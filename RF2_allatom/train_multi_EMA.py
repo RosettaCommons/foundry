@@ -764,13 +764,13 @@ class Trainer():
             valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
-            _, _, _ = self.valid_ppi_cycle(
-                ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
-                rank, gpu, world_size, epoch, header="NA", report_interface=False)
-            _, _, _ = self.valid_ppi_cycle(
-                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
-                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
-            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
+#            _, _, _ = self.valid_ppi_cycle(
+#                ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
+#                rank, gpu, world_size, epoch, header="NA", report_interface=False)
+#            _, _, _ = self.valid_ppi_cycle(
+#                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
+#                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
+#            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
             _,_,_ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl")            
 
             if rank == 0: # save model
