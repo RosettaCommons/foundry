@@ -1268,8 +1268,8 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
     chain_idx[:Ls[0], :Ls[0]] = 1
     chain_idx[Ls[0]:, Ls[0]:] = 1  # fd - "negatives" still predict DNA double helix
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
-    bond_feats[:L_s[0], :L_s[0]] = get_protein_bond_feats(L_s[0])
-    bond_feats[L_s[0]:, L_s[0]:] = get_protein_bond_feats(sum(L_s[1:]))
+    bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(L_s[0])
+    bond_feats[Ls[0]:, Ls[0]:] = get_protein_bond_feats(sum(L_s[1:]))
 
     init = torch.cat((
         INIT_CRDS.reshape(1, NTOTAL, 3).repeat(Ls[0], 1, 1),
