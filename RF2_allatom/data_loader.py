@@ -1273,7 +1273,7 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
     chain_idx[:Ls[0], :Ls[0]] = 1
     chain_idx[Ls[0]:, Ls[0]:] = 1  # fd - "negatives" still predict DNA double helix
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
-    bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(L_s[0])
+    bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = get_protein_bond_feats(sum(Ls[1:]))
 
     init = torch.cat((
@@ -1470,7 +1470,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
     bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
-    # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
+    # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)
     xyz = torch.where(mask[...,None], xyz, init).contiguous()
     xyz = torch.nan_to_num(xyz)

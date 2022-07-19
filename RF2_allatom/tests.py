@@ -173,6 +173,24 @@ class LossTestCase(unittest.TestCase):
 				for i in range(1,5):
 					self.assertLess(fapes[i-1], fapes[i])
 				break
+		with self.subTest("test that FAPE loss over only the atoms can be calculated"):
+			for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
+				label_aa_s = msa[:, 0]
+				seq = label_aa_s[:,0].clone()
+				true_crds, atom_mask = resolve_equiv_natives(true_crds[0, 0].unsqueeze(0), true_crds, atom_mask)
+				frames, frame_mask = get_frames(
+					true_crds, atom_mask, seq, frame_indices, atom_frames
+				)
+
+				rotation_mask = is_atom(seq)
+				atom_fape = compute_general_FAPE(
+						true_crds[:,rotation_mask[0],:,:3],
+						true_crds[:,rotation_mask[0],:,:3],
+						atom_mask[:,rotation_mask[0]],
+						frames[:,rotation_mask[0]],
+						frame_mask[:,rotation_mask[0]]
+					)
+				self.assertAlmostEqual(int(atom_fape.numpy()),0)
 
 	def test_get_frames(self):
 		"""test that nodes in atom frames are relatively close to each other (because they should be bonded)"""

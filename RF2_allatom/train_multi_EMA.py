@@ -317,6 +317,15 @@ class Trainer():
         loss_s.append(l_fape.detach())
         tot_loss += w_str*l_fape.mean()
 
+        rotation_mask = is_atom(seq)
+        atom_fape = compute_general_FAPE(
+                pred_allatom[:,rotation_mask[0],:,:3],
+                nat_symm[None,rotation_mask[0],:,:3],
+                xs_mask[:,rotation_mask[0]],
+                frames[:,rotation_mask[0]],
+                frame_mask[:,rotation_mask[0]]
+            )
+        loss_s.append(atom_fape.detach())
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
         if w_bond > 0.0:
@@ -520,7 +529,7 @@ class Trainer():
         self.n_valid_rna = len(valid_rna.keys())
         self.n_valid_sm_compl = len(valid_sm_compl.keys())
 
-        #self.n_valid_pdb = 4
+        self.n_valid_pdb = 200
         #self.n_valid_homo = 4
         #self.n_valid_compl = 4
         #self.n_valid_neg = 4
@@ -579,21 +588,21 @@ class Trainer():
             loader_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
-        valid_homo_set = Dataset(
-            list(valid_homo.keys())[:self.n_valid_homo],
-            loader_pdb, valid_homo,
-            self.loader_param, homo, p_homo_cut=2.0
-        )
-        valid_compl_set = DatasetComplex(
-            list(valid_compl.keys())[:self.n_valid_compl],
-            loader_complex, valid_compl,
-            self.loader_param, negative=False
-        )
-        valid_neg_set = DatasetComplex(
-            list(valid_neg.keys())[:self.n_valid_neg],
-            loader_complex, valid_neg,
-            self.loader_param, negative=True
-        )
+        # valid_homo_set = Dataset(
+        #     list(valid_homo.keys())[:self.n_valid_homo],
+        #     loader_pdb, valid_homo,
+        #     self.loader_param, homo, p_homo_cut=2.0
+        # )
+        # valid_compl_set = DatasetComplex(
+        #     list(valid_compl.keys())[:self.n_valid_compl],
+        #     loader_complex, valid_compl,
+        #     self.loader_param, negative=False
+        # )
+        # valid_neg_set = DatasetComplex(
+        #     list(valid_neg.keys())[:self.n_valid_neg],
+        #     loader_complex, valid_neg,
+        #     self.loader_param, negative=True
+        # )
 #        valid_na_compl_set = DatasetNAComplex(
 #            list(valid_na_compl.keys())[:self.n_valid_na_compl],
 #            loader_na_complex, valid_na_compl,
@@ -647,9 +656,9 @@ class Trainer():
         )
 
         valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
-        valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
-        valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
-        valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
+        # valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
+        # valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
+        # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_compl_sampler = data.distributed.DistributedSampler(valid_na_compl_set, num_replicas=world_size, rank=rank)
 #        valid_na_neg_sampler = data.distributed.DistributedSampler(valid_na_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
@@ -659,9 +668,9 @@ class Trainer():
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
-        valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
-        valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
+        # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
+        # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
+        # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
 #        valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
 #        valid_na_neg_loader = data.DataLoader(valid_na_neg_set, sampler=valid_na_neg_sampler, **LOAD_PARAM)
 #        valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
