@@ -1093,8 +1093,8 @@ class Trainer():
                 atom_frames = atom_frames.to(gpu, non_blocking=True)
                 bond_feats = bond_feats.to(gpu, non_blocking=True)
 
-                res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0]))) # ignore residues having missing BB atoms for loss calculation
-                mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
+                # res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0]))) # ignore residues having missing BB atoms for loss calculation
+                # mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
 
                 # processing template features
                 # get torsion angles from templates
@@ -1255,8 +1255,8 @@ class Trainer():
                 bond_feats = bond_feats.to(gpu, non_blocking=True)
 
                 # processing labels for distogram orientograms
-                res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0]))) # ignore residues having missing BB atoms for loss calculation
-                mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
+                # res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0]))) # ignore residues having missing BB atoms for loss calculation
+                # mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
 
                 # processing template features
                 # get torsion angles from templates

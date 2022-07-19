@@ -2,7 +2,7 @@ import unittest
 import torch
 from torch.utils import data
 
-from chemical import NFRAMES
+# from chemical import NFRAMES
 from data_loader import get_train_valid_set, Dataset, DatasetNAComplex, DatasetRNA, DatasetSMComplex, loader_pdb, loader_na_complex, loader_rna, loader_sm_compl,set_data_loader_params
 from kinematics import xyz_to_c6d, xyz_to_t2d
 from loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss
@@ -45,7 +45,7 @@ class LossTestCase(unittest.TestCase):
 
 	def test_compute_general_FAPE(self):
 		with self.subTest("test that FAPE loss is correctly calculated for proteins"):
-			for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames in self.valid_pdb_loader:
+			for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_pdb_loader:
 				# first assert that same structure gives you 0 loss
 
 				frames, frame_mask = get_frames(
@@ -76,7 +76,7 @@ class LossTestCase(unittest.TestCase):
 				break
 				#add noise and make sure increasing noise increases loss
 		with self.subTest("test that FAPE loss is correctly calculated for protein/NA complexes"):
-			for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames in self.valid_na_compl_loader:
+			for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_na_compl_loader:
 				# first assert that same structure gives you 0 loss
 
 				frames, frame_mask = get_frames(
@@ -106,7 +106,7 @@ class LossTestCase(unittest.TestCase):
 					self.assertLess(fapes[i-1], fapes[i])
 				break
 		with self.subTest("test that FAPE loss is correctly calculated for protein/SM complexes"):
-			for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames in self.valid_sm_compl_loader:
+			for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
 				# first assert that same structure gives you 0 loss
 				true_crds, atom_mask = resolve_equiv_natives(true_crds[0, 0].unsqueeze(0), true_crds, atom_mask)
 				frames, frame_mask = get_frames(
@@ -136,7 +136,7 @@ class LossTestCase(unittest.TestCase):
 					self.assertLess(fapes[i-1], fapes[i])
 				break
 		with self.subTest("test that protein backbone FAPE loss can be calculated with compute_general_FAPE"):
-			for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames in self.valid_pdb_loader:
+			for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_pdb_loader:
 				frames, frame_mask = get_frames(
 					true_crds, atom_mask, msa[:, 0, 0], frame_indices, atom_frames
 					)
@@ -176,7 +176,8 @@ class LossTestCase(unittest.TestCase):
 
 	def test_get_frames(self):
 		"""test that nodes in atom frames are relatively close to each other (because they should be bonded)"""
-		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames in self.valid_sm_compl_loader:
+		NFRAMES = 8
+		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
 			true_crds, atom_mask = resolve_equiv_natives(true_crds[0, 0].unsqueeze(0), true_crds, atom_mask)
 			frames, frame_mask = get_frames(
 				true_crds, atom_mask, msa[:, 0, 0], frame_indices, atom_frames
@@ -206,7 +207,7 @@ class LossTestCase(unittest.TestCase):
 			break
 
 	def test_xyz_to_c6d(self):
-		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames in self.valid_sm_compl_loader:
+		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
 			true_crds, atom_mask = resolve_equiv_natives(true_crds[0, 0].unsqueeze(0), true_crds, atom_mask)
 			# atoms = is_atom(msa[:, 0,0])
 			# atom_crds = true_crds[atoms]
@@ -223,5 +224,14 @@ class LossTestCase(unittest.TestCase):
 			t2d = xyz_to_t2d(xyz_t)
 			break
 
+	def test_res_mask(self):
+		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
+			true_crds, atom_mask = resolve_equiv_natives(true_crds[0, 0].unsqueeze(0), true_crds, atom_mask)
+			res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,0,0])))
+			B, L = true_crds.shape[:2]
+			self.assertEqual(res_mask.shape[0], B)
+			self.assertEqual(res_mask.shape[1], L)
+			break
+		
 if __name__ == '__main__':
 	unittest.main()

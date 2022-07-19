@@ -1466,7 +1466,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
         bond_feats = bond_feats[sel][:, sel]
     bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
-    init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(len(xyz), 1, 1)
+    init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)
     xyz = torch.where(mask[...,None], xyz, init).contiguous()
     xyz = torch.nan_to_num(xyz)
 
