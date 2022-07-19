@@ -19,12 +19,17 @@ compl_dir = "/projects/ml/RoseTTAComplex"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 mol_dir = "/projects/ml/ligand_datasets/mmcif_parse_wlig"
+
 if not os.path.exists(base_dir):
-    # training on blue
-    base_dir = "/gscratch2/PDB-2021AUG02"
-    compl_dir = "/gscratch2/RoseTTAComplex"
-    na_dir = "/gscratch2/nucleic"
-    fb_dir = "/gscratch2/fb_af1"
+    # training on AWS
+    #base_dir = "/gscratch2/PDB-2021AUG02"
+    #compl_dir = "/gscratch2/RoseTTAComplex"
+    #na_dir = "/gscratch2/nucleic"
+    #fb_dir = "/gscratch2/fb_af1"
+    base_dir = "/data/databases/PDB-2021AUG02"
+    fb_dir = "/data/databases/fb_af"
+    compl_dir = "/data/databases/RoseTTAComplex"
+    mol_dir = "/home/rohith"
 
 def set_data_loader_params(args):
     PARAMS = {
