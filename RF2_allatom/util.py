@@ -846,7 +846,7 @@ def get_atom_frames(msa, mol, G):
             frames_with_n = [frame for frame in frames if n in frame]
         # if the atom isn't in a 3 atom frame, it should be ignored in loss calc, set all the atoms to n
         if not frames_with_n:
-            selected_frames.append([(n,0),(n,0),(n, 0)])
+            selected_frames.append([(0,0),(0,0),(0, 0)])
             continue
         frame_priorities = []
         for frame in frames_with_n:
@@ -869,6 +869,8 @@ def get_bond_feats(mol, G):
     """creates 2d bond graph for small molecules"""
     N = mol.GetNumAtoms()
     bond_feats = torch.zeros((N, N)).long()
+    if not G.edges:
+        return bond_feats
     i,j = np.array(G.edges).T
     bond_feats[i,j] = torch.tensor([rdkit2btype[int(b.GetBondType())] for b in mol.GetBonds()]).long()
     bond_feats[j,i] = bond_feats[i,j]

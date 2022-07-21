@@ -425,7 +425,7 @@ def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
 def parse_mol(filename):
     """parses a mol file"""
     mol = Chem.MolFromMolFile(filename)
-    msa = torch.tensor([aa2num[a.GetSymbol()] for a in mol.GetAtoms()])
+    msa = torch.tensor([aa2num[a.GetSymbol()] if a.GetSymbol() in aa2num else aa2num["ATM"]  for a in mol.GetAtoms()])
     ins = torch.zeros_like(msa)
 
     return mol, msa, ins

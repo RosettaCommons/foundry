@@ -40,7 +40,7 @@ N_PRINT_TRAIN = 16
 
 # num structs per epoch
 # must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 25600
+N_EXAMPLE_PER_EPOCH = 1208
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 3,
@@ -318,14 +318,17 @@ class Trainer():
         tot_loss += w_str*l_fape.mean()
 
         rotation_mask = is_atom(seq)
-        atom_fape = compute_general_FAPE(
+        if torch.any(rotation_mask):
+            atom_fape = compute_general_FAPE(
                 pred_allatom[:,rotation_mask[0],:,:3],
                 nat_symm[None,rotation_mask[0],:,:3],
                 xs_mask[:,rotation_mask[0]],
                 frames[:,rotation_mask[0]],
                 frame_mask[:,rotation_mask[0]]
             )
-        loss_s.append(atom_fape.detach())
+            loss_s.append(atom_fape.detach())
+        else:
+            loss_s.append(torch.zeros(l_fape.detach().shape, device=l_fape.device))
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
         if w_bond > 0.0:
@@ -764,9 +767,9 @@ class Trainer():
         for epoch in range(loaded_epoch+1, self.n_epoch):
             train_sampler.set_epoch(epoch)
             valid_pdb_sampler.set_epoch(epoch)
-            valid_homo_sampler.set_epoch(epoch)
-            valid_compl_sampler.set_epoch(epoch)
-            valid_neg_sampler.set_epoch(epoch)
+            #valid_homo_sampler.set_epoch(epoch)
+            #valid_compl_sampler.set_epoch(epoch)
+            #valid_neg_sampler.set_epoch(epoch)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
