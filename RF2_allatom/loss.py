@@ -756,7 +756,7 @@ def calc_allatom_lddt(P, Q, idx, atm_mask, eps=1e-6):
     return lddt
 
 
-def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, negative=False, interface=False, eps=1e-6):
+def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, negative=False, interface=False, bin_scaling=1, eps=1e-6):
     # P - N x L x 27 x 3
     # Q - L x 27 x 3
     # pred_lddt - 1 x nbucket x L
@@ -783,7 +783,7 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
 
     lddt = torch.zeros( (N,L,Natm), device=P.device ) # (N, L, 27)
     for distbin in (0.5,1.0,2.0,4.0):
-        lddt += 0.25 * torch.sum( (delta_PQ<=distbin)*pair_mask, dim=(2,4)
+        lddt += 0.25 * torch.sum( (delta_PQ<=distbin*bin_scaling)*pair_mask, dim=(2,4)
             ) / ( torch.sum( pair_mask, dim=(2,4) ) + eps)
 
     final_lddt_by_res = torch.clamp(

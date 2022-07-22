@@ -317,18 +317,6 @@ class Trainer():
         loss_s.append(l_fape.detach())
         tot_loss += w_str*l_fape.mean()
 
-        rotation_mask = is_atom(seq)
-        if torch.any(rotation_mask):
-            atom_fape = compute_general_FAPE(
-                pred_allatom[:,rotation_mask[0],:,:3],
-                nat_symm[None,rotation_mask[0],:,:3],
-                xs_mask[:,rotation_mask[0]],
-                frames[:,rotation_mask[0]],
-                frame_mask[:,rotation_mask[0]]
-            )
-            loss_s.append(atom_fape.detach())
-        else:
-            loss_s.append(torch.zeros(l_fape.detach().shape, device=l_fape.device))
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
         if w_bond > 0.0:
@@ -351,6 +339,20 @@ class Trainer():
             tot_loss += w_clash*clash_loss.mean()
         loss_s.append( clash_loss.detach() )
 
+        L0 = same_chain[0,0,:].sum()
+        chain1 = torch.zeros_like(same_chain, dtype=bool)
+        chain1[:,:L0,:L0] = True
+        _, allatom_lddt_c1 = calc_allatom_lddt_loss(
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain1, negative=True)
+        loss_s.append(allatom_lddt_c1.detach())
+        chain2 = torch.zeros_like(same_chain, dtype=bool)
+        chain2[:,L0:,L0:] = True
+        _, allatom_lddt_c2 = calc_allatom_lddt_loss(
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain2, negative=True)
+        loss_s.append(allatom_lddt_c2.detach())
+        _, allatom_lddt_inter = calc_allatom_lddt_loss(
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, interface=True, bin_scaling=0.5)
+        loss_s.append(allatom_lddt_inter.detach())
         # hbond [use all atoms not just those in native]
         #hb_loss = calc_hb(
         #    seq[0], pred_all[0,...,:3], 
