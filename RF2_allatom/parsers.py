@@ -431,6 +431,7 @@ def parse_mol(filename):
     return mol, msa, ins
 
 def get_ligand_xyz(mol):
+    """get ligand xyz and mask from mol object accounting for equivalent atoms"""
     xyz = torch.tensor(np.array([c.GetPositions() for c in mol.GetConformers()])).squeeze(0)
     permuts = mol.GetSubstructMatches(mol, uniquify=False, maxMatches=256)
     permuts = torch.tensor(permuts)

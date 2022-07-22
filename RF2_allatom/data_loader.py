@@ -1604,6 +1604,11 @@ class DatasetSMComplex(data.Dataset):
     def __getitem__(self, index):
         ID = self.IDs[index]
         sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+        # remove pdbs with BeF2 ligands, oddly behaved with rdkit
+        item = self.item_dict[ID][sel_idx][0]
+        while item[0] in ["1xhf", "1l5y", "4ukd"]:
+            sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+            item = self.item_dict[ID][sel_idx][0]
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][2],

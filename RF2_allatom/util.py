@@ -232,7 +232,7 @@ def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
     B, T, atom_L, natoms, _ = atom_crds_t.shape
     frames_reindex = torch.zeros(atom_frames.shape[:-1])
     for i in range(atom_L):
-    	frames_reindex[:, i, :] = (i+atom_frames[..., i, :, 0])*natoms + atom_frames[..., i, :, 1]
+        frames_reindex[:, i, :] = (i+atom_frames[..., i, :, 0])*natoms + atom_frames[..., i, :, 1]
     frames_reindex = frames_reindex.long()
     xyz_t[:, :, atoms, :3] = atom_crds_t.reshape(T, atom_L*natoms, 3)[:, frames_reindex.squeeze(0)]
     return xyz_t
@@ -246,13 +246,8 @@ def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
         # print(torch.sum(atoms))
         # print(atom_frames.shape)
         # print(atoms[0].nonzero().flatten().shape)
-        try:
-            frames[:,atoms[0].nonzero().flatten(), 0] = atom_frames
-        except Exception as e:
-            print(e)
-            print(torch.sum(atoms))
-            print(atom_frames.shape)
-            print(atoms[0].nonzero().flatten().shape)
+        frames[:,atoms[0].nonzero().flatten(), 0] = atom_frames
+
 
     frame_mask = ~torch.all(frames[...,0, :] == frames[...,1, :], axis=-1)
 
