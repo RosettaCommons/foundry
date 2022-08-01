@@ -858,7 +858,6 @@ def get_atom_frames(msa, mol, G):
     assert msa.shape[0] == len(selected_frames)
     return torch.tensor(selected_frames).long()
 
-
 ### Generate bond features for small molecules ###
 def get_bond_feats(mol, G):
     """creates 2d bond graph for small molecules"""
@@ -878,3 +877,44 @@ def get_protein_bond_feats(protein_L):
     bond_feats[residues, residues+1] = 1
     bond_feats[residues+1, residues] = 1
     return bond_feats
+
+def atomize_protein(i, msa, true_crds, atom_mask):
+    """ given an index i, make the preceding 2 residues and the following residue (4 total) into "atom" nodes """
+    residues_atomize = msa[0, 0, i-2:i+2]
+    residues_atomize = [aa2elt[num][:14] for num in residues_atomize[0]]
+    lig_seq = []
+    ra = []
+    for idx in range(len(residues_atomize)):
+        for jdx in range(14):
+            if residues_atomize[idx][jdx]:
+                ra.append((i-2+idx, jdx))
+                lig_seq.append(aa2num[residues_atomize[idx][jdx]])
+    lig_seq = torch.tensor(lig_seq)
+    ins = torch.zeros_like(lig_seq)
+    ra = torch.tensor(ra)
+    r,a = ra.T
+    lig_xyz = torch.zeros((len(ra), 3))
+    lig_xyz = true_crds[r, a]
+    lig_mask = atom_mask[r, a]
+    return lig_seq, ins, lig_xyz, lig_mask
+
+def remove_protein_info(i, seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, bond_feats):
+    """ remove the msa/template information for the portion of the protein that was "atomized" """
+    seq = torch.cat((seq[:, :i-2], seq[:, i+2:]), dim=1)
+    msa = torch.cat((msa[:, :, :i-2], msa[:, :, i+2:]), dim=2)
+    msa_masked = torch.cat((msa_masked[:, :, :, :i-2], msa_masked[:, :, i+2:]), dim=2)
+    msa_full = torch.cat((msa_full[:, :, :, :i-2], msa_full[:, :, i+2:]), dim=2)
+    mask_msa = torch.cat((mask_msa[:, :, :, :i-2], mask_msa[:, :, i+2:]), dim=2)
+    true_crds = torch.cat((true_crds[ :, :i-2], true_crds[ :, i+2:]), dim=1)
+    atom_mask = torch.cat((atom_mask[ :, :i-2], atom_mask[ :, i+2:]), dim=1)
+
+    idx_pdb = torch.cat((idx_pdb[ :, :i-2], idx_pdb[ :, i+2:]), dim=1)
+    xyz_t = torch.cat((xyz_t[ :, :, :i-2], xyz_t[:, :, i+2:]), dim=2)
+    t1d = torch.cat((t1d[ :, :, :i-2], t1d[:, :, i+2:]), dim=2)
+    xyz_prev = torch.cat((xyz_prev[ :, :i-2], xyz_prev[:, i+2:]), dim=1)
+    same_chain = torch.cat((same_chain[ :i-2], same_chain[:, i+2:]), dim=1)
+    same_chain = torch.cat((same_chain[ :, :i-2], same_chain[:, i+2:]), dim=2)
+    bond_feats = torch.cat((bond_feats[ :i-2], bond_feats[i+2:]), dim=1)
+    bond_feats = torch.cat((bond_feats[ :, :i-2], bond_feats[:, i+2:]), dim=2)
+    return seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, bond_feats
+
