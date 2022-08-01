@@ -306,7 +306,13 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
         if (natoms!=NHEAVY and natoms!=NTOTAL):
             print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
             assert(False)
-
+        if s not in aa2long:
+            lig_name = "test"
+            f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
+                    "HETATOM", ctr, num2aa[s], lig_name, 
+                    "A", idx_pdb[i], atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
+                    1.0, Bfacts[i] ) )
+            ctr += 1
         atms = aa2long[s]
 
         # his prot hack
