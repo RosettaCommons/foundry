@@ -348,10 +348,10 @@ class Trainer():
         chain2 = torch.zeros_like(same_chain, dtype=bool)
         chain2[:,L0:,L0:] = True
         _, allatom_lddt_c2 = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain2, negative=True)
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain2, negative=True, bin_scaling=0.5)
         loss_s.append(allatom_lddt_c2.detach())
         _, allatom_lddt_inter = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, interface=True, bin_scaling=0.5)
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, interface=True)
         loss_s.append(allatom_lddt_inter.detach())
         # hbond [use all atoms not just those in native]
         #hb_loss = calc_hb(

@@ -249,7 +249,16 @@ class LossTestCase(unittest.TestCase):
 			B, L = true_crds.shape[:2]
 			self.assertEqual(res_mask.shape[0], B)
 			self.assertEqual(res_mask.shape[1], L)
+			print(is_atom(msa[:,0,0]))
+			print(res_mask)
+			print(true_crds[res_mask][:,:23])
 			break
-		
+
+	def test_sm_coords(self):
+		""""""
+		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
+			print(true_crds.shape)
+			print(true_crds[..., 1, :])
+
 if __name__ == '__main__':
 	unittest.main()

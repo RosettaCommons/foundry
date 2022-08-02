@@ -778,7 +778,9 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
     if negative:
         # ignore atoms between different chains
         pair_mask *= same_chain.bool()[:,:,:,None,None]
-
+    elif interface:
+            # ignore atoms between the same chain
+            pair_mask *= ~same_chain.bool()[:,:,:,None,None]
     delta_PQ = torch.abs(Pij-Qij+eps) # (N, L, L, 14, 14)
 
     lddt = torch.zeros( (N,L,Natm), device=P.device ) # (N, L, 27)
