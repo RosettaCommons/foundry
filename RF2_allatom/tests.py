@@ -7,7 +7,7 @@ from data_loader import get_train_valid_set, Dataset, DatasetNAComplex, DatasetR
 from kinematics import xyz_to_c6d, xyz_to_t2d
 from chemical import num2aa, aa2elt, aa2num
 from loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss
-from util import get_frames, frame_indices, is_atom, xyz_to_frame_xyz, xyz_t_to_frame_xyz
+from util import get_frames, frame_indices, is_atom, xyz_to_frame_xyz, xyz_t_to_frame_xyz, long2alt
 
 class LossTestCase(unittest.TestCase):
 
@@ -244,6 +244,7 @@ class LossTestCase(unittest.TestCase):
 			break
 
 	def test_res_mask(self):
+		"""updated res_mask to not mask "atom" nodes that only have one backbone atom filled in """
 		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
 			true_crds, atom_mask = resolve_equiv_natives(true_crds[0, 0].unsqueeze(0), true_crds, atom_mask)
 			res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,0,0])))
@@ -252,6 +253,12 @@ class LossTestCase(unittest.TestCase):
 			self.assertEqual(res_mask.shape[1], L)
 			break
 	
+	def test_resolve_equiv_natives(self):
+		""" test that resolve_equiv_natives works"""
+		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
+			true_crds, atom_mask = resolve_equiv_natives(torch.randn(true_crds[0, 0].unsqueeze(0).shape), true_crds, atom_mask)
+			print(true_crds)
+			break
 
 class DataLoaderTestCase(unittest.TestCase):
 
@@ -283,6 +290,13 @@ class DataLoaderTestCase(unittest.TestCase):
 			i = torch.randint(2, L-3,(1,))
 			residues_atomize = msa[:, 0, 0, i-2:i+2]
 			residues_atomize = [aa2elt[num][:14] for num in residues_atomize[0]]
+
+			true_alt = torch.zeros_like(true_crds)
+			true_alt.scatter_(2, long2alt[msa[:, 0, 0],:,None].repeat(1,1,1,3), true_crds)
+			print(true_crds.shape)
+			print((true_crds[:, i-2:i+2] == true_alt[:, i-2:i+2]).all(dim=2).all(dim=2).squeeze())
+			print(torch.nonzero(~(true_crds[:, i-2:i+2] == true_alt[:, i-2:i+2]).all(dim=2).all(dim=2).squeeze()).squeeze())
+
 			lig_seq = []
 			ra = []
 			for idx in range(len(residues_atomize)):
@@ -310,21 +324,16 @@ class DataLoaderTestCase(unittest.TestCase):
 			atom_mask = torch.cat((atom_mask[ :, :i-2], atom_mask[ :, i+2:]), dim=1)
 
 			idx_pdb = torch.cat((idx_pdb[ :, :i-2], idx_pdb[ :, i+2:]), dim=1)
-			print(idx_pdb.shape)
 			xyz_t = torch.cat((xyz_t[ :, :, :i-2], xyz_t[:, :, i+2:]), dim=2)
-			print(xyz_t.shape)
 			t1d = torch.cat((t1d[ :, :, :i-2], t1d[:, :, i+2:]), dim=2)
-			print(t1d.shape)
 			xyz_prev = torch.cat((xyz_prev[ :, :i-2], xyz_prev[:, i+2:]), dim=1)
-			print(xyz_prev.shape)
 			same_chain = torch.cat((same_chain[ :, :i-2], same_chain[:, i+2:]), dim=1)
 			same_chain = torch.cat((same_chain[ :, :, :i-2], same_chain[:, :, i+2:]), dim=2)
-			print(same_chain.shape)
 
-			print(bond_feats.shape)
 			bond_feats = torch.cat((bond_feats[ :, :i-2], bond_feats[:, i+2:]), dim=1)
 			bond_feats = torch.cat((bond_feats[ :, :, :i-2], bond_feats[:, :, i+2:]), dim=2)
-			print(bond_feats.shape)
+
+
 			break
 		
 if __name__ == '__main__':

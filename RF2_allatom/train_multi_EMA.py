@@ -22,7 +22,7 @@ from scheduler import get_linear_schedule_with_warmup, get_stepwise_decay_schedu
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
-#torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 torch.manual_seed(5924)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
@@ -175,7 +175,7 @@ class Trainer():
 
         loss_s = list()
         tot_loss = 0.0
-
+        
         # c6d loss
         for i in range(4):
             loss = self.loss_fn(logit_s[i], label_s[...,i]) # (B, L, L)
@@ -243,6 +243,7 @@ class Trainer():
         # get alternative coordinates for ground-truth
         true_alt = torch.zeros_like(true)
         true_alt.scatter_(2, self.l2a[seq,:,None].repeat(1,1,1,3), true)
+        print(true_alt)
         natRs_all, _n0 = self.compute_allatom_coords(seq, true[...,:3,:], true_tors)
         natRs_all_alt, _n1 = self.compute_allatom_coords(seq, true_alt[...,:3,:], true_tors_alt)
         predTs = pred[-1,...]
@@ -348,10 +349,10 @@ class Trainer():
         chain2 = torch.zeros_like(same_chain, dtype=bool)
         chain2[:,L0:,L0:] = True
         _, allatom_lddt_c2 = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain2, negative=True)
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain2, negative=True, bin_scaling=0.5)
         loss_s.append(allatom_lddt_c2.detach())
         _, allatom_lddt_inter = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, interface=True, bin_scaling=0.5)
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, interface=True)
         loss_s.append(allatom_lddt_inter.detach())
         # hbond [use all atoms not just those in native]
         #hb_loss = calc_hb(
@@ -733,7 +734,7 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, resume_train=True)
+                                                        self.model_name, gpu, suffix="best", resume_train=True)
 
         if (self.eval):
             # run protein/NA prediction (TEMPLATED)
@@ -742,13 +743,13 @@ class Trainer():
             #    rank, gpu, world_size, 0, header="NA", report_interface=False, verbose=True)
 
             # run protein/NA prediction (NON-TEMPLATED)
-            _, _, _ = self.valid_ppi_cycle(
-                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
-                rank, gpu, world_size, 0, header="NA", report_interface=False, verbose=True)
+            #_, _, _ = self.valid_ppi_cycle(
+            #    ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
+            #    rank, gpu, world_size, 0, header="NA", report_interface=False, verbose=True)
 
             # run RNA prediction
             #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 0, verbose=True)
-
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
             dist.destroy_process_group()
             return
 
@@ -816,7 +817,7 @@ class Trainer():
                             'valid_loss': valid_loss,
                             'valid_acc': valid_acc,
                             'best_loss': best_valid_loss},
-                            self.checkpoint_fn(self.model_name, 'last'))
+                            self.checkpoint_fn(self.model_name, str(epoch)))
 
         dist.destroy_process_group()
 
