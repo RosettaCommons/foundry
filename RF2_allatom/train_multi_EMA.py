@@ -202,7 +202,7 @@ class Trainer():
             mask_BBA = mask_BB.clone()
             mask_BBA[0, L1:] = False
             l_fape_A = compute_general_FAPE(
-                pred[:,:,mask_BBA[0],:,:3].squeeze(1),
+                pred[:,mask_BBA,:,:3],
                 true[:,mask_BBA[0],:3,:3],
                 mask_crds[:,mask_BBA[0], :3],
                 frames[:,mask_BBA[0]],
@@ -212,7 +212,7 @@ class Trainer():
             mask_BBB = mask_BB.clone()
             mask_BBB[0,:L1] = False
             l_fape_B = compute_general_FAPE(
-                    pred[:,:, mask_BBB[0],:,:3].squeeze(1),
+                pred[:, mask_BBB,:,:3],
                 true[:,mask_BBB[0],:3,:3],
                 mask_crds[:,mask_BBB[0], :3],
                 frames[:,mask_BBB[0]],
