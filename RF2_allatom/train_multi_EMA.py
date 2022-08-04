@@ -172,7 +172,7 @@ class Trainer():
         seq = label_aa_s[:,0].clone()
 
         assert (B==1) # fd - code assumes a batch size of 1
-
+        
         loss_s = list()
         tot_loss = 0.0
 
@@ -202,9 +202,9 @@ class Trainer():
             mask_BBA = mask_BB.clone()
             mask_BBA[0, L1:] = False
             l_fape_A = compute_general_FAPE(
-                pred_allatom[:,mask_BBA[0],:,:3],
-                true[:,mask_BBA[0],:,:3],
-                mask_crds[:,mask_BBA[0]],
+                pred[:,:,mask_BBA[0],:,:3].squeeze(1),
+                true[:,mask_BBA[0],:3,:3],
+                mask_crds[:,mask_BBA[0], :3],
                 frames[:,mask_BBA[0]],
                 frame_mask_BB[:,mask_BBA[0]],
                 dclamp=dclamp
@@ -212,9 +212,9 @@ class Trainer():
             mask_BBB = mask_BB.clone()
             mask_BBB[0,:L1] = False
             l_fape_B = compute_general_FAPE(
-                pred_allatom[:,mask_BBB[0],:,:3],
-                true[:,mask_BBB[0],:,:3],
-                mask_crds[:,mask_BBB[0]],
+                    pred[:,:, mask_BBB[0],:,:3].squeeze(1),
+                true[:,mask_BBB[0],:3,:3],
+                mask_crds[:,mask_BBB[0], :3],
                 frames[:,mask_BBB[0]],
                 frame_mask_BB[:,mask_BBB[0]],
                 dclamp=dclamp
@@ -224,9 +224,9 @@ class Trainer():
 
         else:
             tot_str = compute_general_FAPE(
-                pred_allatom[:,mask_BB[0],:,:3],
-                true[:,mask_BB[0],:,:3],
-                mask_crds[:,mask_BB[0]],
+                pred[:,mask_BB,:,:3],
+                true[:,mask_BB[0],:3,:3],
+                mask_crds[:,mask_BB[0],:3],
                 frames[:,mask_BB[0]],
                 frame_mask_BB[:,mask_BB[0]],
                 dclamp=dclamp
@@ -366,10 +366,13 @@ class Trainer():
         if (verbose):
             print (
                 ctr,
+                tot_str.cpu().detach().numpy(),
                 allatom_lddt.cpu().detach().numpy(),
                 l_fape.cpu().detach().numpy(),
                 mask_BB[0].sum()
             )
+            for i in range(pred.shape[0]):
+                writepdb("p_"+self.model_name+"_"+str(ctr)+"_"+str(i)+".pdb", pred[i,0,mask_BB[0]][:,:3], seq[mask_BB][:])
             writepdb("p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
             writepdb("n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
             writepdb("nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])

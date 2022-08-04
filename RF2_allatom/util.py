@@ -303,24 +303,25 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
     Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
     for i,s in enumerate(scpu):
         natoms = atomscpu.shape[-2]
-        if (natoms!=NHEAVY and natoms!=NTOTAL):
+        if (natoms!=NHEAVY and natoms!=NTOTAL and natoms!=3):
             print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
             assert(False)
-        if s not in aa2long:
+        if s > len(aa2long):
             lig_name = "test"
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
-                    "HETATOM", ctr, num2aa[s], lig_name, 
-                    "A", idx_pdb[i], atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
+                    "HETATM", ctr, num2aa[s], lig_name, 
+                    "A", torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
                     1.0, Bfacts[i] ) )
             ctr += 1
+            continue
         atms = aa2long[s]
 
         # his prot hack
-        if (s==8 and torch.linalg.norm( atomscpu[i,9,:]-atomscpu[i,5,:] ) < 1.7):
-            atms = (
-                " N  "," CA "," C  "," O  "," CB "," CG "," NE2"," CD2"," CE1"," ND1",
-                  None,  None,  None,  None," H  "," HA ","1HB ","2HB "," HD2"," HE1",
-                " HD1",  None,  None,  None,  None,  None,  None) # his_d
+        #if (s==8 and torch.linalg.norm( atomscpu[i,9,:]-atomscpu[i,5,:] ) < 1.7):
+        #    atms = (
+        #        " N  "," CA "," C  "," O  "," CB "," CG "," NE2"," CD2"," CE1"," ND1",
+        #          None,  None,  None,  None," H  "," HA ","1HB ","2HB "," HD2"," HE1",
+        #        " HD1",  None,  None,  None,  None,  None,  None) # his_d
 
         for j,atm_j in enumerate(atms):
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
