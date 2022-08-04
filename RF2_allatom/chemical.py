@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import rdkit
 
 num2aa=[
     'ALA','ARG','ASN','ASP','CYS',
@@ -43,14 +42,6 @@ NTOTALDOFS = NTOTALTORS+NPROTANGS
 #bond types
 num2btype = [0,1,2,3,4] # UNK, SINGLE, DOUBLE, TRIPLE, AROMATIC
 
-# reindexes the rdkit btypes
-rdkit2btype = {
-    int(rdkit.Chem.rdchem.BondType.UNSPECIFIED): 0,
-    int(rdkit.Chem.rdchem.BondType.SINGLE): 1,
-    int(rdkit.Chem.rdchem.BondType.DOUBLE): 2,
-    int(rdkit.Chem.rdchem.BondType.TRIPLE): 3,
-    int(rdkit.Chem.rdchem.BondType.AROMATIC): 4
-}
 NBTYPES = len(num2btype)
 # full sc atom representation
 aa2long=[
@@ -1074,3 +1065,7 @@ ideal_coords = [
 frame_priority2atom = ["F", "Cl", "Br", "I", "O", "S", "Se", "Te", "N", "P", "As", "Sb", "C", "Si", "Sn", "Pb", "B", "Al", 
                          "Zn", "Hg", "Cu", "Au", "Ni", "Pd", "Pt", "Co", "Rh", "Ir", "Pr", "Fe", "Ru", "Os", "Mn", "Re", "Cr", "Mo", "W", "U", "Tb", "Y", "Be", "Mg", "Ca", "Li", "ATM"]
 atom2frame_priority = {x:i for i,x in enumerate(frame_priority2atom)}
+
+atom_num= [9, 17, 35, 53, 8, 16, 34, 52, 7, 15, 33, 51, 6, 14, 32, 50, 82, 5, 13,30, 80, 29, 79, 28, 46,78,27,45, 77,26, 
+                        44,76,25,75,24, 42, 74,92, 65, 39, 4, 12, 20, 3, 0] # in same order as frame priority
+atomnum2atomtype = dict(zip(atom_num, frame_priority2atom))

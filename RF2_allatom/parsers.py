@@ -9,8 +9,8 @@ import util
 import gzip
 from ffindex import *
 import torch
-from chemical import NAATOKENS, aa2num, aa2long
-from rdkit import Chem
+from chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype
+from openbabel import openbabel
 
 to1letter = {
     "ALA":'A', "ARG":'R', "ASN":'N', "ASP":'D', "CYS":'C',
@@ -423,18 +423,19 @@ def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
     return xyz, f1d
 
 def parse_mol(filename):
-    """parses a mol file"""
-    mol = Chem.MolFromMolFile(filename)
-    msa = torch.tensor([aa2num[a.GetSymbol()] if a.GetSymbol() in aa2num else aa2num["ATM"]  for a in mol.GetAtoms()])
+    obConversion = openbabel.OBConversion()
+    obConversion.SetInFormat("mol2")
+
+    obmol = openbabel.OBMol()
+    obConversion.ReadFile(obmol,filename)
+    obmol.DeleteHydrogens()
+    msa = torch.tensor([aa2num[atomnum2atomtype[obmol.GetAtom(i).GetAtomicNum()]] for i in range(1, obmol.NumAtoms()+1)])
     ins = torch.zeros_like(msa)
+    atom_coords = torch.tensor([[obmol.GetAtom(i).x(),obmol.GetAtom(i).y(), obmol.GetAtom(i).z()] for i in range(1, obmol.NumAtoms()+1)])
+    mask = torch.full(atom_coords.shape[:-1], True)
 
-    return mol, msa, ins
-
-def get_ligand_xyz(mol):
-    """get ligand xyz and mask from mol object accounting for equivalent atoms"""
-    xyz = torch.tensor(np.array([c.GetPositions() for c in mol.GetConformers()])).squeeze(0)
-    permuts = mol.GetSubstructMatches(mol, uniquify=False, maxMatches=256)
-    permuts = torch.tensor(permuts)
-    Y = xyz[permuts].reshape(-1,mol.GetNumAtoms(),3)
-    mask = torch.full(Y.shape[:-1], True)
-    return Y, mask
+    automorphs = openbabel.vvpairUIntUInt()
+    openbabel.FindAutomorphisms(obmol,automorphs)
+    atom_coords = atom_coords[torch.tensor(automorphs)[:, :, 1]]
+    mask = mask[torch.tensor(automorphs)[:, :, 1]]
+    return obmol, msa, ins, atom_coords, mask

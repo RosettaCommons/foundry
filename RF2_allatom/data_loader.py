@@ -4,7 +4,7 @@ import os
 import csv
 from dateutil import parser
 import numpy as np
-from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol, get_ligand_xyz
+from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats
 import pickle
@@ -1411,13 +1411,12 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     a3m_prot = {"msa": msa_prot, "ins": ins_prot}
     xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
     protein_L, nprotatoms, _ = xyz_prot.shape
+ 
     # Load small molecule
-
-    mol, msa_sm, ins_sm = parse_mol(params["MOL_DIR"]+"/mol2/"+item[0][1:3]+"/"+item[0][:-1]+random.choice(sm_chains)+".mol2")
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/mol2/"+item[0][1:3]+"/"+item[0][:-1]+random.choice(sm_chains)+".mol2")
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
-    frames = get_atom_frames(msa_sm, mol, G)
-    xyz_sm, mask_sm = get_ligand_xyz(mol)
+    frames = get_atom_frames(msa_sm, G)
 
     N_symmetry, sm_L, _ = xyz_sm.shape
     # Generate ground truth structure: account for ligand symmetry
@@ -1483,7 +1482,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
 def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to the ligand center of mass"""
     ligand_com = torch.nanmean(lig_xyz, dim=[0,1]).expand(1,3)
-    dist = torch.cdist(prot_xyz[:,1].double(), ligand_com).flatten()
+    dist = torch.cdist(prot_xyz[:,1], ligand_com).flatten()
     _, idx = torch.topk(dist, params["CROP"]-len(lig_xyz), largest=False)
     sel, _ = torch.sort(idx)
     # select the whole ligand
