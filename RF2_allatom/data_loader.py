@@ -18,7 +18,7 @@ compl_dir = "/projects/ml/RoseTTAComplex"
 #na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
-mol_dir = "/projects/ml/ligand_datasets/mmcif_parse_wlig"
+mol_dir = "/home/dimaio/ccd/by-pdb"
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -29,7 +29,7 @@ if not os.path.exists(base_dir):
     base_dir = "/data/databases/PDB-2021AUG02"
     fb_dir = "/data/databases/fb_af"
     compl_dir = "/data/databases/RoseTTAComplex"
-    mol_dir = "/home/rohith"
+    mol_dir = "/home/dimaio/ccd/by-pdb"
 
 def set_data_loader_params(args):
     PARAMS = {
@@ -39,7 +39,7 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.csv"%na_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/list_v02_ligonly_notest.csv"%base_dir, 
+        "SM_LIST"          : "/home/rohith/list_v02_ligonly_notest_ccd_ob", 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         #"PDB_LIST"        : "/gscratch2/list_2021AUG02.csv", # on blue
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
@@ -1413,7 +1413,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     protein_L, nprotatoms, _ = xyz_prot.shape
  
     # Load small molecule
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/mol2/"+item[0][1:3]+"/"+item[0][:-1]+random.choice(sm_chains)+".mol2")
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+item[0][1:3]+"/"+random.choice(sm_chains))
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
@@ -1604,7 +1604,7 @@ class DatasetSMComplex(data.Dataset):
     def __getitem__(self, index):
         ID = self.IDs[index]
         sel_idx = np.random.randint(0, len(self.item_dict[ID]))
-
+        print(self.item_dict[ID][sel_idx])
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][2],
