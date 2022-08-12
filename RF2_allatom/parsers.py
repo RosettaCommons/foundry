@@ -433,9 +433,11 @@ def parse_mol(filename):
     ins = torch.zeros_like(msa)
     atom_coords = torch.tensor([[obmol.GetAtom(i).x(),obmol.GetAtom(i).y(), obmol.GetAtom(i).z()] for i in range(1, obmol.NumAtoms()+1)])
     mask = torch.full(atom_coords.shape[:-1], True)
-
-    automorphs = openbabel.vvpairUIntUInt()
-    openbabel.FindAutomorphisms(obmol,automorphs)
-    atom_coords = atom_coords[torch.tensor(automorphs)[:, :, 1]]
-    mask = mask[torch.tensor(automorphs)[:, :, 1]]
+    try:
+        automorphs = openbabel.vvpairUIntUInt()
+        openbabel.FindAutomorphisms(obmol,automorphs)
+        atom_coords = atom_coords[torch.tensor(automorphs)[:, :, 1]]
+        mask = mask[torch.tensor(automorphs)[:, :, 1]]
+    except:
+        print(f"ERROR: automorphs for {filename} yielded invalid tensor")
     return obmol, msa, ins, atom_coords, mask
