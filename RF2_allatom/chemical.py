@@ -6,19 +6,19 @@ num2aa=[
     'GLN','GLU','GLY','HIS','ILE',
     'LEU','LYS','MET','PHE','PRO',
     'SER','THR','TRP','TYR','VAL',
-    'UNK','MAS', 
+    'UNK','MAS',
     ' DA',' DC',' DG',' DU', ' DX',
     ' RA',' RC',' RG',' RU', ' RX',
     'HIS_D', # only used for cart_bonded
-    'Al', 'As', 'Au', 'B', 
-    'Be', 'Br', 'C', 'Ca', 'Cl', 
+    'Al', 'As', 'Au', 'B',
+    'Be', 'Br', 'C', 'Ca', 'Cl',
     'Co', 'Cr', 'Cu', 'F', 'Fe',
-    'Hg', 'I', 'Ir', 'Li', 'Mg',
-    'Mn', 'Mo', 'N', 'Ni', 'O', 
+    'Hg', 'I', 'Ir', 'K', 'Li', 'Mg',
+    'Mn', 'Mo', 'N', 'Ni', 'O',
     'Os', 'P', 'Pb', 'Pd', 'Pr',
     'Pt', 'Re', 'Rh', 'Ru', 'S',
     'Sb', 'Se', 'Si', 'Sn', 'Tb',
-    'Te', 'U', 'W', 'Y', 'Zn', 
+    'Te', 'U', 'W', 'V', 'Y', 'Zn',
     'ATM'
 ]
 
@@ -1062,10 +1062,10 @@ ideal_coords = [
     ],
 ]
 
-frame_priority2atom = ["F", "Cl", "Br", "I", "O", "S", "Se", "Te", "N", "P", "As", "Sb", "C", "Si", "Sn", "Pb", "B", "Al", 
-                         "Zn", "Hg", "Cu", "Au", "Ni", "Pd", "Pt", "Co", "Rh", "Ir", "Pr", "Fe", "Ru", "Os", "Mn", "Re", "Cr", "Mo", "W", "U", "Tb", "Y", "Be", "Mg", "Ca", "Li", "ATM"]
+frame_priority2atom = ["F", "Cl", "Br", "I", "O", "S", "Se", "Te", "N", "P", "As", "Sb", "C", "Si", "Sn", "Pb", "B", "Al",
+                         "Zn", "Hg", "Cu", "Au", "Ni", "Pd", "Pt", "Co", "Rh", "Ir", "Pr", "Fe", "Ru", "Os", "Mn", "Re", "Cr", "Mo", "W", "V", "U", "Tb", "Y", "Be", "Mg", "Ca", "Li", "K", "ATM"]
 atom2frame_priority = {x:i for i,x in enumerate(frame_priority2atom)}
 
-atom_num= [9, 17, 35, 53, 8, 16, 34, 52, 7, 15, 33, 51, 6, 14, 32, 50, 82, 5, 13,30, 80, 29, 79, 28, 46,78,27,45, 77,26, 
-                        44,76,25,75,24, 42, 74,92, 65, 39, 4, 12, 20, 3, 0] # in same order as frame priority
+atom_num= [9, 17, 35, 53, 8, 16, 34, 52, 7, 15, 33, 51, 6, 14, 32, 50, 82, 5, 13,30, 80, 29, 79, 28, 46,78,27,45, 77,26,
+                        44,76,25,75,24, 42, 23, 74,92, 65, 39, 4, 12, 20, 3, 19, 0] # in same order as frame priority
 atomnum2atomtype = dict(zip(atom_num, frame_priority2atom))
