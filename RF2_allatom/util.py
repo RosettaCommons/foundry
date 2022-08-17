@@ -5,8 +5,7 @@ import torch
 
 import scipy.sparse
 import networkx as nx
-import rdkit
-from rdkit import Chem
+from openbabel import openbabel
 
 from chemical import *
 from scoring import *
@@ -303,18 +302,27 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
     Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
     for i,s in enumerate(scpu):
         natoms = atomscpu.shape[-2]
-        if (natoms!=NHEAVY and natoms!=NTOTAL):
+        if (natoms!=NHEAVY and natoms!=NTOTAL and natoms!=3):
             print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
             assert(False)
+
+        if s > len(aa2long):
+            lig_name = "test"
+            f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
+                    "HETATM", ctr, num2aa[s], lig_name, 
+                    "A", torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
+                    1.0, Bfacts[i] ) )
+            ctr += 1
+            continue
 
         atms = aa2long[s]
 
         # his prot hack
-        if (s==8 and torch.linalg.norm( atomscpu[i,9,:]-atomscpu[i,5,:] ) < 1.7):
-            atms = (
-                " N  "," CA "," C  "," O  "," CB "," CG "," NE2"," CD2"," CE1"," ND1",
-                  None,  None,  None,  None," H  "," HA ","1HB ","2HB "," HD2"," HE1",
-                " HD1",  None,  None,  None,  None,  None,  None) # his_d
+        #if (s==8 and torch.linalg.norm( atomscpu[i,9,:]-atomscpu[i,5,:] ) < 1.7):
+        #    atms = (
+        #        " N  "," CA "," C  "," O  "," CB "," CG "," NE2"," CD2"," CE1"," ND1",
+        #          None,  None,  None,  None," H  "," HA ","1HB ","2HB "," HD2"," HE1",
+        #        " HD1",  None,  None,  None,  None,  None,  None) # his_d
 
         for j,atm_j in enumerate(atms):
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
@@ -791,13 +799,13 @@ for i in range(NNAPROTAAS):
             frame_indices[i,j,2] = torch.tensor((0, i_l.index(x[2])))
     
 ### Create atom frames for FAPE loss calculation ###
-def get_nxgraph(mol : rdkit.Chem.rdchem.Mol) -> nx.Graph:
-    '''build NetworkX graph from rdkit's molecule'''
+def get_nxgraph(mol):
+    '''build NetworkX graph from openbabel's OBMol'''
 
-    N = mol.GetNumAtoms()
+    N = mol.NumAtoms()
 
-    # pairs of bonded atoms
-    bonds = [(b.GetBeginAtomIdx(),b.GetEndAtomIdx()) for b in mol.GetBonds()]
+    # pairs of bonded atoms, openbabel indexes from 1 so readjust to indexing from 0
+    bonds = [(bond.GetBeginAtomIdx()-1, bond.GetEndAtomIdx()-1) for bond in openbabel.OBMolBondIter(mol)]
 
     # connectivity graph
     G = nx.Graph()
@@ -827,13 +835,13 @@ def find_all_paths_of_length_n(G : nx.Graph,
     #return torch.tensor(allpaths)
     return allpaths
 
-def get_atom_frames(msa, mol, G):
+def get_atom_frames(msa, G):
     """choose a frame of 3 bonded atoms for each atom in the molecule, rule based system that chooses frame based on atom priorities"""
 
     query_seq = msa
     frames = find_all_paths_of_length_n(G, 2)
     selected_frames = []
-    for n in range(mol.GetNumAtoms()):
+    for n in range(msa.shape[0]):
         frames_with_n = [frame for frame in frames if n == frame[1]]
 
         # some chemical groups don't have two bonded heavy atoms; so choose a frame with an atom 2 bonds away
@@ -861,12 +869,12 @@ def get_atom_frames(msa, mol, G):
 ### Generate bond features for small molecules ###
 def get_bond_feats(mol, G):
     """creates 2d bond graph for small molecules"""
-    N = mol.GetNumAtoms()
+    N = mol.NumAtoms()
     bond_feats = torch.zeros((N, N)).long()
     if not G.edges:
         return bond_feats
     i,j = np.array(G.edges).T
-    bond_feats[i,j] = torch.tensor([rdkit2btype[int(b.GetBondType())] for b in mol.GetBonds()]).long()
+    bond_feats[i,j] = torch.tensor([bond.GetBondOrder() if not bond.IsAromatic() else 4 for bond in openbabel.OBMolBondIter(mol)]).long()
     bond_feats[j,i] = bond_feats[i,j]
     return bond_feats
 
@@ -896,6 +904,12 @@ def atomize_protein(i, msa, true_crds, atom_mask):
     lig_xyz = torch.zeros((len(ra), 3))
     lig_xyz = true_crds[r, a]
     lig_mask = atom_mask[r, a]
+<<<<<<< HEAD
+=======
+
+    # handle symmetries
+
+>>>>>>> 6566fdc41c8bc8590153043450969789f7e9afc5
     return lig_seq, ins, lig_xyz, lig_mask
 
 def remove_protein_info(i, seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, bond_feats):

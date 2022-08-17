@@ -251,6 +251,9 @@ class LossTestCase(unittest.TestCase):
 			B, L = true_crds.shape[:2]
 			self.assertEqual(res_mask.shape[0], B)
 			self.assertEqual(res_mask.shape[1], L)
+			print(is_atom(msa[:,0,0]))
+			print(res_mask)
+			print(true_crds[res_mask][:,:23])
 			break
 	
 	def test_resolve_equiv_natives(self):

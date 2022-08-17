@@ -4,7 +4,7 @@ import os
 import csv
 from dateutil import parser
 import numpy as np
-from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol, get_ligand_xyz
+from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats
 import pickle
@@ -18,7 +18,7 @@ compl_dir = "/projects/ml/RoseTTAComplex"
 #na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
-mol_dir = "/projects/ml/ligand_datasets/mmcif_parse_wlig"
+mol_dir = "/home/dimaio/ccd/by-pdb"
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -29,7 +29,7 @@ if not os.path.exists(base_dir):
     base_dir = "/data/databases/PDB-2021AUG02"
     fb_dir = "/data/databases/fb_af"
     compl_dir = "/data/databases/RoseTTAComplex"
-    mol_dir = "/home/rohith"
+    mol_dir = "/home/dimaio/ccd/by-pdb"
 
 def set_data_loader_params(args):
     PARAMS = {
@@ -39,7 +39,7 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.csv"%na_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/list_v02_ligonly_notest.csv"%base_dir, 
+        "SM_LIST"          : "/home/rohith/list_v02_ligonly_notest_ccd_ob", 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         #"PDB_LIST"        : "/gscratch2/list_2021AUG02.csv", # on blue
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
@@ -1411,13 +1411,12 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     a3m_prot = {"msa": msa_prot, "ins": ins_prot}
     xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
     protein_L, nprotatoms, _ = xyz_prot.shape
+ 
     # Load small molecule
-
-    mol, msa_sm, ins_sm = parse_mol(params["MOL_DIR"]+"/mol2/"+item[0][1:3]+"/"+item[0][:-1]+random.choice(sm_chains)+".mol2")
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+item[0][1:3]+"/"+random.choice(sm_chains))
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
-    frames = get_atom_frames(msa_sm, mol, G)
-    xyz_sm, mask_sm = get_ligand_xyz(mol)
+    frames = get_atom_frames(msa_sm, G)
 
     N_symmetry, sm_L, _ = xyz_sm.shape
     # Generate ground truth structure: account for ligand symmetry
@@ -1472,6 +1471,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)
+    init = init + (torch.rand(init.shape)*5-2.5)
     xyz = torch.where(mask[...,None], xyz, init).contiguous()
     xyz = torch.nan_to_num(xyz)
 
@@ -1483,7 +1483,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
 def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to the ligand center of mass"""
     ligand_com = torch.nanmean(lig_xyz, dim=[0,1]).expand(1,3)
-    dist = torch.cdist(prot_xyz[:,1].double(), ligand_com).flatten()
+    dist = torch.cdist(prot_xyz[:,1], ligand_com).flatten()
     _, idx = torch.topk(dist, params["CROP"]-len(lig_xyz), largest=False)
     sel, _ = torch.sort(idx)
     # select the whole ligand
@@ -1604,11 +1604,7 @@ class DatasetSMComplex(data.Dataset):
     def __getitem__(self, index):
         ID = self.IDs[index]
         sel_idx = np.random.randint(0, len(self.item_dict[ID]))
-        # remove pdbs with BeF2 ligands, oddly behaved with rdkit
-        item = self.item_dict[ID][sel_idx][0]
-        while item[0] in ["1xhf", "1l5y", "4ukd"]:
-            sel_idx = np.random.randint(0, len(self.item_dict[ID]))
-            item = self.item_dict[ID][sel_idx][0]
+        print(self.item_dict[ID][sel_idx])
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][2],

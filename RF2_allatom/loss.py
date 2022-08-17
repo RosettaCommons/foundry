@@ -128,11 +128,11 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
 
 # from Ivan: FAPE generalized over atom sets & frames
 def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.0, eps=1e-4):
-    # X (predicted) N x L x 27 x 3
-    # Y (native)    1 x L x 27 x 3
-    # atom_mask     1 x L x 27
-    # frames        1 x L x 6 x 3 x 2
-    # frame_mask    1 x L x 6
+    # X (predicted) N x L x natoms x 3
+    # Y (native)    1 x L x natoms x 3
+    # atom_mask     1 x L x natoms
+    # frames        1 x L x nframes x 3 x 2
+    # frame_mask    1 x L x nframes
 
     N, L, natoms, _ = X.shape
     # flatten middle dims so can gather across residues
@@ -778,7 +778,9 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
     if negative:
         # ignore atoms between different chains
         pair_mask *= same_chain.bool()[:,:,:,None,None]
-
+    elif interface:
+            # ignore atoms between the same chain
+            pair_mask *= ~same_chain.bool()[:,:,:,None,None]
     delta_PQ = torch.abs(Pij-Qij+eps) # (N, L, L, 14, 14)
 
     lddt = torch.zeros( (N,L,Natm), device=P.device ) # (N, L, 27)
