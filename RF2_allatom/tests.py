@@ -7,7 +7,7 @@ from data_loader import get_train_valid_set, Dataset, DatasetNAComplex, DatasetR
 from kinematics import xyz_to_c6d, xyz_to_t2d
 from chemical import num2aa, aa2elt, aa2num
 from loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss
-from util import get_frames, frame_indices, is_atom, xyz_to_frame_xyz, xyz_t_to_frame_xyz, long2alt
+from util import get_frames, frame_indices, is_atom, xyz_to_frame_xyz, xyz_t_to_frame_xyz, long2alt, writepdb
 
 class LossTestCase(unittest.TestCase):
 
@@ -282,7 +282,13 @@ class DataLoaderTestCase(unittest.TestCase):
 			loader_pdb, valid_pdb,
 			self.loader_param, homo, p_homo_cut=-1.0
 		)
+		valid_sm_compl_set = DatasetSMComplex(
+			list(sm_compl_dict.keys()),
+			loader_sm_compl, sm_compl_dict,
+			self.loader_param
+		)
 		self.valid_pdb_loader = data.DataLoader(valid_pdb_set)
+		self.valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set)
 
 	def test_vaporize_protein(self):
 		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_pdb_loader:
@@ -293,9 +299,22 @@ class DataLoaderTestCase(unittest.TestCase):
 
 			true_alt = torch.zeros_like(true_crds)
 			true_alt.scatter_(2, long2alt[msa[:, 0, 0],:,None].repeat(1,1,1,3), true_crds)
-			print(true_crds.shape)
-			print((true_crds[:, i-2:i+2] == true_alt[:, i-2:i+2]).all(dim=2).all(dim=2).squeeze())
-			print(torch.nonzero(~(true_crds[:, i-2:i+2] == true_alt[:, i-2:i+2]).all(dim=2).all(dim=2).squeeze()).squeeze())
+			coords_stack = torch.stack((true_crds[:, i-2:i+2], true_alt[:, i-2:i+2]), dim=0)
+			swaps = (coords_stack[0] == coords_stack[1]).all(dim=2).all(dim=2).squeeze() #checks whether theres a swap at each position
+			print((coords_stack[0] == coords_stack[1]).all(dim=2).all(dim=2).squeeze())
+			print(coords_stack.shape)
+			swaps = torch.nonzero(~swaps).squeeze() # indices with a swap
+			print(swaps)
+			if swaps.numel() != 0:
+				combs = torch.combinations(torch.tensor([0,1]), r=swaps.numel(), with_replacement=True)
+				stack = torch.stack((combs, swaps.unsqueeze(0).repeat(swaps.numel()+1,1)), dim =2)
+				coords_stack = coords_stack.repeat(swaps.numel()+1,1,1,1,1).squeeze(1)
+				atom_coords = true_crds.repeat(swaps.numel()+1,1,1,1)
+				print(coords_stack.shape)
+				true_crds[:, i-2:i+2][swaps] = coords_stack[stack[...,0], stack[...,1]]
+				print(atom_coords)
+			else:
+				continue
 
 			lig_seq = []
 			ra = []
@@ -334,6 +353,12 @@ class DataLoaderTestCase(unittest.TestCase):
 			bond_feats = torch.cat((bond_feats[ :, :, :i-2], bond_feats[:, :, i+2:]), dim=2)
 
 
+			break
+
+	def test_writepdb(self):
+		counter = 0
+		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
+			writepdb(f"{counter}.pdb", seq, true_crds[0])
 			break
 		
 if __name__ == '__main__':
