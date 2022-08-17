@@ -24,7 +24,7 @@ num2aa=[
 
 aa2num= {x:i for i,x in enumerate(num2aa)}
 
-NAATOKENS = 20+2+10+1+45 # 20 AAs, UNK, MASK, 8 NAs,HIS_D, 45 atoms
+NAATOKENS = 20+2+10+1+47 # 20 AAs, UNK, MASK, 8 NAs,HIS_D, 47 atoms
 MASKINDEX = 21  # protein mask
 
 NHEAVY = 23
