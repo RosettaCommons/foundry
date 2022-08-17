@@ -439,5 +439,7 @@ def parse_mol(filename):
         atom_coords = atom_coords[torch.tensor(automorphs)[:, :, 1]]
         mask = mask[torch.tensor(automorphs)[:, :, 1]]
     except:
+        atom_coords = atom_coords.unsqueeze(0)
+        mask = mask.unsqueeze(0)
         print(f"ERROR: automorphs for {filename} yielded invalid tensor")
     return obmol, msa, ins, atom_coords, mask
