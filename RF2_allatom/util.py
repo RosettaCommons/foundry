@@ -205,36 +205,38 @@ def xyz_to_frame_xyz(xyz, seq_unmasked, atom_frames):
     seq_unmasked (1, L)
     atom_frames (1, L, 3, 2)
     """ 
+    xyz_frame = xyz.clone()
     atoms = is_atom(seq_unmasked)
     if torch.all(~atoms):
-        return xyz
-    atom_crds = xyz[atoms]
+        return xyz_frame
+    atom_crds = xyz_frame[atoms]
     atom_L, natoms, _ = atom_crds.shape
     frames_reindex = torch.zeros(atom_frames.shape[:-1])
     for i in range(atom_L):
         frames_reindex[:, i, :] = (i+atom_frames[..., i, :, 0])*natoms + atom_frames[..., i, :, 1]
     frames_reindex = frames_reindex.long()
-    xyz[atoms, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
-    return xyz
+    xyz_frame[atoms, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
+    return xyz_frame
 
 def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
     """
-    xyz (1, T, L, natoms, 3)
+    xyz_t (1, T, L, natoms, 3)
     seq_unmasked (L)
     atom_frames (1, L, 3, 2)
     """
+    xyz_t_frame = xyz_t.clone()
     atoms = is_atom(seq_unmasked)
     if torch.all(~atoms):
-        return xyz_t
-    atom_crds_t = xyz_t[:, :, atoms]
+        return xyz_t_frame
+    atom_crds_t = xyz_t_frame[:, :, atoms]
 
     B, T, atom_L, natoms, _ = atom_crds_t.shape
     frames_reindex = torch.zeros(atom_frames.shape[:-1])
     for i in range(atom_L):
         frames_reindex[:, i, :] = (i+atom_frames[..., i, :, 0])*natoms + atom_frames[..., i, :, 1]
     frames_reindex = frames_reindex.long()
-    xyz_t[:, :, atoms, :3] = atom_crds_t.reshape(T, atom_L*natoms, 3)[:, frames_reindex.squeeze(0)]
-    return xyz_t
+    xyz_t_frame[:, :, atoms, :3] = atom_crds_t.reshape(T, atom_L*natoms, 3)[:, frames_reindex.squeeze(0)]
+    return xyz_t_frame
 
 def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
     B,L,natoms = xyz_in.shape[:3]
@@ -434,7 +436,9 @@ for i in range(NNAPROTAAS):
         else:
             long2alt[i,j] = i_lalt.index(a)
             allatom_mask[i,j] = True
-
+for i in range(NNAPROTAAS, NAATOKENS):
+    for j in range(NTOTAL):
+        long2alt[i, j] = j
 # bond graph traversal
 num_bonds = torch.zeros((NAATOKENS,NTOTAL,NTOTAL), dtype=torch.long)
 for i in range(NNAPROTAAS):
