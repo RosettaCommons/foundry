@@ -204,7 +204,7 @@ def xyz_to_frame_xyz(xyz, seq_unmasked, atom_frames):
     xyz (1, L, natoms, 3)
     seq_unmasked (1, L)
     atom_frames (1, L, 3, 2)
-    """
+    """ 
     atoms = is_atom(seq_unmasked)
     if torch.all(~atoms):
         return xyz
@@ -307,7 +307,7 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
             assert(False)
 
         if s > len(aa2long):
-            lig_name = "test"
+            lig_name = "LG1"
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "HETATM", ctr, num2aa[s], lig_name, 
                     "A", torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
@@ -904,12 +904,9 @@ def atomize_protein(i, msa, true_crds, atom_mask):
     lig_xyz = torch.zeros((len(ra), 3))
     lig_xyz = true_crds[r, a]
     lig_mask = atom_mask[r, a]
-<<<<<<< HEAD
-=======
 
     # handle symmetries
 
->>>>>>> 6566fdc41c8bc8590153043450969789f7e9afc5
     return lig_seq, ins, lig_xyz, lig_mask
 
 def remove_protein_info(i, seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, bond_feats):

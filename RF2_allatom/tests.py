@@ -361,8 +361,12 @@ class DataLoaderTestCase(unittest.TestCase):
 	def test_writepdb(self):
 		counter = 0
 		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_sm_compl_loader:
-			writepdb(f"{counter}.pdb", seq, true_crds[0])
-			break
+			print(msa.shape)
+			print(true_crds[0, 0].shape)
+			writepdb(f"{counter}.pdb",  true_crds[0, 0].unsqueeze(0),msa[0,0,0])
+			counter = counter +1
+			if counter > 20:
+				break
 		
 if __name__ == '__main__':
 	unittest.main()
