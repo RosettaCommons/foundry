@@ -743,7 +743,7 @@ class Trainer():
                                                         self.model_name, gpu, suffix="best", resume_train=True)
 
         if (self.eval):
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
             # run protein/NA prediction (TEMPLATED)
             #_, _, _ = self.valid_ppi_cycle(
             #    ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
