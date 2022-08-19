@@ -1451,23 +1451,23 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     #generate initial coordinates
     xyz_prev = xyz_t[0]
 
-    # if sum(Ls) > params["CROP"]:
-    #     sel = crop_small_molecule(xyz_prot, xyz_sm[0], Ls, params)
+    if sum(Ls) > params["CROP"]:
+        sel = crop_small_molecule(xyz_prot, xyz_sm[0], Ls, params)
         
-    #     seq = seq[:,sel]
-    #     msa_seed_orig = msa_seed_orig[:,:,sel]
-    #     msa_seed = msa_seed[:,:,sel]
-    #     msa_extra = msa_extra[:,:,sel]
-    #     mask_msa = mask_msa[:,:,sel]
-    #     xyz = xyz[:,sel] 
-    #     mask = mask[:,sel]
-    #     xyz_t = xyz_t[:,sel]
-    #     f1d_t = f1d_t[:,sel]
-    #     xyz_prev = xyz_prev[sel] # need to initialize ligand atoms
-    #     #
-    #     idx = idx[sel]
-    #     chain_idx = chain_idx[sel][:,sel]
-    #     bond_feats = bond_feats[sel][:, sel]
+        seq = seq[:,sel]
+        msa_seed_orig = msa_seed_orig[:,:,sel]
+        msa_seed = msa_seed[:,:,sel]
+        msa_extra = msa_extra[:,:,sel]
+        mask_msa = mask_msa[:,:,sel]
+        xyz = xyz[:,sel] 
+        mask = mask[:,sel]
+        xyz_t = xyz_t[:,sel]
+        f1d_t = f1d_t[:,sel]
+        xyz_prev = xyz_prev[sel] # need to initialize ligand atoms
+        #
+        idx = idx[sel]
+        chain_idx = chain_idx[sel][:,sel]
+        bond_feats = bond_feats[sel][:, sel]
     bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)

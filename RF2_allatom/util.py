@@ -244,9 +244,6 @@ def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
 
     atoms = seq > NNAPROTAAS
     if torch.any(atoms):
-        # print(torch.sum(atoms))
-        # print(atom_frames.shape)
-        # print(atoms[0].nonzero().flatten().shape)
         frames[:,atoms[0].nonzero().flatten(), 0] = atom_frames
 
 
