@@ -853,7 +853,6 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     xyz_prev = xyz_t[0]
     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
-    bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(len(xyz), 1, 1)
     xyz = torch.where(mask[...,None], xyz, init).contiguous()
@@ -937,7 +936,6 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         bond_feats = bond_feats[crop_idx][:,crop_idx]
         xyz_prev = xyz_prev[crop_idx]
 
-    bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, 1, NTOTAL, 3).repeat(npairs, xyz.shape[1], 1, 1)
 
@@ -1042,7 +1040,6 @@ def loader_fb(item, params, unclamp=False):
     xyz_prev = xyz_t[0]
     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
-    bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
 
     #print ("loader_fb", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
 
@@ -1153,7 +1150,6 @@ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=Tru
         idx = idx[sel]
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:,sel]
-    bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
 
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(len(xyz), 1, 1)
@@ -1301,7 +1297,6 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:,sel]
         init = init[sel]
-    bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
     xyz = torch.where(mask[...,None], xyz, init).contiguous()
     xyz = torch.nan_to_num(xyz)
@@ -1383,7 +1378,6 @@ def loader_rna(pdb_set, Ls, params):
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
         init = init[sel]
-    bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
     xyz = torch.where(mask[...,None], xyz, init).contiguous()
     xyz = torch.nan_to_num(xyz)
@@ -1468,7 +1462,6 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
         idx = idx[sel]
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
-    bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)
     init = init + (torch.rand(init.shape)*5-2.5)

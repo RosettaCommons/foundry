@@ -883,8 +883,8 @@ def get_protein_bond_feats(protein_L):
     """ creates protein residue connectivity graphs """
     bond_feats = torch.zeros((protein_L, protein_L))
     residues = torch.arange(protein_L-1)
-    bond_feats[residues, residues+1] = 1
-    bond_feats[residues+1, residues] = 1
+    bond_feats[residues, residues+1] = 5
+    bond_feats[residues+1, residues] = 5
     return bond_feats
 
 def atomize_protein(i, msa, true_crds, atom_mask):

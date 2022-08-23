@@ -71,7 +71,7 @@ class RoseTTAFoldModule(nn.Module):
     ):
         B, N, L = msa_latent.shape[:3]
         # Get embeddings
-        msa_latent, pair, state = self.latent_emb(msa_latent, seq, idx)
+        msa_latent, pair, state = self.latent_emb(msa_latent, seq, idx, bond_feats)
         msa_full = self.full_emb(msa_full, seq, idx)
         pair = pair + self.bond_emb(bond_feats)
         #
