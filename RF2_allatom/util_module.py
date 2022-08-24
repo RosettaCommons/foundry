@@ -5,7 +5,9 @@ import torch.nn.functional as F
 from opt_einsum import contract as einsum
 import copy
 import dgl
-from util import base_indices, RTs_by_torsion, xyzs_in_base_frame, rigid_from_3_points, is_nucleic
+import networkx as nx
+from util import base_indices, RTs_by_torsion, xyzs_in_base_frame, \
+    rigid_from_3_points, is_nucleic, is_atom
 
 def init_lecun_normal(module, scale=1.0):
     def truncated_normal(uniform, mu=0.0, sigma=1.0, a=-2, b=2):
@@ -93,6 +95,8 @@ def rbf(D, scale=1.0):
 
 def get_seqsep(idx):
     '''
+    Sequence separation feature for structure module. Protein-only.
+
     Input:
         - idx: residue indices of given sequence (B,L)
     Output:
@@ -105,6 +109,69 @@ def get_seqsep(idx):
     neigh[neigh > 1] = 0.0 # if bonded -- 1.0 / else 0.0
     neigh = sign * neigh
     return neigh.unsqueeze(-1)
+
+def get_seqsep_protein_sm(idx, bond_feats, sm_mask):
+    '''
+    Sequence separation features for protein-SM complex
+
+    Input:
+        - idx: residue indices of given sequence (B,L)
+        - bond_feats: bond features (B, L, L)
+        - sm_mask: boolean feature True if a position represents atom, False if residue (B, L)
+
+    Output:
+        - seqsep: sequence separation feature with sign (B, L, L, 1)
+            -1 or 1 for bonded protein residues
+            1 for bonded SM atoms
+            0 elsewhere
+    '''
+    relpos = get_relpos(idx, bond_feats, sm_mask, inter_pos=0, maxpath=2)
+    relpos[(relpos > 1) | (relpos < -1)] = 0.0
+    return relpos.unsqueeze(-1)
+
+def get_relpos(idx, bond_feats, sm_mask, inter_pos=32, maxpath=32):
+    '''
+    Relative position matrix of protein/SM complex. Assumes batch=1
+
+    Input:
+        - idx: residue index (B, L)
+        - bond_feats: bond features (B, L, L)
+        - sm_mask: boolean feature True if a position represents atom, False if residue (B, L)
+        - inter_pos: value to assign as the protein-SM residue index differences
+        - maxpath: bond distances greater than this are clipped to this value
+
+    Output:
+        - relpos: relative position feature (B, L, L)
+            for intra-protein this is the residue index difference
+            for intra-SM this is the bond distance
+            for protein-SM this is user-defined value inter_pos
+    '''
+    bond_feats = bond_feats[0]
+
+    sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
+    prot_mask_2d = (~sm_mask[None,:]) * (~sm_mask[:,None])
+    inter_mask_2d = (~sm_mask[None,:]) * (sm_mask[:,None]) + (sm_mask[None,:]) * (~sm_mask[:,None])
+
+    # intra-protein: residue # differences
+    seqsep = idx[:,None,:] - idx[:,:,None] # (B, L, L)
+
+    # intra-small molecule: bond distances
+    sm_bond_feats = torch.zeros_like(bond_feats) + sm_mask*bond_feats                                      
+    G = nx.from_numpy_matrix(sm_bond_feats.detach().cpu().numpy())
+    paths = dict(nx.all_pairs_shortest_path_length(G,cutoff=maxpath))
+    paths = [(i,j,vij) for i,vi in paths.items() for j,vij in vi.items()]
+    i,j,v = torch.tensor(paths).T
+
+    bond_separation = torch.full_like(bond_feats, maxpath) \
+        - maxpath*torch.eye(bond_feats.shape[0]).to(bond_feats.device).long()
+    bond_separation[i,j] = v.to(bond_feats.device)
+
+    # combine: protein-s.m. are always positive maximum distance apart
+    # assumes one small molecule per example
+    relpos = prot_mask_2d * seqsep + sm_mask_2d * bond_separation + inter_mask_2d * inter_pos # (B, L, L)
+    relpos = relpos.to(bond_feats.device)
+
+    return relpos
 
 def make_full_graph(xyz, pair, idx):
     '''

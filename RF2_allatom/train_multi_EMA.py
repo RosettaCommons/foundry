@@ -1,5 +1,4 @@
-import sys, os, time, subprocess
-from datetime import date
+import sys, os, time, subprocess, datetime
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
@@ -107,14 +106,11 @@ class EMA(nn.Module):
         else:
             return self.shadow(*args, **kwargs)
 
-def get_datetime():
-    return str(date.today()) + '_' + str(time.time())
-
 class Trainer():
     def __init__(self, model_name='BFF',
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
                  model_param={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
-                 eval=False, outdir=f'./training_runs/{get_datetime()}', wandb_prefix=None):
+                 eval=False, outdir=None, wandb_prefix=None):
         self.model_name = model_name #"BFF"
         #self.model_name = "%s_%d_%d_%d_%d"%(model_name, model_param['n_module'], 
         #                                    model_param['n_module_str'],
@@ -135,7 +131,7 @@ class Trainer():
         self.ACCUM_STEP = accum_step
         self.batch_size = batch_size
         self.outdir = outdir
-        os.makedirs(self.outdir, exist_ok=True)
+        if outdir is not None: os.makedirs(self.outdir, exist_ok=True)
         self.wandb_prefix = wandb_prefix
 
         # for all-atom str loss
@@ -254,7 +250,7 @@ class Trainer():
         # get alternative coordinates for ground-truth
         true_alt = torch.zeros_like(true)
         true_alt.scatter_(2, self.l2a[seq,:,None].repeat(1,1,1,3), true)
-        print(true_alt)
+        #print(true_alt)
         natRs_all, _n0 = self.compute_allatom_coords(seq, true[...,:3,:], true_tors)
         natRs_all_alt, _n1 = self.compute_allatom_coords(seq, true_alt[...,:3,:], true_tors_alt)
         predTs = pred[-1,...]
@@ -512,9 +508,10 @@ class Trainer():
     def train_model(self, rank, world_size):
         
         # save git diff from last commit
-        gitdiff_fn = open(f'{self.outdir}/git_diff.txt','w')
-        git_diff = subprocess.Popen(['git diff'], cwd = os.getcwd(), shell = True, stdout = gitdiff_fn, stderr = subprocess.PIPE)
-        print('Save git diff between current state and last commit')
+        if self.outdir is not None:
+            gitdiff_fn = open(f'{self.outdir}/git_diff.txt','w')
+            git_diff = subprocess.Popen(['git diff'], cwd = os.getcwd(), shell = True, stdout = gitdiff_fn, stderr = subprocess.PIPE)
+            print('Save git diff between current state and last commit')
 
         # wandb logging
         if self.wandb_prefix is not None and rank == 0:
@@ -1087,7 +1084,7 @@ class Trainer():
                             " ".join(["%8.4f"%l for l in local_loss]),\
                             local_acc[0], local_acc[1], local_acc[2], max_mem))
 
-                    if self.wandb is not None and rank == 0:
+                    if self.wandb_prefix is not None and rank == 0:
                         loss_dict.update({'total_examples':epoch*len(train_loader)+counter*world_size})
                         wandb.log(loss_dict)
 
@@ -1636,6 +1633,9 @@ if __name__ == "__main__":
 
     print (args)
 
+    datestr = str(datetime.datetime.now()).replace(':','').replace(' ','_') # YYYY-MM-DD_HHMMSS.xxxxxx
+    outdir = (args.outdir_prefix+'_'+datestr).replace('/_','/')
+
     mp.freeze_support()
     train = Trainer(model_name=args.model_name,
                     n_epoch=args.num_epochs, step_lr=args.step_lr, lr=args.lr, l2_coeff=1.0e-2,
@@ -1645,5 +1645,6 @@ if __name__ == "__main__":
                     accum_step=args.accum,
                     maxcycle=args.maxcycle,
                     eval=args.eval,
+                    outdir=outdir,
                     wandb_prefix=args.wandb_prefix)
     train.run_model_training(torch.cuda.device_count())

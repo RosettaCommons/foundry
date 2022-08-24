@@ -28,5 +28,4 @@ python -u ./train_multi_EMA.py \
     -slice CONT \
     -lr 0.001 \
     -port 12345 \
-    -wandb_prefix test_wandb
     #-eval

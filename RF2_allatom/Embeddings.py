@@ -4,52 +4,25 @@ import torch.nn.functional as F
 from opt_einsum import contract as einsum
 import torch.utils.checkpoint as checkpoint
 from util import *
-from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal
+from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_relpos
 from Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
 from Track_module import PairStr2Pair
 from chemical import NAATOKENS,NTOTALDOFS, NBTYPES
-import networkx as nx
 
 # Module contains classes and functions to generate initial embeddings
 
 class PositionalEncoding2D(nn.Module):
     # Add relative positional encoding to pair features
-    def __init__(self, d_model, minpos=-32, maxpos=32, maxpath=16, p_drop=0.1):
+    def __init__(self, d_model, minpos=-32, maxpos=32, p_drop=0.1):
         super(PositionalEncoding2D, self).__init__()
         self.minpos = minpos
         self.maxpos = maxpos
-        self.maxpath = maxpath # maximum bond distance in s.m.
         self.nbin = abs(minpos)+maxpos+1
         self.emb = nn.Embedding(self.nbin, d_model)
 
     def forward(self, x, seq, idx, bond_feats):
-        # Jue: Assumes BATCH=1
-        sm_mask = is_atom(seq)[0]
-        bond_feats = bond_feats[0]
-
-        sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
-        prot_mask_2d = (~sm_mask[None,:]) * (~sm_mask[:,None])
-        inter_mask_2d = (~sm_mask[None,:]) * (sm_mask[:,None]) + (sm_mask[None,:]) * (~sm_mask[:,None])
-
-        # intra-protein: residue # differences
-        seqsep = idx[:,None,:] - idx[:,:,None] # (B, L, L)
-
-        # intra-small molecule: bond distances
-        sm_bond_feats = torch.zeros_like(bond_feats) + sm_mask*bond_feats # only look at intra-s.m. bonds
-
-        G = nx.from_numpy_matrix(sm_bond_feats.detach().numpy())
-        paths = dict(nx.all_pairs_shortest_path_length(G,cutoff=self.maxpath))
-        paths = [(i,j,vij) for i,vi in paths.items() for j,vij in vi.items()]
-        i,j,v = torch.tensor(paths).T
-
-        bond_separation = torch.zeros_like(bond_feats)
-        bond_separation[i,j] = v
-
-        # combine: protein-s.m. are always positive maximum distance apart
-        # assumes one small molecule per example
-        relpos = prot_mask_2d * seqsep + sm_mask_2d * bond_separation + inter_mask_2d * self.maxpos # (B, L, L)
-        relpos = relpos.to(x.device)
-
+        sm_mask = is_atom(seq[0])
+        relpos = get_relpos(idx, bond_feats, sm_mask, inter_pos=self.maxpos, maxpath=self.maxpos)
         bins = torch.arange(self.minpos, self.maxpos, device=x.device)
         ib = torch.bucketize(relpos, bins).long() # (B, L, L)
         emb = self.emb(ib) #(B, L, L, d_model)
@@ -59,14 +32,14 @@ class PositionalEncoding2D(nn.Module):
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
     def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=2*NAATOKENS+2+2,
-                 minpos=-32, maxpos=32, maxpath=16, p_drop=0.1):
+                 minpos=-32, maxpos=32, p_drop=0.1):
         super(MSA_emb, self).__init__()
         self.emb = nn.Linear(d_init, d_msa) # embedding for general MSA
         self.emb_q = nn.Embedding(NAATOKENS, d_msa) # embedding for query sequence -- used for MSA embedding
         self.emb_left = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_right = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_state = nn.Embedding(NAATOKENS, d_state)
-        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, maxpath=maxpath, p_drop=p_drop)
+        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, p_drop=p_drop)
         
         self.reset_parameter()
     
