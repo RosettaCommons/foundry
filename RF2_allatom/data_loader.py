@@ -1057,10 +1057,10 @@ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=Tru
     if len(set(taxID.split(':'))) == 1: # two proteins have same taxID -- use paired MSA
         # read pMSA
         if negative:
-            pMSA_fn = params['COMPL_DIR'] + '/pMSA.negative/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m'
+            pMSA_fn = params['COMPL_DIR'] + '/pMSA.negative/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m.gz'
         else:
-            pMSA_fn = params['COMPL_DIR'] + '/pMSA/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m'
-        a3m = get_msa(pMSA_fn, pMSA_hash, unzip=False)
+            pMSA_fn = params['COMPL_DIR'] + '/pMSA/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m.gz'
+        a3m = get_msa(pMSA_fn, pMSA_hash, unzip=True)
     else:
         # read MSA for each subunit & merge them
         a3mA_fn = params['PDB_DIR'] + '/a3m/' + msaA_id[:3] + '/' + msaA_id + '.a3m.gz'

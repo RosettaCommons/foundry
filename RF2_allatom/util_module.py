@@ -112,7 +112,7 @@ def get_seqsep(idx):
 
 def get_seqsep_protein_sm(idx, bond_feats, sm_mask):
     '''
-    Sequence separation features for protein-SM complex
+    Sequence separation features for structure module, protein-SM complex
 
     Input:
         - idx: residue indices of given sequence (B,L)
