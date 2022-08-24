@@ -31,6 +31,8 @@ def get_args():
             help="Gradient accumulation when it's > 1 [1]")
     train_group.add_argument("-eval", action='store_true', default=False,
             help="Train structure only")
+    train_group.add_argument('-wandb_prefix', type=str, 
+            help='Prefix for name of session on wandb.')
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")
