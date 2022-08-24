@@ -1,8 +1,9 @@
-import sys, os
-import time
+import sys, os, time, subprocess
+from datetime import date
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
+import wandb
 import torch
 import torch.nn as nn
 from torch.utils import data
@@ -106,10 +107,14 @@ class EMA(nn.Module):
         else:
             return self.shadow(*args, **kwargs)
 
+def get_datetime():
+    return str(date.today()) + '_' + str(time.time())
+
 class Trainer():
     def __init__(self, model_name='BFF',
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
-                 model_param={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4, eval=False):
+                 model_param={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
+                 eval=False, outdir=f'./training_runs/{get_datetime()}', wandb_prefix=None):
         self.model_name = model_name #"BFF"
         #self.model_name = "%s_%d_%d_%d_%d"%(model_name, model_param['n_module'], 
         #                                    model_param['n_module_str'],
@@ -129,6 +134,9 @@ class Trainer():
         self.loss_param = loss_param
         self.ACCUM_STEP = accum_step
         self.batch_size = batch_size
+        self.outdir = outdir
+        os.makedirs(self.outdir, exist_ok=True)
+        self.wandb_prefix = wandb_prefix
 
         # for all-atom str loss
         self.ti_dev = torsion_indices
@@ -502,6 +510,28 @@ class Trainer():
             mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
 
     def train_model(self, rank, world_size):
+        
+        # save git diff from last commit
+        gitdiff_fn = open(f'{self.outdir}/git_diff.txt','w')
+        git_diff = subprocess.Popen(['git diff'], cwd = os.getcwd(), shell = True, stdout = gitdiff_fn, stderr = subprocess.PIPE)
+        print('Save git diff between current state and last commit')
+
+        # wandb logging
+        if self.wandb_prefix is not None and rank == 0:
+            print('initializing wandb')
+            wandb.init(
+                project='RF2_allatom',
+                entity='bakerlab',
+                name='_'.join([self.wandb_prefix, os.path.basename(self.outdir.strip('/'))]))
+
+            all_param = {}
+            all_param.update(self.loader_param)
+            all_param.update(self.model_param)
+            all_param.update(self.loss_param)
+
+            wandb.config = all_param
+            wandb.save(os.path.join(os.getcwd(), self.outdir, 'git_diff.txt'))
+
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
         dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
@@ -1056,6 +1086,11 @@ class Trainer():
                             epoch, self.n_epoch, counter*self.batch_size*world_size, self.n_train, train_time, local_tot, \
                             " ".join(["%8.4f"%l for l in local_loss]),\
                             local_acc[0], local_acc[1], local_acc[2], max_mem))
+
+                    if self.wandb is not None and rank == 0:
+                        loss_dict.update({'total_examples':epoch*len(train_loader)+counter*world_size})
+                        wandb.log(loss_dict)
+
                     sys.stdout.flush()
                     local_tot = 0.0
                     local_loss = None 
@@ -1609,5 +1644,6 @@ if __name__ == "__main__":
                     batch_size=args.batch_size,
                     accum_step=args.accum,
                     maxcycle=args.maxcycle,
-                    eval=args.eval)
+                    eval=args.eval,
+                    wandb_prefix=args.wandb_prefix)
     train.run_model_training(torch.cuda.device_count())

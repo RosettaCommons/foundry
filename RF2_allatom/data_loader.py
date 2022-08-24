@@ -43,12 +43,12 @@ def set_data_loader_params(args):
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         #"PDB_LIST"        : "/gscratch2/list_2021AUG02.csv", # on blue
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
-        "VAL_PDB"          : "./valid_remapped",
+        "VAL_PDB"          : "/home/rohith/BFF/RF2_allatom/valid_remapped",
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
-        "TEST_SM"          : "./lig_test",
-        "DATAPKL"          : "./dataset.pkl", # cache for faster loading
+        "TEST_SM"          : "/home/rohith/BFF/RF2_allatom/lig_test",
+        "DATAPKL"          : "/home/rohith/BFF/RF2_allatom/dataset.pkl", # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
