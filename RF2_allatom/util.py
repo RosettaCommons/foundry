@@ -246,7 +246,6 @@ def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
     if torch.any(atoms):
         frames[:,atoms[0].nonzero().flatten(), 0] = atom_frames
 
-
     frame_mask = ~torch.all(frames[...,0, :] == frames[...,1, :], axis=-1)
 
     # frame_mask *= torch.all(
@@ -867,6 +866,19 @@ def get_atom_frames(msa, G):
     assert msa.shape[0] == len(selected_frames)
     return torch.tensor(selected_frames).long()
 
+def get_atomized_protein_frames(msa, ra):
+    """ returns a unique frame for each atom in a stretch of residues """
+    residue_frames = atomized_protein_frames[msa]
+    
+    # handle out of bounds at the termini, terminal N and C inherit Calpha frame and offset dimension needs to be updated
+    offset = torch.zeros(3,2)
+    offset[:,0] = 1
+    residue_frames[0, 0] = residue_frames[0,1] + offset
+    residue_frames[-1, 2] = residue_frames[-1,1] + offset
+    r,a = ra.T
+    frames = residue_frames[r,a]
+    return frames 
+    
 ### Generate bond features for small molecules ###
 def get_bond_feats(mol, G):
     """creates 2d bond graph for small molecules"""
@@ -887,46 +899,69 @@ def get_protein_bond_feats(protein_L):
     bond_feats[residues+1, residues] = 1
     return bond_feats
 
-def atomize_protein(i, msa, true_crds, atom_mask):
-    """ given an index i, make the preceding 2 residues and the following residue (4 total) into "atom" nodes """
-    residues_atomize = msa[0, 0, i-2:i+2]
-    residues_atomize = [aa2elt[num][:14] for num in residues_atomize[0]]
-    lig_seq = []
-    ra = []
-    for idx in range(len(residues_atomize)):
-        for jdx in range(14):
-            if residues_atomize[idx][jdx]:
-                ra.append((i-2+idx, jdx))
-                lig_seq.append(aa2num[residues_atomize[idx][jdx]])
-    lig_seq = torch.tensor(lig_seq)
-    ins = torch.zeros_like(lig_seq)
-    ra = torch.tensor(ra)
-    r,a = ra.T
-    lig_xyz = torch.zeros((len(ra), 3))
-    lig_xyz = true_crds[r, a]
-    lig_mask = atom_mask[r, a]
+def get_atomize_protein_bond_feats(sel_res, msa, ra, flank=5):
+    """ generate atom bond features for atomized residues """
+    ra2ind = {}
+    for i, two_d in enumerate(ra):
+        ra2ind[tuple(two_d.numpy())] = i
+    N = len(ra2ind.keys())
+    bond_feats = torch.zeros((N, N))
+    for i, res in enumerate(msa[0, sel_res:sel_res+flank]):
+        for j, bond in enumerate(aabonds[res]):
+            start_idx = aa2long[res].index(bond[0])
+            end_idx = aa2long[res].index(bond[1])
+            if (i, start_idx) not in ra2ind or (i, end_idx) not in ra2ind:
+                #skip bonds with atoms that aren't observed in the structure
+                continue
+            start_idx = ra2ind[(i, start_idx)]
+            end_idx = ra2ind[(i, end_idx)]
+
+            # maps the 2d index of the start and end indices to btype
+            bond_feats[start_idx, end_idx] = aabtypes[res][j]
+            bond_feats[end_idx, start_idx] = aabtypes[res][j]
+        #accounting for peptide bonds
+        if i > 1:
+            if (i-1, 2) not in ra2ind or (i, 0) not in ra2ind:
+                #skip bonds with atoms that aren't observed in the structure
+                continue
+            start_idx = ra2ind[(i-1, 2)]
+            end_idx = ra2ind[(i, 0)]
+            bond_feats[start_idx, end_idx] = aabtypes[res][j]
+            bond_feats[end_idx, start_idx] = aabtypes[res][j]
+    return bond_feats
+
+### Generate atom features for proteins ###
+def atomize_protein(sel_res, msa, xyz, mask, flank=5):
+    """ given an index sel_res, make the following flank residues into "atom" nodes """
+    residues_atomize = msa[0, sel_res:sel_res+flank]
+    residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
+    residue_atomize_mask = mask[sel_res:sel_res+flank].float()
+    xyz = torch.nan_to_num(xyz)
 
     # handle symmetries
+    xyz_alt = torch.zeros_like(xyz.unsqueeze(0))
+    xyz_alt.scatter_(2, long2alt[msa[0],:,None].repeat(1,1,1,3), xyz.unsqueeze(0))
+    coords_stack = torch.stack((xyz[sel_res:sel_res+flank], xyz_alt[0, sel_res:sel_res+flank]), dim=0)
+    swaps = (coords_stack[0] == coords_stack[1]).all(dim=1).all(dim=1).squeeze() #checks whether theres a swap at each position
+    swaps = torch.nonzero(~swaps).squeeze() # indices with a swap
+    if swaps.numel() != 0:
+        # if there are residues with alternate numbering scheme, create a stack of coordinate with each combo of swaps
+        combs = torch.combinations(torch.tensor([0,1]), r=swaps.numel(), with_replacement=True)
+        stack = torch.stack((combs, swaps.repeat(swaps.numel()+1,1)), dim=-1).squeeze()
+        coords_stack = coords_stack.repeat(swaps.numel()+1,1,1,1)
+        nat_symm = coords_stack[0].repeat(swaps.numel()+1,1,1,1) # (N_symm, num_atomize_residues, natoms, 3)
+        swapped_coords = coords_stack[stack[...,0], stack[...,1]].squeeze(1) # 
+        nat_symm[:,swaps] = swapped_coords
+    else:
+        nat_symm = xyz.unsqueeze(0)
+    ra = residue_atomize_mask.nonzero()
+    lig_seq = torch.tensor([aa2num[residues_atom_types[r][a]] for r,a in ra])
+    ins = torch.zeros_like(lig_seq)
 
-    return lig_seq, ins, lig_xyz, lig_mask
-
-def remove_protein_info(i, seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, bond_feats):
-    """ remove the msa/template information for the portion of the protein that was "atomized" """
-    seq = torch.cat((seq[:, :i-2], seq[:, i+2:]), dim=1)
-    msa = torch.cat((msa[:, :, :i-2], msa[:, :, i+2:]), dim=2)
-    msa_masked = torch.cat((msa_masked[:, :, :, :i-2], msa_masked[:, :, i+2:]), dim=2)
-    msa_full = torch.cat((msa_full[:, :, :, :i-2], msa_full[:, :, i+2:]), dim=2)
-    mask_msa = torch.cat((mask_msa[:, :, :, :i-2], mask_msa[:, :, i+2:]), dim=2)
-    true_crds = torch.cat((true_crds[ :, :i-2], true_crds[ :, i+2:]), dim=1)
-    atom_mask = torch.cat((atom_mask[ :, :i-2], atom_mask[ :, i+2:]), dim=1)
-
-    idx_pdb = torch.cat((idx_pdb[ :, :i-2], idx_pdb[ :, i+2:]), dim=1)
-    xyz_t = torch.cat((xyz_t[ :, :, :i-2], xyz_t[:, :, i+2:]), dim=2)
-    t1d = torch.cat((t1d[ :, :, :i-2], t1d[:, :, i+2:]), dim=2)
-    xyz_prev = torch.cat((xyz_prev[ :, :i-2], xyz_prev[:, i+2:]), dim=1)
-    same_chain = torch.cat((same_chain[ :i-2], same_chain[:, i+2:]), dim=1)
-    same_chain = torch.cat((same_chain[ :, :i-2], same_chain[:, i+2:]), dim=2)
-    bond_feats = torch.cat((bond_feats[ :i-2], bond_feats[i+2:]), dim=1)
-    bond_feats = torch.cat((bond_feats[ :, :i-2], bond_feats[:, i+2:]), dim=2)
-    return seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, bond_feats
-
+    r,a = ra.T
+    lig_xyz = torch.zeros((len(ra), 3))
+    lig_xyz = nat_symm[:, r, a]
+    lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
+    frames = get_atomized_protein_frames(residues_atomize, ra)
+    bond_feats = get_atomize_protein_bond_feats(sel_res, msa, ra, flank=flank)
+    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats

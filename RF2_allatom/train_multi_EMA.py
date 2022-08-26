@@ -246,7 +246,6 @@ class Trainer():
         # get alternative coordinates for ground-truth
         true_alt = torch.zeros_like(true)
         true_alt.scatter_(2, self.l2a[seq,:,None].repeat(1,1,1,3), true)
-        print(true_alt)
         natRs_all, _n0 = self.compute_allatom_coords(seq, true[...,:3,:], true_tors)
         natRs_all_alt, _n1 = self.compute_allatom_coords(seq, true_alt[...,:3,:], true_tors_alt)
         predTs = pred[-1,...]

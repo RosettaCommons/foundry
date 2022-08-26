@@ -6,7 +6,7 @@ from dateutil import parser
 import numpy as np
 from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES
-from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats
+from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, atomize_protein
 import pickle
 import random
 import ast
@@ -1480,6 +1480,116 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
            chain_idx, False, False, frames, bond_feats
 
+def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5):
+    """ load pdb with portions represented as atoms instead of residues """
+    pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
+    a3m = get_msa(params['PDB_DIR'] + '/a3m/' + item[1][:3] + '/' + item[1] + '.a3m.gz', item[1])
+    tplt = torch.load(params['PDB_DIR']+'/torch/hhr/'+item[1][:3]+'/'+item[1]+'.pt')
+    
+    # get msa features
+    msa = a3m['msa'].long()
+    ins = a3m['ins'].long()
+    if len(msa) > params['BLOCKCUT']:
+        msa, ins = MSABlockDeletion(msa, ins)
+    
+    idx = torch.arange(len(pdb['xyz'])) 
+    xyz = torch.full((len(idx),NTOTAL,3), np.nan).float()
+    xyz[:,:14,:] = pdb['xyz']
+    mask = torch.full((len(idx), NTOTAL), False)
+    mask[:,:14] = pdb['mask']
+    
+    # handle template features
+    ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
+    xyz_t_prot, f1d_t_prot = TemplFeaturize(tplt, len(pdb['xyz']), params, offset=0, npick=ntempl, pick_top=pick_top)
+
+    crop_idx = get_crop(len(idx), mask, msa.device, params, unclamp=unclamp)
+    msa_prot = msa[:, crop_idx]
+    ins_prot = ins[:, crop_idx]
+    xyz_prot = xyz[crop_idx]
+    mask_prot = mask[crop_idx]
+    idx = idx[crop_idx]
+    xyz_t_prot = xyz_t_prot[:, crop_idx]
+    f1d_t_prot = f1d_t_prot[:, crop_idx]
+    protein_L, nprotatoms, _ = xyz_prot.shape
+
+    # Choose a residue for the atomize stretch
+    stretch = 5 # how many residues to atomize
+    flank = 3 # how many residue chain break to have between atomized portion and residues
+    sc_residues = (torch.sum(mask_prot, dim=1)>3).nonzero()
+    sel_res = torch.randint(flank+1, sc_residues.shape[0]-(stretch+flank+1),(1,))
+    sel_res = sc_residues[sel_res]
+
+    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, flank=stretch)
+    # no atom templates
+    tplt_sm = {"ids":[]}
+    xyz_t_sm, f1d_t_sm = TemplFeaturize(tplt_sm, xyz_sm.shape[1], params, offset=0, npick=0, pick_top=pick_top)
+    ntempl = xyz_t_prot.shape[0]
+    xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
+    f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
+
+    N_symmetry, sm_L, _ = xyz_sm.shape
+    # Generate ground truth structure: account for ligand symmetry
+    xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
+    mask = torch.full(xyz.shape[:-1], False).bool()
+    xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
+    xyz[:, protein_L:, 1, :] = xyz_sm
+    mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, protein_L, nprotatoms)
+    mask[:, protein_L:, 1] = mask_sm
+    
+    Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
+    a3m_prot = {"msa": msa_prot, "ins": ins_prot}
+    a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
+    a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+    msa = a3m['msa'].long()
+    ins = a3m['ins'].long()
+
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+
+    # handle bond features
+    bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
+    bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
+    bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
+
+    # handle res_idx
+    last_res = idx[-1]
+    idx_sm = torch.arange(Ls[1]) + last_res
+    idx = torch.cat((idx, idx_sm))
+    # handle chain_idx
+    chain_idx = torch.zeros((sum(Ls), sum(Ls))).long()
+    chain_idx[:Ls[0], :Ls[0]] = 1
+    chain_idx[Ls[0]:, Ls[0]:] = 1 
+    
+    # remove msa features for atomized portion
+    seq = torch.cat((seq[:, :sel_res-flank], seq[:, sel_res+stretch+flank:]), dim=1)
+    msa_seed_orig = torch.cat((msa_seed_orig[:, :, :sel_res-flank], msa_seed_orig[:, :, sel_res+stretch+flank:]), dim=2)
+    msa_seed = torch.cat((msa_seed[:, :, :sel_res-flank], msa_seed[:, :, sel_res+stretch+flank:]), dim=2)
+    msa_extra = torch.cat((msa_extra[:, :, :sel_res-flank], msa_extra[:, :, sel_res+stretch+flank:]), dim=2)
+    mask_msa = torch.cat((mask_msa[:, :, :sel_res-flank], mask_msa[:, :, sel_res+stretch+flank:]), dim=2)
+    xyz = torch.cat((xyz[:, :sel_res-flank], xyz[:, sel_res+stretch+flank:]), dim=1)
+    mask = torch.cat((mask[:, :sel_res-flank], mask[:, sel_res+stretch+flank:]), dim=1)
+
+    idx = torch.cat((idx[:sel_res-flank], idx[sel_res+stretch+flank:]), dim=0)
+    xyz_t = torch.cat((xyz_t[:, :sel_res-flank], xyz_t[:, sel_res+stretch+flank:]), dim=1)
+    f1d_t = torch.cat((f1d_t[:, :sel_res-flank], f1d_t[:, sel_res+stretch+flank:]), dim=1)
+    chain_idx = torch.cat((chain_idx[ :sel_res-flank], chain_idx[sel_res+stretch+flank:]), dim=0)
+    chain_idx = torch.cat((chain_idx[ :, :sel_res-flank], chain_idx[:, sel_res+stretch+flank:]), dim=1)
+    bond_feats = torch.cat((bond_feats[ :sel_res-flank], bond_feats[sel_res+stretch+flank:]), dim=0)
+    bond_feats = torch.cat((bond_feats[ :, :sel_res-flank], bond_feats[:, sel_res+stretch+flank:]), dim=1)
+
+    xyz_prev = xyz_t[0]
+
+    bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
+    # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
+    init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)
+    init = init + (torch.rand(init.shape)*5-2.5)
+    xyz = torch.where(mask[...,None], xyz, init).contiguous()
+    xyz = torch.nan_to_num(xyz)
+    return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+           xyz.float(), mask, idx.long(), \
+           xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
+           chain_idx, False, False, frames, bond_feats
+    
+
 def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to the ligand center of mass"""
     ligand_com = torch.nanmean(lig_xyz, dim=[0,1]).expand(1,3)
@@ -1604,7 +1714,6 @@ class DatasetSMComplex(data.Dataset):
     def __getitem__(self, index):
         ID = self.IDs[index]
         sel_idx = np.random.randint(0, len(self.item_dict[ID]))
-        print(self.item_dict[ID][sel_idx])
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][2],
