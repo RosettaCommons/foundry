@@ -9,7 +9,7 @@ from torch.utils import data
 from functools import partial
 from data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm_compl,
-    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
+    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler, loader_atomize_pdb
 )
 from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor, get_init_xyz
 from RoseTTAFoldModel  import RoseTTAFoldModule
@@ -581,7 +581,7 @@ class Trainer():
             )
 
         train_set = DistilledDataset(
-            pdb_IDs, loader_pdb, pdb_dict,
+            pdb_IDs, loader_atomize_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
             neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
@@ -662,7 +662,7 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
-            fraction_sm_compl=1.0,
+            fraction_sm_compl=0.5,
             replacement=True
         )
 
