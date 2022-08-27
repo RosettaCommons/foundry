@@ -1619,7 +1619,7 @@ class DatasetSMComplex(data.Dataset):
     def __getitem__(self, index):
         ID = self.IDs[index]
         sel_idx = np.random.randint(0, len(self.item_dict[ID]))
-        print(self.item_dict[ID][sel_idx])
+        #print(self.item_dict[ID][sel_idx])
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][2],

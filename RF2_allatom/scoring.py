@@ -1,4 +1,6 @@
-import json
+import json, os
+
+script_dir = os.path.dirname(os.path.realpath(__file__))+'/'
 
 ##
 ## lk and lk term
@@ -39,7 +41,7 @@ type2ljlk = {
 }
 
 # cartbonded
-with open('cartbonded.json', 'r') as j:
+with open(script_dir+'cartbonded.json', 'r') as j:
     cartbonded_data_raw = json.loads(j.read())
 
 # hbond donor/acceptors

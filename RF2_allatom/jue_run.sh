@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -c 4
-#SBATCH --mem 64g
+#SBATCH --mem 128g
 #SBATCH -p gpu
 #SBATCH --gres gpu:a6000:1
 #SBATCH -o train.log
@@ -12,12 +12,16 @@ python -u ./train_multi_EMA.py \
     -model_name BFF20h \
     -p_drop 0.0 \
     -maxcycle 4 \
-    -n_extra_block 4 \
-    -n_main_block 32 \
-    -n_ref_block 4 \
+    -n_extra_block 2 \
+    -n_main_block 8 \
+    -n_ref_block 2 \
     -n_finetune_block 0 \
     -ref_num_layers 2 \
-    -accum 4 \
+    -d_msa 64 \
+    -d_pair 64 \
+    -d_templ 32 \
+    -d_hidden_templ 32 \
+    -accum 8 \
     -crop 256 \
     -w_bond 0.0 \
     -w_dih 0.0 \
@@ -33,5 +37,5 @@ python -u ./train_multi_EMA.py \
     -slice CONT \
     -lr 0.001 \
     -port 12345 \
-    -wandb_prefix ligand_dock
+    -wandb_prefix ligand_dock \
     #-eval

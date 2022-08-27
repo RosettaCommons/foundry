@@ -18,6 +18,10 @@ from util import *
 from util_module import ComputeAllAtomCoords
 from scheduler import get_linear_schedule_with_warmup, get_stepwise_decay_schedule_with_warmup
 
+# disable openbabel warnings
+from openbabel import openbabel as ob
+ob.obErrorLog.SetOutputLevel(0)
+
 # distributed data parallel
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -815,7 +819,7 @@ class Trainer():
 
             # run RNA prediction
             #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=False)
             dist.destroy_process_group()
             return
 
@@ -842,7 +846,7 @@ class Trainer():
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
 #            _, _, _ = self.valid_ppi_cycle(
@@ -1151,6 +1155,7 @@ class Trainer():
         return train_tot, train_loss, train_acc
 
     def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False):
+        print('Starting validation cycle')
         valid_tot = 0.0
         valid_loss = None
         valid_acc = None
@@ -1190,7 +1195,7 @@ class Trainer():
 
                 # get torsion angles from templates
                 seq_tmpl = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
-                alpha, _, alpha_mask, _ = get_torsions(xyz_t.reshape(-1,L,NTOTAL,3), seq_tmp, self.ti_dev, self.ti_flip, self.ang_ref)
+                alpha, _, alpha_mask, _ = get_torsions(xyz_t.reshape(-1,L,NTOTAL,3), seq_tmpl, self.ti_dev, self.ti_flip, self.ang_ref)
                 alpha_mask = torch.logical_and(alpha_mask, ~torch.isnan(alpha[...,0]))
                 alpha[torch.isnan(alpha)] = 0.0
                 alpha = alpha.reshape(B,-1,L,NTOTALDOFS,2)
