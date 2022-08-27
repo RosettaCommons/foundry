@@ -1,4 +1,9 @@
 #!/bin/bash
+#SBATCH -c 4
+#SBATCH --mem 64g
+#SBATCH -p gpu
+#SBATCH --gres gpu:a6000:1
+#SBATCH -o train.log
 
 export CUDA_VISIBLE_DEVICES=0
 
@@ -28,4 +33,5 @@ python -u ./train_multi_EMA.py \
     -slice CONT \
     -lr 0.001 \
     -port 12345 \
+    -wandb_prefix ligand_dock
     #-eval

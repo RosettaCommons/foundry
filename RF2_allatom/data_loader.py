@@ -855,7 +855,7 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(len(xyz), 1, 1)
-    xyz = torch.where(mask[...,None], xyz, init).contiguous()
+    xyz_prev = torch.where(mask[...,None], xyz_prev, init).contiguous()
     xyz = torch.nan_to_num(xyz)
     
     #print ("loader_single", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
@@ -939,7 +939,7 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, 1, NTOTAL, 3).repeat(npairs, xyz.shape[1], 1, 1)
 
-    xyz = torch.where(mask[...,None], xyz, init).contiguous()
+    xyz_prev = torch.where(mask[...,None], xyz_prev, init).contiguous()
     xyz = torch.nan_to_num(xyz)
 
     #print ("loader_homo", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
@@ -1153,7 +1153,7 @@ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=Tru
 
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(len(xyz), 1, 1)
-    xyz = torch.where(mask[...,None], xyz, init).contiguous()
+    xyz_prev = torch.where(mask[...,None], xyz_prev, init).contiguous()
     xyz = torch.nan_to_num(xyz)
     
     #print ("loader_compl", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape, negative)
@@ -1298,7 +1298,7 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
         bond_feats = bond_feats[sel][:,sel]
         init = init[sel]
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
-    xyz = torch.where(mask[...,None], xyz, init).contiguous()
+    xyz_prev = torch.where(mask[...,None], xyz_prev, init).contiguous()
     xyz = torch.nan_to_num(xyz)
 
     #print ("loader_na_complex", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
@@ -1379,7 +1379,7 @@ def loader_rna(pdb_set, Ls, params):
         bond_feats = bond_feats[sel][:, sel]
         init = init[sel]
     # replace missing with blackholes & conovert NaN to zeros to avoid any NaN problems during loss calculation
-    xyz = torch.where(mask[...,None], xyz, init).contiguous()
+    xyz_prev = torch.where(mask[...,None], xyz_prev, init).contiguous()
     xyz = torch.nan_to_num(xyz)
 
     #print ("loader_rna", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
@@ -1438,10 +1438,31 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol, G)
     
-    ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
-    xyz_t, f1d_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=pick_top) 
-    # give template of native backbone if none exists
+    #ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
+    #xyz_t, f1d_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=pick_top) 
     
+    # LIGAND DOCKING
+    # make blank features for 2 templates
+    xyz_t = torch.full((2,sum(Ls),NTOTAL,3),np.nan).float()
+    f1d_t = torch.nn.functional.one_hot(
+        torch.full((2, sum(Ls)), 20).long(), num_classes=NAATOKENS-1).float() # all gaps (no mask token)
+    conf = torch.zeros((2, sum(Ls), 1)).float()
+    f1d_t = torch.cat((f1d_t, conf), -1)
+
+    # input true protein xyz as template 0
+    xyz_t[0, :Ls[0], :3] = xyz[0, :Ls[0], :3]
+    f1d_t[0, :Ls[0]] = torch.cat((
+        torch.nn.functional.one_hot(msa_seed_orig[0,0, :Ls[0] ], num_classes=NAATOKENS-1).float(),
+        torch.ones((Ls[0], 1)).float()
+    ), -1) # (1, L_protein, NAATOKENS)
+
+    # input true s.m. xyz as template 1
+    xyz_t[1, Ls[0]:, :3] = xyz[0, Ls[0]:, :3]
+    f1d_t[1, Ls[0]:] = torch.cat((
+        torch.nn.functional.one_hot(msa_seed_orig[0,0, Ls[0]: ]-1, num_classes=NAATOKENS-1).float(),
+        torch.ones((Ls[1], 1)).float()
+    ), -1) # (1, L_sm, NAATOKENS)
+
     #generate initial coordinates
     xyz_prev = xyz_t[0]
 
@@ -1462,10 +1483,11 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
         idx = idx[sel]
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
+
     # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
-    init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)
+    init = INIT_CRDS.reshape(NTOTAL, 3).repeat(xyz_prev.shape[0], 1, 1)
     init = init + (torch.rand(init.shape)*5-2.5)
-    xyz = torch.where(mask[...,None], xyz, init).contiguous()
+    xyz_prev = torch.where(mask[0,:,:,None], xyz_prev, init).contiguous()
     xyz = torch.nan_to_num(xyz)
 
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
