@@ -1,11 +1,12 @@
 #!/bin/bash
-#SBATCH -c 4
-#SBATCH --mem 128g
-#SBATCH -p gpu
-#SBATCH --gres gpu:a6000:1
+#SBATCH -p gpu-long
+#SBATCH -c 24
+#SBATCH --mem=128g
+#SBATCH --gres=gpu:a100:4
 #SBATCH -o train.log
+#SBATCH -J ligand_dock_sm
 
-export CUDA_VISIBLE_DEVICES=0
+#export CUDA_VISIBLE_DEVICES=0
 
 source activate SE3nv
 python -u ./train_multi_EMA.py \
@@ -13,15 +14,13 @@ python -u ./train_multi_EMA.py \
     -p_drop 0.0 \
     -maxcycle 4 \
     -n_extra_block 2 \
-    -n_main_block 8 \
+    -n_main_block 4 \
     -n_ref_block 2 \
     -n_finetune_block 0 \
     -ref_num_layers 2 \
     -d_msa 64 \
     -d_pair 64 \
-    -d_templ 32 \
-    -d_hidden_templ 32 \
-    -accum 8 \
+    -accum 1 \
     -crop 256 \
     -w_bond 0.0 \
     -w_dih 0.0 \
@@ -36,6 +35,6 @@ python -u ./train_multi_EMA.py \
     -num_epochs 400 \
     -slice CONT \
     -lr 0.001 \
-    -port 12345 \
-    -wandb_prefix ligand_dock \
+    -port 12346 \
+    -wandb_prefix ligand_dock_sm \
     #-eval
