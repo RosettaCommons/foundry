@@ -8,7 +8,8 @@
 
 #export CUDA_VISIBLE_DEVICES=0
 
-source activate SE3nv
+#source activate SE3nv
+source activate dlchem
 python -u ./train_multi_EMA.py \
     -model_name BFF20h \
     -p_drop 0.0 \
