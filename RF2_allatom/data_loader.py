@@ -67,7 +67,8 @@ def set_data_loader_params(args):
         "SCCUT"            : 90.0,
         "ROWS"             : 1,
         "SEQID"            : 95.0,
-        "MAXCYCLE"         : 4
+        "MAXCYCLE"         : 4,
+        "LIGAND_DOCK"      : False
     }
     for param in PARAMS:
         if hasattr(args, param.lower()):
@@ -1438,8 +1439,37 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol, G)
     
-    ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
-    xyz_t, f1d_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=pick_top) 
+    if params['LIGAND_DOCK']:
+        # RIGID-BODY LIGAND DOCKING: template 0 will contain ground-truth
+        # protein coords and be input as xyz coords; template 1 will contain
+        # ground-truth small-molecule, which will be converted to pairwise
+        # template features and have black hole xyz initialization. 
+
+        # make blank features for 2 templates
+        xyz_t = torch.full((2,sum(Ls),NTOTAL,3),np.nan).float()
+        f1d_t = torch.nn.functional.one_hot(
+            torch.full((2, sum(Ls)), 20).long(), num_classes=NAATOKENS-1).float() # all gaps (no mask token)
+        conf = torch.zeros((2, sum(Ls), 1)).float()
+        f1d_t = torch.cat((f1d_t, conf), -1)
+
+        # input true protein xyz as template 0
+        xyz_t[0, :Ls[0], :3] = xyz[0, :Ls[0], :3]
+        f1d_t[0, :Ls[0]] = torch.cat((
+            torch.nn.functional.one_hot(msa_seed_orig[0,0, :Ls[0] ], num_classes=NAATOKENS-1).float(),
+            torch.ones((Ls[0], 1)).float()
+        ), -1) # (1, L_protein, NAATOKENS)
+
+        # input true s.m. xyz as template 1
+        xyz_t[1, Ls[0]:, :3] = xyz[0, Ls[0]:, :3]
+        f1d_t[1, Ls[0]:] = torch.cat((
+            torch.nn.functional.one_hot(msa_seed_orig[0,0, Ls[0]: ]-1, num_classes=NAATOKENS-1).float(),
+            torch.ones((Ls[1], 1)).float()
+        ), -1) # (1, L_sm, NAATOKENS)
+    else:
+        # standard template featurization
+        ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
+        xyz_t, f1d_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0,
+        npick=ntempl, pick_top=pick_top) 
 
     #generate initial coordinates
     xyz_prev = xyz_t[0]

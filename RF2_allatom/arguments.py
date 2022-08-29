@@ -63,6 +63,8 @@ def get_args():
             help="maximum sequence identity cutoff for template selection [150.0]")
     data_group.add_argument('-maxcycle', type=int, default=4,
             help="maximum number of recycle [4]")
+    data_group.add_argument('-ligand_dock', action='store_true', default=False,
+            help="do rigid-body ligand docking for protein-sm examples [False]")
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")
