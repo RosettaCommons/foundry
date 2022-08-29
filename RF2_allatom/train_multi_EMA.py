@@ -1,8 +1,8 @@
-import sys, os
-import time
+import sys, os, time, subprocess, datetime
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
+import wandb
 import torch
 import torch.nn as nn
 from torch.utils import data
@@ -17,6 +17,10 @@ from loss import *
 from util import *
 from util_module import ComputeAllAtomCoords
 from scheduler import get_linear_schedule_with_warmup, get_stepwise_decay_schedule_with_warmup
+
+# disable openbabel warnings
+from openbabel import openbabel as ob
+ob.obErrorLog.SetOutputLevel(0)
 
 # distributed data parallel
 import torch.distributed as dist
@@ -109,7 +113,8 @@ class EMA(nn.Module):
 class Trainer():
     def __init__(self, model_name='BFF',
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
-                 model_param={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4, eval=False):
+                 model_param={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
+                 eval=False, outdir=None, wandb_prefix=None):
         self.model_name = model_name #"BFF"
         #self.model_name = "%s_%d_%d_%d_%d"%(model_name, model_param['n_module'], 
         #                                    model_param['n_module_str'],
@@ -129,6 +134,9 @@ class Trainer():
         self.loss_param = loss_param
         self.ACCUM_STEP = accum_step
         self.batch_size = batch_size
+        self.outdir = outdir
+        if outdir is not None: os.makedirs(self.outdir, exist_ok=True)
+        self.wandb_prefix = wandb_prefix
 
         # for all-atom str loss
         self.ti_dev = torsion_indices
@@ -168,6 +176,9 @@ class Trainer():
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_lddt=1.0, w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
                   lj_lin=0.85, eps=1e-6
     ):
+        # dictionary for keeping track of losses
+        loss_dict = {}
+
         B, L = true.shape[:2]
         seq = label_aa_s[:,0].clone()
 
@@ -182,6 +193,8 @@ class Trainer():
             loss = (mask_2d*loss).sum() / (mask_2d.sum() + eps)
             tot_loss += w_dist*loss
             loss_s.append(loss[None].detach())
+            
+            loss_dict[f'c6d_{i}'] = float(loss.detach())
 
         # masked token prediction loss
         loss = self.loss_fn(logit_aa_s, label_aa_s.reshape(B, -1))
@@ -189,6 +202,8 @@ class Trainer():
         loss = loss.sum() / (mask_aa_s.sum() + 1e-8)
         tot_loss += w_aa*loss
         loss_s.append(loss[None].detach())
+
+        loss_dict['aa_cce'] = float(loss.detach())
 
         ### GENERAL LAYERS
         # Structural loss
@@ -237,6 +252,8 @@ class Trainer():
         tot_loss += 0.5*w_str*tot_str[0]
         loss_s.append(tot_str.detach())
 
+        loss_dict['tot_str'] = float(tot_str[0].detach())
+
         # AllAtom loss
         # get ground-truth torsion angles
         true_tors, true_tors_alt, tors_mask, tors_planar = get_torsions(
@@ -246,6 +263,10 @@ class Trainer():
         # get alternative coordinates for ground-truth
         true_alt = torch.zeros_like(true)
         true_alt.scatter_(2, self.l2a[seq,:,None].repeat(1,1,1,3), true)
+<<<<<<< HEAD
+=======
+        #print(true_alt)
+>>>>>>> main
         natRs_all, _n0 = self.compute_allatom_coords(seq, true[...,:3,:], true_tors)
         natRs_all_alt, _n1 = self.compute_allatom_coords(seq, true_alt[...,:3,:], true_tors_alt)
         predTs = pred[-1,...]
@@ -273,12 +294,17 @@ class Trainer():
         ca_lddt = calc_lddt(pred[:,:,:,1].detach(), true[:,:,1], mask_BB, mask_2d, same_chain, negative=negative, interface=interface)
         loss_s.append(ca_lddt.detach())
 
+        loss_dict['ca_lddt'] = float(ca_lddt[-1].detach())
+
         # lddts (allatom) + lddt loss
         lddt_loss, allatom_lddt = calc_allatom_lddt_loss(
             pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, negative=negative, interface=interface)
         tot_loss += w_lddt*lddt_loss
         loss_s.append(lddt_loss.detach()[None])
         loss_s.append(allatom_lddt.detach())
+
+        loss_dict['lddt_loss'] = float(lddt_loss.detach())
+        loss_dict['allatom_lddt'] = float(allatom_lddt.detach())
 
         # FAPE losses
         # allatom fape and torsion angle loss
@@ -320,6 +346,8 @@ class Trainer():
         loss_s.append(l_fape.detach())
         tot_loss += w_str*l_fape.mean()
 
+        loss_dict['fape'] = float(l_fape.detach())
+
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
         if w_bond > 0.0:
@@ -332,6 +360,8 @@ class Trainer():
                 tot_loss += w_bond*bond_loss.mean()
             loss_s.append( bond_loss.detach() )
 
+        loss_dict['bond_loss'] = float(bond_loss.detach())
+
         # clash [use all atoms not just those in native]
         clash_loss = calc_lj(
             seq[0], pred_allatom, 
@@ -342,20 +372,31 @@ class Trainer():
             tot_loss += w_clash*clash_loss.mean()
         loss_s.append( clash_loss.detach() )
 
+        loss_dict['clash_loss'] = float(clash_loss.detach())
+
         L0 = same_chain[0,0,:].sum()
         chain1 = torch.zeros_like(same_chain, dtype=bool)
         chain1[:,:L0,:L0] = True
         _, allatom_lddt_c1 = calc_allatom_lddt_loss(
             pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain1, negative=True)
         loss_s.append(allatom_lddt_c1.detach())
+
+        loss_dict['allatom_lddt_c1'] = float(allatom_lddt_c1.detach())
+
         chain2 = torch.zeros_like(same_chain, dtype=bool)
         chain2[:,L0:,L0:] = True
         _, allatom_lddt_c2 = calc_allatom_lddt_loss(
             pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain2, negative=True, bin_scaling=0.5)
         loss_s.append(allatom_lddt_c2.detach())
+
+        loss_dict['allatom_lddt_c2'] = float(allatom_lddt_c2.detach())
+
         _, allatom_lddt_inter = calc_allatom_lddt_loss(
             pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, interface=True)
         loss_s.append(allatom_lddt_inter.detach())
+
+        loss_dict['allatom_lddt_inter'] = float(allatom_lddt_inter.detach())
+
         # hbond [use all atoms not just those in native]
         #hb_loss = calc_hb(
         #    seq[0], pred_all[0,...,:3], 
@@ -379,7 +420,10 @@ class Trainer():
             writepdb("p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
             writepdb("n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
             writepdb("nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
-        return tot_loss, torch.cat(loss_s, dim=0)
+
+        loss_dict['total_loss'] = float(tot_loss.detach())
+
+        return tot_loss, torch.cat(loss_s, dim=0), loss_dict
 
 
     def calc_acc(self, prob, dist, idx_pdb, mask_2d, return_cnt=False):
@@ -501,6 +545,29 @@ class Trainer():
             mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
 
     def train_model(self, rank, world_size):
+        
+        # save git diff from last commit
+        if self.outdir is not None:
+            gitdiff_fn = open(f'{self.outdir}/git_diff.txt','w')
+            git_diff = subprocess.Popen(['git diff'], cwd = os.getcwd(), shell = True, stdout = gitdiff_fn, stderr = subprocess.PIPE)
+            print('Save git diff between current state and last commit')
+
+        # wandb logging
+        if self.wandb_prefix is not None and rank == 0:
+            print('initializing wandb')
+            wandb.init(
+                project='RF2_allatom',
+                entity='bakerlab',
+                name='_'.join([self.wandb_prefix, os.path.basename(self.outdir.strip('/'))]))
+
+            all_param = {}
+            all_param.update(self.loader_param)
+            all_param.update(self.model_param)
+            all_param.update(self.loss_param)
+
+            wandb.config = all_param
+            wandb.save(os.path.join(os.getcwd(), self.outdir, 'git_diff.txt'))
+
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
         dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
@@ -755,7 +822,7 @@ class Trainer():
 
             # run RNA prediction
             #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=False)
             dist.destroy_process_group()
             return
 
@@ -782,7 +849,7 @@ class Trainer():
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
 #            _, _, _ = self.valid_ppi_cycle(
@@ -868,13 +935,14 @@ class Trainer():
             bond_feats = bond_feats.to(gpu, non_blocking=True)
 
             # processing template features
-            # get torsion angles from templates
-            seq_tmp = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
-            xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_tmp, atom_frames)
+            seq_unmasked = msa[:, 0, 0, :] # (B, L)
+            xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
             t2d = xyz_to_t2d(xyz_t_frames)
 
+            # get torsion angles from templates
+            seq_tmpl = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
             alpha, _, alpha_mask, _ = get_torsions(
-                xyz_t.reshape(-1,L,NTOTAL,3), seq_tmp, self.ti_dev, self.ti_flip, self.ang_ref)
+                xyz_t.reshape(-1,L,NTOTAL,3), seq_tmpl, self.ti_dev, self.ti_flip, self.ang_ref)
             alpha_mask = torch.logical_and(alpha_mask, ~torch.isnan(alpha[...,0]))
             alpha[torch.isnan(alpha)] = 0.0
             alpha = alpha.reshape(B,-1,L,NTOTALDOFS,2)
@@ -955,7 +1023,7 @@ class Trainer():
                         acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
 
                         ctrid = len(train_loader)*rank+counter
-                        loss, loss_s = self.calc_loss(
+                        loss, loss_s, loss_dict = self.calc_loss(
                             logit_s, c6d,
                             logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                             pred_crds, alphas, pred_allatom, true_crds, 
@@ -1000,7 +1068,7 @@ class Trainer():
                     acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
 
                     ctrid = len(train_loader)*rank+counter
-                    loss, loss_s = self.calc_loss(
+                    loss, loss_s, loss_dict = self.calc_loss(
                         logit_s, c6d,
                         logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                         pred_crds, alphas, pred_allatom, true_crds, 
@@ -1055,6 +1123,11 @@ class Trainer():
                             epoch, self.n_epoch, counter*self.batch_size*world_size, self.n_train, train_time, local_tot, \
                             " ".join(["%8.4f"%l for l in local_loss]),\
                             local_acc[0], local_acc[1], local_acc[2], max_mem))
+
+                    if self.wandb_prefix is not None and rank == 0:
+                        loss_dict.update({'total_examples':epoch*len(train_loader)+counter*world_size})
+                        wandb.log(loss_dict)
+
                     sys.stdout.flush()
                     local_tot = 0.0
                     local_loss = None 
@@ -1085,6 +1158,7 @@ class Trainer():
         return train_tot, train_loss, train_acc
 
     def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False):
+        print('Starting validation cycle')
         valid_tot = 0.0
         valid_loss = None
         valid_acc = None
@@ -1118,12 +1192,13 @@ class Trainer():
                 # mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
 
                 # processing template features
-                # get torsion angles from templates
-                seq_tmp = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
-                xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_tmp, atom_frames)
+                seq_unmasked = msa[:, 0, 0, :] # (B, L)
+                xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
                 t2d = xyz_to_t2d(xyz_t_frames)
 
-                alpha, _, alpha_mask, _ = get_torsions(xyz_t.reshape(-1,L,NTOTAL,3), seq_tmp, self.ti_dev, self.ti_flip, self.ang_ref)
+                # get torsion angles from templates
+                seq_tmpl = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
+                alpha, _, alpha_mask, _ = get_torsions(xyz_t.reshape(-1,L,NTOTAL,3), seq_tmpl, self.ti_dev, self.ti_flip, self.ang_ref)
                 alpha_mask = torch.logical_and(alpha_mask, ~torch.isnan(alpha[...,0]))
                 alpha[torch.isnan(alpha)] = 0.0
                 alpha = alpha.reshape(B,-1,L,NTOTALDOFS,2)
@@ -1199,7 +1274,7 @@ class Trainer():
                 acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
 
                 ctrid = len(valid_loader)*rank+counter
-                loss, loss_s = self.calc_loss(
+                loss, loss_s, loss_dict = self.calc_loss(
                     logit_s, c6d,
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds, 
@@ -1378,7 +1453,7 @@ class Trainer():
                 inter_s = torch.tensor([TP, FP, TN, FN], device=prob.device).float()
 
                 ctrid = len(valid_pos_loader)*rank+counter
-                loss, loss_s = self.calc_loss(
+                loss, loss_s, loss_dict = self.calc_loss(
                     logit_s, c6d,
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds,
@@ -1545,7 +1620,7 @@ class Trainer():
                         TN += 1.0
                 inter_s = torch.tensor([TP, FP, TN, FN], device=prob.device).float()
 
-                loss, loss_s = self.calc_loss(
+                loss, loss_s, loss_dict = self.calc_loss(
                     logit_s, c6d,
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds,
@@ -1600,6 +1675,9 @@ if __name__ == "__main__":
 
     print (args)
 
+    datestr = str(datetime.datetime.now()).replace(':','').replace(' ','_') # YYYY-MM-DD_HHMMSS.xxxxxx
+    outdir = (args.outdir_prefix+'_'+datestr).replace('/_','/')
+
     mp.freeze_support()
     train = Trainer(model_name=args.model_name,
                     n_epoch=args.num_epochs, step_lr=args.step_lr, lr=args.lr, l2_coeff=1.0e-2,
@@ -1608,5 +1686,7 @@ if __name__ == "__main__":
                     batch_size=args.batch_size,
                     accum_step=args.accum,
                     maxcycle=args.maxcycle,
-                    eval=args.eval)
+                    eval=args.eval,
+                    outdir=outdir,
+                    wandb_prefix=args.wandb_prefix)
     train.run_model_training(torch.cuda.device_count())

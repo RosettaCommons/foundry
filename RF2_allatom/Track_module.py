@@ -191,7 +191,7 @@ class Str2Str(nn.Module):
         nn.init.zeros_(self.embed_e2.bias)
     
     @torch.cuda.amp.autocast(enabled=False)
-    def forward(self, msa, pair, xyz, state, idx, rotation_mask, extra_l0=None, extra_l1=None, top_k=128, eps=1e-5):
+    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, extra_l0=None, extra_l1=None, top_k=128, eps=1e-5):
         # process msa & pair features
         B, N, L = msa.shape[:3]
         node = self.norm_msa(msa[:,0])
@@ -202,7 +202,7 @@ class Str2Str(nn.Module):
         node = self.norm_node(self.embed_x(node))
         pair = self.norm_edge1(self.embed_e1(pair))
         
-        neighbor = get_seqsep(idx)
+        neighbor = get_seqsep_protein_sm(idx, bond_feats, rotation_mask)
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas), self.rbf_sigma)
         pair = torch.cat((pair, rbf_feat, neighbor), dim=-1)
@@ -473,7 +473,7 @@ class IterBlock(nn.Module):
                                p_drop=p_drop)
         self.rbf_sigma = rbf_sigma
 
-    def forward(self, msa, pair, xyz, state, idx, use_checkpoint=False, top_k=128, rotation_mask=None):
+    def forward(self, msa, pair, xyz, state, idx, bond_feats, use_checkpoint=False, top_k=128, rotation_mask=None):
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas), self.rbf_sigma)
         if use_checkpoint:
@@ -482,14 +482,14 @@ class IterBlock(nn.Module):
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask)
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats)
 
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
             pair = self.msa2pair(msa, pair)
             pair = self.pair2pair(pair, rbf_feat)
 
-            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, top_k=top_k)
+            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, top_k=top_k)
 
         return msa, pair, xyz, state, alpha
 
@@ -587,7 +587,7 @@ class IterativeSimulator(nn.Module):
         self.compute_allatom_coords = ComputeAllAtomCoords()
 
 
-    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, use_checkpoint=False):
+    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, use_checkpoint=False):
         # input:
         #   msa: initial MSA embeddings (N, L, d_msa)
         #   pair: initial residue pair embeddings (L, L, d_pair)
@@ -596,14 +596,14 @@ class IterativeSimulator(nn.Module):
         alpha_s = list()
         for i_m in range(self.n_extra_block):
             msa_full, pair, xyz, state, alpha = self.extra_block[i_m](msa_full, pair,
-                                                               xyz, state, idx,
+                                                               xyz, state, idx, bond_feats,
                                                                use_checkpoint=use_checkpoint, top_k=0, rotation_mask=rotation_mask)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
 
         for i_m in range(self.n_main_block):
             msa, pair, xyz, state, alpha = self.main_block[i_m](msa, pair,
-                                                         xyz, state, idx,
+                                                         xyz, state, idx, bond_feats,
                                                          use_checkpoint=use_checkpoint, top_k=0, rotation_mask=rotation_mask)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
@@ -628,7 +628,7 @@ class IterativeSimulator(nn.Module):
             extra_l1= None
 
             xyz, state, alpha = self.str_refiner(
-                msa, pair, xyz.detach(), state, idx, rotation_mask,
+                msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats,
                 extra_l0, extra_l1, top_k=128)
 
             xyz_s.append(xyz)

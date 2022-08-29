@@ -117,7 +117,6 @@ def idealize_reference_frame(seq, xyz_in):
 def get_tor_mask(seq, torsion_indices, mask_in=None):
     B,L = seq.shape[:2]
     dna_mask = is_nucleic(seq)
-    prot_mask = ~dna_mask
 
     tors_mask = torsion_indices[seq,:,-1] > 0
 
@@ -223,11 +222,11 @@ def xyz_to_frame_xyz(xyz, seq_unmasked, atom_frames):
 def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
     """
     xyz_t (1, T, L, natoms, 3)
-    seq_unmasked (L)
+    seq_unmasked (B, L)
     atom_frames (1, L, 3, 2)
     """
     xyz_t_frame = xyz_t.clone()
-    atoms = is_atom(seq_unmasked)
+    atoms = is_atom(seq_unmasked[0])
     if torch.all(~atoms):
         return xyz_t_frame
     atom_crds_t = xyz_t_frame[:, :, atoms]
@@ -897,8 +896,8 @@ def get_protein_bond_feats(protein_L):
     """ creates protein residue connectivity graphs """
     bond_feats = torch.zeros((protein_L, protein_L))
     residues = torch.arange(protein_L-1)
-    bond_feats[residues, residues+1] = 1
-    bond_feats[residues+1, residues] = 1
+    bond_feats[residues, residues+1] = 5
+    bond_feats[residues+1, residues] = 5
     return bond_feats
 
 def get_atomize_protein_bond_feats(sel_res, msa, ra, flank=5):

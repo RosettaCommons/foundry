@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from opt_einsum import contract as einsum
 import torch.utils.checkpoint as checkpoint
 from util import *
-from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal
+from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_relpos
 from Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
 from Track_module import PairStr2Pair
 from chemical import NAATOKENS,NTOTALDOFS, NBTYPES
@@ -19,12 +19,12 @@ class PositionalEncoding2D(nn.Module):
         self.maxpos = maxpos
         self.nbin = abs(minpos)+maxpos+1
         self.emb = nn.Embedding(self.nbin, d_model)
-    
-    def forward(self, x, idx):
+
+    def forward(self, x, seq, idx, bond_feats):
+        sm_mask = is_atom(seq[0])
+        relpos = get_relpos(idx, bond_feats, sm_mask, inter_pos=self.maxpos, maxpath=self.maxpos)
         bins = torch.arange(self.minpos, self.maxpos, device=x.device)
-        seqsep = idx[:,None,:] - idx[:,:,None] # (B, L, L)
-        #
-        ib = torch.bucketize(seqsep, bins).long() # (B, L, L)
+        ib = torch.bucketize(relpos, bins).long() # (B, L, L)
         emb = self.emb(ib) #(B, L, L, d_model)
         x = x + emb # add relative positional encoding
         return x
@@ -52,11 +52,12 @@ class MSA_emb(nn.Module):
 
         nn.init.zeros_(self.emb.bias)
 
-    def forward(self, msa, seq, idx):
+    def forward(self, msa, seq, idx, bond_feats):
         # Inputs:
         #   - msa: Input MSA (B, N, L, d_init)
         #   - seq: Input Sequence (B, L)
         #   - idx: Residue index
+        #   - bond_feats: Bond features (B, L, L)
         # Outputs:
         #   - msa: Initial MSA embedding (B, N, L, d_msa)
         #   - pair: Initial Pair embedding (B, L, L, d_pair)
@@ -73,7 +74,7 @@ class MSA_emb(nn.Module):
         left = self.emb_left(seq)[:,None] # (B, 1, L, d_pair)
         right = self.emb_right(seq)[:,:,None] # (B, L, 1, d_pair)
         pair = left + right # (B, L, L, d_pair)
-        pair = self.pos(pair, idx) # add relative position
+        pair = self.pos(pair, seq, idx, bond_feats) # add relative position
 
         # state embedding
         state = self.emb_state(seq)
@@ -120,6 +121,7 @@ class Bond_emb(nn.Module):
         nn.init.zeros_(self.emb.bias)
 
     def forward(self, bond_feats):
+        bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
         return self.emb(bond_feats.float())
 
 # TODO: Update template embedding not to use triangles....

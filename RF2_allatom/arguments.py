@@ -10,6 +10,9 @@ SE3_PARAMS = ['num_layers', 'num_channels', 'num_degrees', 'n_heads', 'div',
               'l0_in_features', 'l0_out_features', 'l1_in_features', 'l1_out_features', 'num_edge_features'
              ]
 
+def get_datetime():
+    return str(date.today()) + '_' + str(time.time())
+
 def get_args():
     parser = argparse.ArgumentParser()
 
@@ -31,6 +34,10 @@ def get_args():
             help="Gradient accumulation when it's > 1 [1]")
     train_group.add_argument("-eval", action='store_true', default=False,
             help="Train structure only")
+    train_group.add_argument('-outdir_prefix', type=str, default=f'./training_runs/',
+            help='Prefix for output directory.')
+    train_group.add_argument('-wandb_prefix', type=str, 
+            help='Prefix for name of session on wandb.')
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")
