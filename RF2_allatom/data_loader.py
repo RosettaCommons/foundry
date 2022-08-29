@@ -1517,8 +1517,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     flank = 3 # how many residue chain break to have between atomized portion and residues
     sc_residues = (torch.sum(mask_prot, dim=1)>3).nonzero()
     sel_res = torch.randint(flank+1, sc_residues.shape[0]-(stretch+flank+1),(1,))
-    sel_res = sc_residues[sel_res]
-
+    sel_res = sc_residues[sel_res] 
     msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, flank=stretch)
     # no atom templates
     tplt_sm = {"ids":[]}
