@@ -1,6 +1,6 @@
 import argparse
 import data_loader
-import os
+import os, datetime
 
 TRUNK_PARAMS = ['n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_block',\
                 'd_msa', 'd_msa_full', 'd_pair', 'd_templ',\
@@ -9,9 +9,6 @@ TRUNK_PARAMS = ['n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_bloc
 SE3_PARAMS = ['num_layers', 'num_channels', 'num_degrees', 'n_heads', 'div', 
               'l0_in_features', 'l0_out_features', 'l1_in_features', 'l1_out_features', 'num_edge_features'
              ]
-
-def get_datetime():
-    return str(date.today()) + '_' + str(time.time())
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -34,10 +31,12 @@ def get_args():
             help="Gradient accumulation when it's > 1 [1]")
     train_group.add_argument("-eval", action='store_true', default=False,
             help="Train structure only")
-    train_group.add_argument('-outdir_prefix', type=str, default=f'./training_runs/',
-            help='Prefix for output directory.')
+    train_group.add_argument('-outdir', type=str, 
+            help='Output folder.')
     train_group.add_argument('-wandb_prefix', type=str, 
-            help='Prefix for name of session on wandb.')
+            help='Prefix for name of session on Weights and Biases.')
+    train_group.add_argument('-datestamp', action='store_true', default=False,
+            help='Adds datestamp to output folder and/or wandb prefix.')
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")
@@ -63,6 +62,8 @@ def get_args():
             help="maximum sequence identity cutoff for template selection [150.0]")
     data_group.add_argument('-maxcycle', type=int, default=4,
             help="maximum number of recycle [4]")
+    data_group.add_argument('-ligand_dock', action='store_true', default=False,
+            help="do rigid-body ligand docking for protein-sm examples [False]")
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")
@@ -148,6 +149,13 @@ def get_args():
 
     # parse arguments
     args = parser.parse_args()
+
+    if args.datestamp:
+        datestr = str(datetime.datetime.now()).replace(':','').replace(' ','_') # YYYY-MM-DD_HHMMSS.xxxxxx
+        if args.outdir is not None:
+            args.outdir = (args.outdir+'_'+datestr).replace('/_','/')+'/'
+        if args.wandb_prefix is not None:
+            args.wandb_prefix = args.wandb_prefix+'_'+datestr
 
     # Setup dataloader parameters:
     loader_param = data_loader.set_data_loader_params(args)

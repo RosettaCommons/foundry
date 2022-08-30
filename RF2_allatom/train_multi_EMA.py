@@ -1,4 +1,4 @@
-import sys, os, time, subprocess, datetime
+import sys, os, time, subprocess
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
@@ -49,6 +49,12 @@ N_EXAMPLE_PER_EPOCH = 1208
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 0,
               'pin_memory': True}
+
+DEBUG = True
+if DEBUG:
+    N_EXAMPLE_PER_EPOCH = 64
+    #os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+    LOAD_PARAM['num_workers'] = 3
 
 def add_weight_decay(model, l2_coeff):
     decay, no_decay = [], []
@@ -554,8 +560,8 @@ class Trainer():
             wandb.init(
                 project='RF2_allatom',
                 entity='bakerlab',
-                name='_'.join([self.wandb_prefix, os.path.basename(self.outdir.strip('/'))]))
-
+                name=self.wandb_prefix
+            )
             all_param = {}
             all_param.update(self.loader_param)
             all_param.update(self.model_param)
@@ -855,8 +861,7 @@ class Trainer():
 #                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
-            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl")            
-
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl")            
             if rank == 0: # save model
                 if valid_tot < best_valid_loss:
                     best_valid_loss = valid_tot
@@ -1154,7 +1159,6 @@ class Trainer():
         return train_tot, train_loss, train_acc
 
     def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False):
-        print('Starting validation cycle')
         valid_tot = 0.0
         valid_loss = None
         valid_acc = None
@@ -1671,9 +1675,6 @@ if __name__ == "__main__":
 
     print (args)
 
-    datestr = str(datetime.datetime.now()).replace(':','').replace(' ','_') # YYYY-MM-DD_HHMMSS.xxxxxx
-    outdir = (args.outdir_prefix+'_'+datestr).replace('/_','/')
-
     mp.freeze_support()
     train = Trainer(model_name=args.model_name,
                     n_epoch=args.num_epochs, step_lr=args.step_lr, lr=args.lr, l2_coeff=1.0e-2,
@@ -1683,6 +1684,6 @@ if __name__ == "__main__":
                     accum_step=args.accum,
                     maxcycle=args.maxcycle,
                     eval=args.eval,
-                    outdir=outdir,
+                    outdir=args.outdir,
                     wandb_prefix=args.wandb_prefix)
     train.run_model_training(torch.cuda.device_count())
