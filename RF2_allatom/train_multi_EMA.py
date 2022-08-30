@@ -47,7 +47,7 @@ N_PRINT_TRAIN = 16
 N_EXAMPLE_PER_EPOCH = 1208
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 3,
+              'num_workers': 0,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -263,10 +263,6 @@ class Trainer():
         # get alternative coordinates for ground-truth
         true_alt = torch.zeros_like(true)
         true_alt.scatter_(2, self.l2a[seq,:,None].repeat(1,1,1,3), true)
-<<<<<<< HEAD
-=======
-        #print(true_alt)
->>>>>>> main
         natRs_all, _n0 = self.compute_allatom_coords(seq, true[...,:3,:], true_tors)
         natRs_all_alt, _n1 = self.compute_allatom_coords(seq, true_alt[...,:3,:], true_tors_alt)
         predTs = pred[-1,...]
@@ -729,7 +725,7 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
-            fraction_sm_compl=0.5,
+            fraction_sm_compl=0,
             replacement=True
         )
 

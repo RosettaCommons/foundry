@@ -1509,9 +1509,9 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     stretch = 5 # how many residues to atomize
     flank = 3 # how many residue chain break to have between atomized portion and residues
     sc_residues = (torch.sum(mask_prot, dim=1)>3).nonzero()
-    sel_res = torch.randint(flank+1, sc_residues.shape[0]-(stretch+flank+1),(1,))
-    sel_res = sc_residues[sel_res] 
-    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, flank=stretch)
+    sel_res = torch.randint(flank+1, sc_residues.shape[0]-(stretch+flank+1),(1,)) # sel_res is the start index of atomized region
+    sel_res = sc_residues[sel_res] # sel_res index of the first residue to be atomized
+    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, stretch=stretch)
     # no atom templates
     tplt_sm = {"ids":[]}
     xyz_t_sm, f1d_t_sm = TemplFeaturize(tplt_sm, xyz_sm.shape[1], params, offset=0, npick=0, pick_top=pick_top)
@@ -1570,7 +1570,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
 
     xyz_prev = xyz_t[0]
 
-    bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
+    # bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)
     init = init + (torch.rand(init.shape)*5-2.5)
