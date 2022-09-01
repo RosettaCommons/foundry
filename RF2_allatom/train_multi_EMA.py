@@ -44,17 +44,18 @@ N_PRINT_TRAIN = 16
 
 # num structs per epoch
 # must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 1208
+#N_EXAMPLE_PER_EPOCH = 1208
+N_EXAMPLE_PER_EPOCH = 6712
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 3,
               'pin_memory': True}
 
-DEBUG = True
+DEBUG = False
 if DEBUG:
     N_EXAMPLE_PER_EPOCH = 64
     #os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
-    LOAD_PARAM['num_workers'] = 3
+    LOAD_PARAM['num_workers'] = 0
 
 def add_weight_decay(model, l2_coeff):
     decay, no_decay = [], []
@@ -418,11 +419,12 @@ class Trainer():
                 l_fape.cpu().detach().numpy(),
                 mask_BB[0].sum()
             )
+            outdir = self.outdir if self.outdir else './'
             for i in range(pred.shape[0]):
-                writepdb("p_"+self.model_name+"_"+str(ctr)+"_"+str(i)+".pdb", pred[i,0,mask_BB[0]][:,:3], seq[mask_BB][:])
-            writepdb("p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
-            writepdb("n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
-            writepdb("nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
+                writepdb(outdir+"p_"+self.model_name+"_"+str(ctr)+"_"+str(i)+".pdb", pred[i,0,mask_BB[0]][:,:3], seq[mask_BB][:])
+            writepdb(outdir+"p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
+            writepdb(outdir+"n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
+            writepdb(outdir+"nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
 
         loss_dict['total_loss'] = float(tot_loss.detach())
 
@@ -617,6 +619,7 @@ class Trainer():
         #self.n_valid_na_compl = 4
         #self.n_valid_na_neg = 4
         #self.n_valid_rna = 4
+        #self.n_valid_sm_compl = 200
 
         if (rank==0):
             print ('Loaded (training)',
@@ -825,7 +828,7 @@ class Trainer():
 
             # run RNA prediction
             #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=False)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
             dist.destroy_process_group()
             return
 
@@ -1283,6 +1286,14 @@ class Trainer():
                     pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative,
                     verbose=verbose, ctr=ctrid, **self.loss_param
                 )
+
+                outdir = self.outdir if self.outdir else './'
+
+
+                writepdb(outdir+"xyz_prev_"+str(ctrid)+".pdb", xyz_prev[res_mask][:,:23], seq[:,i_cycle][res_mask])
+                writepdb(outdir+"xyz_t0_"+str(ctrid)+".pdb", xyz_t[:,0][res_mask][:,:23], seq[:,i_cycle][res_mask])
+                writepdb(outdir+"xyz_t1_"+str(ctrid)+".pdb", xyz_t[:,1][res_mask][:,:23], seq[:,i_cycle][res_mask])
+                torch.save(t2d,outdir+'t2d_'+str(ctrid)+'.pdb')
                 
                 valid_tot += loss.detach()
                 if valid_loss == None:
