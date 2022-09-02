@@ -959,6 +959,8 @@ class Trainer():
             bond_feats = bond_feats.to(gpu, non_blocking=True)
 
             # processing template features
+            xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
+            xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
             seq_unmasked = msa[:, 0, 0, :] # (B, L)
             xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
             t2d = xyz_to_t2d(xyz_t_frames)
@@ -972,10 +974,6 @@ class Trainer():
             alpha = alpha.reshape(B,-1,L,NTOTALDOFS,2)
             alpha_mask = alpha_mask.reshape(B,-1,L,NTOTALDOFS,1)
             alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, L, 3*NTOTALDOFS)
-
-            # processing template coordinates
-            xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
-            xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
 
             counter += 1
 
@@ -1215,6 +1213,8 @@ class Trainer():
                 # mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
 
                 # processing template features
+                xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
+                xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
                 seq_unmasked = msa[:, 0, 0, :] # (B, L)
                 xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
                 t2d = xyz_to_t2d(xyz_t_frames)
@@ -1227,9 +1227,6 @@ class Trainer():
                 alpha = alpha.reshape(B,-1,L,NTOTALDOFS,2)
                 alpha_mask = alpha_mask.reshape(B,-1,L,NTOTALDOFS,1)
                 alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, L, 3*NTOTALDOFS)
-                # processing template coordinates
-                xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
-                xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
 
                 # set number of recycles
                 N_cycle = self.maxcycle
