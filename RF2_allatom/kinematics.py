@@ -228,14 +228,30 @@ def c6d_to_bins(c6d, same_chain, negative=False, params=PARAMS):
     return torch.stack([db,ob,tb,pb],axis=-1).long()
 
 def get_init_xyz(seq, xyz_t, same_chain):
-    # input: xyz_t (B, T, L, Natms, 3)
-    # ouput: xyz (B, T, L, Natms, 3)
+    """
+    Initializes coordinates of missing residues in xyz_t. Each template is
+    centroid-subtracted. Then, missing positions (protein/NA residues with any
+    NaN-coordinates or sm. mol. positions with NaN CA coord) are initialized as
+    triangles at origin or to position of nearest neighbor on same chain.
+
+    Parameters
+    ----------
+    seq : (B, L)
+    xyz_t : (B, T, L, Natms, 3)
+    same_chain : (B, L, L)
+
+    Returns
+    -------
+    xyz : (B, T, L, Natms, 3)
+    
+    """
     B, T, L = xyz_t.shape[:3]
 
     init = torch.full((B,T,L,NTOTAL,3), np.nan, device=xyz_t.device)
-    na_mask = is_nucleic(seq)
-    b_nmask,l_nmask = na_mask.nonzero(as_tuple=True)
-    b_pmask,l_pmask = (~na_mask).nonzero(as_tuple=True)
+    na_mask = is_nucleic(seq).to(xyz_t.device) # (1, L)
+    sm_mask = is_atom(seq).to(xyz_t.device) # (1, L)
+    b_nmask,l_nmask = na_mask.nonzero(as_tuple=True) # nucleic acid bases
+    b_pmask,l_pmask = (~na_mask).nonzero(as_tuple=True) # protein residues & small mols
 
     init[b_pmask,:,l_pmask] = INIT_CRDS[None,...].to(xyz_t.device)
     init[b_nmask,:,l_nmask] = INIT_NA_CRDS[None,...].to(xyz_t.device)
@@ -243,11 +259,15 @@ def get_init_xyz(seq, xyz_t, same_chain):
     if torch.isnan(xyz_t).all():
         return init
 
-    mask = torch.isnan(xyz_t[:,:,:,:3]).any(dim=-1).any(dim=-1) # (B, T, L)
-    #
+    mask_prot = torch.isnan(xyz_t[:,:,:,:3]).any(dim=-1).any(dim=-1) & ~sm_mask # missing protein/NA residues (B, T, L)
+    mask_ca_sm = torch.isnan(xyz_t[:,:,:,1]).any(dim=-1) & sm_mask # missing sm mol positions (B, T, L)
+    mask = mask_prot | mask_ca_sm # missing any type of position
+
+    # move CA centroid to origin
     center_CA = ((~mask[:,:,:,None]) * torch.nan_to_num(xyz_t[:,:,:,1,:])).sum(dim=2) / ((~mask[:,:,:,None]).sum(dim=2)+1e-4) # (B, T, 3)
     xyz_t = xyz_t - center_CA.view(B,T,1,1,3)
-    #
+
+    # move to nearest neighbor on same chain
     idx_s = list()
     for i_b in range(B):
         for i_T in range(T):
@@ -260,6 +280,9 @@ def get_init_xyz(seq, xyz_t, same_chain):
             seqmap = torch.argmin(seqmap, dim=-1) # (L)
             idx = torch.gather(exist_in_templ, -1, seqmap) # (L)
             offset_CA = torch.gather(xyz_t[i_b, i_T, :, 1, :], 0, idx.reshape(L,1).expand(-1,3))
+            has_neighbor = is_same_chain_in_templ.all(-1) 
+            offset_CA[~has_neighbor] = 0 # stay at origin if nothing on same chain has coords
+
             init[i_b,i_T] += offset_CA.reshape(L,1,3)
     #
     xyz = torch.where(mask.view(B, T, L, 1, 1), init, xyz_t)
