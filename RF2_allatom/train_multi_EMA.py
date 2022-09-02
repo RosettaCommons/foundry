@@ -9,7 +9,7 @@ from torch.utils import data
 from functools import partial
 from data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm_compl,
-    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
+    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler, loader_atomize_pdb
 )
 from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor, get_init_xyz
 from RoseTTAFoldModel  import RoseTTAFoldModule
@@ -48,7 +48,7 @@ N_PRINT_TRAIN = 16
 N_EXAMPLE_PER_EPOCH = 6712
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 3,
+              'num_workers': 4,
               'pin_memory': True}
 
 DEBUG = False
@@ -256,10 +256,15 @@ class Trainer():
                 frame_mask_BB[:,mask_BB[0]],
                 dclamp=dclamp
             )
-        tot_loss += 0.5*w_str*tot_str[0]
+        num_layers = pred.shape[0]
+        gamma = 0.99
+        w_bb_fape = torch.pow(torch.full((num_layers,), gamma, device=pred.device), torch.arange(num_layers, device=pred.device))
+        w_bb_fape = torch.flip(w_bb_fape, (0,))
+        w_bb_fape = w_bb_fape / w_bb_fape.sum()
+        bb_l_fape = (w_bb_fape*tot_str).sum()
+        tot_loss += 0.5*w_str*bb_l_fape
         loss_s.append(tot_str.detach())
-
-        loss_dict['tot_str'] = float(tot_str[0].detach())
+        loss_dict['tot_str'] = float(bb_l_fape.detach())
 
         # AllAtom loss
         # get ground-truth torsion angles
@@ -270,7 +275,6 @@ class Trainer():
         # get alternative coordinates for ground-truth
         true_alt = torch.zeros_like(true)
         true_alt.scatter_(2, self.l2a[seq,:,None].repeat(1,1,1,3), true)
-        #print(true_alt)
         natRs_all, _n0 = self.compute_allatom_coords(seq, true[...,:3,:], true_tors)
         natRs_all_alt, _n1 = self.compute_allatom_coords(seq, true_alt[...,:3,:], true_tors_alt)
         predTs = pred[-1,...]
@@ -346,11 +350,9 @@ class Trainer():
                 frames[:,mask_BB[0]],
                 frame_mask[:,mask_BB[0]]
             )
-
         loss_s.append(l_fape.detach())
-        tot_loss += w_str*l_fape.mean()
-
-        loss_dict['fape'] = float(l_fape.detach())
+        tot_loss += w_str*l_fape[0]
+        loss_dict['fape'] = float(l_fape[0].detach())
 
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
@@ -560,6 +562,7 @@ class Trainer():
         # wandb logging
         if self.wandb_prefix is not None and rank == 0:
             print('initializing wandb')
+            wandb.require("service")
             wandb.init(
                 project='RF2_allatom',
                 entity='bakerlab',
@@ -654,7 +657,7 @@ class Trainer():
             )
 
         train_set = DistilledDataset(
-            pdb_IDs, loader_pdb, pdb_dict,
+            pdb_IDs, loader_atomize_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
             neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
@@ -672,6 +675,10 @@ class Trainer():
             loader_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
+        valid_atomize_pdb_set = Dataset(
+            list(valid_pdb.keys())[:self.n_valid_pdb],
+            loader_atomize_pdb, valid_pdb,
+            self.loader_param, homo, p_homo_cut=-1.0)
         # valid_homo_set = Dataset(
         #     list(valid_homo.keys())[:self.n_valid_homo],
         #     loader_pdb, valid_homo,
@@ -717,6 +724,13 @@ class Trainer():
             loader_sm_compl, valid_sm_compl,
             self.loader_param
         )
+        rigid_body_param = self.loader_param
+        rigid_body_param["LIGAND_DOCK"] = True
+        valid_sm_compl_rigid_body_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param)
+
 
         train_sampler = DistributedWeightedSampler(
             train_set, 
@@ -735,7 +749,7 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
-            fraction_sm_compl=1.0,
+            fraction_sm_compl=.66,
             replacement=True
         )
 
@@ -752,6 +766,7 @@ class Trainer():
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
@@ -761,6 +776,7 @@ class Trainer():
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
 #        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
         valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -855,7 +871,8 @@ class Trainer():
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
 #            _, _, _ = self.valid_ppi_cycle(
@@ -865,7 +882,9 @@ class Trainer():
 #                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl")            
+
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
             if rank == 0: # save model
                 if valid_tot < best_valid_loss:
                     best_valid_loss = valid_tot

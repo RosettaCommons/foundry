@@ -3,9 +3,9 @@ import torch
 from torch.utils import data
 
 # from chemical import NFRAMES
-from data_loader import get_train_valid_set, Dataset, DatasetNAComplex, DatasetRNA, DatasetSMComplex, loader_pdb, loader_na_complex, loader_rna, loader_sm_compl,set_data_loader_params
+from data_loader import get_train_valid_set, Dataset, DatasetNAComplex, DatasetRNA, DatasetSMComplex, loader_pdb, loader_na_complex, loader_rna, loader_sm_compl,set_data_loader_params, loader_atomize_pdb
 from kinematics import xyz_to_c6d, xyz_to_t2d
-from chemical import num2aa, aa2elt, aa2num
+from chemical import num2aa, aa2elt, aa2num, aabonds,aa2long, aabtypes, atomized_protein_frames
 from loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss
 from util import get_frames, frame_indices, is_atom, xyz_to_frame_xyz, xyz_t_to_frame_xyz, long2alt, writepdb
 
@@ -285,18 +285,27 @@ class DataLoaderTestCase(unittest.TestCase):
 			loader_pdb, valid_pdb,
 			self.loader_param, homo, p_homo_cut=-1.0
 		)
-		valid_sm_compl_set = DatasetSMComplex(
+		valid_atomize_pdb_set = Dataset(
+			list(valid_pdb.keys()),
+			loader_atomize_pdb, valid_pdb,
+			self.loader_param, homo, p_homo_cut=-1.0
+		)
+		self.valid_sm_compl_set = DatasetSMComplex(
 			list(sm_compl_dict.keys()),
 			loader_sm_compl, sm_compl_dict,
 			self.loader_param
 		)
 		self.valid_pdb_loader = data.DataLoader(valid_pdb_set)
-		self.valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set)
+		self.valid_sm_compl_loader = data.DataLoader(self.valid_sm_compl_set)
+		self.valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set)
 
 	def test_vaporize_protein(self):
 		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_pdb_loader:
 			B, L = msa[:, 0, 0].shape
-			i = torch.randint(2, L-3,(1,))
+			# find residues indices with side chains and sample from those
+			sc_residues = (torch.sum(atom_mask, dim=2)>3).nonzero()[:, 1]
+			i = torch.randint(2, sc_residues.shape[0]-3,(1,))
+			i = sc_residues[i]
 			residues_atomize = msa[:, 0, 0, i-2:i+2]
 			residues_atomize = [aa2elt[num][:14] for num in residues_atomize[0]]
 
@@ -304,38 +313,73 @@ class DataLoaderTestCase(unittest.TestCase):
 			true_alt.scatter_(2, long2alt[msa[:, 0, 0],:,None].repeat(1,1,1,3), true_crds)
 			coords_stack = torch.stack((true_crds[:, i-2:i+2], true_alt[:, i-2:i+2]), dim=0)
 			swaps = (coords_stack[0] == coords_stack[1]).all(dim=2).all(dim=2).squeeze() #checks whether theres a swap at each position
-			print((coords_stack[0] == coords_stack[1]).all(dim=2).all(dim=2).squeeze())
-			print(coords_stack.shape)
 			swaps = torch.nonzero(~swaps).squeeze() # indices with a swap
-			print(swaps)
 			if swaps.numel() != 0:
 				combs = torch.combinations(torch.tensor([0,1]), r=swaps.numel(), with_replacement=True)
 				stack = torch.stack((combs, swaps.unsqueeze(0).repeat(swaps.numel()+1,1)), dim =2)
 				coords_stack = coords_stack.repeat(swaps.numel()+1,1,1,1,1).squeeze(1)
-				atom_coords = true_crds.repeat(swaps.numel()+1,1,1,1)
-				print(coords_stack.shape)
-				true_crds[:, i-2:i+2][swaps] = coords_stack[stack[...,0], stack[...,1]]
-				print(atom_coords)
+				nat_symm = coords_stack[0].repeat(swaps.numel()+1,1,1,1).squeeze(1)
+				for j in range(1, nat_symm.shape[0]):
+					self.assertFalse(torch.any(nat_symm[j-1]!=nat_symm[j]))
+				swapped_coords = coords_stack[stack[...,0], stack[...,1]].squeeze(1)
+				nat_symm[:,swaps] = swapped_coords
+				for j in range(1, nat_symm.shape[0]):
+					self.assertTrue(torch.any(nat_symm[j-1]!=nat_symm[j]))
 			else:
-				continue
+				nat_symm = true_crds[:, i-2:i+2]
 
-			lig_seq = []
-			ra = []
-			for idx in range(len(residues_atomize)):
-				for jdx in range(14):
-					if residues_atomize[idx][jdx]:
-						ra.append((i-2+idx, jdx))
-						lig_seq.append(aa2num[residues_atomize[idx][jdx]])
-			lig_seq = torch.tensor(lig_seq)
+			residue_atomize_mask = atom_mask[:, i-2:i+2]
+			ra = residue_atomize_mask.nonzero()[:,1:]
+			lig_seq = torch.tensor([aa2num[residues_atomize[r][a]] for r,a in ra])
 			ins = torch.zeros_like(lig_seq)
-			print(lig_seq)
-			ra = torch.tensor(ra)
+			# print(lig_seq)
+			print(ra)
+			# ra = torch.tensor(ra)
 			r,a = ra.T
 			lig_xyz = torch.zeros((len(ra), 3))
-			lig_xyz = true_crds[:, r, a]
-			lig_mask = atom_mask[:, r, a]
+			lig_xyz = nat_symm[:, r, a]
+			lig_mask = residue_atomize_mask[:, r, a].repeat(nat_symm.shape[0], 1,1)
+
+			residue_frames = atomized_protein_frames[msa[:, 0, 0, i-2:i+2][0]]
+			# handle out of bounds at the termini
+			residue_frames[0, 0] = residue_frames[0,1]
+			residue_frames[-1, 2] = residue_frames[-1,1]
+			r,a = ra.T
+			frames = residue_frames[r,a]
+			print(frames.shape)
+			# ra2ind = {}
+			# for i, two_d in enumerate(ra):
+			# 	ra2ind[tuple(two_d.numpy())] = i
+			# N = len(ra2ind.keys())
+			# bond_feats = torch.zeros((N, N))
+			# for i, res in enumerate(msa[:, 0, 0, i-2:i+2][0]):
+			# 	for j, bond in enumerate(aabonds[res]):
+			# 		start_idx = aa2long[res].index(bond[0])
+			# 		end_idx = aa2long[res].index(bond[1])
+			# 		if (i, start_idx) not in ra2ind or (i, end_idx) not in ra2ind:
+			# 			#skip bonds with atoms that aren't observed in the structure
+			# 			continue
+			# 		start_idx = ra2ind[(i, start_idx)]
+			# 		end_idx = ra2ind[(i, end_idx)]
+
+			# 		# maps the 2d index of the start and end indices to btype
+			# 		bond_feats[start_idx, end_idx] = aabtypes[res][j]
+			# 		bond_feats[end_idx, start_idx] = aabtypes[res][j]
+			# 	#accounting for peptide bonds
+			# 	if i > 1:
+			# 		if (i-1, 2) not in ra2ind or (i, 0) not in ra2ind:
+			# 			#skip bonds with atoms that aren't observed in the structure
+			# 			continue
+			# 		start_idx = ra2ind[(i-1, 2)]
+			# 		end_idx = ra2ind[(i, 0)]
+			# 		bond_feats[start_idx, end_idx] = aabtypes[res][j]
+			# 		bond_feats[end_idx, start_idx] = aabtypes[res][j]
+
+			# print(bond_feats)
 			# print(lig_xyz)
 			# print(lig_mask)
+
+
 			#NEED TO FIGURE OUT XYZ_T, T1D set everything vaporized into NaN and then create new NaN features for length, set t1D into gaps
 			msa = torch.cat((msa[:, :, :, :i-2], msa[:, :, :, i+2:]), dim=3)
 			msa_masked = torch.cat((msa_masked[:, :, :, :i-2], msa_masked[:, :, :, i+2:]), dim=3)
@@ -357,6 +401,20 @@ class DataLoaderTestCase(unittest.TestCase):
 
 
 			break
+	def test_atomized_pdb_loader(self):
+		for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in self.valid_atomize_pdb_loader:
+			print(seq.shape)
+			print(msa.shape)
+			print(true_crds.shape)
+			print(atom_mask.shape)
+			print(idx_pdb.shape)
+			print(xyz_t.shape)
+			print(t1d.shape)
+			print(same_chain.shape)
+			print(bond_feats.shape)
+			print("SEPARATE")
+
+			
 
 	def test_writepdb(self):
 		counter = 0
