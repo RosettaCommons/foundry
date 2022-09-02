@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from util import INIT_CRDS, INIT_NA_CRDS, generate_Cbeta, is_nucleic
+from util import INIT_CRDS, INIT_NA_CRDS, generate_Cbeta, is_nucleic, is_atom
 from chemical import NTOTAL
 
 PARAMS = {
