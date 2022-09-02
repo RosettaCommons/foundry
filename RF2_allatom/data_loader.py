@@ -1442,15 +1442,16 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     if params['LIGAND_DOCK']:
         # RIGID-BODY LIGAND DOCKING: template 0 will contain ground-truth
         # protein coords and be input as xyz coords; template 1 will contain
-        # ground-truth small-molecule, which will be converted to pairwise
-        # template features and have black hole xyz initialization. 
+        # ground-truth small-molecule
 
         # make blank features for 2 templates
         xyz_t = torch.full((2,sum(Ls),NTOTAL,3),np.nan).float()
-        f1d_t = torch.nn.functional.one_hot(
-            torch.full((2, sum(Ls)), 20).long(), num_classes=NAATOKENS-1).float() # all gaps (no mask token)
-        conf = torch.zeros((2, sum(Ls), 1)).float()
-        f1d_t = torch.cat((f1d_t, conf), -1)
+        f1d_t = torch.cat((
+            torch.nn.functional.one_hot(
+                torch.full((2, sum(Ls)), 20).long(), 
+                num_classes=NAATOKENS-1).float(), # all gaps (no mask token)
+            torch.zeros((2, sum(Ls), 1)).float()
+        ), -1) # (2, L_protein + L_sm, NAATOKENS)
 
         # input true protein xyz as template 0
         xyz_t[0, :Ls[0], :3] = xyz[0, :Ls[0], :3]
@@ -1465,14 +1466,22 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
             torch.nn.functional.one_hot(msa_seed_orig[0,0, Ls[0]: ]-1, num_classes=NAATOKENS-1).float(),
             torch.ones((Ls[1], 1)).float()
         ), -1) # (1, L_sm, NAATOKENS)
+
+        # initialize coords to ground truth, but separately move protein & sm to origin
+        xyz1 = xyz[0, :Ls[0], :3]
+        xyz1 = xyz1 - xyz1[:,1].nanmean(0) # CA centroid -> origin
+        xyz2 = xyz[0, Ls[0]:, :3]
+        xyz2 = xyz2 - xyz2[:,1].nanmean(0) # centroid -> origin
+        xyz_prev = torch.full((sum(Ls), NTOTAL, 3), np.nan).float()
+        xyz_prev[:Ls[0], :3] = xyz1
+        xyz_prev[Ls[0]:, :3] = xyz2
+
     else:
         # standard template featurization
         ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
         xyz_t, f1d_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0,
         npick=ntempl, pick_top=pick_top) 
-
-    #generate initial coordinates
-    xyz_prev = xyz_t[0]
+        xyz_prev = xyz_t[0]
 
     if sum(Ls) > params["CROP"]:
         sel = crop_small_molecule(xyz_prot, xyz_sm[0], Ls, params)
