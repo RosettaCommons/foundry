@@ -869,16 +869,22 @@ def get_atom_frames(msa, G):
 def get_atomized_protein_frames(msa, ra):
     """ returns a unique frame for each atom in a stretch of residues """
     r,a = ra.T
-
     residue_frames = atomized_protein_frames[msa]
     # handle out of bounds at the termini, terminal N and C inherit Calpha frame, offset dimension needs to be updated
     offset = torch.zeros(3,2)
     offset[:,0] = 1
-    residue_frames[r[0], 0] = residue_frames[0,1] + offset
-    residue_frames[r[-1], 2] = residue_frames[-1,1] - offset
+    residue_frames[r[0], 0] = residue_frames[r[0],1] + offset
+    residue_frames[r[-1], 2] = residue_frames[r[-1],1] - offset
     # terminal O needs to have O-C-Calpha frame
-    residue_frames[r[-1],3,2] = torch.tensor([-2,1])    
+    residue_frames[r[-1],3,2] = torch.tensor([-2,1])
     frames = residue_frames[r,a]
+
+    # make sure no masked atoms are in frames
+    atom_idx = torch.arange(frames.shape[0]).unsqueeze(1).repeat(1,3)
+    masked_atoms = ~torch.all((frames[...,0] + atom_idx) < frames.shape[0], dim=-1)
+    reframe_indices = masked_atoms.nonzero()
+    for i in reframe_indices:
+        frames[i] = frames[i-1]-offset
     return frames.long() 
     
 ### Generate bond features for small molecules ###

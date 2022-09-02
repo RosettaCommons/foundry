@@ -47,14 +47,14 @@ N_PRINT_TRAIN = 16
 N_EXAMPLE_PER_EPOCH = 1208
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 0,
+              'num_workers': 4,
               'pin_memory': True}
 
-DEBUG = True
+DEBUG = False
 if DEBUG:
     N_EXAMPLE_PER_EPOCH = 64
     #os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
-    LOAD_PARAM['num_workers'] = 3
+    LOAD_PARAM['num_workers'] = 0
 
 def add_weight_decay(model, l2_coeff):
     decay, no_decay = [], []
@@ -255,10 +255,15 @@ class Trainer():
                 frame_mask_BB[:,mask_BB[0]],
                 dclamp=dclamp
             )
-        tot_loss += 0.5*w_str*tot_str[0]
+        num_layers = pred.shape[0]
+        gamma = 0.99
+        w_bb_fape = torch.pow(torch.full((num_layers,), gamma, device=pred.device), torch.arange(num_layers, device=pred.device))
+        w_bb_fape = torch.flip(w_bb_fape, (0,))
+        w_bb_fape = w_bb_fape / w_bb_fape.sum()
+        bb_l_fape = (w_bb_fape*tot_str).sum()
+        tot_loss += 0.5*w_str*bb_l_fape
         loss_s.append(tot_str.detach())
-
-        loss_dict['tot_str'] = float(tot_str[0].detach())
+        loss_dict['tot_str'] = float(bb_l_fape.detach())
 
         # AllAtom loss
         # get ground-truth torsion angles
@@ -344,11 +349,9 @@ class Trainer():
                 frames[:,mask_BB[0]],
                 frame_mask[:,mask_BB[0]]
             )
-
         loss_s.append(l_fape.detach())
-        tot_loss += w_str*l_fape.mean()
-
-        loss_dict['fape'] = float(l_fape.detach())
+        tot_loss += w_str*l_fape[0]
+        loss_dict['fape'] = float(l_fape[0].detach())
 
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
@@ -557,6 +560,7 @@ class Trainer():
         # wandb logging
         if self.wandb_prefix is not None and rank == 0:
             print('initializing wandb')
+            wandb.require("service")
             wandb.init(
                 project='RF2_allatom',
                 entity='bakerlab',
@@ -668,6 +672,10 @@ class Trainer():
             loader_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
+        valid_atomize_pdb_set = Dataset(
+            list(valid_pdb.keys())[:self.n_valid_pdb],
+            loader_atomize_pdb, valid_pdb,
+            self.loader_param, homo, p_homo_cut=-1.0)
         # valid_homo_set = Dataset(
         #     list(valid_homo.keys())[:self.n_valid_homo],
         #     loader_pdb, valid_homo,
@@ -713,6 +721,13 @@ class Trainer():
             loader_sm_compl, valid_sm_compl,
             self.loader_param
         )
+        rigid_body_param = self.loader_param
+        rigid_body_param["LIGAND_DOCK"] = True
+        valid_sm_compl_rigid_body_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param)
+
 
         train_sampler = DistributedWeightedSampler(
             train_set, 
@@ -731,7 +746,7 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
-            fraction_sm_compl=0,
+            fraction_sm_compl=.66,
             replacement=True
         )
 
@@ -748,6 +763,7 @@ class Trainer():
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
@@ -757,6 +773,7 @@ class Trainer():
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
 #        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
         valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -851,7 +868,8 @@ class Trainer():
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
 #            _, _, _ = self.valid_ppi_cycle(
@@ -861,7 +879,9 @@ class Trainer():
 #                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl")            
+
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
             if rank == 0: # save model
                 if valid_tot < best_valid_loss:
                     best_valid_loss = valid_tot

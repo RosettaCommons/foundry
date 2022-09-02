@@ -127,7 +127,7 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
     return loss
 
 # from Ivan: FAPE generalized over atom sets & frames
-def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.0, eps=1e-4):
+def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.0,gamma=0.99, eps=1e-4):
     # X (predicted) N x L x natoms x 3
     # Y (native)    1 x L x natoms x 3
     # atom_mask     1 x L x natoms
