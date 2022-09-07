@@ -68,7 +68,7 @@ def set_data_loader_params(args):
         "ROWS"             : 1,
         "SEQID"            : 95.0,
         "MAXCYCLE"         : 4,
-        "LIGAND_DOCK"      : False
+        "P_LIGAND_DOCK"    : 0.0
     }
     for param in PARAMS:
         if hasattr(args, param.lower()):
@@ -1390,7 +1390,7 @@ def loader_rna(pdb_set, Ls, params):
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats
 
-def loader_sm_compl(item, sm_chains, params, pick_top=True):
+def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
     """Load protein/SM complex with mixed residue and atom tokens. Also, compute frames for atom FAPE loss calc"""
     # Load protein information
     pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
@@ -1423,6 +1423,11 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     mask[:, protein_L:, 1] = mask_sm
     
     Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
+    
+    if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
+        print(f'WARNING [loader_sm_compl]: Sm. mol. XYZ and MSA lengths don\'t match: {item}. Skipping.')
+        return [None]*17
+
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
@@ -1439,7 +1444,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol, G)
     
-    if params['LIGAND_DOCK']:
+    if ligand_dock:
         # RIGID-BODY LIGAND DOCKING: template 0 will contain ground-truth
         # protein coords and be input as xyz coords; template 1 will contain
         # ground-truth small-molecule
@@ -1483,6 +1488,10 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
         npick=ntempl, pick_top=pick_top) 
         xyz_prev = xyz_t[0]
 
+        if msa.shape[1] != xyz_t.shape[1]:
+            print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
+            return [None]*17
+
     if sum(Ls) > params["CROP"]:
         sel = crop_small_molecule(xyz_prot, xyz_sm[0], Ls, params)
         
@@ -1510,7 +1519,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, False, False, frames, bond_feats
+           chain_idx, False, False, frames, bond_feats, item
 
 def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5):
     """ load pdb with portions represented as atoms instead of residues """
@@ -1733,11 +1742,12 @@ class DatasetRNA(data.Dataset):
 
 
 class DatasetSMComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params):
+    def __init__(self, IDs, loader, item_dict, params, p_ligand_dock=0.0):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
         self.params = params
+        self.p_ligand_dock = p_ligand_dock
 
     def __len__(self):
         return len(self.IDs)
@@ -1748,7 +1758,8 @@ class DatasetSMComplex(data.Dataset):
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][2],
-            self.params
+            self.params,
+            ligand_dock = np.random.rand(1) <= self.p_ligand_dock
         )
         return out
 
@@ -1905,14 +1916,13 @@ class DistilledDataset(data.Dataset):
         offset += len(self.rna_inds)
         if index >= offset:
             # in half of cases do logand docking
-            if np.random.rand(1) > 0.5:
-                self.params["LIGAND_DOCK"] = True
             ID = self.sm_compl_IDs[index-offset]
             sel_idx = np.random.randint(0, len(self.sm_compl_dict[ID]))
             out = self.sm_compl_loader(
                 self.sm_compl_dict[ID][sel_idx][0],
                 self.sm_compl_dict[ID][sel_idx][2],
-                self.params
+                self.params,
+                ligand_dock = np.random.rand(1) <= self.params['P_LIGAND_DOCK']
             )
         return out
 
