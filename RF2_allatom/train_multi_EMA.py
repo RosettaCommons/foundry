@@ -8,8 +8,8 @@ import torch.nn as nn
 from torch.utils import data
 from functools import partial
 from data_loader import (
-    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm_compl,
-    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler, loader_atomize_pdb
+    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm_compl, loader_atomize_pdb,
+    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
 )
 from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor, get_init_xyz
 from RoseTTAFoldModel  import RoseTTAFoldModule
@@ -562,7 +562,7 @@ class Trainer():
         # wandb logging
         if self.wandb_prefix is not None and rank == 0:
             print('initializing wandb')
-            wandb.require("service")
+            #wandb.require("service")
             wandb.init(
                 project='RF2_allatom',
                 entity='bakerlab',
@@ -670,15 +670,15 @@ class Trainer():
             native_NA_frac=0.25
         )
 
-        valid_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.n_valid_pdb],
-            loader_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0
-        )
-        valid_atomize_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.n_valid_pdb],
-            loader_atomize_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0)
+        #valid_pdb_set = Dataset(
+        #    list(valid_pdb.keys())[:self.n_valid_pdb],
+        #    loader_pdb, valid_pdb,
+        #    self.loader_param, homo, p_homo_cut=-1.0
+        #)
+        #valid_atomize_pdb_set = Dataset(
+        #    list(valid_pdb.keys())[:self.n_valid_pdb],
+        #    loader_atomize_pdb, valid_pdb,
+        #    self.loader_param, homo, p_homo_cut=-1.0)
         # valid_homo_set = Dataset(
         #     list(valid_homo.keys())[:self.n_valid_homo],
         #     loader_pdb, valid_homo,
@@ -724,12 +724,12 @@ class Trainer():
             loader_sm_compl, valid_sm_compl,
             self.loader_param
         )
-        rigid_body_param = self.loader_param
-        rigid_body_param["LIGAND_DOCK"] = True
-        valid_sm_compl_rigid_body_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param)
+        #rigid_body_param = self.loader_param
+        #rigid_body_param["LIGAND_DOCK"] = True
+        #valid_sm_compl_rigid_body_set = DatasetSMComplex(
+        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+        #    loader_sm_compl, valid_sm_compl,
+        #    self.loader_param)
 
 
         train_sampler = DistributedWeightedSampler(
@@ -749,11 +749,11 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
-            fraction_sm_compl=.66,
-            replacement=True
+            fraction_sm_compl=1.0,
+            replacement=False
         )
 
-        valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
+        #valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
         # valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
         # valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
         # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
@@ -765,8 +765,8 @@ class Trainer():
         valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
-        valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        #valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
@@ -776,7 +776,7 @@ class Trainer():
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
 #        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
         valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        #valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -864,15 +864,16 @@ class Trainer():
 
         for epoch in range(loaded_epoch+1, self.n_epoch):
             train_sampler.set_epoch(epoch)
-            valid_pdb_sampler.set_epoch(epoch)
+            #valid_pdb_sampler.set_epoch(epoch)
             #valid_homo_sampler.set_epoch(epoch)
             #valid_compl_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
+            valid_sm_compl_sampler.set_epoch(epoch)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
+            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
 #            _, _, _ = self.valid_ppi_cycle(
@@ -883,8 +884,8 @@ class Trainer():
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
             if rank == 0: # save model
                 if valid_tot < best_valid_loss:
                     best_valid_loss = valid_tot
@@ -937,7 +938,12 @@ class Trainer():
 
         counter = 0
         
-        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in train_loader:
+        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, item in train_loader:
+            
+            # skip known bad training examples
+            # loader will print warning message with item info for followup later
+            if item==None:
+                continue
 
             # transfer inputs to device
             B, _, N, L = msa.shape
@@ -963,6 +969,9 @@ class Trainer():
             xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
             t2d = xyz_to_t2d(xyz_t_frames)
 
+            xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
+            xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
+
             # get torsion angles from templates
             seq_tmpl = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
             alpha, _, alpha_mask, _ = get_torsions(
@@ -972,10 +981,6 @@ class Trainer():
             alpha = alpha.reshape(B,-1,L,NTOTALDOFS,2)
             alpha_mask = alpha_mask.reshape(B,-1,L,NTOTALDOFS,1)
             alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, L, 3*NTOTALDOFS)
-
-            # processing template coordinates
-            xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
-            xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
 
             counter += 1
 
@@ -1191,7 +1196,13 @@ class Trainer():
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in valid_loader:
+            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, item in valid_loader:
+            
+                # skip known bad training examples
+                # loader will print warning message with item info for followup later
+                if item==None:
+                    continue
+
                 # transfer inputs to device
                 B, _, N, L = msa.shape
 
@@ -1219,6 +1230,9 @@ class Trainer():
                 xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
                 t2d = xyz_to_t2d(xyz_t_frames)
 
+                xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
+                xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
+
                 # get torsion angles from templates
                 seq_tmpl = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
                 alpha, _, alpha_mask, _ = get_torsions(xyz_t.reshape(-1,L,NTOTAL,3), seq_tmpl, self.ti_dev, self.ti_flip, self.ang_ref)
@@ -1227,9 +1241,6 @@ class Trainer():
                 alpha = alpha.reshape(B,-1,L,NTOTALDOFS,2)
                 alpha_mask = alpha_mask.reshape(B,-1,L,NTOTALDOFS,1)
                 alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, L, 3*NTOTALDOFS)
-                # processing template coordinates
-                xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
-                xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
 
                 # set number of recycles
                 N_cycle = self.maxcycle
@@ -1306,14 +1317,6 @@ class Trainer():
                     verbose=verbose, ctr=ctrid, **self.loss_param
                 )
 
-                outdir = self.outdir if self.outdir else './'
-
-
-                writepdb(outdir+"xyz_prev_"+str(ctrid)+".pdb", xyz_prev[res_mask][:,:23], seq[:,i_cycle][res_mask])
-                writepdb(outdir+"xyz_t0_"+str(ctrid)+".pdb", xyz_t[:,0][res_mask][:,:23], seq[:,i_cycle][res_mask])
-                writepdb(outdir+"xyz_t1_"+str(ctrid)+".pdb", xyz_t[:,1][res_mask][:,:23], seq[:,i_cycle][res_mask])
-                torch.save(t2d,outdir+'t2d_'+str(ctrid)+'.pdb')
-                
                 valid_tot += loss.detach()
                 if valid_loss == None:
                     valid_loss = torch.zeros_like(loss_s.detach())

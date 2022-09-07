@@ -1423,6 +1423,11 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     mask[:, protein_L:, 1] = mask_sm
     
     Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
+    
+    if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
+        print(f'WARNING [loader_sm_compl]: Sm. mol. XYZ and MSA lengths don\'t match: {item}. Skipping.')
+        return [None]*17
+
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
@@ -1483,6 +1488,10 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
         npick=ntempl, pick_top=pick_top) 
         xyz_prev = xyz_t[0]
 
+        if msa.shape[1] != xyz_t.shape[1]:
+            print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
+            return [None]*17
+
     if sum(Ls) > params["CROP"]:
         sel = crop_small_molecule(xyz_prot, xyz_sm[0], Ls, params)
         
@@ -1510,7 +1519,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, False, False, frames, bond_feats
+           chain_idx, False, False, frames, bond_feats, item
 
 def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5):
     """ load pdb with portions represented as atoms instead of residues """
