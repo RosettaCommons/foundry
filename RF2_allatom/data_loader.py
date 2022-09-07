@@ -1668,7 +1668,7 @@ def loader_small_molecule(item, sm_chains, params, pick_top=True):
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, False, False, frames, bond_feats
+           chain_idx, False, False, frames, bond_feats, item
 
 def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to the ligand center of mass"""

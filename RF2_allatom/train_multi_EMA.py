@@ -729,18 +729,13 @@ class Trainer():
         valid_sm_compl_rigid_body_set = DatasetSMComplex(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_sm_compl, valid_sm_compl,
-<<<<<<< HEAD
             self.loader_param, p_ligand_dock=1.0)
 
-
-=======
-            rigid_body_param)
         valid_sm_set = DatasetSM(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_small_molecule, valid_sm_compl, self.loader_param
         )
         
->>>>>>> 018a10e (added support for training with small molecules)
         train_sampler = DistributedWeightedSampler(
             train_set, 
             pdb_weights,
@@ -759,14 +754,9 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
-<<<<<<< HEAD
-            fraction_sm_compl=0.66,
-            replacement=False
-=======
             fraction_sm_compl=0,
             fraction_sm = 1, 
             replacement=True
->>>>>>> 018a10e (added support for training with small molecules)
         )
 
         valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
@@ -955,7 +945,6 @@ class Trainer():
 
         counter = 0
         
-<<<<<<< HEAD
         for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, item in train_loader:
             
             # skip known bad training examples
@@ -963,10 +952,6 @@ class Trainer():
             if item==None:
                 continue
 
-=======
-        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in train_loader:
-            
->>>>>>> 018a10e (added support for training with small molecules)
             # transfer inputs to device
             B, _, N, L = msa.shape
             idx_pdb = idx_pdb.to(gpu, non_blocking=True) # (B, L)
