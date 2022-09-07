@@ -68,7 +68,7 @@ def set_data_loader_params(args):
         "ROWS"             : 1,
         "SEQID"            : 95.0,
         "MAXCYCLE"         : 4,
-        "LIGAND_DOCK"      : False
+        "P_LIGAND_DOCK"    : 0.0
     }
     for param in PARAMS:
         if hasattr(args, param.lower()):
@@ -1390,7 +1390,7 @@ def loader_rna(pdb_set, Ls, params):
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats
 
-def loader_sm_compl(item, sm_chains, params, pick_top=True):
+def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
     """Load protein/SM complex with mixed residue and atom tokens. Also, compute frames for atom FAPE loss calc"""
     # Load protein information
     pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
@@ -1444,7 +1444,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True):
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol, G)
     
-    if params['LIGAND_DOCK']:
+    if ligand_dock:
         # RIGID-BODY LIGAND DOCKING: template 0 will contain ground-truth
         # protein coords and be input as xyz coords; template 1 will contain
         # ground-truth small-molecule
@@ -1742,11 +1742,12 @@ class DatasetRNA(data.Dataset):
 
 
 class DatasetSMComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params):
+    def __init__(self, IDs, loader, item_dict, params, p_ligand_dock=0.0):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
         self.params = params
+        self.p_ligand_dock = p_ligand_dock
 
     def __len__(self):
         return len(self.IDs)
@@ -1757,7 +1758,8 @@ class DatasetSMComplex(data.Dataset):
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][2],
-            self.params
+            self.params,
+            ligand_dock = np.random.rand(1) <= self.p_ligand_dock
         )
         return out
 
@@ -1914,14 +1916,13 @@ class DistilledDataset(data.Dataset):
         offset += len(self.rna_inds)
         if index >= offset:
             # in half of cases do logand docking
-            if np.random.rand(1) > 0.5:
-                self.params["LIGAND_DOCK"] = True
             ID = self.sm_compl_IDs[index-offset]
             sel_idx = np.random.randint(0, len(self.sm_compl_dict[ID]))
             out = self.sm_compl_loader(
                 self.sm_compl_dict[ID][sel_idx][0],
                 self.sm_compl_dict[ID][sel_idx][2],
-                self.params
+                self.params,
+                ligand_dock = np.random.rand(1) <= self.params['P_LIGAND_DOCK']
             )
         return out
 

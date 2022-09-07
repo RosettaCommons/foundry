@@ -727,14 +727,13 @@ class Trainer():
         valid_sm_compl_set = DatasetSMComplex(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_sm_compl, valid_sm_compl,
-            self.loader_param
+            self.loader_param, p_ligand_dock=0.0,
         )
-        #rigid_body_param = self.loader_param
-        #rigid_body_param["LIGAND_DOCK"] = True
+
         #valid_sm_compl_rigid_body_set = DatasetSMComplex(
         #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
         #    loader_sm_compl, valid_sm_compl,
-        #    self.loader_param)
+        #    self.loader_param, p_ligand_dock=1.0)
 
 
         train_sampler = DistributedWeightedSampler(
