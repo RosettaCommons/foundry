@@ -869,7 +869,7 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats
+           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, "monomer"
 
 # Generate input features for homo-oligomers
 def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True):
@@ -1572,6 +1572,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     # if there aren't enough unmasked residues to atomize and have space for flanks, treat as monomer example
     if flank +1 >= sc_residues.shape[0]-(stretch+flank+1):
         return featurize_single_chain(msa, ins, tplt, pdb, params) + ("monomer", item,)
+
     sel_res = torch.randint(flank+1, sc_residues.shape[0]-(stretch+flank+1),(1,)) # sel_res is the start index of atomized region
     sel_res = sc_residues[sel_res] # sel_res index of the first residue to be atomized
     msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, stretch=stretch)

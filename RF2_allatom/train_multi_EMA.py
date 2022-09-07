@@ -761,8 +761,8 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
-            fraction_sm_compl=0.5,
-            fraction_sm = 0, 
+            fraction_sm_compl=0,
+            fraction_sm = 1, 
             replacement=True
         )
 
@@ -846,7 +846,7 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="best", resume_train=True)
+                                                        self.model_name, gpu, suffix="25", resume_train=True)
 
         if (self.eval):
 #            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
@@ -1200,7 +1200,6 @@ class Trainer():
                         loss_dict.update({'total_examples':epoch*len(train_loader)+counter*world_size})
                         log_dict = {f"Train":{task[0]:loss_dict}}
                         wandb.log(log_dict)
-                        wandb.log(loss_dict)
 
                     sys.stdout.flush()
                     local_tot = 0.0
