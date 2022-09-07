@@ -1913,6 +1913,9 @@ class DistilledDataset(data.Dataset):
             )
         offset += len(self.rna_inds)
         if index >= offset:
+            # in half of cases do logand docking
+            if np.random.rand(1) > 0.5:
+                self.params["LIGAND_DOCK"] = True
             ID = self.sm_compl_IDs[index-offset]
             sel_idx = np.random.randint(0, len(self.sm_compl_dict[ID]))
             out = self.sm_compl_loader(

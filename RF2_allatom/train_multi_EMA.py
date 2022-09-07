@@ -222,10 +222,10 @@ class Trainer():
         frames_BB[..., 1:, :, :] = 0
         frame_mask_BB = frame_mask.clone()
         frame_mask_BB[...,1:] =False
-        if negative: # inter-chain fapes should be ignored for negative cases
-            L1 = same_chain[0,0,:].sum()
-            mask_BBA = mask_BB.clone()
-            mask_BBA[0, L1:] = False
+        L1 = same_chain[0,0,:].sum()
+        mask_BBA = mask_BB.clone()
+        mask_BBA[0, L1:] = False
+        if torch.sum(mask_BBA) >0:
             l_fape_A = compute_general_FAPE(
                 pred[:,mask_BBA,:,:3],
                 true[:,mask_BBA[0],:3],
@@ -234,8 +234,10 @@ class Trainer():
                 frame_mask_BB[:,mask_BBA[0]],
                 dclamp=dclamp
             )
-            mask_BBB = mask_BB.clone()
-            mask_BBB[0,:L1] = False
+            loss_dict['fape_c1'] = float(l_fape_A[-1].detach())
+        mask_BBB = mask_BB.clone()
+        mask_BBB[0,:L1] = False
+        if torch.sum(mask_BBB) >0:
             l_fape_B = compute_general_FAPE(
                 pred[:, mask_BBB,:,:3],
                 true[:,mask_BBB[0],:3,:3],
@@ -244,6 +246,9 @@ class Trainer():
                 frame_mask_BB[:,mask_BBB[0]],
                 dclamp=dclamp
             )
+            loss_dict['fape_c2'] = float(l_fape_A[-1].detach())
+        if negative: # inter-chain fapes should be ignored for negative cases
+
             fracA = float(L1)/len(same_chain[0,0])
             tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
 
@@ -965,6 +970,8 @@ class Trainer():
             bond_feats = bond_feats.to(gpu, non_blocking=True)
 
             # processing template features
+            xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
+            xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
             seq_unmasked = msa[:, 0, 0, :] # (B, L)
             xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
             t2d = xyz_to_t2d(xyz_t_frames)
@@ -1155,6 +1162,7 @@ class Trainer():
 
                     if self.wandb_prefix is not None and rank == 0:
                         loss_dict.update({'total_examples':epoch*len(train_loader)+counter*world_size})
+                        loss_dict = {"train_"+k:v for k,v in loss_dict.items()}
                         wandb.log(loss_dict)
 
                     sys.stdout.flush()
@@ -1226,6 +1234,8 @@ class Trainer():
                 # mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
 
                 # processing template features
+                xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
+                xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
                 seq_unmasked = msa[:, 0, 0, :] # (B, L)
                 xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
                 t2d = xyz_to_t2d(xyz_t_frames)
