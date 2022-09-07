@@ -435,6 +435,8 @@ for i in range(NNAPROTAAS):
 for i in range(NNAPROTAAS, NAATOKENS):
     for j in range(NTOTAL):
         long2alt[i, j] = j
+allatom_mask[NNAPROTAAS:,1] = True
+
 # bond graph traversal
 num_bonds = torch.zeros((NAATOKENS,NTOTAL,NTOTAL), dtype=torch.long)
 for i in range(NNAPROTAAS):

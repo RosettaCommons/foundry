@@ -144,7 +144,7 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.
     for i in range(L):
         frames_reindex[:, i, :, :] = (i+frames[..., i, :, :, 0])*natoms + frames[..., i, :, :, 1]
     frames_reindex = frames_reindex.long()
-    
+
     frame_mask *= torch.all(
         torch.gather(atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
         axis=-1)
@@ -165,9 +165,7 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.
     )
 
     xij_t = torch.einsum('rji,rsj->rsi', uY[frame_mask], Y[atom_mask][None,...] - Y_y[frame_mask][:,None,...])
-
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
-    
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
     return loss
 

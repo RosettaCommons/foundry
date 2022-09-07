@@ -8,8 +8,8 @@ import torch.nn as nn
 from torch.utils import data
 from functools import partial
 from data_loader import (
-    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm_compl, loader_atomize_pdb,
-    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
+    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_small_molecule, loader_sm_compl, loader_atomize_pdb,
+    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
 )
 from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor, get_init_xyz
 from RoseTTAFoldModel  import RoseTTAFoldModule
@@ -246,9 +246,8 @@ class Trainer():
                 frame_mask_BB[:,mask_BBB[0]],
                 dclamp=dclamp
             )
-            loss_dict['fape_c2'] = float(l_fape_A[-1].detach())
+            loss_dict['fape_c2'] = float(l_fape_B[-1].detach())
         if negative: # inter-chain fapes should be ignored for negative cases
-
             fracA = float(L1)/len(same_chain[0,0])
             tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
 
@@ -270,7 +269,7 @@ class Trainer():
         tot_loss += 0.5*w_str*bb_l_fape
         loss_s.append(tot_str.detach())
         loss_dict['tot_str'] = float(bb_l_fape.detach())
-
+        
         # AllAtom loss
         # get ground-truth torsion angles
         true_tors, true_tors_alt, tors_mask, tors_planar = get_torsions(
@@ -323,7 +322,6 @@ class Trainer():
         # allatom fape and torsion angle loss
         # frames, frame_mask = get_frames(
         #     pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
-
         if negative: # inter-chain fapes should be ignored for negative cases
             # L1 = same_chain[0,0,:].sum()
             # mask_BBA = mask_BB.clone()
@@ -427,8 +425,6 @@ class Trainer():
                 mask_BB[0].sum()
             )
             outdir = self.outdir if self.outdir else './'
-            for i in range(pred.shape[0]):
-                writepdb(outdir+"p_"+self.model_name+"_"+str(ctr)+"_"+str(i)+".pdb", pred[i,0,mask_BB[0]][:,:3], seq[mask_BB][:])
             writepdb(outdir+"p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
             writepdb(outdir+"n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
             writepdb(outdir+"nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
@@ -670,6 +666,7 @@ class Trainer():
             fb_IDs, loader_fb, fb_dict,
             rna_IDs, loader_rna, rna_dict,
             sm_compl_IDs, loader_sm_compl, sm_compl_dict,
+            sm_compl_IDs, loader_small_molecule, sm_compl_dict,
             homo, 
             self.loader_param,
             native_NA_frac=0.25
@@ -732,9 +729,18 @@ class Trainer():
         valid_sm_compl_rigid_body_set = DatasetSMComplex(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_sm_compl, valid_sm_compl,
+<<<<<<< HEAD
             self.loader_param, p_ligand_dock=1.0)
 
 
+=======
+            rigid_body_param)
+        valid_sm_set = DatasetSM(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_small_molecule, valid_sm_compl, self.loader_param
+        )
+        
+>>>>>>> 018a10e (added support for training with small molecules)
         train_sampler = DistributedWeightedSampler(
             train_set, 
             pdb_weights,
@@ -745,6 +751,7 @@ class Trainer():
             na_neg_weights,
             rna_weights,
             sm_compl_weights,
+            sm_compl_weights,
             num_example_per_epoch=N_EXAMPLE_PER_EPOCH,
             num_replicas=world_size, 
             rank=rank, 
@@ -752,8 +759,14 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
+<<<<<<< HEAD
             fraction_sm_compl=0.66,
             replacement=False
+=======
+            fraction_sm_compl=0,
+            fraction_sm = 1, 
+            replacement=True
+>>>>>>> 018a10e (added support for training with small molecules)
         )
 
         valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
@@ -780,6 +793,7 @@ class Trainer():
 #        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
         valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -888,6 +902,7 @@ class Trainer():
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, rank, gpu, world_size, epoch, header="SM Only") 
             if rank == 0: # save model
                 if valid_tot < best_valid_loss:
                     best_valid_loss = valid_tot
@@ -940,6 +955,7 @@ class Trainer():
 
         counter = 0
         
+<<<<<<< HEAD
         for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, item in train_loader:
             
             # skip known bad training examples
@@ -947,9 +963,12 @@ class Trainer():
             if item==None:
                 continue
 
+=======
+        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in train_loader:
+            
+>>>>>>> 018a10e (added support for training with small molecules)
             # transfer inputs to device
             B, _, N, L = msa.shape
-
             idx_pdb = idx_pdb.to(gpu, non_blocking=True) # (B, L)
             true_crds = true_crds.to(gpu, non_blocking=True) # (B, N?, L, Natms, 3)
             atom_mask = atom_mask.to(gpu, non_blocking=True) # (B, L, Natms)
@@ -1042,7 +1061,6 @@ class Trainer():
                         )
 
                         true_crds, atom_mask = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-
                         res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                         mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 

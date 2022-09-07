@@ -10,7 +10,6 @@ from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_
 import pickle
 import random
 import ast
-
 from scipy.sparse.csgraph import shortest_path
 
 base_dir = "/projects/ml/TrRosetta/PDB-2021AUG02"
@@ -1631,7 +1630,45 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
            chain_idx, False, False, frames, bond_feats, item
+
+def loader_small_molecule(item, sm_chains, params, pick_top=True):
+    """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
+    # Load small molecule
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+item[0][1:3]+"/"+random.choice(sm_chains))
+    a3m = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
+    G = get_nxgraph(mol)
+    frames = get_atom_frames(msa_sm, G)
+
+    N_symmetry, sm_L, _ = xyz_sm.shape
+    # Generate ground truth structure: account for ligand symmetry
+    xyz = torch.full((N_symmetry, sm_L, NTOTAL, 3), np.nan).float()
+    mask = torch.full(xyz.shape[:-1], False).bool()
+    xyz[:, :, 1, :] = xyz_sm
+    mask[:, :, 1] = True
     
+    msa = a3m['msa'].long()
+    ins = a3m['ins'].long()
+
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+    
+    idx = torch.arange(sm_L)
+    
+    chain_idx = torch.zeros((sm_L, sm_L)).long()
+    bond_feats = get_bond_feats(mol, G)
+
+    xyz_t, f1d_t = TemplFeaturize({"ids":[]}, sm_L, params, offset=0,
+    npick=0, pick_top=pick_top) 
+    xyz_prev = xyz_t[0]
+
+    # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
+    init = INIT_CRDS.reshape(NTOTAL, 3).repeat(xyz_prev.shape[0], 1, 1)
+    init = init + (torch.rand(init.shape)*5-2.5)
+    xyz_prev = torch.where(mask[0,:,:,None], xyz_prev, init).contiguous()
+    xyz = torch.nan_to_num(xyz)
+    return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+           xyz.float(), mask, idx.long(), \
+           xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
+           chain_idx, False, False, frames, bond_feats
 
 def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to the ligand center of mass"""
@@ -1766,6 +1803,25 @@ class DatasetSMComplex(data.Dataset):
         )
         return out
 
+class DatasetSM(data.Dataset):
+    def __init__(self, IDs, loader, item_dict, params):
+        self.IDs = IDs
+        self.item_dict = item_dict
+        self.loader = loader
+        self.params = params
+
+    def __len__(self):
+        return len(self.IDs)
+
+    def __getitem__(self, index):
+        ID = self.IDs[index]
+        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+        out = self.loader(
+            self.item_dict[ID][sel_idx][0],
+            self.item_dict[ID][sel_idx][2],
+            self.params
+        )
+        return out
 
 class DistilledDataset(data.Dataset):
     def __init__(
@@ -1778,6 +1834,7 @@ class DistilledDataset(data.Dataset):
         fb_IDs, fb_loader, fb_dict,
         rna_IDs, rna_loader, rna_dict,
         sm_compl_IDs, sm_compl_loader, sm_compl_dict, 
+        sm_IDs, sm_loader, sm_dict,
         homo, 
         params,
         native_NA_frac=0.25,
@@ -1808,6 +1865,9 @@ class DistilledDataset(data.Dataset):
         self.sm_compl_IDs = sm_compl_IDs
         self.sm_compl_loader = sm_compl_loader
         self.sm_compl_dict = sm_compl_dict
+        self.sm_IDs = sm_IDs
+        self.sm_loader = sm_loader
+        self.sm_dict = sm_dict
         self.homo = homo
         self.params = params
         self.unclamp_cut = unclamp_cut
@@ -1821,6 +1881,7 @@ class DistilledDataset(data.Dataset):
         self.pdb_inds = np.arange(len(self.pdb_IDs))
         self.rna_inds = np.arange(len(self.rna_IDs))
         self.sm_compl_inds = np.arange(len(self.sm_compl_IDs))
+        self.sm_inds = np.arange(len(self.sm_IDs))
 
     def __len__(self):
         return (
@@ -1832,6 +1893,7 @@ class DistilledDataset(data.Dataset):
             + len(self.na_neg_inds)
             + len(self.rna_inds)
             + len(self.sm_compl_inds)
+            + len(self.sm_inds)
         )
 
     # order:
@@ -1917,8 +1979,17 @@ class DistilledDataset(data.Dataset):
                 self.params
             )
         offset += len(self.rna_inds)
+<<<<<<< HEAD
         if index >= offset:
             # in half of cases do logand docking
+=======
+        if index >= offset and index < offset + len(self.sm_compl_inds):
+            # in half of cases do ligand docking
+            if np.random.rand(1) > 0.5:
+                self.params["LIGAND_DOCK"] = True
+            else:
+                self.params["LIGAND_DOCK"] = False
+>>>>>>> 018a10e (added support for training with small molecules)
             ID = self.sm_compl_IDs[index-offset]
             sel_idx = np.random.randint(0, len(self.sm_compl_dict[ID]))
             out = self.sm_compl_loader(
@@ -1926,6 +1997,15 @@ class DistilledDataset(data.Dataset):
                 self.sm_compl_dict[ID][sel_idx][2],
                 self.params,
                 ligand_dock = np.random.rand(1) <= self.params['P_LIGAND_DOCK']
+            )
+        offset += len(self.sm_compl_inds)
+        if index >= offset:
+            ID = self.sm_IDs[index-offset]
+            sel_idx = np.random.randint(0, len(self.sm_dict[ID]))
+            out = self.sm_loader(
+                self.sm_dict[ID][sel_idx][0],
+                self.sm_dict[ID][sel_idx][2],
+                self.params
             )
         return out
 
@@ -1941,12 +2021,14 @@ class DistributedWeightedSampler(data.Sampler):
         neg_na_compl_weights,
         rna_weights,
         sm_compl_weights,
+        sm_weights,
         num_example_per_epoch=25600,
-        fraction_fb=0.16,
-        fraction_compl=0.16,  # half neg, half pos
-        fraction_na_compl=0.16, # half neg, half pos
-        fraction_rna=0.16,
-        fraction_sm_compl=0.16, 
+        fraction_fb=0.14,
+        fraction_compl=0.14,  # half neg, half pos
+        fraction_na_compl=0.14, # half neg, half pos
+        fraction_rna=0.14,
+        fraction_sm_compl=0.14, 
+        fraction_sm=0.14,
         num_replicas=None,
         rank=None,
         replacement=False
@@ -1972,6 +2054,7 @@ class DistributedWeightedSampler(data.Sampler):
         self.num_neg_na_compl_per_epoch = self.num_na_compl_per_epoch
         self.num_rna_per_epoch = int(round(num_example_per_epoch*fraction_rna))
         self.num_sm_compl_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl))
+        self.num_sm_per_epoch = int(round(num_example_per_epoch*fraction_sm))
 
         self.num_pdb_per_epoch = num_example_per_epoch - (
             self.num_fb_per_epoch 
@@ -1981,6 +2064,7 @@ class DistributedWeightedSampler(data.Sampler):
             + self.num_neg_na_compl_per_epoch
             + self.num_rna_per_epoch
             + self.num_sm_compl_per_epoch
+            + self.num_sm_per_epoch
         )
 
         if (rank==0):
@@ -2013,7 +2097,9 @@ class DistributedWeightedSampler(data.Sampler):
         self.neg_na_compl_weights = neg_na_compl_weights
 
         self.rna_weights = rna_weights
+        
         self.sm_compl_weights = sm_compl_weights
+        self.sm_weights = sm_weights
 
     def __iter__(self):
         # deterministically shuffle based on epoch
@@ -2097,7 +2183,19 @@ class DistributedWeightedSampler(data.Sampler):
             )
             sm_compl_sampled = torch.multinomial(self.sm_compl_weights, self.num_sm_compl_per_epoch, self.replacement, generator=g)
             sel_indices = torch.cat((sel_indices, indices[sm_compl_sampled + offset]))
-        
+        if (self.num_sm_per_epoch>0):
+            offset = (
+                len(self.dataset.fb_IDs) 
+                + len(self.dataset.pdb_IDs) 
+                + len(self.dataset.compl_IDs)
+                + len(self.dataset.neg_IDs)
+                + len(self.dataset.na_compl_IDs)
+                + len(self.dataset.na_neg_IDs)
+                + len(self.dataset.rna_IDs)
+                + len(self.dataset.sm_IDs)
+            )
+            sm_sampled = torch.multinomial(self.sm_weights, self.num_sm_per_epoch, self.replacement, generator=g)
+            sel_indices = torch.cat((sel_indices, indices[sm_sampled + offset]))
 
         # shuffle indices
         indices = sel_indices[torch.randperm(len(sel_indices), generator=g)]
