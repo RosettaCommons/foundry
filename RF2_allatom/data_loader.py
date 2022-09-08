@@ -1640,31 +1640,38 @@ def loader_small_molecule(item, sm_chains, params, pick_top=True):
     frames = get_atom_frames(msa_sm, G)
 
     N_symmetry, sm_L, _ = xyz_sm.shape
+
+    if sm_L < 2:
+        print(f'WARNING [loader_small_molecule]: Sm mol. {item} only has one atom. Skipping.')
+        return [torch.tensor([-1])]*17 # flag for bad example
+
     # Generate ground truth structure: account for ligand symmetry
     xyz = torch.full((N_symmetry, sm_L, NTOTAL, 3), np.nan).float()
-    mask = torch.full(xyz.shape[:-1], False).bool()
     xyz[:, :, 1, :] = xyz_sm
-    mask[:, :, 1] = True
-    
+
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
 
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
-    
+
     idx = torch.arange(sm_L)
-    
+
     chain_idx = torch.zeros((sm_L, sm_L)).long()
     bond_feats = get_bond_feats(mol, G)
 
     xyz_t, f1d_t = TemplFeaturize({"ids":[]}, sm_L, params, offset=0,
-    npick=0, pick_top=pick_top) 
+    npick=0, pick_top=pick_top)
     xyz_prev = xyz_t[0]
 
     # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
+    mask = torch.full(xyz.shape[:-1], False).bool()
+    mask[:, :, 1] = True # CAs
     init = INIT_CRDS.reshape(NTOTAL, 3).repeat(xyz_prev.shape[0], 1, 1)
     init = init + (torch.rand(init.shape)*5-2.5)
-    xyz_prev = torch.where(mask[0,:,:,None], xyz_prev, init).contiguous()
+    xyz_prev = torch.where(~mask[0,:,:,None], xyz_prev, init).contiguous() # initialize CAs, leave everything else nan
     xyz = torch.nan_to_num(xyz)
+    xyz_prev = torch.nan_to_num(xyz_prev)
+    xyz_t = torch.nan_to_num(xyz_t)
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
