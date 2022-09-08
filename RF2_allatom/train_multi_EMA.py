@@ -724,16 +724,16 @@ class Trainer():
 #            loader_rna, valid_rna,
 #            self.loader_param
 #        )
-        valid_sm_compl_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param, p_ligand_dock=0.0,
-        )
-
-        #valid_sm_compl_rigid_body_set = DatasetSMComplex(
+        #valid_sm_compl_set = DatasetSMComplex(
         #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
         #    loader_sm_compl, valid_sm_compl,
-        #    self.loader_param, p_ligand_dock=1.0)
+        #    self.loader_param, p_ligand_dock=0.0,
+        #)
+
+        valid_sm_compl_rigid_body_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param, p_ligand_dock=1.0)
 
 
         train_sampler = DistributedWeightedSampler(
@@ -766,7 +766,8 @@ class Trainer():
 #        valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
 #        valid_na_from_scratch_neg_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_neg_set, num_replicas=world_size, rank=rank)
 #        valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
+        #valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
+        valid_sm_compl_rigid_body_sampler = data.distributed.DistributedSampler(valid_sm_compl_rigid_body_set, num_replicas=world_size, rank=rank)
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         #valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
@@ -779,8 +780,8 @@ class Trainer():
 #        valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
 #        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
-        valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        #valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        #valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_rigid_body_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -848,7 +849,8 @@ class Trainer():
 
             # run RNA prediction
             #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch=0, verbose=True, header='SM Rigid Body')
             dist.destroy_process_group()
             return
 
@@ -872,7 +874,8 @@ class Trainer():
             #valid_homo_sampler.set_epoch(epoch)
             #valid_compl_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
-            valid_sm_compl_sampler.set_epoch(epoch)
+            #valid_sm_compl_sampler.set_epoch(epoch)
+            valid_sm_compl_rigid_body_sampler.set_epoch(epoch)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
@@ -888,8 +891,8 @@ class Trainer():
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
 
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
+            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
             if rank == 0: # save model
                 if valid_tot < best_valid_loss:
                     best_valid_loss = valid_tot
@@ -1304,9 +1307,9 @@ class Trainer():
                     use_checkpoint=False
                 )
 
-                true_crds, atom_mask = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+                true_crds, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
-                res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                 mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 true_crds_frame = xyz_to_frame_xyz(true_crds, msa[:, i_cycle, 0],atom_frames)
@@ -1321,7 +1324,7 @@ class Trainer():
                     logit_s, c6d,
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds, 
-                    atom_mask, res_mask, mask_2d, same_chain,
+                    atom_mask_, res_mask, mask_2d, same_chain,
                     pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative,
                     verbose=verbose, ctr=ctrid, **self.loss_param
                 )
