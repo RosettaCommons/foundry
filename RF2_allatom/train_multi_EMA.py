@@ -45,7 +45,7 @@ N_PRINT_TRAIN = 16
 # num structs per epoch
 # must be divisible by #GPUs
 #N_EXAMPLE_PER_EPOCH = 1208
-N_EXAMPLE_PER_EPOCH = 6712
+N_EXAMPLE_PER_EPOCH = 100
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 4,
