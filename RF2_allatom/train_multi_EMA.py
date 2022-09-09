@@ -1009,15 +1009,12 @@ class Trainer():
 
             N_cycle = np.random.randint(1, self.maxcycle+1) # number of recycling
 
-                msa_prev = None
-                pair_prev = None
-                alpha_prev = torch.zeros((B,L,NTOTALDOFS,2)).to(gpu, non_blocking=True)
-                state_prev = None
+            msa_prev = None
+            pair_prev = None
+            alpha_prev = torch.zeros((B,L,NTOTALDOFS,2)).to(gpu, non_blocking=True)
+            state_prev = None
 
-<<<<<<< HEAD
             try:
-=======
->>>>>>> 50a2029 (ready to train with bug fix)
                 with torch.no_grad():
                     for i_cycle in range(N_cycle-1):
                         with ddp_model.no_sync():
@@ -1066,18 +1063,10 @@ class Trainer():
                                 use_checkpoint=True
                             )
 
-<<<<<<< HEAD
-                            true_crds, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-
-                            res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
-                            mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
-
-=======
                             true_crds, atom_mask = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
                             res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                             mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
->>>>>>> 50a2029 (ready to train with bug fix)
                             true_crds_frame = xyz_to_frame_xyz(true_crds, msa[:, i_cycle, 0],atom_frames)
                             c6d, _ = xyz_to_c6d(true_crds_frame)
                             c6d = c6d_to_bins(c6d, same_chain, negative=negative)
@@ -1090,11 +1079,7 @@ class Trainer():
                                 logit_s, c6d,
                                 logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                                 pred_crds, alphas, pred_allatom, true_crds, 
-<<<<<<< HEAD
-                                atom_mask_, res_mask, mask_2d, same_chain,
-=======
                                 atom_mask, res_mask, mask_2d, same_chain,
->>>>>>> 50a2029 (ready to train with bug fix)
                                 pred_lddts, idx_pdb, atom_frames=atom_frames,
                                 unclamp=unclamp, negative=negative,
                                 verbose=verbose, ctr=ctrid, **self.loss_param
@@ -1122,15 +1107,9 @@ class Trainer():
                             use_checkpoint=True
                         )
 
-<<<<<<< HEAD
-                        true_crds, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-
-                        res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
-=======
                         true_crds, atom_mask = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
                         res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
->>>>>>> 50a2029 (ready to train with bug fix)
                         mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                         true_crds_frame = xyz_to_frame_xyz(true_crds, msa[:, i_cycle, 0],atom_frames)
@@ -1145,11 +1124,7 @@ class Trainer():
                             logit_s, c6d,
                             logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                             pred_crds, alphas, pred_allatom, true_crds, 
-<<<<<<< HEAD
-                            atom_mask_, res_mask, mask_2d, same_chain,
-=======
                             atom_mask, res_mask, mask_2d, same_chain,
->>>>>>> 50a2029 (ready to train with bug fix)
                             pred_lddts, idx_pdb, atom_frames=atom_frames, unclamp=unclamp, negative=negative,
                             verbose=verbose, ctr=ctrid, **self.loss_param
                         )
@@ -1168,7 +1143,6 @@ class Trainer():
                     if not skip_lr_sched:
                         scheduler.step()
                     ddp_model.module.update() # apply EMA
-<<<<<<< HEAD
             except Exception as e:
                 print('true_crds.shape',true_crds.shape)
                 print('msa_masked.shape',msa_masked.shape)
@@ -1217,7 +1191,8 @@ class Trainer():
 
                     if self.wandb_prefix is not None and rank == 0:
                         loss_dict.update({'total_examples':epoch*len(train_loader)+counter*world_size})
-                        loss_dict = {"train_"+k:v for k,v in loss_dict.items()}
+                        log_dict = {f"Train":{task[0]:loss_dict}}
+                        wandb.log(log_dict)
                         wandb.log(loss_dict)
 
                     sys.stdout.flush()
@@ -1227,53 +1202,6 @@ class Trainer():
                 torch.cuda.reset_peak_memory_stats()
             torch.cuda.empty_cache()
         
-=======
-                
-                local_tot += loss.detach()*self.ACCUM_STEP
-                if local_loss == None:
-                    local_loss = torch.zeros_like(loss_s.detach())
-                    local_acc = torch.zeros_like(acc_s.detach())
-                local_loss += loss_s.detach()
-                local_acc += acc_s.detach()
-                
-                train_tot += loss.detach()*self.ACCUM_STEP
-                if train_loss == None:
-                    train_loss = torch.zeros_like(loss_s.detach())
-                    train_acc = torch.zeros_like(acc_s.detach())
-                train_loss += loss_s.detach()
-                train_acc += acc_s.detach()
-
-                
-                if counter % N_PRINT_TRAIN == 0:
-                    if rank == 0:
-                        max_mem = torch.cuda.max_memory_allocated()/1e9
-                        train_time = time.time() - start_time
-                        local_tot /= float(N_PRINT_TRAIN)
-                        local_loss /= float(N_PRINT_TRAIN)
-                        local_acc /= float(N_PRINT_TRAIN)
-                        
-                        local_tot = local_tot.cpu().detach()
-                        local_loss = local_loss.cpu().detach().numpy()
-                        local_acc = local_acc.cpu().detach().numpy()
-
-                        sys.stdout.write("Local: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f | Max mem %.4f\n"%(\
-                                epoch, self.n_epoch, counter*self.batch_size*world_size, self.n_train, train_time, local_tot, \
-                                " ".join(["%8.4f"%l for l in local_loss]),\
-                                local_acc[0], local_acc[1], local_acc[2], max_mem))
-
-                        if self.wandb_prefix is not None and rank == 0:
-                            loss_dict.update({'total_examples':epoch*len(train_loader)+counter*world_size})
-                            log_dict = {"Train":{task[0]:loss_dict}}
-                            wandb.log(log_dict)
-
-                        sys.stdout.flush()
-                        local_tot = 0.0
-                        local_loss = None 
-                        local_acc = None 
-                    torch.cuda.reset_peak_memory_stats()
-                torch.cuda.empty_cache()
-            
->>>>>>> 50a2029 (ready to train with bug fix)
         # write total train loss
         train_tot /= float(counter * world_size)
         train_loss /= float(counter * world_size)
