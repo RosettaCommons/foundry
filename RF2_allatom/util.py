@@ -55,7 +55,6 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-4):
     e2 = u2/(torch.norm(u2, dim=-1, keepdim=True)+eps)
     e3 = torch.cross(e1, e2, dim=-1)
     R = torch.cat([e1[...,None], e2[...,None], e3[...,None]], axis=-1) #[B,L,3,3] - rotation matrix
-<<<<<<< HEAD
 
     v2 = v2/(torch.norm(v2, dim=-1, keepdim=True)+eps)
     cosref = torch.sum(e1*v2, dim=-1)
@@ -76,25 +75,6 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-4):
     Rp[...,1,0] = sindel
     Rp[...,1,1] = cosdel
     R = torch.einsum('...ij,...jk->...ik', R,Rp)
-=======
-    
-    #v2 = v2/(torch.norm(v2, dim=-1, keepdim=True)+eps)
-    #cosref = torch.sum(e1*v2, dim=-1)
-    #costgt = torch.full(dims, -0.3616, device=N.device)
-    #if is_na is not None:
-    #    costgt[is_na] = -0.4929
-
-    #cos2del = torch.clamp( cosref*costgt + torch.sqrt((1-cosref*cosref)*(1-costgt*costgt)+eps), min=-1.0, max=1.0 )
-    #cosdel = torch.sqrt(0.5*(1+cos2del)+eps)
-    #sindel = torch.sign(costgt-cosref) * torch.sqrt(1-0.5*(1+cos2del)+eps)
-    #Rp = torch.eye(3, device=N.device).repeat(*dims,1,1)
-    #Rp[...,0,0] = cosdel
-    #Rp[...,0,1] = -sindel
-    #Rp[...,1,0] = sindel
-    #Rp[...,1,1] = cosdel
-
-    #R = torch.einsum('...ij,...jk->...ik', R,Rp)
->>>>>>> 6c76449 (previous training run state)
 
     return R, Ca
 
