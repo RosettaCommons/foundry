@@ -45,7 +45,7 @@ def th_dih(a,b,c,d):
 # build a frame from 3 points
 #fd  -  more complicated version splits angle deviations between CA-N and CA-C (giving more accurate CB position)
 #fd  -  makes no assumptions about input dims (other than last 1 is xyz)
-def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-8):
+def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-4):
     dims = N.shape[:-1]
 
     v1 = C-Ca
@@ -55,23 +55,26 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-8):
     e2 = u2/(torch.norm(u2, dim=-1, keepdim=True)+eps)
     e3 = torch.cross(e1, e2, dim=-1)
     R = torch.cat([e1[...,None], e2[...,None], e3[...,None]], axis=-1) #[B,L,3,3] - rotation matrix
+
+    v2 = v2/(torch.norm(v2, dim=-1, keepdim=True)+eps)
+    cosref = torch.sum(e1*v2, dim=-1)
+
+    costgt = torch.full(dims, -0.3616, device=N.device)
+    if is_na is not None:
+       costgt[is_na] = -0.4929
     
-    #v2 = v2/(torch.norm(v2, dim=-1, keepdim=True)+eps)
-    #cosref = torch.sum(e1*v2, dim=-1)
-    #costgt = torch.full(dims, -0.3616, device=N.device)
-    #if is_na is not None:
-    #    costgt[is_na] = -0.4929
+    cos2del = torch.clamp( cosref*costgt + torch.sqrt((1-cosref*cosref)*(1-costgt*costgt)+eps), min=-1.0, max=1.0 )
 
-    #cos2del = torch.clamp( cosref*costgt + torch.sqrt((1-cosref*cosref)*(1-costgt*costgt)+eps), min=-1.0, max=1.0 )
-    #cosdel = torch.sqrt(0.5*(1+cos2del)+eps)
-    #sindel = torch.sign(costgt-cosref) * torch.sqrt(1-0.5*(1+cos2del)+eps)
-    #Rp = torch.eye(3, device=N.device).repeat(*dims,1,1)
-    #Rp[...,0,0] = cosdel
-    #Rp[...,0,1] = -sindel
-    #Rp[...,1,0] = sindel
-    #Rp[...,1,1] = cosdel
+    cosdel = torch.sqrt(0.5*(1+cos2del)+eps)
 
-    #R = torch.einsum('...ij,...jk->...ik', R,Rp)
+    sindel = torch.sign(costgt-cosref) * torch.sqrt(1-0.5*(1+cos2del)+eps)
+
+    Rp = torch.eye(3, device=N.device).repeat(*dims,1,1)
+    Rp[...,0,0] = cosdel
+    Rp[...,0,1] = -sindel
+    Rp[...,1,0] = sindel
+    Rp[...,1,1] = cosdel
+    R = torch.einsum('...ij,...jk->...ik', R,Rp)
 
     return R, Ca
 
@@ -788,7 +791,8 @@ for i in range(NPROTAAS, NNAPROTAAS):
             xyzs_in_base_frame[i,a2,:3] , torch.tensor([-1.,0.,0.])
         )
         RTs_by_torsion[i,NPROTTORS+9,:3,3] = xyzs_in_base_frame[i,a2,:3]
-
+#Small molecules
+xyzs_in_base_frame[NNAPROTAAS:,1, :3] = 0
 # general FAPE parameters
 frame_indices = torch.full((NAATOKENS,NFRAMES,3,2),0, dtype=torch.long)
 for i in range(NNAPROTAAS):
