@@ -53,7 +53,7 @@ LOAD_PARAM = {'shuffle': False,
 
 DEBUG = False
 if DEBUG:
-    N_EXAMPLE_PER_EPOCH =1208
+    N_EXAMPLE_PER_EPOCH =8
     #os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
     LOAD_PARAM['num_workers'] = 0
 
@@ -624,7 +624,7 @@ class Trainer():
         self.n_valid_rna = len(valid_rna.keys())
         self.n_valid_sm_compl = len(valid_sm_compl.keys())
 
-        self.n_valid_pdb = 200
+        self.n_valid_pdb = 4
         #self.n_valid_homo = 4
         #self.n_valid_compl = 4
         #self.n_valid_neg = 4
@@ -680,11 +680,11 @@ class Trainer():
             native_NA_frac=0.25
         )
 
-        #valid_pdb_set = Dataset(
-        #    list(valid_pdb.keys())[:self.n_valid_pdb],
-        #    loader_pdb, valid_pdb,
-        #    self.loader_param, homo, p_homo_cut=-1.0
-        #)
+        valid_pdb_set = Dataset(
+            list(valid_pdb.keys())[:self.n_valid_pdb],
+            loader_pdb, valid_pdb,
+            self.loader_param, homo, p_homo_cut=-1.0
+        )
         #valid_atomize_pdb_set = Dataset(
         #    list(valid_pdb.keys())[:self.n_valid_pdb],
         #    loader_atomize_pdb, valid_pdb,
@@ -767,7 +767,7 @@ class Trainer():
             replacement=True
         )
 
-        #valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
+        valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
         # valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
         # valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
         # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
@@ -780,7 +780,7 @@ class Trainer():
         valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
-        #valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
@@ -902,10 +902,16 @@ class Trainer():
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
 
+<<<<<<< HEAD
             valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, rank, gpu, world_size, epoch, header="SM Only") 
 
+=======
+       #     valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
+       #     _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
+       #     _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, rank, gpu, world_size, epoch, header="SM Only") 
+>>>>>>> 76811ac (fixed wandb saving)
             if rank == 0: # save model
                 if valid_tot < best_valid_loss:
                     best_valid_loss = valid_tot
@@ -937,7 +943,7 @@ class Trainer():
                             'valid_acc': valid_acc,
                             'best_loss': best_valid_loss},
                             self.checkpoint_fn(self.model_name, str(epoch)))
-                    wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
+                wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
             dist.destroy_process_group()
 
     def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, verbose=False):
