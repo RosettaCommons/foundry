@@ -39,7 +39,7 @@ np.random.seed(6636)
 USE_AMP = False
 torch.set_num_threads(4)
 
-N_PRINT_TRAIN = 16
+N_PRINT_TRAIN = 4
 #BATCH_SIZE = 1 * torch.cuda.device_count()
 
 # num structs per epoch
@@ -53,7 +53,7 @@ LOAD_PARAM = {'shuffle': False,
 
 DEBUG = False
 if DEBUG:
-    N_EXAMPLE_PER_EPOCH = 64
+    N_EXAMPLE_PER_EPOCH =1208
     #os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
     LOAD_PARAM['num_workers'] = 0
 
@@ -224,6 +224,7 @@ class Trainer():
         frames_BB[..., 1:, :, :] = 0
         frame_mask_BB = frame_mask.clone()
         frame_mask_BB[...,1:] =False
+
         L1 = same_chain[0,0,:].sum()
         mask_BBA = mask_BB.clone()
         mask_BBA[0, L1:] = False
@@ -246,7 +247,8 @@ class Trainer():
                 mask_crds[:,mask_BBB[0], :3],
                 frames_BB[:,mask_BBB[0]],
                 frame_mask_BB[:,mask_BBB[0]],
-                dclamp=dclamp
+                Z=4,
+                dclamp=4
             )
             loss_dict['fape_c2'] = float(l_fape_B[-1].detach())
         if negative: # inter-chain fapes should be ignored for negative cases
@@ -269,6 +271,9 @@ class Trainer():
         w_bb_fape = w_bb_fape / w_bb_fape.sum()
         bb_l_fape = (w_bb_fape*tot_str).sum()
         tot_loss += 0.5*w_str*bb_l_fape
+        if "fape_c2" in loss_dict.keys():
+            lig_fape = (w_bb_fape*l_fape_B).sum()
+            tot_loss += 0.5*w_str*lig_fape
         loss_s.append(tot_str.detach())
         loss_dict['tot_str'] = float(bb_l_fape.detach())
         
@@ -358,7 +363,7 @@ class Trainer():
         loss_s.append(l_fape.detach())
         tot_loss += w_str*l_fape[0]
         loss_dict['fape'] = float(l_fape[0].detach())
-
+        
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
         if w_bond > 0.0:
@@ -424,6 +429,7 @@ class Trainer():
                 tot_str.cpu().detach().numpy(),
                 allatom_lddt.cpu().detach().numpy(),
                 l_fape.cpu().detach().numpy(),
+                l_fape_B.cpu().detach().numpy(),
                 mask_BB[0].sum()
             )
             outdir = self.outdir if self.outdir else './'
@@ -723,16 +729,15 @@ class Trainer():
 #            loader_rna, valid_rna,
 #            self.loader_param
 #        )
-        #valid_sm_compl_set = DatasetSMComplex(
-        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-        #    loader_sm_compl, valid_sm_compl,
-        #    self.loader_param, p_ligand_dock=0.0,
-        #)
-        #valid_sm_compl_rigid_body_set = DatasetSMComplex(
-        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-        #    loader_sm_compl, valid_sm_compl,
-        #    self.loader_param, p_ligand_dock=1.0)
-
+        valid_sm_compl_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param, p_ligand_dock=0.0,
+        )
+        valid_sm_compl_rigid_body_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param, p_ligand_dock=1.0)
         valid_sm_set = DatasetSM(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_small_molecule, valid_sm_compl, self.loader_param
@@ -838,7 +843,7 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="best", resume_train=True)
+                                                        self.model_name, gpu, suffix="25", resume_train=True)
 
         if (self.eval):
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
@@ -883,7 +888,7 @@ class Trainer():
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
@@ -894,9 +899,10 @@ class Trainer():
 #                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_loader, rank, gpu, world_size, epoch, header="SM Only") 
+
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, rank, gpu, world_size, epoch, header="SM Only") 
             if rank == 0: # save model
                 if valid_tot < best_valid_loss:
                     best_valid_loss = valid_tot
@@ -904,31 +910,31 @@ class Trainer():
                                 #'model_state_dict': ddp_model.state_dict(),
                                 'model_state_dict': ddp_model.module.shadow.state_dict(),
                                 'optimizer_state_dict': optimizer.state_dict(),
+                                    'scheduler_state_dict': scheduler.state_dict(),
+                                    'scaler_state_dict': scaler.state_dict(),
+                                    'best_loss': best_valid_loss,
+                                    'train_loss': train_loss,
+                                    'train_acc': train_acc,
+                                    'valid_loss': valid_loss,
+                                    'valid_acc': valid_acc},
+                                    self.checkpoint_fn(self.model_name, 'best'))
+                
+                
+                    torch.save({'epoch': epoch,
+                                #'model_state_dict': ddp_model.state_dict(),
+                                'model_state_dict': ddp_model.module.shadow.state_dict(),
+                                'final_state_dict': ddp_model.module.model.state_dict(),
+                                'optimizer_state_dict': optimizer.state_dict(),
                                 'scheduler_state_dict': scheduler.state_dict(),
                                 'scaler_state_dict': scaler.state_dict(),
-                                'best_loss': best_valid_loss,
                                 'train_loss': train_loss,
                                 'train_acc': train_acc,
                                 'valid_loss': valid_loss,
-                                'valid_acc': valid_acc},
-                                self.checkpoint_fn(self.model_name, 'best'))
-            
-            
-                torch.save({'epoch': epoch,
-                            #'model_state_dict': ddp_model.state_dict(),
-                            'model_state_dict': ddp_model.module.shadow.state_dict(),
-                            'final_state_dict': ddp_model.module.model.state_dict(),
-                            'optimizer_state_dict': optimizer.state_dict(),
-                            'scheduler_state_dict': scheduler.state_dict(),
-                            'scaler_state_dict': scaler.state_dict(),
-                            'train_loss': train_loss,
-                            'train_acc': train_acc,
-                            'valid_loss': valid_loss,
-                            'valid_acc': valid_acc,
-                            'best_loss': best_valid_loss},
-                            self.checkpoint_fn(self.model_name, str(epoch)))
+                                'valid_acc': valid_acc,
+                                'best_loss': best_valid_loss},
+                                self.checkpoint_fn(self.model_name, str(epoch)))
 
-        dist.destroy_process_group()
+            dist.destroy_process_group()
 
     def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, verbose=False):
         # Turn on training mode
@@ -949,7 +955,7 @@ class Trainer():
 
         counter = 0
         
-        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, item in train_loader:
+        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in train_loader:
             
             # skip known bad training examples
             # loader will print warning message with item info for followup later
@@ -1003,12 +1009,15 @@ class Trainer():
 
             N_cycle = np.random.randint(1, self.maxcycle+1) # number of recycling
 
-            msa_prev = None
-            pair_prev = None
-            alpha_prev = torch.zeros((B,L,NTOTALDOFS,2)).to(gpu, non_blocking=True)
-            state_prev = None
+                msa_prev = None
+                pair_prev = None
+                alpha_prev = torch.zeros((B,L,NTOTALDOFS,2)).to(gpu, non_blocking=True)
+                state_prev = None
 
+<<<<<<< HEAD
             try:
+=======
+>>>>>>> 50a2029 (ready to train with bug fix)
                 with torch.no_grad():
                     for i_cycle in range(N_cycle-1):
                         with ddp_model.no_sync():
@@ -1057,11 +1066,18 @@ class Trainer():
                                 use_checkpoint=True
                             )
 
+<<<<<<< HEAD
                             true_crds, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
                             res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                             mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
+=======
+                            true_crds, atom_mask = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+                            res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                            mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
+
+>>>>>>> 50a2029 (ready to train with bug fix)
                             true_crds_frame = xyz_to_frame_xyz(true_crds, msa[:, i_cycle, 0],atom_frames)
                             c6d, _ = xyz_to_c6d(true_crds_frame)
                             c6d = c6d_to_bins(c6d, same_chain, negative=negative)
@@ -1074,7 +1090,11 @@ class Trainer():
                                 logit_s, c6d,
                                 logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                                 pred_crds, alphas, pred_allatom, true_crds, 
+<<<<<<< HEAD
                                 atom_mask_, res_mask, mask_2d, same_chain,
+=======
+                                atom_mask, res_mask, mask_2d, same_chain,
+>>>>>>> 50a2029 (ready to train with bug fix)
                                 pred_lddts, idx_pdb, atom_frames=atom_frames,
                                 unclamp=unclamp, negative=negative,
                                 verbose=verbose, ctr=ctrid, **self.loss_param
@@ -1102,9 +1122,15 @@ class Trainer():
                             use_checkpoint=True
                         )
 
+<<<<<<< HEAD
                         true_crds, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
                         res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+=======
+                        true_crds, atom_mask = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+
+                        res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+>>>>>>> 50a2029 (ready to train with bug fix)
                         mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                         true_crds_frame = xyz_to_frame_xyz(true_crds, msa[:, i_cycle, 0],atom_frames)
@@ -1119,7 +1145,11 @@ class Trainer():
                             logit_s, c6d,
                             logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                             pred_crds, alphas, pred_allatom, true_crds, 
+<<<<<<< HEAD
                             atom_mask_, res_mask, mask_2d, same_chain,
+=======
+                            atom_mask, res_mask, mask_2d, same_chain,
+>>>>>>> 50a2029 (ready to train with bug fix)
                             pred_lddts, idx_pdb, atom_frames=atom_frames, unclamp=unclamp, negative=negative,
                             verbose=verbose, ctr=ctrid, **self.loss_param
                         )
@@ -1138,6 +1168,7 @@ class Trainer():
                     if not skip_lr_sched:
                         scheduler.step()
                     ddp_model.module.update() # apply EMA
+<<<<<<< HEAD
             except Exception as e:
                 print('true_crds.shape',true_crds.shape)
                 print('msa_masked.shape',msa_masked.shape)
@@ -1196,6 +1227,53 @@ class Trainer():
                 torch.cuda.reset_peak_memory_stats()
             torch.cuda.empty_cache()
         
+=======
+                
+                local_tot += loss.detach()*self.ACCUM_STEP
+                if local_loss == None:
+                    local_loss = torch.zeros_like(loss_s.detach())
+                    local_acc = torch.zeros_like(acc_s.detach())
+                local_loss += loss_s.detach()
+                local_acc += acc_s.detach()
+                
+                train_tot += loss.detach()*self.ACCUM_STEP
+                if train_loss == None:
+                    train_loss = torch.zeros_like(loss_s.detach())
+                    train_acc = torch.zeros_like(acc_s.detach())
+                train_loss += loss_s.detach()
+                train_acc += acc_s.detach()
+
+                
+                if counter % N_PRINT_TRAIN == 0:
+                    if rank == 0:
+                        max_mem = torch.cuda.max_memory_allocated()/1e9
+                        train_time = time.time() - start_time
+                        local_tot /= float(N_PRINT_TRAIN)
+                        local_loss /= float(N_PRINT_TRAIN)
+                        local_acc /= float(N_PRINT_TRAIN)
+                        
+                        local_tot = local_tot.cpu().detach()
+                        local_loss = local_loss.cpu().detach().numpy()
+                        local_acc = local_acc.cpu().detach().numpy()
+
+                        sys.stdout.write("Local: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f | Max mem %.4f\n"%(\
+                                epoch, self.n_epoch, counter*self.batch_size*world_size, self.n_train, train_time, local_tot, \
+                                " ".join(["%8.4f"%l for l in local_loss]),\
+                                local_acc[0], local_acc[1], local_acc[2], max_mem))
+
+                        if self.wandb_prefix is not None and rank == 0:
+                            loss_dict.update({'total_examples':epoch*len(train_loader)+counter*world_size})
+                            log_dict = {"Train":{task[0]:loss_dict}}
+                            wandb.log(log_dict)
+
+                        sys.stdout.flush()
+                        local_tot = 0.0
+                        local_loss = None 
+                        local_acc = None 
+                    torch.cuda.reset_peak_memory_stats()
+                torch.cuda.empty_cache()
+            
+>>>>>>> 50a2029 (ready to train with bug fix)
         # write total train loss
         train_tot /= float(counter * world_size)
         train_loss /= float(counter * world_size)
@@ -1228,7 +1306,7 @@ class Trainer():
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, item in valid_loader:
+            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in valid_loader:
             
                 # skip known bad training examples
                 # loader will print warning message with item info for followup later
@@ -1370,6 +1448,8 @@ class Trainer():
         valid_acc = valid_acc.cpu().detach().numpy()
         
         if rank == 0:
+            log_dict = {f"Valid_{header}":{task[0]:loss_dict}}
+            wandb.log(log_dict)
             train_time = time.time() - start_time
             sys.stdout.write("%s: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f\n"%(\
                     header, epoch, self.n_epoch, world_size*len(valid_loader), world_size*len(valid_loader), train_time, valid_tot, \

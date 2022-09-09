@@ -989,13 +989,13 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5)
             #homo_item = homo[item[0]][sel_idx]
             interfaces = homo[item[0]]
             feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top)
-            return feats + (item,)
+            return feats + ("homo",item,)
         else:
             return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top) \
-                   + (item,)
+                   + ("monomer",item,)
     else:
         return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top) \
-               + (item,)
+               + ("monomer",item,)
 
     
 def loader_fb(item, params, unclamp=False):
@@ -1049,7 +1049,7 @@ def loader_fb(item, params, unclamp=False):
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, item
+           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats,"fb", item
 
 
 def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=True):
@@ -1164,7 +1164,7 @@ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=Tru
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, item
+           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats,"compl", item
 
 def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pick_top=True):
     pdb_set = item[0]
@@ -1309,7 +1309,7 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, item
+           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats,"na_compl", item
 
 def loader_rna(pdb_set, Ls, params):
     # read PDBs
@@ -1390,7 +1390,7 @@ def loader_rna(pdb_set, Ls, params):
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, item
+           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, "rna",item
 
 def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
     """Load protein/SM complex with mixed residue and atom tokens. Also, compute frames for atom FAPE loss calc"""
@@ -1521,7 +1521,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, False, False, frames, bond_feats, item
+           chain_idx, False, False, frames, bond_feats, "sm_compl", item
 
 def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5):
     """ load pdb with portions represented as atoms instead of residues """
@@ -1559,6 +1559,9 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     stretch = 5 # how many residues to atomize
     flank = 3 # how many residue chain break to have between atomized portion and residues
     sc_residues = (torch.sum(mask_prot, dim=1)>3).nonzero()
+    # if there aren't enough unmasked residues to atomize and have space for flanks, treat as monomer example
+    if flank +1 >= sc_residues.shape[0]-(stretch+flank+1):
+        return featurize_single_chain(msa, ins, tplt, pdb, params)
     sel_res = torch.randint(flank+1, sc_residues.shape[0]-(stretch+flank+1),(1,)) # sel_res is the start index of atomized region
     sel_res = sc_residues[sel_res] # sel_res index of the first residue to be atomized
     msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, stretch=stretch)
@@ -1629,7 +1632,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, False, False, frames, bond_feats, item
+           chain_idx, False, False, frames, bond_feats,"atomize_pdb", item
 
 def loader_small_molecule(item, sm_chains, params, pick_top=True):
     """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
@@ -1675,7 +1678,7 @@ def loader_small_molecule(item, sm_chains, params, pick_top=True):
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, False, False, frames, bond_feats, item
+           chain_idx, False, False, frames, bond_feats, "sm_only", item
 
 def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to the ligand center of mass"""

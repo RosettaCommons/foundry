@@ -609,7 +609,6 @@ class IterativeSimulator(nn.Module):
             alpha_s.append(alpha)
 
         _, xyzallatom = self.compute_allatom_coords(seq_unmasked, xyz, alpha)  # think about detach here...
-
         # now use unmasked seq (no cross-talk for msa prediction)
         for i_m in range(self.n_ref_block):
             # dbonddxyz, = calc_BB_bond_geom_grads(seq_unmasked[0], xyz.detach(), idx)
@@ -633,11 +632,10 @@ class IterativeSimulator(nn.Module):
 
             xyz_s.append(xyz)
             alpha_s.append(alpha)
-
+        
         _, xyzallatom = self.compute_allatom_coords(seq_unmasked, xyz, alpha)  # think about detach here...
         xyzallatom_s = list()
         xyzallatom_s.append(xyzallatom.clone())
-
         if (self.n_finetune_block>0):
             state = self.allatom_embed(state, seq_unmasked, self.atom_type_index)
 
