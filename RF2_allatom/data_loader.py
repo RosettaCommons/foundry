@@ -10,6 +10,7 @@ from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_
 import pickle
 import random
 import ast
+import scipy
 from scipy.sparse.csgraph import shortest_path
 
 base_dir = "/projects/ml/TrRosetta/PDB-2021AUG02"
@@ -17,7 +18,9 @@ compl_dir = "/projects/ml/RoseTTAComplex"
 #na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
-mol_dir = "/home/dimaio/ccd/by-pdb"
+sm_compl_dir = "/projects/ml/RF2_allatom"
+mol_dir = "/projects/ml/RF2_allatom/by-pdb"
+#mol_dir = "/home/dimaio/ccd/by-pdb"
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -38,21 +41,22 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.csv"%na_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "/home/rohith/list_v02_ligonly_notest_ccd_ob", 
+        "SM_LIST"          : "%s/list_v02_ligonly_notest_ccd_ob"%sm_compl_dir, 
+        #"SM_LIST"          : "%s/list_v02_sm_filt_notest.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         #"PDB_LIST"        : "/gscratch2/list_2021AUG02.csv", # on blue
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
-        "VAL_PDB"          : "/home/rohith/BFF/RF2_allatom/valid_remapped",
+        "VAL_PDB"          : "%s/valid_remapped"%sm_compl_dir,
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
-        "TEST_SM"          : "/home/rohith/BFF/RF2_allatom/lig_test",
-        "DATAPKL"          : "/home/rohith/BFF/RF2_allatom/dataset.pkl", # cache for faster loading
+        "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
+        "DATAPKL"          : "%s/dataset.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
         "NA_DIR"           : na_dir,
-        "MOL_DIR"          : mol_dir, 
+        "MOL_DIR"          : mol_dir,
         "MINTPLT"          : 0,
         "MAXTPLT"          : 5,
         "MINSEQ"           : 1,
@@ -374,7 +378,9 @@ def get_train_valid_set(params, OFFSET=1000000):
         valid_pdb = {}
         valid_homo = {}
         for r in rows:
-            if r[2] in val_pdb_ids or r[2] in test_sm_ids:
+            if r[2] in test_sm_ids:
+                continue # completely held out test set examples
+            if r[2] in val_pdb_ids: 
                 val_hash.append(r[1])
                 if r[2] in valid_pdb.keys():
                     valid_pdb[r[2]].append((r[:2], r[-1]))
@@ -1395,6 +1401,7 @@ def loader_rna(pdb_set, Ls, params):
 def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
     """Load protein/SM complex with mixed residue and atom tokens. Also, compute frames for atom FAPE loss calc"""
     # Load protein information
+    print(item)
     pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
     a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+item[1][:3] + '/'+ item[1] + '.a3m.gz', item[1])
     tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+item[1][:3]+'/'+item[1]+'.pt')
@@ -1474,14 +1481,17 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
             torch.ones((Ls[1], 1)).float()
         ), -1) # (1, L_sm, NAATOKENS)
 
-        # initialize coords to ground truth, but separately move protein & sm to origin
+        # initialize coords to ground truth, but separately move to origin and rotate randomly
         xyz1 = xyz[0, :Ls[0], :3]
         xyz1 = xyz1 - xyz1[:,1].nanmean(0) # CA centroid -> origin
         xyz2 = xyz[0, Ls[0]:, :3]
         xyz2 = xyz2 - xyz2[:,1].nanmean(0) # centroid -> origin
         xyz_prev = torch.full((sum(Ls), NTOTAL, 3), np.nan).float()
-        xyz_prev[:Ls[0], :3] = xyz1
-        xyz_prev[Ls[0]:, :3] = xyz2
+
+        R = scipy.spatial.transform.Rotation.random(2).as_matrix()
+        R = torch.tensor(R).float()
+        xyz_prev[:Ls[0], :3] = xyz1 @ R[0].T
+        xyz_prev[Ls[0]:, :3] = xyz2 @ R[1].T
 
     else:
         # standard template featurization
