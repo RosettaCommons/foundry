@@ -775,7 +775,7 @@ class Trainer():
 #        valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
 #        valid_na_from_scratch_neg_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_neg_set, num_replicas=world_size, rank=rank)
 #        valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
-        #valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
+        valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
         valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
@@ -789,7 +789,7 @@ class Trainer():
 #        valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
 #        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
-        #valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         #valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
 
@@ -843,10 +843,10 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="28", resume_train=True)
+                                                        self.model_name, gpu, suffix="best", resume_train=True)
 
         if (self.eval):
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
+#            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
             # run protein/NA prediction (TEMPLATED)
             #_, _, _ = self.valid_ppi_cycle(
             #    ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
@@ -859,7 +859,7 @@ class Trainer():
 
             # run RNA prediction
             #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 0, verbose=True)
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
             dist.destroy_process_group()
             return
 
@@ -918,22 +918,23 @@ class Trainer():
                                     'valid_loss': valid_loss,
                                     'valid_acc': valid_acc},
                                     self.checkpoint_fn(self.model_name, 'best'))
-                
-                
-                    torch.save({'epoch': epoch,
-                                #'model_state_dict': ddp_model.state_dict(),
-                                'model_state_dict': ddp_model.module.shadow.state_dict(),
-                                'final_state_dict': ddp_model.module.model.state_dict(),
-                                'optimizer_state_dict': optimizer.state_dict(),
-                                'scheduler_state_dict': scheduler.state_dict(),
-                                'scaler_state_dict': scaler.state_dict(),
-                                'train_loss': train_loss,
-                                'train_acc': train_acc,
-                                'valid_loss': valid_loss,
-                                'valid_acc': valid_acc,
-                                'best_loss': best_valid_loss},
-                                self.checkpoint_fn(self.model_name, str(epoch)))
+                    wandb.save(self.checkpoint_fn(self.model_name, 'best'))
 
+                
+                torch.save({'epoch': epoch,
+                            #'model_state_dict': ddp_model.state_dict(),
+                            'model_state_dict': ddp_model.module.shadow.state_dict(),
+                            'final_state_dict': ddp_model.module.model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'scheduler_state_dict': scheduler.state_dict(),
+                            'scaler_state_dict': scaler.state_dict(),
+                            'train_loss': train_loss,
+                            'train_acc': train_acc,
+                            'valid_loss': valid_loss,
+                            'valid_acc': valid_acc,
+                            'best_loss': best_valid_loss},
+                            self.checkpoint_fn(self.model_name, str(epoch)))
+                    wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
             dist.destroy_process_group()
 
     def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, verbose=False):
