@@ -44,8 +44,8 @@ N_PRINT_TRAIN = 4
 
 # num structs per epoch
 # must be divisible by #GPUs
-#N_EXAMPLE_PER_EPOCH = 1208
-N_EXAMPLE_PER_EPOCH = 6712
+N_EXAMPLE_PER_EPOCH = 1208
+#N_EXAMPLE_PER_EPOCH = 6712
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 0,
@@ -761,8 +761,8 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
-            fraction_sm_compl=0,
-            fraction_sm = 1, 
+            fraction_sm_compl=0.5,
+            fraction_sm = 0, 
             replacement=True
         )
 
@@ -843,10 +843,10 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="25", resume_train=True)
+                                                        self.model_name, gpu, suffix="28", resume_train=True)
 
         if (self.eval):
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
             # run protein/NA prediction (TEMPLATED)
             #_, _, _ = self.valid_ppi_cycle(
             #    ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
@@ -859,7 +859,7 @@ class Trainer():
 
             # run RNA prediction
             #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
             dist.destroy_process_group()
             return
 

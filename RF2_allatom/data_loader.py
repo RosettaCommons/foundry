@@ -1428,7 +1428,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
     
     if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
         print(f'WARNING [loader_sm_compl]: Sm. mol. XYZ and MSA lengths don\'t match: {item}. Skipping.')
-        return [-1]*17
+        return [-1]*18
 
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
     msa = a3m['msa'].long()
@@ -1492,7 +1492,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
 
         if msa.shape[1] != xyz_t.shape[1]:
             print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
-            return [-1]*17
+            return [-1]*18
 
     if sum(Ls) > params["CROP"]:
         sel = crop_small_molecule(xyz_prot, xyz_sm[0], Ls, params)
@@ -1561,7 +1561,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     sc_residues = (torch.sum(mask_prot, dim=1)>3).nonzero()
     # if there aren't enough unmasked residues to atomize and have space for flanks, treat as monomer example
     if flank +1 >= sc_residues.shape[0]-(stretch+flank+1):
-        return featurize_single_chain(msa, ins, tplt, pdb, params)
+        return featurize_single_chain(msa, ins, tplt, pdb, params) + ("monomer", item,)
     sel_res = torch.randint(flank+1, sc_residues.shape[0]-(stretch+flank+1),(1,)) # sel_res is the start index of atomized region
     sel_res = sc_residues[sel_res] # sel_res index of the first residue to be atomized
     msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, stretch=stretch)
