@@ -1434,7 +1434,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
     
     if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
         print(f'WARNING [loader_sm_compl]: Sm. mol. XYZ and MSA lengths don\'t match: {item}. Skipping.')
-        return [-1]*18
+        return [torch.tensor([-1])]*18
 
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
     msa = a3m['msa'].long()
@@ -1501,7 +1501,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
 
         if msa.shape[1] != xyz_t.shape[1]:
             print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
-            return [-1]*18
+            return [torch.tensor([-1])]*18
 
     if sum(Ls) > params["CROP"]:
         sel = crop_small_molecule(xyz_prot, xyz_sm[0], Ls, params)
@@ -1655,7 +1655,7 @@ def loader_small_molecule(item, sm_chains, params, pick_top=True):
 
     if sm_L < 2:
         print(f'WARNING [loader_small_molecule]: Sm mol. {item} only has one atom. Skipping.')
-        return [torch.tensor([-1])]*17 # flag for bad example
+        return [torch.tensor([-1])]*18 # flag for bad example
 
     # Generate ground truth structure: account for ligand symmetry
     xyz = torch.full((N_symmetry, sm_L, NTOTAL, 3), np.nan).float()
