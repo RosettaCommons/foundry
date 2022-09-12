@@ -44,8 +44,8 @@ N_PRINT_TRAIN = 4
 
 # num structs per epoch
 # must be divisible by #GPUs
-#N_EXAMPLE_PER_EPOCH = 1208
-N_EXAMPLE_PER_EPOCH = 6632 # divisible by 8
+N_EXAMPLE_PER_EPOCH = 1208
+#N_EXAMPLE_PER_EPOCH = 6632 # divisible by 8
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 0,
@@ -631,7 +631,7 @@ class Trainer():
         #self.n_valid_na_compl = 4
         #self.n_valid_na_neg = 4
         #self.n_valid_rna = 4
-        #self.n_valid_sm_compl = 200
+        self.n_valid_sm_compl = 200
 
         if (rank==0):
             print ('Loaded (training)',
@@ -904,8 +904,8 @@ class Trainer():
 #                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
-            # _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
+            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
             # _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, rank, gpu, world_size, epoch, header="SM Only") 
 
             if rank == 0: # save model
@@ -968,7 +968,7 @@ class Trainer():
             if torch.is_tensor(item) and len(item.shape) == 2 and torch.all(item==-1):
                 continue
 
-            save_pdbs = np.random.rand()<=1
+            save_pdbs = np.random.rand()<=0.01
 
             # transfer inputs to device
             B, _, N, L = msa.shape
