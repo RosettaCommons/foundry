@@ -1691,9 +1691,10 @@ def loader_small_molecule(item, sm_chains, params, pick_top=True):
            chain_idx, False, False, frames, bond_feats, "sm_only", item
 
 def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
-    """choose residues with calphas close to the ligand center of mass"""
-    ligand_com = torch.nanmean(lig_xyz, dim=[0,1]).expand(1,3)
-    dist = torch.cdist(prot_xyz[:,1], ligand_com).flatten()
+    """choose residues with calphas close to a random ligand atom"""
+    # ligand_com = torch.nanmean(lig_xyz, dim=[0,1]).expand(1,3)
+    i_face_xyz = lig_xyz[np.random.randint(len(lig_xyz))]
+    dist = torch.cdist(prot_xyz[:,1].unsqueeze(0), i_face_xyz.unsqueeze(0)).flatten()
     _, idx = torch.topk(dist, params["CROP"]-len(lig_xyz), largest=False)
     sel, _ = torch.sort(idx)
     # select the whole ligand
