@@ -941,7 +941,7 @@ class Trainer():
                             'best_loss': best_valid_loss},
                             self.checkpoint_fn(self.model_name, str(epoch)))
                 wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
-            dist.destroy_process_group()
+        dist.destroy_process_group()
 
     def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, verbose=False):
         # Turn on training mode
