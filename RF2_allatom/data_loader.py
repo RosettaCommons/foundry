@@ -869,7 +869,7 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, "monomer"
+           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats
 
 # Generate input features for homo-oligomers
 def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True):
@@ -1567,7 +1567,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
 
     # Choose a residue for the atomize stretch
     stretch = 5 # how many residues to atomize
-    flank = 3 # how many residue chain break to have between atomized portion and residues
+    flank = 0  # how many residue chain break to have between atomized portion and residues
     sc_residues = (torch.sum(mask_prot, dim=1)>3).nonzero()
     # if there aren't enough unmasked residues to atomize and have space for flanks, treat as monomer example
     if flank +1 >= sc_residues.shape[0]-(stretch+flank+1):
@@ -1605,6 +1605,10 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
+    bond_feats[sel_res, Ls[0]] = 6
+    bond_feats[Ls[0], sel_res] = 6
+    bond_feats[sel_res+stretch+flank, -1] = 6
+    bond_feats[-1, sel_res+stretch+flank] = 6
 
     # handle res_idx
     last_res = idx[-1]
@@ -1633,7 +1637,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     bond_feats = torch.cat((bond_feats[ :, :sel_res-flank], bond_feats[:, sel_res+stretch+flank:]), dim=1)
 
     xyz_prev = xyz_t[0]
-
+    xyz_prev[Ls[0]:] = xyz_prev[sel_res]
     # bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)
@@ -1657,7 +1661,7 @@ def loader_small_molecule(item, sm_chains, params, pick_top=True):
 
     if sm_L < 2:
         print(f'WARNING [loader_small_molecule]: Sm mol. {item} only has one atom. Skipping.')
-        return [torch.tensor([-1])]*17 # flag for bad example
+        return [torch.tensor([-1])]*18 # flag for bad example
 
     # Generate ground truth structure: account for ligand symmetry
     xyz = torch.full((N_symmetry, sm_L, NTOTAL, 3), np.nan).float()
@@ -1696,6 +1700,7 @@ def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
     # ligand_com = torch.nanmean(lig_xyz, dim=[0,1]).expand(1,3)
     i_face_xyz = lig_xyz[np.random.randint(len(lig_xyz))]
     dist = torch.cdist(prot_xyz[:,1].unsqueeze(0), i_face_xyz.unsqueeze(0)).flatten()
+    dist = torch.nan_to_num(dist, nan=999999)
     _, idx = torch.topk(dist, params["CROP"]-len(lig_xyz), largest=False)
     sel, _ = torch.sort(idx)
     # select the whole ligand

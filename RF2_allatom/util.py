@@ -307,7 +307,7 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
             print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
             assert(False)
 
-        if s > len(aa2long):
+        if s >= len(aa2long):
             lig_name = "LG1"
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "HETATM", ctr, num2aa[s], lig_name, 

@@ -412,7 +412,8 @@ class Trainer():
         loss_s.append(allatom_lddt_inter.detach())
 
         loss_dict['allatom_lddt_inter'] = float(allatom_lddt_inter.detach())
-
+        if float(allatom_lddt_c2.detach()) > .3:
+            verbose=True
         # hbond [use all atoms not just those in native]
         #hb_loss = calc_hb(
         #    seq[0], pred_all[0,...,:3], 
@@ -428,6 +429,7 @@ class Trainer():
                 ctr,
                 tot_str.cpu().detach().numpy(),
                 allatom_lddt.cpu().detach().numpy(),
+                allatom_lddt_c2.cpu().detach().numpy(),
                 l_fape.cpu().detach().numpy(),
                 l_fape_B.cpu().detach().numpy(),
                 mask_BB[0].sum()
@@ -685,10 +687,10 @@ class Trainer():
             loader_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
-        valid_atomize_pdb_set = Dataset(
-           list(valid_pdb.keys())[:self.n_valid_pdb],
-           loader_atomize_pdb, valid_pdb,
-           self.loader_param, homo, p_homo_cut=-1.0)
+        #valid_atomize_pdb_set = Dataset(
+        #    list(valid_pdb.keys())[:self.n_valid_pdb],
+        #    loader_atomize_pdb, valid_pdb,
+        #    self.loader_param, homo, p_homo_cut=-1.0)
         # valid_homo_set = Dataset(
         #     list(valid_homo.keys())[:self.n_valid_homo],
         #     loader_pdb, valid_homo,
@@ -762,7 +764,7 @@ class Trainer():
             fraction_na_compl=0.0,
             fraction_rna=0.0,
             fraction_sm_compl=0,
-            fraction_sm = 1, 
+            fraction_sm = 0, 
             replacement=True
         )
 
@@ -782,7 +784,8 @@ class Trainer():
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        
+        #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
@@ -793,7 +796,7 @@ class Trainer():
 #        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
 
         valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        #valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_rigid_body_sampler, **LOAD_PARAM)
+        valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
@@ -846,7 +849,7 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="25", resume_train=True)
+                                                        self.model_name, gpu, suffix="best", resume_train=True)
 
         if (self.eval):
 #            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
@@ -941,7 +944,7 @@ class Trainer():
                             'best_loss': best_valid_loss},
                             self.checkpoint_fn(self.model_name, str(epoch)))
                 wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
-            dist.destroy_process_group()
+        dist.destroy_process_group()
 
     def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, verbose=False):
         # Turn on training mode
@@ -1009,10 +1012,10 @@ class Trainer():
 
             counter += 1
 
-            if save_pdbs:
-                res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
-                writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
-                    torch.nan_to_num(xyz_prev[res_mask][:,:23]), seq_unmasked[res_mask])
+            #if save_pdbs:
+               # res_mask = ~((atom_mask[0,0,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+               # writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
+               #     torch.nan_to_num(xyz_prev[res_mask][:,:23]), seq_unmasked[res_mask])
 
             N_cycle = np.random.randint(1, self.maxcycle+1) # number of recycling
 
@@ -1158,7 +1161,7 @@ class Trainer():
                 raise e
             
             if save_pdbs:
-                res_mask = ~((atom_mask[0,0,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                #res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                 writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_true.pdb', 
                     torch.nan_to_num(true_crds[res_mask][:,:23]), seq_unmasked[res_mask])
                 writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb', 
