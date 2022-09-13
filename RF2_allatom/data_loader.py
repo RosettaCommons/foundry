@@ -1575,7 +1575,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
 
     sel_res = torch.randint(flank+1, sc_residues.shape[0]-(stretch+flank+1),(1,)) # sel_res is the start index of atomized region
     sel_res = sc_residues[sel_res] # sel_res index of the first residue to be atomized
-    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, stretch=stretch)
+    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, stretch=stretch)
     # no atom templates
     tplt_sm = {"ids":[]}
     xyz_t_sm, f1d_t_sm = TemplFeaturize(tplt_sm, xyz_sm.shape[1], params, offset=0, npick=0, pick_top=pick_top)
@@ -1607,8 +1607,8 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
     bond_feats[sel_res, Ls[0]] = 6
     bond_feats[Ls[0], sel_res] = 6
-    bond_feats[sel_res+stretch+flank, -1] = 6
-    bond_feats[-1, sel_res+stretch+flank] = 6
+    bond_feats[sel_res+stretch+flank, Ls[0]+int(last_C.numpy())] = 6
+    bond_feats[Ls[0]+int(last_C.numpy()), sel_res+stretch+flank] = 6
 
     # handle res_idx
     last_res = idx[-1]

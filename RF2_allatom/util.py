@@ -973,9 +973,10 @@ def atomize_protein(sel_res, msa, xyz, mask, stretch=5):
     ins = torch.zeros_like(lig_seq)
 
     r,a = ra.T
+    last_C = torch.all(ra==torch.tensor([r[-1],2]),dim=1).nonzero()
     lig_xyz = torch.zeros((len(ra), 3))
     lig_xyz = nat_symm[:, r, a]
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     frames = get_atomized_protein_frames(residues_atomize, ra)
     bond_feats = get_atomize_protein_bond_feats(sel_res, msa, ra, flank=stretch)
-    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats
+    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C
