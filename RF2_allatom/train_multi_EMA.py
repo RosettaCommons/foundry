@@ -412,7 +412,8 @@ class Trainer():
         loss_s.append(allatom_lddt_inter.detach())
 
         loss_dict['allatom_lddt_inter'] = float(allatom_lddt_inter.detach())
-
+        if float(allatom_lddt_c2.detach()) > .3:
+            verbose=True
         # hbond [use all atoms not just those in native]
         #hb_loss = calc_hb(
         #    seq[0], pred_all[0,...,:3], 
@@ -428,6 +429,7 @@ class Trainer():
                 ctr,
                 tot_str.cpu().detach().numpy(),
                 allatom_lddt.cpu().detach().numpy(),
+                allatom_lddt_c2.cpu().detach().numpy(),
                 l_fape.cpu().detach().numpy(),
                 l_fape_B.cpu().detach().numpy(),
                 mask_BB[0].sum()
@@ -686,9 +688,9 @@ class Trainer():
             self.loader_param, homo, p_homo_cut=-1.0
         )
         #valid_atomize_pdb_set = Dataset(
-        #   list(valid_pdb.keys())[:self.n_valid_pdb],
-        #   loader_atomize_pdb, valid_pdb,
-        #   self.loader_param, homo, p_homo_cut=-1.0)
+        #    list(valid_pdb.keys())[:self.n_valid_pdb],
+        #    loader_atomize_pdb, valid_pdb,
+        #    self.loader_param, homo, p_homo_cut=-1.0)
         # valid_homo_set = Dataset(
         #     list(valid_homo.keys())[:self.n_valid_homo],
         #     loader_pdb, valid_homo,
@@ -782,6 +784,7 @@ class Trainer():
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        
         #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
@@ -792,9 +795,9 @@ class Trainer():
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
 #        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
 
-        #valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        #valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_rigid_body_sampler, **LOAD_PARAM)
-        #valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
+        valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -941,7 +944,7 @@ class Trainer():
                             'best_loss': best_valid_loss},
                             self.checkpoint_fn(self.model_name, str(epoch)))
                 wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
-            dist.destroy_process_group()
+        dist.destroy_process_group()
 
     def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, verbose=False):
         # Turn on training mode
@@ -996,6 +999,7 @@ class Trainer():
 
             xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
             xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
+            xyz_prev_orig = xyz_prev
 
             # get torsion angles from templates
             seq_tmpl = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
@@ -1008,11 +1012,6 @@ class Trainer():
             alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, L, 3*NTOTALDOFS)
 
             counter += 1
-
-            if save_pdbs:
-                res_mask = ~((atom_mask[0,0,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,-1,0])))
-                writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
-                    torch.nan_to_num(xyz_prev[res_mask][:,:23]), seq_unmasked[res_mask])
 
             N_cycle = np.random.randint(1, self.maxcycle+1) # number of recycling
 
@@ -1151,7 +1150,8 @@ class Trainer():
                 ddp_model.module.update() # apply EMA
             
             if save_pdbs:
-                res_mask = ~((atom_mask[0,0,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
+                    torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
                 writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_true.pdb', 
                     torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
                 writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb', 
@@ -1193,7 +1193,6 @@ class Trainer():
                         loss_dict.update({'total_examples':epoch*len(train_loader)+counter*world_size})
                         log_dict = {f"Train":{task[0]:loss_dict}}
                         wandb.log(log_dict)
-                        wandb.log(loss_dict)
 
                     sys.stdout.flush()
                     local_tot = 0.0

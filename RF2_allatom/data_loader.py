@@ -41,8 +41,8 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.csv"%na_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/list_v02_ligonly_notest_ccd_ob"%sm_compl_dir, 
-        #"SM_LIST"          : "%s/list_v02_sm_filt_notest.csv"%sm_compl_dir, 
+        #"SM_LIST"          : "%s/list_v02_ligonly_notest_ccd_ob"%sm_compl_dir, 
+        "SM_LIST"          : "%s/list_v02_sm_filt_notest.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         #"PDB_LIST"        : "/gscratch2/list_2021AUG02.csv", # on blue
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
@@ -1566,14 +1566,15 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
 
     # Choose a residue for the atomize stretch
     stretch = 5 # how many residues to atomize
-    flank = 3 # how many residue chain break to have between atomized portion and residues
+    flank = 0  # how many residue chain break to have between atomized portion and residues
     sc_residues = (torch.sum(mask_prot, dim=1)>3).nonzero()
     # if there aren't enough unmasked residues to atomize and have space for flanks, treat as monomer example
     if flank +1 >= sc_residues.shape[0]-(stretch+flank+1):
         return featurize_single_chain(msa, ins, tplt, pdb, params) + ("monomer", item,)
+
     sel_res = torch.randint(flank+1, sc_residues.shape[0]-(stretch+flank+1),(1,)) # sel_res is the start index of atomized region
     sel_res = sc_residues[sel_res] # sel_res index of the first residue to be atomized
-    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, stretch=stretch)
+    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C = atomize_protein(sel_res, msa_prot, xyz_prot, mask_prot, stretch=stretch)
     # no atom templates
     tplt_sm = {"ids":[]}
     xyz_t_sm, f1d_t_sm = TemplFeaturize(tplt_sm, xyz_sm.shape[1], params, offset=0, npick=0, pick_top=pick_top)
@@ -1603,6 +1604,10 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
+    bond_feats[sel_res, Ls[0]] = 6
+    bond_feats[Ls[0], sel_res] = 6
+    bond_feats[sel_res+stretch+flank, Ls[0]+int(last_C.numpy())] = 6
+    bond_feats[Ls[0]+int(last_C.numpy()), sel_res+stretch+flank] = 6
 
     # handle res_idx
     last_res = idx[-1]
@@ -1631,7 +1636,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     bond_feats = torch.cat((bond_feats[ :, :sel_res-flank], bond_feats[:, sel_res+stretch+flank:]), dim=1)
 
     xyz_prev = xyz_t[0]
-
+    xyz_prev[Ls[0]:] = xyz_prev[sel_res]
     # bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
     # replace missing with blackholes & convert NaN to zeros to avoid any NaN problems during loss calculation
     init = INIT_CRDS.reshape(1, NTOTAL, 3).repeat(xyz.shape[0], xyz.shape[1], 1, 1)
@@ -1694,6 +1699,7 @@ def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
     # ligand_com = torch.nanmean(lig_xyz, dim=[0,1]).expand(1,3)
     i_face_xyz = lig_xyz[np.random.randint(len(lig_xyz))]
     dist = torch.cdist(prot_xyz[:,1].unsqueeze(0), i_face_xyz.unsqueeze(0)).flatten()
+    dist = torch.nan_to_num(dist, nan=999999)
     _, idx = torch.topk(dist, params["CROP"]-len(lig_xyz), largest=False)
     sel, _ = torch.sort(idx)
     # select the whole ligand
