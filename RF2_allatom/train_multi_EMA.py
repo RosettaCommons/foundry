@@ -270,7 +270,8 @@ class Trainer():
         w_bb_fape = torch.flip(w_bb_fape, (0,))
         w_bb_fape = w_bb_fape / w_bb_fape.sum()
         bb_l_fape = (w_bb_fape*tot_str).sum()
-        tot_loss += 0.5*w_str*bb_l_fape
+        tot_loss += 0.5*w_str*bb_l_fape*0.5 # extra factor added by jue 2022-9-14
+
         if "fape_c2" in loss_dict.keys():
             lig_fape = (w_bb_fape*l_fape_B).sum()
             tot_loss += 0.5*w_str*lig_fape
@@ -923,7 +924,8 @@ class Trainer():
                                     'valid_loss': valid_loss,
                                     'valid_acc': valid_acc},
                                     self.checkpoint_fn(self.model_name, 'best'))
-                    wandb.save(self.checkpoint_fn(self.model_name, 'best'))
+                    if self.wandb_prefix is not None:
+                        wandb.save(self.checkpoint_fn(self.model_name, 'best'))
 
                 
                 torch.save({'epoch': epoch,
@@ -939,8 +941,9 @@ class Trainer():
                             'valid_acc': valid_acc,
                             'best_loss': best_valid_loss},
                             self.checkpoint_fn(self.model_name, str(epoch)))
-                wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
-            dist.destroy_process_group()
+                if self.wandb_prefix is not None:
+                    wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
+        dist.destroy_process_group()
 
     def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, verbose=False):
         # Turn on training mode
@@ -965,7 +968,7 @@ class Trainer():
             
             # skip known bad training examples
             # loader will print warning message with item info for followup later
-            if torch.is_tensor(item) and len(item.shape) == 2 and torch.all(item==-1):
+            if torch.is_tensor(item) and torch.all(item==-1):
                 continue
 
             save_pdbs = np.random.rand()<=0.01
@@ -1008,16 +1011,6 @@ class Trainer():
 
             counter += 1
 
-            if save_pdbs:
-                try:
-                    res_mask = ~((atom_mask[0,0,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,-1,0])))
-                    writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
-                        torch.nan_to_num(xyz_prev[res_mask][:,:23]), seq_unmasked[res_mask])
-                except Exception as e:
-                    torch.save(xyz_prev, self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pt')
-                    torch.save(seq_unmasked, self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_seq_unmasked.pt')
-                    raise e
-
             N_cycle = np.random.randint(1, self.maxcycle+1) # number of recycling
 
             msa_prev = None
@@ -1025,37 +1018,11 @@ class Trainer():
             alpha_prev = torch.zeros((B,L,NTOTALDOFS,2)).to(gpu, non_blocking=True)
             state_prev = None
 
-            try:
-                with torch.no_grad():
-                    for i_cycle in range(N_cycle-1):
-                        with ddp_model.no_sync():
-                            with torch.cuda.amp.autocast(enabled=USE_AMP):
-                                msa_prev, pair_prev, xyz_prev, state_prev, alpha = ddp_model(
-                                    msa_masked[:,i_cycle],
-                                    msa_full[:,i_cycle],
-                                    seq[:,i_cycle],
-                                    msa[:,i_cycle,0], # unmasked seq
-                                    xyz_prev,
-                                    alpha_prev,
-                                    idx_pdb,
-                                    bond_feats,
-                                    t1d=t1d,
-                                    t2d=t2d,
-                                    xyz_t=xyz_t,
-                                    alpha_t=alpha_t,
-                                    msa_prev=msa_prev,
-                                    pair_prev=pair_prev,
-                                    state_prev=state_prev,
-                                    return_raw=True,
-                                    use_checkpoint=False
-                                )
-
-                i_cycle = N_cycle-1
-
-                if counter%self.ACCUM_STEP != 0:
+            with torch.no_grad():
+                for i_cycle in range(N_cycle-1):
                     with ddp_model.no_sync():
                         with torch.cuda.amp.autocast(enabled=USE_AMP):
-                            logit_s, logit_aa_s, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
+                            msa_prev, pair_prev, xyz_prev, state_prev, alpha = ddp_model(
                                 msa_masked[:,i_cycle],
                                 msa_full[:,i_cycle],
                                 seq[:,i_cycle],
@@ -1071,33 +1038,14 @@ class Trainer():
                                 msa_prev=msa_prev,
                                 pair_prev=pair_prev,
                                 state_prev=state_prev,
-                                use_checkpoint=True
+                                return_raw=True,
+                                use_checkpoint=False
                             )
 
-                            true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds_, atom_mask)
-                            res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
-                            mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
+            i_cycle = N_cycle-1
 
-                            true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
-                            c6d, _ = xyz_to_c6d(true_crds_frame)
-                            c6d = c6d_to_bins(c6d, same_chain, negative=negative)
-
-                            prob = self.active_fn(logit_s[0]) # distogram
-                            acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
-
-                            ctrid = len(train_loader)*rank+counter
-                            loss, loss_s, loss_dict = self.calc_loss(
-                                logit_s, c6d,
-                                logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
-                                pred_crds, alphas, pred_allatom, true_crds_, 
-                                atom_mask_, res_mask, mask_2d, same_chain,
-                                pred_lddts, idx_pdb, atom_frames=atom_frames,
-                                unclamp=unclamp, negative=negative,
-                                verbose=verbose, ctr=ctrid, **self.loss_param
-                            )
-                        loss = loss / self.ACCUM_STEP
-                        scaler.scale(loss).backward()
-                else:
+            if counter%self.ACCUM_STEP != 0:
+                with ddp_model.no_sync():
                     with torch.cuda.amp.autocast(enabled=USE_AMP):
                         logit_s, logit_aa_s, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
                             msa_masked[:,i_cycle],
@@ -1119,7 +1067,6 @@ class Trainer():
                         )
 
                         true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-
                         res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                         mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
@@ -1136,33 +1083,74 @@ class Trainer():
                             logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                             pred_crds, alphas, pred_allatom, true_crds_, 
                             atom_mask_, res_mask, mask_2d, same_chain,
-                            pred_lddts, idx_pdb, atom_frames=atom_frames, unclamp=unclamp, negative=negative,
+                            pred_lddts, idx_pdb, atom_frames=atom_frames,
+                            unclamp=unclamp, negative=negative,
                             verbose=verbose, ctr=ctrid, **self.loss_param
                         )
                     loss = loss / self.ACCUM_STEP
                     scaler.scale(loss).backward()
-                    # gradient clipping
-                    scaler.unscale_(optimizer)
+            else:
+                with torch.cuda.amp.autocast(enabled=USE_AMP):
+                    logit_s, logit_aa_s, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
+                        msa_masked[:,i_cycle],
+                        msa_full[:,i_cycle],
+                        seq[:,i_cycle],
+                        msa[:,i_cycle,0], # unmasked seq
+                        xyz_prev,
+                        alpha_prev,
+                        idx_pdb,
+                        bond_feats,
+                        t1d=t1d,
+                        t2d=t2d,
+                        xyz_t=xyz_t,
+                        alpha_t=alpha_t,
+                        msa_prev=msa_prev,
+                        pair_prev=pair_prev,
+                        state_prev=state_prev,
+                        use_checkpoint=True
+                    )
 
-                    torch.nn.utils.clip_grad_norm_(ddp_model.parameters(), 0.2)
+                    true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
-                    scaler.step(optimizer)
-                    scale = scaler.get_scale()
-                    scaler.update()
-                    skip_lr_sched = (scale != scaler.get_scale())
-                    optimizer.zero_grad()
-                    if not skip_lr_sched:
-                        scheduler.step()
-                    ddp_model.module.update() # apply EMA
-            except Exception as e:
-                print('true_crds.shape',true_crds.shape)
-                print('msa_masked.shape',msa_masked.shape)
-                print('xyz_prev.shape',xyz_prev.shape)
-                print('xyz_t.shape',xyz_t.shape)
-                raise e
-            
+                    res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                    mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
+
+                    true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
+                    c6d, _ = xyz_to_c6d(true_crds_frame)
+                    c6d = c6d_to_bins(c6d, same_chain, negative=negative)
+
+                    prob = self.active_fn(logit_s[0]) # distogram
+                    acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
+
+                    ctrid = len(train_loader)*rank+counter
+                    loss, loss_s, loss_dict = self.calc_loss(
+                        logit_s, c6d,
+                        logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
+                        pred_crds, alphas, pred_allatom, true_crds_, 
+                        atom_mask_, res_mask, mask_2d, same_chain,
+                        pred_lddts, idx_pdb, atom_frames=atom_frames, unclamp=unclamp, negative=negative,
+                        verbose=verbose, ctr=ctrid, **self.loss_param
+                    )
+                loss = loss / self.ACCUM_STEP
+                scaler.scale(loss).backward()
+                # gradient clipping
+                scaler.unscale_(optimizer)
+
+                torch.nn.utils.clip_grad_norm_(ddp_model.parameters(), 0.2)
+
+                scaler.step(optimizer)
+                scale = scaler.get_scale()
+                scaler.update()
+                skip_lr_sched = (scale != scaler.get_scale())
+                optimizer.zero_grad()
+                if not skip_lr_sched:
+                    scheduler.step()
+                ddp_model.module.update() # apply EMA
+
             if save_pdbs:
-                res_mask = ~((atom_mask[0,0,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                #res_mask = ~((atom_mask[0,0,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
+                    torch.nan_to_num(xyz_prev[res_mask][:,:23]), seq_unmasked[res_mask])
                 writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_true.pdb', 
                     torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
                 writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb', 
@@ -1249,7 +1237,7 @@ class Trainer():
             
                 # skip known bad training examples
                 # loader will print warning message with item info for followup later
-                if torch.is_tensor(item) and len(item.shape) == 2 and torch.all(item==-1):
+                if torch.is_tensor(item) and torch.all(item==-1):
                     continue
 
                 # transfer inputs to device
@@ -1387,8 +1375,9 @@ class Trainer():
         valid_acc = valid_acc.cpu().detach().numpy()
         
         if rank == 0:
-            log_dict = {f"Valid_{header}":{task[0]:loss_dict}}
-            wandb.log(log_dict)
+            if self.wandb_prefix is not None:
+                log_dict = {f"Valid_{header}":{task[0]:loss_dict}}
+                wandb.log(log_dict)
             train_time = time.time() - start_time
             sys.stdout.write("%s: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f\n"%(\
                     header, epoch, self.n_epoch, world_size*len(valid_loader), world_size*len(valid_loader), train_time, valid_tot, \

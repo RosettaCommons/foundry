@@ -41,8 +41,8 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.csv"%na_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/list_v02_ligonly_notest_ccd_ob"%sm_compl_dir, 
-        #"SM_LIST"          : "%s/list_v02_sm_filt_notest.csv"%sm_compl_dir, 
+        #"SM_LIST"          : "%s/list_v02_ligonly_notest_ccd_ob"%sm_compl_dir, 
+        "SM_LIST"          : "%s/list_v02_sm_filt_notest.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         #"PDB_LIST"        : "/gscratch2/list_2021AUG02.csv", # on blue
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
