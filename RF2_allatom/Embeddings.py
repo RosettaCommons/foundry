@@ -13,20 +13,30 @@ from chemical import NAATOKENS,NTOTALDOFS, NBTYPES
 
 class PositionalEncoding2D(nn.Module):
     # Add relative positional encoding to pair features
-    def __init__(self, d_model, minpos=-32, maxpos=32, p_drop=0.1):
+    def __init__(self, d_model, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1):
         super(PositionalEncoding2D, self).__init__()
         self.minpos = minpos
-        self.maxpos = maxpos
-        self.nbin = abs(minpos)+maxpos+1
-        self.emb = nn.Embedding(self.nbin, d_model)
+        self.maxpos = maxpos                        
+        self.maxpos_atom = maxpos_atom
+        self.nbin_res = abs(minpos)+maxpos+2 # include 0 and "unknown" value (maxpos+1)
+        self.nbin_atom = maxpos_atom+2 # include 0 and "unknown" token (maxpos_sm + 1)
+        self.emb_res = nn.Embedding(self.nbin_res, d_model)
+        self.emb_atom = nn.Embedding(self.nbin_atom, d_model)
 
     def forward(self, x, seq, idx, bond_feats):
         sm_mask = is_atom(seq[0])
-        relpos = get_relpos(idx, bond_feats, sm_mask, inter_pos=self.maxpos, maxpath=self.maxpos)
-        bins = torch.arange(self.minpos, self.maxpos, device=x.device)
-        ib = torch.bucketize(relpos, bins).long() # (B, L, L)
-        emb = self.emb(ib) #(B, L, L, d_model)
-        x = x + emb # add relative positional encoding
+        res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, sm_mask,
+            minpos_res=self.minpos, maxpos_res=self.maxpos, maxpos_atom=self.maxpos_atom)
+
+        bins = torch.arange(self.minpos, self.maxpos+1, device=x.device)
+        ib_res = torch.bucketize(res_dist, bins).long() # (B, L, L)
+        emb_res = self.emb_res(ib_res) #(B, L, L, d_model)
+
+        bins = torch.arange(0, self.maxpos_atom+1, device=x.device)
+        ib_atom = torch.bucketize(atom_dist, bins).long() # (B, L, L)
+        emb_atom = self.emb_atom(ib_atom) #(B, L, L, d_model)
+
+        x = x + emb_res + emb_atom # add relative positional encoding
         return x
 
 class MSA_emb(nn.Module):

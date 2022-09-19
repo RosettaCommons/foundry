@@ -914,7 +914,10 @@ def get_protein_bond_feats(protein_L):
     return bond_feats
 
 def get_atomize_protein_bond_feats(sel_res, msa, ra, flank=5):
-    """ generate atom bond features for atomized residues """
+    """ 
+    generate atom bond features for atomized residues 
+    currently ignores long-range bonds like disulfides
+    """
     ra2ind = {}
     for i, two_d in enumerate(ra):
         ra2ind[tuple(two_d.numpy())] = i
@@ -934,14 +937,14 @@ def get_atomize_protein_bond_feats(sel_res, msa, ra, flank=5):
             bond_feats[start_idx, end_idx] = aabtypes[res][j]
             bond_feats[end_idx, start_idx] = aabtypes[res][j]
         #accounting for peptide bonds
-        if i > 1:
+        if i > 0:
             if (i-1, 2) not in ra2ind or (i, 0) not in ra2ind:
                 #skip bonds with atoms that aren't observed in the structure
                 continue
             start_idx = ra2ind[(i-1, 2)]
             end_idx = ra2ind[(i, 0)]
-            bond_feats[start_idx, end_idx] = aabtypes[res][j]
-            bond_feats[end_idx, start_idx] = aabtypes[res][j]
+            bond_feats[start_idx, end_idx] = 1
+            bond_feats[end_idx, start_idx] = 1
     return bond_feats
 
 ### Generate atom features for proteins ###

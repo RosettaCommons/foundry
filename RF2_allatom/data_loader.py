@@ -1604,8 +1604,8 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
-    bond_feats[sel_res, Ls[0]] = 6
-    bond_feats[Ls[0], sel_res] = 6
+    bond_feats[sel_res-1, Ls[0]] = 6
+    bond_feats[Ls[0], sel_res-1] = 6
     bond_feats[sel_res+stretch+flank, Ls[0]+int(last_C.numpy())] = 6
     bond_feats[Ls[0]+int(last_C.numpy()), sel_res+stretch+flank] = 6
 
