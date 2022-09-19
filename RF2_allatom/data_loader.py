@@ -1825,8 +1825,6 @@ class DatasetSMComplex(data.Dataset):
             self.item_dict[ID][sel_idx][2],
             self.params,
             ligand_dock = np.random.rand(1) <= self.p_ligand_dock,
-            init_protein_xyz = False,
-            init_ligand_xyz = False
         )
         return out
 
