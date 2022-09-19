@@ -183,8 +183,10 @@ class Trainer():
                   pred_lddt, idx, atom_frames=None, unclamp=False, negative=False, interface=False,
                   verbose=False, ctr=0,
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_lddt=1.0, w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
-                  lj_lin=0.85, eps=1e-6
+                  lj_lin=0.85, eps=1e-6, item=None
     ):
+        gpu = pred.device
+
         # dictionary for keeping track of losses
         loss_dict = {}
 
@@ -256,13 +258,14 @@ class Trainer():
             tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
 
         else:
-            tot_str = compute_general_FAPE(
+            tot_str, fape_matrix = compute_general_FAPE(
                 pred[:,mask_BB,:,:3],
                 true[:,mask_BB[0],:3],
                 mask_crds[:,mask_BB[0],:3],
                 frames_BB[:,mask_BB[0]],
                 frame_mask_BB[:,mask_BB[0]],
-                dclamp=dclamp
+                dclamp=dclamp, 
+                return_matrix = True
             )
         num_layers = pred.shape[0]
         gamma = 0.99
@@ -270,13 +273,37 @@ class Trainer():
         w_bb_fape = torch.flip(w_bb_fape, (0,))
         w_bb_fape = w_bb_fape / w_bb_fape.sum()
         bb_l_fape = (w_bb_fape*tot_str).sum()
-        tot_loss += 0.5*w_str*bb_l_fape*0.5 # extra factor added by jue 2022-9-14
+
+        # protein-sm interface fape
+        try:
+            sm_res_mask = is_atom(label_aa_s[0,0,mask_BB[0]]) # (L,)
+            sm_atom_mask = sm_res_mask[...,None].repeat((1,1,3))[mask_crds[:,mask_BB[0],:3]] # (L,)
+            if bool(torch.any(sm_res_mask)):
+                # fape_matrix : (B, n_res, n_bb_atoms + n_sm_atoms)
+                inter_fape = fape_matrix[:,sm_res_mask][:,:,~sm_atom_mask].sum(dim=[1,2]) + \
+                             fape_matrix[:,~sm_res_mask][:,:,sm_atom_mask].sum(dim=[1,2])
+                inter_fape /= sm_res_mask.sum()*(~sm_atom_mask).sum() + (~sm_res_mask).sum()*sm_atom_mask.sum()
+                bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
+            else:
+                bb_l_fape_inter = torch.tensor(0).to(gpu)
+        except Exception as e:
+            print('error in calc_loss', item, '\n'+repr(e))
+            bb_l_fape_inter = torch.tensor(0).to(gpu)
+            print('bb_l_fape.shape',bb_l_fape.shape)
+            print('bb_l_fape',bb_l_fape)
+            print('bb_l_fape_inter.shape',bb_l_fape_inter.shape)
+            print('bb_l_fape_inter',bb_l_fape_inter)
+
+        #tot_loss += 0.5*w_str*bb_l_fape*0.5 # extra factor added by jue 2022-9-14
+        tot_loss += 0.5*w_str*(bb_l_fape + bb_l_fape_inter) # inter-fape added 2022-9-16
 
         if "fape_c2" in loss_dict.keys():
             lig_fape = (w_bb_fape*l_fape_B).sum()
             tot_loss += 0.5*w_str*lig_fape
         loss_s.append(tot_str.detach())
         loss_dict['tot_str'] = float(bb_l_fape.detach())
+        loss_dict['lig_fape'] = float(lig_fape.detach())
+        loss_dict['inter_fape'] = float(bb_l_fape_inter.detach())
         
         # AllAtom loss
         # get ground-truth torsion angles
@@ -1085,7 +1112,7 @@ class Trainer():
                             atom_mask_, res_mask, mask_2d, same_chain,
                             pred_lddts, idx_pdb, atom_frames=atom_frames,
                             unclamp=unclamp, negative=negative,
-                            verbose=verbose, ctr=ctrid, **self.loss_param
+                            verbose=verbose, ctr=ctrid, item=item, **self.loss_param
                         )
                     loss = loss / self.ACCUM_STEP
                     scaler.scale(loss).backward()
@@ -1110,7 +1137,11 @@ class Trainer():
                         use_checkpoint=True
                     )
 
-                    true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+                    try:
+                        true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+                    except Exception as e:
+                        print('error resolving equivalent natives',item)
+                        raise e
 
                     res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                     mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
@@ -1129,7 +1160,7 @@ class Trainer():
                         pred_crds, alphas, pred_allatom, true_crds_, 
                         atom_mask_, res_mask, mask_2d, same_chain,
                         pred_lddts, idx_pdb, atom_frames=atom_frames, unclamp=unclamp, negative=negative,
-                        verbose=verbose, ctr=ctrid, **self.loss_param
+                        verbose=verbose, ctr=ctrid, item=item, **self.loss_param
                     )
                 loss = loss / self.ACCUM_STEP
                 scaler.scale(loss).backward()
@@ -1146,6 +1177,10 @@ class Trainer():
                 if not skip_lr_sched:
                     scheduler.step()
                 ddp_model.module.update() # apply EMA
+
+            if torch.isnan(loss):
+                print('nan loss',item)
+                save_pdbs = True
 
             if save_pdbs:
                 #res_mask = ~((atom_mask[0,0,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
@@ -1351,7 +1386,7 @@ class Trainer():
                     pred_crds, alphas, pred_allatom, true_crds_, 
                     atom_mask_, res_mask, mask_2d, same_chain,
                     pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative,
-                    verbose=verbose, ctr=ctrid, **self.loss_param
+                    verbose=verbose, ctr=ctrid, item=item, **self.loss_param
                 )
 
                 valid_tot += loss.detach()
