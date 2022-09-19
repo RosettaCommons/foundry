@@ -738,6 +738,7 @@ class Trainer():
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_sm_compl, valid_sm_compl,
             self.loader_param, p_ligand_dock=1.0)
+
         valid_sm_set = DatasetSM(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_small_molecule, valid_sm_compl, self.loader_param

@@ -1398,7 +1398,8 @@ def loader_rna(pdb_set, Ls, params):
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats, "rna",item
 
-def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
+def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False, 
+    init_protein_xyz=True, init_ligand_xyz=True):
     """Load protein/SM complex with mixed residue and atom tokens. Also, compute frames for atom FAPE loss calc"""
     # Load protein information
     print(item)
@@ -1481,17 +1482,20 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False):
             torch.ones((Ls[1], 1)).float()
         ), -1) # (1, L_sm, NAATOKENS)
 
-        # initialize coords to ground truth, but separately move to origin and rotate randomly
-        xyz1 = xyz[0, :Ls[0], :3]
-        xyz1 = xyz1 - xyz1[:,1].nanmean(0) # CA centroid -> origin
-        xyz2 = xyz[0, Ls[0]:, :3]
-        xyz2 = xyz2 - xyz2[:,1].nanmean(0) # centroid -> origin
+        # initialize coords to ground truth, but move to origin and rotate randomly
         xyz_prev = torch.full((sum(Ls), NTOTAL, 3), np.nan).float()
-
         R = scipy.spatial.transform.Rotation.random(2).as_matrix()
         R = torch.tensor(R).float()
-        xyz_prev[:Ls[0], :3] = xyz1 @ R[0].T
-        xyz_prev[Ls[0]:, :3] = xyz2 @ R[1].T
+
+        if init_protein_xyz:
+            xyz1 = xyz[0, :Ls[0], :3]
+            xyz1 = xyz1 - xyz1[:,1].nanmean(0) # CA centroid -> origin
+            xyz_prev[:Ls[0], :3] = xyz1 @ R[0].T
+
+        if init_ligand_xyz:
+            xyz2 = xyz[0, Ls[0]:, :3]
+            xyz2 = xyz2 - xyz2[:,1].nanmean(0) # centroid -> origin
+            xyz_prev[Ls[0]:, :3] = xyz2 @ R[1].T
 
     else:
         # standard template featurization
@@ -1820,7 +1824,9 @@ class DatasetSMComplex(data.Dataset):
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][2],
             self.params,
-            ligand_dock = np.random.rand(1) <= self.p_ligand_dock
+            ligand_dock = np.random.rand(1) <= self.p_ligand_dock,
+            init_protein_xyz = False,
+            init_ligand_xyz = False
         )
         return out
 
