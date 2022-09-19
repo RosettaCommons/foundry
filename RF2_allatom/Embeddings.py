@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from opt_einsum import contract as einsum
 import torch.utils.checkpoint as checkpoint
 from util import *
-from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_relpos
+from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_res_atom_dist
 from Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
 from Track_module import PairStr2Pair
 from chemical import NAATOKENS,NTOTALDOFS, NBTYPES

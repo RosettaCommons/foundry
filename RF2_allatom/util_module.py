@@ -125,7 +125,7 @@ def get_seqsep_protein_sm(idx, bond_feats, sm_mask):
             1 for bonded SM atoms or residue-atom bonds
             0 elsewhere
     '''
-
+    sm_mask = sm_mask[0] # assume batch = 1
     res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, sm_mask)
 
     sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
@@ -147,7 +147,7 @@ def get_res_atom_dist(idx, bond_feats, sm_mask, minpos_res=-32, maxpos_res=32, m
     Input:
         - idx: residue index (B, L)
         - bond_feats: bond features (B, L, L)
-        - sm_mask: boolean feature True if a position represents atom, False if residue (B, L)
+        - sm_mask: boolean feature True if a position represents atom, False if residue (L)
         - minpos_res: minimum value of residue distances
         - maxpos_res: maximum value of residue distances
         - maxpos_atom: maximum value of atom bond distances
@@ -166,38 +166,38 @@ def get_res_atom_dist(idx, bond_feats, sm_mask, minpos_res=-32, maxpos_res=32, m
 
     # protein residue distances
     res_dist_prot = torch.clamp(idx[0,None,:] - idx[0,:,None],
-                               min=minpos_res, max=maxpos_res) # (L, L) intra-protein
-    res_dist_sm = torch.full((L,L), maxpos_res+1) # (L, L) with "unknown" res. dist. token
+                               min=minpos_res, max=maxpos_res).to(gpu) # (L, L) intra-protein
+    res_dist_sm = torch.full((L,L), maxpos_res+1).to(gpu) # (L, L) with "unknown" res. dist. token
 
     # small molecule atom bond graph
     sm_bond_feats = torch.zeros_like(bond_feats) + sm_mask_2d*bond_feats
     G = nx.from_numpy_matrix(sm_bond_feats.detach().cpu().numpy())
-    paths = dict(nx.all_pairs_shortest_path_length(G,cutoff=maxpos_sm))
+    paths = dict(nx.all_pairs_shortest_path_length(G,cutoff=maxpos_atom))
     paths = [(i,j,vij) for i,vi in paths.items() for j,vij in vi.items()]
     i,j,v = torch.tensor(paths).T
 
     # small molecule atom bond distances
-    atom_dist_sm = torch.full((L,L), maxpos_atom) - maxpos_sm*torch.eye(L).to(gpu).long()
+    atom_dist_sm = torch.full((L,L), maxpos_atom).to(gpu) - maxpos_atom*torch.eye(L).to(gpu).long()
     atom_dist_sm[i,j] = v.to(gpu)
-    atom_dist_prot = torch.full((L,L), maxpos_atom+1)
+    atom_dist_prot = torch.full((L,L), maxpos_atom+1).to(gpu)
 
     # s.m.-protein bonds
-    sm_idx = np.where(sm_mask)[0]
-    prot_idx = np.where(~sm_mask)[0]
-    i_s, j_s = np.where(bond_feats==6)
+    sm_idx = torch.where(sm_mask)[0]
+    prot_idx = torch.where(~sm_mask)[0]
+    i_s, j_s = torch.where(bond_feats==6)
     i_prot = [j for i,j in zip(i_s,j_s) if i in sm_idx] # protein residues bonded to s.m. atoms
     i_sm = [i for i in i_s if i in sm_idx] # s.m. atoms bonded to protein residues
 
     # inter-protein-s.m. residue & atom distances
     # atoms inherit residue distances from their nearest bonded residue
-    res_dist_inter = torch.full((L,L), 0)
+    res_dist_inter = torch.full((L,L), 0).to(gpu)
     for i in sm_idx:
-        i_closest_res = i_prot[np.argmin(atom_dist_sm[i,i_sm])]
+        i_closest_res = i_prot[torch.argmin(atom_dist_sm[i,i_sm])]
         res_dist_inter[i,:] = res_dist_prot[i_closest_res,:]
         res_dist_inter[:,i] = res_dist_prot[:,i_closest_res]
 
     # residues inherit atom distances from their nearest bonded atom (+ 1 to count "boundary" res-atom bond)
-    atom_dist_inter = torch.full((L, L), 0)
+    atom_dist_inter = torch.full((L, L), 0).to(gpu)
     for i in prot_idx:
         i_closest_atom = i_sm[torch.argmin(torch.abs(res_dist_prot[i,i_prot]))]
         atom_dist_inter[i,:] = atom_dist_sm[i_closest_atom,:] + 1
