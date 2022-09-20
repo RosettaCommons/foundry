@@ -141,13 +141,13 @@ def get_seqsep_protein_sm(idx, bond_feats, sm_mask):
 
 def get_res_atom_dist(idx, bond_feats, sm_mask, minpos_res=-32, maxpos_res=32, maxpos_atom=8):
     '''
-    Calculates residue number and atom bond distances of protein/SM complex. Used for positional
-    embedding and structure module. More complex version from 2022-9-19; handles atomized proteins.
+    Calculates residue and atom bond distances of protein/SM complex. Used for positional
+    embedding and structure module. 2nd version (2022-9-19); handles atomized proteins.
 
     Input:
         - idx: residue index (B, L)
         - bond_feats: bond features (B, L, L)
-        - sm_mask: boolean feature True if a position represents atom, False if residue (L)
+        - sm_mask: boolean feature (L). True if a position represents atom, False otherwise
         - minpos_res: minimum value of residue distances
         - maxpos_res: maximum value of residue distances
         - maxpos_atom: maximum value of atom bond distances
@@ -190,18 +190,21 @@ def get_res_atom_dist(idx, bond_feats, sm_mask, minpos_res=-32, maxpos_res=32, m
 
     # inter-protein-s.m. residue & atom distances
     # atoms inherit residue distances from their nearest bonded residue
-    res_dist_inter = torch.full((L,L), 0).to(gpu)
-    for i in sm_idx:
-        i_closest_res = i_prot[torch.argmin(atom_dist_sm[i,i_sm])]
-        res_dist_inter[i,:] = res_dist_prot[i_closest_res,:]
-        res_dist_inter[:,i] = res_dist_prot[:,i_closest_res]
+    res_dist_inter = torch.full((L,L), maxpos_res).to(gpu)
+    if len(i_prot) > 0: # prot & s.m. are connected
+        for i in sm_idx:
+            i_closest_res = i_prot[torch.argmin(atom_dist_sm[i,i_sm])]
+            res_dist_inter[i,:] = res_dist_prot[i_closest_res,:]
+            res_dist_inter[:,i] = res_dist_prot[:,i_closest_res]
 
     # residues inherit atom distances from their nearest bonded atom (+ 1 to count "boundary" res-atom bond)
-    atom_dist_inter = torch.full((L, L), 0).to(gpu)
-    for i in prot_idx:
-        i_closest_atom = i_sm[torch.argmin(torch.abs(res_dist_prot[i,i_prot]))]
-        atom_dist_inter[i,:] = atom_dist_sm[i_closest_atom,:] + 1
-        atom_dist_inter[:,i] = atom_dist_sm[:,i_closest_atom] + 1
+    atom_dist_inter = torch.full((L, L), maxpos_atom).to(gpu)
+    if len(i_prot) > 0: # prot & s.m. are connected
+        for i in prot_idx:
+            i_closest_atom = i_sm[torch.argmin(torch.abs(res_dist_prot[i,i_prot]))]
+            atom_dist_inter[i,:] = atom_dist_sm[i_closest_atom,:] + 1
+            atom_dist_inter[:,i] = atom_dist_sm[:,i_closest_atom] + 1
+        atom_dist_inter = torch.minimum(atom_dist_inter, torch.tensor(maxpos_atom))
 
     res_dist = res_dist_prot * prot_mask_2d + res_dist_inter * inter_mask_2d + res_dist_sm * sm_mask_2d
     atom_dist = atom_dist_prot * prot_mask_2d + atom_dist_inter * inter_mask_2d + atom_dist_sm * sm_mask_2d
