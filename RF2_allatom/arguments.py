@@ -66,6 +66,10 @@ def get_args():
             help="maximum number of recycle [4]")
     data_group.add_argument('-p_ligand_dock', type=float, default=0.0,
             help="probability of doing rigid-body ligand docking for protein-sm examples [0.0]")
+    data_group.add_argument('-init_protein_xyz', action='store_true', default=False,
+            help="initialize xyz coordinates of protein to ground truth, after putting to origin and rotating randomly")
+    data_group.add_argument('-init_ligand_xyz', action='store_true', default=False,
+            help="initialize xyz coordinates of ligand to ground truth, after putting to origin and rotating randomly")
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")

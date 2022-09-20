@@ -71,7 +71,9 @@ def set_data_loader_params(args):
         "ROWS"             : 1,
         "SEQID"            : 95.0,
         "MAXCYCLE"         : 4,
-        "P_LIGAND_DOCK"    : 0.0
+        "P_LIGAND_DOCK"    : 0.0,
+        "INIT_PROTEIN_XYZ" : False,
+        "INIT_LIGAND_XYZ"  : False,
     }
     for param in PARAMS:
         if hasattr(args, param.lower()):
@@ -1399,7 +1401,7 @@ def loader_rna(pdb_set, Ls, params):
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats, "rna",item
 
 def loader_sm_compl(item, sm_chains, params, pick_top=True, ligand_dock=False,
-    init_protein_xyz=True, init_ligand_xyz=True):
+    init_protein_xyz=False, init_ligand_xyz=False):
     """Load protein/SM complex with mixed residue and atom tokens. Also, compute frames for atom FAPE loss calc"""
     # Load protein information
     pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
@@ -1824,8 +1826,8 @@ class DatasetSMComplex(data.Dataset):
             self.item_dict[ID][sel_idx][2],
             self.params,
             ligand_dock = np.random.rand(1) <= self.p_ligand_dock,
-            init_protein_xyz = False,
-            init_ligand_xyz = False
+            init_protein_xyz = self.params['INIT_PROTEIN_XYZ'],
+            init_ligand_xyz = self.params['INIT_LIGAND_XYZ']
         )
         return out
 
@@ -2006,18 +2008,15 @@ class DistilledDataset(data.Dataset):
             )
         offset += len(self.rna_inds)
         if index >= offset and index < offset + len(self.sm_compl_inds):
-            # in half of cases do ligand docking
-            if np.random.rand(1) > 0.5:
-                self.params["LIGAND_DOCK"] = True
-            else:
-                self.params["LIGAND_DOCK"] = False
             ID = self.sm_compl_IDs[index-offset]
             sel_idx = np.random.randint(0, len(self.sm_compl_dict[ID]))
             out = self.sm_compl_loader(
                 self.sm_compl_dict[ID][sel_idx][0],
                 self.sm_compl_dict[ID][sel_idx][2],
                 self.params,
-                ligand_dock = np.random.rand(1) <= self.params['P_LIGAND_DOCK']
+                ligand_dock = np.random.rand(1) <= self.params['P_LIGAND_DOCK'],
+                init_protein_xyz = self.params['INIT_PROTEIN_XYZ'],
+                init_ligand_xyz = self.params['INIT_LIGAND_XYZ']
             )
         offset += len(self.sm_compl_inds)
         if index >= offset:
@@ -2027,8 +2026,6 @@ class DistilledDataset(data.Dataset):
                 self.sm_dict[ID][sel_idx][0],
                 self.sm_dict[ID][sel_idx][2],
                 self.params,
-                init_protein_xyz = False,
-                init_ligand_xyz = False
             )
         return out
 
