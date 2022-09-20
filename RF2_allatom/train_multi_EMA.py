@@ -48,7 +48,7 @@ N_EXAMPLE_PER_EPOCH = 1208
 #N_EXAMPLE_PER_EPOCH = 6632 # divisible by 8
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 0,
+              'num_workers': 3,
               'pin_memory': True}
 
 DEBUG = False

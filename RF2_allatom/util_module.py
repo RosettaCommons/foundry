@@ -125,7 +125,7 @@ def get_seqsep_protein_sm(idx, bond_feats, sm_mask):
             1 for bonded SM atoms
             0 elsewhere
     '''
-    relpos = get_relpos(idx, bond_feats, sm_mask, inter_pos=0, maxpath=2)
+    relpos = get_relpos(idx, bond_feats, sm_mask[0], inter_pos=0, maxpath=2)
     relpos[(relpos > 1) | (relpos < -1)] = 0.0
     return relpos.unsqueeze(-1)
 
