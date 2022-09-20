@@ -31,12 +31,14 @@ def get_args():
             help="Gradient accumulation when it's > 1 [1]")
     train_group.add_argument("-eval", action='store_true', default=False,
             help="Train structure only")
-    train_group.add_argument('-outdir', type=str, 
+    train_group.add_argument('-out_dir', type=str, 
             help='Output folder.')
     train_group.add_argument('-wandb_prefix', type=str, 
             help='Prefix for name of session on Weights and Biases.')
     train_group.add_argument('-datestamp', action='store_true', default=False,
             help='Adds datestamp to output folder and/or wandb prefix.')
+    train_group.add_argument('-model_dir', type=str, default='models/',
+            help='Output folder for model weights. [models/]')
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")
@@ -152,8 +154,8 @@ def get_args():
 
     if args.datestamp:
         datestr = str(datetime.datetime.now()).replace(':','').replace(' ','_') # YYYY-MM-DD_HHMMSS.xxxxxx
-        if args.outdir is not None:
-            args.outdir = (args.outdir+'_'+datestr).replace('/_','/')+'/'
+        if args.out_dir is not None:
+            args.out_dir = (args.out_dir+'_'+datestr).replace('/_','/')+'/'
         if args.wandb_prefix is not None:
             args.wandb_prefix = args.wandb_prefix+'_'+datestr
 
