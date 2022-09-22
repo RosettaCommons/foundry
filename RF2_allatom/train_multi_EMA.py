@@ -11,7 +11,7 @@ from data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_small_molecule, loader_sm_compl, loader_atomize_pdb,
     Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
 )
-from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor, get_init_xyz
+from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
 from RoseTTAFoldModel  import RoseTTAFoldModule
 from loss import *
 from util import *
@@ -412,8 +412,6 @@ class Trainer():
         loss_s.append(allatom_lddt_inter.detach())
 
         loss_dict['allatom_lddt_inter'] = float(allatom_lddt_inter.detach())
-        if float(allatom_lddt_c2.detach()) > .3:
-            verbose=True
         # hbond [use all atoms not just those in native]
         #hb_loss = calc_hb(
         #    seq[0], pred_all[0,...,:3], 
@@ -964,11 +962,11 @@ class Trainer():
 
         counter = 0
         
-        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in train_loader:
+        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in train_loader:
             
             # skip known bad training examples
             # loader will print warning message with item info for followup later
-            if torch.is_tensor(item) and len(item.shape) == 2 and torch.all(item==-1):
+            if torch.is_tensor(item) and torch.all(item==-1):
                 continue
 
             save_pdbs = np.random.rand()<=0.01
@@ -982,6 +980,9 @@ class Trainer():
 
             xyz_t = xyz_t.to(gpu, non_blocking=True)
             t1d = t1d.to(gpu, non_blocking=True)
+            mask_t = mask_t.to(gpu, non_blocking=True)
+            xyz_prev = xyz_prev.to(gpu, non_blocking=True)
+            mask_prev = mask_prev.to(gpu, non_blocking=True)
 
             seq = seq.to(gpu, non_blocking=True)
             msa = msa.to(gpu, non_blocking=True)
@@ -991,13 +992,22 @@ class Trainer():
             atom_frames = atom_frames.to(gpu, non_blocking=True)
             bond_feats = bond_feats.to(gpu, non_blocking=True)
 
-            # processing template features
+            # template masking
             seq_unmasked = msa[:, 0, 0, :] # (B, L)
-            xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
-            t2d = xyz_to_t2d(xyz_t_frames)
+            mask_t_2d = get_prot_sm_mask(mask_t, seq_unmasked[0]) # (B, T, L)
+            #mask_t_2d = mask_t[:,:,:,:3].all(dim=-1) # (B, T, L)
+            mask_t_2d = mask_t_2d[:,:,None]*mask_t_2d[:,:,:,None] # (B, T, L, L)
+            mask_t_2d = mask_t_2d.float() * same_chain.float()[:,None] # (ignore inter-chain region)
 
-            xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
-            xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
+            mask_recycle = get_prot_sm_mask(mask_prev, seq_unmasked[0])
+            #mask_recycle = mask_prev[:,:,:3].bool().all(dim=-1)
+            mask_recycle = mask_recycle[:,:,None]*mask_recycle[:,None,:] # (B, L, L)
+            mask_recycle = same_chain.float()*mask_recycle.float()
+
+            # processing template features
+            xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
+            t2d = xyz_to_t2d(xyz_t_frames, mask_t_2d)
+
             xyz_prev_orig = xyz_prev
 
             # get torsion angles from templates
@@ -1034,11 +1044,14 @@ class Trainer():
                                 bond_feats,
                                 t1d=t1d,
                                 t2d=t2d,
-                                xyz_t=xyz_t,
+                                xyz_t=xyz_t[...,1,:],
                                 alpha_t=alpha_t,
+                                mask_t=mask_t_2d,
+                                same_chain=same_chain,
                                 msa_prev=msa_prev,
                                 pair_prev=pair_prev,
                                 state_prev=state_prev,
+                                mask_recycle=mask_recycle,
                                 return_raw=True,
                                 use_checkpoint=False
                             )
@@ -1059,11 +1072,14 @@ class Trainer():
                             bond_feats,
                             t1d=t1d,
                             t2d=t2d,
-                            xyz_t=xyz_t,
+                            xyz_t=xyz_t[...,1,:],
                             alpha_t=alpha_t,
+                            mask_t=mask_t_2d,
+                            same_chain=same_chain,
                             msa_prev=msa_prev,
                             pair_prev=pair_prev,
                             state_prev=state_prev,
+                            mask_recycle=mask_recycle,
                             use_checkpoint=True
                         )
 
@@ -1072,7 +1088,7 @@ class Trainer():
                         mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                         true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
-                        c6d, _ = xyz_to_c6d(true_crds_frame)
+                        c6d = xyz_to_c6d(true_crds_frame)
                         c6d = c6d_to_bins(c6d, same_chain, negative=negative)
 
                         prob = self.active_fn(logit_s[0]) # distogram
@@ -1103,11 +1119,14 @@ class Trainer():
                         bond_feats,
                         t1d=t1d,
                         t2d=t2d,
-                        xyz_t=xyz_t,
+                        xyz_t=xyz_t[...,1,:],
                         alpha_t=alpha_t,
+                        mask_t=mask_t_2d,
+                        same_chain=same_chain,
                         msa_prev=msa_prev,
                         pair_prev=pair_prev,
                         state_prev=state_prev,
+                        mask_recycle=mask_recycle,
                         use_checkpoint=True
                     )
 
@@ -1117,7 +1136,7 @@ class Trainer():
                     mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                     true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
-                    c6d, _ = xyz_to_c6d(true_crds_frame)
+                    c6d = xyz_to_c6d(true_crds_frame)
                     c6d = c6d_to_bins(c6d, same_chain, negative=negative)
 
                     prob = self.active_fn(logit_s[0]) # distogram
@@ -1232,11 +1251,11 @@ class Trainer():
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in valid_loader:
+            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in valid_loader:
             
                 # skip known bad training examples
                 # loader will print warning message with item info for followup later
-                if torch.is_tensor(item) and len(item.shape) == 2 and torch.all(item==-1):
+                if torch.is_tensor(item) and torch.all(item==-1):
                     continue
 
                 # transfer inputs to device
@@ -1249,6 +1268,9 @@ class Trainer():
 
                 xyz_t = xyz_t.to(gpu, non_blocking=True)
                 t1d = t1d.to(gpu, non_blocking=True)
+                mask_t = mask_t.to(gpu, non_blocking=True)
+                xyz_prev = xyz_prev.to(gpu, non_blocking=True)
+                mask_prev = mask_prev.to(gpu, non_blocking=True)
 
                 seq = seq.to(gpu, non_blocking=True)
                 msa = msa.to(gpu, non_blocking=True)
@@ -1258,16 +1280,21 @@ class Trainer():
                 atom_frames = atom_frames.to(gpu, non_blocking=True)
                 bond_feats = bond_feats.to(gpu, non_blocking=True)
 
-                # res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0]))) # ignore residues having missing BB atoms for loss calculation
-                # mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
+                # template masking
+                seq_unmasked = msa[:, 0, 0, :] # (B, L)
+                mask_t_2d = get_prot_sm_mask(mask_t, seq_unmasked[0]) # (B, T, L)
+                #mask_t_2d = mask_t[:,:,:,:3].all(dim=-1) # (B, T, L)
+                mask_t_2d = mask_t_2d[:,:,None]*mask_t_2d[:,:,:,None] # (B, T, L, L)
+                mask_t_2d = mask_t_2d.float() * same_chain.float()[:,None] # (ignore inter-chain region)
+
+                mask_recycle = get_prot_sm_mask(mask_prev, seq_unmasked[0])
+                mask_recycle = mask_prev[:,:,:3].bool().all(dim=-1)
+                mask_recycle = mask_recycle[:,:,None]*mask_recycle[:,None,:] # (B, L, L)
+                mask_recycle = same_chain.float()*mask_recycle.float()
 
                 # processing template features
-                seq_unmasked = msa[:, 0, 0, :] # (B, L)
                 xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
-                t2d = xyz_to_t2d(xyz_t_frames)
-
-                xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
-                xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
+                t2d = xyz_to_t2d(xyz_t_frames, mask_t_2d)
 
                 # get torsion angles from templates
                 seq_tmpl = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
@@ -1297,11 +1324,14 @@ class Trainer():
                         bond_feats,
                         t1d=t1d,
                         t2d=t2d,
-                        xyz_t=xyz_t,
+                        xyz_t=xyz_t[...,1,:],
                         alpha_t=alpha_t,
+                        mask_t=mask_t_2d,
+                        same_chain=same_chain,
                         msa_prev=msa_prev,
                         pair_prev=pair_prev,
                         state_prev=state_prev,
+                        mask_recycle=mask_recycle,
                         return_raw=True,
                         use_checkpoint=False
                     )
@@ -1323,11 +1353,14 @@ class Trainer():
                     bond_feats,
                     t1d=t1d,
                     t2d=t2d,
-                    xyz_t=xyz_t,
+                    xyz_t=xyz_t[...,1,:],
                     alpha_t=alpha_t,
+                    mask_t=mask_t_2d,
+                    same_chain=same_chain,
                     msa_prev=msa_prev,
                     pair_prev=pair_prev,
                     state_prev=state_prev,
+                    mask_recycle=mask_recycle,
                     use_checkpoint=False
                 )
 
@@ -1337,7 +1370,7 @@ class Trainer():
                 mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
-                c6d, _ = xyz_to_c6d(true_crds_frame)
+                c6d = xyz_to_c6d(true_crds_frame)
                 c6d = c6d_to_bins(c6d, same_chain, negative=negative)
 
                 prob = self.active_fn(logit_s[0]) # distogram
@@ -1438,9 +1471,6 @@ class Trainer():
                 alpha = alpha.reshape(B,-1,L,NTOTALDOFS,2)
                 alpha_mask = alpha_mask.reshape(B,-1,L,NTOTALDOFS,1)
                 alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, L, 3*NTOTALDOFS)
-                # processing template coordinates
-                xyz_t = get_init_xyz(seq[:,0],xyz_t,same_chain)
-                xyz_prev = get_init_xyz(seq[:,0],xyz_prev[:,None],same_chain).reshape(B, L, NTOTAL, 3)
 
                 N_cycle = self.maxcycle # number of recycling
 
@@ -1502,7 +1532,7 @@ class Trainer():
                 mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 true_crds_frame = xyz_to_frame_xyz(true_crds, msa[:, i_cycle, 0],atom_frames)
-                c6d, _ = xyz_to_c6d(true_crds_frame)
+                c6d = xyz_to_c6d(true_crds_frame)
                 c6d = c6d_to_bins(c6d, same_chain, negative=negative)
 
                 prob = self.active_fn(logit_s[0]) # distogram
@@ -1670,7 +1700,7 @@ class Trainer():
                 mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 true_crds_frame = xyz_to_frame_xyz(true_crds, msa[:, i_cycle, 0],atom_frames)
-                c6d, _ = xyz_to_c6d(true_crds_frame)
+                c6d = xyz_to_c6d(true_crds_frame)
                 c6d = c6d_to_bins(c6d, same_chain, negative=negative)
 
                 prob = self.active_fn(logit_s[0]) # distogram

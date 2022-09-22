@@ -22,8 +22,9 @@ class PositionalEncoding2D(nn.Module):
         self.nbin_atom = maxpos_atom+2 # include 0 and "unknown" token (maxpos_sm + 1)
         self.emb_res = nn.Embedding(self.nbin_res, d_model)
         self.emb_atom = nn.Embedding(self.nbin_atom, d_model)
+        self.emb_chain = nn.Embedding(2, d_model)
 
-    def forward(self, x, seq, idx, bond_feats):
+    def forward(self, x, seq, idx, bond_feats, same_chain):
         sm_mask = is_atom(seq[0])
         res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, sm_mask,
             minpos_res=self.minpos, maxpos_res=self.maxpos, maxpos_atom=self.maxpos_atom)
@@ -36,8 +37,9 @@ class PositionalEncoding2D(nn.Module):
         ib_atom = torch.bucketize(atom_dist, bins).long() # (B, L, L)
         emb_atom = self.emb_atom(ib_atom) #(B, L, L, d_model)
 
-        x = x + emb_res + emb_atom # add relative positional encoding
-        return x
+        emb_c = self.emb_chain(same_chain.long())
+
+        return x + emb_res + emb_atom + emb_c # add relative positional encoding
 
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
@@ -62,7 +64,7 @@ class MSA_emb(nn.Module):
 
         nn.init.zeros_(self.emb.bias)
 
-    def forward(self, msa, seq, idx, bond_feats):
+    def forward(self, msa, seq, idx, bond_feats, same_chain):
         # Inputs:
         #   - msa: Input MSA (B, N, L, d_init)
         #   - seq: Input Sequence (B, L)
@@ -84,7 +86,7 @@ class MSA_emb(nn.Module):
         left = self.emb_left(seq)[:,None] # (B, 1, L, d_pair)
         right = self.emb_right(seq)[:,:,None] # (B, L, 1, d_pair)
         pair = left + right # (B, L, L, d_pair)
-        pair = self.pos(pair, seq, idx, bond_feats) # add relative position
+        pair = self.pos(pair, seq, idx, bond_feats, same_chain) # add relative position
 
         # state embedding
         state = self.emb_state(seq)
@@ -137,19 +139,16 @@ class Bond_emb(nn.Module):
 # TODO: Update template embedding not to use triangles....
 # Use input xyz_t with biased attention
 class TemplatePairStack(nn.Module):
-    def __init__(self, n_block=2, d_templ=64, n_head=4, d_hidden=32, rbf_sigma=1.0, p_drop=0.25):
+    def __init__(self, n_block=2, d_templ=64, n_head=4, d_hidden=32, p_drop=0.25):
         super(TemplatePairStack, self).__init__()
         self.n_block = n_block
-        self.rbf_sigma = rbf_sigma
         proc_s = [PairStr2Pair(d_pair=d_templ, n_head=n_head, d_hidden=d_hidden, p_drop=p_drop) for i in range(n_block)]
         self.block = nn.ModuleList(proc_s)
         self.norm = nn.LayerNorm(d_templ)
 
-    def forward(self, templ, xyz_t, use_checkpoint=False):
+    def forward(self, templ, rbf_feat, use_checkpoint=False):
         B, T, L = templ.shape[:3]
         templ = templ.reshape(B*T, L, L, -1)
-        xyz_t = xyz_t.reshape(B*T, L, -1, 3)
-        rbf_feat = rbf(torch.cdist(xyz_t[:,:,1], xyz_t[:,:,1]), self.rbf_sigma)
 
         for i_block in range(self.n_block):
             if use_checkpoint:
@@ -199,21 +198,41 @@ class Templ_emb(nn.Module):
         self.proj_t1d = init_lecun_normal(self.proj_t1d)
         nn.init.zeros_(self.proj_t1d.bias)
 
-    def forward(self, t1d, t2d, alpha_t, xyz_t, pair, state, use_checkpoint=False):
-        # Input
-        #   - t1d: 1D template info (B, T, L, 30)
-        #   - t2d: 2D template info (B, T, L, L, 44)
+    def _get_templ_emb(self, t1d, t2d):
         B, T, L, _ = t1d.shape
-
         # Prepare 2D template features
         left = t1d.unsqueeze(3).expand(-1,-1,-1,L,-1)
         right = t1d.unsqueeze(2).expand(-1,-1,L,-1,-1)
         #
         templ = torch.cat((t2d, left, right), -1) # (B, T, L, L, 88)
-        templ = self.emb(templ) # Template templures (B, T, L, L, d_templ)
+        return self.emb(templ) # Template templures (B, T, L, L, d_templ)
+
+    def _get_templ_rbf(self, xyz_t, mask_t):
+        B, T, L = xyz_t.shape[:3]
+
         # process each template features
-        xyz_t = xyz_t.reshape(B*T, L, -1, 3)
-        templ = self.templ_stack(templ, xyz_t, use_checkpoint=use_checkpoint) # (B, T, L,L, d_templ)
+        xyz_t = xyz_t.reshape(B*T, L, 3).contiguous()
+        mask_t = mask_t.reshape(B*T, L, L)
+        assert(xyz_t.is_contiguous())
+        rbf_feat = rbf(torch.cdist(xyz_t, xyz_t)) * mask_t[...,None] # (B*T, L, L, d_rbf)
+        return rbf_feat
+
+    def forward(self, t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=False):
+        # Input
+        #   - t1d: 1D template info (B, T, L, 30)
+        #   - t2d: 2D template info (B, T, L, L, 44)
+        #   - alpha_t: torsion angle info (B, T, L, 30) - DOUBLE-CHECK
+        #   - xyz_t: template CA coordinates (B, T, L, 3)
+        #   - mask_t: is valid residue pair? (B, T, L, L)
+        #   - pair: query pair features (B, L, L, d_pair)
+        #   - state: query state features (B, L, d_state)
+        B, T, L, _ = t1d.shape
+
+        templ = self._get_templ_emb(t1d, t2d)
+        rbf_feat = self._get_templ_rbf(xyz_t, mask_t)
+
+        # process each template pair feature
+        templ = self.templ_stack(templ, rbf_feat, use_checkpoint=use_checkpoint) # (B, T, L,L, d_templ)
 
         # Prepare 1D template torsion angle features
         t1d = torch.cat((t1d, alpha_t), dim=-1) # (B, T, L, 30+3*17)
@@ -247,13 +266,12 @@ class Templ_emb(nn.Module):
 
 
 class Recycling(nn.Module):
-    def __init__(self, d_msa=256, d_pair=128, d_state=32, rbf_sigma=1.0):
+    def __init__(self, d_msa=256, d_pair=128, d_state=32):
         super(Recycling, self).__init__()
         self.proj_dist = nn.Linear(36+d_state*2, d_pair)
         self.norm_pair = nn.LayerNorm(d_pair)
         self.proj_sctors = nn.Linear(2*NTOTALDOFS, d_msa)
         self.norm_msa = nn.LayerNorm(d_msa)
-        self.rbf_sigma = rbf_sigma
         self.norm_state = nn.LayerNorm(d_state)
 
         self.reset_parameter()
@@ -264,22 +282,18 @@ class Recycling(nn.Module):
         self.proj_sctors = init_lecun_normal(self.proj_sctors)
         nn.init.zeros_(self.proj_sctors.bias)
 
-    def forward(self, msa, pair, xyz, state, sctors):
+    def forward(self, msa, pair, xyz, state, sctors, mask_recycle=None):
         B, L = pair.shape[:2]
         state = self.norm_state(state)
 
         left = state.unsqueeze(2).expand(-1,-1,L,-1)
         right = state.unsqueeze(1).expand(-1,L,-1,-1)
         
-        Ca_or_P = xyz[:,:,1]
+        Ca_or_P = xyz[:,:,1].contiguous()
 
-        # recreate Cb given N,Ca,C
-        #N  = xyz[:,:,0]
-        #C  = xyz[:,:,2]
-        #Cb = generate_Cbeta(N,Ca,C)
-        #dist = rbf(torch.cdist(Cb, Cb), self.rbf_sigma)
-
-        dist = rbf(torch.cdist(Ca_or_P, Ca_or_P), self.rbf_sigma)
+        dist = rbf(torch.cdist(Ca_or_P, Ca_or_P))
+        if mask_recycle != None:
+            dist = mask_recycle[...,None].float()*dist
         dist = torch.cat((dist, left, right), dim=-1)
         dist = self.proj_dist(dist)
         pair = dist + self.norm_pair(pair)
