@@ -211,7 +211,6 @@ def get_res_atom_dist(idx, bond_feats, sm_mask, minpos_res=-32, maxpos_res=32, m
 
     return res_dist[None].to(gpu), atom_dist[None].to(gpu) # add batch dim.
 
-
 def get_relpos(idx, bond_feats, sm_mask, inter_pos=32, maxpath=32):
     '''
     Relative position matrix of protein/SM complex. Used for positional

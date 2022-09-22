@@ -48,7 +48,7 @@ N_EXAMPLE_PER_EPOCH = 1208
 #N_EXAMPLE_PER_EPOCH = 6632 # divisible by 8
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 0,
+              'num_workers': 3,
               'pin_memory': True}
 
 DEBUG = False
@@ -121,7 +121,7 @@ class Trainer():
     def __init__(self, model_name='BFF',
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
                  model_param={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
-                 eval=False, outdir=None, wandb_prefix=None):
+                 eval=False, out_dir=None, wandb_prefix=None, model_dir='models/'):
         self.model_name = model_name #"BFF"
         #self.model_name = "%s_%d_%d_%d_%d"%(model_name, model_param['n_module'], 
         #                                    model_param['n_module_str'],
@@ -141,11 +141,12 @@ class Trainer():
         self.loss_param = loss_param
         self.ACCUM_STEP = accum_step
         self.batch_size = batch_size
-        self.outdir = outdir 
-        if outdir is not None: 
-            os.makedirs(self.outdir, exist_ok=True)
-            if outdir[-1] != '/': self.outdir += '/'
+        self.out_dir = out_dir 
+        if out_dir is not None: 
+            os.makedirs(self.out_dir, exist_ok=True)
+            if out_dir[-1] != '/': self.out_dir += '/'
         self.wandb_prefix = wandb_prefix
+        self.model_dir = model_dir
 
         # for all-atom str loss
         self.ti_dev = torsion_indices
@@ -183,8 +184,10 @@ class Trainer():
                   pred_lddt, idx, atom_frames=None, unclamp=False, negative=False, interface=False,
                   verbose=False, ctr=0,
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_lddt=1.0, w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
-                  lj_lin=0.85, eps=1e-6
+                  lj_lin=0.85, eps=1e-6, item=None
     ):
+        gpu = pred.device
+
         # dictionary for keeping track of losses
         loss_dict = {}
 
@@ -256,13 +259,14 @@ class Trainer():
             tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
 
         else:
-            tot_str = compute_general_FAPE(
+            tot_str, fape_matrix = compute_general_FAPE(
                 pred[:,mask_BB,:,:3],
                 true[:,mask_BB[0],:3],
                 mask_crds[:,mask_BB[0],:3],
                 frames_BB[:,mask_BB[0]],
                 frame_mask_BB[:,mask_BB[0]],
-                dclamp=dclamp
+                dclamp=dclamp, 
+                return_matrix = True
             )
         num_layers = pred.shape[0]
         gamma = 0.99
@@ -270,12 +274,37 @@ class Trainer():
         w_bb_fape = torch.flip(w_bb_fape, (0,))
         w_bb_fape = w_bb_fape / w_bb_fape.sum()
         bb_l_fape = (w_bb_fape*tot_str).sum()
-        tot_loss += 0.5*w_str*bb_l_fape
+
+        # protein-sm interface fape
+        try:
+            sm_res_mask = is_atom(label_aa_s[0,0,mask_BB[0]]) # (L,)
+            sm_atom_mask = sm_res_mask[...,None].repeat((1,1,3))[mask_crds[:,mask_BB[0],:3]] # (L,)
+            if bool(torch.any(sm_res_mask)):
+                # fape_matrix : (B, n_res, n_bb_atoms + n_sm_atoms)
+                inter_fape = fape_matrix[:,sm_res_mask][:,:,~sm_atom_mask].sum(dim=[1,2]) + \
+                             fape_matrix[:,~sm_res_mask][:,:,sm_atom_mask].sum(dim=[1,2])
+                inter_fape /= sm_res_mask.sum()*(~sm_atom_mask).sum() + (~sm_res_mask).sum()*sm_atom_mask.sum()
+                bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
+            else:
+                bb_l_fape_inter = torch.tensor(0).to(gpu)
+        except Exception as e:
+            print('error in calc_loss', item, '\n'+repr(e))
+            bb_l_fape_inter = torch.tensor(0).to(gpu)
+            print('bb_l_fape.shape',bb_l_fape.shape)
+            print('bb_l_fape',bb_l_fape)
+            print('bb_l_fape_inter.shape',bb_l_fape_inter.shape)
+            print('bb_l_fape_inter',bb_l_fape_inter)
+
+        #tot_loss += 0.5*w_str*bb_l_fape*0.5 # extra factor added by jue 2022-9-14
+        tot_loss += 0.5*w_str*(bb_l_fape + bb_l_fape_inter) # inter-fape added 2022-9-16
+
         if "fape_c2" in loss_dict.keys():
             lig_fape = (w_bb_fape*l_fape_B).sum()
             tot_loss += 0.5*w_str*lig_fape
         loss_s.append(tot_str.detach())
         loss_dict['tot_str'] = float(bb_l_fape.detach())
+        loss_dict['lig_fape'] = float(lig_fape.detach())
+        loss_dict['inter_fape'] = float(bb_l_fape_inter.detach())
         
         # AllAtom loss
         # get ground-truth torsion angles
@@ -432,10 +461,10 @@ class Trainer():
                 l_fape_B.cpu().detach().numpy(),
                 mask_BB[0].sum()
             )
-            outdir = self.outdir if self.outdir else './'
-            writepdb(outdir+"p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
-            writepdb(outdir+"n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
-            writepdb(outdir+"nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
+            out_dir = self.out_dir if self.out_dir else './'
+            writepdb(out_dir+"p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
+            writepdb(out_dir+"n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
+            writepdb(out_dir+"nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
 
         loss_dict['total_loss'] = float(tot_loss.detach())
 
@@ -476,7 +505,7 @@ class Trainer():
         return torch.stack([prec, recall, F1])
 
     def load_model(self, model, optimizer, scheduler, scaler, model_name, rank, suffix='last', resume_train=False):
-        chk_fn = "models/%s_%s.pt"%(model_name, suffix)
+        chk_fn = self.model_dir+"/%s_%s.pt"%(model_name, suffix)
         loaded_epoch = -1
         best_valid_loss = 999999.9
         if not os.path.exists(chk_fn):
@@ -534,10 +563,10 @@ class Trainer():
         return loaded_epoch, best_valid_loss
 
     def checkpoint_fn(self, model_name, description):
-        if not os.path.exists("models"):
-            os.mkdir("models")
+        if not os.path.exists(self.model_dir):
+            os.mkdir(self.model_dir)
         name = "%s_%s.pt"%(model_name, description)
-        return os.path.join("models", name)
+        return os.path.join(self.model_dir, name)
     
     # main entry function of training
     # 1) make sure ddp env vars set
@@ -563,8 +592,8 @@ class Trainer():
     def train_model(self, rank, world_size):
         
         # save git diff from last commit
-        if self.outdir is not None:
-            gitdiff_fn = open(f'{self.outdir}/git_diff.txt','w')
+        if self.out_dir is not None:
+            gitdiff_fn = open(f'{self.out_dir}/git_diff.txt','w')
             git_diff = subprocess.Popen(['git diff'], cwd = os.getcwd(), shell = True, stdout = gitdiff_fn, stderr = subprocess.PIPE)
             print('Save git diff between current state and last commit')
 
@@ -583,7 +612,7 @@ class Trainer():
             all_param.update(self.loss_param)
 
             wandb.config = all_param
-            wandb.save(os.path.join(os.getcwd(), self.outdir, 'git_diff.txt'))
+            wandb.save(os.path.join(os.getcwd(), self.out_dir, 'git_diff.txt'))
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
@@ -847,7 +876,8 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="best", resume_train=True)
+                                                        self.model_name, gpu, suffix="best", 
+                                                        resume_train=True)
 
         if (self.eval):
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
@@ -924,7 +954,8 @@ class Trainer():
                                     'valid_loss': valid_loss,
                                     'valid_acc': valid_acc},
                                     self.checkpoint_fn(self.model_name, 'best'))
-                    wandb.save(self.checkpoint_fn(self.model_name, 'best'))
+                    if self.wandb_prefix is not None:
+                        wandb.save(self.checkpoint_fn(self.model_name, 'best'))
 
                 
                 torch.save({'epoch': epoch,
@@ -940,7 +971,8 @@ class Trainer():
                             'valid_acc': valid_acc,
                             'best_loss': best_valid_loss},
                             self.checkpoint_fn(self.model_name, str(epoch)))
-                wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
+                if self.wandb_prefix is not None:
+                    wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
         dist.destroy_process_group()
 
     def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, verbose=False):
@@ -1102,7 +1134,7 @@ class Trainer():
                             atom_mask_, res_mask, mask_2d, same_chain,
                             pred_lddts, idx_pdb, atom_frames=atom_frames,
                             unclamp=unclamp, negative=negative,
-                            verbose=verbose, ctr=ctrid, **self.loss_param
+                            verbose=verbose, ctr=ctrid, item=item, **self.loss_param
                         )
                     loss = loss / self.ACCUM_STEP
                     scaler.scale(loss).backward()
@@ -1130,7 +1162,11 @@ class Trainer():
                         use_checkpoint=True
                     )
 
-                    true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+                    try:
+                        true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+                    except Exception as e:
+                        print('error resolving equivalent natives',item)
+                        raise e
 
                     res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                     mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
@@ -1167,12 +1203,16 @@ class Trainer():
                     scheduler.step()
                 ddp_model.module.update() # apply EMA
             
+            if torch.isnan(loss):
+                print('nan loss',item)
+                save_pdbs = True
+
             if save_pdbs:
                 writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
                     torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
                 writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_true.pdb', 
                     torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
-                writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb', 
+                writepdb(self.out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb', 
                     torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask])
 
             local_tot += loss.detach()*self.ACCUM_STEP
@@ -1383,7 +1423,7 @@ class Trainer():
                     pred_crds, alphas, pred_allatom, true_crds_, 
                     atom_mask_, res_mask, mask_2d, same_chain,
                     pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative,
-                    verbose=verbose, ctr=ctrid, **self.loss_param
+                    verbose=verbose, ctr=ctrid, item=item, **self.loss_param
                 )
 
                 valid_tot += loss.detach()
@@ -1407,8 +1447,9 @@ class Trainer():
         valid_acc = valid_acc.cpu().detach().numpy()
         
         if rank == 0:
-            log_dict = {f"Valid_{header}":{task[0]:loss_dict}}
-            wandb.log(log_dict)
+            if self.wandb_prefix is not None:
+                log_dict = {f"Valid_{header}":{task[0]:loss_dict}}
+                wandb.log(log_dict)
             train_time = time.time() - start_time
             sys.stdout.write("%s: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f\n"%(\
                     header, epoch, self.n_epoch, world_size*len(valid_loader), world_size*len(valid_loader), train_time, valid_tot, \
@@ -1786,6 +1827,7 @@ if __name__ == "__main__":
                     accum_step=args.accum,
                     maxcycle=args.maxcycle,
                     eval=args.eval,
-                    outdir=args.outdir,
-                    wandb_prefix=args.wandb_prefix)
+                    out_dir=args.out_dir,
+                    wandb_prefix=args.wandb_prefix,
+                    model_dir=args.model_dir)
     train.run_model_training(torch.cuda.device_count())

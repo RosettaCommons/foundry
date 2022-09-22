@@ -1,5 +1,7 @@
+import sys, os
 import torch
 import numpy as np
+script_dir = os.path.dirname(os.path.realpath(__file__))+'/'
 
 num2aa=[
     'ALA','ARG','ASN','ASP','CYS',
@@ -1094,4 +1096,4 @@ atom_num= [9, 17, 35, 53, 8, 16, 34, 52, 7, 15, 33, 51, 6, 14, 32, 50, 82, 5, 13
                         44,76,25,75,24, 42, 23, 74,92, 65, 39, 4, 12, 20, 3, 19, 0] # in same order as frame priority
 atomnum2atomtype = dict(zip(atom_num, frame_priority2atom))
 
-atomized_protein_frames = torch.load("atomized_protein_frames.pt")
+atomized_protein_frames = torch.load(script_dir+"atomized_protein_frames.pt")
