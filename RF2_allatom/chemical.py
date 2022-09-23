@@ -34,6 +34,8 @@ NTOTAL = 36
 NNAPROTAAS = 32
 NPROTAAS = 22 # include UNK/MAS
 
+CHAIN_GAP = 200
+
 # internal coords
 NPROTTORS = 7
 NPROTANGS = 3

@@ -44,8 +44,8 @@ N_PRINT_TRAIN = 4
 
 # num structs per epoch
 # must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 1208
-#N_EXAMPLE_PER_EPOCH = 6632 # divisible by 8
+N_EXAMPLE_PER_EPOCH = 6144
+#N_EXAMPLE_PER_EPOCH = 8
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 3,
@@ -183,7 +183,7 @@ class Trainer():
                   mask_crds, mask_BB, mask_2d, same_chain,
                   pred_lddt, idx, atom_frames=None, unclamp=False, negative=False, interface=False,
                   verbose=False, ctr=0,
-                  w_dist=1.0, w_aa=1.0, w_str=1.0, w_lddt=1.0, w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
+                  w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lddt=1.0, w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
                   lj_lin=0.85, eps=1e-6, item=None
     ):
         gpu = pred.device
@@ -275,6 +275,8 @@ class Trainer():
         w_bb_fape = w_bb_fape / w_bb_fape.sum()
         bb_l_fape = (w_bb_fape*tot_str).sum()
 
+        tot_loss += 0.5*w_str*bb_l_fape
+
         # protein-sm interface fape
         try:
             sm_res_mask = is_atom(label_aa_s[0,0,mask_BB[0]]) # (L,)
@@ -285,18 +287,19 @@ class Trainer():
                              fape_matrix[:,~sm_res_mask][:,:,sm_atom_mask].sum(dim=[1,2])
                 inter_fape /= sm_res_mask.sum()*(~sm_atom_mask).sum() + (~sm_res_mask).sum()*sm_atom_mask.sum()
                 bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
+                tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
+
+                loss_dict['inter_fape'] = float(bb_l_fape_inter.detach())
             else:
-                bb_l_fape_inter = torch.tensor(0).to(gpu)
+                loss_dict['inter_fape'] = 0.0
+
         except Exception as e:
-            print('error in calc_loss', item, '\n'+repr(e))
-            bb_l_fape_inter = torch.tensor(0).to(gpu)
+            print('error in calc_loss inter-fape', item, '\n'+repr(e))
             print('bb_l_fape.shape',bb_l_fape.shape)
             print('bb_l_fape',bb_l_fape)
             print('bb_l_fape_inter.shape',bb_l_fape_inter.shape)
             print('bb_l_fape_inter',bb_l_fape_inter)
-
-        #tot_loss += 0.5*w_str*bb_l_fape*0.5 # extra factor added by jue 2022-9-14
-        tot_loss += 0.5*w_str*(bb_l_fape + bb_l_fape_inter) # inter-fape added 2022-9-16
+            loss_dict['inter_fape'] = 0.0
 
         if "fape_c2" in loss_dict.keys():
             lig_fape = (w_bb_fape*l_fape_B).sum()
@@ -304,7 +307,6 @@ class Trainer():
         loss_s.append(tot_str.detach())
         loss_dict['tot_str'] = float(bb_l_fape.detach())
         loss_dict['lig_fape'] = float(lig_fape.detach())
-        loss_dict['inter_fape'] = float(bb_l_fape_inter.detach())
         
         # AllAtom loss
         # get ground-truth torsion angles
@@ -637,30 +639,22 @@ class Trainer():
 
         self.n_train = N_EXAMPLE_PER_EPOCH
         self.n_valid_pdb = len(valid_pdb.keys())
-        #self.n_valid_pdb = (self.n_valid_pdb // world_size)*world_size
         self.n_valid_homo = len(valid_homo.keys())
-        #self.n_valid_homo = (self.n_valid_homo // world_size)*world_size
         self.n_valid_compl = len(valid_compl.keys())
-        #self.n_valid_compl = (self.n_valid_compl // world_size)*world_size
         self.n_valid_neg = len(valid_neg.keys())
-        #self.n_valid_neg = (self.n_valid_neg // world_size)*world_size
         self.n_valid_na_compl = len(valid_na_compl.keys())
-        #self.n_valid_na_compl = (self.n_valid_na_compl // world_size)*world_size
         self.n_valid_na_neg = len(valid_na_neg.keys())
-        #self.n_valid_na_neg = (self.n_valid_na_neg // world_size)*world_size
         self.n_valid_rna = len(valid_rna.keys())
-        #self.n_valid_rna = (self.n_valid_rna // world_size)*world_size
         self.n_valid_rna = len(valid_rna.keys())
         self.n_valid_sm_compl = len(valid_sm_compl.keys())
 
-        self.n_valid_pdb = 200
-        #self.n_valid_homo = 4
-        #self.n_valid_compl = 4
-        #self.n_valid_neg = 4
-        #self.n_valid_na_compl = 4
-        #self.n_valid_na_neg = 4
-        #self.n_valid_rna = 4
-        self.n_valid_sm_compl = 200
+        # manual override
+        self.n_valid_pdb = 100
+        self.n_valid_pdb_atomize = 100
+        self.n_valid_sm_compl = 100
+        self.n_valid_sm_compl_dock = 100
+        self.n_valid_sm_compl_foldprot = 100
+        self.n_valid_sm_compl_foldlig = 100
 
         if (rank==0):
             print ('Loaded (training)',
@@ -714,10 +708,34 @@ class Trainer():
             loader_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
-        valid_atomize_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.n_valid_pdb],
-            loader_atomize_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0)
+        valid_sm_compl_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param,
+        )
+        valid_sm_compl_dock_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=True, 
+            init_protein_xyz=True, init_ligand_xyz=True
+        )
+        valid_sm_compl_foldprot_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param, init_protein_tmpl=False, init_ligand_tmpl=True, 
+            init_protein_xyz=False, init_ligand_xyz=True
+        )
+        valid_sm_compl_foldlig_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=False, 
+            init_protein_xyz=True, init_ligand_xyz=False
+        )
+        #valid_atomize_pdb_set = Dataset(
+        #    list(valid_pdb.keys())[:self.n_valid_pdb],
+        #    loader_atomize_pdb, valid_pdb,
+        #    self.loader_param, homo, p_homo_cut=-1.0
+        #)
         # valid_homo_set = Dataset(
         #     list(valid_homo.keys())[:self.n_valid_homo],
         #     loader_pdb, valid_homo,
@@ -758,15 +776,6 @@ class Trainer():
 #            loader_rna, valid_rna,
 #            self.loader_param
 #        )
-        #valid_sm_compl_set = DatasetSMComplex(
-        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-        #    loader_sm_compl, valid_sm_compl,
-        #    self.loader_param, p_ligand_dock=0.0,
-        #)
-        #valid_sm_compl_rigid_body_set = DatasetSMComplex(
-        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-        #    loader_sm_compl, valid_sm_compl,
-        #    self.loader_param, p_ligand_dock=1.0)
         #valid_sm_set = DatasetSM(
         #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
         #    loader_small_molecule, valid_sm_compl, self.loader_param
@@ -790,12 +799,16 @@ class Trainer():
             fraction_compl=0.0,
             fraction_na_compl=0.0,
             fraction_rna=0.0,
-            fraction_sm_compl=0.0,
+            fraction_sm_compl=0.8,
             fraction_sm = 0, 
             replacement=True
         )
 
         valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
+        valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
+        valid_sm_compl_dock_sampler = data.distributed.DistributedSampler(valid_sm_compl_dock_set, num_replicas=world_size, rank=rank)
+        valid_sm_compl_foldprot_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldprot_set, num_replicas=world_size, rank=rank)
+        valid_sm_compl_foldlig_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldlig_set, num_replicas=world_size, rank=rank)
         # valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
         # valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
         # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
@@ -805,14 +818,16 @@ class Trainer():
 #        valid_na_from_scratch_neg_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_neg_set, num_replicas=world_size, rank=rank)
 #        valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
 
-        #valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
         #valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
-        #valid_sm_compl_rigid_body_sampler = data.distributed.DistributedSampler(valid_sm_compl_rigid_body_set, num_replicas=world_size, rank=rank)
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
+        valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_compl_dock_loader = data.DataLoader(valid_sm_compl_dock_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_compl_foldprot_loader = data.DataLoader(valid_sm_compl_foldprot_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_compl_foldlig_loader = data.DataLoader(valid_sm_compl_foldlig_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         #valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
@@ -822,8 +837,6 @@ class Trainer():
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
 #        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
 
-        #valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        #valid_sm_compl_rigid_body_loader = data.DataLoader(valid_sm_compl_rigid_body_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         #valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
@@ -880,7 +893,12 @@ class Trainer():
                                                         resume_train=True)
 
         if (self.eval):
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 0, verbose=True) # for debugging
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 0, verbose=True)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, 0, verbose=True)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, 0, verbose=True)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, 0, verbose=True)
+
             # run protein/NA prediction (TEMPLATED)
             #_, _, _ = self.valid_ppi_cycle(
             #    ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
@@ -915,17 +933,23 @@ class Trainer():
         for epoch in range(loaded_epoch+1, self.n_epoch):
             train_sampler.set_epoch(epoch)
             valid_pdb_sampler.set_epoch(epoch)
+            valid_sm_compl_sampler.set_epoch(epoch)
+            valid_sm_compl_dock_sampler.set_epoch(epoch)
+            valid_sm_compl_foldprot_sampler.set_epoch(epoch)
+            valid_sm_compl_foldlig_sampler.set_epoch(epoch)
             #valid_homo_sampler.set_epoch(epoch)
             #valid_compl_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
-            #valid_sm_compl_sampler.set_epoch(epoch)
-            #valid_sm_compl_rigid_body_sampler.set_epoch(epoch)
             #valid_sm_sampler.set_epoch(epoch)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, epoch, header="SM Dock") 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, epoch, header="SM FoldProt") 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, epoch, header="SM FoldLig") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
 #            _, _, _ = self.valid_ppi_cycle(
@@ -935,8 +959,6 @@ class Trainer():
 #                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
-            #valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
-            # _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch, header="SM Rigid Body") 
             # _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, rank, gpu, world_size, epoch, header="SM Only") 
 
             if rank == 0: # save model

@@ -64,12 +64,6 @@ def get_args():
             help="maximum sequence identity cutoff for template selection [150.0]")
     data_group.add_argument('-maxcycle', type=int, default=4,
             help="maximum number of recycle [4]")
-    data_group.add_argument('-p_ligand_dock', type=float, default=0.0,
-            help="probability of doing rigid-body ligand docking for protein-sm examples [0.0]")
-    data_group.add_argument('-init_protein_xyz', action='store_true', default=False,
-            help="initialize xyz coordinates of protein to ground truth, after putting to origin and rotating randomly")
-    data_group.add_argument('-init_ligand_xyz', action='store_true', default=False,
-            help="initialize xyz coordinates of ligand to ground truth, after putting to origin and rotating randomly")
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")
@@ -138,6 +132,8 @@ def get_args():
             help="Weight on distd in loss function [1.0]")
     loss_group.add_argument('-w_str', type=float, default=10.0,
             help="Weight on strd in loss function [10.0]")
+    loss_group.add_argument('-w_inter_fape', type=float, default=2,
+            help="Weight on inter-chain backbone fape in loss function [2.0]")
     loss_group.add_argument('-w_lddt', type=float, default=0.1,
             help="Weight on predicted lddt loss [0.1]")
     loss_group.add_argument('-w_aa', type=float, default=3.0,
@@ -187,7 +183,8 @@ def get_args():
     trunk_param['SE3_ref_param'] = SE3_ref_param 
 
     loss_param = {}
-    for param in ['w_dist', 'w_str', 'w_aa', 'w_lddt', 'w_bond', 'w_dih', 'w_clash', 'w_hb', 'lj_lin']:
+    for param in ['w_dist', 'w_str', 'w_inter_fape', 'w_aa', 'w_lddt', 'w_bond', 
+                  'w_dih', 'w_clash', 'w_hb', 'lj_lin']:
         loss_param[param] = getattr(args, param)
 
     return args, trunk_param, loader_param, loss_param

@@ -8,7 +8,7 @@ import scipy
 from scipy.sparse.csgraph import shortest_path
 
 from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
-from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES
+from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing
 
@@ -70,9 +70,6 @@ def set_data_loader_params(args):
         "ROWS"             : 1,
         "SEQID"            : 95.0,
         "MAXCYCLE"         : 4,
-        "P_LIGAND_DOCK"    : 0.0,
-        "INIT_PROTEIN_XYZ" : False,
-        "INIT_LIGAND_XYZ"  : False,
     }
     for param in PARAMS:
         if hasattr(args, param.lower()):
@@ -916,7 +913,7 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
     xyz = torch.nan_to_num(xyz)
 
     idx = torch.arange(L*2)
-    idx[L:] += 200 # to let network know about chain breaks
+    idx[L:] += CHAIN_GAP # to let network know about chain breaks
 
     # indicator for which residues are in same chain
     chain_idx = torch.zeros((2*L, 2*L)).long()
@@ -1133,7 +1130,7 @@ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=Tru
     xyz = torch.nan_to_num(xyz)
 
     idx = torch.arange(sum(L_s))
-    idx[L_s[0]:] += 200
+    idx[L_s[0]:] += CHAIN_GAP
 
     chain_idx = torch.zeros((sum(L_s), sum(L_s))).long()
     chain_idx[:L_s[0], :L_s[0]] = 1
@@ -1279,9 +1276,9 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
     xyz = torch.nan_to_num(xyz)
 
     idx = torch.arange(sum(Ls))
-    idx[Ls[0]:] += 200
+    idx[Ls[0]:] += CHAIN_GAP
     if (len(pdb_ids)==3):
-        idx[Ls[1]:] += 200
+        idx[Ls[1]:] += CHAIN_GAP
 
     chain_idx = torch.zeros((sum(Ls), sum(Ls))).long()
     chain_idx[:Ls[0], :Ls[0]] = 1
@@ -1361,7 +1358,7 @@ def loader_rna(pdb_set, Ls, params, random_noise=5.0):
 
     idx = torch.arange(L)
     if (len(pdb_ids)==2):
-        idx[Ls[0]:] += 200
+        idx[Ls[0]:] += CHAIN_GAP
 
     chain_idx = torch.ones(L,L).long()
     bond_feats = get_protein_bond_feats(L)
@@ -1396,7 +1393,7 @@ def loader_rna(pdb_set, Ls, params, random_noise=5.0):
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats, "rna",item
 
 def loader_sm_compl(item, sm_chains, params, pick_top=True,
-    init_protein_template=False, init_ligand_template=False,
+    init_protein_tmpl=False, init_ligand_tmpl=False,
     init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0):
     """Load protein/SM complex with mixed residue and atom tokens. Also,
     compute frames for atom FAPE loss calc"""
@@ -1443,7 +1440,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True,
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
     
     idx = torch.arange(sum(Ls))
-    idx[Ls[0]:] += 200
+    idx[Ls[0]:] += CHAIN_GAP
     
     chain_idx = torch.zeros((sum(Ls), sum(Ls))).long()
     chain_idx[:Ls[0], :Ls[0]] = 1
@@ -1452,7 +1449,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True,
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol, G)
     
-    if init_protein_template or init_ligand_template:
+    if init_protein_tmpl or init_ligand_tmpl:
         # make blank features for 2 templates
         xyz_t = torch.full((2,sum(Ls),NTOTAL,3),np.nan).float()
         f1d_t = torch.cat((
@@ -1463,7 +1460,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True,
         ), -1) # (2, L_protein + L_sm, NAATOKENS)
         mask_t = torch.full((2, sum(Ls), NTOTAL), False)
 
-        if init_protein_template:
+        if init_protein_tmpl:
             # input true protein xyz as template 0
             xyz_t[0, :Ls[0], :3] = xyz[0, :Ls[0], :3]
             f1d_t[0, :Ls[0]] = torch.cat((
@@ -1472,7 +1469,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True,
             ), -1) # (1, L_protein, NAATOKENS)
             mask_t[0, :Ls[0], :nprotatoms] = mask_prot
 
-        if init_ligand_template:
+        if init_ligand_tmpl:
             # input true s.m. xyz as template 1
             xyz_t[1, Ls[0]:, :3] = xyz[0, Ls[0]:, :3]
             f1d_t[1, Ls[0]:] = torch.cat((
@@ -1823,12 +1820,16 @@ class DatasetRNA(data.Dataset):
 
 
 class DatasetSMComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, p_ligand_dock=0.0):
+    def __init__(self, IDs, loader, item_dict, params, init_protein_tmpl=False, init_ligand_tmpl=False,
+                 init_protein_xyz=False, init_ligand_xyz=False):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
         self.params = params
-        self.p_ligand_dock = p_ligand_dock
+        self.init_protein_tmpl = init_protein_tmpl
+        self.init_ligand_tmpl = init_ligand_tmpl
+        self.init_protein_xyz = init_protein_xyz
+        self.init_ligand_xyz = init_ligand_xyz
 
     def __len__(self):
         return len(self.IDs)
@@ -1840,9 +1841,10 @@ class DatasetSMComplex(data.Dataset):
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][2],
             self.params,
-            ligand_dock = np.random.rand(1) <= self.p_ligand_dock,
-            init_protein_xyz = self.params['INIT_PROTEIN_XYZ'],
-            init_ligand_xyz = self.params['INIT_LIGAND_XYZ']
+            init_protein_tmpl = self.init_protein_tmpl,
+            init_ligand_tmpl = self.init_ligand_tmpl,
+            init_protein_xyz = self.init_protein_xyz,
+            init_ligand_xyz = self.init_ligand_xyz
         )
         return out
 
@@ -2022,17 +2024,35 @@ class DistilledDataset(data.Dataset):
                 self.params
             )
         offset += len(self.rna_inds)
+
         if index >= offset and index < offset + len(self.sm_compl_inds):
             ID = self.sm_compl_IDs[index-offset]
             sel_idx = np.random.randint(0, len(self.sm_compl_dict[ID]))
+
+            # choose one of 4 protein-sm tasks
+            task = np.random.randint(4)
+            if task==0: # fold-and-dock
+                kwargs = {}
+            elif task==1: # rigid body dock
+                kwargs = dict(
+                    init_protein_tmpl = True, init_ligand_tmpl = True,
+                    init_protein_xyz = True, init_ligand_xyz = True
+                )
+            elif task==2: # fold protein
+                kwargs = dict(
+                    init_ligand_tmpl = True, init_ligand_xyz = True
+                )
+            elif task==3: # fold ligand
+                kwargs = dict(
+                    init_protein_tmpl = True, init_protein_xyz = True,
+                )
             out = self.sm_compl_loader(
                 self.sm_compl_dict[ID][sel_idx][0],
                 self.sm_compl_dict[ID][sel_idx][2],
                 self.params,
-                ligand_dock = np.random.rand(1) <= self.params['P_LIGAND_DOCK'],
-                init_protein_xyz = self.params['INIT_PROTEIN_XYZ'],
-                init_ligand_xyz = self.params['INIT_LIGAND_XYZ']
+                **kwargs
             )
+
         offset += len(self.sm_compl_inds)
         if index >= offset:
             ID = self.sm_IDs[index-offset]
