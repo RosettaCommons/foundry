@@ -134,6 +134,8 @@ def get_args():
             help="Weight on strd in loss function [10.0]")
     loss_group.add_argument('-w_inter_fape', type=float, default=2,
             help="Weight on inter-chain backbone fape in loss function [2.0]")
+    loss_group.add_argument('-w_lig_fape', type=float, default=10,
+            help="Weight on ligand fape in loss function [10.0]")
     loss_group.add_argument('-w_lddt', type=float, default=0.1,
             help="Weight on predicted lddt loss [0.1]")
     loss_group.add_argument('-w_aa', type=float, default=3.0,
@@ -183,7 +185,7 @@ def get_args():
     trunk_param['SE3_ref_param'] = SE3_ref_param 
 
     loss_param = {}
-    for param in ['w_dist', 'w_str', 'w_inter_fape', 'w_aa', 'w_lddt', 'w_bond', 
+    for param in ['w_dist', 'w_str', 'w_inter_fape', 'w_lig_fape', 'w_aa', 'w_lddt', 'w_bond', 
                   'w_dih', 'w_clash', 'w_hb', 'lj_lin']:
         loss_param[param] = getattr(args, param)
 

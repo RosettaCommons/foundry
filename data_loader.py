@@ -1460,8 +1460,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True,
         ), -1) # (2, L_protein + L_sm, NAATOKENS)
         mask_t = torch.full((2, sum(Ls), NTOTAL), False)
 
-        if init_protein_tmpl:
-            # input true protein xyz as template 0
+        if init_protein_tmpl: # input true protein xyz as template 0
             xyz_t[0, :Ls[0], :3] = xyz[0, :Ls[0], :3]
             f1d_t[0, :Ls[0]] = torch.cat((
                 torch.nn.functional.one_hot(msa_seed_orig[0,0, :Ls[0] ], num_classes=NAATOKENS-1).float(),
@@ -1469,8 +1468,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True,
             ), -1) # (1, L_protein, NAATOKENS)
             mask_t[0, :Ls[0], :nprotatoms] = mask_prot
 
-        if init_ligand_tmpl:
-            # input true s.m. xyz as template 1
+        if init_ligand_tmpl: # input true s.m. xyz as template 1
             xyz_t[1, Ls[0]:, :3] = xyz[0, Ls[0]:, :3]
             f1d_t[1, Ls[0]:] = torch.cat((
                 torch.nn.functional.one_hot(msa_seed_orig[0,0, Ls[0]: ]-1, num_classes=NAATOKENS-1).float(),
@@ -1492,28 +1490,32 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True,
     if init_protein_xyz or init_ligand_xyz:
         # initialize coords to ground truth, move to origin, rotate randomly
         xyz_prev = torch.full((sum(Ls), NTOTAL, 3), np.nan).float()
+        mask_prev = torch.full((sum(Ls), NTOTAL), False)
         R = scipy.spatial.transform.Rotation.random(2).as_matrix()
         R = torch.tensor(R).float()
         if init_protein_xyz:
             xyz1 = xyz[0, :Ls[0], :3]
             xyz1 = xyz1 - xyz1[:,1].nanmean(0)
             xyz_prev[:Ls[0], :3] = xyz1 @ R[0].T
+            mask_prev[:Ls[0]] = mask[0,:Ls[0]]
         if init_ligand_xyz:
             xyz2 = xyz[0, Ls[0]:, :3]
             xyz2 = xyz2 - xyz2[:,1].nanmean(0)
             xyz_prev[Ls[0]:, :3] = xyz2 @ R[1].T
+            mask_prev[Ls[0]:] = mask[0,Ls[0]:]
 
         # initialize missing positions in ground truth structures
         init = INIT_CRDS.reshape(1,NTOTAL,3).repeat(sum(Ls),1,1)
         init = init + torch.rand(sum(Ls),1,3)*random_noise - random_noise/2
-        xyz_prev = torch.where(mask[0,:,:,None], xyz_prev, init).contiguous()
+        xyz_prev = torch.where(mask_prev[:,:,None], xyz_prev, init).contiguous()
 
     else:
         xyz_prev = xyz_t[0].clone()
+        xyz_prev = torch.nan_to_num(xyz_prev)
+        mask_prev = mask_t[0].clone()
 
     xyz = torch.nan_to_num(xyz)
     xyz_t = torch.nan_to_num(xyz_t)
-    mask_prev = mask_t[0].clone()
 
     if sum(Ls) > params["CROP"]:
         sel = crop_small_molecule(xyz_prot, xyz_sm[0], Ls, params)
@@ -2030,28 +2032,33 @@ class DistilledDataset(data.Dataset):
             sel_idx = np.random.randint(0, len(self.sm_compl_dict[ID]))
 
             # choose one of 4 protein-sm tasks
-            task = np.random.randint(4)
-            if task==0: # fold-and-dock
+            i_task = np.random.randint(4)
+            if i_task==0: # fold-and-dock
                 kwargs = {}
-            elif task==1: # rigid body dock
+                task = 'sm_compl_fold_dock'
+            elif i_task==1: # rigid body dock
                 kwargs = dict(
                     init_protein_tmpl = True, init_ligand_tmpl = True,
                     init_protein_xyz = True, init_ligand_xyz = True
                 )
-            elif task==2: # fold protein
+                task = 'sm_compl_dock'
+            elif i_task==2: # fold protein
                 kwargs = dict(
                     init_ligand_tmpl = True, init_ligand_xyz = True
                 )
-            elif task==3: # fold ligand
+                task = 'sm_compl_foldprot'
+            elif i_task==3: # fold ligand
                 kwargs = dict(
                     init_protein_tmpl = True, init_protein_xyz = True,
                 )
+                task = 'sm_compl_foldsm'
             out = self.sm_compl_loader(
                 self.sm_compl_dict[ID][sel_idx][0],
                 self.sm_compl_dict[ID][sel_idx][2],
                 self.params,
                 **kwargs
             )
+            out = out[:-2]+(task,)+out[-1:]
 
         offset += len(self.sm_compl_inds)
         if index >= offset:

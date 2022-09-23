@@ -44,8 +44,8 @@ N_PRINT_TRAIN = 4
 
 # num structs per epoch
 # must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 6144
-#N_EXAMPLE_PER_EPOCH = 8
+#N_EXAMPLE_PER_EPOCH = 6144
+N_EXAMPLE_PER_EPOCH = 8
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 3,
@@ -183,20 +183,20 @@ class Trainer():
                   mask_crds, mask_BB, mask_2d, same_chain,
                   pred_lddt, idx, atom_frames=None, unclamp=False, negative=False, interface=False,
                   verbose=False, ctr=0,
-                  w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lddt=1.0, w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
-                  lj_lin=0.85, eps=1e-6, item=None
+                  w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lig_fape=1.0, w_lddt=1.0, 
+                  w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
+                  lj_lin=0.85, eps=1e-6, item=None, out_dir='./'
     ):
         gpu = pred.device
 
-        # dictionary for keeping track of losses
-        loss_dict = {}
+        # track losses for printing to local log and uploading to WandB
+        loss_dict = OrderedDict()
 
         B, L = true.shape[:2]
         seq = label_aa_s[:,0].clone()
 
         assert (B==1) # fd - code assumes a batch size of 1
         
-        loss_s = list()
         tot_loss = 0.0
         
         # c6d loss
@@ -204,21 +204,17 @@ class Trainer():
             loss = self.loss_fn(logit_s[i], label_s[...,i]) # (B, L, L)
             loss = (mask_2d*loss).sum() / (mask_2d.sum() + eps)
             tot_loss += w_dist*loss
-            loss_s.append(loss[None].detach())
-            
-            loss_dict[f'c6d_{i}'] = float(loss.detach())
+            loss_dict[f'c6d_{i}'] = loss.detach()
 
         # masked token prediction loss
         loss = self.loss_fn(logit_aa_s, label_aa_s.reshape(B, -1))
         loss = loss * mask_aa_s.reshape(B, -1)
         loss = loss.sum() / (mask_aa_s.sum() + 1e-8)
         tot_loss += w_aa*loss
-        loss_s.append(loss[None].detach())
-
-        loss_dict['aa_cce'] = float(loss.detach())
+        loss_dict['aa_cce'] = loss.detach()
 
         ### GENERAL LAYERS
-        # Structural loss
+        # Structural loss (layer-wise backbone FAPE)
         dclamp = 300.0 if unclamp else 30.0 
         frames, frame_mask = get_frames(
             pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
@@ -240,7 +236,10 @@ class Trainer():
                 frame_mask_BB[:,mask_BBA[0]],
                 dclamp=dclamp
             )
-            loss_dict['fape_c1'] = float(l_fape_A[-1].detach())
+        else:
+            l_fape_A = torch.tensor([0]).to(gpu)
+        loss_dict['bb_fape_c1'] = l_fape_A[-1].detach()
+
         mask_BBB = mask_BB.clone()
         mask_BBB[0,:L1] = False
         if torch.sum(mask_BBB) >0:
@@ -253,11 +252,13 @@ class Trainer():
                 Z=4,
                 dclamp=4
             )
-            loss_dict['fape_c2'] = float(l_fape_B[-1].detach())
+        else:
+            l_fape_B = torch.tensor([0]).to(gpu)
+        loss_dict['bb_fape_c2'] = l_fape_B[-1].detach()
+            
         if negative: # inter-chain fapes should be ignored for negative cases
             fracA = float(L1)/len(same_chain[0,0])
             tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
-
         else:
             tot_str, fape_matrix = compute_general_FAPE(
                 pred[:,mask_BB,:,:3],
@@ -277,37 +278,37 @@ class Trainer():
 
         tot_loss += 0.5*w_str*bb_l_fape
 
+        for i in range(len(tot_str)):
+            loss_dict[f'bb_fape_layer{i}'] = tot_str[i].detach()
+        loss_dict['bb_fape_full'] = bb_l_fape.detach()
+
+        # ligand fape (layer-averaged c2 fape)
+        lig_fape = (w_bb_fape*l_fape_B).sum()
+        tot_loss += 0.5*w_lig_fape*lig_fape
+        loss_dict['bb_fape_lig'] = l_fape_B[-1].detach()
+
         # protein-sm interface fape
-        try:
-            sm_res_mask = is_atom(label_aa_s[0,0,mask_BB[0]]) # (L,)
-            sm_atom_mask = sm_res_mask[...,None].repeat((1,1,3))[mask_crds[:,mask_BB[0],:3]] # (L,)
-            if bool(torch.any(sm_res_mask)):
+        sm_res_mask = is_atom(label_aa_s[0,0,mask_BB[0]]) # (L,)
+        sm_atom_mask = sm_res_mask[...,None].repeat((1,1,3))[mask_crds[:,mask_BB[0],:3]] # (L,)
+        if bool(torch.any(sm_res_mask)):
+            try:
                 # fape_matrix : (B, n_res, n_bb_atoms + n_sm_atoms)
                 inter_fape = fape_matrix[:,sm_res_mask][:,:,~sm_atom_mask].sum(dim=[1,2]) + \
                              fape_matrix[:,~sm_res_mask][:,:,sm_atom_mask].sum(dim=[1,2])
                 inter_fape /= sm_res_mask.sum()*(~sm_atom_mask).sum() + (~sm_res_mask).sum()*sm_atom_mask.sum()
                 bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
                 tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
+            except Exception as e:
+                print('error in calc_loss inter-fape', item, '\n'+repr(e))
+                print('bb_l_fape.shape',bb_l_fape.shape)
+                print('bb_l_fape',bb_l_fape)
+                print('bb_l_fape_inter.shape',bb_l_fape_inter.shape)
+                print('bb_l_fape_inter',bb_l_fape_inter)
+                bb_l_fape_inter = torch.tensor(0).to(gpu)
+        else:
+            bb_l_fape_inter = torch.tensor(0).to(gpu)
+        loss_dict['inter_fape'] = bb_l_fape_inter.detach()
 
-                loss_dict['inter_fape'] = float(bb_l_fape_inter.detach())
-            else:
-                loss_dict['inter_fape'] = 0.0
-
-        except Exception as e:
-            print('error in calc_loss inter-fape', item, '\n'+repr(e))
-            print('bb_l_fape.shape',bb_l_fape.shape)
-            print('bb_l_fape',bb_l_fape)
-            print('bb_l_fape_inter.shape',bb_l_fape_inter.shape)
-            print('bb_l_fape_inter',bb_l_fape_inter)
-            loss_dict['inter_fape'] = 0.0
-
-        if "fape_c2" in loss_dict.keys():
-            lig_fape = (w_bb_fape*l_fape_B).sum()
-            tot_loss += 0.5*w_str*lig_fape
-        loss_s.append(tot_str.detach())
-        loss_dict['tot_str'] = float(bb_l_fape.detach())
-        loss_dict['lig_fape'] = float(lig_fape.detach())
-        
         # AllAtom loss
         # get ground-truth torsion angles
         true_tors, true_tors_alt, tors_mask, tors_planar = get_torsions(
@@ -337,24 +338,19 @@ class Trainer():
             tors_planar,
             eps = 1e-10)
         tot_loss += w_str*l_tors
-        loss_s.append(l_tors[None].detach())
+        loss_dict['torsion'] = l_tors.detach()
 
         ### FINETUNING LAYERS
         # lddts (CA)
         ca_lddt = calc_lddt(pred[:,:,:,1].detach(), true[:,:,1], mask_BB, mask_2d, same_chain, negative=negative, interface=interface)
-        loss_s.append(ca_lddt.detach())
-
-        loss_dict['ca_lddt'] = float(ca_lddt[-1].detach())
+        loss_dict['ca_lddt'] = ca_lddt[-1].detach()
 
         # lddts (allatom) + lddt loss
         lddt_loss, allatom_lddt = calc_allatom_lddt_loss(
             pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, negative=negative, interface=interface)
         tot_loss += w_lddt*lddt_loss
-        loss_s.append(lddt_loss.detach()[None])
-        loss_s.append(allatom_lddt.detach())
-
-        loss_dict['lddt_loss'] = float(lddt_loss.detach())
-        loss_dict['allatom_lddt'] = float(allatom_lddt.detach())
+        loss_dict['lddt_loss'] = lddt_loss.detach()
+        loss_dict['allatom_lddt'] = allatom_lddt[0].detach()
 
         # FAPE losses
         # allatom fape and torsion angle loss
@@ -391,23 +387,23 @@ class Trainer():
                 frames[:,mask_BB[0]],
                 frame_mask[:,mask_BB[0]]
             )
-        loss_s.append(l_fape.detach())
         tot_loss += w_str*l_fape[0]
-        loss_dict['fape'] = float(l_fape[0].detach())
+        loss_dict['allatom_fape'] = l_fape[0].detach()
         
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
         if w_bond > 0.0:
             tot_loss += w_bond*bond_loss
-        loss_s.append( bond_loss[None].detach() )
+        loss_dict['bond_geom'] = bond_loss.detach()
 
         if (pred_allatom.shape[0] > 1):
             bond_loss = calc_cart_bonded(seq, pred_allatom[1:], idx, self.cb_len, self.cb_ang, self.cb_tor)
             if w_bond > 0.0:
                 tot_loss += w_bond*bond_loss.mean()
             loss_s.append( bond_loss.detach() )
-
-        loss_dict['bond_loss'] = float(bond_loss.detach())
+        else:
+            bond_loss = torch.tensor(0).to(gpu)
+        loss_dict['bond_loss'] = bond_loss.detach()
 
         # clash [use all atoms not just those in native]
         clash_loss = calc_lj(
@@ -417,32 +413,24 @@ class Trainer():
         )
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
-        loss_s.append( clash_loss.detach() )
-
-        loss_dict['clash_loss'] = float(clash_loss.detach())
+        loss_dict['clash_loss'] = clash_loss[0].detach()
 
         L0 = same_chain[0,0,:].sum()
         chain1 = torch.zeros_like(same_chain, dtype=bool)
         chain1[:,:L0,:L0] = True
         _, allatom_lddt_c1 = calc_allatom_lddt_loss(
             pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain1, negative=True)
-        loss_s.append(allatom_lddt_c1.detach())
-
-        loss_dict['allatom_lddt_c1'] = float(allatom_lddt_c1.detach())
+        loss_dict['allatom_lddt_c1'] = allatom_lddt_c1[0].detach()
 
         chain2 = torch.zeros_like(same_chain, dtype=bool)
         chain2[:,L0:,L0:] = True
         _, allatom_lddt_c2 = calc_allatom_lddt_loss(
             pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain2, negative=True, bin_scaling=0.5)
-        loss_s.append(allatom_lddt_c2.detach())
-
-        loss_dict['allatom_lddt_c2'] = float(allatom_lddt_c2.detach())
+        loss_dict['allatom_lddt_c2'] = allatom_lddt_c2[0].detach()
 
         _, allatom_lddt_inter = calc_allatom_lddt_loss(
             pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, interface=True)
-        loss_s.append(allatom_lddt_inter.detach())
-
-        loss_dict['allatom_lddt_inter'] = float(allatom_lddt_inter.detach())
+        loss_dict['allatom_lddt_inter'] = allatom_lddt_inter[0].detach()
         # hbond [use all atoms not just those in native]
         #hb_loss = calc_hb(
         #    seq[0], pred_all[0,...,:3], 
@@ -452,6 +440,8 @@ class Trainer():
         #if w_hb > 0.0:
         #    tot_loss += w_hb*hb_loss
         #loss_s.append(torch.stack((hb_loss, clash_loss, bond_loss)).detach())
+
+        loss_dict['total_loss'] = tot_loss.detach()
 
         if (verbose):
             print (
@@ -463,14 +453,11 @@ class Trainer():
                 l_fape_B.cpu().detach().numpy(),
                 mask_BB[0].sum()
             )
-            out_dir = self.out_dir if self.out_dir else './'
-            writepdb(out_dir+"p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
-            writepdb(out_dir+"n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
-            writepdb(out_dir+"nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
+            #writepdb(out_dir+"p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
+            #writepdb(out_dir+"n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
+            #writepdb(out_dir+"nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
 
-        loss_dict['total_loss'] = float(tot_loss.detach())
-
-        return tot_loss, torch.cat(loss_s, dim=0), loss_dict
+        return tot_loss, loss_dict
 
 
     def calc_acc(self, prob, dist, idx_pdb, mask_2d, return_cnt=False):
@@ -638,20 +625,15 @@ class Trainer():
         sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
 
         self.n_train = N_EXAMPLE_PER_EPOCH
-        self.n_valid_pdb = len(valid_pdb.keys())
-        self.n_valid_homo = len(valid_homo.keys())
-        self.n_valid_compl = len(valid_compl.keys())
-        self.n_valid_neg = len(valid_neg.keys())
-        self.n_valid_na_compl = len(valid_na_compl.keys())
-        self.n_valid_na_neg = len(valid_na_neg.keys())
-        self.n_valid_rna = len(valid_rna.keys())
-        self.n_valid_rna = len(valid_rna.keys())
-        self.n_valid_sm_compl = len(valid_sm_compl.keys())
-
-        # manual override
-        self.n_valid_pdb = 100
-        self.n_valid_pdb_atomize = 100
-        self.n_valid_sm_compl = 100
+        self.n_valid_pdb = 100 #len(valid_pdb.keys())
+        self.n_valid_pdb_atomize = 0 #100
+        self.n_valid_homo = 0 #len(valid_homo.keys())
+        self.n_valid_compl = 0 #len(valid_compl.keys())
+        self.n_valid_neg = 0 #len(valid_neg.keys())
+        self.n_valid_na_compl = 100 #len(valid_na_compl.keys())
+        self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
+        self.n_valid_rna = 100 #len(valid_rna.keys())
+        self.n_valid_sm_compl = 100 #len(valid_sm_compl.keys())
         self.n_valid_sm_compl_dock = 100
         self.n_valid_sm_compl_foldprot = 100
         self.n_valid_sm_compl_foldlig = 100
@@ -679,13 +661,17 @@ class Trainer():
             )
             print ('Using',
                 self.n_valid_pdb,'monomers,',
+                self.n_valid_pdb_atomize,'monomers (atomized),',
                 self.n_valid_homo,'homomers,',
                 self.n_valid_compl,'heteromers,',
-                self.n_valid_neg,'negative heteromers',
+                self.n_valid_neg,'negative heteromers,',
                 self.n_valid_na_compl,'nucleic-acid complexes,',
                 self.n_valid_na_neg,'negative nucleic-acid complexes,',
-                self.n_valid_rna,'RNA structures,  and',
-                self.n_valid_sm_compl, 'small molecule complexes'
+                self.n_valid_rna,'RNA structures,',
+                self.n_valid_sm_compl, 'small mol. complexes (fold & dock),',
+                self.n_valid_sm_compl_dock, 'small mol. complexes (rigid dock),',
+                self.n_valid_sm_compl_foldprot, 'small mol. complexes (fold prot),',
+                self.n_valid_sm_compl_foldlig, 'small mol. complexes (fold ligand)',
             )
 
         train_set = DistilledDataset(
@@ -731,6 +717,21 @@ class Trainer():
             self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=False, 
             init_protein_xyz=True, init_ligand_xyz=False
         )
+        valid_na_compl_set = DatasetNAComplex(
+            list(valid_na_compl.keys())[:self.n_valid_na_compl],
+            loader_na_complex, valid_na_compl,
+            self.loader_param, negative=False, native_NA_frac=1.0
+        )
+        valid_na_from_scratch_compl_set = DatasetNAComplex(
+            list(valid_na_compl.keys())[:self.n_valid_na_compl],
+            loader_na_complex, valid_na_compl,
+            self.loader_param, negative=False, native_NA_frac=0.0
+        )
+        valid_rna_set = DatasetRNA(
+            list(valid_rna.keys())[:self.n_valid_rna],
+            loader_rna, valid_rna,
+            self.loader_param
+        )
         #valid_atomize_pdb_set = Dataset(
         #    list(valid_pdb.keys())[:self.n_valid_pdb],
         #    loader_atomize_pdb, valid_pdb,
@@ -751,30 +752,15 @@ class Trainer():
         #     loader_complex, valid_neg,
         #     self.loader_param, negative=True
         # )
-#        valid_na_compl_set = DatasetNAComplex(
-#            list(valid_na_compl.keys())[:self.n_valid_na_compl],
-#            loader_na_complex, valid_na_compl,
-#            self.loader_param, negative=False, native_NA_frac=1.0
-#        )
 #        valid_na_neg_set = DatasetNAComplex(
 #            list(valid_na_neg.keys())[:self.n_valid_na_neg],
 #            loader_na_complex, valid_na_neg,
 #            self.loader_param, negative=True, native_NA_frac=1.0
 #        )
-#        valid_na_from_scratch_compl_set = DatasetNAComplex(
-#            list(valid_na_compl.keys())[:self.n_valid_na_compl],
-#            loader_na_complex, valid_na_compl,
-#            self.loader_param, negative=False, native_NA_frac=0.0
-#        )
 #        valid_na_from_scratch_neg_set = DatasetNAComplex(
 #            list(valid_na_neg.keys())[:self.n_valid_na_neg],
 #            loader_na_complex, valid_na_neg,
 #            self.loader_param, negative=True, native_NA_frac=0.0
-#        )
-#        valid_rna_set = DatasetRNA(
-#            list(valid_rna.keys())[:self.n_valid_rna],
-#            loader_rna, valid_rna,
-#            self.loader_param
 #        )
         #valid_sm_set = DatasetSM(
         #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
@@ -809,33 +795,33 @@ class Trainer():
         valid_sm_compl_dock_sampler = data.distributed.DistributedSampler(valid_sm_compl_dock_set, num_replicas=world_size, rank=rank)
         valid_sm_compl_foldprot_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldprot_set, num_replicas=world_size, rank=rank)
         valid_sm_compl_foldlig_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldlig_set, num_replicas=world_size, rank=rank)
+        valid_na_compl_sampler = data.distributed.DistributedSampler(valid_na_compl_set, num_replicas=world_size, rank=rank)
+        valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
+        valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
         # valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
         # valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
         # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
-#        valid_na_compl_sampler = data.distributed.DistributedSampler(valid_na_compl_set, num_replicas=world_size, rank=rank)
 #        valid_na_neg_sampler = data.distributed.DistributedSampler(valid_na_neg_set, num_replicas=world_size, rank=rank)
-#        valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
 #        valid_na_from_scratch_neg_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_neg_set, num_replicas=world_size, rank=rank)
-#        valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
 
         #valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
+        valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         valid_sm_compl_dock_loader = data.DataLoader(valid_sm_compl_dock_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         valid_sm_compl_foldprot_loader = data.DataLoader(valid_sm_compl_foldprot_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         valid_sm_compl_foldlig_loader = data.DataLoader(valid_sm_compl_foldlig_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        #valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
+        valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
+        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
         
         #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
-#        valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
 #        valid_na_neg_loader = data.DataLoader(valid_na_neg_set, sampler=valid_na_neg_sampler, **LOAD_PARAM)
-#        valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
-#        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
 
         #valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
 
@@ -1006,6 +992,10 @@ class Trainer():
 
         start_time = time.time()
         
+        # save intermediate outputs
+        out_dir = self.out_dir+f'/train_ep{epoch}/'
+        os.makedirs(out_dir, exist_ok=True)
+
         # For intermediate logs
         local_tot = 0.0
         local_loss = None
@@ -1037,6 +1027,7 @@ class Trainer():
             mask_t = mask_t.to(gpu, non_blocking=True)
             xyz_prev = xyz_prev.to(gpu, non_blocking=True)
             mask_prev = mask_prev.to(gpu, non_blocking=True)
+            xyz_prev_orig = xyz_prev.clone()
 
             seq = seq.to(gpu, non_blocking=True)
             msa = msa.to(gpu, non_blocking=True)
@@ -1061,8 +1052,6 @@ class Trainer():
             # processing template features
             xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
             t2d = xyz_to_t2d(xyz_t_frames, mask_t_2d)
-
-            xyz_prev_orig = xyz_prev
 
             # get torsion angles from templates
             seq_tmpl = t1d[...,:-1].argmax(dim=-1).reshape(-1,L)
@@ -1149,7 +1138,7 @@ class Trainer():
                         acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
 
                         ctrid = len(train_loader)*rank+counter
-                        loss, loss_s, loss_dict = self.calc_loss(
+                        loss, loss_dict = self.calc_loss(
                             logit_s, c6d,
                             logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                             pred_crds, alphas, pred_allatom, true_crds_, 
@@ -1201,7 +1190,7 @@ class Trainer():
                     acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
 
                     ctrid = len(train_loader)*rank+counter
-                    loss, loss_s, loss_dict = self.calc_loss(
+                    loss, loss_dict = self.calc_loss(
                         logit_s, c6d,
                         logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                         pred_crds, alphas, pred_allatom, true_crds_, 
@@ -1211,8 +1200,7 @@ class Trainer():
                     )
                 loss = loss / self.ACCUM_STEP
                 scaler.scale(loss).backward()
-                # gradient clipping
-                scaler.unscale_(optimizer)
+                scaler.unscale_(optimizer) # gradient clipping
 
                 torch.nn.utils.clip_grad_norm_(ddp_model.parameters(), 0.2)
 
@@ -1230,27 +1218,30 @@ class Trainer():
                 save_pdbs = True
 
             if save_pdbs:
-                writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
+                writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
                     torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
-                writepdb(self.outdir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_true.pdb', 
+                writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_true.pdb', 
                     torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
-                writepdb(self.out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb', 
+                writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb', 
                     torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask])
 
             local_tot += loss.detach()*self.ACCUM_STEP
-            if local_loss == None:
-                local_loss = torch.zeros_like(loss_s.detach())
+            if local_loss is None:
+                local_loss = torch.zeros_like(torch.stack(list(loss_dict.values())))
                 local_acc = torch.zeros_like(acc_s.detach())
-            local_loss += loss_s.detach()
+            local_loss += torch.stack(list(loss_dict.values()))
             local_acc += acc_s.detach()
             
             train_tot += loss.detach()*self.ACCUM_STEP
-            if train_loss == None:
-                train_loss = torch.zeros_like(loss_s.detach())
+            if train_loss is None:
+                train_loss = torch.zeros_like(torch.stack(list(loss_dict.values())))
                 train_acc = torch.zeros_like(acc_s.detach())
-            train_loss += loss_s.detach()
+            train_loss += torch.stack(list(loss_dict.values()))
             train_acc += acc_s.detach()
 
+            # print loss names once at beginning of epoch
+            if counter == 1 and rank == 0:
+                sys.stdout.write(f'Header: [epoch/# epochs] Batch: [processed/examples in epoch] Time: seconds | total_loss: loss | {" ".join(loss_dict.keys())} | precision recall F1 | Max mem \n')
             
             if counter % N_PRINT_TRAIN == 0:
                 if rank == 0:
@@ -1261,7 +1252,7 @@ class Trainer():
                     local_acc /= float(N_PRINT_TRAIN)
                     
                     local_tot = local_tot.cpu().detach()
-                    local_loss = local_loss.cpu().detach().numpy()
+                    local_loss = local_loss.cpu().detach()
                     local_acc = local_acc.cpu().detach().numpy()
 
                     sys.stdout.write("Local: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f | Max mem %.4f\n"%(\
@@ -1292,8 +1283,8 @@ class Trainer():
         train_tot = train_tot.cpu().detach()
         train_loss = train_loss.cpu().detach().numpy()
         train_acc = train_acc.cpu().detach().numpy()
-        if rank == 0:
 
+        if rank == 0:
             train_time = time.time() - start_time
             sys.stdout.write("Train: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f\n"%(\
                     epoch, self.n_epoch, self.n_train, self.n_train, train_time, train_tot, \
@@ -1310,6 +1301,9 @@ class Trainer():
         counter = 0
         
         start_time = time.time()
+
+        out_dir = self.out_dir+f'/valid_ep{epoch}/'
+        os.makedirs(out_dir, exist_ok=True)
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
@@ -1319,6 +1313,8 @@ class Trainer():
                 # loader will print warning message with item info for followup later
                 if torch.is_tensor(item) and torch.all(item==-1):
                     continue
+
+                save_pdbs = np.random.rand()<=0.1 or verbose
 
                 # transfer inputs to device
                 B, _, N, L = msa.shape
@@ -1333,6 +1329,7 @@ class Trainer():
                 mask_t = mask_t.to(gpu, non_blocking=True)
                 xyz_prev = xyz_prev.to(gpu, non_blocking=True)
                 mask_prev = mask_prev.to(gpu, non_blocking=True)
+                xyz_prev_orig = xyz_prev.clone()
 
                 seq = seq.to(gpu, non_blocking=True)
                 msa = msa.to(gpu, non_blocking=True)
@@ -1439,21 +1436,30 @@ class Trainer():
                 acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
 
                 ctrid = len(valid_loader)*rank+counter
-                loss, loss_s, loss_dict = self.calc_loss(
+                loss, loss_dict = self.calc_loss(
                     logit_s, c6d,
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds_, 
                     atom_mask_, res_mask, mask_2d, same_chain,
                     pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative,
-                    verbose=verbose, ctr=ctrid, item=item, **self.loss_param
+                    verbose=verbose, ctr=ctrid, item=item, out_dir=out_dir, **self.loss_param
                 )
 
                 valid_tot += loss.detach()
-                if valid_loss == None:
-                    valid_loss = torch.zeros_like(loss_s.detach())
+                if valid_loss is None:
+                    valid_loss = torch.zeros_like(torch.stack(list(loss_dict.values())))
                     valid_acc = torch.zeros_like(acc_s.detach())
-                valid_loss += loss_s.detach()
+                valid_loss += torch.stack(list(loss_dict.values()))
                 valid_acc += acc_s.detach()
+
+                if save_pdbs:
+                    writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb',
+                        torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
+                    writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_true.pdb',
+                        torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
+                    writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb',
+                        torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask])
+
                 counter += 1
 
         valid_tot /= float(counter*world_size)
