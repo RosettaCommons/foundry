@@ -2038,17 +2038,16 @@ class DistilledDataset(data.Dataset):
             elif i_task==1: # rigid body dock
                 kwargs = dict(
                     init_protein_tmpl = True, init_ligand_tmpl = True,
-                    init_protein_xyz = True, init_ligand_xyz = True
                 )
                 task = 'sm_compl_dock'
             elif i_task==2: # fold protein
                 kwargs = dict(
-                    init_ligand_tmpl = True, init_ligand_xyz = True
+                    init_ligand_tmpl = True, 
                 )
                 task = 'sm_compl_foldprot'
             elif i_task==3: # fold ligand
                 kwargs = dict(
-                    init_protein_tmpl = True, init_protein_xyz = True,
+                    init_protein_tmpl = True, 
                 )
                 task = 'sm_compl_foldsm'
             out = self.sm_compl_loader(

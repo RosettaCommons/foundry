@@ -44,8 +44,8 @@ N_PRINT_TRAIN = 4
 
 # num structs per epoch
 # must be divisible by #GPUs
-#N_EXAMPLE_PER_EPOCH = 6144
-N_EXAMPLE_PER_EPOCH = 8
+N_EXAMPLE_PER_EPOCH = 6144
+#N_EXAMPLE_PER_EPOCH = 8
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 3,
@@ -703,19 +703,16 @@ class Trainer():
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_sm_compl, valid_sm_compl,
             self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=True, 
-            init_protein_xyz=True, init_ligand_xyz=True
         )
         valid_sm_compl_foldprot_set = DatasetSMComplex(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_sm_compl, valid_sm_compl,
             self.loader_param, init_protein_tmpl=False, init_ligand_tmpl=True, 
-            init_protein_xyz=False, init_ligand_xyz=True
         )
         valid_sm_compl_foldlig_set = DatasetSMComplex(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_sm_compl, valid_sm_compl,
             self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=False, 
-            init_protein_xyz=True, init_ligand_xyz=False
         )
         valid_na_compl_set = DatasetNAComplex(
             list(valid_na_compl.keys())[:self.n_valid_na_compl],
