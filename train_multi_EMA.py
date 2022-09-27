@@ -302,8 +302,7 @@ class Trainer():
                 print('error in calc_loss inter-fape', item, '\n'+repr(e))
                 print('bb_l_fape.shape',bb_l_fape.shape)
                 print('bb_l_fape',bb_l_fape)
-                print('bb_l_fape_inter.shape',bb_l_fape_inter.shape)
-                print('bb_l_fape_inter',bb_l_fape_inter)
+                print('fape_matrix.shape',fape_matrix.shape)
                 bb_l_fape_inter = torch.tensor(0).to(gpu)
         else:
             bb_l_fape_inter = torch.tensor(0).to(gpu)
@@ -675,7 +674,7 @@ class Trainer():
             )
 
         train_set = DistilledDataset(
-            pdb_IDs, loader_atomize_pdb, pdb_dict,
+            pdb_IDs, loader_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
             neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
@@ -872,7 +871,7 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="best", 
+                                                        self.model_name, gpu, suffix="last", 
                                                         resume_train=True)
 
         if (self.eval):
@@ -962,7 +961,7 @@ class Trainer():
                     if self.wandb_prefix is not None:
                         wandb.save(self.checkpoint_fn(self.model_name, 'best'))
 
-                
+                chk_fn = self.checkpoint_fn(self.model_name, str(epoch))
                 torch.save({'epoch': epoch,
                             #'model_state_dict': ddp_model.state_dict(),
                             'model_state_dict': ddp_model.module.shadow.state_dict(),
@@ -975,7 +974,9 @@ class Trainer():
                             'valid_loss': valid_loss,
                             'valid_acc': valid_acc,
                             'best_loss': best_valid_loss},
-                            self.checkpoint_fn(self.model_name, str(epoch)))
+                            chk_fn)
+                shutil.copy(chk_fn, self.checkpoint_fn(self.model_name, 'last'))
+
                 if self.wandb_prefix is not None:
                     wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
         dist.destroy_process_group()

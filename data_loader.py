@@ -30,7 +30,8 @@ if not os.path.exists(base_dir):
     base_dir = "/data/databases/PDB-2021AUG02"
     fb_dir = "/data/databases/fb_af"
     compl_dir = "/data/databases/RoseTTAComplex"
-    mol_dir = "/home/dimaio/ccd/by-pdb"
+    sm_compl_dir = "/data/databases/RF2_allatom"
+    mol_dir = "/data/databases/RF2_allatom/by-pdb"
 
 def set_data_loader_params(args):
     PARAMS = {
