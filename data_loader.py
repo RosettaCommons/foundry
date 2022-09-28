@@ -10,7 +10,7 @@ from scipy.sparse.csgraph import shortest_path
 from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
-    atomize_protein, center_and_realign_missing
+    atomize_protein, center_and_realign_missing, random_rot_trans
 
 base_dir = "/projects/ml/TrRosetta/PDB-2021AUG02"
 compl_dir = "/projects/ml/RoseTTAComplex"
