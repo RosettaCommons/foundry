@@ -4,6 +4,7 @@ import numpy as np
 import torch
 
 import scipy.sparse
+from scipy.spatial.transform import Rotation
 import networkx as nx
 from openbabel import openbabel
 

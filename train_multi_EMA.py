@@ -1241,13 +1241,17 @@ class Trainer():
             if counter == 1 and rank == 0:
                 sys.stdout.write(f'Header: [epoch/# epochs] Batch: [processed/examples in epoch] Time: seconds | total_loss: loss | {" ".join(loss_dict.keys())} | precision recall F1 | Max mem \n')
             
-            if counter % N_PRINT_TRAIN == 0:
+            #if counter % N_PRINT_TRAIN == 0:
+            if counter % self.ACCUM_STEP == 0:
                 if rank == 0:
                     max_mem = torch.cuda.max_memory_allocated()/1e9
                     train_time = time.time() - start_time
-                    local_tot /= float(N_PRINT_TRAIN)
-                    local_loss /= float(N_PRINT_TRAIN)
-                    local_acc /= float(N_PRINT_TRAIN)
+                    local_tot /= float(self.ACCUM_STEP)
+                    local_loss /= float(self.ACCUM_STEP)
+                    local_acc /= float(self.ACCUM_STEP)
+                    #local_tot /= float(N_PRINT_TRAIN)
+                    #local_loss /= float(N_PRINT_TRAIN)
+                    #local_acc /= float(N_PRINT_TRAIN)
                     
                     local_tot = local_tot.cpu().detach()
                     local_loss = local_loss.cpu().detach()

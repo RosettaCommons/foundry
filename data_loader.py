@@ -605,18 +605,21 @@ def get_train_valid_set(params, OFFSET=1000000):
 
 
 # slice long chains
-def get_crop(l, mask, device, params, unclamp=False):
-
+def get_crop(l, mask, device, crop_size, unclamp=False):
     sel = torch.arange(l,device=device)
-    if l <= params['CROP']:
+    if l <= crop_size:
         return sel
 
-    size = params['CROP']
+    size = crop_size
 
     mask = ~(mask[:,:3].sum(dim=-1) < 3.0)
     exists = mask.nonzero()[0]
-    res_idx = exists[torch.randperm(len(exists))[0]].item()
 
+    if unclamp: # bias it toward N-term.. (follow what AF did.. but don't know why)
+        x = np.random.randint(len(exists)) + 1
+        res_idx = exists[torch.randperm(x)[0]].item()
+    else:
+        res_idx = exists[torch.randperm(len(exists))[0]].item()
     lower_bound = max(0, res_idx-size+1)
     upper_bound = min(l-size, res_idx+1)
     start = np.random.randint(lower_bound, upper_bound)
@@ -846,7 +849,7 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     xyz = torch.nan_to_num(xyz)
 
     # Residue cropping
-    crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params, unclamp=unclamp)
+    crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
     seq = seq[:,crop_idx]
     msa_seed_orig = msa_seed_orig[:,:,crop_idx]
     msa_seed = msa_seed[:,:,crop_idx]
@@ -1029,7 +1032,7 @@ def loader_fb(item, params, unclamp=False):
     mask[:,:27] = pdb['mask']
 
     # Residue cropping
-    crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params, unclamp=unclamp)
+    crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
     seq = seq[:,crop_idx]
     msa_seed_orig = msa_seed_orig[:,:,crop_idx]
     msa_seed = msa_seed[:,:,crop_idx]
@@ -1565,7 +1568,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     xyz_t_prot, f1d_t_prot, mask_t_prot = TemplFeaturize(tplt, len(pdb['xyz']), params, offset=0, 
         npick=ntempl, pick_top=pick_top, random_noise=random_noise)
 
-    crop_idx = get_crop(len(idx), mask, msa.device, params, unclamp=unclamp)
+    crop_idx = get_crop(len(idx), mask, msa.device, params['CROP'], unclamp=unclamp)
     msa_prot = msa[:, crop_idx]
     ins_prot = ins[:, crop_idx]
     xyz_prot = xyz[crop_idx]
