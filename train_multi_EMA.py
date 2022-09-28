@@ -249,25 +249,24 @@ class Trainer():
                 mask_crds[:,mask_BBB[0], :3],
                 frames_BB[:,mask_BBB[0]],
                 frame_mask_BB[:,mask_BBB[0]],
-                Z=4,
-                dclamp=4
+                dclamp=dclamp
             )
         else:
             l_fape_B = torch.tensor([0]).to(gpu)
+
         loss_dict['bb_fape_c2'] = l_fape_B[-1].detach()
             
         if negative: # inter-chain fapes should be ignored for negative cases
             fracA = float(L1)/len(same_chain[0,0])
             tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
         else:
-            tot_str, fape_matrix = compute_general_FAPE(
+            tot_str = compute_general_FAPE(
                 pred[:,mask_BB,:,:3],
                 true[:,mask_BB[0],:3],
                 mask_crds[:,mask_BB[0],:3],
                 frames_BB[:,mask_BB[0]],
                 frame_mask_BB[:,mask_BB[0]],
                 dclamp=dclamp, 
-                return_matrix = True
             )
         num_layers = pred.shape[0]
         gamma = 0.99
@@ -282,30 +281,57 @@ class Trainer():
             loss_dict[f'bb_fape_layer{i}'] = tot_str[i].detach()
         loss_dict['bb_fape_full'] = bb_l_fape.detach()
 
-        # ligand fape (layer-averaged c2 fape)
-        lig_fape = (w_bb_fape*l_fape_B).sum()
-        tot_loss += 0.5*w_lig_fape*lig_fape
-        loss_dict['bb_fape_lig'] = l_fape_B[-1].detach()
-
-        # protein-sm interface fape
-        sm_res_mask = is_atom(label_aa_s[0,0,mask_BB[0]]) # (L,)
-        sm_atom_mask = sm_res_mask[...,None].repeat((1,1,3))[mask_crds[:,mask_BB[0],:3]] # (L,)
+        sm_res_mask = is_atom(label_aa_s[0,0])*mask_BB[0] # (L,)
         if bool(torch.any(sm_res_mask)):
-            try:
-                # fape_matrix : (B, n_res, n_bb_atoms + n_sm_atoms)
-                inter_fape = fape_matrix[:,sm_res_mask][:,:,~sm_atom_mask].sum(dim=[1,2]) + \
-                             fape_matrix[:,~sm_res_mask][:,:,sm_atom_mask].sum(dim=[1,2])
-                inter_fape /= sm_res_mask.sum()*(~sm_atom_mask).sum() + (~sm_res_mask).sum()*sm_atom_mask.sum()
-                bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
-                tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
-            except Exception as e:
-                print('error in calc_loss inter-fape', item, '\n'+repr(e))
-                print('bb_l_fape.shape',bb_l_fape.shape)
-                print('bb_l_fape',bb_l_fape)
-                print('fape_matrix.shape',fape_matrix.shape)
-                bb_l_fape_inter = torch.tensor(0).to(gpu)
+            # ligand fape (layer-averaged fape on atom coordinates with atom frames)
+            l_fape_sm = compute_general_FAPE(
+                pred[:, sm_res_mask[None],:,:3],
+                true[:,sm_res_mask,:3,:3],
+                mask_crds[:,sm_res_mask, :3],
+                frames_BB[:,sm_res_mask],
+                frame_mask_BB[:,sm_res_mask],
+                dclamp=dclamp
+            )
+
+            lig_fape = (w_bb_fape*l_fape_sm).sum()
+            tot_loss += 0.5*w_lig_fape*lig_fape
+            
+            # calculate interchain fape 
+            # fape of protein coordinates wrt ligand frames 
+            mask_crds_protein = mask_crds.clone()
+            mask_crds_protein[:, sm_res_mask] = False
+            frame_mask_BB_sm = frame_mask_BB.clone()
+            frame_mask_BB_sm[:,~sm_res_mask] = False
+            l_fape_protein_sm = compute_general_FAPE(
+                pred[:, mask_BB,:,:3],
+                true[:, mask_BB[0],:3,:3],
+                mask_crds_protein[:,mask_BB[0], :3],
+                frames_BB[:,mask_BB[0]],
+                frame_mask_BB_sm[:,mask_BB[0]],
+                dclamp=dclamp
+            )
+            # fape of ligand coordinates wrt protein frames
+            mask_crds_sm = mask_crds.clone()
+            mask_crds_sm[:, ~sm_res_mask] = False
+            frame_mask_BB_protein = frame_mask_BB.clone()
+            frame_mask_BB_protein[:,sm_res_mask] = False
+            l_fape_sm_protein = compute_general_FAPE(
+                pred[:, mask_BB,:,:3],
+                true[:, mask_BB[0],:3,:3],
+                mask_crds_sm[:,mask_BB[0], :3],
+                frames_BB[:,mask_BB[0]],
+                frame_mask_BB_protein[:,mask_BB[0]],
+                dclamp=dclamp
+            )
+            frac_sm = torch.sum(frame_mask_BB_sm[:,mask_BB[0]])/ torch.sum(frame_mask_BB[:,mask_BB[0]])
+            inter_fape = frac_sm*l_fape_protein_sm + (1.0-frac_sm)*l_fape_sm_protein
+            bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
+            tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
         else:
             bb_l_fape_inter = torch.tensor(0).to(gpu)
+            l_fape_sm = torch.tensor([0]).to(gpu)
+
+        loss_dict['bb_fape_lig'] = l_fape_sm[-1].detach()
         loss_dict['inter_fape'] = bb_l_fape_inter.detach()
 
         # AllAtom loss
