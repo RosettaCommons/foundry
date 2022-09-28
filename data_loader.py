@@ -23,15 +23,21 @@ mol_dir = "/projects/ml/RF2_allatom/by-pdb"
 
 if not os.path.exists(base_dir):
     # training on AWS
-    #base_dir = "/gscratch2/PDB-2021AUG02"
-    #compl_dir = "/gscratch2/RoseTTAComplex"
-    #na_dir = "/gscratch2/nucleic"
-    #fb_dir = "/gscratch2/fb_af1"
     base_dir = "/data/databases/PDB-2021AUG02"
-    fb_dir = "/data/databases/fb_af"
     compl_dir = "/data/databases/RoseTTAComplex"
+    na_dir = "/data/databases/nucleic"
+    fb_dir = "/data/databases/fb_af"
     sm_compl_dir = "/data/databases/RF2_allatom"
     mol_dir = "/data/databases/RF2_allatom/by-pdb"
+
+if not os.path.exists(base_dir):
+    # training on blue
+    base_dir = "/gscratch2/PDB-2021AUG02"
+    compl_dir = "/gscratch2/RoseTTAComplex"
+    na_dir = "/gscratch2/nucleic"
+    fb_dir = "/gscratch2/fb_af1"
+    sm_compl_dir = "/gscratch2/RF2_allatom"
+    mol_dir = "/gscratch2/RF2_allatom/by-pdb"
 
 def set_data_loader_params(args):
     PARAMS = {
