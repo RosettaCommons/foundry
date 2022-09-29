@@ -167,9 +167,8 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.
     xij_t = torch.einsum('rji,rsj->rsi', uY[frame_mask], Y[atom_mask][None,...] - Y_y[frame_mask][:,None,...])
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
 
-    #loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
-    loss_matrix = (1.0/Z) * (torch.clamp(diff, max=dclamp))
-    loss = loss_matrix.mean(dim=(1,2))
+    loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
+
 
     return loss
 
