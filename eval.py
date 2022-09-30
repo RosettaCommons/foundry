@@ -193,7 +193,7 @@ class Predictor():
             #    msa, ins = MSABlockDeletion(msa, ins)
             #
             seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(
-                msa, ins, p_mask=0.0, params={'MAXLAT': 128, 'MAXSEQ': 1024, 'MAXCYCLE': MAX_CYCLE}, tocpu=True)
+                msa, ins, p_mask=0.1, params={'MAXLAT': 128, 'MAXSEQ': 1024, 'MAXCYCLE': MAX_CYCLE}, tocpu=True)
             _, N, L = msa_seed.shape[:3]
             B = 1   
             #

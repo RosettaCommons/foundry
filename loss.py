@@ -127,8 +127,7 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
     return loss
 
 # from Ivan: FAPE generalized over atom sets & frames
-def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.0, gamma=0.99, 
-    eps=1e-4, return_matrix=False):
+def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.0, gamma=0.99, eps=1e-4):
 
     # X (predicted) N x L x natoms x 3
     # Y (native)    1 x L x natoms x 3
@@ -147,9 +146,9 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.
         frames_reindex[:, i, :, :] = (i+frames[..., i, :, :, 0])*natoms + frames[..., i, :, :, 1]
     frames_reindex = frames_reindex.long()
 
-    frame_mask *= torch.all(
-        torch.gather(atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
-        axis=-1)
+    # frame_mask *= torch.all(
+    #     torch.gather(atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
+    #     axis=-1)
 
     X_x = torch.gather(X_prime, 1, frames_reindex[...,0:1].repeat(N,1,1,3))
     X_y = torch.gather(X_prime, 1, frames_reindex[...,1:2].repeat(N,1,1,3))
@@ -165,14 +164,12 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.
         'brji,brsj->brsi',
         uX[:,frame_mask[0]], X[:,atom_mask[0]][:,None,...] - X_y[:,frame_mask[0]][:,:,None,...]
     )
-
     xij_t = torch.einsum('rji,rsj->rsi', uY[frame_mask], Y[atom_mask][None,...] - Y_y[frame_mask][:,None,...])
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
-    #loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
-    loss_matrix = (1.0/Z) * (torch.clamp(diff, max=dclamp))
-    loss = loss_matrix.mean(dim=(1,2))
-    if return_matrix:
-        return loss, loss_matrix
+
+    loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
+
+
     return loss
 
 
