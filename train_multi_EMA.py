@@ -215,7 +215,9 @@ class Trainer():
 
         ### GENERAL LAYERS
         # Structural loss (layer-wise backbone FAPE)
-        dclamp = 300.0 if unclamp else 30.0 
+        dclamp = 300.0 if unclamp else 30.0 # protein & NA FAPE distance cutoffs
+        dclamp_sm, Z_sm = 4, 4  # sm mol FAPE distance cutoffs
+
         frames, frame_mask = get_frames(
             pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
         # update frames and frames_mask to only include BB frames (have to update both for compatibility with compute_general_FAPE)
@@ -290,9 +292,9 @@ class Trainer():
                 mask_crds[:,sm_res_mask, :3],
                 frames_BB[:,sm_res_mask],
                 frame_mask_BB[:,sm_res_mask],
-                dclamp=dclamp
+                dclamp=dclamp_sm,
+                Z=Z_sm
             )
-
             lig_fape = (w_bb_fape*l_fape_sm).sum()
             tot_loss += 0.5*w_lig_fape*lig_fape
             
@@ -329,10 +331,12 @@ class Trainer():
             tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
         else:
             bb_l_fape_inter = torch.tensor(0).to(gpu)
-            l_fape_sm = torch.tensor([0]).to(gpu)
+            lig_fape = torch.tensor(0).to(gpu)
+            #l_fape_sm = torch.tensor([0]).to(gpu)
 
-        loss_dict['bb_fape_lig'] = l_fape_sm[-1].detach()
-        loss_dict['inter_fape'] = bb_l_fape_inter.detach()
+        #loss_dict['bb_fape_lig'] = l_fape_sm[-1].detach()
+        loss_dict['bb_fape_lig'] = lig_fape.detach()
+        loss_dict['bb_fape_inter'] = bb_l_fape_inter.detach()
 
         # AllAtom loss
         # get ground-truth torsion angles
@@ -590,7 +594,7 @@ class Trainer():
     def run_model_training(self, world_size):
         if ('MASTER_ADDR' not in os.environ):
             os.environ['MASTER_ADDR'] = '127.0.0.1' # multinode requires this set in submit script
-        if ('MASTER_PORT' not in os.environ):
+        if (#'MASTER_PORT' not in os.environ):
             os.environ['MASTER_PORT'] = '%d'%self.port
 
         if (not self.interactive and "SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
@@ -659,9 +663,9 @@ class Trainer():
         self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
         self.n_valid_rna = 100 #len(valid_rna.keys())
         self.n_valid_sm_compl = 100 #len(valid_sm_compl.keys())
-        self.n_valid_sm_compl_dock = 100
-        self.n_valid_sm_compl_foldprot = 100
-        self.n_valid_sm_compl_foldlig = 100
+        #self.n_valid_sm_compl_dock = 100
+        #self.n_valid_sm_compl_foldprot = 100
+        #self.n_valid_sm_compl_foldlig = 100
 
         if (rank==0):
             print ('Loaded (training)',
@@ -724,21 +728,6 @@ class Trainer():
             loader_sm_compl, valid_sm_compl,
             self.loader_param,
         )
-        valid_sm_compl_dock_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=True, 
-        )
-        valid_sm_compl_foldprot_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param, init_protein_tmpl=False, init_ligand_tmpl=True, 
-        )
-        valid_sm_compl_foldlig_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=False, 
-        )
         valid_na_compl_set = DatasetNAComplex(
             list(valid_na_compl.keys())[:self.n_valid_na_compl],
             loader_na_complex, valid_na_compl,
@@ -784,6 +773,21 @@ class Trainer():
 #            loader_na_complex, valid_na_neg,
 #            self.loader_param, negative=True, native_NA_frac=0.0
 #        )
+        #valid_sm_compl_dock_set = DatasetSMComplex(
+        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+        #    loader_sm_compl, valid_sm_compl,
+        #    self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=True, 
+        #)
+        #valid_sm_compl_foldprot_set = DatasetSMComplex(
+        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+        #    loader_sm_compl, valid_sm_compl,
+        #    self.loader_param, init_protein_tmpl=False, init_ligand_tmpl=True, 
+        #)
+        #valid_sm_compl_foldlig_set = DatasetSMComplex(
+        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+        #    loader_sm_compl, valid_sm_compl,
+        #    self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=False, 
+        #)
         #valid_sm_set = DatasetSM(
         #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
         #    loader_small_molecule, valid_sm_compl, self.loader_param
@@ -805,9 +809,9 @@ class Trainer():
             rank=rank, 
             fraction_fb=0.0,
             fraction_compl=0.0,
-            fraction_na_compl=0.0,
-            fraction_rna=0.0,
-            fraction_sm_compl=0.8,
+            fraction_na_compl=0.05,
+            fraction_rna=0.1,
+            fraction_sm_compl=0.5,
             fraction_sm = 0, 
             replacement=True
         )
@@ -831,9 +835,6 @@ class Trainer():
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        valid_sm_compl_dock_loader = data.DataLoader(valid_sm_compl_dock_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        valid_sm_compl_foldprot_loader = data.DataLoader(valid_sm_compl_foldprot_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        valid_sm_compl_foldlig_loader = data.DataLoader(valid_sm_compl_foldlig_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
         valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
         valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
@@ -844,7 +845,9 @@ class Trainer():
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
 #        valid_na_neg_loader = data.DataLoader(valid_na_neg_set, sampler=valid_na_neg_sampler, **LOAD_PARAM)
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
-
+        #valid_sm_compl_dock_loader = data.DataLoader(valid_sm_compl_dock_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        #valid_sm_compl_foldprot_loader = data.DataLoader(valid_sm_compl_foldprot_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        #valid_sm_compl_foldlig_loader = data.DataLoader(valid_sm_compl_foldlig_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         #valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
@@ -903,9 +906,9 @@ class Trainer():
         if (self.eval):
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 0, verbose=True)
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, 0, verbose=True)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, 0, verbose=True)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, 0, verbose=True)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, 0, verbose=True)
 
             # run protein/NA prediction (TEMPLATED)
             #_, _, _ = self.valid_ppi_cycle(
@@ -942,9 +945,9 @@ class Trainer():
             train_sampler.set_epoch(epoch)
             valid_pdb_sampler.set_epoch(epoch)
             valid_sm_compl_sampler.set_epoch(epoch)
-            valid_sm_compl_dock_sampler.set_epoch(epoch)
-            valid_sm_compl_foldprot_sampler.set_epoch(epoch)
-            valid_sm_compl_foldlig_sampler.set_epoch(epoch)
+            #valid_sm_compl_dock_sampler.set_epoch(epoch)
+            #valid_sm_compl_foldprot_sampler.set_epoch(epoch)
+            #valid_sm_compl_foldlig_sampler.set_epoch(epoch)
             #valid_homo_sampler.set_epoch(epoch)
             #valid_compl_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
@@ -954,9 +957,9 @@ class Trainer():
 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
             valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, epoch, header="SM Dock") 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, epoch, header="SM FoldProt") 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, epoch, header="SM FoldLig") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, epoch, header="SM Dock") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, epoch, header="SM FoldProt") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, epoch, header="SM FoldLig") 
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
