@@ -1299,19 +1299,19 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
 
     # Do cropping
     if sum(Ls) > params['CROP']:
-        sel = get_na_crop(seq[0], xyz, mask, torch.arange(sum(Ls)), Ls, params, negative)
+        cropref = np.random.randint(xyz.shape[0])
+        sel = get_na_crop(seq[0], xyz[cropref], mask[cropref], torch.arange(sum(Ls)), Ls, params, negative)
 
         seq = seq[:,sel]
         msa_seed_orig = msa_seed_orig[:,:,sel]
         msa_seed = msa_seed[:,:,sel]
         msa_extra = msa_extra[:,:,sel]
         mask_msa = mask_msa[:,:,sel]
-        xyz = xyz[sel]
-        mask = mask[sel]
+        xyz = xyz[:,sel]
+        mask = mask[:,sel]
         xyz_t = xyz_t[:,sel]
         f1d_t = f1d_t[:,sel]
         mask_t = mask_t[:,sel]
-        xyz_prev = xyz_prev[sel]
         #
         idx = idx[sel]
         chain_idx = chain_idx[sel][:,sel]
@@ -1326,9 +1326,9 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
            xyz_prev.float(), mask_prev, \
            chain_idx, False, negative, torch.zeros(seq.shape), bond_feats,"na_compl", item
 
-def loader_rna(pdb_set, Ls, params, random_noise=5.0):
+def loader_rna(item, Ls, params, random_noise=5.0):
     # read PDBs
-    pdb_ids = pdb_set.split(':')
+    pdb_ids = item.split(':')
     pdbA = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt')
     pdbB = None
     if (len(pdb_ids)==2):
@@ -2041,7 +2041,8 @@ class DistilledDataset(data.Dataset):
             sel_idx = np.random.randint(0, len(self.sm_compl_dict[ID]))
 
             # choose one of 4 protein-sm tasks
-            i_task = np.random.randint(4)
+            #i_task = np.random.randint(4)
+            i_task = 0
             if i_task==0: # fold-and-dock
                 kwargs = {}
                 task = 'sm_compl_fold_dock'

@@ -127,15 +127,20 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
     return loss
 
 # from Ivan: FAPE generalized over atom sets & frames
-def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.0, gamma=0.99, eps=1e-4):
+def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, Z=10.0, dclamp=10.0, gamma=0.99, eps=1e-4):
 
     # X (predicted) N x L x natoms x 3
     # Y (native)    1 x L x natoms x 3
     # atom_mask     1 x L x natoms
     # frames        1 x L x nframes x 3 x 2
     # frame_mask    1 x L x nframes
+    # frame_atom_mask     1 x L x natoms
+
+    if frame_atom_mask is None:
+        frame_atom_mask = atom_mask
 
     N, L, natoms, _ = X.shape
+
     # flatten middle dims so can gather across residues
     X_prime = X.reshape(N, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
     Y_prime = Y.reshape(1, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
@@ -146,9 +151,9 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.
         frames_reindex[:, i, :, :] = (i+frames[..., i, :, :, 0])*natoms + frames[..., i, :, :, 1]
     frames_reindex = frames_reindex.long()
 
-    # frame_mask *= torch.all(
-    #     torch.gather(atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
-    #     axis=-1)
+    frame_mask *= torch.all(
+        torch.gather(frame_atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
+        axis=-1)
 
     X_x = torch.gather(X_prime, 1, frames_reindex[...,0:1].repeat(N,1,1,3))
     X_y = torch.gather(X_prime, 1, frames_reindex[...,1:2].repeat(N,1,1,3))
