@@ -1894,7 +1894,9 @@ class DistilledDataset(data.Dataset):
         homo, 
         params,
         native_NA_frac=0.25,
-        unclamp_cut=0.9
+        neg_compl_frac=1.0,
+        neg_na_compl_frac=1.0,
+        unclamp_cut=0.9,
     ):
         #
         self.pdb_IDs = pdb_IDs
@@ -1903,13 +1905,15 @@ class DistilledDataset(data.Dataset):
         self.compl_IDs = compl_IDs
         self.compl_loader = compl_loader
         self.compl_dict = compl_dict
-        self.neg_IDs = neg_IDs
+        idx = np.random.permutation(len(neg_IDs))[:int(len(neg_IDs)*neg_compl_frac)]
+        self.neg_IDs = [neg_IDs[i] for i in idx]
         self.neg_loader = neg_loader
         self.neg_dict = neg_dict
         self.na_compl_IDs = na_compl_IDs
         self.na_compl_loader = na_compl_loader
         self.na_compl_dict = na_compl_dict
-        self.na_neg_IDs = na_neg_IDs
+        idx = np.random.permutation(len(na_neg_IDs))[:int(len(na_neg_IDs)*neg_na_compl_frac)]
+        self.na_neg_IDs = [na_neg_IDs[i] for i in idx]
         self.na_neg_loader = na_neg_loader
         self.na_neg_dict = na_neg_dict
         self.fb_IDs = fb_IDs

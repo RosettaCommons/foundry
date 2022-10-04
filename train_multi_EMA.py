@@ -717,6 +717,8 @@ class Trainer():
             sm_compl_IDs, loader_small_molecule, sm_compl_dict,
             homo, 
             self.loader_param,
+            neg_compl_frac=0.0,
+            neg_na_compl_frac=0.0,
             native_NA_frac=0.25
         )
 
