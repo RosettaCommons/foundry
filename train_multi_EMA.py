@@ -1,4 +1,4 @@
-import sys, os, time, subprocess
+import sys, os, time, subprocess, shutil
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
@@ -44,8 +44,8 @@ torch.set_num_threads(4)
 
 # num structs per epoch
 # must be divisible by #GPUs
-#N_EXAMPLE_PER_EPOCH = 6144
-N_EXAMPLE_PER_EPOCH = 8
+N_EXAMPLE_PER_EPOCH = 6144
+#N_EXAMPLE_PER_EPOCH = 8
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 3,
@@ -708,17 +708,15 @@ class Trainer():
         train_set = DistilledDataset(
             pdb_IDs, loader_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
-            neg_IDs, loader_complex, neg_dict,
+            #neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
-            na_neg_IDs, loader_na_complex, na_neg_dict,
+            #na_neg_IDs, loader_na_complex, na_neg_dict,
             fb_IDs, loader_fb, fb_dict,
             rna_IDs, loader_rna, rna_dict,
             sm_compl_IDs, loader_sm_compl, sm_compl_dict,
             sm_compl_IDs, loader_small_molecule, sm_compl_dict,
             homo, 
             self.loader_param,
-            neg_compl_frac=0.0,
-            neg_na_compl_frac=0.0,
             native_NA_frac=0.25
         )
 
@@ -802,9 +800,9 @@ class Trainer():
             pdb_weights,
             fb_weights,
             compl_weights,
-            neg_weights,
+            #neg_weights,
             na_compl_weights,
-            na_neg_weights,
+            #na_neg_weights,
             rna_weights,
             sm_compl_weights,
             sm_compl_weights,
