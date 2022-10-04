@@ -811,10 +811,10 @@ class Trainer():
             rank=rank, 
             #fraction_pdb=0.22 # not a real argument but implicit
             fraction_fb=0.0,
-            fraction_compl=0.22,
-            fraction_na_compl=0.22,
-            fraction_rna=0.12,
-            fraction_sm_compl=0.22,
+            fraction_compl=0.18,
+            fraction_na_compl=0.18,
+            fraction_rna=0.09,
+            fraction_sm_compl=0.37,
             fraction_sm = 0, 
             replacement=True
         )
