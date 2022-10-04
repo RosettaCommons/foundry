@@ -436,8 +436,8 @@ def parse_mol(filename):
     try:
         automorphs = openbabel.vvpairUIntUInt()
         openbabel.FindAutomorphisms(obmol,automorphs)
-        atom_coords = atom_coords[torch.tensor(automorphs)[:, :, 1]]
-        mask = mask[torch.tensor(automorphs)[:, :, 1]]
+        atom_coords[torch.tensor(automorphs)[:, :, 0]] = atom_coords[torch.tensor(automorphs)[:, :, 1]]
+        mask[torch.tensor(automorphs)[:, :, 0]] = mask[torch.tensor(automorphs)[:, :, 1]]
     except:
         atom_coords = atom_coords.unsqueeze(0)
         mask = mask.unsqueeze(0)
