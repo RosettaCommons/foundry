@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import scipy
 
 from util import (
     rigid_from_3_points,
@@ -10,7 +11,7 @@ from util import (
     cb_torsions_CANCO,
     is_nucleic
 )
-from chemical import NFRAMES
+from chemical import NFRAMES, NTOTAL
 
 from kinematics import get_dih, get_ang
 from scoring import HbHybType
@@ -417,7 +418,7 @@ def calc_clash(xs, mask):
 # Rosetta-like version of LJ (fa_atr+fa_rep)
 #   lj_lin is switch from linear to 12-6.  Smaller values more sharply penalize clashes
 def calc_lj(
-    seq, xs, aamask, ljparams, ljcorr, num_bonds, 
+    seq, xs, aamask, bond_feats, ljparams, ljcorr, num_bonds, 
     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
     lj_maxrad=-1.0, eps=1e-8
 ):
@@ -449,7 +450,7 @@ def calc_lj(
     idxes1r = torch.tril_indices(L,L,-1)
     mask[idxes1r[0],:,idxes1r[1],:] = False
     idxes2r = torch.arange(L)
-    idxes2a = torch.tril_indices(27,27,0)
+    idxes2a = torch.tril_indices(NTOTAL,NTOTAL,0)
     mask[idxes2r[:,None],idxes2a[0:1],idxes2r[:,None],idxes2a[1:2]] = False
 
     # "countpair" can be enforced by making this a weight
@@ -457,10 +458,14 @@ def calc_lj(
     mask[idxes2r[:-1],:,idxes2r[1:],:] *= (
         num_bonds[seq[:-1],:,2:3] + num_bonds[seq[1:],0:1,:] + 1 >= 4 #inter-res
     )
+    atom_bonds = (bond_feats > 0)*(bond_feats<5)
+    dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds[0].long().detach().cpu().numpy(), directed=False)
+    dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0), device=mask.device) # protein portion is inf and you don't want to mask it out
+    mask[:,1,:,1] *= dist_matrix >=4
     si,ai,sj,aj = mask.nonzero(as_tuple=True)
 
     ds = torch.sqrt( torch.sum ( torch.square( xs[:,si,ai]-xs[:,sj,aj] ), dim=-1 ) + eps )
-
+    
     # hbond correction
     use_hb_dis = (
         ljcorr[seq[si],ai,0]*ljcorr[seq[sj],aj,1] 
@@ -486,7 +491,6 @@ def calc_lj(
     ljss [potential_disulf] = 0.0
 
     ljval = ljV(ds,ljrs,ljss,lj_lin,lj_maxrad)
-
     return (torch.sum( ljval, dim=-1 )/torch.sum(aamask[seq]))
 
 

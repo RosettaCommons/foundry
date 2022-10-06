@@ -38,6 +38,53 @@ type2ljlk = {
     "Haro":(1.374914,0.015909,0.0000,3.5000,0.0000),
     "Hpol":(0.901681,0.005000,0.0000,3.5000,0.0000),
     "HS":(0.363887,0.050836,0.0000,3.5000,0.0000),
+    "genAl":(1,0.1, 0.0000, 0.0000, 0.0000), 
+    "genAs":(1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genAu":(1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genB": (1,0.1, 0.0000, 0.0000, 0.0000),
+    "genBe": (1,0.1, 0.0000, 0.0000, 0.0000),
+    "genBr": (2.1971, 0.1090, 2.7951, 3.5000, 19.6876),
+    "genC": (2.0067, 0.0689, 2.2256, 3.5000, 10.6860), # params from CT
+    "genCa": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genCl": (2.0496, 0.1070, 2.3668, 3.5000, 17.5849),
+    "genCo": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genCr": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genCu": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genF": (1.6941, 0.0750, 1.6442, 3.5000, 12.2163),
+    "genFe": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genHg": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genI": (2.3600, 0.1110, 3.1361, 3.5000, 22.0891),
+    "genIr": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genK": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genLi": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genMg": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genMn": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genMo": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genN": (1.7854, 0.1497, -6.3760, 3.5000, 9.5221), # params from NG2
+    "genNi": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genO": (1.5492, 0.1576, -3.5363, 3.5000, 10.7220), # params for OG3
+    "genOs": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genP": (2.1290, 0.5838, -9.6272, 3.5000, 34.8000), # params for PG5
+    "genPb": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genPd": (1, 0.1, 0.0000, 0.0000,0.0000),
+    "genPr": (1, 0.1, 0.0000, 0.0000,0.0000),
+    "genPt": (1, 0.1, 0.0000, 0.0000,0.0000),
+    "genRe": (1, 0.1, 0.0000, 0.0000,0.0000),
+    "genRh": (1, 0.1, 0.0000, 0.0000,0.0000),
+    "genRu": (1, 0.1, 0.0000, 0.0000,0.0000),
+    "genS": (1.9893, 0.3634, -2.3560, 3.5000, 17.6400), # params for SG3
+    "genSb": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genSe": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genSi": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genSn": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genTb": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genTe": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genU": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genW": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genV": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genY": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genZn": (1, 0.1, 0.0000, 0.0000, 0.0000),
+    "genATM": (1, 0.0, 0.0000, 0.0000, 0.0000), # masked
 }
 
 # cartbonded
@@ -61,7 +108,19 @@ type2hb = {
     "Nbb":HbAtom.DO,  "CAbb":HbAtom.NO, "CObb":HbAtom.NO, "OCbb":HbAtom.AC,
     "HNbb":HbAtom.HP, "Hapo":HbAtom.NO, "Haro":HbAtom.NO, "Hpol":HbAtom.HP,
     "HS":HbAtom.HP, # HP in rosetta(?)
-    "Phos":HbAtom.NO, "Oet2":HbAtom.AC, "Oet3":HbAtom.AC
+    "Phos":HbAtom.NO, "Oet2":HbAtom.AC, "Oet3":HbAtom.AC,
+    "genAl":HbAtom.NO, "genAs":HbAtom.NO, "genAu":HbAtom.NO, "genB": HbAtom.NO,
+    "genBe": HbAtom.NO, "genBr": HbAtom.NO, "genC": HbAtom.NO, "genCa": HbAtom.NO,
+    "genCl": HbAtom.NO, "genCo": HbAtom.NO, "genCr": HbAtom.NO, "genCu": HbAtom.NO,
+    "genF": HbAtom.DA, "genFe": HbAtom.NO, "genHg": HbAtom.NO, "genI": HbAtom.NO,
+    "genIr": HbAtom.NO, "genK": HbAtom.NO, "genLi": HbAtom.NO, "genMg": HbAtom.NO,
+    "genMn": HbAtom.NO, "genMo": HbAtom.NO, "genN": HbAtom.DA,  "genNi": HbAtom.NO,
+    "genO": HbAtom.DA, "genOs": HbAtom.NO, "genP": HbAtom.NO,  "genPb": HbAtom.NO,
+    "genPd": HbAtom.NO, "genPr": HbAtom.NO, "genPt": HbAtom.NO, "genRe": HbAtom.NO,
+    "genRh": HbAtom.NO, "genRu": HbAtom.NO, "genS": HbAtom.DA, "genSb": HbAtom.NO,
+    "genSe": HbAtom.NO, "genSi": HbAtom.NO,"genSn": HbAtom.NO,"genTb": HbAtom.NO, 
+    "genTe": HbAtom.NO, "genU": HbAtom.NO, "genW": HbAtom.NO, "genV": HbAtom.NO, 
+    "genY": HbAtom.NO, "genZn": HbAtom.NO, "genATM": HbAtom.NO, # masked
 }
 
 ##

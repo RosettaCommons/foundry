@@ -440,7 +440,7 @@ def parse_mol(filename):
     try:
         automorphs = openbabel.vvpairUIntUInt()
         openbabel.FindAutomorphisms(obmol,automorphs)
-
+        
         automorphs = torch.tensor(automorphs)
         n_symmetry = automorphs.shape[0]
 

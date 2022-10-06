@@ -546,7 +546,7 @@ element_index = torch.zeros((NAATOKENS,NTOTAL), dtype=torch.long)
 
 ljlk_parameters = torch.zeros((NAATOKENS,NTOTAL,5), dtype=torch.float)
 lj_correction_parameters = torch.zeros((NAATOKENS,NTOTAL,4), dtype=bool) # donor/acceptor/hpol/disulf
-for i in range(NNAPROTAAS):
+for i in range(NAATOKENS):
     for j,a in enumerate(aa2type[i]):
         if (a is not None):
             atom_type_index[i,j] = aatype2idx[a]
@@ -554,7 +554,11 @@ for i in range(NNAPROTAAS):
             lj_correction_parameters[i,j,0] = (type2hb[a]==HbAtom.DO)+(type2hb[a]==HbAtom.DA)
             lj_correction_parameters[i,j,1] = (type2hb[a]==HbAtom.AC)+(type2hb[a]==HbAtom.DA)
             lj_correction_parameters[i,j,2] = (type2hb[a]==HbAtom.HP)
-            lj_correction_parameters[i,j,3] = (a=="SH1" or a=="HS")
+            lj_correction_parameters[i,j,3] = (a=="SH1" or a=="HS" or a=="genS")
+    # NOT updating element index for atoms yet
+    if i > NNAPROTAAS-1:
+        continue
+
     for j,a in enumerate(aa2elt[i]):
         if (a is not None):
             element_index[i,j] = elt2idx[a]

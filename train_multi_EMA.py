@@ -181,7 +181,8 @@ class Trainer():
                   logit_aa_s, label_aa_s, mask_aa_s,
                   pred, pred_tors, pred_allatom, true,
                   mask_crds, mask_BB, mask_2d, same_chain,
-                  pred_lddt, idx, atom_frames=None, unclamp=False, negative=False, interface=False,
+                  pred_lddt, idx, bond_feats, atom_frames=None, unclamp=False, 
+                  negative=False, interface=False,
                   verbose=False, ctr=0,
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lig_fape=1.0, w_lddt=1.0, 
                   w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
@@ -439,7 +440,7 @@ class Trainer():
         # clash [use all atoms not just those in native]
         clash_loss = calc_lj(
             seq[0], pred_allatom, 
-            self.aamask, self.ljlk_parameters, self.lj_correction_parameters, self.num_bonds,
+            self.aamask, bond_feats, self.ljlk_parameters, self.lj_correction_parameters, self.num_bonds,
             lj_lin=lj_lin
         )
         if w_clash > 0.0:
@@ -811,11 +812,19 @@ class Trainer():
             rank=rank, 
             #fraction_pdb=0.22 # not a real argument but implicit
             fraction_fb=0.0,
+<<<<<<< HEAD
             fraction_compl=0.18,
             fraction_na_compl=0.18,
             fraction_rna=0.09,
             fraction_sm_compl=0.37,
             fraction_sm = 0, 
+=======
+            fraction_compl=0.0,
+            fraction_na_compl=0.0,
+            fraction_rna=0.0,
+            fraction_sm_compl=1.0,
+            fraction_sm = 0.0, 
+>>>>>>> 74e19c0 (added general leonard jones)
             replacement=True
         )
 
@@ -903,7 +912,7 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="last", 
+                                                        self.model_name, gpu, suffix="best", 
                                                         resume_train=True)
 
         if (self.eval):
@@ -1044,7 +1053,6 @@ class Trainer():
         counter = 0
         
         for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in train_loader:
-            
             # skip known bad training examples
             # loader will print warning message with item info for followup later
             if torch.is_tensor(item) and torch.all(item==-1):
@@ -1180,7 +1188,7 @@ class Trainer():
                             logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                             pred_crds, alphas, pred_allatom, true_crds_, 
                             atom_mask_, res_mask, mask_2d, same_chain,
-                            pred_lddts, idx_pdb, atom_frames=atom_frames,
+                            pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
                             unclamp=unclamp, negative=negative,
                             verbose=verbose, ctr=ctrid, item=item, task=task, **self.loss_param
                         )
@@ -1232,7 +1240,8 @@ class Trainer():
                         logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                         pred_crds, alphas, pred_allatom, true_crds_, 
                         atom_mask_, res_mask, mask_2d, same_chain,
-                        pred_lddts, idx_pdb, atom_frames=atom_frames, unclamp=unclamp, negative=negative,
+                        pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
+                        unclamp=unclamp, negative=negative,
                         verbose=verbose, ctr=ctrid, item=item, task=task, **self.loss_param
                     )
                 loss = loss / self.ACCUM_STEP
@@ -1349,7 +1358,6 @@ class Trainer():
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
             for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in valid_loader:
-            
                 # skip known bad training examples
                 # loader will print warning message with item info for followup later
                 if torch.is_tensor(item) and torch.all(item==-1):
@@ -1482,7 +1490,7 @@ class Trainer():
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds_, 
                     atom_mask_, res_mask, mask_2d, same_chain,
-                    pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative,
+                    pred_lddts, idx_pdb, bond_feats, atom_frames, unclamp=unclamp, negative=negative,
                     verbose=verbose, ctr=ctrid, item=item, out_dir=out_dir, **self.loss_param
                 )
 
@@ -1670,7 +1678,7 @@ class Trainer():
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds,
                     atom_mask, res_mask, mask_2d, same_chain,
-                    pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative, interface=report_interface,
+                    pred_lddts, idx_pdb, bond_feats, atom_frames, unclamp=unclamp, negative=negative, interface=report_interface,
                     verbose=verbose, ctr=ctrid, **self.loss_param
                 )
 
@@ -1837,7 +1845,7 @@ class Trainer():
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds,
                     atom_mask, res_mask, mask_2d, same_chain,
-                    pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative,
+                    pred_lddts, idx_pdb, atom_frames, bond_feats, unclamp=unclamp, negative=negative,
                     verbose=verbose, ctr=ctrid, **self.loss_param
                 )
                 
