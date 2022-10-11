@@ -146,6 +146,14 @@ def get_args():
             help="Weight on pseudodihedral loss [0.0]")
     loss_group.add_argument('-w_clash', type=float, default=0.0,
             help="Weight on clash loss [0.0]")
+    loss_group.add_argument('-w_atom_bond', type=float, default=0.0,
+            help="Weight on atom bond loss [0.0]")
+    loss_group.add_argument('-w_skip_bond', type=float, default=0.0,
+            help="Weight on skip bond distance loss [0.0]") 
+    loss_group.add_argument('-w_rigid', type=float, default=0.0,
+            help="Weight on rigid body distance loss [0.0]")    
+    loss_group.add_argument('-w_clash', type=float, default=0.0,
+            help="Weight on clash loss [0.0]")    
     loss_group.add_argument('-w_hb', type=float, default=0.0,
             help="Weight on clash loss [0.0]")
     loss_group.add_argument('-lj_lin', type=float, default=0.75,

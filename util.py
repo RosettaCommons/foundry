@@ -4,84 +4,13 @@ import numpy as np
 import torch
 
 import scipy.sparse
-from scipy.spatial.transform import Rotation
 import networkx as nx
+from itertools import combinations
 from openbabel import openbabel
 
 from chemical import *
 from scoring import *
 
-def random_rot_trans(xyz, random_noise=20.0):
-    # xyz: (N, L, 27, 3)
-    N, L = xyz.shape[:2]
-
-    # pick random rotation axis
-    R_mat = torch.tensor(Rotation.random(N).as_matrix(), dtype=xyz.dtype).to(xyz.device)
-    xyz = torch.einsum('nij,nlaj->nlai', R_mat, xyz) + torch.rand(N,1,1,3, device=xyz.device)*random_noise
-    return xyz
-
-def get_prot_sm_mask(atom_mask, seq):
-    """
-    Parameters
-    ----------
-    atom_mask : (..., L, Natoms) 
-    seq : (L) 
-
-    Returns
-    -------
-    mask : (..., L) 
-    """
-    sm_mask = is_atom(seq).to(atom_mask.device) # (L)
-    mask_prot = atom_mask[...,:3].all(dim=-1) & ~sm_mask # valid protein/NA residues (L)
-    mask_ca_sm = atom_mask[...,1] & sm_mask # valid sm mol positions (L)
-    mask = mask_prot | mask_ca_sm # valid positions
-    return mask
-
-def center_and_realign_missing(xyz, mask_t, seq=None, same_chain=None):
-    """
-    Moves center of mass of xyz to origin, then moves positions with missing
-    coordinates to nearest existing residue on same chain.
-
-    Parameters
-    ----------
-    seq : (L)
-    xyz : (L, Natms, 3)
-    mask_t : (L, Natms)
-    same_chain : (L, L)
-
-    Returns
-    -------
-    xyz : (L, Natms, 3)
-    
-    """
-    L = xyz.shape[0]
-
-    if same_chain is None:
-        same_chain = torch.full((L,L), True)
-
-    # valid protein/NA/small mol. positions
-    if seq is None:
-        mask = torch.full((L,), True)
-    else:
-        mask = get_prot_sm_mask(mask_t, seq)
-
-    # center c.o.m of existing residues at the origin
-    center_CA = (mask[...,None]*xyz[:,1]).sum(dim=0) / (mask[...,None].sum(dim=0) + 1e-5) # (3)
-    xyz = torch.where(mask.view(L,1,1), xyz - center_CA.view(1, 1, 3), xyz)
-
-    # move missing residues to the closest valid residues on same chain
-    exist_in_xyz = torch.where(mask)[0] # (L_sub)
-    same_chain_in_xyz = same_chain[:,mask].bool() # (L, L_sub)
-    seqmap = (torch.arange(L, device=xyz.device)[:,None] - exist_in_xyz[None,:]).abs() # (L, L_sub)
-    seqmap[~same_chain_in_xyz] += 99999
-    seqmap = torch.argmin(seqmap, dim=-1) # (L)
-    idx = torch.gather(exist_in_xyz, 0, seqmap) # (L)
-    offset_CA = torch.gather(xyz[:,1], 0, idx.reshape(L,1).expand(-1,3))
-    has_neighbor = same_chain_in_xyz.all(-1) 
-    offset_CA[~has_neighbor] = 0 # stay at origin if nothing on same chain has coords
-    xyz = torch.where(mask.view(L, 1, 1), xyz, xyz + offset_CA.reshape(L,1,3))
-
-    return xyz
 
 def th_ang_v(ab,bc,eps:float=1e-8):
     def th_norm(x,eps:float=1e-8):
@@ -546,7 +475,7 @@ element_index = torch.zeros((NAATOKENS,NTOTAL), dtype=torch.long)
 
 ljlk_parameters = torch.zeros((NAATOKENS,NTOTAL,5), dtype=torch.float)
 lj_correction_parameters = torch.zeros((NAATOKENS,NTOTAL,4), dtype=bool) # donor/acceptor/hpol/disulf
-for i in range(NAATOKENS):
+for i in range(NNAPROTAAS):
     for j,a in enumerate(aa2type[i]):
         if (a is not None):
             atom_type_index[i,j] = aatype2idx[a]
@@ -554,11 +483,7 @@ for i in range(NAATOKENS):
             lj_correction_parameters[i,j,0] = (type2hb[a]==HbAtom.DO)+(type2hb[a]==HbAtom.DA)
             lj_correction_parameters[i,j,1] = (type2hb[a]==HbAtom.AC)+(type2hb[a]==HbAtom.DA)
             lj_correction_parameters[i,j,2] = (type2hb[a]==HbAtom.HP)
-            lj_correction_parameters[i,j,3] = (a=="SH1" or a=="HS" or a=="genS")
-    # NOT updating element index for atoms yet
-    if i > NNAPROTAAS-1:
-        continue
-
+            lj_correction_parameters[i,j,3] = (a=="SH1" or a=="HS")
     for j,a in enumerate(aa2elt[i]):
         if (a is not None):
             element_index[i,j] = elt2idx[a]
@@ -896,6 +821,22 @@ def get_nxgraph(mol):
 
     return G
 
+def find_all_rigid_groups(bond_feats):
+    """
+    remove all single bonds from the graph and find connected components
+    """
+    rigid_atom_bonds = (bond_feats>1)*(bond_feats<5)
+    rigid_atom_bonds_np = rigid_atom_bonds[0].cpu().numpy()
+    G = nx.from_numpy_matrix(rigid_atom_bonds_np)
+    connected_components = nx.connected_components(G)
+    connected_components = [cc for cc in connected_components if len(cc)>2]
+    connected_components = [torch.tensor(list(combinations(cc,2))) for cc in connected_components]
+    if connected_components:
+        connected_components = torch.cat(connected_components, dim=0)
+    else:
+        connected_components = None
+    return connected_components
+
 def find_all_paths_of_length_n(G : nx.Graph,
                                n : int) -> torch.Tensor:
     '''find all paths of length N in a networkx graph
@@ -983,17 +924,14 @@ def get_bond_feats(mol, G):
 
 def get_protein_bond_feats(protein_L):
     """ creates protein residue connectivity graphs """
-    bond_feats = torch.zeros((protein_L, protein_L)).long()
+    bond_feats = torch.zeros((protein_L, protein_L))
     residues = torch.arange(protein_L-1)
     bond_feats[residues, residues+1] = 5
     bond_feats[residues+1, residues] = 5
     return bond_feats
 
 def get_atomize_protein_bond_feats(sel_res, msa, ra, flank=5):
-    """ 
-    generate atom bond features for atomized residues 
-    currently ignores long-range bonds like disulfides
-    """
+    """ generate atom bond features for atomized residues """
     ra2ind = {}
     for i, two_d in enumerate(ra):
         ra2ind[tuple(two_d.numpy())] = i
@@ -1013,29 +951,28 @@ def get_atomize_protein_bond_feats(sel_res, msa, ra, flank=5):
             bond_feats[start_idx, end_idx] = aabtypes[res][j]
             bond_feats[end_idx, start_idx] = aabtypes[res][j]
         #accounting for peptide bonds
-        if i > 0:
+        if i > 1:
             if (i-1, 2) not in ra2ind or (i, 0) not in ra2ind:
                 #skip bonds with atoms that aren't observed in the structure
                 continue
             start_idx = ra2ind[(i-1, 2)]
             end_idx = ra2ind[(i, 0)]
-            bond_feats[start_idx, end_idx] = 1
-            bond_feats[end_idx, start_idx] = 1
+            bond_feats[start_idx, end_idx] = aabtypes[res][j]
+            bond_feats[end_idx, start_idx] = aabtypes[res][j]
     return bond_feats
 
 ### Generate atom features for proteins ###
-def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
-    """Starting with residue `i_start`, make `n_res_atomize` contiguous residues
-    into "atom" nodes """
-    residues_atomize = msa[0, i_start:i_start+n_res_atomize]
+def atomize_protein(sel_res, msa, xyz, mask, stretch=5):
+    """ given an index sel_res, make the following flank residues into "atom" nodes """
+    residues_atomize = msa[0, sel_res:sel_res+stretch]
     residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
-    residue_atomize_mask = mask[i_start:i_start+n_res_atomize].float()
+    residue_atomize_mask = mask[sel_res:sel_res+stretch].float()
     xyz = torch.nan_to_num(xyz)
 
     # handle symmetries
     xyz_alt = torch.zeros_like(xyz.unsqueeze(0))
     xyz_alt.scatter_(2, long2alt[msa[0],:,None].repeat(1,1,1,3), xyz.unsqueeze(0))
-    coords_stack = torch.stack((xyz[i_start:i_start+n_res_atomize], xyz_alt[0, i_start:i_start+n_res_atomize]), dim=0)
+    coords_stack = torch.stack((xyz[sel_res:sel_res+stretch], xyz_alt[0, sel_res:sel_res+stretch]), dim=0)
     swaps = (coords_stack[0] == coords_stack[1]).all(dim=1).all(dim=1).squeeze() #checks whether theres a swap at each position
     swaps = torch.nonzero(~swaps).squeeze() # indices with a swap eg. [2,3]
     if swaps.numel() != 0:
@@ -1053,11 +990,9 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     ins = torch.zeros_like(lig_seq)
 
     r,a = ra.T
-    last_C = torch.all(ra==torch.tensor([r[-1],2]),dim=1).nonzero()
     lig_xyz = torch.zeros((len(ra), 3))
     lig_xyz = nat_symm[:, r, a]
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     frames = get_atomized_protein_frames(residues_atomize, ra)
-    bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, flank=n_res_atomize)
-
-    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C
+    bond_feats = get_atomize_protein_bond_feats(sel_res, msa, ra, flank=stretch)
+    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats
