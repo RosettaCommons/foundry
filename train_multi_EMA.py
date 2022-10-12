@@ -185,7 +185,7 @@ class Trainer():
                   negative=False, interface=False,
                   verbose=False, ctr=0,
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lig_fape=1.0, w_lddt=1.0, 
-                  w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
+                  w_bond=1.0, w_clash=0.0, w_atom_bond=0.0, w_skip_bond=0.0, w_rigid=0.0, w_hb=0.0, w_dih=0.0,
                   lj_lin=0.85, eps=1e-6, item=None, task=None, out_dir='./'
     ):
         gpu = pred.device
@@ -432,7 +432,7 @@ class Trainer():
             bond_loss = calc_cart_bonded(seq, pred_allatom[1:], idx, self.cb_len, self.cb_ang, self.cb_tor)
             if w_bond > 0.0:
                 tot_loss += w_bond*bond_loss.mean()
-            loss_s.append( bond_loss.detach() )
+            oss_dict['clash_loss'] = ( bond_loss.detach() )
         else:
             bond_loss = torch.tensor(0).to(gpu)
         loss_dict['bond_loss'] = bond_loss.detach()
@@ -446,7 +446,18 @@ class Trainer():
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
+        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats)
+        if w_atom_bond > 0.0:
+            tot_loss += w_atom_bond*atom_bond_loss
+        loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
 
+        if w_skip_bond > 0.0:
+            tot_loss += w_skip_bond*skip_bond_loss
+        loss_dict['skip_bond_loss'] = ( skip_bond_loss.detach() )
+
+        if w_rigid > 0.0:
+            tot_loss += w_rigid*rigid_loss
+        loss_dict['rigid_loss'] = ( rigid_loss.detach() )
         L0 = same_chain[0,0,:].sum()
         chain1 = torch.zeros_like(same_chain, dtype=bool)
         chain1[:,:L0,:L0] = True
@@ -471,9 +482,10 @@ class Trainer():
         #)
         #if w_hb > 0.0:
         #    tot_loss += w_hb*hb_loss
-        #loss_s.append(torch.stack((hb_loss, clash_loss, bond_loss)).detach())
+        #oss_dict['clash_loss'] = (torch.stack((hb_loss, clash_loss, bond_loss)).detach())
 
         loss_dict['total_loss'] = tot_loss.detach()
+        print(loss_dict)
 
         if (verbose):
             print (

@@ -7,10 +7,83 @@ import scipy.sparse
 import networkx as nx
 from itertools import combinations
 from openbabel import openbabel
+from scipy.spatial.transform import Rotation
 
 from chemical import *
 from scoring import *
 
+
+def random_rot_trans(xyz, random_noise=20.0):
+    # xyz: (N, L, 27, 3)
+    N, L = xyz.shape[:2]
+
+    # pick random rotation axis
+    R_mat = torch.tensor(Rotation.random(N).as_matrix(), dtype=xyz.dtype).to(xyz.device)
+    xyz = torch.einsum('nij,nlaj->nlai', R_mat, xyz) + torch.rand(N,1,1,3, device=xyz.device)*random_noise
+    return xyz
+
+def get_prot_sm_mask(atom_mask, seq):
+    """
+    Parameters
+    ----------
+    atom_mask : (..., L, Natoms) 
+    seq : (L) 
+
+    Returns
+    -------
+    mask : (..., L) 
+    """
+    sm_mask = is_atom(seq).to(atom_mask.device) # (L)
+    mask_prot = atom_mask[...,:3].all(dim=-1) & ~sm_mask # valid protein/NA residues (L)
+    mask_ca_sm = atom_mask[...,1] & sm_mask # valid sm mol positions (L)
+    mask = mask_prot | mask_ca_sm # valid positions
+    return mask
+
+def center_and_realign_missing(xyz, mask_t, seq=None, same_chain=None):
+    """
+    Moves center of mass of xyz to origin, then moves positions with missing
+    coordinates to nearest existing residue on same chain.
+
+    Parameters
+    ----------
+    seq : (L)
+    xyz : (L, Natms, 3)
+    mask_t : (L, Natms)
+    same_chain : (L, L)
+
+    Returns
+    -------
+    xyz : (L, Natms, 3)
+    
+    """
+    L = xyz.shape[0]
+
+    if same_chain is None:
+        same_chain = torch.full((L,L), True)
+
+    # valid protein/NA/small mol. positions
+    if seq is None:
+        mask = torch.full((L,), True)
+    else:
+        mask = get_prot_sm_mask(mask_t, seq)
+
+    # center c.o.m of existing residues at the origin
+    center_CA = (mask[...,None]*xyz[:,1]).sum(dim=0) / (mask[...,None].sum(dim=0) + 1e-5) # (3)
+    xyz = torch.where(mask.view(L,1,1), xyz - center_CA.view(1, 1, 3), xyz)
+
+    # move missing residues to the closest valid residues on same chain
+    exist_in_xyz = torch.where(mask)[0] # (L_sub)
+    same_chain_in_xyz = same_chain[:,mask].bool() # (L, L_sub)
+    seqmap = (torch.arange(L, device=xyz.device)[:,None] - exist_in_xyz[None,:]).abs() # (L, L_sub)
+    seqmap[~same_chain_in_xyz] += 99999
+    seqmap = torch.argmin(seqmap, dim=-1) # (L)
+    idx = torch.gather(exist_in_xyz, 0, seqmap) # (L)
+    offset_CA = torch.gather(xyz[:,1], 0, idx.reshape(L,1).expand(-1,3))
+    has_neighbor = same_chain_in_xyz.all(-1) 
+    offset_CA[~has_neighbor] = 0 # stay at origin if nothing on same chain has coords
+    xyz = torch.where(mask.view(L, 1, 1), xyz, xyz + offset_CA.reshape(L,1,3))
+
+    return xyz
 
 def th_ang_v(ab,bc,eps:float=1e-8):
     def th_norm(x,eps:float=1e-8):

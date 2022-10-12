@@ -299,14 +299,14 @@ def calc_atom_bond_loss(pred, true, bond_feats, clamp=4, eps=1e-6):
         pred_dist = torch.sum(torch.square(pred[:,paths[:,0],1]-pred[:,paths[:,2],1]),dim=-1)
         skip_bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(paths.shape[0]+eps)
     else:
-        skip_bond_dist_loss = torch.tensor([0], device=pred.device)
+        skip_bond_dist_loss = torch.tensor(0, device=pred.device)
     rigid_groups = find_all_rigid_groups(bond_feats)
     if rigid_groups != None:
         nat_dist = torch.sum(torch.square(true[:,rigid_groups[:,0],1]-true[:,rigid_groups[:,1],1]),dim=-1)
         pred_dist = torch.sum(torch.square(pred[:,rigid_groups[:,0],1]-pred[:,rigid_groups[:,1],1]),dim=-1)
         rigid_group_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(rigid_groups.shape[0]+eps)
     else:
-        rigid_group_dist_loss = torch.tensor([0], device=pred.device)
+        rigid_group_dist_loss = torch.tensor(0, device=pred.device)
     return bond_dist_loss, skip_bond_dist_loss, rigid_group_dist_loss
 
 def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-6):

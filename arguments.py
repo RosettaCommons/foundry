@@ -31,7 +31,7 @@ def get_args():
             help="Gradient accumulation when it's > 1 [1]")
     train_group.add_argument("-eval", action='store_true', default=False,
             help="Train structure only")
-    train_group.add_argument('-out_dir', type=str, 
+    train_group.add_argument('-out_dir', type=str, default='test/',
             help='Output folder.')
     train_group.add_argument('-wandb_prefix', type=str, 
             help='Prefix for name of session on Weights and Biases.')
@@ -151,11 +151,9 @@ def get_args():
     loss_group.add_argument('-w_skip_bond', type=float, default=0.0,
             help="Weight on skip bond distance loss [0.0]") 
     loss_group.add_argument('-w_rigid', type=float, default=0.0,
-            help="Weight on rigid body distance loss [0.0]")    
-    loss_group.add_argument('-w_clash', type=float, default=0.0,
-            help="Weight on clash loss [0.0]")    
+            help="Weight on rigid body distance loss [0.0]")      
     loss_group.add_argument('-w_hb', type=float, default=0.0,
-            help="Weight on clash loss [0.0]")
+            help="Weight on hydrogen bond loss [0.0]")
     loss_group.add_argument('-lj_lin', type=float, default=0.75,
             help="linear inflection for lj [0.75]")
 
