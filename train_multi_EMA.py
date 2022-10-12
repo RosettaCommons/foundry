@@ -419,9 +419,36 @@ class Trainer():
                 frames[:,mask_BB[0]],
                 frame_mask[:,mask_BB[0]]
             )
+
         tot_loss += w_str*l_fape[0]
         loss_dict['allatom_fape'] = l_fape[0].detach()
-        
+        rmsd = calc_crd_rmsd(
+            pred_allatom[:,mask_BB[0],:,:3],
+            nat_symm[None,mask_BB[0],:,:3],
+            xs_mask[:,mask_BB[0]]
+            )
+        loss_dict["allatom_rmsd"] = rmsd[0].detach()
+        sm_res_mask = is_atom(label_aa_s[0,0])*mask_BB[0] # (L,)
+        if torch.any(sm_res_mask):
+            xs_mask_sm = xs_mask.clone()
+            xs_mask_sm[:,~sm_res_mask] = False
+            rmsd_sm = calc_crd_rmsd(
+                pred_allatom[:,mask_BB[0],:,:3],
+                nat_symm[None,mask_BB[0],:,:3],
+                xs_mask_sm[:,mask_BB[0]]
+                )
+            rmsd_sm_protein = calc_crd_rmsd(
+                pred_allatom[:,mask_BB[0],:,:3],
+                nat_symm[None,mask_BB[0],:,:3],
+                xs_mask[:,mask_BB[0]],
+                xs_mask_sm[:,mask_BB[0]]
+            )
+            loss_dict["kabsch_rsmd"]= rmsd_sm[0].detach()
+            loss_dict["sm_rmsd"] = rmsd_sm_protein[0].detach()
+        else:
+            loss_dict["kabsch_rsmd"]= torch.tensor(0, device=pred.device)
+            loss_dict["sm_rmsd"] = torch.tensor(0, device=pred.device)
+
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
         if w_bond > 0.0:
@@ -485,7 +512,6 @@ class Trainer():
         #oss_dict['clash_loss'] = (torch.stack((hb_loss, clash_loss, bond_loss)).detach())
 
         loss_dict['total_loss'] = tot_loss.detach()
-        print(loss_dict)
 
         if (verbose):
             print (

@@ -181,7 +181,59 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
 
     return loss
 
+def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None):
+    '''
+    Calculate coordinate RMSD
+    Input:
+        - pred: predicted coordinates (B, L, natoms, 3)
+        - true: true coordinates (B, L, natoms, 3)
+        - atom_mask: mask for seen coordinates (B, L, natoms)
+    Output: RMSD after superposition
+    '''
+    def rmsd(V, W, eps=1e-6):
+        L = V.shape[1]
+        return torch.sqrt(torch.sum((V-W)*(V-W), dim=(1,2)) / L + eps)
+    def centroid(X):
+        return X.mean(dim=-2, keepdim=True)
+    if rmsd_mask == None:
+        rmsd_mask = atom_mask.clone()
 
+    B, L, natoms = pred.shape[:3]
+
+    # center to centroid
+    pred_allatom = pred[atom_mask][None]
+    true_allatom = true[atom_mask][None]
+
+    pred_allatom_origin = pred_allatom - centroid(pred_allatom)
+    true_allatom_origin = true_allatom - centroid(true_allatom)
+
+    # reshape true crds to match the shape to pred crds
+    # true = true.unsqueeze(0).expand(I,-1,-1,-1,-1)
+    # pred = pred.view(B, L*natoms, 3)
+    # true = true.view(I*B, L*natoms, 3)
+
+    # Computation of the covariance matrix
+    C = torch.matmul(pred_allatom_origin.permute(0,2,1), true_allatom_origin)
+
+    # Compute optimal rotation matrix using SVD
+    V, S, W = torch.svd(C)
+
+    # get sign to ensure right-handedness
+    d = torch.ones([B,3,3], device=pred.device)
+    d[:,:,-1] = torch.sign(torch.det(V)*torch.det(W)).unsqueeze(1)
+
+    # Rotation matrix U
+    U = torch.matmul(d*V, W.permute(0,2,1)) # (IB, 3, 3)
+
+    pred_rms = pred[rmsd_mask][None] - centroid(pred_allatom)
+    true_rms = true[rmsd_mask][None] - centroid(true_allatom)
+    # Rotate pred
+    rP = torch.matmul(pred_rms, U) # (IB, L*3, 3)
+
+    # get RMS
+    rms = rmsd(rP, true_rms).reshape(B)
+    return rms
+    
 def angle(a, b, c, eps=1e-6):
     '''
     Calculate cos/sin angle between ab and cb
