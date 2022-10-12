@@ -1278,7 +1278,7 @@ class Trainer():
 
             # print loss names once at beginning of epoch
             if counter == 1 and rank == 0:
-                sys.stdout.write(f'Header: [epoch/# epochs] Batch: [processed/examples in epoch] Time: seconds | total_loss: loss | {" ".join(loss_dict.keys())} | precision recall F1 | Max mem \n')
+                sys.stdout.write(f'Header: [epoch/num_epochs] Batch: [examples_seen_in_epoch/examples_per_epoch] Time: time | Total_loss: total_loss | {" ".join(loss_dict.keys())} | precision recall F1 | max_mem \n')
             
             #if counter % N_PRINT_TRAIN == 0:
             if counter % self.ACCUM_STEP == 0:
