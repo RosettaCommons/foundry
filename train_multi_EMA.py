@@ -26,15 +26,16 @@ ob.obErrorLog.SetOutputLevel(0)
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
-torch.autograd.set_detect_anomaly(True)
-torch.manual_seed(5924)
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
+#torch.autograd.set_detect_anomaly(True)
+#torch.backends.cudnn.benchmark = False
+#torch.backends.cudnn.deterministic = True
+#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
-#import random
+import random
+random.seed(0)
+torch.manual_seed(5924)
 np.random.seed(6636)
-#random.seed(0)
 
 USE_AMP = False
 torch.set_num_threads(4)
@@ -44,18 +45,12 @@ torch.set_num_threads(4)
 
 # num structs per epoch
 # must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 6144
-#N_EXAMPLE_PER_EPOCH = 8
+N_EXAMPLE_PER_EPOCH = 3072
+#N_EXAMPLE_PER_EPOCH = 16
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 3,
+              'num_workers': 5,
               'pin_memory': True}
-
-DEBUG = False
-if DEBUG:
-    N_EXAMPLE_PER_EPOCH =8
-    #os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
-    LOAD_PARAM['num_workers'] = 0
 
 def add_weight_decay(model, l2_coeff):
     decay, no_decay = [], []
@@ -531,9 +526,9 @@ class Trainer():
         if not os.path.exists(chk_fn):
             print ('no model found', model_name)
             return -1, best_valid_loss
-        print ('loading model', model_name)
         map_location = {"cuda:%d"%0: "cuda:%d"%rank}
         checkpoint = torch.load(chk_fn, map_location=map_location)
+        print ('loading model', model_name, 'from', chk_fn, 'epoch', checkpoint['epoch'])
         rename_model = False
         new_chk = {}
         msd_src = checkpoint['model_state_dict']
@@ -608,14 +603,34 @@ class Trainer():
             print ("Launched from interactive")
             world_size = torch.cuda.device_count()
             mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
+ 
+    def record_git_commit():
+        # git hash of current commit
+        try:
+            commit = subprocess.check_output(f'git --git-dir {script_dir}/../.git rev-parse HEAD',
+                                                  shell=True).decode().strip()
+        except subprocess.CalledProcessError:
+            print('WARNING: Failed to determine git commit hash.')
+            commit = 'unknown'
+        # save git diff from last commit
+        git_diff = subprocess.Popen(['git diff'], cwd = os.getcwd(), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+        out, err = git_diff.communicate()
+
+        git_outdir = self.out_dir if self.out_dir is not None else './'
+        datestr = str(datetime.datetime.now()).replace(':','').replace(' ','_') # YYYY-MM-DD_HHMMSS.xxxxxx
+        with open(f'{git_outdir}/git_diff_{datestr}.txt','w') as outf:
+            if self.eval: 
+                print('eval', file=outf)
+            else:
+                print('train', file=outf)
+            print(commit, file=outf)
+            print(out.decode(), file=outf)
+
+        print('Saved git diff between current state and last commit')
 
     def train_model(self, rank, world_size):
-        
-        # save git diff from last commit
-        if self.out_dir is not None:
-            gitdiff_fn = open(f'{self.out_dir}/git_diff.txt','w')
-            git_diff = subprocess.Popen(['git diff'], cwd = os.getcwd(), shell = True, stdout = gitdiff_fn, stderr = subprocess.PIPE)
-            print('Save git diff between current state and last commit')
+       
+        record_git_commit()
 
         # wandb logging
         if self.wandb_prefix is not None and rank == 0:
@@ -624,7 +639,8 @@ class Trainer():
             wandb.init(
                 project='RF2_allatom',
                 entity='bakerlab',
-                name=self.wandb_prefix
+                name=self.wandb_prefix,
+                resume=True
             )
             all_param = {}
             all_param.update(self.loader_param)
@@ -636,7 +652,7 @@ class Trainer():
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
+        dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
         #define dataset & data loader
@@ -655,16 +671,18 @@ class Trainer():
         rna_IDs, rna_weights, rna_dict = rna_items
         sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
 
+        sm_compl_IDs = [x for x in sm_compl_IDs if x != 6215] # remove 6uiw_A to avoid GPU OOM
+
         self.n_train = N_EXAMPLE_PER_EPOCH
-        self.n_valid_pdb = 100 #len(valid_pdb.keys())
+        self.n_valid_pdb = len(valid_pdb.keys()) if self.eval else 100
         self.n_valid_pdb_atomize = 0 #100
-        self.n_valid_homo = 100 #len(valid_homo.keys())
-        self.n_valid_compl = 100 #len(valid_compl.keys())
+        self.n_valid_homo = len(valid_homo.keys()) if self.eval else 100
+        self.n_valid_compl = len(valid_compl.keys()) if self.eval else 100
         self.n_valid_neg = 0 #len(valid_neg.keys())
-        self.n_valid_na_compl = 100 #len(valid_na_compl.keys())
+        self.n_valid_na_compl = len(valid_na_compl.keys()) if self.eval else 100
         self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
-        self.n_valid_rna = 100 #len(valid_rna.keys())
-        self.n_valid_sm_compl = 100 #len(valid_sm_compl.keys())
+        self.n_valid_rna = len(valid_rna.keys()) if self.eval else 100
+        self.n_valid_sm_compl = len(valid_sm_compl.keys()) if self.eval else 100
         #self.n_valid_sm_compl_dock = 100
         #self.n_valid_sm_compl_foldprot = 100
         #self.n_valid_sm_compl_foldlig = 100
@@ -906,30 +924,6 @@ class Trainer():
                                                         self.model_name, gpu, suffix="last", 
                                                         resume_train=True)
 
-        if (self.eval):
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, 0, verbose=True)
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, 0, verbose=True)
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, 0, verbose=True)
-
-            # run protein/NA prediction (TEMPLATED)
-            #_, _, _ = self.valid_ppi_cycle(
-            #    ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
-            #    rank, gpu, world_size, 0, header="NA", report_interface=False, verbose=True)
-
-            # run protein/NA prediction (NON-TEMPLATED)
-            #_, _, _ = self.valid_ppi_cycle(
-            #    ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
-            #    rank, gpu, world_size, 0, header="NA", report_interface=False, verbose=True)
-
-            # run RNA prediction
-            #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 0, verbose=True)
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_rigid_body_loader, rank, gpu, world_size, epoch=0, verbose=True, header='SM Rigid Body')
-            dist.destroy_process_group()
-            return
-
         if loaded_epoch >= self.n_epoch:
             DDP_cleanup()
             return
@@ -945,34 +939,47 @@ class Trainer():
         #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
 
         for epoch in range(loaded_epoch+1, self.n_epoch):
-            train_sampler.set_epoch(epoch)
-            valid_pdb_sampler.set_epoch(epoch)
-            valid_homo_sampler.set_epoch(epoch)
-            valid_compl_sampler.set_epoch(epoch)
-            valid_na_compl_sampler.set_epoch(epoch)
-            valid_na_from_scratch_compl_sampler.set_epoch(epoch)
-            valid_rna_sampler.set_epoch(epoch)
-            valid_sm_compl_sampler.set_epoch(epoch)
-            #valid_sm_compl_dock_sampler.set_epoch(epoch)
-            #valid_sm_compl_foldprot_sampler.set_epoch(epoch)
-            #valid_sm_compl_foldlig_sampler.set_epoch(epoch)
-            #valid_neg_sampler.set_epoch(epoch)
-            #valid_sm_sampler.set_epoch(epoch)
+            if not self.eval:
+                train_sampler.set_epoch(epoch)
+                valid_pdb_sampler.set_epoch(epoch)
+                valid_homo_sampler.set_epoch(epoch)
+                valid_compl_sampler.set_epoch(epoch)
+                valid_na_compl_sampler.set_epoch(epoch)
+                valid_na_from_scratch_compl_sampler.set_epoch(epoch)
+                valid_rna_sampler.set_epoch(epoch)
+                valid_sm_compl_sampler.set_epoch(epoch)
+                #valid_sm_compl_dock_sampler.set_epoch(epoch)
+                #valid_sm_compl_foldprot_sampler.set_epoch(epoch)
+                #valid_sm_compl_foldlig_sampler.set_epoch(epoch)
+                #valid_neg_sampler.set_epoch(epoch)
+                #valid_sm_sampler.set_epoch(epoch)
 
-            train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
+                train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, epoch, header="Hetero")
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, epoch, header="NA")
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, world_size, epoch, header="NAfs")
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, epoch, header="SM Dock") 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, epoch, header="SM FoldProt") 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, epoch, header="SM FoldLig") 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
-            #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
+                epoch, verbose = self.eval)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
+                epoch, header="Homo", verbose = self.eval)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
+                epoch, header="Hetero", verbose = self.eval)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
+                epoch, header="NA", verbose = self.eval)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
+                world_size, epoch, header="NAfs", verbose = self.eval)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
+                epoch, header="RNA", verbose = self.eval)
+            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
+                rank, gpu, world_size, epoch, header="SM Compl", verbose = self.eval) 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, 
+            #    epoch, header="SM Dock") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, 
+            #    world_size, epoch, header="SM FoldProt") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, 
+            #    world_size, epoch, header="SM FoldLig") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
+            #    epoch, header="Atomize PDB")
+            #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
+            #    world_size, epoch, report_interface=True)
 #            _, _, _ = self.valid_ppi_cycle(
 #                ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
 #                rank, gpu, world_size, epoch, header="NA", report_interface=False)
@@ -981,6 +988,8 @@ class Trainer():
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
 #            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
             # _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, rank, gpu, world_size, epoch, header="SM Only") 
+
+            if self.eval: break
 
             if rank == 0: # save model
                 if valid_tot < best_valid_loss:
@@ -1113,7 +1122,7 @@ class Trainer():
                 for i_cycle in range(N_cycle-1):
                     with ddp_model.no_sync():
                         with torch.cuda.amp.autocast(enabled=USE_AMP):
-                            msa_prev, pair_prev, xyz_prev, state_prev, alpha = ddp_model(
+                            msa_prev, pair_prev, xyz_prev, state_prev, alpha_prev = ddp_model(
                                 msa_masked[:,i_cycle],
                                 msa_full[:,i_cycle],
                                 seq[:,i_cycle],
@@ -1249,17 +1258,21 @@ class Trainer():
                 if not skip_lr_sched:
                     scheduler.step()
                 ddp_model.module.update() # apply EMA
-            
+
             if torch.isnan(loss):
                 print('nan loss',item)
                 save_pdbs = True
 
             if save_pdbs:
-                writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb', 
-                    torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
-                writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_true.pdb', 
+                try:
+                    writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_prev.pdb', 
+                        torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
+                except Exception as e:
+                    print('saving error',item)
+                    raise e
+                writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_true.pdb', 
                     torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
-                writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb', 
+                writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_pred.pdb', 
                     torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask])
 
             local_tot += loss.detach()*self.ACCUM_STEP
@@ -1292,8 +1305,8 @@ class Trainer():
                     #local_loss /= float(N_PRINT_TRAIN)
                     #local_acc /= float(N_PRINT_TRAIN)
                     
-                    local_tot = local_tot.cpu().detach()
-                    local_loss = local_loss.cpu().detach()
+                    local_tot = local_tot.cpu().detach().numpy()
+                    local_loss = local_loss.cpu().detach().numpy()
                     local_acc = local_acc.cpu().detach().numpy()
 
                     sys.stdout.write("Local: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f | Max mem %.4f\n"%(\
@@ -1321,7 +1334,7 @@ class Trainer():
         dist.all_reduce(train_tot, op=dist.ReduceOp.SUM)
         dist.all_reduce(train_loss, op=dist.ReduceOp.SUM)
         dist.all_reduce(train_acc, op=dist.ReduceOp.SUM)
-        train_tot = train_tot.cpu().detach()
+        train_tot = train_tot.cpu().detach().numpy()
         train_loss = train_loss.cpu().detach().numpy()
         train_acc = train_acc.cpu().detach().numpy()
 
@@ -1336,6 +1349,9 @@ class Trainer():
         return train_tot, train_loss, train_acc
 
     def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False):
+        if len(valid_loader) == 0:
+            return None, None, None
+
         valid_tot = 0.0
         valid_loss = None
         valid_acc = None
@@ -1343,7 +1359,7 @@ class Trainer():
         
         start_time = time.time()
 
-        out_dir = self.out_dir+f'/valid_ep{epoch}/'
+        out_dir = self.out_dir+f'/valid_ep{epoch}{"_eval" if verbose else ""}/'
         os.makedirs(out_dir, exist_ok=True)
         
         with torch.no_grad(): # no need to calculate gradient
@@ -1413,7 +1429,7 @@ class Trainer():
                 state_prev = None
 
                 for i_cycle in range(N_cycle-1): 
-                    msa_prev, pair_prev, xyz_prev, state_prev, alpha = ddp_model(
+                    msa_prev, pair_prev, xyz_prev, state_prev, alpha_prev = ddp_model(
                         msa_masked[:,i_cycle],
                         msa_full[:,i_cycle],
                         seq[:,i_cycle],
@@ -1494,11 +1510,11 @@ class Trainer():
                 valid_acc += acc_s.detach()
 
                 if save_pdbs:
-                    writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_prev.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_prev.pdb',
                         torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
-                    writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_true.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_true.pdb',
                         torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
-                    writepdb(out_dir+f'ep{epoch}_{counter}_{item[0][0]}_xyz_pred.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_pred.pdb',
                         torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask])
 
                 counter += 1
