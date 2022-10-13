@@ -40,7 +40,7 @@ if not os.path.exists(base_dir):
     mol_dir = "/gscratch2/RF2_allatom/by-pdb"
 
 def set_data_loader_params(args):
-    PARAMS = {
+    params = {
         "COMPL_LIST"       : "%s/list.hetero.csv"%compl_dir,
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
         "NEGATIVE_LIST"    : "%s/list.negative.csv"%compl_dir,
@@ -52,17 +52,19 @@ def set_data_loader_params(args):
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         #"PDB_LIST"        : "/gscratch2/list_2021AUG02.csv", # on blue
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
+        "CSD_LIST"         : "/projects/ml/ligand_datasets/csd543/csd543_cleaned01.csv", 
         "VAL_PDB"          : "%s/valid_remapped"%sm_compl_dir,
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "./dataset.pkl", # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
         "NA_DIR"           : na_dir,
         "MOL_DIR"          : mol_dir,
+        "CSD_DIR"          : "/projects/ml/ligand_datasets/csd543",
         "MINTPLT"          : 0,
         "MAXTPLT"          : 5,
         "MINSEQ"           : 1,
@@ -77,11 +79,16 @@ def set_data_loader_params(args):
         "ROWS"             : 1,
         "SEQID"            : 95.0,
         "MAXCYCLE"         : 4,
+        "RMAX"             : 5.0,
+        "MAXRES"           : 1,
+        "MINATOMS"         : 5,
+        "MAXATOMS"         : 100,
+        "MAXSIM"           : 0.85,
     }
-    for param in PARAMS:
+    for param in params:
         if hasattr(args, param.lower()):
-            PARAMS[param] = getattr(args, param.lower())
-    return PARAMS
+            params[param] = getattr(args, param.lower())
+    return params
 
 def MSABlockDeletion(msa, ins, nb=5):
     '''
@@ -525,6 +532,27 @@ def get_train_valid_set(params, OFFSET=1000000):
                     train_na_neg[r[2]].append((r[:2], r[-1]))
                 else:
                     train_na_neg[r[2]] = [(r[:2], r[-1])]
+        
+        sim_idx = int(params["MAXSIM"]*100-50)
+        with open(params["CSD_LIST"], 'r') as f:
+            reader = csv.reader(f)
+            next(reader)
+            rows = [[r[1], # name
+                    ast.literal_eval(r[11])[sim_idx], # train similarity 
+                    ast.literal_eval(r[13])[sim_idx]] # valid similarity
+                    for r in reader if float(r[4]) <= params["RMAX"] 
+                    and float(r[8]) <= params["MAXRES"] 
+                    and float(r[9]) <= params["MAXATOMS"] 
+                    and float(r[9]) >= params["MINATOMS"] 
+                    and ast.literal_eval(r[12])[sim_idx]==0] # not in test set
+
+        train_sm = {}
+        valid_sm = {}
+        for i, row in enumerate(rows):
+            if row[2] != 0:
+                valid_sm[i] = row[:2]
+            else:
+                train_sm[i] = row[:2]
 
         # Get average chain length in each cluster and calculate weights
         pdb_IDs = list(train_pdb.keys())
@@ -535,6 +563,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         na_neg_IDs = list(train_na_neg.keys())
         rna_IDs = list(train_rna.keys())
         sm_compl_IDs = list(train_sm_compl.keys())
+        sm_IDs = list(train_sm.keys())
 
         #
         pdb_weights = np.array([train_pdb[key][0][1] for key in pdb_IDs])
@@ -552,6 +581,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         rna_weights = np.ones(len(rna_IDs)) # no weighing
         sm_compl_weights = np.array([train_sm_compl[key][0][1] for key in sm_compl_IDs])
         sm_compl_weights = (1/512.)*np.clip(sm_compl_weights, 256, 512)  
+        sm_weights = np.array([train_sm[key][1] for key in sm_IDs])
 
         # save
         obj = (
@@ -563,10 +593,11 @@ def get_train_valid_set(params, OFFSET=1000000):
             na_neg_IDs, na_neg_weights, train_na_neg,
             rna_IDs, rna_weights, train_rna,
             sm_compl_IDs, sm_compl_weights, train_sm_compl,
+            sm_IDs, sm_weights, train_sm,
             valid_pdb, valid_homo, 
             valid_compl, valid_neg,
             valid_na_compl, valid_na_neg,
-            valid_rna, valid_sm_compl,
+            valid_rna, valid_sm_compl, valid_sm, 
             homo
         )
         with open(params["DATAPKL"], "wb") as f:
@@ -585,10 +616,11 @@ def get_train_valid_set(params, OFFSET=1000000):
                 na_neg_IDs, na_neg_weights, train_na_neg,
                 rna_IDs, rna_weights, train_rna,
                 sm_compl_IDs, sm_compl_weights, train_sm_compl,
+                sm_IDs, sm_weights, train_sm, 
                 valid_pdb, valid_homo, 
                 valid_compl, valid_neg,
                 valid_na_compl, valid_na_neg,
-                valid_rna, valid_sm_compl,
+                valid_rna, valid_sm_compl, valid_sm,
                 homo
             ) = pickle.load(f)
             print ('...done')
@@ -601,11 +633,12 @@ def get_train_valid_set(params, OFFSET=1000000):
         (na_compl_IDs, torch.tensor(na_compl_weights).float(), train_na_compl),\
         (na_neg_IDs, torch.tensor(na_neg_weights).float(), train_na_neg),\
         (rna_IDs, torch.tensor(rna_weights).float(), train_rna),\
-        (sm_compl_IDs, torch.tensor(sm_compl_weights).float(), train_sm_compl),
+        (sm_compl_IDs, torch.tensor(sm_compl_weights).float(), train_sm_compl), \
+        (sm_IDs, torch.tensor(sm_weights).float(), train_sm), \
         valid_pdb, valid_homo, 
         valid_compl, valid_neg,
         valid_na_compl, valid_na_neg,
-        valid_rna, valid_sm_compl,
+        valid_rna, valid_sm_compl, valid_sm, 
         homo
     )
 
@@ -1400,7 +1433,7 @@ def loader_rna(item, Ls, params, random_noise=5.0):
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, "rna",item
+           chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), "rna",item
 
 def loader_sm_compl(item, sm_chains, params, pick_top=True,
     init_protein_tmpl=False, init_ligand_tmpl=False,
@@ -1528,7 +1561,7 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True,
     xyz_t = torch.nan_to_num(xyz_t)
 
     if sum(Ls) > params["CROP"]:
-        sel = crop_small_molecule(xyz_prot, xyz_sm[0], Ls, params)
+        sel = crop_sm(xyz_prot, xyz_sm[0], Ls, params)
         seq = seq[:,sel]
         msa_seed_orig = msa_seed_orig[:,:,sel]
         msa_seed = msa_seed[:,:,sel]
@@ -1675,10 +1708,13 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats,"atomize_pdb", item
 
-def loader_small_molecule(item, sm_chains, params, pick_top=True):
+def loader_sm(item, params, pick_top=True):
     """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
     # Load small molecule
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+item[0][1:3]+"/"+random.choice(sm_chains))
+    fname = params['CSD_DIR']+'/torch/'+item[:2]+'/'+item+'.pt'
+    data = torch.load(fname)
+
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(data["mol2"], string=True)
     a3m = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
@@ -1686,7 +1722,7 @@ def loader_small_molecule(item, sm_chains, params, pick_top=True):
     N_symmetry, sm_L, _ = xyz_sm.shape
 
     if sm_L < 2:
-        print(f'WARNING [loader_small_molecule]: Sm mol. {item} only has one atom. Skipping.')
+        print(f'WARNING [loader_sm]: Sm mol. {item} only has one atom. Skipping.')
         return [torch.tensor([-1])]*20 # flag for bad example
 
     # Generate ground truth structure: account for ligand symmetry
@@ -1718,7 +1754,7 @@ def loader_small_molecule(item, sm_chains, params, pick_top=True):
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, "sm_only", item
 
-def crop_small_molecule(prot_xyz, lig_xyz,Ls, params):
+def crop_sm(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to a random ligand atom"""
     # ligand_com = torch.nanmean(lig_xyz, dim=[0,1]).expand(1,3)
     i_face_xyz = lig_xyz[np.random.randint(len(lig_xyz))]
@@ -1885,9 +1921,9 @@ class DistilledDataset(data.Dataset):
         self,
         pdb_IDs, pdb_loader, pdb_dict,
         compl_IDs, compl_loader, compl_dict,
-        #neg_IDs, neg_loader, neg_dict,
+        neg_IDs, neg_loader, neg_dict,
         na_compl_IDs, na_compl_loader, na_compl_dict,
-        #na_neg_IDs, na_neg_loader, na_neg_dict,
+        na_neg_IDs, na_neg_loader, na_neg_dict,
         fb_IDs, fb_loader, fb_dict,
         rna_IDs, rna_loader, rna_dict,
         sm_compl_IDs, sm_compl_loader, sm_compl_dict, 
@@ -1904,15 +1940,15 @@ class DistilledDataset(data.Dataset):
         self.compl_IDs = compl_IDs
         self.compl_loader = compl_loader
         self.compl_dict = compl_dict
-        #self.neg_IDs = neg_IDs
-        #self.neg_loader = neg_loader
-        #self.neg_dict = neg_dict
+        self.neg_IDs = neg_IDs
+        self.neg_loader = neg_loader
+        self.neg_dict = neg_dict
         self.na_compl_IDs = na_compl_IDs
         self.na_compl_loader = na_compl_loader
         self.na_compl_dict = na_compl_dict
-        #self.na_neg_IDs = na_neg_IDs
-        #self.na_neg_loader = na_neg_loader
-        #self.na_neg_dict = na_neg_dict
+        self.na_neg_IDs = na_neg_IDs
+        self.na_neg_loader = na_neg_loader
+        self.na_neg_dict = na_neg_dict
         self.fb_IDs = fb_IDs
         self.fb_dict = fb_dict
         self.fb_loader = fb_loader
@@ -1931,9 +1967,9 @@ class DistilledDataset(data.Dataset):
         self.native_NA_frac = native_NA_frac
 
         self.compl_inds = np.arange(len(self.compl_IDs))
-        #self.neg_inds = np.arange(len(self.neg_IDs))
+        self.neg_inds = np.arange(len(self.neg_IDs))
         self.na_compl_inds = np.arange(len(self.na_compl_IDs))
-        #self.na_neg_inds = np.arange(len(self.na_neg_IDs))
+        self.na_neg_inds = np.arange(len(self.na_neg_IDs))
         self.fb_inds = np.arange(len(self.fb_IDs))
         self.pdb_inds = np.arange(len(self.pdb_IDs))
         self.rna_inds = np.arange(len(self.rna_IDs))
@@ -1949,8 +1985,8 @@ class DistilledDataset(data.Dataset):
             + len(self.rna_inds)
             + len(self.sm_compl_inds)
             + len(self.sm_inds)
-            #+ len(self.neg_inds)
-            #+ len(self.na_neg_inds)
+            + len(self.neg_inds)
+            + len(self.na_neg_inds)
         )
 
     # order:
@@ -1990,18 +2026,18 @@ class DistilledDataset(data.Dataset):
             )
         offset += len(self.compl_inds)
 
-        #if index >= offset and index < offset + len(self.neg_inds):
-        #    ID = self.neg_IDs[index-offset]
-        #    sel_idx = np.random.randint(0, len(self.neg_dict[ID]))
-        #    out = self.neg_loader(
-        #        self.neg_dict[ID][sel_idx][0],
-        #        self.neg_dict[ID][sel_idx][1],
-        #        self.neg_dict[ID][sel_idx][2],
-        #        self.neg_dict[ID][sel_idx][3],
-        #        self.params,
-        #        negative=True
-        #    )
-        #offset += len(self.neg_inds)
+        if index >= offset and index < offset + len(self.neg_inds):
+           ID = self.neg_IDs[index-offset]
+           sel_idx = np.random.randint(0, len(self.neg_dict[ID]))
+           out = self.neg_loader(
+               self.neg_dict[ID][sel_idx][0],
+               self.neg_dict[ID][sel_idx][1],
+               self.neg_dict[ID][sel_idx][2],
+               self.neg_dict[ID][sel_idx][3],
+               self.params,
+               negative=True
+           )
+        offset += len(self.neg_inds)
 
         if index >= offset and index < offset + len(self.na_compl_inds):
             ID = self.na_compl_IDs[index-offset]
@@ -2015,17 +2051,17 @@ class DistilledDataset(data.Dataset):
             )
         offset += len(self.na_compl_inds)
 
-        #if index >= offset and index < offset + len(self.na_neg_inds):
-        #    ID = self.na_neg_IDs[index-offset]
-        #    sel_idx = np.random.randint(0, len(self.na_neg_dict[ID]))
-        #    out = self.na_neg_loader(
-        #        self.na_neg_dict[ID][sel_idx][0],
-        #        self.na_neg_dict[ID][sel_idx][1],
-        #        self.params,
-        #        negative=True,
-        #        native_NA_frac=self.native_NA_frac
-        #    )
-        #offset += len(self.na_neg_inds)
+        if index >= offset and index < offset + len(self.na_neg_inds):
+           ID = self.na_neg_IDs[index-offset]
+           sel_idx = np.random.randint(0, len(self.na_neg_dict[ID]))
+           out = self.na_neg_loader(
+               self.na_neg_dict[ID][sel_idx][0],
+               self.na_neg_dict[ID][sel_idx][1],
+               self.params,
+               negative=True,
+               native_NA_frac=self.native_NA_frac
+           )
+        offset += len(self.na_neg_inds)
 
         if index >= offset and index < offset + len(self.rna_inds):
             ID = self.rna_IDs[index-offset]
@@ -2073,10 +2109,8 @@ class DistilledDataset(data.Dataset):
 
         if index >= offset:
             ID = self.sm_IDs[index-offset]
-            sel_idx = np.random.randint(0, len(self.sm_dict[ID]))
             out = self.sm_loader(
-                self.sm_dict[ID][sel_idx][0],
-                self.sm_dict[ID][sel_idx][2],
+                self.sm_dict[ID][0],
                 self.params,
             )
         return out
@@ -2088,9 +2122,9 @@ class DistributedWeightedSampler(data.Sampler):
         pdb_weights,
         fb_weights,
         compl_weights,
-        #neg_weights,
+        neg_weights,
         na_compl_weights,
-        #neg_na_compl_weights,
+        neg_na_compl_weights,
         rna_weights,
         sm_compl_weights,
         sm_weights,
@@ -2121,9 +2155,9 @@ class DistributedWeightedSampler(data.Sampler):
         self.num_replicas = num_replicas
         self.num_fb_per_epoch = int(round(num_example_per_epoch*fraction_fb))
         self.num_compl_per_epoch = int(round(0.5*num_example_per_epoch*fraction_compl))
-        #self.num_neg_per_epoch = self.num_compl_per_epoch
+        self.num_neg_per_epoch = 0 #manually set to 0
         self.num_na_compl_per_epoch = int(round(0.5*num_example_per_epoch*fraction_na_compl))
-        #self.num_neg_na_compl_per_epoch = self.num_na_compl_per_epoch
+        self.num_neg_na_compl_per_epoch = 0 # manually set to 0
         self.num_rna_per_epoch = int(round(num_example_per_epoch*fraction_rna))
         self.num_sm_compl_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl))
         self.num_sm_per_epoch = int(round(num_example_per_epoch*fraction_sm))
@@ -2135,8 +2169,8 @@ class DistributedWeightedSampler(data.Sampler):
             + self.num_rna_per_epoch
             + self.num_sm_compl_per_epoch
             + self.num_sm_per_epoch
-            #+ self.num_neg_per_epoch
-            #+ self.num_neg_na_compl_per_epoch
+            + self.num_neg_per_epoch
+            + self.num_neg_na_compl_per_epoch
         )
 
         if (rank==0):
@@ -2145,11 +2179,12 @@ class DistributedWeightedSampler(data.Sampler):
                 self.num_pdb_per_epoch,"pdb,",
                 self.num_fb_per_epoch,"fb,",
                 self.num_compl_per_epoch,"compl,",
-                #self.num_neg_per_epoch,"neg,",
+                self.num_neg_per_epoch,"neg,",
                 self.num_na_compl_per_epoch,"NA compl,",
-                #self.num_neg_na_compl_per_epoch,"NA neg,",
+                self.num_neg_na_compl_per_epoch,"NA neg,",
                 self.num_rna_per_epoch,"RNA,",
-                self.num_sm_compl_per_epoch, "SM Compl."
+                self.num_sm_compl_per_epoch, "SM Compl,",
+                self.num_sm_per_epoch, "SM crystals."
             )
 
 
@@ -2163,10 +2198,10 @@ class DistributedWeightedSampler(data.Sampler):
         self.fb_weights = fb_weights
 
         self.compl_weights = compl_weights
-        #self.neg_weights = neg_weights
+        self.neg_weights = neg_weights
 
         self.na_compl_weights = na_compl_weights
-        #self.neg_na_compl_weights = neg_na_compl_weights
+        self.neg_na_compl_weights = neg_na_compl_weights
 
         self.rna_weights = rna_weights
         
@@ -2207,20 +2242,20 @@ class DistributedWeightedSampler(data.Sampler):
             sel_indices = torch.cat((sel_indices, indices[compl_sampled + offset]))
         offset += len(self.dataset.compl_IDs)
         
-        #if (self.num_neg_per_epoch>0):
-        #    neg_sampled = torch.multinomial(self.neg_weights, self.num_neg_per_epoch, self.replacement, generator=g)
-        #    sel_indices = torch.cat((sel_indices, indices[neg_sampled + offset]))
-        #offset += len(self.dataset.neg_IDs)
+        if (self.num_neg_per_epoch>0):
+           neg_sampled = torch.multinomial(self.neg_weights, self.num_neg_per_epoch, self.replacement, generator=g)
+           sel_indices = torch.cat((sel_indices, indices[neg_sampled + offset]))
+        offset += len(self.dataset.neg_IDs)
 
         if (self.num_na_compl_per_epoch>0):
             na_compl_sampled = torch.multinomial(self.na_compl_weights, self.num_na_compl_per_epoch, self.replacement, generator=g)
             sel_indices = torch.cat((sel_indices, indices[na_compl_sampled + offset]))
         offset += len(self.dataset.na_compl_IDs)
 
-        #if (self.num_neg_na_compl_per_epoch>0):
-        #    neg_na_sampled = torch.multinomial(self.neg_na_compl_weights, self.num_neg_na_compl_per_epoch, self.replacement, generator=g)
-        #    sel_indices = torch.cat((sel_indices, indices[neg_na_sampled + offset]))
-        #offset += len(self.dataset.na_neg_IDs)
+        if (self.num_neg_na_compl_per_epoch>0):
+           neg_na_sampled = torch.multinomial(self.neg_na_compl_weights, self.num_neg_na_compl_per_epoch, self.replacement, generator=g)
+           sel_indices = torch.cat((sel_indices, indices[neg_na_sampled + offset]))
+        offset += len(self.dataset.na_neg_IDs)
 
         if (self.num_rna_per_epoch>0):
             rna_sampled = torch.multinomial(self.rna_weights, self.num_rna_per_epoch, self.replacement, generator=g)

@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.utils import data
 from functools import partial
 from data_loader import (
-    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_small_molecule, loader_sm_compl, loader_atomize_pdb,
+    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_atomize_pdb,
     Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
 )
 from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
@@ -298,7 +298,9 @@ class Trainer():
             )
             lig_fape = (w_bb_fape*l_fape_sm).sum()
             tot_loss += 0.5*w_lig_fape*lig_fape
-            
+        else:
+            lig_fape = torch.tensor(0).to(gpu)
+        if not bool(torch.all(sm_res_mask)) and bool(torch.any(sm_res_mask)):    # not all atoms but some atoms    
             # calculate interchain fape 
             # fape of protein coordinates wrt ligand frames 
             mask_crds_protein = mask_crds.clone()
@@ -334,7 +336,6 @@ class Trainer():
             tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
         else:
             bb_l_fape_inter = torch.tensor(0).to(gpu)
-            lig_fape = torch.tensor(0).to(gpu)
             #l_fape_sm = torch.tensor([0]).to(gpu)
 
         #loss_dict['bb_fape_lig'] = l_fape_sm[-1].detach()
@@ -681,8 +682,8 @@ class Trainer():
         #define dataset & data loader
         (
             pdb_items, fb_items, compl_items, neg_items, na_compl_items, na_neg_items, rna_items,
-            sm_compl_items, valid_pdb, valid_homo, valid_compl, valid_neg, valid_na_compl, 
-            valid_na_neg, valid_rna, valid_sm_compl, homo
+            sm_compl_items, sm_items, valid_pdb, valid_homo, valid_compl, valid_neg, valid_na_compl, 
+            valid_na_neg, valid_rna, valid_sm_compl, valid_sm, homo
         ) = get_train_valid_set(self.loader_param)
 
         pdb_IDs, pdb_weights, pdb_dict = pdb_items
@@ -693,7 +694,8 @@ class Trainer():
         na_neg_IDs, na_neg_weights, na_neg_dict = na_neg_items
         rna_IDs, rna_weights, rna_dict = rna_items
         sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
-
+        sm_IDs, sm_weights, sm_dict = sm_items
+        
         self.n_train = N_EXAMPLE_PER_EPOCH
         self.n_valid_pdb = 100 #len(valid_pdb.keys())
         self.n_valid_pdb_atomize = 0 #100
@@ -707,6 +709,7 @@ class Trainer():
         #self.n_valid_sm_compl_dock = 100
         #self.n_valid_sm_compl_foldprot = 100
         #self.n_valid_sm_compl_foldlig = 100
+        self.n_valid_sm = 100
 
         if (rank==0):
             print ('Loaded (training)',
@@ -716,8 +719,9 @@ class Trainer():
                 len(neg_IDs),'negative heteromers,',
                 len(na_compl_IDs),'nucleic-acid complexes,',
                 len(na_neg_IDs),'negative nucleic-acid complexes,',
-                len(rna_IDs),'RNA structures,  and',
-                len(sm_compl_IDs), 'small molecule complexes'
+                len(rna_IDs),'RNA structures,',
+                len(sm_compl_IDs), 'small molecule complexes, and',
+                len(sm_IDs), "small molecule crystals."
             )
             print ('Loaded (valid)',
                 len(valid_pdb.keys()),'monomers,',
@@ -726,8 +730,10 @@ class Trainer():
                 len(valid_neg.keys()),'negative heteromers,',
                 len(valid_na_compl.keys()),'nucleic-acid complexes,',
                 len(valid_na_neg.keys()),'negative nucleic-acid complexes,',
-                len(valid_rna),'RNA structures, and',
-                len(valid_sm_compl), 'small molecule complexes'
+                len(valid_rna),'RNA structures,',
+                len(valid_sm_compl), 'small molecule complexes, and',
+                len(valid_sm), 'small molecule crystals.'
+
             )
             print ('Using',
                 self.n_valid_pdb,'monomers,',
@@ -742,18 +748,19 @@ class Trainer():
                 #self.n_valid_sm_compl_dock, 'small mol. complexes (rigid dock),',
                 #self.n_valid_sm_compl_foldprot, 'small mol. complexes (fold prot),',
                 #self.n_valid_sm_compl_foldlig, 'small mol. complexes (fold ligand)',
+                self.n_valid_sm, "small molecule crystals."
             )
 
         train_set = DistilledDataset(
             pdb_IDs, loader_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
-            #neg_IDs, loader_complex, neg_dict,
+            neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
-            #na_neg_IDs, loader_na_complex, na_neg_dict,
+            na_neg_IDs, loader_na_complex, na_neg_dict,
             fb_IDs, loader_fb, fb_dict,
             rna_IDs, loader_rna, rna_dict,
             sm_compl_IDs, loader_sm_compl, sm_compl_dict,
-            sm_compl_IDs, loader_small_molecule, sm_compl_dict,
+            sm_IDs, loader_sm, sm_dict,
             homo, 
             self.loader_param,
             native_NA_frac=0.25
@@ -792,6 +799,11 @@ class Trainer():
         valid_sm_compl_set = DatasetSMComplex(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_sm_compl, valid_sm_compl,
+            self.loader_param,
+        )
+        valid_sm_set = DatasetSM(
+            list(valid_sm.keys())[:self.n_valid_sm],
+            loader_sm, valid_sm,
             self.loader_param,
         )
         #valid_atomize_pdb_set = Dataset(
@@ -839,22 +851,22 @@ class Trainer():
             pdb_weights,
             fb_weights,
             compl_weights,
-            #neg_weights,
+            neg_weights,
             na_compl_weights,
-            #na_neg_weights,
+            na_neg_weights,
             rna_weights,
             sm_compl_weights,
-            sm_compl_weights,
+            sm_weights, 
             num_example_per_epoch=N_EXAMPLE_PER_EPOCH,
             num_replicas=world_size, 
             rank=rank, 
             #fraction_pdb=0.22 # not a real argument but implicit
             fraction_fb=0.0,
-            fraction_compl=0.18,
-            fraction_na_compl=0.18,
-            fraction_rna=0.09,
-            fraction_sm_compl=0.37,
-            fraction_sm = 0, 
+            fraction_compl=0.0,
+            fraction_na_compl=0.0,
+            fraction_rna=0.0,
+            fraction_sm_compl=0.0,
+            fraction_sm=1, 
             replacement=True
         )
 
@@ -1087,7 +1099,6 @@ class Trainer():
             # loader will print warning message with item info for followup later
             if torch.is_tensor(item) and torch.all(item==-1):
                 continue
-
             save_pdbs = np.random.rand()<=0.01
 
             # transfer inputs to device
