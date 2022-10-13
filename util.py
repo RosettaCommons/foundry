@@ -4,12 +4,14 @@ import numpy as np
 import torch
 
 import scipy.sparse
-from scipy.spatial.transform import Rotation
 import networkx as nx
+from itertools import combinations
 from openbabel import openbabel
+from scipy.spatial.transform import Rotation
 
 from chemical import *
 from scoring import *
+
 
 def random_rot_trans(xyz, random_noise=20.0):
     # xyz: (N, L, 27, 3)
@@ -1025,29 +1027,28 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
             bond_feats[start_idx, end_idx] = aabtypes[res][j]
             bond_feats[end_idx, start_idx] = aabtypes[res][j]
         #accounting for peptide bonds
-        if i > 0:
+        if i > 1:
             if (i-1, 2) not in ra2ind or (i, 0) not in ra2ind:
                 #skip bonds with atoms that aren't observed in the structure
                 continue
             start_idx = ra2ind[(i-1, 2)]
             end_idx = ra2ind[(i, 0)]
-            bond_feats[start_idx, end_idx] = 1
-            bond_feats[end_idx, start_idx] = 1
+            bond_feats[start_idx, end_idx] = aabtypes[res][j]
+            bond_feats[end_idx, start_idx] = aabtypes[res][j]
     return bond_feats
 
 ### Generate atom features for proteins ###
-def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
-    """Starting with residue `i_start`, make `n_res_atomize` contiguous residues
-    into "atom" nodes """
-    residues_atomize = msa[0, i_start:i_start+n_res_atomize]
+def atomize_protein(sel_res, msa, xyz, mask, stretch=5):
+    """ given an index sel_res, make the following flank residues into "atom" nodes """
+    residues_atomize = msa[0, sel_res:sel_res+stretch]
     residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
-    residue_atomize_mask = mask[i_start:i_start+n_res_atomize].float()
+    residue_atomize_mask = mask[sel_res:sel_res+stretch].float()
     xyz = torch.nan_to_num(xyz)
 
     # handle symmetries
     xyz_alt = torch.zeros_like(xyz.unsqueeze(0))
     xyz_alt.scatter_(2, long2alt[msa[0],:,None].repeat(1,1,1,3), xyz.unsqueeze(0))
-    coords_stack = torch.stack((xyz[i_start:i_start+n_res_atomize], xyz_alt[0, i_start:i_start+n_res_atomize]), dim=0)
+    coords_stack = torch.stack((xyz[sel_res:sel_res+stretch], xyz_alt[0, sel_res:sel_res+stretch]), dim=0)
     swaps = (coords_stack[0] == coords_stack[1]).all(dim=1).all(dim=1).squeeze() #checks whether theres a swap at each position
     swaps = torch.nonzero(~swaps).squeeze() # indices with a swap eg. [2,3]
     if swaps.numel() != 0:
@@ -1065,11 +1066,10 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     ins = torch.zeros_like(lig_seq)
 
     r,a = ra.T
-    last_C = torch.all(ra==torch.tensor([r[-1],2]),dim=1).nonzero()
     lig_xyz = torch.zeros((len(ra), 3))
     lig_xyz = nat_symm[:, r, a]
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     frames = get_atomized_protein_frames(residues_atomize, ra)
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
 
-    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C
+    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats

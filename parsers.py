@@ -423,6 +423,7 @@ def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
     return xyz, f1d
 
 def parse_mol(filename):
+
     obConversion = openbabel.OBConversion()
     obConversion.SetInFormat("mol2")
 
@@ -431,15 +432,28 @@ def parse_mol(filename):
     obmol.DeleteHydrogens()
     msa = torch.tensor([aa2num[atomnum2atomtype[obmol.GetAtom(i).GetAtomicNum()]] for i in range(1, obmol.NumAtoms()+1)])
     ins = torch.zeros_like(msa)
-    atom_coords = torch.tensor([[obmol.GetAtom(i).x(),obmol.GetAtom(i).y(), obmol.GetAtom(i).z()] for i in range(1, obmol.NumAtoms()+1)])
-    mask = torch.full(atom_coords.shape[:-1], True)
+
+    atom_coords = torch.tensor([[obmol.GetAtom(i).x(),obmol.GetAtom(i).y(), obmol.GetAtom(i).z()] 
+                                for i in range(1, obmol.NumAtoms()+1)]).unsqueeze(0) # (1, natoms, 3)
+    mask = torch.full(atom_coords.shape[:-1], True) # (1, natoms)
+
     try:
         automorphs = openbabel.vvpairUIntUInt()
         openbabel.FindAutomorphisms(obmol,automorphs)
-        atom_coords = atom_coords[torch.tensor(automorphs)[:, :, 1]]
-        mask = mask[torch.tensor(automorphs)[:, :, 1]]
-    except:
-        atom_coords = atom_coords.unsqueeze(0)
-        mask = mask.unsqueeze(0)
+        
+        automorphs = torch.tensor(automorphs)
+        n_symmetry = automorphs.shape[0]
+
+        atom_coords = atom_coords.repeat(n_symmetry,1,1)
+        mask = mask.repeat(n_symmetry,1)
+
+        atom_coords = torch.scatter(atom_coords, 1, automorphs[:,:,0:1].repeat(1,1,3),
+                                    torch.gather(atom_coords,1,automorphs[:,:,1:2].repeat(1,1,3)))
+        mask = torch.scatter(mask, 1, automorphs[:,:,0],
+                             torch.gather(mask, 1, automorphs[:,:,1]))
+
+    except Exception as e:
         print(f"ERROR: automorphs for {filename} yielded invalid tensor")
+
     return obmol, msa, ins, atom_coords, mask
+

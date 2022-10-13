@@ -1,4 +1,4 @@
-import sys, os, time, subprocess
+import sys, os, time, subprocess, shutil
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
@@ -39,7 +39,7 @@ np.random.seed(6636)
 USE_AMP = False
 torch.set_num_threads(4)
 
-N_PRINT_TRAIN = 4
+#N_PRINT_TRAIN = 4
 #BATCH_SIZE = 1 * torch.cuda.device_count()
 
 # num structs per epoch
@@ -181,11 +181,12 @@ class Trainer():
                   logit_aa_s, label_aa_s, mask_aa_s,
                   pred, pred_tors, pred_allatom, true,
                   mask_crds, mask_BB, mask_2d, same_chain,
-                  pred_lddt, idx, atom_frames=None, unclamp=False, negative=False, interface=False,
+                  pred_lddt, idx, bond_feats, atom_frames=None, unclamp=False, 
+                  negative=False, interface=False,
                   verbose=False, ctr=0,
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lig_fape=1.0, w_lddt=1.0, 
-                  w_bond=1.0, w_clash=0.0, w_hb=0.0, w_dih=0.0,
-                  lj_lin=0.85, eps=1e-6, item=None, out_dir='./'
+                  w_bond=1.0, w_clash=0.0, w_atom_bond=0.0, w_skip_bond=0.0, w_rigid=0.0, w_hb=0.0, w_dih=0.0,
+                  lj_lin=0.85, eps=1e-6, item=None, task=None, out_dir='./'
     ):
         gpu = pred.device
 
@@ -215,7 +216,9 @@ class Trainer():
 
         ### GENERAL LAYERS
         # Structural loss (layer-wise backbone FAPE)
-        dclamp = 300.0 if unclamp else 30.0 
+        dclamp = 300.0 if unclamp else 30.0 # protein & NA FAPE distance cutoffs
+        dclamp_sm, Z_sm = 4, 4  # sm mol FAPE distance cutoffs
+
         frames, frame_mask = get_frames(
             pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
         # update frames and frames_mask to only include BB frames (have to update both for compatibility with compute_general_FAPE)
@@ -249,25 +252,24 @@ class Trainer():
                 mask_crds[:,mask_BBB[0], :3],
                 frames_BB[:,mask_BBB[0]],
                 frame_mask_BB[:,mask_BBB[0]],
-                Z=4,
-                dclamp=4
+                dclamp=dclamp
             )
         else:
             l_fape_B = torch.tensor([0]).to(gpu)
+
         loss_dict['bb_fape_c2'] = l_fape_B[-1].detach()
             
         if negative: # inter-chain fapes should be ignored for negative cases
             fracA = float(L1)/len(same_chain[0,0])
             tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
         else:
-            tot_str, fape_matrix = compute_general_FAPE(
+            tot_str = compute_general_FAPE(
                 pred[:,mask_BB,:,:3],
                 true[:,mask_BB[0],:3],
                 mask_crds[:,mask_BB[0],:3],
                 frames_BB[:,mask_BB[0]],
                 frame_mask_BB[:,mask_BB[0]],
                 dclamp=dclamp, 
-                return_matrix = True
             )
         num_layers = pred.shape[0]
         gamma = 0.99
@@ -282,31 +284,62 @@ class Trainer():
             loss_dict[f'bb_fape_layer{i}'] = tot_str[i].detach()
         loss_dict['bb_fape_full'] = bb_l_fape.detach()
 
-        # ligand fape (layer-averaged c2 fape)
-        lig_fape = (w_bb_fape*l_fape_B).sum()
-        tot_loss += 0.5*w_lig_fape*lig_fape
-        loss_dict['bb_fape_lig'] = l_fape_B[-1].detach()
-
-        # protein-sm interface fape
-        sm_res_mask = is_atom(label_aa_s[0,0,mask_BB[0]]) # (L,)
-        sm_atom_mask = sm_res_mask[...,None].repeat((1,1,3))[mask_crds[:,mask_BB[0],:3]] # (L,)
+        sm_res_mask = is_atom(label_aa_s[0,0])*mask_BB[0] # (L,)
         if bool(torch.any(sm_res_mask)):
-            try:
-                # fape_matrix : (B, n_res, n_bb_atoms + n_sm_atoms)
-                inter_fape = fape_matrix[:,sm_res_mask][:,:,~sm_atom_mask].sum(dim=[1,2]) + \
-                             fape_matrix[:,~sm_res_mask][:,:,sm_atom_mask].sum(dim=[1,2])
-                inter_fape /= sm_res_mask.sum()*(~sm_atom_mask).sum() + (~sm_res_mask).sum()*sm_atom_mask.sum()
-                bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
-                tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
-            except Exception as e:
-                print('error in calc_loss inter-fape', item, '\n'+repr(e))
-                print('bb_l_fape.shape',bb_l_fape.shape)
-                print('bb_l_fape',bb_l_fape)
-                print('fape_matrix.shape',fape_matrix.shape)
-                bb_l_fape_inter = torch.tensor(0).to(gpu)
+            # ligand fape (layer-averaged fape on atom coordinates with atom frames)
+            l_fape_sm = compute_general_FAPE(
+                pred[:, sm_res_mask[None],:,:3],
+                true[:,sm_res_mask,:3,:3],
+                atom_mask = mask_crds[:,sm_res_mask, :3],
+                frames = frames_BB[:,sm_res_mask],
+                frame_mask = frame_mask_BB[:,sm_res_mask],
+                dclamp=dclamp_sm,
+                Z=Z_sm
+            )
+            lig_fape = (w_bb_fape*l_fape_sm).sum()
+            tot_loss += 0.5*w_lig_fape*lig_fape
+            
+            # calculate interchain fape 
+            # fape of protein coordinates wrt ligand frames 
+            mask_crds_protein = mask_crds.clone()
+            mask_crds_protein[:, sm_res_mask] = False
+            frame_mask_BB_sm = frame_mask_BB.clone()
+            frame_mask_BB_sm[:,~sm_res_mask] = False
+            l_fape_protein_sm = compute_general_FAPE(
+                pred[:, mask_BB,:,:3],
+                true[:, mask_BB[0],:3,:3],
+                atom_mask = mask_crds_protein[:,mask_BB[0], :3],
+                frames = frames_BB[:,mask_BB[0]],
+                frame_mask = frame_mask_BB_sm[:,mask_BB[0]],
+                frame_atom_mask = mask_crds[:,mask_BB[0],:3],
+                dclamp=dclamp
+            )
+            # fape of ligand coordinates wrt protein frames
+            mask_crds_sm = mask_crds.clone()
+            mask_crds_sm[:, ~sm_res_mask] = False
+            frame_mask_BB_protein = frame_mask_BB.clone()
+            frame_mask_BB_protein[:,sm_res_mask] = False
+            l_fape_sm_protein = compute_general_FAPE(
+                pred[:, mask_BB,:,:3],
+                true[:, mask_BB[0],:3,:3],
+                atom_mask = mask_crds_sm[:,mask_BB[0], :3],
+                frames = frames_BB[:,mask_BB[0]],
+                frame_mask = frame_mask_BB_protein[:,mask_BB[0]],
+                frame_atom_mask = mask_crds[:,mask_BB[0],:3],
+                dclamp=dclamp
+            )
+            frac_sm = torch.sum(frame_mask_BB_sm[:,mask_BB[0]])/ torch.sum(frame_mask_BB[:,mask_BB[0]])
+            inter_fape = frac_sm*l_fape_protein_sm + (1.0-frac_sm)*l_fape_sm_protein
+            bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
+            tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
         else:
             bb_l_fape_inter = torch.tensor(0).to(gpu)
-        loss_dict['inter_fape'] = bb_l_fape_inter.detach()
+            lig_fape = torch.tensor(0).to(gpu)
+            #l_fape_sm = torch.tensor([0]).to(gpu)
+
+        #loss_dict['bb_fape_lig'] = l_fape_sm[-1].detach()
+        loss_dict['bb_fape_lig'] = lig_fape.detach()
+        loss_dict['bb_fape_inter'] = bb_l_fape_inter.detach()
 
         # AllAtom loss
         # get ground-truth torsion angles
@@ -386,9 +419,36 @@ class Trainer():
                 frames[:,mask_BB[0]],
                 frame_mask[:,mask_BB[0]]
             )
+
         tot_loss += w_str*l_fape[0]
         loss_dict['allatom_fape'] = l_fape[0].detach()
-        
+        rmsd = calc_crd_rmsd(
+            pred_allatom[:,mask_BB[0],:,:3],
+            nat_symm[None,mask_BB[0],:,:3],
+            xs_mask[:,mask_BB[0]]
+            )
+        loss_dict["allatom_rmsd"] = rmsd[0].detach()
+        sm_res_mask = is_atom(label_aa_s[0,0])*mask_BB[0] # (L,)
+        if torch.any(sm_res_mask):
+            xs_mask_sm = xs_mask.clone()
+            xs_mask_sm[:,~sm_res_mask] = False
+            rmsd_sm = calc_crd_rmsd(
+                pred_allatom[:,mask_BB[0],:,:3],
+                nat_symm[None,mask_BB[0],:,:3],
+                xs_mask_sm[:,mask_BB[0]]
+                )
+            rmsd_sm_protein = calc_crd_rmsd(
+                pred_allatom[:,mask_BB[0],:,:3],
+                nat_symm[None,mask_BB[0],:,:3],
+                xs_mask[:,mask_BB[0]],
+                xs_mask_sm[:,mask_BB[0]]
+            )
+            loss_dict["kabsch_rsmd"]= rmsd_sm[0].detach()
+            loss_dict["sm_rmsd"] = rmsd_sm_protein[0].detach()
+        else:
+            loss_dict["kabsch_rsmd"]= torch.tensor(0, device=pred.device)
+            loss_dict["sm_rmsd"] = torch.tensor(0, device=pred.device)
+
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
         if w_bond > 0.0:
@@ -399,7 +459,7 @@ class Trainer():
             bond_loss = calc_cart_bonded(seq, pred_allatom[1:], idx, self.cb_len, self.cb_ang, self.cb_tor)
             if w_bond > 0.0:
                 tot_loss += w_bond*bond_loss.mean()
-            loss_s.append( bond_loss.detach() )
+            oss_dict['clash_loss'] = ( bond_loss.detach() )
         else:
             bond_loss = torch.tensor(0).to(gpu)
         loss_dict['bond_loss'] = bond_loss.detach()
@@ -407,13 +467,24 @@ class Trainer():
         # clash [use all atoms not just those in native]
         clash_loss = calc_lj(
             seq[0], pred_allatom, 
-            self.aamask, self.ljlk_parameters, self.lj_correction_parameters, self.num_bonds,
+            self.aamask, bond_feats, self.ljlk_parameters, self.lj_correction_parameters, self.num_bonds,
             lj_lin=lj_lin
         )
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
+        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats)
+        if w_atom_bond > 0.0:
+            tot_loss += w_atom_bond*atom_bond_loss
+        loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
 
+        if w_skip_bond > 0.0:
+            tot_loss += w_skip_bond*skip_bond_loss
+        loss_dict['skip_bond_loss'] = ( skip_bond_loss.detach() )
+
+        if w_rigid > 0.0:
+            tot_loss += w_rigid*rigid_loss
+        loss_dict['rigid_loss'] = ( rigid_loss.detach() )
         L0 = same_chain[0,0,:].sum()
         chain1 = torch.zeros_like(same_chain, dtype=bool)
         chain1[:,:L0,:L0] = True
@@ -438,7 +509,7 @@ class Trainer():
         #)
         #if w_hb > 0.0:
         #    tot_loss += w_hb*hb_loss
-        #loss_s.append(torch.stack((hb_loss, clash_loss, bond_loss)).detach())
+        #oss_dict['clash_loss'] = (torch.stack((hb_loss, clash_loss, bond_loss)).detach())
 
         loss_dict['total_loss'] = tot_loss.detach()
 
@@ -604,7 +675,7 @@ class Trainer():
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
+        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
         #define dataset & data loader
@@ -626,16 +697,16 @@ class Trainer():
         self.n_train = N_EXAMPLE_PER_EPOCH
         self.n_valid_pdb = 100 #len(valid_pdb.keys())
         self.n_valid_pdb_atomize = 0 #100
-        self.n_valid_homo = 0 #len(valid_homo.keys())
-        self.n_valid_compl = 0 #len(valid_compl.keys())
+        self.n_valid_homo = 100 #len(valid_homo.keys())
+        self.n_valid_compl = 100 #len(valid_compl.keys())
         self.n_valid_neg = 0 #len(valid_neg.keys())
         self.n_valid_na_compl = 100 #len(valid_na_compl.keys())
         self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
         self.n_valid_rna = 100 #len(valid_rna.keys())
         self.n_valid_sm_compl = 100 #len(valid_sm_compl.keys())
-        self.n_valid_sm_compl_dock = 100
-        self.n_valid_sm_compl_foldprot = 100
-        self.n_valid_sm_compl_foldlig = 100
+        #self.n_valid_sm_compl_dock = 100
+        #self.n_valid_sm_compl_foldprot = 100
+        #self.n_valid_sm_compl_foldlig = 100
 
         if (rank==0):
             print ('Loaded (training)',
@@ -668,17 +739,17 @@ class Trainer():
                 self.n_valid_na_neg,'negative nucleic-acid complexes,',
                 self.n_valid_rna,'RNA structures,',
                 self.n_valid_sm_compl, 'small mol. complexes (fold & dock),',
-                self.n_valid_sm_compl_dock, 'small mol. complexes (rigid dock),',
-                self.n_valid_sm_compl_foldprot, 'small mol. complexes (fold prot),',
-                self.n_valid_sm_compl_foldlig, 'small mol. complexes (fold ligand)',
+                #self.n_valid_sm_compl_dock, 'small mol. complexes (rigid dock),',
+                #self.n_valid_sm_compl_foldprot, 'small mol. complexes (fold prot),',
+                #self.n_valid_sm_compl_foldlig, 'small mol. complexes (fold ligand)',
             )
 
         train_set = DistilledDataset(
             pdb_IDs, loader_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
-            neg_IDs, loader_complex, neg_dict,
+            #neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
-            na_neg_IDs, loader_na_complex, na_neg_dict,
+            #na_neg_IDs, loader_na_complex, na_neg_dict,
             fb_IDs, loader_fb, fb_dict,
             rna_IDs, loader_rna, rna_dict,
             sm_compl_IDs, loader_sm_compl, sm_compl_dict,
@@ -693,25 +764,15 @@ class Trainer():
             loader_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
-        valid_sm_compl_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param,
+        valid_homo_set = Dataset(
+            list(valid_homo.keys())[:self.n_valid_homo],
+            loader_pdb, valid_homo,
+            self.loader_param, homo, p_homo_cut=2.0
         )
-        valid_sm_compl_dock_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=True, 
-        )
-        valid_sm_compl_foldprot_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param, init_protein_tmpl=False, init_ligand_tmpl=True, 
-        )
-        valid_sm_compl_foldlig_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=False, 
+        valid_compl_set = DatasetComplex(
+            list(valid_compl.keys())[:self.n_valid_compl],
+            loader_complex, valid_compl,
+            self.loader_param, negative=False
         )
         valid_na_compl_set = DatasetNAComplex(
             list(valid_na_compl.keys())[:self.n_valid_na_compl],
@@ -728,21 +789,16 @@ class Trainer():
             loader_rna, valid_rna,
             self.loader_param
         )
+        valid_sm_compl_set = DatasetSMComplex(
+            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            loader_sm_compl, valid_sm_compl,
+            self.loader_param,
+        )
         #valid_atomize_pdb_set = Dataset(
         #    list(valid_pdb.keys())[:self.n_valid_pdb],
         #    loader_atomize_pdb, valid_pdb,
         #    self.loader_param, homo, p_homo_cut=-1.0
         #)
-        # valid_homo_set = Dataset(
-        #     list(valid_homo.keys())[:self.n_valid_homo],
-        #     loader_pdb, valid_homo,
-        #     self.loader_param, homo, p_homo_cut=2.0
-        # )
-        # valid_compl_set = DatasetComplex(
-        #     list(valid_compl.keys())[:self.n_valid_compl],
-        #     loader_complex, valid_compl,
-        #     self.loader_param, negative=False
-        # )
         # valid_neg_set = DatasetComplex(
         #     list(valid_neg.keys())[:self.n_valid_neg],
         #     loader_complex, valid_neg,
@@ -758,6 +814,21 @@ class Trainer():
 #            loader_na_complex, valid_na_neg,
 #            self.loader_param, negative=True, native_NA_frac=0.0
 #        )
+        #valid_sm_compl_dock_set = DatasetSMComplex(
+        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+        #    loader_sm_compl, valid_sm_compl,
+        #    self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=True, 
+        #)
+        #valid_sm_compl_foldprot_set = DatasetSMComplex(
+        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+        #    loader_sm_compl, valid_sm_compl,
+        #    self.loader_param, init_protein_tmpl=False, init_ligand_tmpl=True, 
+        #)
+        #valid_sm_compl_foldlig_set = DatasetSMComplex(
+        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+        #    loader_sm_compl, valid_sm_compl,
+        #    self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=False, 
+        #)
         #valid_sm_set = DatasetSM(
         #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
         #    loader_small_molecule, valid_sm_compl, self.loader_param
@@ -768,34 +839,35 @@ class Trainer():
             pdb_weights,
             fb_weights,
             compl_weights,
-            neg_weights,
+            #neg_weights,
             na_compl_weights,
-            na_neg_weights,
+            #na_neg_weights,
             rna_weights,
             sm_compl_weights,
             sm_compl_weights,
             num_example_per_epoch=N_EXAMPLE_PER_EPOCH,
             num_replicas=world_size, 
             rank=rank, 
+            #fraction_pdb=0.22 # not a real argument but implicit
             fraction_fb=0.0,
-            fraction_compl=0.0,
-            fraction_na_compl=0.0,
-            fraction_rna=0.0,
-            fraction_sm_compl=0.8,
+            fraction_compl=0.18,
+            fraction_na_compl=0.18,
+            fraction_rna=0.09,
+            fraction_sm_compl=0.37,
             fraction_sm = 0, 
             replacement=True
         )
 
         valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_dock_sampler = data.distributed.DistributedSampler(valid_sm_compl_dock_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_foldprot_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldprot_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_foldlig_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldlig_set, num_replicas=world_size, rank=rank)
+        valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
+        valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
         valid_na_compl_sampler = data.distributed.DistributedSampler(valid_na_compl_set, num_replicas=world_size, rank=rank)
         valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
         valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
-        # valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
-        # valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
+        valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
+        #valid_sm_compl_dock_sampler = data.distributed.DistributedSampler(valid_sm_compl_dock_set, num_replicas=world_size, rank=rank)
+        #valid_sm_compl_foldprot_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldprot_set, num_replicas=world_size, rank=rank)
+        #valid_sm_compl_foldlig_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldlig_set, num_replicas=world_size, rank=rank)
         # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_neg_sampler = data.distributed.DistributedSampler(valid_na_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_from_scratch_neg_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_neg_set, num_replicas=world_size, rank=rank)
@@ -804,21 +876,20 @@ class Trainer():
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        valid_sm_compl_dock_loader = data.DataLoader(valid_sm_compl_dock_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        valid_sm_compl_foldprot_loader = data.DataLoader(valid_sm_compl_foldprot_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        valid_sm_compl_foldlig_loader = data.DataLoader(valid_sm_compl_foldlig_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
+        valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
         valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
         valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
+        valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         
         #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        # valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
-        # valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
 #        valid_na_neg_loader = data.DataLoader(valid_na_neg_set, sampler=valid_na_neg_sampler, **LOAD_PARAM)
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
-
+        #valid_sm_compl_dock_loader = data.DataLoader(valid_sm_compl_dock_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        #valid_sm_compl_foldprot_loader = data.DataLoader(valid_sm_compl_foldprot_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        #valid_sm_compl_foldlig_loader = data.DataLoader(valid_sm_compl_foldlig_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         #valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
@@ -871,15 +942,15 @@ class Trainer():
        
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="last", 
+                                                        self.model_name, gpu, suffix="best", 
                                                         resume_train=True)
 
         if (self.eval):
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 0, verbose=True)
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, 0, verbose=True)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, 0, verbose=True)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, 0, verbose=True)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, 0, verbose=True)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, 0, verbose=True)
 
             # run protein/NA prediction (TEMPLATED)
             #_, _, _ = self.valid_ppi_cycle(
@@ -915,24 +986,31 @@ class Trainer():
         for epoch in range(loaded_epoch+1, self.n_epoch):
             train_sampler.set_epoch(epoch)
             valid_pdb_sampler.set_epoch(epoch)
+            valid_homo_sampler.set_epoch(epoch)
+            valid_compl_sampler.set_epoch(epoch)
+            valid_na_compl_sampler.set_epoch(epoch)
+            valid_na_from_scratch_compl_sampler.set_epoch(epoch)
+            valid_rna_sampler.set_epoch(epoch)
             valid_sm_compl_sampler.set_epoch(epoch)
-            valid_sm_compl_dock_sampler.set_epoch(epoch)
-            valid_sm_compl_foldprot_sampler.set_epoch(epoch)
-            valid_sm_compl_foldlig_sampler.set_epoch(epoch)
-            #valid_homo_sampler.set_epoch(epoch)
-            #valid_compl_sampler.set_epoch(epoch)
+            #valid_sm_compl_dock_sampler.set_epoch(epoch)
+            #valid_sm_compl_foldprot_sampler.set_epoch(epoch)
+            #valid_sm_compl_foldlig_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
             #valid_sm_sampler.set_epoch(epoch)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, epoch)
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, epoch, header="Hetero")
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, epoch, header="NA")
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, world_size, epoch, header="NAfs")
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
             valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl") 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, epoch, header="SM Dock") 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, epoch, header="SM FoldProt") 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, epoch, header="SM FoldLig") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, epoch, header="SM Dock") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, world_size, epoch, header="SM FoldProt") 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, world_size, epoch, header="SM FoldLig") 
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, epoch, header="Atomize PDB")
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, epoch, header="Homo")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, world_size, epoch, report_interface=True)
 #            _, _, _ = self.valid_ppi_cycle(
 #                ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
@@ -1005,7 +1083,6 @@ class Trainer():
         counter = 0
         
         for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in train_loader:
-            
             # skip known bad training examples
             # loader will print warning message with item info for followup later
             if torch.is_tensor(item) and torch.all(item==-1):
@@ -1141,9 +1218,9 @@ class Trainer():
                             logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                             pred_crds, alphas, pred_allatom, true_crds_, 
                             atom_mask_, res_mask, mask_2d, same_chain,
-                            pred_lddts, idx_pdb, atom_frames=atom_frames,
+                            pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
                             unclamp=unclamp, negative=negative,
-                            verbose=verbose, ctr=ctrid, item=item, **self.loss_param
+                            verbose=verbose, ctr=ctrid, item=item, task=task, **self.loss_param
                         )
                     loss = loss / self.ACCUM_STEP
                     scaler.scale(loss).backward()
@@ -1193,8 +1270,9 @@ class Trainer():
                         logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                         pred_crds, alphas, pred_allatom, true_crds_, 
                         atom_mask_, res_mask, mask_2d, same_chain,
-                        pred_lddts, idx_pdb, atom_frames=atom_frames, unclamp=unclamp, negative=negative,
-                        verbose=verbose, ctr=ctrid, **self.loss_param
+                        pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
+                        unclamp=unclamp, negative=negative,
+                        verbose=verbose, ctr=ctrid, item=item, task=task, **self.loss_param
                     )
                 loss = loss / self.ACCUM_STEP
                 scaler.scale(loss).backward()
@@ -1310,7 +1388,6 @@ class Trainer():
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
             for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in valid_loader:
-            
                 # skip known bad training examples
                 # loader will print warning message with item info for followup later
                 if torch.is_tensor(item) and torch.all(item==-1):
@@ -1443,7 +1520,7 @@ class Trainer():
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds_, 
                     atom_mask_, res_mask, mask_2d, same_chain,
-                    pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative,
+                    pred_lddts, idx_pdb, bond_feats, atom_frames, unclamp=unclamp, negative=negative,
                     verbose=verbose, ctr=ctrid, item=item, out_dir=out_dir, **self.loss_param
                 )
 
@@ -1631,7 +1708,7 @@ class Trainer():
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds,
                     atom_mask, res_mask, mask_2d, same_chain,
-                    pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative, interface=report_interface,
+                    pred_lddts, idx_pdb, bond_feats, atom_frames, unclamp=unclamp, negative=negative, interface=report_interface,
                     verbose=verbose, ctr=ctrid, **self.loss_param
                 )
 
@@ -1798,7 +1875,7 @@ class Trainer():
                     logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
                     pred_crds, alphas, pred_allatom, true_crds,
                     atom_mask, res_mask, mask_2d, same_chain,
-                    pred_lddts, idx_pdb, atom_frames, unclamp=unclamp, negative=negative,
+                    pred_lddts, idx_pdb, atom_frames, bond_feats, unclamp=unclamp, negative=negative,
                     verbose=verbose, ctr=ctrid, **self.loss_param
                 )
                 

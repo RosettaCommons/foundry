@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+import scipy
+import networkx as nx
 
 from util import (
     rigid_from_3_points,
@@ -9,11 +11,10 @@ from util import (
     cb_torsions_CACNH,
     cb_torsions_CANCO,
     is_nucleic,
-    is_atom,
     find_all_paths_of_length_n,
     find_all_rigid_groups
 )
-from chemical import NFRAMES
+from chemical import NFRAMES, NTOTAL
 
 from kinematics import get_dih, get_ang
 from scoring import HbHybType
@@ -130,16 +131,20 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
     return loss
 
 # from Ivan: FAPE generalized over atom sets & frames
-def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.0, gamma=0.99, 
-    eps=1e-4, return_matrix=False):
+def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, Z=10.0, dclamp=10.0, gamma=0.99, eps=1e-4):
 
     # X (predicted) N x L x natoms x 3
     # Y (native)    1 x L x natoms x 3
     # atom_mask     1 x L x natoms
     # frames        1 x L x nframes x 3 x 2
     # frame_mask    1 x L x nframes
+    # frame_atom_mask     1 x L x natoms
+
+    if frame_atom_mask is None:
+        frame_atom_mask = atom_mask
 
     N, L, natoms, _ = X.shape
+
     # flatten middle dims so can gather across residues
     X_prime = X.reshape(N, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
     Y_prime = Y.reshape(1, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
@@ -151,7 +156,7 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.
     frames_reindex = frames_reindex.long()
 
     frame_mask *= torch.all(
-        torch.gather(atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
+        torch.gather(frame_atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
         axis=-1)
 
     X_x = torch.gather(X_prime, 1, frames_reindex[...,0:1].repeat(N,1,1,3))
@@ -168,17 +173,67 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, Z=10.0, dclamp=10.
         'brji,brsj->brsi',
         uX[:,frame_mask[0]], X[:,atom_mask[0]][:,None,...] - X_y[:,frame_mask[0]][:,:,None,...]
     )
-
     xij_t = torch.einsum('rji,rsj->rsi', uY[frame_mask], Y[atom_mask][None,...] - Y_y[frame_mask][:,None,...])
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
-    #loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
-    loss_matrix = (1.0/Z) * (torch.clamp(diff, max=dclamp))
-    loss = loss_matrix.mean(dim=(1,2))
-    if return_matrix:
-        return loss, loss_matrix
+
+    loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
+
+
     return loss
 
+def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None):
+    '''
+    Calculate coordinate RMSD
+    Input:
+        - pred: predicted coordinates (B, L, natoms, 3)
+        - true: true coordinates (B, L, natoms, 3)
+        - atom_mask: mask for seen coordinates (B, L, natoms)
+    Output: RMSD after superposition
+    '''
+    def rmsd(V, W, eps=1e-6):
+        L = V.shape[1]
+        return torch.sqrt(torch.sum((V-W)*(V-W), dim=(1,2)) / L + eps)
+    def centroid(X):
+        return X.mean(dim=-2, keepdim=True)
+    if rmsd_mask == None:
+        rmsd_mask = atom_mask.clone()
 
+    B, L, natoms = pred.shape[:3]
+
+    # center to centroid
+    pred_allatom = pred[atom_mask][None]
+    true_allatom = true[atom_mask][None]
+
+    pred_allatom_origin = pred_allatom - centroid(pred_allatom)
+    true_allatom_origin = true_allatom - centroid(true_allatom)
+
+    # reshape true crds to match the shape to pred crds
+    # true = true.unsqueeze(0).expand(I,-1,-1,-1,-1)
+    # pred = pred.view(B, L*natoms, 3)
+    # true = true.view(I*B, L*natoms, 3)
+
+    # Computation of the covariance matrix
+    C = torch.matmul(pred_allatom_origin.permute(0,2,1), true_allatom_origin)
+
+    # Compute optimal rotation matrix using SVD
+    V, S, W = torch.svd(C)
+
+    # get sign to ensure right-handedness
+    d = torch.ones([B,3,3], device=pred.device)
+    d[:,:,-1] = torch.sign(torch.det(V)*torch.det(W)).unsqueeze(1)
+
+    # Rotation matrix U
+    U = torch.matmul(d*V, W.permute(0,2,1)) # (IB, 3, 3)
+
+    pred_rms = pred[rmsd_mask][None] - centroid(pred_allatom)
+    true_rms = true[rmsd_mask][None] - centroid(true_allatom)
+    # Rotate pred
+    rP = torch.matmul(pred_rms, U) # (IB, L*3, 3)
+
+    # get RMS
+    rms = rmsd(rP, true_rms).reshape(B)
+    return rms
+    
 def angle(a, b, c, eps=1e-6):
     '''
     Calculate cos/sin angle between ab and cb
@@ -290,19 +345,21 @@ def calc_atom_bond_loss(pred, true, bond_feats, clamp=4, eps=1e-6):
     atom_bonds_np = atom_bonds[0].cpu().numpy()
     G = nx.from_numpy_matrix(atom_bonds_np)
     paths = find_all_paths_of_length_n(G,2)
-    paths = torch.tensor(paths, device=pred.device)
-    nat_dist = torch.sum(torch.square(true[:,paths[:,0],1]-true[:,paths[:,2],1]),dim=-1)
-    pred_dist = torch.sum(torch.square(pred[:,paths[:,0],1]-pred[:,paths[:,2],1]),dim=-1)
-    skip_bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(paths.shape[0]+eps)
+    if paths:
+        paths = torch.tensor(paths, device=pred.device)
+        nat_dist = torch.sum(torch.square(true[:,paths[:,0],1]-true[:,paths[:,2],1]),dim=-1)
+        pred_dist = torch.sum(torch.square(pred[:,paths[:,0],1]-pred[:,paths[:,2],1]),dim=-1)
+        skip_bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(paths.shape[0]+eps)
+    else:
+        skip_bond_dist_loss = torch.tensor(0, device=pred.device)
     rigid_groups = find_all_rigid_groups(bond_feats)
     if rigid_groups != None:
         nat_dist = torch.sum(torch.square(true[:,rigid_groups[:,0],1]-true[:,rigid_groups[:,1],1]),dim=-1)
         pred_dist = torch.sum(torch.square(pred[:,rigid_groups[:,0],1]-pred[:,rigid_groups[:,1],1]),dim=-1)
         rigid_group_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(rigid_groups.shape[0]+eps)
-        print(bond_dist_loss)
-        print(skip_bond_dist_loss)
-        print(rigid_group_dist_loss)
-    return bond_dist_loss
+    else:
+        rigid_group_dist_loss = torch.tensor(0, device=pred.device)
+    return bond_dist_loss, skip_bond_dist_loss, rigid_group_dist_loss
 
 def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-6):
     # pred: N x L x 27 x 3
@@ -444,7 +501,7 @@ def calc_clash(xs, mask):
 # Rosetta-like version of LJ (fa_atr+fa_rep)
 #   lj_lin is switch from linear to 12-6.  Smaller values more sharply penalize clashes
 def calc_lj(
-    seq, xs, aamask, ljparams, ljcorr, num_bonds, 
+    seq, xs, aamask, bond_feats, ljparams, ljcorr, num_bonds, 
     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
     lj_maxrad=-1.0, eps=1e-8
 ):
@@ -476,7 +533,7 @@ def calc_lj(
     idxes1r = torch.tril_indices(L,L,-1)
     mask[idxes1r[0],:,idxes1r[1],:] = False
     idxes2r = torch.arange(L)
-    idxes2a = torch.tril_indices(27,27,0)
+    idxes2a = torch.tril_indices(NTOTAL,NTOTAL,0)
     mask[idxes2r[:,None],idxes2a[0:1],idxes2r[:,None],idxes2a[1:2]] = False
 
     # "countpair" can be enforced by making this a weight
@@ -484,10 +541,14 @@ def calc_lj(
     mask[idxes2r[:-1],:,idxes2r[1:],:] *= (
         num_bonds[seq[:-1],:,2:3] + num_bonds[seq[1:],0:1,:] + 1 >= 4 #inter-res
     )
+    atom_bonds = (bond_feats > 0)*(bond_feats<5)
+    dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds[0].long().detach().cpu().numpy(), directed=False)
+    dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0), device=mask.device) # protein portion is inf and you don't want to mask it out
+    mask[:,1,:,1] *= dist_matrix >=4
     si,ai,sj,aj = mask.nonzero(as_tuple=True)
 
     ds = torch.sqrt( torch.sum ( torch.square( xs[:,si,ai]-xs[:,sj,aj] ), dim=-1 ) + eps )
-
+    
     # hbond correction
     use_hb_dis = (
         ljcorr[seq[si],ai,0]*ljcorr[seq[sj],aj,1] 
@@ -513,7 +574,6 @@ def calc_lj(
     ljss [potential_disulf] = 0.0
 
     ljval = ljV(ds,ljrs,ljss,lj_lin,lj_maxrad)
-
     return (torch.sum( ljval, dim=-1 )/torch.sum(aamask[seq]))
 
 
