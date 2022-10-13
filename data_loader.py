@@ -2120,9 +2120,9 @@ class DistributedWeightedSampler(data.Sampler):
         self.dataset = dataset
         self.num_replicas = num_replicas
         self.num_fb_per_epoch = int(round(num_example_per_epoch*fraction_fb))
-        self.num_compl_per_epoch = int(round(0.5*num_example_per_epoch*fraction_compl))
+        self.num_compl_per_epoch = int(round(num_example_per_epoch*fraction_compl))
         #self.num_neg_per_epoch = self.num_compl_per_epoch
-        self.num_na_compl_per_epoch = int(round(0.5*num_example_per_epoch*fraction_na_compl))
+        self.num_na_compl_per_epoch = int(round(num_example_per_epoch*fraction_na_compl))
         #self.num_neg_na_compl_per_epoch = self.num_na_compl_per_epoch
         self.num_rna_per_epoch = int(round(num_example_per_epoch*fraction_rna))
         self.num_sm_compl_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl))
