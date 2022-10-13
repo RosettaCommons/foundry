@@ -892,6 +892,22 @@ def get_nxgraph(mol):
 
     return G
 
+def find_all_rigid_groups(bond_feats):
+    """
+    remove all single bonds from the graph and find connected components
+    """
+    rigid_atom_bonds = (bond_feats>1)*(bond_feats<5)
+    rigid_atom_bonds_np = rigid_atom_bonds[0].cpu().numpy()
+    G = nx.from_numpy_matrix(rigid_atom_bonds_np)
+    connected_components = nx.connected_components(G)
+    connected_components = [cc for cc in connected_components if len(cc)>2]
+    connected_components = [torch.tensor(list(combinations(cc,2))) for cc in connected_components]
+    if connected_components:
+        connected_components = torch.cat(connected_components, dim=0)
+    else:
+        connected_components = None
+    return connected_components
+
 def find_all_paths_of_length_n(G : nx.Graph,
                                n : int) -> torch.Tensor:
     '''find all paths of length N in a networkx graph
@@ -985,7 +1001,7 @@ def get_protein_bond_feats(protein_L):
     bond_feats[residues+1, residues] = 5
     return bond_feats
 
-def get_atomize_protein_bond_feats(sel_res, msa, ra, flank=5):
+def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
     """ 
     generate atom bond features for atomized residues 
     currently ignores long-range bonds like disulfides
@@ -995,7 +1011,7 @@ def get_atomize_protein_bond_feats(sel_res, msa, ra, flank=5):
         ra2ind[tuple(two_d.numpy())] = i
     N = len(ra2ind.keys())
     bond_feats = torch.zeros((N, N))
-    for i, res in enumerate(msa[0, sel_res:sel_res+flank]):
+    for i, res in enumerate(msa[0, i_start:i_start+n_res_atomize]):
         for j, bond in enumerate(aabonds[res]):
             start_idx = aa2long[res].index(bond[0])
             end_idx = aa2long[res].index(bond[1])
@@ -1054,6 +1070,6 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     lig_xyz = nat_symm[:, r, a]
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     frames = get_atomized_protein_frames(residues_atomize, ra)
-    bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, flank=n_res_atomize)
+    bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
 
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C

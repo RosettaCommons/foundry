@@ -8,7 +8,10 @@ from util import (
     cb_angles_CNCA,
     cb_torsions_CACNH,
     cb_torsions_CANCO,
-    is_nucleic
+    is_nucleic,
+    is_atom,
+    find_all_paths_of_length_n,
+    find_all_rigid_groups
 )
 from chemical import NFRAMES
 
@@ -274,6 +277,32 @@ def calc_BB_bond_geom(
 
     return blen_loss+bang_loss
 
+def calc_atom_bond_loss(pred, true, bond_feats, clamp=4, eps=1e-6):
+    """
+    L2 loss on distances between bonded atoms
+    """
+    atom_bonds = (bond_feats>0)*(bond_feats < 5)
+    b, i, j = torch.where(atom_bonds>0)
+    nat_dist = torch.sum(torch.square(true[:,i,1]-true[:,j,1]),dim=-1)
+    pred_dist = torch.sum(torch.square(pred[:,i,1]-pred[:,j,1]),dim=-1)
+    bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))/(atom_bonds.sum()+eps)
+    # enforce LAS constraints between atoms 2 bonds away and aromatic groups
+    atom_bonds_np = atom_bonds[0].cpu().numpy()
+    G = nx.from_numpy_matrix(atom_bonds_np)
+    paths = find_all_paths_of_length_n(G,2)
+    paths = torch.tensor(paths, device=pred.device)
+    nat_dist = torch.sum(torch.square(true[:,paths[:,0],1]-true[:,paths[:,2],1]),dim=-1)
+    pred_dist = torch.sum(torch.square(pred[:,paths[:,0],1]-pred[:,paths[:,2],1]),dim=-1)
+    skip_bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(paths.shape[0]+eps)
+    rigid_groups = find_all_rigid_groups(bond_feats)
+    if rigid_groups != None:
+        nat_dist = torch.sum(torch.square(true[:,rigid_groups[:,0],1]-true[:,rigid_groups[:,1],1]),dim=-1)
+        pred_dist = torch.sum(torch.square(pred[:,rigid_groups[:,0],1]-pred[:,rigid_groups[:,1],1]),dim=-1)
+        rigid_group_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(rigid_groups.shape[0]+eps)
+        print(bond_dist_loss)
+        print(skip_bond_dist_loss)
+        print(rigid_group_dist_loss)
+    return bond_dist_loss
 
 def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-6):
     # pred: N x L x 27 x 3
