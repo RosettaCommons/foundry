@@ -1,4 +1,4 @@
-import sys, os, time, subprocess, shutil
+import sys, os, time, datetime, subprocess, shutil
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
@@ -45,7 +45,7 @@ torch.set_num_threads(4)
 
 # num structs per epoch
 # must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 3072
+N_EXAMPLE_PER_EPOCH = 6144
 #N_EXAMPLE_PER_EPOCH = 16
 
 LOAD_PARAM = {'shuffle': False,
@@ -604,14 +604,15 @@ class Trainer():
             world_size = torch.cuda.device_count()
             mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
  
-    def record_git_commit():
+    def record_git_commit(self):
         # git hash of current commit
         try:
-            commit = subprocess.check_output(f'git --git-dir {script_dir}/../.git rev-parse HEAD',
+            commit = subprocess.check_output(f'git --git-dir {script_dir}/.git rev-parse HEAD',
                                                   shell=True).decode().strip()
         except subprocess.CalledProcessError:
             print('WARNING: Failed to determine git commit hash.')
             commit = 'unknown'
+
         # save git diff from last commit
         git_diff = subprocess.Popen(['git diff'], cwd = os.getcwd(), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
         out, err = git_diff.communicate()
@@ -630,7 +631,7 @@ class Trainer():
 
     def train_model(self, rank, world_size):
        
-        record_git_commit()
+        if rank==0: self.record_git_commit()
 
         # wandb logging
         if self.wandb_prefix is not None and rank == 0:
@@ -827,7 +828,7 @@ class Trainer():
             num_example_per_epoch=N_EXAMPLE_PER_EPOCH,
             num_replicas=world_size, 
             rank=rank, 
-            #fraction_pdb=0.22 # not a real argument but implicit
+            #fraction_pdb=0.18 # not a real argument but implicit
             fraction_fb=0.0,
             fraction_compl=0.18,
             fraction_na_compl=0.18,
