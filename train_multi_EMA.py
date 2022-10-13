@@ -627,6 +627,7 @@ class Trainer():
             print(commit, file=outf)
             print(out.decode(), file=outf)
 
+        print(f'Current date/time: {datestr}')
         print('Saved git diff between current state and last commit')
 
     def train_model(self, rank, world_size):
@@ -675,18 +676,26 @@ class Trainer():
         sm_compl_IDs = [x for x in sm_compl_IDs if x != 6215] # remove 6uiw_A to avoid GPU OOM
 
         self.n_train = N_EXAMPLE_PER_EPOCH
-        self.n_valid_pdb = len(valid_pdb.keys()) if self.eval else 100
+        self.n_valid_pdb = 100
         self.n_valid_pdb_atomize = 0 #100
-        self.n_valid_homo = len(valid_homo.keys()) if self.eval else 100
-        self.n_valid_compl = len(valid_compl.keys()) if self.eval else 100
+        self.n_valid_homo = 100
+        self.n_valid_compl = 100
         self.n_valid_neg = 0 #len(valid_neg.keys())
-        self.n_valid_na_compl = len(valid_na_compl.keys()) if self.eval else 100
+        self.n_valid_na_compl = 100
         self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
-        self.n_valid_rna = len(valid_rna.keys()) if self.eval else 100
-        self.n_valid_sm_compl = len(valid_sm_compl.keys()) if self.eval else 100
+        self.n_valid_rna = 100
+        self.n_valid_sm_compl = 100
         #self.n_valid_sm_compl_dock = 100
         #self.n_valid_sm_compl_foldprot = 100
         #self.n_valid_sm_compl_foldlig = 100
+
+        if self.eval:
+            self.n_valid_pdb = 0 #len(valid_pdb.keys())
+            self.n_valid_homo = 0 #len(valid_homo.keys())
+            self.n_valid_compl = 0 #len(valid_compl.keys())
+            self.n_valid_na_compl = 0 #len(valid_na_compl.keys())
+            self.n_valid_rna = 0 #len(valid_rna.keys())
+            self.n_valid_sm_compl = len(valid_sm_compl.keys())
 
         if (rank==0):
             print ('Loaded (training)',
