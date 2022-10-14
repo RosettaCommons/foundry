@@ -45,11 +45,12 @@ torch.set_num_threads(4)
 
 # num structs per epoch
 # must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 6144
+#N_EXAMPLE_PER_EPOCH = 6144
+N_EXAMPLE_PER_EPOCH = 1536
 #N_EXAMPLE_PER_EPOCH = 16
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 2,
+              'num_workers': 5,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -774,9 +775,9 @@ class Trainer():
         train_set = DistilledDataset(
             pdb_IDs, loader_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
-            neg_IDs, loader_complex, neg_dict,
+            #neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
-            na_neg_IDs, loader_na_complex, na_neg_dict,
+            #na_neg_IDs, loader_na_complex, na_neg_dict,
             fb_IDs, loader_fb, fb_dict,
             rna_IDs, loader_rna, rna_dict,
             sm_compl_IDs, loader_sm_compl, sm_compl_dict,
@@ -871,9 +872,9 @@ class Trainer():
             pdb_weights,
             fb_weights,
             compl_weights,
-            neg_weights,
+            #neg_weights,
             na_compl_weights,
-            na_neg_weights,
+            #na_neg_weights,
             rna_weights,
             sm_compl_weights,
             sm_weights, 
@@ -882,11 +883,11 @@ class Trainer():
             rank=rank, 
             #fraction_pdb=0.18 # not a real argument but implicit
             fraction_fb=0.0,
-            fraction_compl=0.0,
-            fraction_na_compl=0.0,
-            fraction_rna=0.0,
-            fraction_sm_compl=0.0,
-            fraction_sm=1, 
+            fraction_compl=0.18,
+            fraction_na_compl=0.18,
+            fraction_rna=0.09,
+            fraction_sm_compl=0.19,
+            fraction_sm=0.18, 
             replacement=True
         )
 

@@ -1936,9 +1936,9 @@ class DistilledDataset(data.Dataset):
         self,
         pdb_IDs, pdb_loader, pdb_dict,
         compl_IDs, compl_loader, compl_dict,
-        neg_IDs, neg_loader, neg_dict,
+        #neg_IDs, neg_loader, neg_dict,
         na_compl_IDs, na_compl_loader, na_compl_dict,
-        na_neg_IDs, na_neg_loader, na_neg_dict,
+        #na_neg_IDs, na_neg_loader, na_neg_dict,
         fb_IDs, fb_loader, fb_dict,
         rna_IDs, rna_loader, rna_dict,
         sm_compl_IDs, sm_compl_loader, sm_compl_dict, 
@@ -1955,15 +1955,15 @@ class DistilledDataset(data.Dataset):
         self.compl_IDs = compl_IDs
         self.compl_loader = compl_loader
         self.compl_dict = compl_dict
-        self.neg_IDs = neg_IDs
-        self.neg_loader = neg_loader
-        self.neg_dict = neg_dict
+        #self.neg_IDs = neg_IDs
+        #self.neg_loader = neg_loader
+        #self.neg_dict = neg_dict
         self.na_compl_IDs = na_compl_IDs
         self.na_compl_loader = na_compl_loader
         self.na_compl_dict = na_compl_dict
-        self.na_neg_IDs = na_neg_IDs
-        self.na_neg_loader = na_neg_loader
-        self.na_neg_dict = na_neg_dict
+        #self.na_neg_IDs = na_neg_IDs
+        #self.na_neg_loader = na_neg_loader
+        #self.na_neg_dict = na_neg_dict
         self.fb_IDs = fb_IDs
         self.fb_dict = fb_dict
         self.fb_loader = fb_loader
@@ -1982,9 +1982,9 @@ class DistilledDataset(data.Dataset):
         self.native_NA_frac = native_NA_frac
 
         self.compl_inds = np.arange(len(self.compl_IDs))
-        self.neg_inds = np.arange(len(self.neg_IDs))
+        #self.neg_inds = np.arange(len(self.neg_IDs))
         self.na_compl_inds = np.arange(len(self.na_compl_IDs))
-        self.na_neg_inds = np.arange(len(self.na_neg_IDs))
+        #self.na_neg_inds = np.arange(len(self.na_neg_IDs))
         self.fb_inds = np.arange(len(self.fb_IDs))
         self.pdb_inds = np.arange(len(self.pdb_IDs))
         self.rna_inds = np.arange(len(self.rna_IDs))
@@ -2000,8 +2000,8 @@ class DistilledDataset(data.Dataset):
             + len(self.rna_inds)
             + len(self.sm_compl_inds)
             + len(self.sm_inds)
-            + len(self.neg_inds)
-            + len(self.na_neg_inds)
+            #+ len(self.neg_inds)
+            #+ len(self.na_neg_inds)
         )
 
     # order:
@@ -2041,18 +2041,18 @@ class DistilledDataset(data.Dataset):
             )
         offset += len(self.compl_inds)
 
-        if index >= offset and index < offset + len(self.neg_inds):
-           ID = self.neg_IDs[index-offset]
-           sel_idx = np.random.randint(0, len(self.neg_dict[ID]))
-           out = self.neg_loader(
-               self.neg_dict[ID][sel_idx][0],
-               self.neg_dict[ID][sel_idx][1],
-               self.neg_dict[ID][sel_idx][2],
-               self.neg_dict[ID][sel_idx][3],
-               self.params,
-               negative=True
-           )
-        offset += len(self.neg_inds)
+        #if index >= offset and index < offset + len(self.neg_inds):
+        #   ID = self.neg_IDs[index-offset]
+        #   sel_idx = np.random.randint(0, len(self.neg_dict[ID]))
+        #   out = self.neg_loader(
+        #       self.neg_dict[ID][sel_idx][0],
+        #       self.neg_dict[ID][sel_idx][1],
+        #       self.neg_dict[ID][sel_idx][2],
+        #       self.neg_dict[ID][sel_idx][3],
+        #       self.params,
+        #       negative=True
+        #   )
+        #offset += len(self.neg_inds)
 
         if index >= offset and index < offset + len(self.na_compl_inds):
             ID = self.na_compl_IDs[index-offset]
@@ -2064,19 +2064,20 @@ class DistilledDataset(data.Dataset):
                 negative=False,
                 native_NA_frac=self.native_NA_frac
             )
+
         offset += len(self.na_compl_inds)
 
-        if index >= offset and index < offset + len(self.na_neg_inds):
-           ID = self.na_neg_IDs[index-offset]
-           sel_idx = np.random.randint(0, len(self.na_neg_dict[ID]))
-           out = self.na_neg_loader(
-               self.na_neg_dict[ID][sel_idx][0],
-               self.na_neg_dict[ID][sel_idx][1],
-               self.params,
-               negative=True,
-               native_NA_frac=self.native_NA_frac
-           )
-        offset += len(self.na_neg_inds)
+        #if index >= offset and index < offset + len(self.na_neg_inds):
+        #   ID = self.na_neg_IDs[index-offset]
+        #   sel_idx = np.random.randint(0, len(self.na_neg_dict[ID]))
+        #   out = self.na_neg_loader(
+        #       self.na_neg_dict[ID][sel_idx][0],
+        #       self.na_neg_dict[ID][sel_idx][1],
+        #       self.params,
+        #       negative=True,
+        #       native_NA_frac=self.native_NA_frac
+        #   )
+        #offset += len(self.na_neg_inds)
 
         if index >= offset and index < offset + len(self.rna_inds):
             ID = self.rna_IDs[index-offset]
@@ -2138,9 +2139,9 @@ class DistributedWeightedSampler(data.Sampler):
         pdb_weights,
         fb_weights,
         compl_weights,
-        neg_weights,
+        #neg_weights,
         na_compl_weights,
-        neg_na_compl_weights,
+        #neg_na_compl_weights,
         rna_weights,
         sm_compl_weights,
         sm_weights,
@@ -2171,9 +2172,9 @@ class DistributedWeightedSampler(data.Sampler):
         self.num_replicas = num_replicas
         self.num_fb_per_epoch = int(round(num_example_per_epoch*fraction_fb))
         self.num_compl_per_epoch = int(round(num_example_per_epoch*fraction_compl))
-        self.num_neg_per_epoch = 0 #manually set to 0
+        #self.num_neg_per_epoch = 0 #manually set to 0
         self.num_na_compl_per_epoch = int(round(num_example_per_epoch*fraction_na_compl))
-        self.num_neg_na_compl_per_epoch = 0 # manually set to 0
+        #self.num_neg_na_compl_per_epoch = 0 # manually set to 0
         self.num_rna_per_epoch = int(round(num_example_per_epoch*fraction_rna))
         self.num_sm_compl_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl))
         self.num_sm_per_epoch = int(round(num_example_per_epoch*fraction_sm))
@@ -2185,8 +2186,8 @@ class DistributedWeightedSampler(data.Sampler):
             + self.num_rna_per_epoch
             + self.num_sm_compl_per_epoch
             + self.num_sm_per_epoch
-            + self.num_neg_per_epoch
-            + self.num_neg_na_compl_per_epoch
+        #    + self.num_neg_per_epoch
+        #    + self.num_neg_na_compl_per_epoch
         )
 
         if (rank==0):
@@ -2195,9 +2196,9 @@ class DistributedWeightedSampler(data.Sampler):
                 self.num_pdb_per_epoch,"pdb,",
                 self.num_fb_per_epoch,"fb,",
                 self.num_compl_per_epoch,"compl,",
-                self.num_neg_per_epoch,"neg,",
+        #        self.num_neg_per_epoch,"neg,",
                 self.num_na_compl_per_epoch,"NA compl,",
-                self.num_neg_na_compl_per_epoch,"NA neg,",
+        #        self.num_neg_na_compl_per_epoch,"NA neg,",
                 self.num_rna_per_epoch,"RNA,",
                 self.num_sm_compl_per_epoch, "SM Compl,",
                 self.num_sm_per_epoch, "SM crystals."
@@ -2214,10 +2215,10 @@ class DistributedWeightedSampler(data.Sampler):
         self.fb_weights = fb_weights
 
         self.compl_weights = compl_weights
-        self.neg_weights = neg_weights
+        #self.neg_weights = neg_weights
 
         self.na_compl_weights = na_compl_weights
-        self.neg_na_compl_weights = neg_na_compl_weights
+        #self.neg_na_compl_weights = neg_na_compl_weights
 
         self.rna_weights = rna_weights
         
@@ -2258,20 +2259,20 @@ class DistributedWeightedSampler(data.Sampler):
             sel_indices = torch.cat((sel_indices, indices[compl_sampled + offset]))
         offset += len(self.dataset.compl_IDs)
         
-        if (self.num_neg_per_epoch>0):
-           neg_sampled = torch.multinomial(self.neg_weights, self.num_neg_per_epoch, self.replacement, generator=g)
-           sel_indices = torch.cat((sel_indices, indices[neg_sampled + offset]))
-        offset += len(self.dataset.neg_IDs)
+        #if (self.num_neg_per_epoch>0):
+        #   neg_sampled = torch.multinomial(self.neg_weights, self.num_neg_per_epoch, self.replacement, generator=g)
+        #   sel_indices = torch.cat((sel_indices, indices[neg_sampled + offset]))
+        #offset += len(self.dataset.neg_IDs)
 
         if (self.num_na_compl_per_epoch>0):
             na_compl_sampled = torch.multinomial(self.na_compl_weights, self.num_na_compl_per_epoch, self.replacement, generator=g)
             sel_indices = torch.cat((sel_indices, indices[na_compl_sampled + offset]))
         offset += len(self.dataset.na_compl_IDs)
 
-        if (self.num_neg_na_compl_per_epoch>0):
-           neg_na_sampled = torch.multinomial(self.neg_na_compl_weights, self.num_neg_na_compl_per_epoch, self.replacement, generator=g)
-           sel_indices = torch.cat((sel_indices, indices[neg_na_sampled + offset]))
-        offset += len(self.dataset.na_neg_IDs)
+        #if (self.num_neg_na_compl_per_epoch>0):
+        #   neg_na_sampled = torch.multinomial(self.neg_na_compl_weights, self.num_neg_na_compl_per_epoch, self.replacement, generator=g)
+        #   sel_indices = torch.cat((sel_indices, indices[neg_na_sampled + offset]))
+        #offset += len(self.dataset.na_neg_IDs)
 
         if (self.num_rna_per_epoch>0):
             rna_sampled = torch.multinomial(self.rna_weights, self.num_rna_per_epoch, self.replacement, generator=g)
