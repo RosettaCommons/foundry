@@ -341,6 +341,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         with open(params["SM_LIST"], 'r') as f:
             reader = csv.reader(f)
             next(reader)
+            # PDB_ID, HASH, CLUSTER, LEN, MOL2_FILES
             rows = [[r[0],r[3],int(r[4]), int(r[6]), ast.literal_eval(r[-2].strip())] for r in reader
                             if float(r[2])<=params['RESCUT'] and
                             parser.parse(r[1])<=parser.parse(params['DATCUT'])]
@@ -350,7 +351,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         for r in rows:
             if r[2] in val_pdb_ids:
                 if r[2] in valid_sm_compl.keys():
-                    valid_sm_compl[r[2]].append((r[:2], r[3], r[-1]))
+                    valid_sm_compl[r[2]].append((r[:2], r[3], r[-1])) # ((PDB_ID, HASH), LEN, MOL2_files)
                 else:
                     valid_sm_compl[r[2]] = [(r[:2], r[3], r[-1])]
             else:

@@ -416,6 +416,38 @@ class Trainer():
         tot_loss += w_str*l_fape[0]
         loss_dict['allatom_fape'] = l_fape[0].detach()
         
+        # rmsd loss (for logging only)
+        rmsd = calc_crd_rmsd(
+            pred_allatom[:,mask_BB[0],:,:3],
+            nat_symm[None,mask_BB[0],:,:3],
+            xs_mask[:,mask_BB[0]]
+            )
+        loss_dict["rmsd"] = rmsd[0].detach()
+
+        if torch.any(mask_BBB):
+            xs_mask_c1, xs_mask_c2 = xs_mask.clone(), xs_mask.clone()
+            xs_mask_c1[:,~mask_BBA[0]] = False
+            xs_mask_c2[:,~mask_BBB[0]] = False
+            rmsd_c1_c1 = calc_crd_rmsd(
+                pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
+                atom_mask=xs_mask_c1[:,mask_BB[0]], rmsd_mask=xs_mask_c1[:,mask_BB[0]]
+            )
+            rmsd_c1_c2 = calc_crd_rmsd(
+                pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
+                atom_mask=xs_mask_c1[:,mask_BB[0]], rmsd_mask=xs_mask_c2[:,mask_BB[0]]
+            )
+            rmsd_c2_c2 = calc_crd_rmsd(
+                pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
+                atom_mask=xs_mask_c2[:,mask_BB[0]], rmsd_mask=xs_mask_c2[:,mask_BB[0]]
+            )
+            loss_dict["rmsd_c1_c1"]= rmsd_c1_c1[0].detach()
+            loss_dict["rmsd_c1_c2"]= rmsd_c1_c2[0].detach()
+            loss_dict["rmsd_c2_c2"]= rmsd_c2_c2[0].detach()
+        else:
+            loss_dict["rmsd_c1_c1"]= loss_dict['rmsd']
+            loss_dict["rmsd_c1_c2"]= torch.tensor(0, device=pred.device)
+            loss_dict["rmsd_c2_c2"]= torch.tensor(0, device=pred.device)
+
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
         if w_bond > 0.0:
