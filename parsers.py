@@ -439,13 +439,16 @@ def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
 
     return xyz, f1d
 
-def parse_mol(filename):
+def parse_mol(filename, string=False):
 
     obConversion = openbabel.OBConversion()
     obConversion.SetInFormat("mol2")
 
     obmol = openbabel.OBMol()
-    obConversion.ReadFile(obmol,filename)
+    if string:
+        obConversion.ReadString(obmol,filename)
+    else:
+        obConversion.ReadFile(obmol,filename)
     obmol.DeleteHydrogens()
     msa = torch.tensor([aa2num[atomnum2atomtype[obmol.GetAtom(i).GetAtomicNum()]] for i in range(1, obmol.NumAtoms()+1)])
     ins = torch.zeros_like(msa)

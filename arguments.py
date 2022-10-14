@@ -39,6 +39,8 @@ def get_args():
             help='Adds datestamp to output folder and/or wandb prefix.')
     train_group.add_argument('-model_dir', type=str, default='models/',
             help='Output folder for model weights. [models/]')
+    train_group.add_argument('-interactive', action='store_true', default=False,
+            help='Start training in interactive mode. [False]')
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")
