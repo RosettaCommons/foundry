@@ -668,6 +668,7 @@ class Trainer():
             print(commit, file=outf)
             print(out.decode(), file=outf)
 
+        print(f'Current date/time: {datestr}')
         print('Saved git diff between current state and last commit')
 
     def train_model(self, rank, world_size):
@@ -694,7 +695,7 @@ class Trainer():
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
+        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
         #define dataset & data loader
