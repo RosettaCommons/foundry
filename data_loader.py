@@ -48,7 +48,7 @@ def set_data_loader_params(args):
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
         "NEGATIVE_LIST"    : "%s/list.negative.csv"%compl_dir,
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
-        "NA_COMPL_LIST"    : "%s/list.nucleic.csv"%na_dir,
+        "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%na_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
         "SM_LIST"          : "%s/list_v02_sm_filt_notest_reclustered.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
@@ -1239,7 +1239,12 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
     # read PDBs
     pdb_ids = pdb_set.split(':')
     pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt')
-    pdbB = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt')
+    try:
+        pdbB = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt')
+    except FileNotFoundError as e:
+        print('filenotfounderror', item)
+        print('pdb_ids',pdb_ids)
+        raise e
     pdbC = None
     if (len(pdb_ids)==3):
         pdbC = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt')
@@ -2130,7 +2135,6 @@ class DistilledDataset(data.Dataset):
                 self.sm_dict[ID][0],
                 self.params,
             )
-        print(index, out[-1])
         return out
 
 class DistributedWeightedSampler(data.Sampler):
