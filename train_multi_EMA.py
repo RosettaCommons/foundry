@@ -29,7 +29,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 #torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -668,6 +668,7 @@ class Trainer():
             print(commit, file=outf)
             print(out.decode(), file=outf)
 
+        print(f'Current date/time: {datestr}')
         print('Saved git diff between current state and last commit')
 
     def train_model(self, rank, world_size):

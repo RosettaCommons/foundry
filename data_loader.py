@@ -2130,6 +2130,7 @@ class DistilledDataset(data.Dataset):
                 self.sm_dict[ID][0],
                 self.params,
             )
+        print(index, out[-1])
         return out
 
 class DistributedWeightedSampler(data.Sampler):
