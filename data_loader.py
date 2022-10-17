@@ -13,14 +13,22 @@ from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTY
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans
 
-base_dir = "/projects/ml/TrRosetta/PDB-2021AUG02"
+# faster for remote/tukwila nodes
+#base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
+#compl_dir = "/databases/TrRosetta/RoseTTAComplex"
+#na_dir = "/databases/TrRosetta/nucleic"
+#sm_compl_dir = "/databases/TrRosetta/RF2_allatom"
+#mol_dir = "/databases/TrRosetta/RF2_allatom/by-pdb"
+csd_dir = "/databases/csd543"
+
+# older paths, still good but best for local/UW nodes
+base_dir = "/projects/ml/TrRosetta/PDB-2021AUG02"  
 compl_dir = "/projects/ml/RoseTTAComplex"
 #na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
 mol_dir = "/projects/ml/RF2_allatom/by-pdb"
-csd_dir = "/databases/csd543"
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -50,7 +58,7 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%na_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/list_v02_sm_filt_notest_reclustered.csv"%sm_compl_dir, 
+        "SM_LIST"          : "%s/list_v02_smcompl_20221017.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
@@ -323,6 +331,9 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
 
 def get_train_valid_set(params, OFFSET=1000000):
     if (not os.path.exists(params['DATAPKL'])):
+        print(f'cached train/valid datasets {params["DATAPKL"]} not found. '\
+              f're-parsing train/valid metadata...')
+
         # read validation IDs for PDB set
         val_pdb_ids = set([int(l) for l in open(params['VAL_PDB']).readlines()])
         val_compl_ids = set([int(l) for l in open(params['VAL_COMPL']).readlines()])
@@ -356,11 +367,12 @@ def get_train_valid_set(params, OFFSET=1000000):
             (~df.LIGANDS.str.contains('1fcv_GCU_1_A_405__B___.mol2')) & # malformatted, tanimoto neighbors=0, weight=Inf
             (df.CHAINID != '6uiw_A') # causes GPU OOM for some reason
         ]
+        df['LIGANDS'] = df.LIGANDS.apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
 
         # weight each example by various factors
         seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
         multi_lig_factor = df['LIGANDS'].apply(lambda x: len(x))/df.NUM_LIGANDS.astype(float) # num of this ligand versus total ligands for this protein chain
-        if params['CLUSTER_BY_LIGAND']:
+        if params['CLUSTER_LIGANDS']:
             ligand_cluster_factor = 1./df.LIGAND_CLUSTER_SIZE # how many sm mol have tanimoto > 0.85 to this?
         else:
             ligand_cluster_factor = 1.0
@@ -1470,7 +1482,7 @@ def loader_sm_compl(item, params, pick_top=True,
 
     # Load protein information
     pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
-    a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+pdb_hash[:3] + '/'+ pdb_hash[1] + '.a3m.gz', pdb_hash)
+    a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+pdb_hash[:3] + '/'+ pdb_hash + '.a3m.gz', pdb_hash)
     tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
    
     # get msa features
@@ -1484,7 +1496,7 @@ def loader_sm_compl(item, params, pick_top=True,
     protein_L, nprotatoms, _ = xyz_prot.shape
  
     # Load small molecule
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+ligand_fn)
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+ligands[0])
     for alt_lig in ligands[1:]:
         mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+alt_lig)
         if all(msa_sm2==msa_sm):

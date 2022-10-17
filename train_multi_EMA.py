@@ -45,12 +45,12 @@ torch.set_num_threads(4)
 
 # num structs per epoch
 # must be divisible by #GPUs
-#N_EXAMPLE_PER_EPOCH = 6144
-N_EXAMPLE_PER_EPOCH = 1536
+N_EXAMPLE_PER_EPOCH = 6144
+#N_EXAMPLE_PER_EPOCH = 1536
 #N_EXAMPLE_PER_EPOCH = 16
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 5,
+              'num_workers': 2,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -899,14 +899,11 @@ class Trainer():
         valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
         valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
         valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
-        #valid_sm_compl_dock_sampler = data.distributed.DistributedSampler(valid_sm_compl_dock_set, num_replicas=world_size, rank=rank)
-        #valid_sm_compl_foldprot_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldprot_set, num_replicas=world_size, rank=rank)
-        #valid_sm_compl_foldlig_sampler = data.distributed.DistributedSampler(valid_sm_compl_foldlig_set, num_replicas=world_size, rank=rank)
+        valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
         # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_neg_sampler = data.distributed.DistributedSampler(valid_na_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_from_scratch_neg_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_neg_set, num_replicas=world_size, rank=rank)
 
-        #valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
@@ -916,6 +913,7 @@ class Trainer():
         valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
         valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
         valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
         
         #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
@@ -924,7 +922,6 @@ class Trainer():
         #valid_sm_compl_dock_loader = data.DataLoader(valid_sm_compl_dock_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         #valid_sm_compl_foldprot_loader = data.DataLoader(valid_sm_compl_foldprot_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
         #valid_sm_compl_foldlig_loader = data.DataLoader(valid_sm_compl_foldlig_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        #valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
 
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -1003,11 +1000,8 @@ class Trainer():
                 valid_na_from_scratch_compl_sampler.set_epoch(epoch)
                 valid_rna_sampler.set_epoch(epoch)
                 valid_sm_compl_sampler.set_epoch(epoch)
-                #valid_sm_compl_dock_sampler.set_epoch(epoch)
-                #valid_sm_compl_foldprot_sampler.set_epoch(epoch)
-                #valid_sm_compl_foldlig_sampler.set_epoch(epoch)
+                valid_sm_sampler.set_epoch(epoch)
                 #valid_neg_sampler.set_epoch(epoch)
-                #valid_sm_sampler.set_epoch(epoch)
 
                 train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
@@ -1025,12 +1019,8 @@ class Trainer():
                 epoch, header="RNA", verbose = self.eval)
             valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl", verbose = self.eval) 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_dock_loader, rank, gpu, world_size, 
-            #    epoch, header="SM Dock") 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldprot_loader, rank, gpu, 
-            #    world_size, epoch, header="SM FoldProt") 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_foldlig_loader, rank, gpu, 
-            #    world_size, epoch, header="SM FoldLig") 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+                rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
