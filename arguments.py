@@ -66,6 +66,9 @@ def get_args():
             help="maximum sequence identity cutoff for template selection [150.0]")
     data_group.add_argument('-maxcycle', type=int, default=4,
             help="maximum number of recycle [4]")
+    data_group.add_argument('-cluster_ligands', action='store_true', default=False,
+            help="cluster protein/sm. mol examples by ligand similarity (downsamples "\
+                 "examples with common ligands like ATP, heme, etc [False]")
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")

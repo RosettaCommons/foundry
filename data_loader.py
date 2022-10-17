@@ -59,7 +59,7 @@ def set_data_loader_params(args):
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221014.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221017.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -85,6 +85,7 @@ def set_data_loader_params(args):
         "MINATOMS"         : 5,
         "MAXATOMS"         : 100,
         "MAXSIM"           : 0.85,
+        "CLUSTER_LIGANDS"  : False
     }
     for param in params:
         if hasattr(args, param.lower()):
@@ -352,14 +353,17 @@ def get_train_valid_set(params, OFFSET=1000000):
         df = df[
             (df.RESOLUTION<=params['RESCUT']) &
             (df.DEPOSITION.apply(lambda x: parser.parse(x))<=parser.parse(params['DATCUT'])) &
-            (df.LIGAND != '1fcv_GCU_1_A_405__B___.mol2') & # malformatted, tanimoto neighbors=0, weight=Inf
+            (~df.LIGANDS.str.contains('1fcv_GCU_1_A_405__B___.mol2')) & # malformatted, tanimoto neighbors=0, weight=Inf
             (df.CHAINID != '6uiw_A') # causes GPU OOM for some reason
         ]
 
         # weight each example by various factors
         seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
-        multi_lig_factor = 1./df.NUM_LIGANDS # some proteins have multiple ligands
-        ligand_cluster_factor = 1./df.LIGAND_CLUSTER_SIZE # how many other sm mol have tanimoto > 0.85 to this?
+        multi_lig_factor = df['LIGANDS'].apply(lambda x: len(x))/df.NUM_LIGANDS.astype(float) # num of this ligand versus total ligands for this protein chain
+        if params['CLUSTER_BY_LIGAND']:
+            ligand_cluster_factor = 1./df.LIGAND_CLUSTER_SIZE # how many sm mol have tanimoto > 0.85 to this?
+        else:
+            ligand_cluster_factor = 1.0
         seq_cluster_factor = 1./df.CLUSTER_SIZE # protein seq similarity cluster size
         df['WEIGHT'] = seq_len_factor * multi_lig_factor * ligand_cluster_factor * seq_cluster_factor
 
@@ -367,7 +371,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         train_sm_compl = {}
         valid_sm_compl = {}
         for i,row in df.iterrows():
-            entry = ((row.CHAINID, row.HASH, row.LIGAND), row.LEN_EXIST, row.WEIGHT)
+            entry = ((row.CHAINID, row.HASH, row.LIGANDS), row.LEN_EXIST, row.WEIGHT)
             if row.CLUSTER in val_pdb_ids:
                 if row.CLUSTER in valid_sm_compl.keys():
                     valid_sm_compl[row.CLUSTER].append(entry)
@@ -1461,10 +1465,13 @@ def loader_sm_compl(item, params, pick_top=True,
     init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0):
     """Load protein/SM complex with mixed residue and atom tokens. Also,
     compute frames for atom FAPE loss calc"""
+
+    pdb_chain, pdb_hash, ligands = item
+
     # Load protein information
-    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
-    a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+item[1][:3] + '/'+ item[1] + '.a3m.gz', item[1])
-    tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+item[1][:3]+'/'+item[1]+'.pt')
+    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
+    a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+pdb_hash[:3] + '/'+ pdb_hash[1] + '.a3m.gz', pdb_hash)
+    tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
    
     # get msa features
     msa_prot = a3mA['msa'].long()
@@ -1477,7 +1484,16 @@ def loader_sm_compl(item, params, pick_top=True,
     protein_L, nprotatoms, _ = xyz_prot.shape
  
     # Load small molecule
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+item[0][1:3]+"/"+item[2])
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+ligand_fn)
+    for alt_lig in ligands[1:]:
+        mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+alt_lig)
+        if all(msa_sm2==msa_sm):
+            xyz_sm = torch.concat([xyz_sm, xyz_sm2],dim=0) # (N_symm1 + N_symm2, Natoms, 3)
+            mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
+        else:
+            print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same atom order: '\
+                  f'{item}. Skipping.')
+            return [torch.tensor([-1])]*20
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
