@@ -13,7 +13,7 @@ from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTY
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans
 
-# faster for remote/tukwila nodes
+# faster for remote/tukwila nodes - switch to these on 10/18 when server gets mirrored
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
 #compl_dir = "/databases/TrRosetta/RoseTTAComplex"
 #na_dir = "/databases/TrRosetta/nucleic"
@@ -361,13 +361,13 @@ def get_train_valid_set(params, OFFSET=1000000):
         # parse protein-small molecule complexes
         df = pd.read_csv(params['SM_LIST'])
         df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') # restore leading zeros, make into string
+        df['LIGANDS'] = df.LIGANDS.apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
         df = df[
             (df.RESOLUTION<=params['RESCUT']) &
             (df.DEPOSITION.apply(lambda x: parser.parse(x))<=parser.parse(params['DATCUT'])) &
-            (~df.LIGANDS.str.contains('1fcv_GCU_1_A_405__B___.mol2')) & # malformatted, tanimoto neighbors=0, weight=Inf
+            df.LIGANDS.apply(lambda x: '1fcv_GCU_1_A_405__B___.mol2' in x) & # malformatted, tanimoto neighbors=0, weight=Inf
             (df.CHAINID != '6uiw_A') # causes GPU OOM for some reason
         ]
-        df['LIGANDS'] = df.LIGANDS.apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
 
         # weight each example by various factors
         seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
@@ -1255,12 +1255,7 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
     # read PDBs
     pdb_ids = pdb_set.split(':')
     pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt')
-    try:
-        pdbB = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt')
-    except FileNotFoundError as e:
-        print('filenotfounderror', item)
-        print('pdb_ids',pdb_ids)
-        raise e
+    pdbB = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt')
     pdbC = None
     if (len(pdb_ids)==3):
         pdbC = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt')
