@@ -1003,14 +1003,17 @@ def get_protein_bond_feats(protein_L):
     bond_feats[residues+1, residues] = 5
     return bond_feats
 
-def get_atomize_protein_bond_feats(sel_res, msa, ra, flank=5):
-    """ generate atom bond features for atomized residues """
+def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
+    """ 
+    generate atom bond features for atomized residues 
+    currently ignores long-range bonds like disulfides
+    """
     ra2ind = {}
     for i, two_d in enumerate(ra):
         ra2ind[tuple(two_d.numpy())] = i
     N = len(ra2ind.keys())
     bond_feats = torch.zeros((N, N))
-    for i, res in enumerate(msa[0, sel_res:sel_res+flank]):
+    for i, res in enumerate(msa[0, i_start:i_start+n_res_atomize]):
         for j, bond in enumerate(aabonds[res]):
             start_idx = aa2long[res].index(bond[0])
             end_idx = aa2long[res].index(bond[1])
@@ -1067,5 +1070,6 @@ def atomize_protein(sel_res, msa, xyz, mask, stretch=5):
     lig_xyz = nat_symm[:, r, a]
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     frames = get_atomized_protein_frames(residues_atomize, ra)
-    bond_feats = get_atomize_protein_bond_feats(sel_res, msa, ra, flank=stretch)
+    bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
+
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats

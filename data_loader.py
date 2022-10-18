@@ -3,6 +3,7 @@ from torch.utils import data
 import os, csv, random, pickle
 from dateutil import parser
 import numpy as np
+import pandas as pd
 import ast
 import scipy
 from scipy.sparse.csgraph import shortest_path
@@ -12,14 +13,22 @@ from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTY
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans
 
-base_dir = "/projects/ml/TrRosetta/PDB-2021AUG02"
+# faster for remote/tukwila nodes - switch to these on 10/18 when server gets mirrored
+#base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
+#compl_dir = "/databases/TrRosetta/RoseTTAComplex"
+#na_dir = "/databases/TrRosetta/nucleic"
+#sm_compl_dir = "/databases/TrRosetta/RF2_allatom"
+#mol_dir = "/databases/TrRosetta/RF2_allatom/by-pdb"
+csd_dir = "/databases/csd543"
+
+# older paths, still good but best for local/UW nodes
+base_dir = "/projects/ml/TrRosetta/PDB-2021AUG02"  
 compl_dir = "/projects/ml/RoseTTAComplex"
 #na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
 mol_dir = "/projects/ml/RF2_allatom/by-pdb"
-#mol_dir = "/home/dimaio/ccd/by-pdb"
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -29,6 +38,7 @@ if not os.path.exists(base_dir):
     fb_dir = "/data/databases/fb_af"
     sm_compl_dir = "/data/databases/RF2_allatom"
     mol_dir = "/data/databases/RF2_allatom/by-pdb"
+    csd_dir = "/data/databases/csd543"
 
 if not os.path.exists(base_dir):
     # training on blue
@@ -38,6 +48,7 @@ if not os.path.exists(base_dir):
     fb_dir = "/gscratch2/fb_af1"
     sm_compl_dir = "/gscratch2/RF2_allatom"
     mol_dir = "/gscratch2/RF2_allatom/by-pdb"
+    csd_dir = "/gscratch2/RF2_allatom/csd543"
 
 def set_data_loader_params(args):
     params = {
@@ -45,26 +56,24 @@ def set_data_loader_params(args):
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
         "NEGATIVE_LIST"    : "%s/list.negative.csv"%compl_dir,
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
-        "NA_COMPL_LIST"    : "%s/list.nucleic.csv"%na_dir,
+        "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%na_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        #"SM_LIST"          : "%s/list_v02_ligonly_notest_ccd_ob"%sm_compl_dir, 
-        "SM_LIST"          : "%s/list_v02_sm_filt_notest.csv"%sm_compl_dir, 
+        "SM_LIST"          : "%s/list_v02_smcompl_20221017.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
-        #"PDB_LIST"        : "/gscratch2/list_2021AUG02.csv", # on blue
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
-        "CSD_LIST"         : "/projects/ml/ligand_datasets/csd543/csd543_cleaned01.csv", 
+        "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
         "VAL_PDB"          : "%s/valid_remapped"%sm_compl_dir,
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "./dataset.pkl", # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221017.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
         "NA_DIR"           : na_dir,
         "MOL_DIR"          : mol_dir,
-        "CSD_DIR"          : "/projects/ml/ligand_datasets/csd543",
+        "CSD_DIR"          : csd_dir,
         "MINTPLT"          : 0,
         "MAXTPLT"          : 5,
         "MINSEQ"           : 1,
@@ -84,6 +93,7 @@ def set_data_loader_params(args):
         "MINATOMS"         : 5,
         "MAXATOMS"         : 100,
         "MAXSIM"           : 0.85,
+        "CLUSTER_LIGANDS"  : False
     }
     for param in params:
         if hasattr(args, param.lower()):
@@ -321,6 +331,9 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
 
 def get_train_valid_set(params, OFFSET=1000000):
     if (not os.path.exists(params['DATAPKL'])):
+        print(f'cached train/valid datasets {params["DATAPKL"]} not found. '\
+              f're-parsing train/valid metadata...')
+
         # read validation IDs for PDB set
         val_pdb_ids = set([int(l) for l in open(params['VAL_PDB']).readlines()])
         val_compl_ids = set([int(l) for l in open(params['VAL_COMPL']).readlines()])
@@ -345,26 +358,48 @@ def get_train_valid_set(params, OFFSET=1000000):
             else:
                 train_rna[i] = [(r[0], r[-1])]
 
-        with open(params["SM_LIST"], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            rows = [[r[0],r[3],int(r[4]), int(r[6]), ast.literal_eval(r[-2].strip())] for r in reader
-                            if float(r[2])<=params['RESCUT'] and
-                            parser.parse(r[1])<=parser.parse(params['DATCUT'])]
+        # parse protein-small molecule complexes
+        df = pd.read_csv(params['SM_LIST'])
+        df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') # restore leading zeros, make into string
+        df['LIGANDS'] = df.LIGANDS.apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
+        df = df[
+            (df.RESOLUTION<=params['RESCUT']) &
+            (df.DEPOSITION.apply(lambda x: parser.parse(x))<=parser.parse(params['DATCUT'])) &
+            df.LIGANDS.apply(lambda x: '1fcv_GCU_1_A_405__B___.mol2' in x) & # malformatted, tanimoto neighbors=0, weight=Inf
+            (df.CHAINID != '6uiw_A') # causes GPU OOM for some reason
+        ]
 
+        # weight each example by various factors
+        seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
+        multi_lig_factor = df['LIGANDS'].apply(lambda x: len(x))/df.NUM_LIGANDS.astype(float) # num of this ligand versus total ligands for this protein chain
+        if params['CLUSTER_LIGANDS']:
+            ligand_cluster_factor = 1./df.LIGAND_CLUSTER_SIZE # how many sm mol have tanimoto > 0.85 to this?
+        else:
+            ligand_cluster_factor = 1.0
+        seq_cluster_factor = 1./df.CLUSTER_SIZE # protein seq similarity cluster size
+        df['WEIGHT'] = seq_len_factor * multi_lig_factor * ligand_cluster_factor * seq_cluster_factor
+
+        # compile protein-sm. mol training & validation sets
         train_sm_compl = {}
         valid_sm_compl = {}
-        for r in rows:
-            if r[2] in val_pdb_ids:
-                if r[2] in valid_sm_compl.keys():
-                    valid_sm_compl[r[2]].append((r[:2], r[3], r[-1]))
+        for i,row in df.iterrows():
+            entry = ((row.CHAINID, row.HASH, row.LIGANDS), row.LEN_EXIST, row.WEIGHT)
+            if row.CLUSTER in val_pdb_ids:
+                if row.CLUSTER in valid_sm_compl.keys():
+                    valid_sm_compl[row.CLUSTER].append(entry)
                 else:
-                    valid_sm_compl[r[2]] = [(r[:2], r[3], r[-1])]
+                    valid_sm_compl[row.CLUSTER] = [entry]
             else:
-                if r[2] in train_sm_compl.keys():
-                    train_sm_compl[r[2]].append((r[:2], r[3], r[-1]))
+                if row.CLUSTER in train_sm_compl.keys():
+                    train_sm_compl[row.CLUSTER].append(entry)
                 else:
-                    train_sm_compl[r[2]] = [(r[:2], r[3], r[-1])]
+                    train_sm_compl[row.CLUSTER] = [entry]
+
+        # protein-small mol cluster weights are the sum of cluster member weights
+        sm_compl_IDs = list(train_sm_compl.keys())
+        df_clus = df[['CLUSTER','WEIGHT']].groupby('CLUSTER').sum().reset_index()
+        clus2weight = dict(zip(df_clus.CLUSTER, df_clus.WEIGHT))
+        sm_compl_weights = [clus2weight[i] for i in sm_compl_IDs]
 
         # read homo-oligomer list
         homo = {}
@@ -555,6 +590,7 @@ def get_train_valid_set(params, OFFSET=1000000):
                 train_sm[i] = row[:2]
 
         # Get average chain length in each cluster and calculate weights
+        # protein-small mol complex weights are done separately above
         pdb_IDs = list(train_pdb.keys())
         fb_IDs = list(fb.keys())
         compl_IDs = list(train_compl.keys())
@@ -562,10 +598,8 @@ def get_train_valid_set(params, OFFSET=1000000):
         na_compl_IDs = list(train_na_compl.keys())
         na_neg_IDs = list(train_na_neg.keys())
         rna_IDs = list(train_rna.keys())
-        sm_compl_IDs = list(train_sm_compl.keys())
         sm_IDs = list(train_sm.keys())
 
-        #
         pdb_weights = np.array([train_pdb[key][0][1] for key in pdb_IDs])
         pdb_weights = (1/512.)*np.clip(pdb_weights, 256, 512)
         fb_weights = np.array([fb[key][0][1] for key in fb_IDs])
@@ -579,8 +613,6 @@ def get_train_valid_set(params, OFFSET=1000000):
         na_neg_weights = np.array([sum(train_na_neg[key][0][1]) for key in na_neg_IDs])
         na_neg_weights = (1/512.)*np.clip(na_neg_weights, 256, 512)
         rna_weights = np.ones(len(rna_IDs)) # no weighing
-        sm_compl_weights = np.array([train_sm_compl[key][0][1] for key in sm_compl_IDs])
-        sm_compl_weights = (1/512.)*np.clip(sm_compl_weights, 256, 512)  
         sm_weights = np.array([train_sm[key][1] for key in sm_IDs])
 
         # save
@@ -1435,15 +1467,18 @@ def loader_rna(item, Ls, params, random_noise=5.0):
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), "rna",item
 
-def loader_sm_compl(item, sm_chains, params, pick_top=True,
+def loader_sm_compl(item, params, pick_top=True,
     init_protein_tmpl=False, init_ligand_tmpl=False,
     init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0):
     """Load protein/SM complex with mixed residue and atom tokens. Also,
     compute frames for atom FAPE loss calc"""
+
+    pdb_chain, pdb_hash, ligands = item
+
     # Load protein information
-    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
-    a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+item[1][:3] + '/'+ item[1] + '.a3m.gz', item[1])
-    tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+item[1][:3]+'/'+item[1]+'.pt')
+    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
+    a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+pdb_hash[:3] + '/'+ pdb_hash + '.a3m.gz', pdb_hash)
+    tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
    
     # get msa features
     msa_prot = a3mA['msa'].long()
@@ -1456,8 +1491,16 @@ def loader_sm_compl(item, sm_chains, params, pick_top=True,
     protein_L, nprotatoms, _ = xyz_prot.shape
  
     # Load small molecule
-    sm_ch = random.choice(sm_chains)
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+item[0][1:3]+"/"+sm_ch)
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+ligands[0])
+    for alt_lig in ligands[1:]:
+        mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+alt_lig)
+        if all(msa_sm2==msa_sm):
+            xyz_sm = torch.concat([xyz_sm, xyz_sm2],dim=0) # (N_symm1 + N_symm2, Natoms, 3)
+            mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
+        else:
+            print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same atom order: '\
+                  f'{item}. Skipping.')
+            return [torch.tensor([-1])]*20
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
@@ -1884,10 +1927,10 @@ class DatasetSMComplex(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+        weights = torch.tensor([item[2] for item in self.item_dict[ID]])
+        sel_idx = torch.multinomial(weights, 1)
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
-            self.item_dict[ID][sel_idx][2],
             self.params,
             init_protein_tmpl = self.init_protein_tmpl,
             init_ligand_tmpl = self.init_ligand_tmpl,
@@ -1921,9 +1964,9 @@ class DistilledDataset(data.Dataset):
         self,
         pdb_IDs, pdb_loader, pdb_dict,
         compl_IDs, compl_loader, compl_dict,
-        neg_IDs, neg_loader, neg_dict,
+        #neg_IDs, neg_loader, neg_dict,
         na_compl_IDs, na_compl_loader, na_compl_dict,
-        na_neg_IDs, na_neg_loader, na_neg_dict,
+        #na_neg_IDs, na_neg_loader, na_neg_dict,
         fb_IDs, fb_loader, fb_dict,
         rna_IDs, rna_loader, rna_dict,
         sm_compl_IDs, sm_compl_loader, sm_compl_dict, 
@@ -1940,15 +1983,15 @@ class DistilledDataset(data.Dataset):
         self.compl_IDs = compl_IDs
         self.compl_loader = compl_loader
         self.compl_dict = compl_dict
-        self.neg_IDs = neg_IDs
-        self.neg_loader = neg_loader
-        self.neg_dict = neg_dict
+        #self.neg_IDs = neg_IDs
+        #self.neg_loader = neg_loader
+        #self.neg_dict = neg_dict
         self.na_compl_IDs = na_compl_IDs
         self.na_compl_loader = na_compl_loader
         self.na_compl_dict = na_compl_dict
-        self.na_neg_IDs = na_neg_IDs
-        self.na_neg_loader = na_neg_loader
-        self.na_neg_dict = na_neg_dict
+        #self.na_neg_IDs = na_neg_IDs
+        #self.na_neg_loader = na_neg_loader
+        #self.na_neg_dict = na_neg_dict
         self.fb_IDs = fb_IDs
         self.fb_dict = fb_dict
         self.fb_loader = fb_loader
@@ -1967,9 +2010,9 @@ class DistilledDataset(data.Dataset):
         self.native_NA_frac = native_NA_frac
 
         self.compl_inds = np.arange(len(self.compl_IDs))
-        self.neg_inds = np.arange(len(self.neg_IDs))
+        #self.neg_inds = np.arange(len(self.neg_IDs))
         self.na_compl_inds = np.arange(len(self.na_compl_IDs))
-        self.na_neg_inds = np.arange(len(self.na_neg_IDs))
+        #self.na_neg_inds = np.arange(len(self.na_neg_IDs))
         self.fb_inds = np.arange(len(self.fb_IDs))
         self.pdb_inds = np.arange(len(self.pdb_IDs))
         self.rna_inds = np.arange(len(self.rna_IDs))
@@ -1985,8 +2028,8 @@ class DistilledDataset(data.Dataset):
             + len(self.rna_inds)
             + len(self.sm_compl_inds)
             + len(self.sm_inds)
-            + len(self.neg_inds)
-            + len(self.na_neg_inds)
+            #+ len(self.neg_inds)
+            #+ len(self.na_neg_inds)
         )
 
     # order:
@@ -2026,18 +2069,18 @@ class DistilledDataset(data.Dataset):
             )
         offset += len(self.compl_inds)
 
-        if index >= offset and index < offset + len(self.neg_inds):
-           ID = self.neg_IDs[index-offset]
-           sel_idx = np.random.randint(0, len(self.neg_dict[ID]))
-           out = self.neg_loader(
-               self.neg_dict[ID][sel_idx][0],
-               self.neg_dict[ID][sel_idx][1],
-               self.neg_dict[ID][sel_idx][2],
-               self.neg_dict[ID][sel_idx][3],
-               self.params,
-               negative=True
-           )
-        offset += len(self.neg_inds)
+        #if index >= offset and index < offset + len(self.neg_inds):
+        #   ID = self.neg_IDs[index-offset]
+        #   sel_idx = np.random.randint(0, len(self.neg_dict[ID]))
+        #   out = self.neg_loader(
+        #       self.neg_dict[ID][sel_idx][0],
+        #       self.neg_dict[ID][sel_idx][1],
+        #       self.neg_dict[ID][sel_idx][2],
+        #       self.neg_dict[ID][sel_idx][3],
+        #       self.params,
+        #       negative=True
+        #   )
+        #offset += len(self.neg_inds)
 
         if index >= offset and index < offset + len(self.na_compl_inds):
             ID = self.na_compl_IDs[index-offset]
@@ -2049,19 +2092,20 @@ class DistilledDataset(data.Dataset):
                 negative=False,
                 native_NA_frac=self.native_NA_frac
             )
+
         offset += len(self.na_compl_inds)
 
-        if index >= offset and index < offset + len(self.na_neg_inds):
-           ID = self.na_neg_IDs[index-offset]
-           sel_idx = np.random.randint(0, len(self.na_neg_dict[ID]))
-           out = self.na_neg_loader(
-               self.na_neg_dict[ID][sel_idx][0],
-               self.na_neg_dict[ID][sel_idx][1],
-               self.params,
-               negative=True,
-               native_NA_frac=self.native_NA_frac
-           )
-        offset += len(self.na_neg_inds)
+        #if index >= offset and index < offset + len(self.na_neg_inds):
+        #   ID = self.na_neg_IDs[index-offset]
+        #   sel_idx = np.random.randint(0, len(self.na_neg_dict[ID]))
+        #   out = self.na_neg_loader(
+        #       self.na_neg_dict[ID][sel_idx][0],
+        #       self.na_neg_dict[ID][sel_idx][1],
+        #       self.params,
+        #       negative=True,
+        #       native_NA_frac=self.native_NA_frac
+        #   )
+        #offset += len(self.na_neg_inds)
 
         if index >= offset and index < offset + len(self.rna_inds):
             ID = self.rna_IDs[index-offset]
@@ -2075,7 +2119,6 @@ class DistilledDataset(data.Dataset):
 
         if index >= offset and index < offset + len(self.sm_compl_inds):
             ID = self.sm_compl_IDs[index-offset]
-            sel_idx = np.random.randint(0, len(self.sm_compl_dict[ID]))
 
             # choose one of 4 protein-sm tasks
             #i_task = np.random.randint(4)
@@ -2098,9 +2141,11 @@ class DistilledDataset(data.Dataset):
                     init_protein_tmpl = True, 
                 )
                 task = 'sm_compl_foldsm'
+
+            weights = torch.tensor([item[2] for item in self.sm_compl_dict[ID]])
+            sel_idx = torch.multinomial(weights, 1)
             out = self.sm_compl_loader(
                 self.sm_compl_dict[ID][sel_idx][0],
-                self.sm_compl_dict[ID][sel_idx][2],
                 self.params,
                 **kwargs
             )
@@ -2122,9 +2167,9 @@ class DistributedWeightedSampler(data.Sampler):
         pdb_weights,
         fb_weights,
         compl_weights,
-        neg_weights,
+        #neg_weights,
         na_compl_weights,
-        neg_na_compl_weights,
+        #neg_na_compl_weights,
         rna_weights,
         sm_compl_weights,
         sm_weights,
@@ -2154,10 +2199,10 @@ class DistributedWeightedSampler(data.Sampler):
         self.dataset = dataset
         self.num_replicas = num_replicas
         self.num_fb_per_epoch = int(round(num_example_per_epoch*fraction_fb))
-        self.num_compl_per_epoch = int(round(0.5*num_example_per_epoch*fraction_compl))
-        self.num_neg_per_epoch = 0 #manually set to 0
-        self.num_na_compl_per_epoch = int(round(0.5*num_example_per_epoch*fraction_na_compl))
-        self.num_neg_na_compl_per_epoch = 0 # manually set to 0
+        self.num_compl_per_epoch = int(round(num_example_per_epoch*fraction_compl))
+        #self.num_neg_per_epoch = 0 #manually set to 0
+        self.num_na_compl_per_epoch = int(round(num_example_per_epoch*fraction_na_compl))
+        #self.num_neg_na_compl_per_epoch = 0 # manually set to 0
         self.num_rna_per_epoch = int(round(num_example_per_epoch*fraction_rna))
         self.num_sm_compl_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl))
         self.num_sm_per_epoch = int(round(num_example_per_epoch*fraction_sm))
@@ -2169,8 +2214,8 @@ class DistributedWeightedSampler(data.Sampler):
             + self.num_rna_per_epoch
             + self.num_sm_compl_per_epoch
             + self.num_sm_per_epoch
-            + self.num_neg_per_epoch
-            + self.num_neg_na_compl_per_epoch
+        #    + self.num_neg_per_epoch
+        #    + self.num_neg_na_compl_per_epoch
         )
 
         if (rank==0):
@@ -2179,9 +2224,9 @@ class DistributedWeightedSampler(data.Sampler):
                 self.num_pdb_per_epoch,"pdb,",
                 self.num_fb_per_epoch,"fb,",
                 self.num_compl_per_epoch,"compl,",
-                self.num_neg_per_epoch,"neg,",
+        #        self.num_neg_per_epoch,"neg,",
                 self.num_na_compl_per_epoch,"NA compl,",
-                self.num_neg_na_compl_per_epoch,"NA neg,",
+        #        self.num_neg_na_compl_per_epoch,"NA neg,",
                 self.num_rna_per_epoch,"RNA,",
                 self.num_sm_compl_per_epoch, "SM Compl,",
                 self.num_sm_per_epoch, "SM crystals."
@@ -2198,10 +2243,10 @@ class DistributedWeightedSampler(data.Sampler):
         self.fb_weights = fb_weights
 
         self.compl_weights = compl_weights
-        self.neg_weights = neg_weights
+        #self.neg_weights = neg_weights
 
         self.na_compl_weights = na_compl_weights
-        self.neg_na_compl_weights = neg_na_compl_weights
+        #self.neg_na_compl_weights = neg_na_compl_weights
 
         self.rna_weights = rna_weights
         
@@ -2242,20 +2287,20 @@ class DistributedWeightedSampler(data.Sampler):
             sel_indices = torch.cat((sel_indices, indices[compl_sampled + offset]))
         offset += len(self.dataset.compl_IDs)
         
-        if (self.num_neg_per_epoch>0):
-           neg_sampled = torch.multinomial(self.neg_weights, self.num_neg_per_epoch, self.replacement, generator=g)
-           sel_indices = torch.cat((sel_indices, indices[neg_sampled + offset]))
-        offset += len(self.dataset.neg_IDs)
+        #if (self.num_neg_per_epoch>0):
+        #   neg_sampled = torch.multinomial(self.neg_weights, self.num_neg_per_epoch, self.replacement, generator=g)
+        #   sel_indices = torch.cat((sel_indices, indices[neg_sampled + offset]))
+        #offset += len(self.dataset.neg_IDs)
 
         if (self.num_na_compl_per_epoch>0):
             na_compl_sampled = torch.multinomial(self.na_compl_weights, self.num_na_compl_per_epoch, self.replacement, generator=g)
             sel_indices = torch.cat((sel_indices, indices[na_compl_sampled + offset]))
         offset += len(self.dataset.na_compl_IDs)
 
-        if (self.num_neg_na_compl_per_epoch>0):
-           neg_na_sampled = torch.multinomial(self.neg_na_compl_weights, self.num_neg_na_compl_per_epoch, self.replacement, generator=g)
-           sel_indices = torch.cat((sel_indices, indices[neg_na_sampled + offset]))
-        offset += len(self.dataset.na_neg_IDs)
+        #if (self.num_neg_na_compl_per_epoch>0):
+        #   neg_na_sampled = torch.multinomial(self.neg_na_compl_weights, self.num_neg_na_compl_per_epoch, self.replacement, generator=g)
+        #   sel_indices = torch.cat((sel_indices, indices[neg_na_sampled + offset]))
+        #offset += len(self.dataset.na_neg_IDs)
 
         if (self.num_rna_per_epoch>0):
             rna_sampled = torch.multinomial(self.rna_weights, self.num_rna_per_epoch, self.replacement, generator=g)
