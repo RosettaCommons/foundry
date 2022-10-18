@@ -29,7 +29,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 #torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -893,8 +893,8 @@ class Trainer():
             fraction_compl=0.18,
             fraction_na_compl=0.18,
             fraction_rna=0.09,
-            fraction_sm_compl=0.19,
-            fraction_sm=0.18, 
+            fraction_sm_compl=0.37,
+            fraction_sm=0.0, 
             replacement=True
         )
 
@@ -1006,7 +1006,7 @@ class Trainer():
                 valid_na_from_scratch_compl_sampler.set_epoch(epoch)
                 valid_rna_sampler.set_epoch(epoch)
                 valid_sm_compl_sampler.set_epoch(epoch)
-                valid_sm_sampler.set_epoch(epoch)
+                #valid_sm_sampler.set_epoch(epoch)
                 #valid_neg_sampler.set_epoch(epoch)
 
                 train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
@@ -1025,8 +1025,8 @@ class Trainer():
                 epoch, header="RNA", verbose = self.eval)
             valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl", verbose = self.eval) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-                rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+            #    rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
@@ -1271,7 +1271,7 @@ class Trainer():
                     try:
                         true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
                     except Exception as e:
-                        print('error resolving equivalent natives',item)
+                        print('error resolving equivalent natives',item, task)
                         raise e
 
                     res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
