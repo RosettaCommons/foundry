@@ -1499,13 +1499,13 @@ def loader_sm_compl(item, params, pick_top=True,
     mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+ligands[0])
     for alt_lig in ligands[1:]:
         mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+alt_lig)
-        if all(msa_sm2==msa_sm):
+        if (msa_sm2.shape == msa_sm.shape) and all(msa_sm2==msa_sm):
             xyz_sm = torch.concat([xyz_sm, xyz_sm2],dim=0) # (N_symm1 + N_symm2, Natoms, 3)
             mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
         else:
             print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same atom order: '\
                   f'{item}. Skipping.')
-            return [torch.tensor([-1])]*20
+            return (torch.tensor([-1]),)*20
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
@@ -1523,7 +1523,7 @@ def loader_sm_compl(item, params, pick_top=True,
     
     if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
         print(f'WARNING [loader_sm_compl]: Sm. mol. XYZ and MSA lengths don\'t match: {item}. Skipping.')
-        return [torch.tensor([-1])]*20
+        return (torch.tensor([-1]),)*20
 
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
     msa = a3m['msa'].long()
@@ -1576,7 +1576,7 @@ def loader_sm_compl(item, params, pick_top=True,
 
         if msa.shape[1] != xyz_t.shape[1]:
             print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
-            return [torch.tensor([-1])]*20
+            return (torch.tensor([-1]),)*20
 
     if init_protein_xyz or init_ligand_xyz:
         # initialize coords to ground truth, move to origin, rotate randomly

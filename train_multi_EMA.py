@@ -45,9 +45,9 @@ torch.set_num_threads(4)
 
 # num structs per epoch
 # must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 6144
+#N_EXAMPLE_PER_EPOCH = 6144
 #N_EXAMPLE_PER_EPOCH = 1536
-#N_EXAMPLE_PER_EPOCH = 16
+N_EXAMPLE_PER_EPOCH = 16
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 2,
