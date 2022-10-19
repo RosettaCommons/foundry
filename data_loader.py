@@ -1936,7 +1936,7 @@ class DatasetRNA(data.Dataset):
 
 class DatasetSMComplex(data.Dataset):
     def __init__(self, IDs, loader, item_dict, params, init_protein_tmpl=False, init_ligand_tmpl=False,
-                 init_protein_xyz=False, init_ligand_xyz=False):
+                 init_protein_xyz=False, init_ligand_xyz=False, task=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
@@ -1945,6 +1945,7 @@ class DatasetSMComplex(data.Dataset):
         self.init_ligand_tmpl = init_ligand_tmpl
         self.init_protein_xyz = init_protein_xyz
         self.init_ligand_xyz = init_ligand_xyz
+        self.task = task
 
     def __len__(self):
         return len(self.IDs)
@@ -1960,6 +1961,8 @@ class DatasetSMComplex(data.Dataset):
             init_protein_xyz = self.init_protein_xyz,
             init_ligand_xyz = self.init_ligand_xyz
         )
+        if self.task is not None:
+            out = out[:-2]+(self.task,)+out[-1:] # custom task name
         return out
 
 class DatasetSM(data.Dataset):
