@@ -30,7 +30,10 @@ def get_args():
     train_group.add_argument("-accum", type=int, default=1,
             help="Gradient accumulation when it's > 1 [1]")
     train_group.add_argument("-eval", action='store_true', default=False,
-            help="Train structure only")
+            help="No training, just run validation cycles and output structures")
+    train_group.add_argument("-start_epoch", type=int, default=None,
+            help="When using -eval, which epoch to start at. "\
+                 "A checkpoint must exist for this epoch.")
     train_group.add_argument('-out_dir', type=str, default='test/',
             help='Output folder.')
     train_group.add_argument('-wandb_prefix', type=str, 
