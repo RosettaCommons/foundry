@@ -1707,9 +1707,11 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
     bond_feats[i_start-1, Ls[0]] = 6
     bond_feats[Ls[0], i_start-1] = 6
-    bond_feats[i_start+n_res_atomize+flank, Ls[0]+int(last_C.numpy())] = 6
-    bond_feats[Ls[0]+int(last_C.numpy()), i_start+n_res_atomize+flank] = 6
-
+    if len(last_C.numpy())==1:
+        bond_feats[i_start+n_res_atomize+flank, Ls[0]+int(last_C.numpy())] = 6
+        bond_feats[Ls[0]+int(last_C.numpy()), i_start+n_res_atomize+flank] = 6
+    else:
+        print(f"ERROR: {item} has multiple values for last_C, {last_C.numpy()} with i_start= {i_start}")
     # handle res_idx
     last_res = idx[-1]
     idx_sm = torch.arange(Ls[1]) + last_res
