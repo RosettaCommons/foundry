@@ -11,7 +11,7 @@ def parse_training_log(filename):
                 # renaming a few things from an earlier version of training script
                 for src,tgt in [('# epochs','num_epochs'), ('processed','examples_seen_in_epoch'),
                                 ('examples in epoch','examples_per_epoch'), ('Max mem','max_mem'),
-                                ('seconds','time'), ('total_loss','Total_loss'), (' loss',' total_loss')]:
+                                ('seconds','time'), ('total_loss: loss','Total_loss: total_loss')]:
                     line = line.replace(src,tgt)
 
                 columns = re.findall('(\w+)',line)
