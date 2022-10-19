@@ -45,9 +45,9 @@ torch.set_num_threads(4)
 
 # num structs per epoch
 # must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 6144
+#N_EXAMPLE_PER_EPOCH = 6144
 #N_EXAMPLE_PER_EPOCH = 1536
-#N_EXAMPLE_PER_EPOCH = 2
+N_EXAMPLE_PER_EPOCH = 2
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 2,
@@ -736,6 +736,19 @@ class Trainer():
         self.n_valid_sm_compl_strict = 100
         self.n_valid_sm = 100
 
+        self.n_valid_pdb = 0
+        self.n_valid_pdb_atomize = 0 #100
+        self.n_valid_homo = 0
+        self.n_valid_compl = 0
+        self.n_valid_neg = 0 #len(valid_neg.keys())
+        self.n_valid_na_compl = 0
+        self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
+        self.n_valid_rna = 0
+        self.n_valid_sm_compl = 100
+        self.n_valid_sm_compl_ligclus = 100
+        self.n_valid_sm_compl_strict = 100
+        self.n_valid_sm = 0
+
         if self.eval:
             self.n_valid_pdb = 0 #len(valid_pdb.keys())
             self.n_valid_homo = 0 #len(valid_homo.keys())
@@ -1020,19 +1033,18 @@ class Trainer():
         #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
 
         for epoch in range(loaded_epoch+1, self.n_epoch):
-            if not self.eval:
-                train_sampler.set_epoch(epoch)
-                valid_pdb_sampler.set_epoch(epoch)
-                valid_homo_sampler.set_epoch(epoch)
-                valid_compl_sampler.set_epoch(epoch)
-                valid_na_compl_sampler.set_epoch(epoch)
-                valid_na_from_scratch_compl_sampler.set_epoch(epoch)
-                valid_rna_sampler.set_epoch(epoch)
-                valid_sm_compl_sampler.set_epoch(epoch)
-                valid_sm_compl_ligclus_sampler.set_epoch(epoch)
-                valid_sm_compl_strict_sampler.set_epoch(epoch)
-                #valid_sm_sampler.set_epoch(epoch)
-                #valid_neg_sampler.set_epoch(epoch)
+            train_sampler.set_epoch(epoch)
+            valid_pdb_sampler.set_epoch(epoch)
+            valid_homo_sampler.set_epoch(epoch)
+            valid_compl_sampler.set_epoch(epoch)
+            valid_na_compl_sampler.set_epoch(epoch)
+            valid_na_from_scratch_compl_sampler.set_epoch(epoch)
+            valid_rna_sampler.set_epoch(epoch)
+            valid_sm_compl_sampler.set_epoch(epoch)
+            valid_sm_compl_ligclus_sampler.set_epoch(epoch)
+            valid_sm_compl_strict_sampler.set_epoch(epoch)
+            #valid_sm_sampler.set_epoch(epoch)
+            #valid_neg_sampler.set_epoch(epoch)
 
                 train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
