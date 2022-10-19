@@ -1038,17 +1038,17 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
     return bond_feats
 
 ### Generate atom features for proteins ###
-def atomize_protein(sel_res, msa, xyz, mask, stretch=5):
+def atomize_protein(sel_res, msa, xyz, mask, n_res_atomize=5):
     """ given an index sel_res, make the following flank residues into "atom" nodes """
-    residues_atomize = msa[0, sel_res:sel_res+stretch]
+    residues_atomize = msa[0, sel_res:sel_res+n_res_atomize]
     residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
-    residue_atomize_mask = mask[sel_res:sel_res+stretch].float()
+    residue_atomize_mask = mask[sel_res:sel_res+n_res_atomize].float()
     xyz = torch.nan_to_num(xyz)
 
     # handle symmetries
     xyz_alt = torch.zeros_like(xyz.unsqueeze(0))
     xyz_alt.scatter_(2, long2alt[msa[0],:,None].repeat(1,1,1,3), xyz.unsqueeze(0))
-    coords_stack = torch.stack((xyz[sel_res:sel_res+stretch], xyz_alt[0, sel_res:sel_res+stretch]), dim=0)
+    coords_stack = torch.stack((xyz[sel_res:sel_res+n_res_atomize], xyz_alt[0, sel_res:sel_res+n_res_atomize]), dim=0)
     swaps = (coords_stack[0] == coords_stack[1]).all(dim=1).all(dim=1).squeeze() #checks whether theres a swap at each position
     swaps = torch.nonzero(~swaps).squeeze() # indices with a swap eg. [2,3]
     if swaps.numel() != 0:
