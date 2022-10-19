@@ -736,19 +736,6 @@ class Trainer():
         self.n_valid_sm_compl_strict = 100
         self.n_valid_sm = 100
 
-        self.n_valid_pdb = 0
-        self.n_valid_pdb_atomize = 0 #100
-        self.n_valid_homo = 0
-        self.n_valid_compl = 0
-        self.n_valid_neg = 0 #len(valid_neg.keys())
-        self.n_valid_na_compl = 0
-        self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
-        self.n_valid_rna = 0
-        self.n_valid_sm_compl = 100
-        self.n_valid_sm_compl_ligclus = 100
-        self.n_valid_sm_compl_strict = 100
-        self.n_valid_sm = 0
-
         if self.eval:
             self.n_valid_pdb = 0 #len(valid_pdb.keys())
             self.n_valid_homo = 0 #len(valid_homo.keys())
@@ -756,8 +743,8 @@ class Trainer():
             self.n_valid_na_compl = 0 #len(valid_na_compl.keys())
             self.n_valid_rna = 0 #len(valid_rna.keys())
             self.n_valid_sm_compl = len(valid_sm_compl.keys())
-            self.n_valid_sm_compl_ligclus = 0 #len(valid_sm_compl_ligclus.keys())
-            self.n_valid_sm_compl_strict = 0 #len(valid_sm_compl_strict.keys())
+            self.n_valid_sm_compl_ligclus = len(valid_sm_compl_ligclus.keys())
+            self.n_valid_sm_compl_strict = len(valid_sm_compl_strict.keys())
             self.n_valid_sm = 0 #len(valid_sm.keys())
 
         if (rank==0):
@@ -1046,7 +1033,7 @@ class Trainer():
             #valid_sm_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
 
-                train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
+            train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
                 epoch, verbose = self.eval)
