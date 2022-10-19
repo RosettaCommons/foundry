@@ -46,8 +46,8 @@ torch.set_num_threads(4)
 # num structs per epoch
 # must be divisible by #GPUs
 #N_EXAMPLE_PER_EPOCH = 6144
-#N_EXAMPLE_PER_EPOCH = 1536
-N_EXAMPLE_PER_EPOCH = 16
+N_EXAMPLE_PER_EPOCH = 1536
+#N_EXAMPLE_PER_EPOCH = 16
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 2,
@@ -708,7 +708,8 @@ class Trainer():
         (
             pdb_items, fb_items, compl_items, neg_items, na_compl_items, na_neg_items, rna_items,
             sm_compl_items, sm_items, valid_pdb, valid_homo, valid_compl, valid_neg, valid_na_compl, 
-            valid_na_neg, valid_rna, valid_sm_compl, valid_sm, homo
+            valid_na_neg, valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, 
+            valid_sm, homo
         ) = get_train_valid_set(self.loader_param)
 
         pdb_IDs, pdb_weights, pdb_dict = pdb_items
@@ -731,7 +732,22 @@ class Trainer():
         self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
         self.n_valid_rna = 100
         self.n_valid_sm_compl = 100
+        self.n_valid_sm_compl_ligclus = 100
+        self.n_valid_sm_compl_strict = 100
         self.n_valid_sm = 100
+
+        self.n_valid_pdb = 0
+        self.n_valid_pdb_atomize = 0 #100
+        self.n_valid_homo = 0
+        self.n_valid_compl = 0
+        self.n_valid_neg = 0 #len(valid_neg.keys())
+        self.n_valid_na_compl = 0
+        self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
+        self.n_valid_rna = 0
+        self.n_valid_sm_compl = 100
+        self.n_valid_sm_compl_ligclus = 100
+        self.n_valid_sm_compl_strict = 100
+        self.n_valid_sm = 0
 
         if self.eval:
             self.n_valid_pdb = 0 #len(valid_pdb.keys())
@@ -740,7 +756,9 @@ class Trainer():
             self.n_valid_na_compl = 0 #len(valid_na_compl.keys())
             self.n_valid_rna = 0 #len(valid_rna.keys())
             self.n_valid_sm_compl = len(valid_sm_compl.keys())
-            self.n_valid_sm = len(valid_sm.keys())
+            self.n_valid_sm_compl_ligclus = 0 #len(valid_sm_compl_ligclus.keys())
+            self.n_valid_sm_compl_strict = 0 #len(valid_sm_compl_strict.keys())
+            self.n_valid_sm = 0 #len(valid_sm.keys())
 
         if (rank==0):
             print ('Loaded (training)',
@@ -762,7 +780,9 @@ class Trainer():
                 len(valid_na_compl.keys()),'nucleic-acid complexes,',
                 len(valid_na_neg.keys()),'negative nucleic-acid complexes,',
                 len(valid_rna),'RNA structures,',
-                len(valid_sm_compl), 'small molecule complexes, and',
+                len(valid_sm_compl), 'small molecule complexes,',
+                len(valid_sm_compl_ligclus), 'small molecule complexes (ligand-clustered),',
+                len(valid_sm_compl_strict), 'small molecule complexes (strict),',
                 len(valid_sm), 'small molecule crystals.'
 
             )
@@ -776,6 +796,8 @@ class Trainer():
                 self.n_valid_na_neg,'negative nucleic-acid complexes,',
                 self.n_valid_rna,'RNA structures,',
                 self.n_valid_sm_compl, 'small mol. complexes (fold & dock),',
+                self.n_valid_sm_compl_ligclus, 'small molecule complexes (ligand-clustered),',
+                self.n_valid_sm_compl_strict, 'small molecule complexes (strict),',
                 self.n_valid_sm, "small molecule crystals."
             )
 
@@ -827,6 +849,16 @@ class Trainer():
         valid_sm_compl_set = DatasetSMComplex(
             list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
             loader_sm_compl, valid_sm_compl,
+            self.loader_param,
+        )
+        valid_sm_compl_ligclus_set = DatasetSMComplex(
+            list(valid_sm_compl_ligclus.keys())[:self.n_valid_sm_compl_ligclus],
+            loader_sm_compl, valid_sm_compl_ligclus,
+            self.loader_param,
+        )
+        valid_sm_compl_strict_set = DatasetSMComplex(
+            list(valid_sm_compl_strict.keys())[:self.n_valid_sm_compl_strict],
+            loader_sm_compl, valid_sm_compl_strict,
             self.loader_param,
         )
         valid_sm_set = DatasetSM(
@@ -893,8 +925,8 @@ class Trainer():
             fraction_compl=0.18,
             fraction_na_compl=0.18,
             fraction_rna=0.09,
-            fraction_sm_compl=0.19,
-            fraction_sm=0.18, 
+            fraction_sm_compl=0.37,
+            fraction_sm=0.0, 
             replacement=True
         )
 
@@ -905,6 +937,8 @@ class Trainer():
         valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
         valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
         valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
+        valid_sm_compl_ligclus_sampler = data.distributed.DistributedSampler(valid_sm_compl_ligclus_set, num_replicas=world_size, rank=rank)
+        valid_sm_compl_strict_sampler = data.distributed.DistributedSampler(valid_sm_compl_strict_set, num_replicas=world_size, rank=rank)
         valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
         # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_neg_sampler = data.distributed.DistributedSampler(valid_na_neg_set, num_replicas=world_size, rank=rank)
@@ -919,6 +953,8 @@ class Trainer():
         valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
         valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
         valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+        valid_sm_compl_ligclus_loader = data.DataLoader(valid_sm_compl_ligclus_set, sampler=valid_sm_compl_ligclus_sampler, **LOAD_PARAM)
+        valid_sm_compl_strict_loader = data.DataLoader(valid_sm_compl_strict_set, sampler=valid_sm_compl_strict_sampler, **LOAD_PARAM)
         valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
         
         #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
@@ -997,17 +1033,18 @@ class Trainer():
         #_,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
 
         for epoch in range(loaded_epoch+1, self.n_epoch):
-            if not self.eval:
-                train_sampler.set_epoch(epoch)
-                valid_pdb_sampler.set_epoch(epoch)
-                valid_homo_sampler.set_epoch(epoch)
-                valid_compl_sampler.set_epoch(epoch)
-                valid_na_compl_sampler.set_epoch(epoch)
-                valid_na_from_scratch_compl_sampler.set_epoch(epoch)
-                valid_rna_sampler.set_epoch(epoch)
-                valid_sm_compl_sampler.set_epoch(epoch)
-                valid_sm_sampler.set_epoch(epoch)
-                #valid_neg_sampler.set_epoch(epoch)
+            train_sampler.set_epoch(epoch)
+            valid_pdb_sampler.set_epoch(epoch)
+            valid_homo_sampler.set_epoch(epoch)
+            valid_compl_sampler.set_epoch(epoch)
+            valid_na_compl_sampler.set_epoch(epoch)
+            valid_na_from_scratch_compl_sampler.set_epoch(epoch)
+            valid_rna_sampler.set_epoch(epoch)
+            valid_sm_compl_sampler.set_epoch(epoch)
+            valid_sm_compl_ligclus_sampler.set_epoch(epoch)
+            valid_sm_compl_strict_sampler.set_epoch(epoch)
+            #valid_sm_sampler.set_epoch(epoch)
+            #valid_neg_sampler.set_epoch(epoch)
 
                 train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
@@ -1025,8 +1062,12 @@ class Trainer():
                 epoch, header="RNA", verbose = self.eval)
             valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl", verbose = self.eval) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-                rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
+                rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", verbose = self.eval) 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
+                rank, gpu, world_size, epoch, header="SM Compl (strict)", verbose = self.eval) 
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+            #    rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
@@ -1271,7 +1312,7 @@ class Trainer():
                     try:
                         true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
                     except Exception as e:
-                        print('error resolving equivalent natives',item)
+                        print('error resolving equivalent natives',item, task)
                         raise e
 
                     res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
