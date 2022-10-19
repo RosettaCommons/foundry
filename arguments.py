@@ -44,6 +44,15 @@ def get_args():
             help='Output folder for model weights. [models/]')
     train_group.add_argument('-interactive', action='store_true', default=False,
             help='Start training in interactive mode. [False]')
+    train_group.add_argument('-n_valid_pdb', type=int, default=None)
+    train_group.add_argument('-n_valid_homo', type=int, default=None)
+    train_group.add_argument('-n_valid_compl', type=int, default=None)
+    train_group.add_argument('-n_valid_na_compl', type=int, default=None)
+    train_group.add_argument('-n_valid_rna', type=int, default=None)
+    train_group.add_argument('-n_valid_sm_compl', type=int, default=None)
+    train_group.add_argument('-n_valid_sm_compl_ligclus', type=int, default=None)
+    train_group.add_argument('-n_valid_sm_compl_strict', type=int, default=None)
+    train_group.add_argument('-n_valid_sm', type=int, default=None)
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")

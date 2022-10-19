@@ -566,13 +566,14 @@ class Trainer():
 
         return torch.stack([prec, recall, F1])
 
-    def load_model(self, model, optimizer, scheduler, scaler, model_name, rank, suffix='last', resume_train=False):
+    def load_model(self, model, model_name, rank, suffix='last', resume_train=False, 
+                   optimizer=None, scheduler=None, scaler=None):
         chk_fn = self.model_dir+"/%s_%s.pt"%(model_name, suffix)
         loaded_epoch = -1
         best_valid_loss = 999999.9
         if not os.path.exists(chk_fn):
             print ('no model found', model_name)
-            return -1, best_valid_loss
+            return -2, best_valid_loss
         map_location = {"cuda:%d"%0: "cuda:%d"%rank}
         checkpoint = torch.load(chk_fn, map_location=map_location)
         print ('loading model', model_name, 'from', chk_fn, 'epoch', checkpoint['epoch'])
@@ -1001,9 +1002,9 @@ class Trainer():
         scaler = torch.cuda.amp.GradScaler(enabled=USE_AMP)
        
         # load model
-        loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix="last", 
-                                                        resume_train=True)
+        loaded_epoch, best_valid_loss = self.load_model(ddp_model, self.model_name, gpu, suffix="last", 
+                                                        resume_train=True, optimizer=optimizer, 
+                                                        scheduler=scheduler, scaler=scaler)
         if loaded_epoch >= self.n_epoch:
             DDP_cleanup()
             return

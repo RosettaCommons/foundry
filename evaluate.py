@@ -2,22 +2,18 @@ import sys, os, time, datetime, subprocess, shutil
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
-import wandb
 import torch
 import torch.nn as nn
 from torch.utils import data
-from functools import partial
 from data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_atomize_pdb,
     Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
 )
-from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
 from RoseTTAFoldModel  import RoseTTAFoldModule
 from loss import *
 from util import *
-from util_module import ComputeAllAtomCoords
 
-from train_multi_EMA import Trainer
+from train_multi_EMA import Trainer, EMA, count_parameters
 
 # disable openbabel warnings
 from openbabel import openbabel as ob
@@ -49,17 +45,29 @@ class Evaluator(Trainer):
     def __init__(self, model_name='BFF',
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
                  model_param={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
-                 eval=True, start_epoch=None, out_dir=None, wandb_prefix=None, model_dir='models/'):
+                 eval=True, start_epoch=None, out_dir=None, wandb_prefix=None, model_dir='models/', 
+                 n_valid_pdb=None, n_valid_homo=None, n_valid_compl=None, n_valid_na_compl=None, 
+                 n_valid_rna=None, n_valid_sm_compl=None, n_valid_sm_compl_ligclus=None, 
+                 n_valid_sm_compl_strict=None,n_valid_sm=None):
 
         super(Evaluator, self).__init__(
             model_name=model_name,
             n_epoch=n_epoch, step_lr=step_lr, l2_coeff=l2_coeff, port=port, interactive=interactive,
             model_param=model_param, loader_param=loader_param, loss_param=loss_param, batch_size=batch_size,
-            accum_step=accum_step, maxcycle=maxcycle, eval=eval, start_epoch=start_epoch, out_dir=out_dir,
+            accum_step=accum_step, maxcycle=maxcycle, eval=eval, out_dir=out_dir,
             wandb_prefix=wandb_prefix, model_dir=model_dir
         )
 
         self.start_epoch = start_epoch
+        self.n_valid_pdb = n_valid_pdb 
+        self.n_valid_homo = n_valid_homo 
+        self.n_valid_compl = n_valid_compl 
+        self.n_valid_na_compl = n_valid_na_compl
+        self.n_valid_rna = n_valid_rna
+        self.n_valid_sm_compl = n_valid_sm_compl
+        self.n_valid_sm_compl_ligclus = n_valid_sm_compl_ligclus
+        self.n_valid_sm_compl_strict = n_valid_sm_compl_strict
+        self.n_valid_sm = n_valid_sm
 
     def train_model(self, rank, world_size):
        
@@ -87,24 +95,22 @@ class Evaluator(Trainer):
         sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
         sm_IDs, sm_weights, sm_dict = sm_items
        
-        self.n_valid_pdb = len(valid_pdb.keys())
-        self.n_valid_homo = len(valid_homo.keys())
-        self.n_valid_compl = len(valid_compl.keys())
-        self.n_valid_na_compl len(valid_na_compl.keys())
-        self.n_valid_rna = 0 #len(valid_rna.keys())
-        self.n_valid_sm_compl = len(valid_sm_compl.keys())
-        self.n_valid_sm_compl_ligclus = len(valid_sm_compl_ligclus.keys())
-        self.n_valid_sm_compl_strict = len(valid_sm_compl_strict.keys())
-        self.n_valid_sm = 0 #len(valid_sm.keys())
+        if self.n_valid_pdb is None: self.n_valid_pdb = len(valid_pdb.keys()) 
+        if self.n_valid_homo is None: self.n_valid_homo = len(valid_homo.keys()) 
+        if self.n_valid_compl is None: self.n_valid_compl = len(valid_compl.keys())
+        if self.n_valid_na_compl is None: self.n_valid_na_compl = len(valid_na_compl.keys())
+        if self.n_valid_rna is None: self.n_valid_rna = len(valid_rna.keys())
+        if self.n_valid_sm_compl is None: self.n_valid_sm_compl = len(valid_sm_compl.keys())
+        if self.n_valid_sm_compl_ligclus is None: self.n_valid_sm_compl_ligclus = len(valid_sm_compl_ligclus.keys())
+        if self.n_valid_sm_compl_strict is None: self.n_valid_sm_compl_strict = len(valid_sm_compl_strict.keys())
+        if self.n_valid_sm is None: self.n_valid_sm = len(valid_sm.keys())
 
         if (rank==0):
             print ('Loaded (valid)',
                 len(valid_pdb.keys()),'monomers,',
                 len(valid_homo.keys()),'homomers,',
                 len(valid_compl.keys()),'heteromers,',
-                len(valid_neg.keys()),'negative heteromers,',
                 len(valid_na_compl.keys()),'nucleic-acid complexes,',
-                len(valid_na_neg.keys()),'negative nucleic-acid complexes,',
                 len(valid_rna),'RNA structures,',
                 len(valid_sm_compl), 'small molecule complexes,',
                 len(valid_sm_compl_ligclus), 'small molecule complexes (ligand-clustered),',
@@ -114,12 +120,9 @@ class Evaluator(Trainer):
             )
             print ('Using',
                 self.n_valid_pdb,'monomers,',
-                self.n_valid_pdb_atomize,'monomers (atomized),',
                 self.n_valid_homo,'homomers,',
                 self.n_valid_compl,'heteromers,',
-                self.n_valid_neg,'negative heteromers,',
                 self.n_valid_na_compl,'nucleic-acid complexes,',
-                self.n_valid_na_neg,'negative nucleic-acid complexes,',
                 self.n_valid_rna,'RNA structures,',
                 self.n_valid_sm_compl, 'small mol. complexes (fold & dock),',
                 self.n_valid_sm_compl_ligclus, 'small molecule complexes (ligand-clustered),',
@@ -237,8 +240,7 @@ class Evaluator(Trainer):
         if rank == 0:
             print ("# of parameters:", count_parameters(ddp_model))
 
-        for epoch in range(self.start_epoch, self.n_epoch):
-            train_sampler.set_epoch(epoch)
+        for epoch in range(self.start_epoch, self.start_epoch+self.n_epoch):
             valid_pdb_sampler.set_epoch(epoch)
             valid_homo_sampler.set_epoch(epoch)
             valid_compl_sampler.set_epoch(epoch)
@@ -250,12 +252,11 @@ class Evaluator(Trainer):
             valid_sm_compl_strict_sampler.set_epoch(epoch)
 
             # load this epoch's checkpoint
-            loaded_epoch, best_valid_loss = self.load_model(ddp_model, optimizer, scheduler, scaler, 
-                                                        self.model_name, gpu, suffix=str(epoch), 
-                                                        resume_train=True)
-            if loaded_epoch == -1:
-                print('Checkpoint doesn\'t exist for epoch {epoch}. Quitting.')
-                DDP_cleanup()
+            loaded_epoch, best_valid_loss = self.load_model(ddp_model, self.model_name, gpu, 
+                                                            suffix=str(epoch), resume_train=False)
+            if loaded_epoch == -2:
+                print(f'Checkpoint doesn\'t exist for epoch {epoch}. Quitting.')
+                dist.destroy_process_group()
                 return
 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
@@ -301,5 +302,14 @@ if __name__ == "__main__":
                     interactive=args.interactive,
                     out_dir=args.out_dir,
                     wandb_prefix=args.wandb_prefix,
-                    model_dir=args.model_dir)
+                    model_dir=args.model_dir,
+                    n_valid_pdb=args.n_valid_pdb, 
+                    n_valid_homo=args.n_valid_homo, 
+                    n_valid_compl=args.n_valid_compl, 
+                    n_valid_na_compl=args.n_valid_na_compl, 
+                    n_valid_rna=args.n_valid_rna,
+                    n_valid_sm_compl=args.n_valid_sm_compl,
+                    n_valid_sm_compl_ligclus=args.n_valid_sm_compl_ligclus, 
+                    n_valid_sm_compl_strict=args.n_valid_sm_compl_strict,
+                    n_valid_sm=args.n_valid_sm)
     evaluator.run_model_training(torch.cuda.device_count())
