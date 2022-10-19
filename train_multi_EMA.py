@@ -841,12 +841,12 @@ class Trainer():
         valid_sm_compl_ligclus_set = DatasetSMComplex(
             list(valid_sm_compl_ligclus.keys())[:self.n_valid_sm_compl_ligclus],
             loader_sm_compl, valid_sm_compl_ligclus,
-            self.loader_param,
+            self.loader_param, task='sm_compl_ligclus'
         )
         valid_sm_compl_strict_set = DatasetSMComplex(
             list(valid_sm_compl_strict.keys())[:self.n_valid_sm_compl_strict],
             loader_sm_compl, valid_sm_compl_strict,
-            self.loader_param,
+            self.loader_param, task='sm_compl_strict'
         )
         valid_sm_set = DatasetSM(
             list(valid_sm.keys())[:self.n_valid_sm],
