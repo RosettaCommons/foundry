@@ -29,7 +29,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 #torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -45,12 +45,12 @@ torch.set_num_threads(4)
 
 # num structs per epoch
 # must be divisible by #GPUs
-#N_EXAMPLE_PER_EPOCH = 6144
-N_EXAMPLE_PER_EPOCH = 1536
+N_EXAMPLE_PER_EPOCH = 6144
+#N_EXAMPLE_PER_EPOCH = 1536
 #N_EXAMPLE_PER_EPOCH = 16
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 2,
+              'num_workers': 5,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -725,7 +725,7 @@ class Trainer():
         
         self.n_train = N_EXAMPLE_PER_EPOCH
         self.n_valid_pdb = 100
-        self.n_valid_pdb_atomize = 0 #100
+        self.n_valid_pdb_atomize = 100 #100
         self.n_valid_homo = 100
         self.n_valid_compl = 100
         self.n_valid_neg = 0 #len(valid_neg.keys())
@@ -736,17 +736,6 @@ class Trainer():
         self.n_valid_sm_compl_ligclus = 100
         self.n_valid_sm_compl_strict = 100
         self.n_valid_sm = 100
-
-        if self.eval:
-            self.n_valid_pdb = 0 #len(valid_pdb.keys())
-            self.n_valid_homo = 0 #len(valid_homo.keys())
-            self.n_valid_compl = 0 #len(valid_compl.keys())
-            self.n_valid_na_compl = 0 #len(valid_na_compl.keys())
-            self.n_valid_rna = 0 #len(valid_rna.keys())
-            self.n_valid_sm_compl = len(valid_sm_compl.keys())
-            self.n_valid_sm_compl_ligclus = len(valid_sm_compl_ligclus.keys())
-            self.n_valid_sm_compl_strict = len(valid_sm_compl_strict.keys())
-            self.n_valid_sm = 0 #len(valid_sm.keys())
 
         if (rank==0):
             print ('Loaded (training)',
@@ -809,6 +798,11 @@ class Trainer():
             loader_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
+        valid_atomize_pdb_set = Dataset(
+            list(valid_pdb.keys())[:self.n_valid_pdb],
+            loader_atomize_pdb, valid_pdb,
+            self.loader_param, homo, p_homo_cut=-1.0
+        )
         valid_homo_set = Dataset(
             list(valid_homo.keys())[:self.n_valid_homo],
             loader_pdb, valid_homo,
@@ -854,11 +848,6 @@ class Trainer():
             loader_sm, valid_sm,
             self.loader_param,
         )
-        #valid_atomize_pdb_set = Dataset(
-        #    list(valid_pdb.keys())[:self.n_valid_pdb],
-        #    loader_atomize_pdb, valid_pdb,
-        #    self.loader_param, homo, p_homo_cut=-1.0
-        #)
         # valid_neg_set = DatasetComplex(
         #     list(valid_neg.keys())[:self.n_valid_neg],
         #     loader_complex, valid_neg,
