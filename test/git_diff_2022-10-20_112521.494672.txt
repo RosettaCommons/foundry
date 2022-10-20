@@ -1,0 +1,568 @@
+train
+54cb928f92482725201874c39c44d917b9cb19b6
+diff --git a/RoseTTAFoldModel.py b/RoseTTAFoldModel.py
+index ec18d3b..0908cd4 100644
+--- a/RoseTTAFoldModel.py
++++ b/RoseTTAFoldModel.py
+@@ -62,7 +62,7 @@ class RoseTTAFoldModule(nn.Module):
+         self.lddt_pred = LDDTNetwork(d_state)
+ 
+     def forward(
+-        self, msa_latent, msa_full, seq, seq_unmasked, xyz, sctors, idx, bond_feats,
++        self, msa_latent, msa_full, seq, seq_unmasked, xyz, sctors, idx, bond_feats, chirals,
+         t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
+         msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None,
+         return_raw=False, return_full=False,
+@@ -90,7 +90,7 @@ class RoseTTAFoldModule(nn.Module):
+ 
+         # Predict coordinates from given inputs
+         msa, pair, xyz, alpha_s, xyz_allatom, state = self.simulator(
+-            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, use_checkpoint=use_checkpoint)
++            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, chirals, use_checkpoint=use_checkpoint)
+ 
+         if return_raw:
+             # get last structure
+diff --git a/Track_module.py b/Track_module.py
+index 9a97f05..596622a 100644
+--- a/Track_module.py
++++ b/Track_module.py
+@@ -10,7 +10,7 @@ from resnet import ResidualNetwork
+ from util import INIT_CRDS, is_atom
+ from loss import (
+     calc_BB_bond_geom_grads, calc_lj_grads, calc_hb_grads, calc_cart_bonded_grads, calc_ljallatom_grads, 
+-    calc_lj, calc_cart_bonded
++    calc_lj, calc_cart_bonded, calc_chiral_grads
+ )
+ from chemical import NTOTALDOFS
+ 
+@@ -587,7 +587,7 @@ class IterativeSimulator(nn.Module):
+         self.compute_allatom_coords = ComputeAllAtomCoords()
+ 
+ 
+-    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, use_checkpoint=False):
++    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, chirals, use_checkpoint=False):
+         # input:
+         #   msa: initial MSA embeddings (N, L, d_msa)
+         #   pair: initial residue pair embeddings (L, L, d_pair)
+@@ -600,7 +600,7 @@ class IterativeSimulator(nn.Module):
+                                                                use_checkpoint=use_checkpoint, top_k=0, rotation_mask=rotation_mask)
+             xyz_s.append(xyz)
+             alpha_s.append(alpha)
+-
++        
+         for i_m in range(self.n_main_block):
+             msa, pair, xyz, state, alpha = self.main_block[i_m](msa, pair,
+                                                          xyz, state, idx, bond_feats,
+@@ -612,16 +612,19 @@ class IterativeSimulator(nn.Module):
+         # now use unmasked seq (no cross-talk for msa prediction)
+         for i_m in range(self.n_ref_block):
+             # dbonddxyz, = calc_BB_bond_geom_grads(seq_unmasked[0], xyz.detach(), idx)
+-            # dljdxyz, dljdalpha = calc_lj_grads(
+-            #     seq_unmasked, xyz.detach(), alpha.detach(), 
+-            #     self.compute_allatom_coords,
+-            #     self.aamask, 
+-            #     self.ljlk_parameters, 
+-            #     self.lj_correction_parameters, 
+-            #     self.num_bonds, 
+-            #     lj_lin=self.lj_lin)
+-
++            dljdxyz, dljdalpha = calc_lj_grads(
++                 seq_unmasked, xyz.detach(), alpha.detach(), 
++                 self.compute_allatom_coords, bond_feats,
++                 self.aamask, 
++                 self.ljlk_parameters, 
++                 self.lj_correction_parameters, 
++                 self.num_bonds, 
++                 lj_lin=self.lj_lin)
++            dchiraldxyz = calc_chiral_grads(xyz.detach(),chirals) 
++            print(dchiraldxyz[0].shape)
++            print(dljdxyz.shape)
+             # extra_l1 = torch.cat((dbonddxyz[0].detach(),dljdxyz[0].detach()), dim=1)
++            extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
+             # extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
+             extra_l0 =None
+             extra_l1= None
+diff --git a/data_loader.py b/data_loader.py
+index bde235b..6a2b4f4 100644
+--- a/data_loader.py
++++ b/data_loader.py
+@@ -10,6 +10,7 @@ from scipy.sparse.csgraph import shortest_path
+ 
+ from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
+ from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP
++from kinematics import get_chirals
+ from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
+     atomize_protein, center_and_realign_missing, random_rot_trans
+ 
+@@ -938,14 +939,14 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
+     mask_prev = mask_t[0].clone()
+     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
+     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
+-    
++    chirals = torch.Tensor()
+     #print ("loader_single", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
+ 
+     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
+            xyz.float(), mask, idx.long(),\
+            xyz_t.float(), f1d_t.float(), mask_t, \
+            xyz_prev.float(), mask_prev, \
+-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats
++           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals
+ 
+ # Generate input features for homo-oligomers
+ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0):
+@@ -1021,12 +1022,12 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
+         bond_feats = bond_feats[crop_idx][:,crop_idx]
+         xyz_prev = xyz_prev[crop_idx]
+         mask_prev = mask_prev[crop_idx]
+-
++    chirals = torch.Tensor()
+     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
+            xyz.float(), mask, idx.long(),\
+            xyz_t.float(), f1d_t.float(), mask_t, \
+            xyz_prev.float(), mask_prev, \
+-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats
++           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, chirals
+ 
+ 
+ def get_pdb(pdbfilename, plddtfilename, item, lddtcut, sccut):
+@@ -1119,13 +1120,13 @@ def loader_fb(item, params, unclamp=False):
+     xyz_prev = xyz_t[0].clone()
+     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
+     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
+-
++    chirals = torch.Tensor()
+     #print ("loader_fb", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
+ 
+     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
+            xyz.float(), mask, idx.long(),\
+            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
+-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats,"fb", item
++           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats,chirals,"fb", item
+ 
+ 
+ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=True, random_noise=5.0):
+@@ -1237,12 +1238,12 @@ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=Tru
+         idx = idx[sel]
+         chain_idx = chain_idx[sel][:,sel]
+         bond_feats = bond_feats[sel][:,sel]
+-
++    chirals = torch.Tensor()
+     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+            xyz.float(), mask, idx.long(), \
+            xyz_t.float(), f1d_t.float(), mask_t, \
+            xyz_prev.float(), mask_prev, \
+-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats,"compl", item
++           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals,"compl", item
+ 
+ 
+ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pick_top=True, random_noise=5.0):
+@@ -1384,12 +1385,12 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
+ 
+     xyz_prev = xyz_t[0].clone()
+     mask_prev = mask_t[0].clone()
+-
++    chirals = torch.Tensor()
+     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+            xyz.float(), mask, idx.long(), \
+            xyz_t.float(), f1d_t.float(), mask_t, \
+            xyz_prev.float(), mask_prev, \
+-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats,"na_compl", item
++           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals, "na_compl", item
+ 
+ def loader_rna(item, Ls, params, random_noise=5.0):
+     # read PDBs
+@@ -1460,12 +1461,12 @@ def loader_rna(item, Ls, params, random_noise=5.0):
+ 
+     xyz_prev = xyz_t[0].clone()
+     mask_prev = mask_t[0].clone()   
+-
++    chirals = torch.Tensor()
+     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+            xyz.float(), mask, idx.long(), \
+            xyz_t.float(), f1d_t.float(), mask_t, \
+            xyz_prev.float(), mask_prev, \
+-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), "rna",item
++           chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, "rna",item
+ 
+ def loader_sm_compl(item, params, pick_top=True,
+     init_protein_tmpl=False, init_ligand_tmpl=False,
+@@ -1504,6 +1505,7 @@ def loader_sm_compl(item, params, pick_top=True,
+     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
+     G = get_nxgraph(mol)
+     frames = get_atom_frames(msa_sm, G)
++    chirals = get_chirals(mol, xyz_sm[0])
+ 
+     # Generate ground truth structure: account for ligand symmetry
+     N_symmetry, sm_L, _ = xyz_sm.shape
+@@ -1513,7 +1515,7 @@ def loader_sm_compl(item, params, pick_top=True,
+     xyz[:, protein_L:, 1, :] = xyz_sm
+     mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, protein_L, nprotatoms)
+     mask[:, protein_L:, 1] = mask_sm
+-    
++
+     Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
+     
+     if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
+@@ -1620,12 +1622,14 @@ def loader_sm_compl(item, params, pick_top=True,
+         idx = idx[sel]
+         chain_idx = chain_idx[sel][:,sel]
+         bond_feats = bond_feats[sel][:, sel]
+-
++    # need to reindex the chiral atom positions - assumes they are the second chain
++    L1 = L1 = chain_idx[0,:].sum()
++    chirals[:, :-1] = chirals[:, :-1] +L1 
+     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+            xyz.float(), mask, idx.long(), \
+            xyz_t.float(), f1d_t.float(), mask_t, \
+            xyz_prev.float(), mask_prev, \
+-           chain_idx, False, False, frames, bond_feats, "sm_compl", item
++           chain_idx, False, False, frames, bond_feats, chirals, "sm_compl", item
+ 
+ 
+ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, n_res_atomize=5, flank=0, random_noise=5.0):
+@@ -1746,12 +1750,12 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
+     xyz_prev[Ls[0]:] = xyz_prev[i_start]
+     mask_prev = mask_t[0].clone()
+     xyz = torch.nan_to_num(xyz)
+-
++    chirals = torch.Tensor()
+     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+            xyz.float(), mask, idx.long(), \
+            xyz_t.float(), f1d_t.float(), mask_t, \
+            xyz_prev.float(), mask_prev, \
+-           chain_idx, False, False, frames, bond_feats,"atomize_pdb", item
++           chain_idx, False, False, frames, bond_feats,chirals,"atomize_pdb", item
+ 
+ def loader_sm(item, params, pick_top=True):
+     """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
+@@ -1763,7 +1767,7 @@ def loader_sm(item, params, pick_top=True):
+     a3m = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
+     G = get_nxgraph(mol)
+     frames = get_atom_frames(msa_sm, G)
+-
++    chirals = get_chirals(mol, xyz_sm[0])
+     N_symmetry, sm_L, _ = xyz_sm.shape
+ 
+     if sm_L < 2:
+@@ -1797,7 +1801,7 @@ def loader_sm(item, params, pick_top=True):
+            xyz.float(), mask, idx.long(), \
+            xyz_t.float(), f1d_t.float(), mask_t, \
+            xyz_prev.float(), mask_prev, \
+-           chain_idx, False, False, frames, bond_feats, "sm_only", item
++           chain_idx, False, False, frames, bond_feats, chirals, "sm_only", item
+ 
+ def crop_sm(prot_xyz, lig_xyz,Ls, params):
+     """choose residues with calphas close to a random ligand atom"""
+diff --git a/kinematics.py b/kinematics.py
+index 72aeffc..a55d008 100644
+--- a/kinematics.py
++++ b/kinematics.py
+@@ -1,5 +1,6 @@
+ import numpy as np
+ import torch
++from openbabel import openbabel
+ from util import INIT_CRDS, INIT_NA_CRDS, generate_Cbeta, is_nucleic, is_atom
+ from chemical import NTOTAL
+ 
+@@ -224,3 +225,39 @@ def c6d_to_bins(c6d, same_chain, negative=False, params=PARAMS):
+         pb = torch.where(same_chain.bool(), pb.long(), params['ABINS']//2)
+     
+     return torch.stack([db,ob,tb,pb],axis=-1).long()
++
++def get_chirals(obmol, xyz):
++        '''get all quadruples of atoms forming chiral centers
++        '''
++
++        # detect stereo centers
++        stereo = [a for a in openbabel.OBMolAtomIter(obmol)
++                  if (a.GetHvyDegree()==3 or a.GetHvyDegree()==4) and a.GetHyb()!=2]
++
++        angle = np.arcsin(1/3**0.5) # perfect tetrahedral geometry
++
++        chirals = []
++        for o in stereo:
++            neigh = [b.GetIdx() for b in openbabel.OBAtomAtomIter(o)]
++            if len(neigh)==3:
++                chirals.append([o.GetIdx(),*neigh,angle])
++            elif len(neigh)==4:
++                a,b,c,d = neigh
++                chirals.extend([[o.GetIdx(),a,b,c,angle],
++                                [o.GetIdx(),b,a,d,angle],
++                                [o.GetIdx(),a,c,d,angle],
++                                [o.GetIdx(),c,b,d,angle]])
++
++
++        n = len(chirals)
++        if n>0:
++            chirals = torch.tensor(chirals*3).float()
++            chirals[n:2*n,1:-1] = torch.roll(chirals[n:2*n,1:-1],1,1)
++            chirals[2*n: ,1:-1] = torch.roll(chirals[2*n: ,1:-1],2,1)
++            chirals[:,:-1] -= 1
++            dih = get_dih(*xyz[chirals[:,:4].long()].split(split_size=1,dim=1))[:,0]
++            chirals[dih<0.0,-1] = -angle
++        else:
++            chirals = torch.Tensor()
++
++        return chirals
+diff --git a/loss.py b/loss.py
+index 724cc8c..d197732 100644
+--- a/loss.py
++++ b/loss.py
+@@ -501,7 +501,7 @@ def calc_clash(xs, mask):
+ # Rosetta-like version of LJ (fa_atr+fa_rep)
+ #   lj_lin is switch from linear to 12-6.  Smaller values more sharply penalize clashes
+ def calc_lj(
+-    seq, xs, aamask, bond_feats, ljparams, ljcorr, num_bonds, 
++    seq, xs, aamask, bond_feats, ljparams, ljcorr, num_bonds,  
+     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
+     lj_maxrad=-1.0, eps=1e-8
+ ):
+@@ -680,6 +680,22 @@ def calc_hb(
+     else:
+         return torch.sum( Es )
+ 
++def calc_chiral_loss(pred, chirals):
++    """
++    calculate error in dihedral angles for chiral atoms
++    Input:
++     - pred: predicted coords (B, L, :, 3)
++     - chirals: True coords (B, nchiral, 5), skip if 0 chiral sites, 5 dimension are indices for 4 atoms that make dihedral and the ideal angle they should form
++    Output:
++     - mean squared error of chiral angles
++    """
++    if chirals.shape[1] == 0:
++        return torch.tensor(0.0, device=pred.device)
++    chiral_dih = pred[:, chirals[..., :-1].long(), 1]
++    pred_dih = get_dih(chiral_dih[...,0, :], chiral_dih[...,1, :], chiral_dih[...,2, :], chiral_dih[...,3, :])
++    l = torch.square(pred_dih-chirals[...,-1]).mean()
++    return l
++
+ @torch.enable_grad()
+ def calc_BB_bond_geom_grads(seq, pred, idx, eps=1e-6, ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, sig_len=0.02, sig_ang=0.05):
+     pred.requires_grad_(True)
+@@ -695,7 +711,7 @@ def calc_cart_bonded_grads(seq, pred, idx, len_param, ang_param, tor_param, eps=
+ @torch.enable_grad()
+ def calc_ljallatom_grads(
+     seq, xyzaa, 
+-    aamask, ljparams, ljcorr, num_bonds, 
++    aamask, bond_feats, ljparams, ljcorr, num_bonds, 
+     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
+     lj_maxrad=-1.0, eps=1e-8
+ ):
+@@ -704,6 +720,7 @@ def calc_ljallatom_grads(
+         seq[0], 
+         xyzaa[...,:3], 
+         aamask,
++        bond_feats,
+         ljparams, 
+         ljcorr, 
+         num_bonds, 
+@@ -718,7 +735,7 @@ def calc_ljallatom_grads(
+ 
+ @torch.enable_grad()
+ def calc_lj_grads(
+-    seq, xyz, alpha, toaa, 
++    seq, xyz, alpha, toaa, bond_feats, 
+     aamask, ljparams, ljcorr, num_bonds, 
+     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
+     lj_maxrad=-1.0, eps=1e-8
+@@ -729,10 +746,11 @@ def calc_lj_grads(
+     Elj = calc_lj(
+         seq[0], 
+         xyzaa[...,:3], 
+-        aamask, 
++        aamask,
++        bond_feats,
+         ljparams, 
+         ljcorr, 
+-        num_bonds, 
++        num_bonds,
+         lj_lin, 
+         lj_hb_dis, 
+         lj_OHdon_dis, 
+@@ -740,6 +758,7 @@ def calc_lj_grads(
+         lj_maxrad,
+         eps
+     )
++    print(xyz.shape)
+     return torch.autograd.grad(Elj, (xyz,alpha))
+ 
+ @torch.enable_grad()
+@@ -768,6 +787,14 @@ def calc_hb_grads(
+         normalize)
+     return torch.autograd.grad(Ehb, xs)
+ 
++@torch.enable_grad()
++def calc_chiral_grads(xyz, chirals):
++    xyz.requires_grad_(True)
++    l = calc_chiral_loss(xyz, chirals)
++    if l.item() == 0.0:
++        return (torch.zeros(xyz.shape, device=xyz.device)) # autograd returns a tuple..
++    return torch.autograd.grad(l, xyz)
++
+ def calc_pseudo_dih(pred, true, eps=1e-6):
+     '''
+     calculate pseudo CA dihedral angle and put loss on them
+diff --git a/tests.py b/tests.py
+index 7fd8734..c5c5046 100644
+--- a/tests.py
++++ b/tests.py
+@@ -6,7 +6,7 @@ from torch.utils import data
+ from data_loader import get_train_valid_set, Dataset, DatasetNAComplex, DatasetRNA, DatasetSMComplex, loader_pdb, loader_na_complex, loader_rna, loader_sm_compl,set_data_loader_params, loader_atomize_pdb
+ from kinematics import xyz_to_c6d, xyz_to_t2d
+ from chemical import num2aa, aa2elt, aa2num, aabonds,aa2long, aabtypes, atomized_protein_frames
+-from loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss
++from loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss, calc_chiral_loss
+ from util import get_frames, frame_indices, is_atom, xyz_to_frame_xyz, xyz_t_to_frame_xyz, long2alt, writepdb
+ 
+ class LossTestCase(unittest.TestCase):
+@@ -262,6 +262,10 @@ class LossTestCase(unittest.TestCase):
+ 			true_crds, atom_mask = resolve_equiv_natives(torch.randn(true_crds[0, 0].unsqueeze(0).shape), true_crds, atom_mask)
+ 			print(true_crds)
+ 			break
++   
++    def test_chiral_loss(self):
++        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in self.valid_sm_compl_loader:
++            print(calc_chiral_loss(true_crds[0][None],chirals) 
+ 
+ class DataLoaderTestCase(unittest.TestCase):
+ 
+@@ -427,4 +431,4 @@ class DataLoaderTestCase(unittest.TestCase):
+ 				break
+ 		
+ if __name__ == '__main__':
+-	unittest.main()
+\ No newline at end of file
++	unittest.main()
+diff --git a/train_multi_EMA.py b/train_multi_EMA.py
+index 8bff211..9364f7e 100644
+--- a/train_multi_EMA.py
++++ b/train_multi_EMA.py
+@@ -1103,7 +1103,7 @@ class Trainer():
+ 
+         counter = 0
+         
+-        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in train_loader:
++        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in train_loader:
+             # skip known bad training examples
+             # loader will print warning message with item info for followup later
+             if torch.is_tensor(item) and torch.all(item==-1):
+@@ -1131,7 +1131,8 @@ class Trainer():
+             mask_msa = mask_msa.to(gpu, non_blocking=True)
+             atom_frames = atom_frames.to(gpu, non_blocking=True)
+             bond_feats = bond_feats.to(gpu, non_blocking=True)
+-
++            chirals = chirals.to(gpu, non_blocking=True)
++            
+             # template masking
+             seq_unmasked = msa[:, 0, 0, :] # (B, L)
+             mask_t_2d = get_prot_sm_mask(mask_t, seq_unmasked[0]) # (B, T, L)
+@@ -1180,6 +1181,7 @@ class Trainer():
+                                 alpha_prev,
+                                 idx_pdb,
+                                 bond_feats,
++                                chirals,
+                                 t1d=t1d,
+                                 t2d=t2d,
+                                 xyz_t=xyz_t[...,1,:],
+@@ -1208,6 +1210,7 @@ class Trainer():
+                             alpha_prev,
+                             idx_pdb,
+                             bond_feats,
++                            chirals,
+                             t1d=t1d,
+                             t2d=t2d,
+                             xyz_t=xyz_t[...,1,:],
+@@ -1255,6 +1258,7 @@ class Trainer():
+                         alpha_prev,
+                         idx_pdb,
+                         bond_feats,
++                        chirals,
+                         t1d=t1d,
+                         t2d=t2d,
+                         xyz_t=xyz_t[...,1,:],
+@@ -1414,7 +1418,7 @@ class Trainer():
+         
+         with torch.no_grad(): # no need to calculate gradient
+             ddp_model.eval() # change it to eval mode
+-            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in valid_loader:
++            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in valid_loader:
+                 # skip known bad training examples
+                 # loader will print warning message with item info for followup later
+                 if torch.is_tensor(item) and torch.all(item==-1):
+@@ -1444,6 +1448,7 @@ class Trainer():
+                 mask_msa = mask_msa.to(gpu, non_blocking=True)
+                 atom_frames = atom_frames.to(gpu, non_blocking=True)
+                 bond_feats = bond_feats.to(gpu, non_blocking=True)
++                chirals = chirals.to(gpu, non_blocking=True)
+ 
+                 # template masking
+                 seq_unmasked = msa[:, 0, 0, :] # (B, L)
+@@ -1487,6 +1492,7 @@ class Trainer():
+                         alpha_prev,
+                         idx_pdb,
+                         bond_feats,
++                        chirals,
+                         t1d=t1d,
+                         t2d=t2d,
+                         xyz_t=xyz_t[...,1,:],
+@@ -1516,6 +1522,7 @@ class Trainer():
+                     alpha_prev,
+                     idx_pdb,
+                     bond_feats,
++                    chirals,
+                     t1d=t1d,
+                     t2d=t2d,
+                     xyz_t=xyz_t[...,1,:],
+@@ -1608,7 +1615,7 @@ class Trainer():
+         
+         with torch.no_grad(): # no need to calculate gradient
+             ddp_model.eval() # change it to eval mode
+-            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in valid_pos_loader:
++            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in valid_pos_loader:
+                 # transfer inputs to device
+                 B, _, N, L = msa.shape
+ 
+@@ -1629,7 +1636,7 @@ class Trainer():
+                 mask_msa = mask_msa.to(gpu, non_blocking=True)
+                 atom_frames = atom_frames.to(gpu, non_blocking=True)
+                 bond_feats = bond_feats.to(gpu, non_blocking=True)
+-
++                chirals = chirals.to(gpu, non_blocking=True)
+                 # processing labels for distogram orientograms
+                 # res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0]))) # ignore residues having missing BB atoms for loss calculation
+                 # mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
+@@ -1664,6 +1671,7 @@ class Trainer():
+                         alpha_prev,
+                         idx_pdb,
+                         bond_feats,
++                        chirals,
+                         t1d=t1d,
+                         t2d=t2d,
+                         xyz_t=xyz_t,
+@@ -1691,6 +1699,7 @@ class Trainer():
+                     alpha_prev,
+                     idx_pdb,
+                     bond_feats,
++                    chirals,
+                     t1d=t1d,
+                     t2d=t2d,
+                     xyz_t=xyz_t,
+@@ -1838,6 +1847,7 @@ class Trainer():
+                         alpha_prev,
+                         idx_pdb,
+                         bond_feats,
++                        chirals,
+                         t1d=t1d,
+                         t2d=t2d,
+                         xyz_t=xyz_t,
+@@ -1859,6 +1869,7 @@ class Trainer():
+                     alpha_prev,
+                     idx_pdb,
+                     bond_feats,
++                    chirals,
+                     t1d=t1d,
+                     t2d=t2d,
+                     xyz_t=xyz_t,
+
