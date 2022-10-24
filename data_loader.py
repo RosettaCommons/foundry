@@ -56,7 +56,7 @@ def set_data_loader_params(args):
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
         "NEGATIVE_LIST"    : "%s/list.negative.csv"%compl_dir,
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
-        "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%na_dir,
+        "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%sm_compl_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
         "SM_LIST"          : "%s/list_v02_smcompl_20221017.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
@@ -66,8 +66,11 @@ def set_data_loader_params(args):
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
+        "VAL_SM_LIGCLUS"   : "%s/list_v02_smcompl_ligclusvalid_20221018.csv"%sm_compl_dir, 
+        "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221018.csv"%sm_compl_dir, 
+        "VAL_PEP"          : "%s/list_v02_peptide_benchmark_valid.csv"%sm_compl_dir,
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221017.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221019.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -359,47 +362,68 @@ def get_train_valid_set(params, OFFSET=1000000):
                 train_rna[i] = [(r[0], r[-1])]
 
         # parse protein-small molecule complexes
-        df = pd.read_csv(params['SM_LIST'])
-        df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') # restore leading zeros, make into string
-        df['LIGANDS'] = df.LIGANDS.apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
+        def _load_df(filename, eval_cols=[]):
+            """Loads CSV into dataframe and applies general filters"""
+            df = pd.read_csv(filename)
+            df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') # restore leading zeros, make into string
+            for col in eval_cols:
+                df[col] = df[col].apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
+            df = df[
+                (df.RESOLUTION<=params['RESCUT']) &
+                (df.DEPOSITION.apply(lambda x: parser.parse(x))<=parser.parse(params['DATCUT']))
+            ]
+            return df
+
+        def _make_example_dict(df, make_entry_func, cluster_key='CLUSTER'):
+            """Converts a dataframe of training examples to dictionary where keys are cluster IDs and values
+               are lists of training examples formatted according to the function `make_entry_func`."""
+            data_dict = {}
+            for i,row in df.iterrows():
+                entry = make_entry_func(row)
+                cluster = row[cluster_key] # cluster of this example
+                if cluster in data_dict.keys():
+                    data_dict[cluster].append(entry)
+                else:
+                    data_dict[cluster] = [entry]
+            return data_dict
+
+        df = _load_df(params['SM_LIST'], eval_cols=['LIGANDS'])
         df = df[
-            (df.RESOLUTION<=params['RESCUT']) &
-            (df.DEPOSITION.apply(lambda x: parser.parse(x))<=parser.parse(params['DATCUT'])) &
-            df.LIGANDS.apply(lambda x: '1fcv_GCU_1_A_405__B___.mol2' in x) & # malformatted, tanimoto neighbors=0, weight=Inf
+            ~df.LIGANDS.apply(lambda x: '1fcv_GCU_1_A_405__B___.mol2' in x) & # tanimoto neighbors=0, weight=Inf
             (df.CHAINID != '6uiw_A') # causes GPU OOM for some reason
         ]
 
         # weight each example by various factors
         seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
-        multi_lig_factor = df['LIGANDS'].apply(lambda x: len(x))/df.NUM_LIGANDS.astype(float) # num of this ligand versus total ligands for this protein chain
+        lig_copy_num = df.LIGANDS.apply(lambda x: len(x)).astype(float) # num copies of this ligand in this structure
+        multi_lig_factor = lig_copy_num/df.NUM_LIGANDS # correct for multiple unique ligands per protein
         if params['CLUSTER_LIGANDS']:
-            ligand_cluster_factor = 1./df.LIGAND_CLUSTER_SIZE # how many sm mol have tanimoto > 0.85 to this?
+            ligand_cluster_factor = lig_copy_num/df.LIGAND_CLUSTER_SIZE # how many sm mol have tanimoto > 0.85 to this?
         else:
             ligand_cluster_factor = 1.0
         seq_cluster_factor = 1./df.CLUSTER_SIZE # protein seq similarity cluster size
         df['WEIGHT'] = seq_len_factor * multi_lig_factor * ligand_cluster_factor * seq_cluster_factor
 
         # compile protein-sm. mol training & validation sets
-        train_sm_compl = {}
-        valid_sm_compl = {}
-        for i,row in df.iterrows():
-            entry = ((row.CHAINID, row.HASH, row.LIGANDS), row.LEN_EXIST, row.WEIGHT)
-            if row.CLUSTER in val_pdb_ids:
-                if row.CLUSTER in valid_sm_compl.keys():
-                    valid_sm_compl[row.CLUSTER].append(entry)
-                else:
-                    valid_sm_compl[row.CLUSTER] = [entry]
-            else:
-                if row.CLUSTER in train_sm_compl.keys():
-                    train_sm_compl[row.CLUSTER].append(entry)
-                else:
-                    train_sm_compl[row.CLUSTER] = [entry]
+        def _make_entry(row):
+            return ((row.CHAINID, row.HASH, row.LIGANDS), row.LEN_EXIST, row.WEIGHT)
+        train_sm_compl = _make_example_dict(df[~df.CLUSTER.isin(val_pdb_ids)], make_entry_func=_make_entry)
+        valid_sm_compl = _make_example_dict(df[df.CLUSTER.isin(val_pdb_ids)], make_entry_func=_make_entry)
 
         # protein-small mol cluster weights are the sum of cluster member weights
         sm_compl_IDs = list(train_sm_compl.keys())
         df_clus = df[['CLUSTER','WEIGHT']].groupby('CLUSTER').sum().reset_index()
         clus2weight = dict(zip(df_clus.CLUSTER, df_clus.WEIGHT))
         sm_compl_weights = [clus2weight[i] for i in sm_compl_IDs]
+
+        # stricter versions of protein-small mol validation set
+        df = _load_df(params['VAL_SM_LIGCLUS'], eval_cols=['LIGANDS']) # deduplicated ligand clusters
+        df['WEIGHT'] = 1 # examples have already been redundancy-reduced
+        valid_sm_compl_ligclus = _make_example_dict(df, make_entry_func=_make_entry)
+
+        df = _load_df(params['VAL_SM_STRICT']) # removed ligand cluster overlap with train
+        df['WEIGHT'] = 1 # examples have already been redundancy-reduced
+        valid_sm_compl_strict = _make_example_dict(df, make_entry_func=_make_entry)
 
         # read homo-oligomer list
         homo = {}
@@ -568,6 +592,7 @@ def get_train_valid_set(params, OFFSET=1000000):
                 else:
                     train_na_neg[r[2]] = [(r[:2], r[-1])]
         
+        # cambridge small molecule crystals
         sim_idx = int(params["MAXSIM"]*100-50)
         with open(params["CSD_LIST"], 'r') as f:
             reader = csv.reader(f)
@@ -588,6 +613,12 @@ def get_train_valid_set(params, OFFSET=1000000):
                 valid_sm[i] = row[:2]
             else:
                 train_sm[i] = row[:2]
+
+        # protein-peptide complexes (validation only)
+        def _make_entry(row):
+            return ((row.CHAINID, row.HASH, row.PEP_CHAINID), row.LEN_EXIST)
+        df = _load_df(params['VAL_PEP'])
+        valid_pep = _make_example_dict(df, make_entry_func=_make_entry)
 
         # Get average chain length in each cluster and calculate weights
         # protein-small mol complex weights are done separately above
@@ -629,7 +660,8 @@ def get_train_valid_set(params, OFFSET=1000000):
             valid_pdb, valid_homo, 
             valid_compl, valid_neg,
             valid_na_compl, valid_na_neg,
-            valid_rna, valid_sm_compl, valid_sm, 
+            valid_rna, valid_sm_compl, valid_sm_compl_ligclus, 
+            valid_sm_compl_strict, valid_sm, valid_pep
             homo
         )
         with open(params["DATAPKL"], "wb") as f:
@@ -652,7 +684,8 @@ def get_train_valid_set(params, OFFSET=1000000):
                 valid_pdb, valid_homo, 
                 valid_compl, valid_neg,
                 valid_na_compl, valid_na_neg,
-                valid_rna, valid_sm_compl, valid_sm,
+                valid_rna, valid_sm_compl, valid_sm_compl_ligclus, 
+                valid_sm_compl_strict, valid_sm, valid_pep
                 homo
             ) = pickle.load(f)
             print ('...done')
@@ -670,7 +703,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         valid_pdb, valid_homo, 
         valid_compl, valid_neg,
         valid_na_compl, valid_na_neg,
-        valid_rna, valid_sm_compl, valid_sm, 
+        valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, valid_pep
         homo
     )
 
@@ -1491,16 +1524,16 @@ def loader_sm_compl(item, params, pick_top=True,
     protein_L, nprotatoms, _ = xyz_prot.shape
  
     # Load small molecule
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+ligands[0])
-    for alt_lig in ligands[1:]:
+    i_lig = np.random.randint(len(ligands))
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+ligands[i_lig])
+    for alt_lig in ligands[:i_lig]+ligands[i_lig+1:]:
         mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+alt_lig)
-        if all(msa_sm2==msa_sm):
+        if (msa_sm2.shape == msa_sm.shape) and all(msa_sm2==msa_sm):
             xyz_sm = torch.concat([xyz_sm, xyz_sm2],dim=0) # (N_symm1 + N_symm2, Natoms, 3)
             mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
         else:
-            print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same atom order: '\
-                  f'{item}. Skipping.')
-            return [torch.tensor([-1])]*20
+            print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same '\
+                  f'atom order: {item[0]}: {ligands[i_lig]} vs {alt_lig}. Skipping latter ligand.')
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
@@ -1518,7 +1551,7 @@ def loader_sm_compl(item, params, pick_top=True,
     
     if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
         print(f'WARNING [loader_sm_compl]: Sm. mol. XYZ and MSA lengths don\'t match: {item}. Skipping.')
-        return [torch.tensor([-1])]*20
+        return (torch.tensor([-1]),)*20
 
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
     msa = a3m['msa'].long()
@@ -1571,7 +1604,7 @@ def loader_sm_compl(item, params, pick_top=True,
 
         if msa.shape[1] != xyz_t.shape[1]:
             print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
-            return [torch.tensor([-1])]*20
+            return (torch.tensor([-1]),)*20
 
     if init_protein_xyz or init_ligand_xyz:
         # initialize coords to ground truth, move to origin, rotate randomly
@@ -1914,7 +1947,7 @@ class DatasetRNA(data.Dataset):
 
 class DatasetSMComplex(data.Dataset):
     def __init__(self, IDs, loader, item_dict, params, init_protein_tmpl=False, init_ligand_tmpl=False,
-                 init_protein_xyz=False, init_ligand_xyz=False):
+                 init_protein_xyz=False, init_ligand_xyz=False, task=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
@@ -1923,14 +1956,14 @@ class DatasetSMComplex(data.Dataset):
         self.init_ligand_tmpl = init_ligand_tmpl
         self.init_protein_xyz = init_protein_xyz
         self.init_ligand_xyz = init_ligand_xyz
+        self.task = task
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        weights = torch.tensor([item[2] for item in self.item_dict[ID]])
-        sel_idx = torch.multinomial(weights, 1)
+        sel_idx = np.random.randint(0, len(self.item_dict[ID])) # no weighting of samples during validation
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.params,
@@ -1939,6 +1972,8 @@ class DatasetSMComplex(data.Dataset):
             init_protein_xyz = self.init_protein_xyz,
             init_ligand_xyz = self.init_ligand_xyz
         )
+        if self.task is not None:
+            out = out[:-2]+(self.task,)+out[-1:] # custom task name
         return out
 
 class DatasetSM(data.Dataset):

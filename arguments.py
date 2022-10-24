@@ -30,7 +30,10 @@ def get_args():
     train_group.add_argument("-accum", type=int, default=1,
             help="Gradient accumulation when it's > 1 [1]")
     train_group.add_argument("-eval", action='store_true', default=False,
-            help="Train structure only")
+            help="No training, just run validation cycles and output structures")
+    train_group.add_argument("-start_epoch", type=int, default=None,
+            help="When using -eval, which epoch to start at. "\
+                 "A checkpoint must exist for this epoch.")
     train_group.add_argument('-out_dir', type=str, default='test/',
             help='Output folder.')
     train_group.add_argument('-wandb_prefix', type=str, 
@@ -41,6 +44,15 @@ def get_args():
             help='Output folder for model weights. [models/]')
     train_group.add_argument('-interactive', action='store_true', default=False,
             help='Start training in interactive mode. [False]')
+    train_group.add_argument('-n_valid_pdb', type=int, default=None)
+    train_group.add_argument('-n_valid_homo', type=int, default=None)
+    train_group.add_argument('-n_valid_compl', type=int, default=None)
+    train_group.add_argument('-n_valid_na_compl', type=int, default=None)
+    train_group.add_argument('-n_valid_rna', type=int, default=None)
+    train_group.add_argument('-n_valid_sm_compl', type=int, default=None)
+    train_group.add_argument('-n_valid_sm_compl_ligclus', type=int, default=None)
+    train_group.add_argument('-n_valid_sm_compl_strict', type=int, default=None)
+    train_group.add_argument('-n_valid_sm', type=int, default=None)
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")
