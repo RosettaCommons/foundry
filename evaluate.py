@@ -26,7 +26,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 #torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -250,6 +250,7 @@ class Evaluator(Trainer):
             valid_sm_compl_sampler.set_epoch(epoch)
             valid_sm_compl_ligclus_sampler.set_epoch(epoch)
             valid_sm_compl_strict_sampler.set_epoch(epoch)
+            valid_sm_sampler.set_epoch(epoch)
 
             # load this epoch's checkpoint
             loaded_epoch, best_valid_loss = self.load_model(ddp_model, self.model_name, gpu, 
@@ -259,24 +260,26 @@ class Evaluator(Trainer):
                 dist.destroy_process_group()
                 return
 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
-                epoch, verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
-                epoch, header="Homo", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
-                epoch, header="Hetero", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
-                epoch, header="NA", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
-                world_size, epoch, header="NAfs", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
-                epoch, header="RNA", verbose = self.eval)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
+            #    epoch, print_header=(epoch==self.start_epoch))
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
+            #    epoch, header="Homo", print_header=(epoch==self.start_epoch))
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
+            #    epoch, header="Hetero", print_header=(epoch==self.start_epoch))
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
+            #    epoch, header="NA", print_header=(epoch==self.start_epoch))
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
+            #    world_size, epoch, header="NAfs", print_header=(epoch==self.start_epoch))
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
+            #    epoch, header="RNA", print_header=(epoch==self.start_epoch))
             valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
-                rank, gpu, world_size, epoch, header="SM Compl", verbose = self.eval) 
+                rank, gpu, world_size, epoch, header="SM Compl", print_header=(epoch==self.start_epoch)) 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
-                rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", verbose = self.eval) 
+                rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", print_header=(epoch==self.start_epoch)) 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
-                rank, gpu, world_size, epoch, header="SM Compl (strict)", verbose = self.eval) 
+                rank, gpu, world_size, epoch, header="SM Compl (strict)", print_header=(epoch==self.start_epoch)) 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+                rank, gpu, world_size, epoch, header="SM_CSD", print_header=(epoch==self.start_epoch)) 
 
         dist.destroy_process_group()
 

@@ -69,7 +69,7 @@ def set_data_loader_params(args):
         "VAL_SM_LIGCLUS"   : "%s/list_v02_smcompl_ligclusvalid_20221018.csv"%sm_compl_dir, 
         "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221018.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221018.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221025.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -390,7 +390,8 @@ def get_train_valid_set(params, OFFSET=1000000):
         df = _load_df(params['SM_LIST'])
         df = df[
             ~df.LIGANDS.apply(lambda x: '1fcv_GCU_1_A_405__B___.mol2' in x) & # tanimoto neighbors=0, weight=Inf
-            (df.CHAINID != '6uiw_A') # causes GPU OOM for some reason
+            (df.CHAINID != '6uiw_A') & # causes GPU OOM for some reason
+            (df.CHAINID != '6v3i_A') # another error-causing example that we will investigate later
         ]
 
         # weight each example by various factors
@@ -1977,10 +1978,8 @@ class DatasetSM(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
         out = self.loader(
-            self.item_dict[ID][sel_idx][0],
-            self.item_dict[ID][sel_idx][2],
+            self.item_dict[ID][0],
             self.params
         )
         return out

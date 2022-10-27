@@ -149,7 +149,7 @@ def get_args():
             help="Weight on distd in loss function [1.0]")
     loss_group.add_argument('-w_str', type=float, default=10.0,
             help="Weight on strd in loss function [10.0]")
-    loss_group.add_argument('-w_inter_fape', type=float, default=0,
+    loss_group.add_argument('-w_inter_fape', type=float, default=2.0,
             help="Weight on inter-chain backbone fape in loss function [2.0]")
     loss_group.add_argument('-w_lig_fape', type=float, default=10,
             help="Weight on ligand fape in loss function [10.0]")

@@ -642,6 +642,7 @@ class Trainer():
         if ('MASTER_PORT' not in os.environ):
             os.environ['MASTER_PORT'] = '%d'%self.port
 
+        print('master port',os.environ['MASTER_PORT'])
         if (not self.interactive and "SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
             world_size = int(os.environ["SLURM_NTASKS"])
             rank = int (os.environ["SLURM_PROCID"])
@@ -702,7 +703,7 @@ class Trainer():
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
+        dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
         #define dataset & data loader
@@ -899,11 +900,11 @@ class Trainer():
             rank=rank, 
             #fraction_pdb=0.18 # not a real argument but implicit
             fraction_fb=0.0,
-            fraction_compl=0.18,
-            fraction_na_compl=0.18,
+            fraction_compl=0.17,
+            fraction_na_compl=0.17,
             fraction_rna=0.09,
             fraction_sm_compl=0.37,
-            fraction_sm=0.0, 
+            fraction_sm=0.03, 
             replacement=True
         )
 
@@ -1009,7 +1010,7 @@ class Trainer():
             valid_sm_compl_sampler.set_epoch(epoch)
             valid_sm_compl_ligclus_sampler.set_epoch(epoch)
             valid_sm_compl_strict_sampler.set_epoch(epoch)
-            #valid_sm_sampler.set_epoch(epoch)
+            valid_sm_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
@@ -1032,8 +1033,8 @@ class Trainer():
                 rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", verbose = self.eval) 
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl (strict)", verbose = self.eval) 
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-            #    rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
+            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+                rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
@@ -1405,7 +1406,7 @@ class Trainer():
             
         return train_tot, train_loss, train_acc
 
-    def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False):
+    def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False, print_header=False):
         if len(valid_loader) == 0:
             return None, None, None
 
@@ -1592,6 +1593,11 @@ class Trainer():
                 log_dict = {f"Valid_{header}":{task[0]:loss_dict}}
                 wandb.log(log_dict)
             train_time = time.time() - start_time
+
+            # print loss names
+            if print_header:
+                sys.stdout.write(f'Header: [epoch/num_epochs] Batch: [examples_seen_in_epoch/examples_per_epoch] Time: time | Total_loss: total_loss | {" ".join(loss_dict.keys())} | precision recall F1 | max_mem \n')
+
             sys.stdout.write("%s: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f\n"%(\
                     header, epoch, self.n_epoch, world_size*len(valid_loader), world_size*len(valid_loader), train_time, valid_tot, \
                     " ".join(["%8.4f"%l for l in valid_loss]),\
