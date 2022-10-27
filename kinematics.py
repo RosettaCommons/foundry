@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from openbabel import openbabel
 from util import INIT_CRDS, INIT_NA_CRDS, generate_Cbeta, is_nucleic, is_atom
 from chemical import NTOTAL
 
@@ -224,3 +225,39 @@ def c6d_to_bins(c6d, same_chain, negative=False, params=PARAMS):
         pb = torch.where(same_chain.bool(), pb.long(), params['ABINS']//2)
     
     return torch.stack([db,ob,tb,pb],axis=-1).long()
+
+def get_chirals(obmol, xyz):
+        '''get all quadruples of atoms forming chiral centers
+        '''
+
+        # detect stereo centers
+        stereo = [a for a in openbabel.OBMolAtomIter(obmol)
+                  if (a.GetHvyDegree()==3 or a.GetHvyDegree()==4) and a.GetHyb()!=2]
+
+        angle = np.arcsin(1/3**0.5) # perfect tetrahedral geometry
+
+        chirals = []
+        for o in stereo:
+            neigh = [b.GetIdx() for b in openbabel.OBAtomAtomIter(o)]
+            if len(neigh)==3:
+                chirals.append([o.GetIdx(),*neigh,angle])
+            elif len(neigh)==4:
+                a,b,c,d = neigh
+                chirals.extend([[o.GetIdx(),a,b,c,angle],
+                                [o.GetIdx(),b,a,d,angle],
+                                [o.GetIdx(),a,c,d,angle],
+                                [o.GetIdx(),c,b,d,angle]])
+
+
+        n = len(chirals)
+        if n>0:
+            chirals = torch.tensor(chirals*3).float()
+            chirals[n:2*n,1:-1] = torch.roll(chirals[n:2*n,1:-1],1,1)
+            chirals[2*n: ,1:-1] = torch.roll(chirals[2*n: ,1:-1],2,1)
+            chirals[:,:-1] -= 1
+            dih = get_dih(*xyz[chirals[:,:4].long()].split(split_size=1,dim=1))[:,0]
+            chirals[dih<0.0,-1] = -angle
+        else:
+            chirals = torch.Tensor()
+
+        return chirals
