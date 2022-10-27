@@ -1110,7 +1110,7 @@ class Trainer():
 
         counter = 0
         
-        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in train_loader:
+        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in train_loader:
             # skip known bad training examples
             # loader will print warning message with item info for followup later
             if torch.is_tensor(item) and torch.all(item==-1):
@@ -1138,7 +1138,8 @@ class Trainer():
             mask_msa = mask_msa.to(gpu, non_blocking=True)
             atom_frames = atom_frames.to(gpu, non_blocking=True)
             bond_feats = bond_feats.to(gpu, non_blocking=True)
-
+            chirals = chirals.to(gpu, non_blocking=True)
+            
             # template masking
             seq_unmasked = msa[:, 0, 0, :] # (B, L)
             mask_t_2d = get_prot_sm_mask(mask_t, seq_unmasked[0]) # (B, T, L)
@@ -1187,6 +1188,7 @@ class Trainer():
                                 alpha_prev,
                                 idx_pdb,
                                 bond_feats,
+                                chirals,
                                 t1d=t1d,
                                 t2d=t2d,
                                 xyz_t=xyz_t[...,1,:],
@@ -1215,6 +1217,7 @@ class Trainer():
                             alpha_prev,
                             idx_pdb,
                             bond_feats,
+                            chirals,
                             t1d=t1d,
                             t2d=t2d,
                             xyz_t=xyz_t[...,1,:],
@@ -1262,6 +1265,7 @@ class Trainer():
                         alpha_prev,
                         idx_pdb,
                         bond_feats,
+                        chirals,
                         t1d=t1d,
                         t2d=t2d,
                         xyz_t=xyz_t[...,1,:],
@@ -1421,7 +1425,7 @@ class Trainer():
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in valid_loader:
+            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in valid_loader:
                 # skip known bad training examples
                 # loader will print warning message with item info for followup later
                 if torch.is_tensor(item) and torch.all(item==-1):
@@ -1451,6 +1455,7 @@ class Trainer():
                 mask_msa = mask_msa.to(gpu, non_blocking=True)
                 atom_frames = atom_frames.to(gpu, non_blocking=True)
                 bond_feats = bond_feats.to(gpu, non_blocking=True)
+                chirals = chirals.to(gpu, non_blocking=True)
 
                 # template masking
                 seq_unmasked = msa[:, 0, 0, :] # (B, L)
@@ -1494,6 +1499,7 @@ class Trainer():
                         alpha_prev,
                         idx_pdb,
                         bond_feats,
+                        chirals,
                         t1d=t1d,
                         t2d=t2d,
                         xyz_t=xyz_t[...,1,:],
@@ -1523,6 +1529,7 @@ class Trainer():
                     alpha_prev,
                     idx_pdb,
                     bond_feats,
+                    chirals,
                     t1d=t1d,
                     t2d=t2d,
                     xyz_t=xyz_t[...,1,:],
@@ -1615,7 +1622,7 @@ class Trainer():
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats in valid_pos_loader:
+            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in valid_pos_loader:
                 # transfer inputs to device
                 B, _, N, L = msa.shape
 
@@ -1636,7 +1643,7 @@ class Trainer():
                 mask_msa = mask_msa.to(gpu, non_blocking=True)
                 atom_frames = atom_frames.to(gpu, non_blocking=True)
                 bond_feats = bond_feats.to(gpu, non_blocking=True)
-
+                chirals = chirals.to(gpu, non_blocking=True)
                 # processing labels for distogram orientograms
                 # res_mask = ~((atom_mask[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0]))) # ignore residues having missing BB atoms for loss calculation
                 # mask_2d = res_mask[:,None,:] * res_mask[:,:,None] # ignore pairs having missing residues
@@ -1671,6 +1678,7 @@ class Trainer():
                         alpha_prev,
                         idx_pdb,
                         bond_feats,
+                        chirals,
                         t1d=t1d,
                         t2d=t2d,
                         xyz_t=xyz_t,
@@ -1698,6 +1706,7 @@ class Trainer():
                     alpha_prev,
                     idx_pdb,
                     bond_feats,
+                    chirals,
                     t1d=t1d,
                     t2d=t2d,
                     xyz_t=xyz_t,
@@ -1845,6 +1854,7 @@ class Trainer():
                         alpha_prev,
                         idx_pdb,
                         bond_feats,
+                        chirals,
                         t1d=t1d,
                         t2d=t2d,
                         xyz_t=xyz_t,
@@ -1866,6 +1876,7 @@ class Trainer():
                     alpha_prev,
                     idx_pdb,
                     bond_feats,
+                    chirals,
                     t1d=t1d,
                     t2d=t2d,
                     xyz_t=xyz_t,

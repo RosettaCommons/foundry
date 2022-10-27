@@ -1043,7 +1043,7 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     residues_atomize = msa[0, i_start:i_start+n_res_atomize]
     residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
     residue_atomize_mask = mask[i_start:i_start+n_res_atomize].float()
-    xyz = torch.nan_to_num(xyz)
+    #xyz = torch.nan_to_num(xyz)
 
     # handle symmetries
     xyz_alt = torch.zeros_like(xyz.unsqueeze(0))

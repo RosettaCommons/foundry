@@ -10,7 +10,7 @@ from resnet import ResidualNetwork
 from util import INIT_CRDS, is_atom
 from loss import (
     calc_BB_bond_geom_grads, calc_lj_grads, calc_hb_grads, calc_cart_bonded_grads, calc_ljallatom_grads, 
-    calc_lj, calc_cart_bonded
+    calc_lj, calc_cart_bonded, calc_chiral_grads
 )
 from chemical import NTOTALDOFS
 
@@ -587,7 +587,7 @@ class IterativeSimulator(nn.Module):
         self.compute_allatom_coords = ComputeAllAtomCoords()
 
 
-    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, use_checkpoint=False):
+    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, chirals, use_checkpoint=False):
         # input:
         #   msa: initial MSA embeddings (N, L, d_msa)
         #   pair: initial residue pair embeddings (L, L, d_pair)
@@ -600,7 +600,7 @@ class IterativeSimulator(nn.Module):
                                                                use_checkpoint=use_checkpoint, top_k=0, rotation_mask=rotation_mask)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
-
+        
         for i_m in range(self.n_main_block):
             msa, pair, xyz, state, alpha = self.main_block[i_m](msa, pair,
                                                          xyz, state, idx, bond_feats,
@@ -612,17 +612,17 @@ class IterativeSimulator(nn.Module):
         # now use unmasked seq (no cross-talk for msa prediction)
         for i_m in range(self.n_ref_block):
             # dbonddxyz, = calc_BB_bond_geom_grads(seq_unmasked[0], xyz.detach(), idx)
-            # dljdxyz, dljdalpha = calc_lj_grads(
-            #     seq_unmasked, xyz.detach(), alpha.detach(), 
-            #     self.compute_allatom_coords,
-            #     self.aamask, 
-            #     self.ljlk_parameters, 
-            #     self.lj_correction_parameters, 
-            #     self.num_bonds, 
-            #     lj_lin=self.lj_lin)
-
-            # extra_l1 = torch.cat((dbonddxyz[0].detach(),dljdxyz[0].detach()), dim=1)
-            # extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
+            dljdxyz, dljdalpha = calc_lj_grads(
+                 seq_unmasked, xyz.detach(), alpha.detach(), 
+                 self.compute_allatom_coords, bond_feats,
+                 self.aamask, 
+                 self.ljlk_parameters, 
+                 self.lj_correction_parameters, 
+                 self.num_bonds, 
+                 lj_lin=self.lj_lin)
+            dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
+            extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
+            extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
             extra_l0 =None
             extra_l1= None
 
