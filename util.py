@@ -385,8 +385,8 @@ def get_tips(xyz, seq):
 
 
 # writepdb
-def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
-    f = open(filename,"w")
+def writepdb(filename, atoms, seq, modelnum=0, idx_pdb=None, bfacts=None, bond_feats=None):
+    f = open(filename,"a")
     ctr = 1
     scpu = seq.cpu().squeeze(0)
     atomscpu = atoms.cpu().squeeze(0)
@@ -397,6 +397,8 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
         idx_pdb = 1 + torch.arange(atomscpu.shape[0])
 
     Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
+    atom_idxs = {}
+    f.write(f"MODEL        {modelnum}\n")
     for i,s in enumerate(scpu):
         natoms = atomscpu.shape[-2]
         if (natoms!=NHEAVY and natoms!=NTOTAL and natoms!=3):
@@ -405,15 +407,15 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
 
         if s >= len(aa2long):
             lig_name = "LG1"
+            atom_idxs[i] = ctr
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
-                    "HETATM", ctr, num2aa[s], lig_name, 
+                    "HETATM", ctr, num2aa[s], lig_name,
                     "A", torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
                     1.0, Bfacts[i] ) )
             ctr += 1
             continue
 
         atms = aa2long[s]
-
         # his prot hack
         #if (s==8 and torch.linalg.norm( atomscpu[i,9,:]-atomscpu[i,5,:] ) < 1.7):
         #    atms = (
@@ -424,11 +426,18 @@ def writepdb(filename, atoms, seq, idx_pdb=None, bfacts=None):
         for j,atm_j in enumerate(atms):
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
-                    "ATOM", ctr, atm_j, num2aa[s], 
+                    "ATOM", ctr, atm_j, num2aa[s],
                     "A", idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
                     1.0, Bfacts[i] ) )
                 ctr += 1
-
+    if bond_feats != None:
+        atom_bonds= (bond_feats > 0) * (bond_feats <5)
+        print(atom_bonds.shape)
+        b, i, j = atom_bonds.nonzero(as_tuple=True)
+        for start, end in zip(i,j):
+            f.write(f"CONECT {atom_idxs[int(start.numpy())]} {atom_idxs[int(end.numpy())]}\n")
+    f.write("ENDMDL\n")
+    
 ######
 ######
 
