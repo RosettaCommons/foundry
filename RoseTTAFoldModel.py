@@ -63,7 +63,7 @@ class RoseTTAFoldModule(nn.Module):
 
     def forward(
         self, msa_latent, msa_full, seq, seq_unmasked, xyz, sctors, idx, bond_feats, chirals, 
-        t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
+        atom_frames=None, t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
         msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None,
         return_raw=False, return_full=False,
         use_checkpoint=False

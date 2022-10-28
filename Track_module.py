@@ -7,7 +7,7 @@ from util_module import *
 from Attention_module import *
 from SE3_network import SE3TransformerWrapper
 from resnet import ResidualNetwork
-from util import INIT_CRDS, is_atom
+from util import INIT_CRDS, is_atom, xyz_frame_from_rotation_mask
 from loss import (
     calc_BB_bond_geom_grads, calc_lj_grads, calc_hb_grads, calc_cart_bonded_grads, calc_ljallatom_grads, 
     calc_lj, calc_cart_bonded, calc_chiral_grads
@@ -191,7 +191,7 @@ class Str2Str(nn.Module):
         nn.init.zeros_(self.embed_e2.bias)
     
     @torch.cuda.amp.autocast(enabled=False)
-    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, extra_l0=None, extra_l1=None, top_k=128, eps=1e-5):
+    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, atom_frames, extra_l0=None, extra_l1=None, top_k=128, eps=1e-5):
         # process msa & pair features
         B, N, L = msa.shape[:3]
         node = self.norm_msa(msa[:,0])
@@ -213,7 +213,8 @@ class Str2Str(nn.Module):
             G, edge_feats = make_topk_graph(xyz[:,:,1,:], pair, idx, top_k=top_k)
         else:
             G, edge_feats = make_full_graph(xyz[:,:,1,:], pair, idx)
-        l1_feats = xyz - xyz[:,:,1,:].unsqueeze(2)
+        xyz_frame = xyz_frame_from_rotation_mask(xyz, rotation_mask, atom_frames)
+        l1_feats = xyz_frame - xyz_frame[:,:,1,:].unsqueeze(2)
         l1_feats = l1_feats.reshape(B*L, -1, 3)
         if extra_l1 is not None:
             l1_feats = torch.cat( (l1_feats,extra_l1), dim=1 )
@@ -473,7 +474,7 @@ class IterBlock(nn.Module):
                                p_drop=p_drop)
         self.rbf_sigma = rbf_sigma
 
-    def forward(self, msa, pair, xyz, state, idx, bond_feats, use_checkpoint=False, top_k=128, rotation_mask=None):
+    def forward(self, msa, pair, xyz, state, idx, bond_feats, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None):
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas), self.rbf_sigma)
         if use_checkpoint:
@@ -482,14 +483,14 @@ class IterBlock(nn.Module):
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats)
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames)
 
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
             pair = self.msa2pair(msa, pair)
             pair = self.pair2pair(pair, rbf_feat)
 
-            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, top_k=top_k)
+            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, top_k=top_k)
 
         return msa, pair, xyz, state, alpha
 
@@ -587,7 +588,7 @@ class IterativeSimulator(nn.Module):
         self.compute_allatom_coords = ComputeAllAtomCoords()
 
 
-    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, chirals, use_checkpoint=False):
+    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, chirals, atom_frames=None, use_checkpoint=False):
         # input:
         #   msa: initial MSA embeddings (N, L, d_msa)
         #   pair: initial residue pair embeddings (L, L, d_pair)
@@ -597,14 +598,18 @@ class IterativeSimulator(nn.Module):
         for i_m in range(self.n_extra_block):
             msa_full, pair, xyz, state, alpha = self.extra_block[i_m](msa_full, pair,
                                                                xyz, state, idx, bond_feats,
-                                                               use_checkpoint=use_checkpoint, top_k=0, rotation_mask=rotation_mask)
+                                                               use_checkpoint=use_checkpoint, 
+                                                               top_k=0, rotation_mask=rotation_mask, 
+                                                               atom_frames=atom_frames)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
         
         for i_m in range(self.n_main_block):
             msa, pair, xyz, state, alpha = self.main_block[i_m](msa, pair,
                                                          xyz, state, idx, bond_feats,
-                                                         use_checkpoint=use_checkpoint, top_k=0, rotation_mask=rotation_mask)
+                                                         use_checkpoint=use_checkpoint, 
+                                                         top_k=0, rotation_mask=rotation_mask,
+                                                         atom_frames=atom_frames)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
 
@@ -625,7 +630,7 @@ class IterativeSimulator(nn.Module):
             extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
 
             xyz, state, alpha = self.str_refiner(
-                msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats,
+                    msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats, atom_frames,
                 extra_l0, extra_l1, top_k=128)
 
             xyz_s.append(xyz)

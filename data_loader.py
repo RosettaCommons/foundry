@@ -71,7 +71,7 @@ def set_data_loader_params(args):
         "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221018.csv"%sm_compl_dir, 
         "VAL_PEP"          : "%s/list_v02_peptide_benchmark_valid.csv"%sm_compl_dir,
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221019.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221024.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -662,7 +662,7 @@ def get_train_valid_set(params, OFFSET=1000000):
             valid_compl, valid_neg,
             valid_na_compl, valid_na_neg,
             valid_rna, valid_sm_compl, valid_sm_compl_ligclus, 
-            valid_sm_compl_strict, valid_sm, valid_pep
+            valid_sm_compl_strict, valid_sm, valid_pep,
             homo
         )
         with open(params["DATAPKL"], "wb") as f:
@@ -686,7 +686,7 @@ def get_train_valid_set(params, OFFSET=1000000):
                 valid_compl, valid_neg,
                 valid_na_compl, valid_na_neg,
                 valid_rna, valid_sm_compl, valid_sm_compl_ligclus, 
-                valid_sm_compl_strict, valid_sm, valid_pep
+                valid_sm_compl_strict, valid_sm, valid_pep,
                 homo
             ) = pickle.load(f)
             print ('...done')
@@ -704,7 +704,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         valid_pdb, valid_homo, 
         valid_compl, valid_neg,
         valid_na_compl, valid_na_neg,
-        valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, valid_pep
+        valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, valid_pep,
         homo
     )
 

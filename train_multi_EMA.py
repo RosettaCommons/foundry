@@ -1116,7 +1116,7 @@ class Trainer():
             if torch.is_tensor(item) and torch.all(item==-1):
                 continue
             save_pdbs = np.random.rand()<=0.01
-
+            
             # transfer inputs to device
             B, _, N, L = msa.shape
             idx_pdb = idx_pdb.to(gpu, non_blocking=True) # (B, L)
@@ -1189,6 +1189,7 @@ class Trainer():
                                 idx_pdb,
                                 bond_feats,
                                 chirals,
+                                atom_frames=atom_frames,
                                 t1d=t1d,
                                 t2d=t2d,
                                 xyz_t=xyz_t[...,1,:],
@@ -1218,6 +1219,7 @@ class Trainer():
                             idx_pdb,
                             bond_feats,
                             chirals,
+                            atom_frames=atom_frames,
                             t1d=t1d,
                             t2d=t2d,
                             xyz_t=xyz_t[...,1,:],
@@ -1266,6 +1268,7 @@ class Trainer():
                         idx_pdb,
                         bond_feats,
                         chirals,
+                        atom_frames=atom_frames,
                         t1d=t1d,
                         t2d=t2d,
                         xyz_t=xyz_t[...,1,:],
@@ -1500,6 +1503,7 @@ class Trainer():
                         idx_pdb,
                         bond_feats,
                         chirals,
+                        atom_frames=atom_frames,
                         t1d=t1d,
                         t2d=t2d,
                         xyz_t=xyz_t[...,1,:],
@@ -1530,6 +1534,7 @@ class Trainer():
                     idx_pdb,
                     bond_feats,
                     chirals,
+                    atom_frames=atom_frames,
                     t1d=t1d,
                     t2d=t2d,
                     xyz_t=xyz_t[...,1,:],
@@ -1679,6 +1684,7 @@ class Trainer():
                         idx_pdb,
                         bond_feats,
                         chirals,
+                        atom_frames=atom_frames,
                         t1d=t1d,
                         t2d=t2d,
                         xyz_t=xyz_t,
@@ -1707,6 +1713,7 @@ class Trainer():
                     idx_pdb,
                     bond_feats,
                     chirals,
+                    atom_frames=atom_frames,
                     t1d=t1d,
                     t2d=t2d,
                     xyz_t=xyz_t,
@@ -1855,6 +1862,7 @@ class Trainer():
                         idx_pdb,
                         bond_feats,
                         chirals,
+                        atom_frames=atom_frames,
                         t1d=t1d,
                         t2d=t2d,
                         xyz_t=xyz_t,
@@ -1877,6 +1885,7 @@ class Trainer():
                     idx_pdb,
                     bond_feats,
                     chirals,
+                    atom_frames=atom_frames,
                     t1d=t1d,
                     t2d=t2d,
                     xyz_t=xyz_t,
