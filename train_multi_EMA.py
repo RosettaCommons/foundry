@@ -117,7 +117,10 @@ class Trainer():
     def __init__(self, model_name='BFF',
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
                  model_param={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
-                 eval=False, out_dir=None, wandb_prefix=None, model_dir='models/'):
+                 eval=False, out_dir=None, wandb_prefix=None, model_dir='models/', dataset_param=None, n_valid_pdb=100,
+                 n_valid_pdb_atomize=100, n_valid_homo=100, n_valid_compl=100, n_valid_neg=0,
+                 n_valid_na_compl=100, n_valid_na_neg=0, n_valid_rna=100, n_valid_sm_compl=100, 
+                 n_valid_sm_compl_ligclus=100, n_valid_sm_compl_strict=100, n_valid_sm=100):
         self.model_name = model_name #"BFF"
         #self.model_name = "%s_%d_%d_%d_%d"%(model_name, model_param['n_module'], 
         #                                    model_param['n_module_str'],
@@ -143,6 +146,19 @@ class Trainer():
             if out_dir[-1] != '/': self.out_dir += '/'
         self.wandb_prefix = wandb_prefix
         self.model_dir = model_dir
+        self.dataset_param = dataset_param
+        self.n_valid_pdb = n_valid_pdb
+        self.n_valid_pdb_atomize = n_valid_pdb_atomize
+        self.n_valid_homo = n_valid_homo
+        self.n_valid_compl = n_valid_compl
+        self.n_valid_neg = n_valid_neg
+        self.n_valid_na_compl = n_valid_na_compl
+        self.n_valid_na_neg = n_valid_na_neg
+        self.n_valid_rna = n_valid_rna
+        self.n_valid_sm_compl = n_valid_sm_compl
+        self.n_valid_sm_compl_ligclus = n_valid_sm_compl_ligclus
+        self.n_valid_sm_compl_strict = n_valid_sm_compl_strict
+        self.n_valid_sm = n_valid_sm
 
         # for all-atom str loss
         self.ti_dev = torsion_indices
@@ -573,7 +589,7 @@ class Trainer():
         best_valid_loss = 999999.9
         if not os.path.exists(chk_fn):
             print ('no model found', model_name)
-            return -2, best_valid_loss
+            return -1, best_valid_loss
         map_location = {"cuda:%d"%0: "cuda:%d"%rank}
         checkpoint = torch.load(chk_fn, map_location=map_location)
         print ('loading model', model_name, 'from', chk_fn, 'epoch', checkpoint['epoch'])
@@ -724,18 +740,18 @@ class Trainer():
         sm_IDs, sm_weights, sm_dict = sm_items
         
         self.n_train = N_EXAMPLE_PER_EPOCH
-        self.n_valid_pdb = 100
-        self.n_valid_pdb_atomize = 0 #100
-        self.n_valid_homo = 100
-        self.n_valid_compl = 100
-        self.n_valid_neg = 0 #len(valid_neg.keys())
-        self.n_valid_na_compl = 100
-        self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
-        self.n_valid_rna = 100
-        self.n_valid_sm_compl = 100
-        self.n_valid_sm_compl_ligclus = 100
-        self.n_valid_sm_compl_strict = 100
-        self.n_valid_sm = 100
+ #       self.n_valid_pdb = 100
+ #       self.n_valid_pdb_atomize = 0 #100
+ #       self.n_valid_homo = 100
+ #       self.n_valid_compl = 100
+ #       self.n_valid_neg = 0 #len(valid_neg.keys())
+ #       self.n_valid_na_compl = 100
+ #       self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
+ #       self.n_valid_rna = 100
+ #       self.n_valid_sm_compl = 100
+ #       self.n_valid_sm_compl_ligclus = 100
+ #       self.n_valid_sm_compl_strict = 100
+ #       self.n_valid_sm = 100
 
         if (rank==0):
             print ('Loaded (training)',
@@ -843,11 +859,11 @@ class Trainer():
             loader_sm, valid_sm,
             self.loader_param,
         )
-        #valid_atomize_pdb_set = Dataset(
-        #    list(valid_pdb.keys())[:self.n_valid_pdb],
-        #    loader_atomize_pdb, valid_pdb,
-        #    self.loader_param, homo, p_homo_cut=-1.0
-        #)
+        valid_atomize_pdb_set = Dataset(
+            list(valid_pdb.keys())[:self.n_valid_pdb],
+            loader_atomize_pdb, valid_pdb,
+            self.loader_param, homo, p_homo_cut=-1.0
+        )
         # valid_neg_set = DatasetComplex(
         #     list(valid_neg.keys())[:self.n_valid_neg],
         #     loader_complex, valid_neg,
@@ -898,12 +914,12 @@ class Trainer():
             num_replicas=world_size, 
             rank=rank, 
             #fraction_pdb=0.18 # not a real argument but implicit
-            fraction_fb=0.0,
-            fraction_compl=0.18,
-            fraction_na_compl=0.18,
-            fraction_rna=0.09,
-            fraction_sm_compl=0.37,
-            fraction_sm=0.0, 
+            fraction_fb=self.dataset_param['fraction_fb'],
+            fraction_compl=self.dataset_param['fraction_compl'],
+            fraction_na_compl=self.dataset_param['fraction_na_compl'],
+            fraction_rna=self.dataset_param['fraction_rna'],
+            fraction_sm_compl=self.dataset_param['fraction_sm_compl'],
+            fraction_sm=self.dataset_param['fraction_sm'], 
             replacement=True
         )
 
@@ -934,7 +950,7 @@ class Trainer():
         valid_sm_compl_strict_loader = data.DataLoader(valid_sm_compl_strict_set, sampler=valid_sm_compl_strict_sampler, **LOAD_PARAM)
         valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
         
-        #valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
 #        valid_na_neg_loader = data.DataLoader(valid_na_neg_set, sampler=valid_na_neg_sampler, **LOAD_PARAM)
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
@@ -1009,7 +1025,7 @@ class Trainer():
             valid_sm_compl_sampler.set_epoch(epoch)
             valid_sm_compl_ligclus_sampler.set_epoch(epoch)
             valid_sm_compl_strict_sampler.set_epoch(epoch)
-            #valid_sm_sampler.set_epoch(epoch)
+            valid_sm_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
@@ -1018,22 +1034,27 @@ class Trainer():
                 epoch, verbose = self.eval)
             _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
                 epoch, header="Homo", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
-                epoch, header="Hetero", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
-                epoch, header="NA", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
-                world_size, epoch, header="NAfs", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
-                epoch, header="RNA", verbose = self.eval)
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
-                rank, gpu, world_size, epoch, header="SM Compl", verbose = self.eval) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
-                rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", verbose = self.eval) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
-                rank, gpu, world_size, epoch, header="SM Compl (strict)", verbose = self.eval) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-                rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
+            if self.dataset_param["fraction_compl"] > 0:
+                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
+                    epoch, header="Hetero", verbose = self.eval)
+            if self.dataset_param["fraction_na_compl"] > 0:
+                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
+                    epoch, header="NA", verbose = self.eval)
+                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
+                    world_size, epoch, header="NAfs", verbose = self.eval)
+            if self.dataset_param["fraction_rna"] > 0:
+                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
+                    epoch, header="RNA", verbose = self.eval)
+            if self.dataset_param["fraction_sm_compl"] > 0:
+                valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
+                    rank, gpu, world_size, epoch, header="SM Compl", verbose = self.eval) 
+                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
+                    rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", verbose = self.eval) 
+                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
+                    rank, gpu, world_size, epoch, header="SM Compl (strict)", verbose = self.eval) 
+            if self.dataset_param["fraction_sm"] > 0:
+                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+                    rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
@@ -1975,7 +1996,7 @@ class Trainer():
 
 if __name__ == "__main__":
     from arguments import get_args
-    args, model_param, loader_param, loss_param = get_args()
+    args, dataset_param, model_param, loader_param, loss_param = get_args()
 
     print (args)
 
@@ -1991,5 +2012,16 @@ if __name__ == "__main__":
                     interactive=args.interactive,
                     out_dir=args.out_dir,
                     wandb_prefix=args.wandb_prefix,
-                    model_dir=args.model_dir)
+                    model_dir=args.model_dir,
+                    dataset_param=dataset_param,
+                    n_valid_pdb=args.n_valid_pdb,
+                    n_valid_pdb_atomize=args.n_valid_pdb_atomize,
+                    n_valid_homo=args.n_valid_homo,
+                    n_valid_compl=args.n_valid_compl,
+                    n_valid_na_compl=args.n_valid_na_compl,
+                    n_valid_rna=args.n_valid_rna,
+                    n_valid_sm_compl=args.n_valid_sm_compl,
+                    n_valid_sm_compl_ligclus=args.n_valid_sm_compl_ligclus,
+                    n_valid_sm_compl_strict=args.n_valid_sm_compl_strict,
+                    n_valid_sm=args.n_valid_sm)
     train.run_model_training(torch.cuda.device_count())

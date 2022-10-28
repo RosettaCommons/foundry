@@ -2,6 +2,8 @@ import argparse
 import data_loader
 import os, datetime
 
+DATASET_PARAMS = ['fraction_fb', 'fraction_compl', 'fraction_na_compl', 'fraction_rna', 'fraction_sm_compl', \
+                   'fraction_sm' ]
 TRUNK_PARAMS = ['n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_block',\
                 'd_msa', 'd_msa_full', 'd_pair', 'd_templ',\
                 'n_head_msa', 'n_head_pair', 'n_head_templ', 'd_hidden', 'd_hidden_templ', 'p_drop', 'rbf_sigma']
@@ -44,15 +46,18 @@ def get_args():
             help='Output folder for model weights. [models/]')
     train_group.add_argument('-interactive', action='store_true', default=False,
             help='Start training in interactive mode. [False]')
-    train_group.add_argument('-n_valid_pdb', type=int, default=None)
-    train_group.add_argument('-n_valid_homo', type=int, default=None)
-    train_group.add_argument('-n_valid_compl', type=int, default=None)
-    train_group.add_argument('-n_valid_na_compl', type=int, default=None)
-    train_group.add_argument('-n_valid_rna', type=int, default=None)
-    train_group.add_argument('-n_valid_sm_compl', type=int, default=None)
-    train_group.add_argument('-n_valid_sm_compl_ligclus', type=int, default=None)
-    train_group.add_argument('-n_valid_sm_compl_strict', type=int, default=None)
-    train_group.add_argument('-n_valid_sm', type=int, default=None)
+    train_group.add_argument('-n_valid_pdb', type=int, default=100)
+    train_group.add_argument('-n_valid_pdb_atomize', type=int, default=100)
+    train_group.add_argument('-n_valid_homo', type=int, default=100)
+    train_group.add_argument('-n_valid_compl', type=int, default=100)
+    train_group.add_argument('-n_valid_neg', type=int, default=0)
+    train_group.add_argument('-n_valid_na_compl', type=int, default=100)
+    train_group.add_argument('-n_valid_na_neg', type=int, default=0)
+    train_group.add_argument('-n_valid_rna', type=int, default=100)
+    train_group.add_argument('-n_valid_sm_compl', type=int, default=100)
+    train_group.add_argument('-n_valid_sm_compl_ligclus', type=int, default=100)
+    train_group.add_argument('-n_valid_sm_compl_strict', type=int, default=100)
+    train_group.add_argument('-n_valid_sm', type=int, default=100)
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")
@@ -81,6 +86,21 @@ def get_args():
     data_group.add_argument('-cluster_ligands', action='store_true', default=False,
             help="cluster protein/sm. mol examples by ligand similarity (downsamples "\
                  "examples with common ligands like ATP, heme, etc [False]")
+    
+    # dataset parameters
+    dataset_group = parser.add_argument_group("data loading parameters")
+    dataset_group.add_argument('-fraction_fb', type=float, default=0.0, 
+            help="how often to sample AF2 predictions from FB during training")
+    dataset_group.add_argument('-fraction_compl', type=float, default=0.18, 
+            help="how often to sample protein-protein complexes during training")
+    dataset_group.add_argument('-fraction_na_compl', type=float, default=0.18,
+            help="how often to sample protein-nucleic acid complexes during training")
+    dataset_group.add_argument('-fraction_rna', type=float, default=0.09,
+            help="how often to sample rna during training")
+    dataset_group.add_argument('-fraction_sm_compl', type=float, default=0.28,
+            help="how often to sample protein small molecule complexes during training")
+    dataset_group.add_argument('-fraction_sm', type=float, default=0.09,
+            help="how often to sample small molecule crystals during training")
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")
@@ -188,6 +208,9 @@ def get_args():
     loader_param = data_loader.set_data_loader_params(args)
 
     # make dictionary for each parameters
+    dataset_param = {}
+    for param in DATASET_PARAMS:
+        dataset_param[param] = getattr(args, param)
     trunk_param = {}
     for param in TRUNK_PARAMS:
         trunk_param[param] = getattr(args, param)
@@ -212,4 +235,4 @@ def get_args():
                   'w_dih', 'w_clash', 'w_hb', 'lj_lin']:
         loss_param[param] = getattr(args, param)
 
-    return args, trunk_param, loader_param, loss_param
+    return args, dataset_param, trunk_param, loader_param, loss_param
