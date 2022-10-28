@@ -174,8 +174,8 @@ class Str2Str(nn.Module):
             d_state=SE3_param['l0_out_features'],
             p_drop=p_drop)
 
-        #self.nextra_l0 = nextra_l0
-        #self.nextra_l1 = nextra_l1
+        self.nextra_l0 = nextra_l0
+        self.nextra_l1 = nextra_l1
 
         self.reset_parameter()
 
@@ -552,8 +552,8 @@ class IterativeSimulator(nn.Module):
                                        SE3_param=SE3_ref_param,
                                        rbf_sigma=rbf_sigma,
                                        p_drop=p_drop,
-                                    #    nextra_l0=2*NTOTALDOFS,
-                                    #    nextra_l1=6 
+                                       nextra_l0=2*NTOTALDOFS,
+                                       nextra_l1=6 
                                        )
 
         # Fine-tuning all-atom SE(3) refinement
@@ -623,8 +623,6 @@ class IterativeSimulator(nn.Module):
             dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
             extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
             extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
-            extra_l0 =None
-            extra_l1= None
 
             xyz, state, alpha = self.str_refiner(
                 msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats,
