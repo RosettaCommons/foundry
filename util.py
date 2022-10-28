@@ -1,3 +1,4 @@
+from asyncio.proactor_events import _ProactorBaseWritePipeTransport
 import sys
 
 import numpy as np
@@ -294,6 +295,27 @@ def xyz_to_frame_xyz(xyz, seq_unmasked, atom_frames):
         frames_reindex[:, i, :] = (i+atom_frames[..., i, :, 0])*natoms + atom_frames[..., i, :, 1]
     frames_reindex = frames_reindex.long()
     xyz_frame[atoms, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
+    return xyz_frame
+
+def xyz_frame_from_rotation_mask(xyz,rotation_mask, atom_frames):
+    """
+    function to get xyz_frame for l1 feature in Structure module
+    xyz (1, L, natoms, 3)
+    rotation_mask (1, L)
+    atom_frames (1, L, 3, 2)
+    """
+    xyz_frame = xyz.clone()
+    if torch.all(~rotation_mask):
+        return xyz_frame
+
+    atom_crds = xyz_frame[rotation_mask]
+    atom_L, natoms, _ = atom_crds.shape
+    frames_reindex = torch.zeros(atom_frames.shape[:-1])
+    
+    for i in range(atom_L):
+        frames_reindex[:, i, :] = (i+atom_frames[..., i, :, 0])*natoms + atom_frames[..., i, :, 1]
+    frames_reindex = frames_reindex.long()
+    xyz_frame[rotation_mask, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
     return xyz_frame
 
 def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
