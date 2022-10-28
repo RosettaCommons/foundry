@@ -231,13 +231,14 @@ def get_chirals(obmol, xyz):
         '''
 
         # detect stereo centers
-        stereo = [a for a in openbabel.OBMolAtomIter(obmol)
-                  if (a.GetHvyDegree()==3 or a.GetHvyDegree()==4) and a.GetHyb()!=2]
-
+#        stereo = [a for a in openbabel.OBMolAtomIter(obmol)
+#                  if (a.GetHvyDegree()==3 or a.GetHvyDegree()==4) and a.GetHyb()!=2]
+        stereo = openbabel.OBStereoFacade(obmol)
+        stereo_atoms = [obmol.GetAtom(i+1) for i in range(obmol.NumAtoms()) if stereo.HasTetrahedralStereo(i)]
         angle = np.arcsin(1/3**0.5) # perfect tetrahedral geometry
 
         chirals = []
-        for o in stereo:
+        for o in stereo_atoms:
             neigh = [b.GetIdx() for b in openbabel.OBAtomAtomIter(o)]
             if len(neigh)==3:
                 chirals.append([o.GetIdx(),*neigh,angle])
