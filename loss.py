@@ -794,7 +794,6 @@ def calc_chiral_grads(xyz, chirals):
         return (torch.zeros(xyz.shape, device=xyz.device),) # autograd returns a tuple..
     return torch.autograd.grad(l, xyz)
 
-
 def calc_pseudo_dih(pred, true, eps=1e-6):
     '''
     calculate pseudo CA dihedral angle and put loss on them
