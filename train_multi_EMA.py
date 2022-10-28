@@ -1356,9 +1356,9 @@ class Trainer():
                     print('saving error',item)
                     raise e
                 writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_true.pdb', 
-                    torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
+                        torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask], bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
                 writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_pred.pdb', 
-                    torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask])
+                    torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask], bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
 
             local_tot += loss.detach()*self.ACCUM_STEP
             if local_loss is None:
@@ -1602,9 +1602,9 @@ class Trainer():
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_prev.pdb',
                         torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_true.pdb',
-                        torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
+                        torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask], bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_pred.pdb',
-                        torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask])
+                        torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask], bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
 
                 counter += 1
 
