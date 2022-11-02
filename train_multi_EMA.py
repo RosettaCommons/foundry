@@ -1,5 +1,6 @@
 import sys, os, time, datetime, subprocess, shutil
 import numpy as np
+import pandas as pd
 from copy import deepcopy
 from collections import OrderedDict
 import wandb
@@ -704,7 +705,7 @@ class Trainer():
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
+        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
         #define dataset & data loader
@@ -1016,25 +1017,25 @@ class Trainer():
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
                 epoch, verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
                 epoch, header="Homo", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
                 epoch, header="Hetero", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
                 epoch, header="NA", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
                 world_size, epoch, header="NAfs", verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
                 epoch, header="RNA", verbose = self.eval)
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
+            valid_tot, valid_loss, valid_acc, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl", verbose = self.eval) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", verbose = self.eval) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl (strict)", verbose = self.eval) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
                 rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
@@ -1409,7 +1410,7 @@ class Trainer():
 
     def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False, print_header=False):
         if len(valid_loader) == 0:
-            return None, None, None
+            return None, None, None, None
 
         valid_tot = 0.0
         valid_loss = None
@@ -1420,6 +1421,9 @@ class Trainer():
 
         out_dir = self.out_dir+f'/valid_ep{epoch}{"_eval" if verbose else ""}/'
         os.makedirs(out_dir, exist_ok=True)
+
+        if self.eval:
+            records = []
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
@@ -1429,7 +1433,7 @@ class Trainer():
                 if torch.is_tensor(item) and torch.all(item==-1):
                     continue
 
-                save_pdbs = np.random.rand()<=0.1 or verbose
+                save_pdbs = np.random.rand()<=0.1 or self.eval
 
                 # transfer inputs to device
                 B, _, N, L = msa.shape
@@ -1567,13 +1571,28 @@ class Trainer():
                 valid_loss += torch.stack(list(loss_dict.values()))
                 valid_acc += acc_s.detach()
 
+                # records results
+                if task[0].startswith('sm_compl'):
+                    name = item[2][0][0].replace('.mol2','')
+                elif task[0]=='sm_only':
+                    name = item[0]
+                else:
+                    name = item[0][0]
+                if self.eval:
+                    record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)
+                    record.update({k:float(v) for k,v in loss_dict.items()})
+                    records.append(record)
+                    
                 if save_pdbs:
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_prev.pdb',
-                        torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_true.pdb',
-                        torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask])
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_pred.pdb',
-                        torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask])
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_prev.pdb',
+                        torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
+                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_true.pdb',
+                        torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask],
+                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_pred.pdb',
+                        torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask],
+                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
 
                 counter += 1
 
@@ -1589,6 +1608,16 @@ class Trainer():
         valid_loss = valid_loss.cpu().detach().numpy()
         valid_acc = valid_acc.cpu().detach().numpy()
         
+        if self.eval:
+            # gather per-example losses
+            if rank == 0:
+                all_records = [None]*world_size 
+                dist.gather_object(records, all_records, dst=0)
+            else:
+                dist.gather_object(records, dst=0)
+
+        loss_df = None
+
         if rank == 0:
             if self.wandb_prefix is not None:
                 log_dict = {f"Valid_{header}":{task[0]:loss_dict}}
@@ -1604,7 +1633,15 @@ class Trainer():
                     " ".join(["%8.4f"%l for l in valid_loss]),\
                     valid_acc[0], valid_acc[1], valid_acc[2])) 
             sys.stdout.flush()
-        return valid_tot, valid_loss, valid_acc
+
+            if self.eval:
+                # save per-example losses
+                all_records_ = []
+                for records in all_records:
+                    all_records_.extend(records)
+                loss_df = pd.DataFrame.from_records(all_records_)
+
+        return valid_tot, valid_loss, valid_acc, loss_df
 
     def valid_ppi_cycle(self, ddp_model, valid_pos_loader, valid_neg_loader, rank, gpu, world_size, epoch, header='Protein', report_interface=True, verbose=False):
         valid_tot = 0.0

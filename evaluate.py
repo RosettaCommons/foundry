@@ -1,5 +1,6 @@
 import sys, os, time, datetime, subprocess, shutil
 import numpy as np
+import pandas as pd
 from copy import deepcopy
 from collections import OrderedDict
 import torch
@@ -272,14 +273,23 @@ class Evaluator(Trainer):
             #    world_size, epoch, header="NAfs", print_header=(epoch==self.start_epoch))
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
             #    epoch, header="RNA", print_header=(epoch==self.start_epoch))
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
+            df_s = []
+            valid_tot, valid_loss, valid_acc, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl", print_header=(epoch==self.start_epoch)) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", print_header=(epoch==self.start_epoch)) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
                 rank, gpu, world_size, epoch, header="SM Compl (strict)", print_header=(epoch==self.start_epoch)) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
                 rank, gpu, world_size, epoch, header="SM_CSD", print_header=(epoch==self.start_epoch)) 
+            df_s.append(loss_df)
+
+            if rank==0:
+                loss_df = pd.concat(df_s)
+                loss_df.to_csv(self.out_dir+f'/loss_per_ex_valid_ep{epoch}.csv')
 
         dist.destroy_process_group()
 
@@ -300,7 +310,7 @@ if __name__ == "__main__":
                     batch_size=args.batch_size,
                     accum_step=args.accum,
                     maxcycle=args.maxcycle,
-                    eval=args.eval,
+                    eval=True,
                     start_epoch=args.start_epoch,
                     interactive=args.interactive,
                     out_dir=args.out_dir,
