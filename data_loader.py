@@ -69,7 +69,7 @@ def set_data_loader_params(args):
         "VAL_SM_LIGCLUS"   : "%s/list_v02_smcompl_ligclusvalid_20221018.csv"%sm_compl_dir, 
         "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221018.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221025.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221031.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -95,6 +95,7 @@ def set_data_loader_params(args):
         "MINATOMS"         : 5,
         "MAXATOMS"         : 100,
         "MAXSIM"           : 0.85,
+        "MAXNSYMM"         : 1024,
         "CLUSTER_LIGANDS"  : False
     }
     for param in params:
@@ -372,10 +373,7 @@ def get_train_valid_set(params, OFFSET=1000000):
             ]
             return df
 
-        def _make_entry(row):
-            return ((row.CHAINID, row.HASH, row.LIGANDS), row.LEN_EXIST, row.WEIGHT)
-
-        def _make_example_dict(df, make_entry_func=_make_entry, cluster_key='CLUSTER'):
+        def _make_example_dict(df, make_entry_func, cluster_key='CLUSTER'):
             """Converts a dataframe of training examples to dictionary where keys are cluster IDs and values
                are lists of training examples formatted according to the function `make_entry_func`."""
             data_dict = {}
@@ -389,10 +387,12 @@ def get_train_valid_set(params, OFFSET=1000000):
 
         df = _load_df(params['SM_LIST'])
         df = df[
-            ~df.LIGANDS.apply(lambda x: '1fcv_GCU_1_A_405__B___.mol2' in x) & # tanimoto neighbors=0, weight=Inf
-            (df.CHAINID != '6uiw_A') & # causes GPU OOM for some reason
-            (df.CHAINID != '6v3i_A') # another error-causing example that we will investigate later
+            ~df.LIGANDS.apply(lambda x: '1fcv_GCU_1_A_405__B___.mol2' in x) # tanimoto neighbors=0, weight=Inf
         ]
+            #(df.CHAINID != '6uiw_A') & # causes GPU OOM for some reason
+            #(df.CHAINID != '6h74_B') & # causes GPU OOM
+            #(df.CHAINID != '6gx4_B') & # causes GPU OOM
+            #(df.CHAINID != '6v3i_A') # another error-causing example that we will investigate later
 
         # weight each example by various factors
         seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
@@ -406,8 +406,10 @@ def get_train_valid_set(params, OFFSET=1000000):
         df['WEIGHT'] = seq_len_factor * multi_lig_factor * ligand_cluster_factor * seq_cluster_factor
 
         # compile protein-sm. mol training & validation sets
-        train_sm_compl = _make_example_dict(df[~df.CLUSTER.isin(val_pdb_ids)])
-        valid_sm_compl = _make_example_dict(df[df.CLUSTER.isin(val_pdb_ids)])
+        def _make_entry(row):
+            return ((row.CHAINID, row.HASH, row.LIGANDS), row.LEN_EXIST, row.WEIGHT)
+        train_sm_compl = _make_example_dict(df[~df.CLUSTER.isin(val_pdb_ids)], make_entry_func=_make_entry)
+        valid_sm_compl = _make_example_dict(df[df.CLUSTER.isin(val_pdb_ids)], make_entry_func=_make_entry)
 
         # protein-small mol cluster weights are the sum of cluster member weights
         sm_compl_IDs = list(train_sm_compl.keys())
@@ -418,11 +420,11 @@ def get_train_valid_set(params, OFFSET=1000000):
         # stricter versions of protein-small mol validation set
         df = _load_df(params['VAL_SM_LIGCLUS']) # deduplicated ligand clusters
         df['WEIGHT'] = 1 # examples have already been redundancy-reduced
-        valid_sm_compl_ligclus = _make_example_dict(df)
+        valid_sm_compl_ligclus = _make_example_dict(df, make_entry_func=_make_entry)
 
         df = _load_df(params['VAL_SM_STRICT']) # removed ligand cluster overlap with train
         df['WEIGHT'] = 1 # examples have already been redundancy-reduced
-        valid_sm_compl_strict = _make_example_dict(df)
+        valid_sm_compl_strict = _make_example_dict(df, make_entry_func=_make_entry)
 
         # read homo-oligomer list
         homo = {}
@@ -1525,7 +1527,12 @@ def loader_sm_compl(item, params, pick_top=True,
             mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
         else:
             print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same '\
+
                   f'atom order: {item[0]}: {ligands[i_lig]} vs {alt_lig}. Skipping latter ligand.')
+    if xyz_sm.shape[0] > params['MAXNSYMM']: # clip no. of symmetry variants to save GPU memory
+        xyz_sm = xyz_sm[:params['MAXNSYMM']]
+        mask_sm = mask_sm[:params['MAXNSYMM']]
+
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
@@ -1786,6 +1793,9 @@ def loader_sm(item, params, pick_top=True):
     a3m = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
+
+    if xyz_sm.shape[0] > params['MAXNSYMM']: # clip no. of symmetry variants to save GPU memory
+        xyz_sm = xyz_sm[:params['MAXNSYMM']]
 
     N_symmetry, sm_L, _ = xyz_sm.shape
 
