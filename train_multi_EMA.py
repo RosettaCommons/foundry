@@ -30,7 +30,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 #torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -49,7 +49,7 @@ torch.set_num_threads(4)
 N_EXAMPLE_PER_EPOCH = 12288
 #N_EXAMPLE_PER_EPOCH = 6144
 #N_EXAMPLE_PER_EPOCH = 1536
-#N_EXAMPLE_PER_EPOCH = 16
+#N_EXAMPLE_PER_EPOCH = 1
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 5,
@@ -782,7 +782,7 @@ class Trainer():
             )
 
         train_set = DistilledDataset(
-            pdb_IDs, loader_pdb, pdb_dict,
+            pdb_IDs, loader_atomize_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
             #neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,

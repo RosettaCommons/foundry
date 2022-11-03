@@ -1660,7 +1660,7 @@ def loader_sm_compl(item, params, pick_top=True,
            chain_idx, False, False, frames, bond_feats, "sm_compl", item
 
 
-def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, n_res_atomize=5, flank=0, random_noise=5.0):
+def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, n_res_atomize=3, flank=0, random_noise=5.0):
     """ load pdb with portions represented as atoms instead of residues """
     pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
     a3m = get_msa(params['PDB_DIR'] + '/a3m/' + item[1][:3] + '/' + item[1] + '.a3m.gz', item[1])
@@ -1739,8 +1739,11 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
     bond_feats[i_start-1, Ls[0]] = 6
     bond_feats[Ls[0], i_start-1] = 6
-    bond_feats[i_start+n_res_atomize+flank, Ls[0]+int(last_C.numpy())] = 6
-    bond_feats[Ls[0]+int(last_C.numpy()), i_start+n_res_atomize+flank] = 6
+    if len(last_C.numpy())==1:
+        bond_feats[i_start+n_res_atomize+flank, Ls[0]+int(last_C.numpy())] = 6
+        bond_feats[Ls[0]+int(last_C.numpy()), i_start+n_res_atomize+flank] = 6
+    else:
+        print(f"ERROR: {item} has multiple values for last_C, {last_C.numpy()} with i_start= {i_start}")
 
     # handle res_idx
     last_res = idx[-1]

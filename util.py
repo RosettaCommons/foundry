@@ -1045,38 +1045,41 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
     return bond_feats
 
 ### Generate atom features for proteins ###
-def atomize_protein(sel_res, msa, xyz, mask, n_res_atomize=5):
-    """ given an index sel_res, make the following flank residues into "atom" nodes """
-    residues_atomize = msa[0, sel_res:sel_res+n_res_atomize]
+def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
+    """ given an index i_start, make the following flank residues into "atom" nodes """
+    residues_atomize = msa[0, i_start:i_start+n_res_atomize]
     residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
-    residue_atomize_mask = mask[sel_res:sel_res+n_res_atomize].float()
-    xyz = torch.nan_to_num(xyz)
+    residue_atomize_mask = mask[i_start:i_start+n_res_atomize].float()
+    xyz_atomize = xyz[i_start:i_start+n_res_atomize]
 
     # handle symmetries
     xyz_alt = torch.zeros_like(xyz.unsqueeze(0))
     xyz_alt.scatter_(2, long2alt[msa[0],:,None].repeat(1,1,1,3), xyz.unsqueeze(0))
-    coords_stack = torch.stack((xyz[sel_res:sel_res+n_res_atomize], xyz_alt[0, sel_res:sel_res+n_res_atomize]), dim=0)
+    xyz_alt_atomize = xyz_alt[0, i_start:i_start+n_res_atomize]
+
+    coords_stack = torch.stack((xyz_atomize, xyz_alt_atomize), dim=0)
     swaps = (coords_stack[0] == coords_stack[1]).all(dim=1).all(dim=1).squeeze() #checks whether theres a swap at each position
     swaps = torch.nonzero(~swaps).squeeze() # indices with a swap eg. [2,3]
     if swaps.numel() != 0:
         # if there are residues with alternate numbering scheme, create a stack of coordinate with each combo of swaps
         combs = torch.combinations(torch.tensor([0,1]), r=swaps.numel(), with_replacement=True) #[[0,0], [0,1], [1,1]]
-        stack = torch.stack((combs, swaps.repeat(swaps.numel()+1,1)), dim=-1).squeeze() 
+        stack = torch.stack((combs, swaps.repeat(swaps.numel()+1,1)), dim=-1).squeeze()
         coords_stack = coords_stack.repeat(swaps.numel()+1,1,1,1)
         nat_symm = coords_stack[0].repeat(swaps.numel()+1,1,1,1) # (N_symm, num_atomize_residues, natoms, 3)
-        swapped_coords = coords_stack[stack[...,0], stack[...,1]].squeeze(1) # 
+        swapped_coords = coords_stack[stack[...,0], stack[...,1]].squeeze(1) #
         nat_symm[:,swaps] = swapped_coords
     else:
-        nat_symm = xyz.unsqueeze(0)
+        nat_symm = xyz_atomize.unsqueeze(0)
     ra = residue_atomize_mask.nonzero()
-    lig_seq = torch.tensor([aa2num[residues_atom_types[r][a]] for r,a in ra])
+    lig_seq = torch.tensor([aa2num[residues_atom_types[r][a]] if residues_atom_types[r][a] in aa2num else aa2num["ATM"] for r,a in ra])
     ins = torch.zeros_like(lig_seq)
 
     r,a = ra.T
+    last_C = torch.all(ra==torch.tensor([r[-1],2]),dim=1).nonzero()
     lig_xyz = torch.zeros((len(ra), 3))
     lig_xyz = nat_symm[:, r, a]
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     frames = get_atomized_protein_frames(residues_atomize, ra)
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
 
-    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats
+    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C
