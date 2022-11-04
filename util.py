@@ -1034,7 +1034,7 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
             bond_feats[start_idx, end_idx] = aabtypes[res][j]
             bond_feats[end_idx, start_idx] = aabtypes[res][j]
         #accounting for peptide bonds
-        if i > 1:
+        if i > 0:
             if (i-1, 2) not in ra2ind or (i, 0) not in ra2ind:
                 #skip bonds with atoms that aren't observed in the structure
                 continue

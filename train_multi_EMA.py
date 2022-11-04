@@ -1023,7 +1023,7 @@ class Trainer():
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
                 epoch, verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
-                epoch, verbose = self.eval)
+                epoch, header='Monomer atomize', verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
                 epoch, header="Homo", verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
