@@ -332,7 +332,7 @@ def calc_BB_bond_geom(
 
     return blen_loss+bang_loss
 
-def calc_atom_bond_loss(pred, true, bond_feats, clamp=4, eps=1e-6):
+def calc_atom_bond_loss(pred, true, bond_feats, seq, clamp=4, eps=1e-6):
     """
     L2 loss on distances between bonded atoms
     """

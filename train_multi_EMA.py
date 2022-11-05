@@ -49,7 +49,7 @@ torch.set_num_threads(4)
 N_EXAMPLE_PER_EPOCH = 12288
 #N_EXAMPLE_PER_EPOCH = 6144
 #N_EXAMPLE_PER_EPOCH = 1536
-#N_EXAMPLE_PER_EPOCH = 1
+#N_EXAMPLE_PER_EPOCH = 32
 
 LOAD_PARAM = {'shuffle': False,
               'num_workers': 5,
@@ -478,7 +478,7 @@ class Trainer():
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
-        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats)
+        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats, seq)
         if w_atom_bond > 0.0:
             tot_loss += w_atom_bond*atom_bond_loss
         loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
@@ -1434,7 +1434,6 @@ class Trainer():
             ddp_model.eval() # change it to eval mode
             for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, task, item in valid_loader:
                 # skip known bad training examples
-                # loader will print warning message with item info for followup later
                 if torch.is_tensor(item) and torch.all(item==-1):
                     continue
 
@@ -1588,6 +1587,7 @@ class Trainer():
                     record.update({k:float(v) for k,v in loss_dict.items()})
                     records.append(record)
                     
+                #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_prev.pdb',
                         torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
