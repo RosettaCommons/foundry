@@ -336,11 +336,28 @@ def calc_atom_bond_loss(pred, true, bond_feats, clamp=4, eps=1e-6):
     """
     L2 loss on distances between bonded atoms
     """
+    # intra-ligand bonds
     atom_bonds = (bond_feats>0)*(bond_feats < 5)
     b, i, j = torch.where(atom_bonds>0)
     nat_dist = torch.sum(torch.square(true[:,i,1]-true[:,j,1]),dim=-1)
     pred_dist = torch.sum(torch.square(pred[:,i,1]-pred[:,j,1]),dim=-1)
-    bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))/(atom_bonds.sum()+eps)
+    lig_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))
+
+    # bonds between protein residues and ligand atoms (i.e. atomized protein)
+    inter_bonds = bond_feats==6 
+    b, i, j = torch.where(inter_bonds)
+    a = (seq[:,i]<22) & (seq[:,j]==39) # res N - atom C
+    b = (seq[:,i]<22) & (seq[:,j]==55) # res C - atom N
+    c = (seq[:,i]==39) & (seq[:,j]<22) # atom C - res N
+    d = (seq[:,i]==55) & (seq[:,j]<22) # atom N - res C
+    i_atom = 0*a + 2*b + 1*c + 1*d # (B, N_res_atom_bonds)
+    j_atom = 1*a + 1*b + 0*c + 2*d # (B, N_res_atom_bonds)
+    nat_dist = torch.sum(torch.square(true[0,i,i_atom[0],:]-true[0,j,j_atom[0],:]), dim=-1) # assumes B=1
+    pred_dist = torch.sum(torch.square(pred[0,i,i_atom[0],:]-pred[0,j,j_atom[0],:]), dim=-1)
+    inter_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))
+
+    bond_dist_loss = (lig_dist_loss + inter_dist_loss)/(atom_bonds.sum() + inter_bonds.sum() + eps)
+
     # enforce LAS constraints between atoms 2 bonds away and aromatic groups
     atom_bonds_np = atom_bonds[0].cpu().numpy()
     G = nx.from_numpy_matrix(atom_bonds_np)
