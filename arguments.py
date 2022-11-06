@@ -2,15 +2,24 @@ import argparse
 import data_loader
 import os, datetime
 
-DATASET_PARAMS = ['fraction_fb', 'fraction_compl', 'fraction_na_compl', 'fraction_rna', 'fraction_sm_compl', \
-                   'fraction_sm' ]
-TRUNK_PARAMS = ['n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_block',\
-                'd_msa', 'd_msa_full', 'd_pair', 'd_templ',\
-                'n_head_msa', 'n_head_pair', 'n_head_templ', 'd_hidden', 'd_hidden_templ', 'p_drop', 'rbf_sigma']
-
-SE3_PARAMS = ['num_layers', 'num_channels', 'num_degrees', 'n_heads', 'div', 
-              'l0_in_features', 'l0_out_features', 'l1_in_features', 'l1_out_features', 'num_edge_features'
-             ]
+DATASET_PARAMS = [
+    'fraction_pdb','fraction_fb', 'fraction_compl', 'fraction_na_compl',
+    'fraction_rna', 'fraction_sm_compl', 'fraction_sm',
+    'fraction_atomize_pdb','n_train', 'n_valid_pdb', 'n_valid_atomize_pdb',
+    'n_valid_homo', 'n_valid_compl', 'n_valid_neg', 'n_valid_na_compl',
+    'n_valid_na_neg', 'n_valid_rna', 'n_valid_sm_compl',
+    'n_valid_sm_compl_ligclus', 'n_valid_sm_compl_strict', 'n_valid_sm',
+]
+TRUNK_PARAMS = [
+    'n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_block',
+    'd_msa', 'd_msa_full', 'd_pair', 'd_templ', 'n_head_msa', 'n_head_pair',
+    'n_head_templ', 'd_hidden', 'd_hidden_templ', 'p_drop', 'rbf_sigma'
+]
+SE3_PARAMS = [
+    'num_layers', 'num_channels', 'num_degrees', 'n_heads', 'div',
+    'l0_in_features', 'l0_out_features', 'l1_in_features', 'l1_out_features',
+    'num_edge_features'
+]
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -46,18 +55,6 @@ def get_args():
             help='Output folder for model weights. [models/]')
     train_group.add_argument('-interactive', action='store_true', default=False,
             help='Start training in interactive mode. [False]')
-    train_group.add_argument('-n_valid_pdb', type=int, default=100)
-    train_group.add_argument('-n_valid_pdb_atomize', type=int, default=100)
-    train_group.add_argument('-n_valid_homo', type=int, default=100)
-    train_group.add_argument('-n_valid_compl', type=int, default=100)
-    train_group.add_argument('-n_valid_neg', type=int, default=0)
-    train_group.add_argument('-n_valid_na_compl', type=int, default=100)
-    train_group.add_argument('-n_valid_na_neg', type=int, default=0)
-    train_group.add_argument('-n_valid_rna', type=int, default=100)
-    train_group.add_argument('-n_valid_sm_compl', type=int, default=100)
-    train_group.add_argument('-n_valid_sm_compl_ligclus', type=int, default=100)
-    train_group.add_argument('-n_valid_sm_compl_strict', type=int, default=100)
-    train_group.add_argument('-n_valid_sm', type=int, default=100)
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")
@@ -86,9 +83,17 @@ def get_args():
     data_group.add_argument('-cluster_ligands', action='store_true', default=False,
             help="cluster protein/sm. mol examples by ligand similarity (downsamples "\
                  "examples with common ligands like ATP, heme, etc [False]")
+    data_group.add_argument('-nres_atomize_min', type=int, default=3,
+            help="minimum number of residues to atomize [3]")
+    data_group.add_argument('-nres_atomize_max', type=int, default=5,
+            help="maximum number of residues to atomize [5]")
+    data_group.add_argument('-atomize_flank', type=int, default=0,
+            help="flanking residues to remove when atomizing [0]")
     
     # dataset parameters
     dataset_group = parser.add_argument_group("data loading parameters")
+    dataset_group.add_argument('-fraction_pdb', type=float, default=0.18, 
+            help="how often to sample PDB monomers during training")
     dataset_group.add_argument('-fraction_fb', type=float, default=0.0, 
             help="how often to sample AF2 predictions from FB during training")
     dataset_group.add_argument('-fraction_compl', type=float, default=0.18, 
@@ -101,6 +106,21 @@ def get_args():
             help="how often to sample protein small molecule complexes during training")
     dataset_group.add_argument('-fraction_sm', type=float, default=0.09,
             help="how often to sample small molecule crystals during training")
+    dataset_group.add_argument('-fraction_atomize_pdb', type=float, default=0.09,
+            help="how often to sample atomized pdb monomers during training")
+    dataset_group.add_argument('-n_train', type=int, default=12288)
+    dataset_group.add_argument('-n_valid_pdb', type=int, default=100)
+    dataset_group.add_argument('-n_valid_homo', type=int, default=100)
+    dataset_group.add_argument('-n_valid_compl', type=int, default=100)
+    dataset_group.add_argument('-n_valid_neg', type=int, default=0)
+    dataset_group.add_argument('-n_valid_na_compl', type=int, default=100)
+    dataset_group.add_argument('-n_valid_na_neg', type=int, default=0)
+    dataset_group.add_argument('-n_valid_rna', type=int, default=100)
+    dataset_group.add_argument('-n_valid_sm_compl', type=int, default=100)
+    dataset_group.add_argument('-n_valid_sm_compl_ligclus', type=int, default=100)
+    dataset_group.add_argument('-n_valid_sm_compl_strict', type=int, default=100)
+    dataset_group.add_argument('-n_valid_sm', type=int, default=100)
+    dataset_group.add_argument('-n_valid_atomize_pdb', type=int, default=100)
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")
@@ -169,7 +189,7 @@ def get_args():
             help="Weight on distd in loss function [1.0]")
     loss_group.add_argument('-w_str', type=float, default=10.0,
             help="Weight on strd in loss function [10.0]")
-    loss_group.add_argument('-w_inter_fape', type=float, default=0,
+    loss_group.add_argument('-w_inter_fape', type=float, default=2.0,
             help="Weight on inter-chain backbone fape in loss function [2.0]")
     loss_group.add_argument('-w_lig_fape', type=float, default=10,
             help="Weight on ligand fape in loss function [10.0]")

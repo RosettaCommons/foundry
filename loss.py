@@ -692,7 +692,7 @@ def calc_chiral_loss(pred, chirals):
     if chirals.shape[1] == 0:
         return torch.tensor(0.0, device=pred.device)
     chiral_dih = pred[:, chirals[..., :-1].long(), 1]
-    pred_dih = get_dih(chiral_dih[...,0, :], chiral_dih[...,1, :], chiral_dih[...,2, :], chiral_dih[...,3, :])
+    pred_dih = get_dih(chiral_dih[...,0, :], chiral_dih[...,1, :], chiral_dih[...,2, :], chiral_dih[...,3, :]) # n_symm, b, n, 36, 3
     l = torch.square(pred_dih-chirals[...,-1]).mean()
     return l
 

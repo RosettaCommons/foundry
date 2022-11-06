@@ -29,7 +29,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 #torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -40,17 +40,8 @@ np.random.seed(6636)
 USE_AMP = False
 torch.set_num_threads(4)
 
-#N_PRINT_TRAIN = 4
-#BATCH_SIZE = 1 * torch.cuda.device_count()
-
-# num structs per epoch
-# must be divisible by #GPUs
-N_EXAMPLE_PER_EPOCH = 6144
-#N_EXAMPLE_PER_EPOCH = 1536
-#N_EXAMPLE_PER_EPOCH = 16
-
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 2,
+              'num_workers': 5,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -116,17 +107,11 @@ class EMA(nn.Module):
 class Trainer():
     def __init__(self, model_name='BFF',
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
-                 model_param={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
-                 eval=False, out_dir=None, wandb_prefix=None, model_dir='models/', dataset_param=None, n_valid_pdb=100,
-                 n_valid_pdb_atomize=100, n_valid_homo=100, n_valid_compl=100, n_valid_neg=0,
-                 n_valid_na_compl=100, n_valid_na_neg=0, n_valid_rna=100, n_valid_sm_compl=100, 
-                 n_valid_sm_compl_ligclus=100, n_valid_sm_compl_strict=100, n_valid_sm=100):
-        self.model_name = model_name #"BFF"
-        #self.model_name = "%s_%d_%d_%d_%d"%(model_name, model_param['n_module'], 
-        #                                    model_param['n_module_str'],
-        #                                    model_param['d_msa'],
-        #                                    model_param['d_pair'])
-        #
+                 model_param={}, loader_param={}, loss_param={}, dataset_param={}, batch_size=1, 
+                 accum_step=1, maxcycle=4, eval=False, out_dir=None, wandb_prefix=None, 
+                 model_dir='models/'):
+
+        self.model_name = model_name 
         self.n_epoch = n_epoch
         self.step_lr = step_lr
         self.init_lr = lr
@@ -134,10 +119,10 @@ class Trainer():
         self.port = port
         self.interactive = interactive
         self.eval = eval
-        #
         self.model_param = model_param
         self.loader_param = loader_param
         self.loss_param = loss_param
+        self.dataset_param = dataset_param
         self.ACCUM_STEP = accum_step
         self.batch_size = batch_size
         self.out_dir = out_dir 
@@ -146,19 +131,6 @@ class Trainer():
             if out_dir[-1] != '/': self.out_dir += '/'
         self.wandb_prefix = wandb_prefix
         self.model_dir = model_dir
-        self.dataset_param = dataset_param
-        self.n_valid_pdb = n_valid_pdb
-        self.n_valid_pdb_atomize = n_valid_pdb_atomize
-        self.n_valid_homo = n_valid_homo
-        self.n_valid_compl = n_valid_compl
-        self.n_valid_neg = n_valid_neg
-        self.n_valid_na_compl = n_valid_na_compl
-        self.n_valid_na_neg = n_valid_na_neg
-        self.n_valid_rna = n_valid_rna
-        self.n_valid_sm_compl = n_valid_sm_compl
-        self.n_valid_sm_compl_ligclus = n_valid_sm_compl_ligclus
-        self.n_valid_sm_compl_strict = n_valid_sm_compl_strict
-        self.n_valid_sm = n_valid_sm
 
         # for all-atom str loss
         self.ti_dev = torsion_indices
@@ -658,6 +630,7 @@ class Trainer():
         if ('MASTER_PORT' not in os.environ):
             os.environ['MASTER_PORT'] = '%d'%self.port
 
+        print('master port',os.environ['MASTER_PORT'])
         if (not self.interactive and "SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
             world_size = int(os.environ["SLURM_NTASKS"])
             rank = int (os.environ["SLURM_PROCID"])
@@ -718,7 +691,7 @@ class Trainer():
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
+        dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
         #define dataset & data loader
@@ -739,20 +712,6 @@ class Trainer():
         sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
         sm_IDs, sm_weights, sm_dict = sm_items
         
-        self.n_train = N_EXAMPLE_PER_EPOCH
- #       self.n_valid_pdb = 100
- #       self.n_valid_pdb_atomize = 0 #100
- #       self.n_valid_homo = 100
- #       self.n_valid_compl = 100
- #       self.n_valid_neg = 0 #len(valid_neg.keys())
- #       self.n_valid_na_compl = 100
- #       self.n_valid_na_neg = 0 #len(valid_na_neg.keys())
- #       self.n_valid_rna = 100
- #       self.n_valid_sm_compl = 100
- #       self.n_valid_sm_compl_ligclus = 100
- #       self.n_valid_sm_compl_strict = 100
- #       self.n_valid_sm = 100
-
         if (rank==0):
             print ('Loaded (training)',
                 len(pdb_IDs),'monomers/homomers,',
@@ -780,18 +739,18 @@ class Trainer():
 
             )
             print ('Using',
-                self.n_valid_pdb,'monomers,',
-                self.n_valid_pdb_atomize,'monomers (atomized),',
-                self.n_valid_homo,'homomers,',
-                self.n_valid_compl,'heteromers,',
-                self.n_valid_neg,'negative heteromers,',
-                self.n_valid_na_compl,'nucleic-acid complexes,',
-                self.n_valid_na_neg,'negative nucleic-acid complexes,',
-                self.n_valid_rna,'RNA structures,',
-                self.n_valid_sm_compl, 'small mol. complexes (fold & dock),',
-                self.n_valid_sm_compl_ligclus, 'small molecule complexes (ligand-clustered),',
-                self.n_valid_sm_compl_strict, 'small molecule complexes (strict),',
-                self.n_valid_sm, "small molecule crystals."
+                self.dataset_param['n_valid_pdb'],'monomers,',
+                self.dataset_param['n_valid_homo'],'homomers,',
+                self.dataset_param['n_valid_compl'],'heteromers,',
+                self.dataset_param['n_valid_neg'],'negative heteromers,',
+                self.dataset_param['n_valid_na_compl'],'nucleic-acid complexes,',
+                self.dataset_param['n_valid_na_neg'],'negative nucleic-acid complexes,',
+                self.dataset_param['n_valid_rna'],'RNA structures,',
+                self.dataset_param['n_valid_sm_compl'], 'small mol. complexes (fold & dock),',
+                self.dataset_param['n_valid_sm_compl_ligclus'], 'small molecule complexes (ligand-clustered),',
+                self.dataset_param['n_valid_sm_compl_strict'], 'small molecule complexes (strict),',
+                self.dataset_param['n_valid_sm'], "small molecule crystals,",
+                self.dataset_param['n_valid_atomize_pdb'],'monomers (atomized)',
             )
 
         train_set = DistilledDataset(
@@ -804,63 +763,64 @@ class Trainer():
             rna_IDs, loader_rna, rna_dict,
             sm_compl_IDs, loader_sm_compl, sm_compl_dict,
             sm_IDs, loader_sm, sm_dict,
+            pdb_IDs, loader_atomize_pdb, pdb_dict,
             homo, 
             self.loader_param,
             native_NA_frac=0.25
         )
 
         valid_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.n_valid_pdb],
+            list(valid_pdb.keys())[:self.dataset_param['n_valid_pdb']],
             loader_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
         valid_homo_set = Dataset(
-            list(valid_homo.keys())[:self.n_valid_homo],
+            list(valid_homo.keys())[:self.dataset_param['n_valid_homo']],
             loader_pdb, valid_homo,
             self.loader_param, homo, p_homo_cut=2.0
         )
         valid_compl_set = DatasetComplex(
-            list(valid_compl.keys())[:self.n_valid_compl],
+            list(valid_compl.keys())[:self.dataset_param['n_valid_compl']],
             loader_complex, valid_compl,
             self.loader_param, negative=False
         )
         valid_na_compl_set = DatasetNAComplex(
-            list(valid_na_compl.keys())[:self.n_valid_na_compl],
+            list(valid_na_compl.keys())[:self.dataset_param['n_valid_na_compl']],
             loader_na_complex, valid_na_compl,
             self.loader_param, negative=False, native_NA_frac=1.0
         )
         valid_na_from_scratch_compl_set = DatasetNAComplex(
-            list(valid_na_compl.keys())[:self.n_valid_na_compl],
+            list(valid_na_compl.keys())[:self.dataset_param['n_valid_na_compl']],
             loader_na_complex, valid_na_compl,
             self.loader_param, negative=False, native_NA_frac=0.0
         )
         valid_rna_set = DatasetRNA(
-            list(valid_rna.keys())[:self.n_valid_rna],
+            list(valid_rna.keys())[:self.dataset_param['n_valid_rna']],
             loader_rna, valid_rna,
             self.loader_param
         )
         valid_sm_compl_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
+            list(valid_sm_compl.keys())[:self.dataset_param['n_valid_sm_compl']],
             loader_sm_compl, valid_sm_compl,
             self.loader_param,
         )
         valid_sm_compl_ligclus_set = DatasetSMComplex(
-            list(valid_sm_compl_ligclus.keys())[:self.n_valid_sm_compl_ligclus],
+            list(valid_sm_compl_ligclus.keys())[:self.dataset_param['n_valid_sm_compl_ligclus']],
             loader_sm_compl, valid_sm_compl_ligclus,
             self.loader_param, task='sm_compl_ligclus'
         )
         valid_sm_compl_strict_set = DatasetSMComplex(
-            list(valid_sm_compl_strict.keys())[:self.n_valid_sm_compl_strict],
+            list(valid_sm_compl_strict.keys())[:self.dataset_param['n_valid_sm_compl_strict']],
             loader_sm_compl, valid_sm_compl_strict,
             self.loader_param, task='sm_compl_strict'
         )
         valid_sm_set = DatasetSM(
-            list(valid_sm.keys())[:self.n_valid_sm],
+            list(valid_sm.keys())[:self.dataset_param['n_valid_sm']],
             loader_sm, valid_sm,
             self.loader_param,
         )
         valid_atomize_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.n_valid_pdb],
+            list(valid_pdb.keys())[:self.dataset_param['n_valid_atomize_pdb']],
             loader_atomize_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
@@ -910,16 +870,18 @@ class Trainer():
             rna_weights,
             sm_compl_weights,
             sm_weights, 
-            num_example_per_epoch=N_EXAMPLE_PER_EPOCH,
+            pdb_weights, # for atomize pdb
+            num_example_per_epoch=self.dataset_param['n_train'],
             num_replicas=world_size, 
             rank=rank, 
-            #fraction_pdb=0.18 # not a real argument but implicit
+            fraction_pdb=self.dataset_param['fraction_pdb'],
             fraction_fb=self.dataset_param['fraction_fb'],
             fraction_compl=self.dataset_param['fraction_compl'],
             fraction_na_compl=self.dataset_param['fraction_na_compl'],
             fraction_rna=self.dataset_param['fraction_rna'],
             fraction_sm_compl=self.dataset_param['fraction_sm_compl'],
             fraction_sm=self.dataset_param['fraction_sm'], 
+            fraction_atomize_pdb=self.dataset_param['fraction_atomize_pdb'], 
             replacement=True
         )
 
@@ -1395,7 +1357,8 @@ class Trainer():
                     local_acc = local_acc.cpu().detach().numpy()
 
                     sys.stdout.write("Local: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f | Max mem %.4f\n"%(\
-                            epoch, self.n_epoch, counter*self.batch_size*world_size, self.n_train, train_time, local_tot, \
+                            epoch, self.n_epoch, counter*self.batch_size*world_size, \
+                            self.dataset_param['n_train'], train_time, local_tot, \
                             " ".join(["%8.4f"%l for l in local_loss]),\
                             local_acc[0], local_acc[1], local_acc[2], max_mem))
 
@@ -1426,14 +1389,15 @@ class Trainer():
         if rank == 0:
             train_time = time.time() - start_time
             sys.stdout.write("Train: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f\n"%(\
-                    epoch, self.n_epoch, self.n_train, self.n_train, train_time, train_tot, \
+                    epoch, self.n_epoch, self.dataset_param['n_train'], self.dataset_param['n_train'], \
+                    train_time, train_tot, \
                     " ".join(["%8.4f"%l for l in train_loss]),\
                     train_acc[0], train_acc[1], train_acc[2]))
             sys.stdout.flush()
             
         return train_tot, train_loss, train_acc
 
-    def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False):
+    def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False, print_header=False):
         if len(valid_loader) == 0:
             return None, None, None
 
@@ -1625,6 +1589,11 @@ class Trainer():
                 log_dict = {f"Valid_{header}":{task[0]:loss_dict}}
                 wandb.log(log_dict)
             train_time = time.time() - start_time
+
+            # print loss names
+            if print_header:
+                sys.stdout.write(f'Header: [epoch/num_epochs] Batch: [examples_seen_in_epoch/examples_per_epoch] Time: time | Total_loss: total_loss | {" ".join(loss_dict.keys())} | precision recall F1 | max_mem \n')
+
             sys.stdout.write("%s: [%04d/%04d] Batch: [%05d/%05d] Time: %16.1f | total_loss: %8.4f | %s | %.4f %.4f %.4f\n"%(\
                     header, epoch, self.n_epoch, world_size*len(valid_loader), world_size*len(valid_loader), train_time, valid_tot, \
                     " ".join(["%8.4f"%l for l in valid_loss]),\
@@ -2013,15 +1982,5 @@ if __name__ == "__main__":
                     out_dir=args.out_dir,
                     wandb_prefix=args.wandb_prefix,
                     model_dir=args.model_dir,
-                    dataset_param=dataset_param,
-                    n_valid_pdb=args.n_valid_pdb,
-                    n_valid_pdb_atomize=args.n_valid_pdb_atomize,
-                    n_valid_homo=args.n_valid_homo,
-                    n_valid_compl=args.n_valid_compl,
-                    n_valid_na_compl=args.n_valid_na_compl,
-                    n_valid_rna=args.n_valid_rna,
-                    n_valid_sm_compl=args.n_valid_sm_compl,
-                    n_valid_sm_compl_ligclus=args.n_valid_sm_compl_ligclus,
-                    n_valid_sm_compl_strict=args.n_valid_sm_compl_strict,
-                    n_valid_sm=args.n_valid_sm)
+                    dataset_param=dataset_param)
     train.run_model_training(torch.cuda.device_count())
