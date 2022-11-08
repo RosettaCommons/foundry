@@ -547,7 +547,8 @@ class IterativeSimulator(nn.Module):
                                                        p_drop=p_drop,
                                                        rbf_sigma=rbf_sigma,
                                                        use_global_attn=False,
-                                                       SE3_param=SE3_param)
+                                                       SE3_param=SE3_param,
+                                                       nextra_l1=3)
                                                        for i in range(n_main_block)])
 
         # Final SE(3) refinement
@@ -558,7 +559,7 @@ class IterativeSimulator(nn.Module):
                                        rbf_sigma=rbf_sigma,
                                        p_drop=p_drop,
                                        nextra_l0=2*NTOTALDOFS,
-                                       nextra_l1=3 
+                                       nextra_l1=6 
                                        )
 
         # Fine-tuning all-atom SE(3) refinement
@@ -614,11 +615,16 @@ class IterativeSimulator(nn.Module):
             alpha_s.append(alpha)
         
         for i_m in range(self.n_main_block):
+            dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
+            extra_l0 = None
+            extra_l1 = dchiraldxyz[0].detach()
             msa, pair, xyz, state, alpha = self.main_block[i_m](msa, pair,
                                                          xyz, state, idx, bond_feats,
                                                          use_checkpoint=use_checkpoint, 
                                                          top_k=0, rotation_mask=rotation_mask,
-                                                         atom_frames=atom_frames)
+                                                         atom_frames=atom_frames,
+                                                         extra_l0=extra_l0,
+                                                         extra_l1=extra_l1)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
 
@@ -634,8 +640,9 @@ class IterativeSimulator(nn.Module):
                  self.lj_correction_parameters, 
                  self.num_bonds, 
                  lj_lin=self.lj_lin)
+            dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
             extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
-            extra_l1 = dljdxyz[0].detach()
+            extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
 
             xyz, state, alpha = self.str_refiner(
                     msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats, atom_frames,
