@@ -6,7 +6,7 @@ from torch.utils import data
 from data_loader import get_train_valid_set, Dataset, DatasetNAComplex, DatasetRNA, DatasetSMComplex, loader_pdb, loader_na_complex, loader_rna, loader_sm_compl,set_data_loader_params, loader_atomize_pdb
 from kinematics import xyz_to_c6d, xyz_to_t2d
 from chemical import num2aa, aa2elt, aa2num, aabonds,aa2long, aabtypes, atomized_protein_frames
-from loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss
+from loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss, calc_chiral_loss
 from util import get_frames, frame_indices, is_atom, xyz_to_frame_xyz, xyz_t_to_frame_xyz, long2alt, writepdb
 
 class LossTestCase(unittest.TestCase):
@@ -262,6 +262,10 @@ class LossTestCase(unittest.TestCase):
 			true_crds, atom_mask = resolve_equiv_natives(torch.randn(true_crds[0, 0].unsqueeze(0).shape), true_crds, atom_mask)
 			print(true_crds)
 			break
+   
+    def test_chiral_loss(self):
+        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in self.valid_sm_compl_loader:
+            print(calc_chiral_loss(true_crds[0][None],chirals) 
 
 class DataLoaderTestCase(unittest.TestCase):
 

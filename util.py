@@ -1,3 +1,4 @@
+from asyncio.proactor_events import _ProactorBaseWritePipeTransport
 import sys
 
 import numpy as np
@@ -10,6 +11,7 @@ from openbabel import openbabel
 from scipy.spatial.transform import Rotation
 
 from chemical import *
+from kinematics import get_atomize_protein_chirals
 from scoring import *
 
 
@@ -296,6 +298,27 @@ def xyz_to_frame_xyz(xyz, seq_unmasked, atom_frames):
     xyz_frame[atoms, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
     return xyz_frame
 
+def xyz_frame_from_rotation_mask(xyz,rotation_mask, atom_frames):
+    """
+    function to get xyz_frame for l1 feature in Structure module
+    xyz (1, L, natoms, 3)
+    rotation_mask (1, L)
+    atom_frames (1, L, 3, 2)
+    """
+    xyz_frame = xyz.clone()
+    if torch.all(~rotation_mask):
+        return xyz_frame
+
+    atom_crds = xyz_frame[rotation_mask]
+    atom_L, natoms, _ = atom_crds.shape
+    frames_reindex = torch.zeros(atom_frames.shape[:-1])
+    
+    for i in range(atom_L):
+        frames_reindex[:, i, :] = (i+atom_frames[..., i, :, 0])*natoms + atom_frames[..., i, :, 1]
+    frames_reindex = frames_reindex.long()
+    xyz_frame[rotation_mask, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
+    return xyz_frame
+
 def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
     """
     xyz_t (1, T, L, natoms, 3)
@@ -331,17 +354,6 @@ def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
 
     return frames, frame_mask
 
-def generate_Cbeta(N,Ca,C):
-    # recreate Cb given N,Ca,C
-    b = Ca - N
-    c = C - Ca
-    a = torch.cross(b, c, dim=-1)
-    #Cb = -0.58273431*a + 0.56802827*b - 0.54067466*c + Ca
-    # fd: below matches sidechain generator (=Rosetta params)
-    Cb = -0.57910144*a + 0.5689693*b - 0.5441217*c + Ca
-
-    return Cb
-
 def get_tips(xyz, seq):
     B,L = xyz.shape[:2]
 
@@ -361,7 +373,7 @@ def get_tips(xyz, seq):
         xyz_tips = torch.where(torch.isnan(xyz_tips), Cb, xyz_tips)
     return xyz_tips
 
-def writepdb(filename, atoms, seq, modelnum=0, idx_pdb=None, bfacts=None, bond_feats=None):
+def writepdb(filename, atoms, seq, modelnum=None, idx_pdb=None, bfacts=None, bond_feats=None):
     f = open(filename,"a")
     ctr = 1
     scpu = seq.cpu().squeeze(0)
@@ -374,7 +386,8 @@ def writepdb(filename, atoms, seq, modelnum=0, idx_pdb=None, bfacts=None, bond_f
 
     Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
     atom_idxs = {}
-    f.write(f"MODEL        {modelnum}\n")
+    if modelnum is not None:
+        f.write(f"MODEL        {modelnum}\n")
     for i,s in enumerate(scpu):
         natoms = atomscpu.shape[-2]
         if (natoms!=NHEAVY and natoms!=NTOTAL and natoms!=3):
@@ -411,12 +424,10 @@ def writepdb(filename, atoms, seq, modelnum=0, idx_pdb=None, bfacts=None, bond_f
         atom_bonds = atom_bonds.cpu()
         b, i, j = atom_bonds.nonzero(as_tuple=True)
         for start, end in zip(i,j):
-            f.write(f"CONECT {atom_idxs[int(start.numpy())]} {atom_idxs[int(end.numpy())]}\n")
-    f.write("ENDMDL\n")
-
-######
-######
-
+            f.write(f"CONECT {atom_idxs[int(start.cpu().numpy())]} {atom_idxs[int(end.cpu().numpy())]}\n")
+    if modelnum is not None:
+        f.write("ENDMDL\n")
+    
 # process ideal frames
 def make_frame(X, Y):
     Xn = X / torch.linalg.norm(X)
@@ -970,7 +981,7 @@ def get_atom_frames(msa, G):
     return torch.tensor(selected_frames).long()
 
 def get_atomized_protein_frames(msa, ra):
-    """ returns a unique frame for each atom in a stretch of residues """
+    """ returns a unique frame for each atom in a n_res_atomize of residues """
     r,a = ra.T
     residue_frames = atomized_protein_frames[msa]
     # handle out of bounds at the termini, terminal N and C inherit Calpha frame, offset dimension needs to be updated
@@ -1082,4 +1093,5 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     frames = get_atomized_protein_frames(residues_atomize, ra)
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
 
-    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C
+    chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_mask, bond_feats)
+    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals

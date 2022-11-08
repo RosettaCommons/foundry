@@ -518,7 +518,7 @@ def calc_clash(xs, mask):
 # Rosetta-like version of LJ (fa_atr+fa_rep)
 #   lj_lin is switch from linear to 12-6.  Smaller values more sharply penalize clashes
 def calc_lj(
-    seq, xs, aamask, bond_feats, ljparams, ljcorr, num_bonds, 
+    seq, xs, aamask, bond_feats, ljparams, ljcorr, num_bonds,  
     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
     lj_maxrad=-1.0, eps=1e-8
 ):
@@ -697,6 +697,22 @@ def calc_hb(
     else:
         return torch.sum( Es )
 
+def calc_chiral_loss(pred, chirals):
+    """
+    calculate error in dihedral angles for chiral atoms
+    Input:
+     - pred: predicted coords (B, L, :, 3)
+     - chirals: True coords (B, nchiral, 5), skip if 0 chiral sites, 5 dimension are indices for 4 atoms that make dihedral and the ideal angle they should form
+    Output:
+     - mean squared error of chiral angles
+    """
+    if chirals.shape[1] == 0:
+        return torch.tensor(0.0, device=pred.device)
+    chiral_dih = pred[:, chirals[..., :-1].long(), 1]
+    pred_dih = get_dih(chiral_dih[...,0, :], chiral_dih[...,1, :], chiral_dih[...,2, :], chiral_dih[...,3, :]) # n_symm, b, n, 36, 3
+    l = torch.square(pred_dih-chirals[...,-1]).mean()
+    return l
+
 @torch.enable_grad()
 def calc_BB_bond_geom_grads(seq, pred, idx, eps=1e-6, ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, sig_len=0.02, sig_ang=0.05):
     pred.requires_grad_(True)
@@ -712,7 +728,7 @@ def calc_cart_bonded_grads(seq, pred, idx, len_param, ang_param, tor_param, eps=
 @torch.enable_grad()
 def calc_ljallatom_grads(
     seq, xyzaa, 
-    aamask, ljparams, ljcorr, num_bonds, 
+    aamask, bond_feats, ljparams, ljcorr, num_bonds, 
     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
     lj_maxrad=-1.0, eps=1e-8
 ):
@@ -721,6 +737,7 @@ def calc_ljallatom_grads(
         seq[0], 
         xyzaa[...,:3], 
         aamask,
+        bond_feats,
         ljparams, 
         ljcorr, 
         num_bonds, 
@@ -735,7 +752,7 @@ def calc_ljallatom_grads(
 
 @torch.enable_grad()
 def calc_lj_grads(
-    seq, xyz, alpha, toaa, 
+    seq, xyz, alpha, toaa, bond_feats, 
     aamask, ljparams, ljcorr, num_bonds, 
     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
     lj_maxrad=-1.0, eps=1e-8
@@ -746,10 +763,11 @@ def calc_lj_grads(
     Elj = calc_lj(
         seq[0], 
         xyzaa[...,:3], 
-        aamask, 
+        aamask,
+        bond_feats,
         ljparams, 
         ljcorr, 
-        num_bonds, 
+        num_bonds,
         lj_lin, 
         lj_hb_dis, 
         lj_OHdon_dis, 
@@ -784,6 +802,14 @@ def calc_hb_grads(
         eps,
         normalize)
     return torch.autograd.grad(Ehb, xs)
+
+@torch.enable_grad()
+def calc_chiral_grads(xyz, chirals):
+    xyz.requires_grad_(True)
+    l = calc_chiral_loss(xyz, chirals)
+    if l.item() == 0.0:
+        return (torch.zeros(xyz.shape, device=xyz.device),) # autograd returns a tuple..
+    return torch.autograd.grad(l, xyz)
 
 def calc_pseudo_dih(pred, true, eps=1e-6):
     '''

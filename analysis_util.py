@@ -19,7 +19,7 @@ def parse_training_log(filename):
                     if val in columns: columns.remove(val)
 
             if any([line.startswith(h) for h in headers]):
-                values = [line.split(':')[0]]+[float(x) for x in re.findall('([\d\.]+)',line)]
+                values = [line.split(':')[0]]+[float(x) for x in re.findall('(\d+\.*\d*)',line)]
                 records.append(OrderedDict(zip(columns, values)))
 
     df = pd.DataFrame.from_records(records)

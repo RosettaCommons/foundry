@@ -62,8 +62,8 @@ class RoseTTAFoldModule(nn.Module):
         self.lddt_pred = LDDTNetwork(d_state)
 
     def forward(
-        self, msa_latent, msa_full, seq, seq_unmasked, xyz, sctors, idx, bond_feats,
-        t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
+        self, msa_latent, msa_full, seq, seq_unmasked, xyz, sctors, idx, bond_feats, chirals, 
+        atom_frames=None, t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
         msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None,
         return_raw=False, return_full=False,
         use_checkpoint=False
@@ -90,7 +90,7 @@ class RoseTTAFoldModule(nn.Module):
 
         # Predict coordinates from given inputs
         msa, pair, xyz, alpha_s, xyz_allatom, state = self.simulator(
-            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, use_checkpoint=use_checkpoint)
+            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, chirals, atom_frames, use_checkpoint=use_checkpoint)
 
         if return_raw:
             # get last structure

@@ -10,10 +10,11 @@ from scipy.sparse.csgraph import shortest_path
 
 from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP
+from kinematics import get_chirals
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans
 
-# faster for remote/tukwila nodes - switch to these on 10/18 when server gets mirrored
+# faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
 #compl_dir = "/databases/TrRosetta/RoseTTAComplex"
 #na_dir = "/databases/TrRosetta/nucleic"
@@ -24,7 +25,7 @@ csd_dir = "/databases/csd543"
 # older paths, still good but best for local/UW nodes
 base_dir = "/projects/ml/TrRosetta/PDB-2021AUG02"  
 compl_dir = "/projects/ml/RoseTTAComplex"
-#na_dir = "/projects/ml/nucleic"
+na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
@@ -67,9 +68,10 @@ def set_data_loader_params(args):
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_LIGCLUS"   : "%s/list_v02_smcompl_ligclusvalid_20221018.csv"%sm_compl_dir, 
-        "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221018.csv"%sm_compl_dir, 
+        "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221102.csv"%sm_compl_dir, 
+        "VAL_PEP"          : "%s/list_v02_peptide_benchmark_valid.csv"%sm_compl_dir,
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221031.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221102.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -96,6 +98,9 @@ def set_data_loader_params(args):
         "MAXATOMS"         : 100,
         "MAXSIM"           : 0.85,
         "MAXNSYMM"         : 1024,
+        "NRES_ATOMIZE_MIN" : 3,
+        "NRES_ATOMIZE_MAX" : 5,
+        "ATOMIZE_FLANK"    : 0,
         "CLUSTER_LIGANDS"  : False
     }
     for param in params:
@@ -362,11 +367,12 @@ def get_train_valid_set(params, OFFSET=1000000):
                 train_rna[i] = [(r[0], r[-1])]
 
         # parse protein-small molecule complexes
-        def _load_df(filename):
+        def _load_df(filename, eval_cols=[]):
             """Loads CSV into dataframe and applies general filters"""
             df = pd.read_csv(filename)
             df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') # restore leading zeros, make into string
-            df['LIGANDS'] = df.LIGANDS.apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
+            for col in eval_cols:
+                df[col] = df[col].apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
             df = df[
                 (df.RESOLUTION<=params['RESCUT']) &
                 (df.DEPOSITION.apply(lambda x: parser.parse(x))<=parser.parse(params['DATCUT']))
@@ -379,20 +385,17 @@ def get_train_valid_set(params, OFFSET=1000000):
             data_dict = {}
             for i,row in df.iterrows():
                 entry = make_entry_func(row)
-                if row[cluster_key] in data_dict.keys():
-                    data_dict[row[cluster_key]].append(entry)
+                cluster = row[cluster_key] # cluster of this example
+                if cluster in data_dict.keys():
+                    data_dict[cluster].append(entry)
                 else:
-                    data_dict[row[cluster_key]] = [entry]
+                    data_dict[cluster] = [entry]
             return data_dict
 
-        df = _load_df(params['SM_LIST'])
+        df = _load_df(params['SM_LIST'], eval_cols=['LIGANDS'])
         df = df[
             ~df.LIGANDS.apply(lambda x: '1fcv_GCU_1_A_405__B___.mol2' in x) # tanimoto neighbors=0, weight=Inf
         ]
-            #(df.CHAINID != '6uiw_A') & # causes GPU OOM for some reason
-            #(df.CHAINID != '6h74_B') & # causes GPU OOM
-            #(df.CHAINID != '6gx4_B') & # causes GPU OOM
-            #(df.CHAINID != '6v3i_A') # another error-causing example that we will investigate later
 
         # weight each example by various factors
         seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
@@ -418,13 +421,13 @@ def get_train_valid_set(params, OFFSET=1000000):
         sm_compl_weights = [clus2weight[i] for i in sm_compl_IDs]
 
         # stricter versions of protein-small mol validation set
-        df = _load_df(params['VAL_SM_LIGCLUS']) # deduplicated ligand clusters
+        df = _load_df(params['VAL_SM_LIGCLUS'], eval_cols=['LIGANDS']) # deduplicated ligand clusters
         df['WEIGHT'] = 1 # examples have already been redundancy-reduced
         valid_sm_compl_ligclus = _make_example_dict(df, make_entry_func=_make_entry)
 
-        df = _load_df(params['VAL_SM_STRICT']) # removed ligand cluster overlap with train
+        df = _load_df(params['VAL_SM_STRICT'], eval_cols=['LIGANDS']) # removed ligand cluster overlap with train
         df['WEIGHT'] = 1 # examples have already been redundancy-reduced
-        valid_sm_compl_strict = _make_example_dict(df, make_entry_func=_make_entry)
+        valid_sm_compl_strict = _make_example_dict(df, make_entry_func=_make_entry, cluster_key='ID') # use all examples regardless of sequence cluster
 
         # read homo-oligomer list
         homo = {}
@@ -593,6 +596,7 @@ def get_train_valid_set(params, OFFSET=1000000):
                 else:
                     train_na_neg[r[2]] = [(r[:2], r[-1])]
         
+        # cambridge small molecule crystals
         sim_idx = int(params["MAXSIM"]*100-50)
         with open(params["CSD_LIST"], 'r') as f:
             reader = csv.reader(f)
@@ -613,6 +617,12 @@ def get_train_valid_set(params, OFFSET=1000000):
                 valid_sm[i] = row[:2]
             else:
                 train_sm[i] = row[:2]
+
+        # protein-peptide complexes (validation only)
+        def _make_entry(row):
+            return ((row.CHAINID, row.HASH, row.PEP_CHAINID), row.LEN_EXIST)
+        df = _load_df(params['VAL_PEP'])
+        valid_pep = _make_example_dict(df, make_entry_func=_make_entry)
 
         # Get average chain length in each cluster and calculate weights
         # protein-small mol complex weights are done separately above
@@ -655,7 +665,7 @@ def get_train_valid_set(params, OFFSET=1000000):
             valid_compl, valid_neg,
             valid_na_compl, valid_na_neg,
             valid_rna, valid_sm_compl, valid_sm_compl_ligclus, 
-            valid_sm_compl_strict, valid_sm, 
+            valid_sm_compl_strict, valid_sm, valid_pep,
             homo
         )
         with open(params["DATAPKL"], "wb") as f:
@@ -679,7 +689,7 @@ def get_train_valid_set(params, OFFSET=1000000):
                 valid_compl, valid_neg,
                 valid_na_compl, valid_na_neg,
                 valid_rna, valid_sm_compl, valid_sm_compl_ligclus, 
-                valid_sm_compl_strict, valid_sm, 
+                valid_sm_compl_strict, valid_sm, valid_pep,
                 homo
             ) = pickle.load(f)
             print ('...done')
@@ -697,7 +707,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         valid_pdb, valid_homo, 
         valid_compl, valid_neg,
         valid_na_compl, valid_na_neg,
-        valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, 
+        valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, valid_pep,
         homo
     )
 
@@ -965,14 +975,14 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     mask_prev = mask_t[0].clone()
     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
-    
+    chirals = torch.Tensor()
     #print ("loader_single", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
 
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats
+           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals
 
 # Generate input features for homo-oligomers
 def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0):
@@ -1048,12 +1058,12 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         bond_feats = bond_feats[crop_idx][:,crop_idx]
         xyz_prev = xyz_prev[crop_idx]
         mask_prev = mask_prev[crop_idx]
-
+    chirals = torch.Tensor()
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats
+           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, chirals
 
 
 def get_pdb(pdbfilename, plddtfilename, item, lddtcut, sccut):
@@ -1146,13 +1156,13 @@ def loader_fb(item, params, unclamp=False):
     xyz_prev = xyz_t[0].clone()
     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
-
+    chirals = torch.Tensor()
     #print ("loader_fb", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
 
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats,"fb", item
+           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats,chirals,"fb", item
 
 
 def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=True, random_noise=5.0):
@@ -1264,12 +1274,12 @@ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=Tru
         idx = idx[sel]
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:,sel]
-
+    chirals = torch.Tensor()
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats,"compl", item
+           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals,"compl", item
 
 
 def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pick_top=True, random_noise=5.0):
@@ -1411,12 +1421,12 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
 
     xyz_prev = xyz_t[0].clone()
     mask_prev = mask_t[0].clone()
-
+    chirals = torch.Tensor()
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats,"na_compl", item
+           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals, "na_compl", item
 
 def loader_rna(item, Ls, params, random_noise=5.0):
     # read PDBs
@@ -1487,12 +1497,12 @@ def loader_rna(item, Ls, params, random_noise=5.0):
 
     xyz_prev = xyz_t[0].clone()
     mask_prev = mask_t[0].clone()   
-
+    chirals = torch.Tensor()
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), "rna",item
+           chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, "rna",item
 
 def loader_sm_compl(item, params, pick_top=True,
     init_protein_tmpl=False, init_ligand_tmpl=False,
@@ -1527,15 +1537,21 @@ def loader_sm_compl(item, params, pick_top=True,
             mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
         else:
             print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same '\
-
                   f'atom order: {item[0]}: {ligands[i_lig]} vs {alt_lig}. Skipping latter ligand.')
-    if xyz_sm.shape[0] > params['MAXNSYMM']: # clip no. of symmetry variants to save GPU memory
+
+    # clamp number of symmetry variants to save GPU memory
+    if xyz_sm.shape[0] > params['MAXNSYMM']: 
         xyz_sm = xyz_sm[:params['MAXNSYMM']]
         mask_sm = mask_sm[:params['MAXNSYMM']]
+
+    if xyz_sm.shape[0] ==0:
+        print(f'ERROR [loader_sm_compl]: {item[0]} had no xyz coords')
+        return (torch.tensor([-1]),)*21 
 
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
+    chirals = get_chirals(mol, xyz_sm[0])
 
     # Generate ground truth structure: account for ligand symmetry
     N_symmetry, sm_L, _ = xyz_sm.shape
@@ -1545,12 +1561,12 @@ def loader_sm_compl(item, params, pick_top=True,
     xyz[:, protein_L:, 1, :] = xyz_sm
     mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, protein_L, nprotatoms)
     mask[:, protein_L:, 1] = mask_sm
-    
+
     Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
     
     if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
         print(f'WARNING [loader_sm_compl]: Sm. mol. XYZ and MSA lengths don\'t match: {item}. Skipping.')
-        return (torch.tensor([-1]),)*20
+        return (torch.tensor([-1]),)*21
 
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
     msa = a3m['msa'].long()
@@ -1603,7 +1619,7 @@ def loader_sm_compl(item, params, pick_top=True,
 
         if msa.shape[1] != xyz_t.shape[1]:
             print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
-            return (torch.tensor([-1]),)*20
+            return (torch.tensor([-1]),)*21
 
     if init_protein_xyz or init_ligand_xyz:
         # initialize coords to ground truth, move to origin, rotate randomly
@@ -1652,15 +1668,18 @@ def loader_sm_compl(item, params, pick_top=True,
         idx = idx[sel]
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
-
+    # need to reindex the chiral atom positions - assumes they are the second chain
+    if chirals.shape[0]>0:
+        L1 = chain_idx[0,:].sum()
+        chirals[:, :-1] = chirals[:, :-1] +L1 
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, "sm_compl", item
+           chain_idx, False, False, frames, bond_feats, chirals, "sm_compl", item
 
 
-def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, n_res_atomize=3, flank=0, random_noise=5.0):
+def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, random_noise=5.0):
     """ load pdb with portions represented as atoms instead of residues """
     pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
     a3m = get_msa(params['PDB_DIR'] + '/a3m/' + item[1][:3] + '/' + item[1] + '.a3m.gz', item[1])
@@ -1698,6 +1717,8 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     sc_residues = (torch.sum(mask_prot, dim=1)>3).nonzero()
 
     # not enough valid residues to atomize and have space for flanks, treat as monomer example
+    n_res_atomize = np.random.randint(params['NRES_ATOMIZE_MIN'], params['NRES_ATOMIZE_MAX']+1)
+    flank = params['ATOMIZE_FLANK']
     if flank +1 >= sc_residues.shape[0]-(n_res_atomize+flank+1):
         return featurize_single_chain(msa, ins, tplt, pdb, params, random_noise=random_noise) \
             + ("monomer", item,)
@@ -1705,8 +1726,8 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     i_start = torch.randint(flank+1, sc_residues.shape[0]-(n_res_atomize+flank+1),(1,))
     i_start = sc_residues[i_start] # index of the first residue to be atomized
 
-    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
-
+    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
+        
     # generate blank template for atoms
     tplt_sm = {"ids":[]}
     xyz_t_sm, f1d_t_sm, mask_t_sm = TemplFeaturize(tplt_sm, xyz_sm.shape[1], params, offset=0, npick=0, pick_top=pick_top)
@@ -1779,12 +1800,14 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     xyz_prev[Ls[0]:] = xyz_prev[i_start]
     mask_prev = mask_t[0].clone()
     xyz = torch.nan_to_num(xyz)
-
+    if chirals.shape[0]>0:
+        L1 = chain_idx[0,:].sum()
+        chirals[:, :-1] = chirals[:, :-1] +L1
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats,"atomize_pdb", item
+           chain_idx, False, False, frames, bond_feats,chirals,"atomize_pdb", item
 
 def loader_sm(item, params, pick_top=True):
     """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
@@ -1799,7 +1822,9 @@ def loader_sm(item, params, pick_top=True):
 
     if xyz_sm.shape[0] > params['MAXNSYMM']: # clip no. of symmetry variants to save GPU memory
         xyz_sm = xyz_sm[:params['MAXNSYMM']]
+        mask_sm = mask_sm[:params['MAXNSYMM']]
 
+    chirals = get_chirals(mol, xyz_sm[0])
     N_symmetry, sm_L, _ = xyz_sm.shape
 
     if sm_L < 2:
@@ -1828,12 +1853,12 @@ def loader_sm(item, params, pick_top=True):
     mask_prev = mask_t[0].clone()
 
     xyz = torch.nan_to_num(xyz)
-
+    
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, "sm_only", item
+           chain_idx, False, False, frames, bond_feats, chirals, "sm_only", item
 
 def crop_sm(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to a random ligand atom"""
@@ -2009,6 +2034,7 @@ class DistilledDataset(data.Dataset):
         rna_IDs, rna_loader, rna_dict,
         sm_compl_IDs, sm_compl_loader, sm_compl_dict, 
         sm_IDs, sm_loader, sm_dict,
+        atomize_pdb_IDs, atomize_pdb_loader, atomize_pdb_dict,
         homo, 
         params,
         native_NA_frac=0.25,
@@ -2042,20 +2068,25 @@ class DistilledDataset(data.Dataset):
         self.sm_IDs = sm_IDs
         self.sm_loader = sm_loader
         self.sm_dict = sm_dict
+        self.atomize_pdb_IDs = atomize_pdb_IDs
+        self.atomize_pdb_dict = atomize_pdb_dict
+        self.atomize_pdb_loader = atomize_pdb_loader
+
         self.homo = homo
         self.params = params
         self.unclamp_cut = unclamp_cut
         self.native_NA_frac = native_NA_frac
 
+        self.pdb_inds = np.arange(len(self.pdb_IDs))
+        self.fb_inds = np.arange(len(self.fb_IDs))
         self.compl_inds = np.arange(len(self.compl_IDs))
         #self.neg_inds = np.arange(len(self.neg_IDs))
         self.na_compl_inds = np.arange(len(self.na_compl_IDs))
         #self.na_neg_inds = np.arange(len(self.na_neg_IDs))
-        self.fb_inds = np.arange(len(self.fb_IDs))
-        self.pdb_inds = np.arange(len(self.pdb_IDs))
         self.rna_inds = np.arange(len(self.rna_IDs))
         self.sm_compl_inds = np.arange(len(self.sm_compl_IDs))
         self.sm_inds = np.arange(len(self.sm_IDs))
+        self.atomize_pdb_inds = np.arange(len(self.atomize_pdb_IDs))
 
     def __len__(self):
         return (
@@ -2066,6 +2097,7 @@ class DistilledDataset(data.Dataset):
             + len(self.rna_inds)
             + len(self.sm_compl_inds)
             + len(self.sm_inds)
+            + len(self.atomize_pdb_inds)
             #+ len(self.neg_inds)
             #+ len(self.na_neg_inds)
         )
@@ -2190,12 +2222,21 @@ class DistilledDataset(data.Dataset):
             out = out[:-2]+(task,)+out[-1:]
         offset += len(self.sm_compl_inds)
 
-        if index >= offset:
+        if index >= offset and index < offset + len(self.sm_inds):
             ID = self.sm_IDs[index-offset]
             out = self.sm_loader(
                 self.sm_dict[ID][0],
                 self.params,
             )
+        offset += len(self.sm_inds)
+
+        if index >= offset and index < offset + len(self.atomize_pdb_inds):
+            ID = self.atomize_pdb_IDs[index-offset]
+            sel_idx = np.random.randint(0, len(self.atomize_pdb_dict[ID]))
+            out = self.atomize_pdb_loader(self.atomize_pdb_dict[ID][sel_idx][0], 
+                self.params, self.homo, unclamp=(p_unclamp > self.unclamp_cut))
+        offset += len(self.atomize_pdb_inds)
+
         return out
 
 class DistributedWeightedSampler(data.Sampler):
@@ -2211,13 +2252,16 @@ class DistributedWeightedSampler(data.Sampler):
         rna_weights,
         sm_compl_weights,
         sm_weights,
+        atomize_pdb_weights,
         num_example_per_epoch=25600,
-        fraction_fb=0.14,
-        fraction_compl=0.14,  # half neg, half pos
-        fraction_na_compl=0.14, # half neg, half pos
-        fraction_rna=0.14,
-        fraction_sm_compl=0.14, 
-        fraction_sm=0.14,
+        fraction_pdb=0.125,
+        fraction_fb=0.125,
+        fraction_compl=0.125,  # half neg, half pos
+        fraction_na_compl=0.125, # half neg, half pos
+        fraction_rna=0.125,
+        fraction_sm_compl=0.125, 
+        fraction_sm=0.125,
+        fraction_atomize_pdb=0.125,
         num_replicas=None,
         rank=None,
         replacement=False
@@ -2232,7 +2276,8 @@ class DistributedWeightedSampler(data.Sampler):
             rank = dist.get_rank()
 
         assert num_example_per_epoch % num_replicas == 0
-        assert (fraction_fb+fraction_compl+fraction_na_compl+fraction_rna+fraction_sm_compl<= 1.0)
+        assert (fraction_pdb + fraction_fb + fraction_compl + fraction_na_compl + \
+                fraction_rna + fraction_sm_compl + fraction_sm + fraction_atomize_pdb == 1.0)
 
         self.dataset = dataset
         self.num_replicas = num_replicas
@@ -2244,6 +2289,7 @@ class DistributedWeightedSampler(data.Sampler):
         self.num_rna_per_epoch = int(round(num_example_per_epoch*fraction_rna))
         self.num_sm_compl_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl))
         self.num_sm_per_epoch = int(round(num_example_per_epoch*fraction_sm))
+        self.num_atomize_pdb_per_epoch = int(round(num_example_per_epoch*fraction_atomize_pdb))
 
         self.num_pdb_per_epoch = num_example_per_epoch - (
             self.num_fb_per_epoch 
@@ -2252,6 +2298,7 @@ class DistributedWeightedSampler(data.Sampler):
             + self.num_rna_per_epoch
             + self.num_sm_compl_per_epoch
             + self.num_sm_per_epoch
+            + self.num_atomize_pdb_per_epoch
         #    + self.num_neg_per_epoch
         #    + self.num_neg_na_compl_per_epoch
         )
@@ -2279,17 +2326,14 @@ class DistributedWeightedSampler(data.Sampler):
 
         self.pdb_weights = pdb_weights
         self.fb_weights = fb_weights
-
         self.compl_weights = compl_weights
         #self.neg_weights = neg_weights
-
         self.na_compl_weights = na_compl_weights
         #self.neg_na_compl_weights = neg_na_compl_weights
-
         self.rna_weights = rna_weights
-        
         self.sm_compl_weights = sm_compl_weights
         self.sm_weights = sm_weights
+        self.atomize_pdb_weights = atomize_pdb_weights
 
     def __iter__(self):
         # deterministically shuffle based on epoch
@@ -2354,6 +2398,11 @@ class DistributedWeightedSampler(data.Sampler):
             sm_sampled = torch.multinomial(self.sm_weights, self.num_sm_per_epoch, self.replacement, generator=g)
             sel_indices = torch.cat((sel_indices, indices[sm_sampled + offset]))
         offset += len(self.dataset.sm_IDs)
+
+        if (self.num_atomize_pdb_per_epoch>0):
+            atomize_pdb_sampled = torch.multinomial(self.atomize_pdb_weights, self.num_atomize_pdb_per_epoch, self.replacement, generator=g)
+            sel_indices = torch.cat((sel_indices, indices[atomize_pdb_sampled + offset]))
+        offset += len(self.dataset.atomize_pdb_IDs)
 
         # shuffle indices
         indices = sel_indices[torch.randperm(len(sel_indices), generator=g)]
