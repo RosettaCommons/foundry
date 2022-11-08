@@ -11,6 +11,7 @@ from openbabel import openbabel
 from scipy.spatial.transform import Rotation
 
 from chemical import *
+from kinematics import get_atomize_protein_chirals
 from scoring import *
 
 
@@ -353,17 +354,6 @@ def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
 
     return frames, frame_mask
 
-def generate_Cbeta(N,Ca,C):
-    # recreate Cb given N,Ca,C
-    b = Ca - N
-    c = C - Ca
-    a = torch.cross(b, c, dim=-1)
-    #Cb = -0.58273431*a + 0.56802827*b - 0.54067466*c + Ca
-    # fd: below matches sidechain generator (=Rosetta params)
-    Cb = -0.57910144*a + 0.5689693*b - 0.5441217*c + Ca
-
-    return Cb
-
 def get_tips(xyz, seq):
     B,L = xyz.shape[:2]
 
@@ -435,7 +425,7 @@ def writepdb(filename, atoms, seq, modelnum=0, idx_pdb=None, bfacts=None, bond_f
         atom_bonds = atom_bonds.cpu()
         b, i, j = atom_bonds.nonzero(as_tuple=True)
         for start, end in zip(i,j):
-            f.write(f"CONECT {atom_idxs[int(start.numpy())]} {atom_idxs[int(end.numpy())]}\n")
+            f.write(f"CONECT {atom_idxs[int(start.cpu().numpy())]} {atom_idxs[int(end.cpu().numpy())]}\n")
     f.write("ENDMDL\n")
     
 ######
@@ -1058,7 +1048,7 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
             bond_feats[start_idx, end_idx] = aabtypes[res][j]
             bond_feats[end_idx, start_idx] = aabtypes[res][j]
         #accounting for peptide bonds
-        if i > 1:
+        if i > 0:
             if (i-1, 2) not in ra2ind or (i, 0) not in ra2ind:
                 #skip bonds with atoms that aren't observed in the structure
                 continue
@@ -1105,5 +1095,5 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     frames = get_atomized_protein_frames(residues_atomize, ra)
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
-
-    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C
+    chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_mask, bond_feats)
+    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
