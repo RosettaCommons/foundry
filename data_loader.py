@@ -1667,7 +1667,7 @@ def loader_sm_compl(item, params, pick_top=True,
         bond_feats = bond_feats[sel][:, sel]
     # need to reindex the chiral atom positions - assumes they are the second chain
     if chirals.shape[0]>0:
-        L1 = L1 = chain_idx[0,:].sum()
+        L1 = chain_idx[0,:].sum()
         chirals[:, :-1] = chirals[:, :-1] +L1 
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
@@ -1722,8 +1722,9 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
 
     i_start = torch.randint(flank+1, sc_residues.shape[0]-(n_res_atomize+flank+1),(1,))
     i_start = sc_residues[i_start] # index of the first residue to be atomized
-    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
-    
+
+    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
+        
     # generate blank template for atoms
     tplt_sm = {"ids":[]}
     xyz_t_sm, f1d_t_sm, mask_t_sm = TemplFeaturize(tplt_sm, xyz_sm.shape[1], params, offset=0, npick=0, pick_top=pick_top)
@@ -1795,7 +1796,9 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     xyz_prev[Ls[0]:] = xyz_prev[i_start]
     mask_prev = mask_t[0].clone()
     xyz = torch.nan_to_num(xyz)
-    chirals = torch.Tensor() # NEED TO IMPLEMENT CHIRALITY FOR ATOMIZE PROTEIN
+    if chirals.shape[0]>0:
+        L1 = chain_idx[0,:].sum()
+        chirals[:, :-1] = chirals[:, :-1] +L1
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \

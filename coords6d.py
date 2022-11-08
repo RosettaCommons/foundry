@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 import scipy.spatial
-from util import generate_Cbeta
+from chemical import generate_Cbeta
 
 # calculate dihedral angles defined by 4 sets of points
 def get_dihedrals(a, b, c, d):

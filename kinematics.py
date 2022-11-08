@@ -1,8 +1,7 @@
 import numpy as np
 import torch
 from openbabel import openbabel
-from util import INIT_CRDS, INIT_NA_CRDS, generate_Cbeta, is_nucleic, is_atom
-from chemical import NTOTAL
+from chemical import aachirals, NTOTAL, generate_Cbeta
 
 PARAMS = {
     "DMIN"    : 2.0,
@@ -262,3 +261,34 @@ def get_chirals(obmol, xyz):
             chirals = torch.Tensor()
 
         return chirals
+
+def get_atomize_protein_chirals(residues_atomize, lig_xyz, residue_atomize_mask, bond_feats):
+    """
+    Enumerate chiral centers in residues and provide features for chiral centers
+    """
+    angle = np.arcsin(1/3**0.5) # perfect tetrahedral geometry
+    chiral_atoms = aachirals[residues_atomize]
+    ra = residue_atomize_mask.nonzero()
+    r,a = ra.T
+
+    chiral_atoms = chiral_atoms[r,a].nonzero().squeeze(1) #num_chiral_centers
+    num_chiral_centers = chiral_atoms.shape[0]
+    chiral_bonds = bond_feats[chiral_atoms] # find bonds to each chiral atom
+    chiral_bonds_idx = chiral_bonds.nonzero() # find indices of each bonded neighbor to chiral atom
+    # in practice all chiral atoms in proteins have 3 heavy atom neighbors, so reshape to 3 
+    chiral_bonds_idx = chiral_bonds_idx.reshape(num_chiral_centers, 3, 2)
+    
+    chirals = torch.zeros((num_chiral_centers, 5))
+    chirals[:,0] = chiral_atoms.long()
+    chirals[:, 1:-1] = chiral_bonds_idx[...,-1].long()
+    chirals[:, -1] = angle
+    n = chirals.shape[0]
+    if n>0:
+        chirals = chirals.repeat(3,1).float()
+        chirals[n:2*n,1:-1] = torch.roll(chirals[n:2*n,1:-1],1,1)
+        chirals[2*n: ,1:-1] = torch.roll(chirals[2*n: ,1:-1],2,1)
+        dih = get_dih(*lig_xyz[chirals[:,:4].long()].split(split_size=1,dim=1))[:,0]
+        chirals[dih<0.0,-1] = -angle
+    else:
+        chirals = torch.Tensor()
+    return chirals
