@@ -573,7 +573,7 @@ class Trainer():
         map_location = {"cuda:%d"%0: "cuda:%d"%rank}
         checkpoint = torch.load(chk_fn, map_location=map_location)
         print ('loading model', model_name, 'from', chk_fn, 'epoch', checkpoint['epoch'])
-        rename_model = False
+        new_params = False
         new_chk = {}
         msd_src = checkpoint['model_state_dict']
         msd_tgt = model.module.model.state_dict()
@@ -581,7 +581,7 @@ class Trainer():
 
             if param not in msd_src:
                 print ('missing',param)
-                rename_model=True
+                new_params = True
                 #break
             elif (msd_tgt[param].shape == msd_src[param].shape):
                 new_chk[param] = msd_src[param]
@@ -600,26 +600,28 @@ class Trainer():
 
                     print (
                         'wrong size',param,
-                        checkpoint['model_state_dict'][param].shape,
+                         checkpoint['model_state_dict'][param].shape,
                          model.module.model.state_dict()[param].shape )
-                    rename_model=True
+                    new_params = True
 
         #new_chk = checkpoint['model_state_dict']
         model.module.model.load_state_dict(new_chk, strict=False)
         model.module.shadow.load_state_dict(new_chk, strict=False)
+
         #if resume_train and (not rename_model):
         if resume_train:
-            print (' ... loading optimization params')
             loaded_epoch = checkpoint['epoch']
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            scaler.load_state_dict(checkpoint['scaler_state_dict'])
+            if not new_params:
+                print (' ... loading optimization params')
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                scaler.load_state_dict(checkpoint['scaler_state_dict'])
             if 'scheduler_state_dict' in checkpoint:
                 print (' ... loading scheduler params')
                 scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
             else:
                 scheduler.last_epoch = loaded_epoch + 1
-            #if 'best_loss' in checkpoint:
-            #    best_valid_loss = checkpoint['best_loss']
+            if 'best_loss' in checkpoint:
+                best_valid_loss = checkpoint['best_loss']
         return loaded_epoch, best_valid_loss
 
     def checkpoint_fn(self, model_name, description):
