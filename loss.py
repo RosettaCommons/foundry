@@ -374,13 +374,13 @@ def calc_atom_bond_loss(pred, true, bond_feats, seq, beta=0.2, eps=1e-6):
 
     # bonds between protein residues and ligand atoms (i.e. atomized protein)
     inter_bonds = bond_feats==6 
-    b, i, j = torch.where(inter_bonds)
-    a = (seq[:,i]<22) & (seq[:,j]==39) # res N - atom C
+    _, i, j = torch.where(inter_bonds)
+    a = (seq[:,i]<22) & (seq[:,j]==39) # res N - atom C: binary indicator
     b = (seq[:,i]<22) & (seq[:,j]==55) # res C - atom N
     c = (seq[:,i]==39) & (seq[:,j]<22) # atom C - res N
     d = (seq[:,i]==55) & (seq[:,j]<22) # atom N - res C
-    i_atom = 0*a + 2*b + 1*c + 1*d # (B, N_res_atom_bonds)
-    j_atom = 1*a + 1*b + 0*c + 2*d # (B, N_res_atom_bonds)
+    i_atom = 0*a + 2*b + 1*c + 1*d # (B, N_bonds) : indexes of atom that is bonded (N:0, C:2, 1:ligand atom)
+    j_atom = 1*a + 1*b + 0*c + 2*d # (B, N_bonds)
     nat_dist = torch.sum(torch.square(true[0,i,i_atom[0],:]-true[0,j,j_atom[0],:]), dim=-1) # assumes B=1
     pred_dist = torch.sum(torch.square(pred[0,i,i_atom[0],:]-pred[0,j,j_atom[0],:]), dim=-1)
     #inter_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))
