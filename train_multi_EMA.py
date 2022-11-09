@@ -163,7 +163,7 @@ class Trainer():
         self.pdb_counter=0
         
     def calc_loss(self, logit_s, label_s,
-                  logit_aa_s, label_aa_s, mask_aa_s,
+                  logit_aa_s, label_aa_s, mask_aa_s, logit_pae, logit_pde,
                   pred, pred_tors, pred_allatom, true,
                   mask_crds, mask_BB, mask_2d, same_chain,
                   pred_lddt, idx, bond_feats, atom_frames=None, unclamp=False, 
@@ -171,7 +171,7 @@ class Trainer():
                   verbose=False, ctr=0,
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lig_fape=1.0, w_lddt=1.0, 
                   w_bond=1.0, w_clash=0.0, w_atom_bond=0.0, w_skip_bond=0.0, w_rigid=0.0, w_hb=0.0, w_dih=0.0,
-                  lj_lin=0.85, eps=1e-6, item=None, task=None, out_dir='./'
+                  w_pae=0.0, w_pde=0.0, lj_lin=0.85, eps=1e-6, item=None, task=None, out_dir='./'
     ):
         gpu = pred.device
 
@@ -216,7 +216,7 @@ class Trainer():
         mask_BBA = mask_BB.clone()
         mask_BBA[0, L1:] = False
         if torch.sum(mask_BBA) >0:
-            l_fape_A = compute_general_FAPE(
+            l_fape_A, _, _ = compute_general_FAPE(
                 pred[:,mask_BBA,:,:3],
                 true[:,mask_BBA[0],:3],
                 mask_crds[:,mask_BBA[0], :3],
@@ -231,7 +231,7 @@ class Trainer():
         mask_BBB = mask_BB.clone()
         mask_BBB[0,:L1] = False
         if torch.sum(mask_BBB) >0:
-            l_fape_B = compute_general_FAPE(
+            l_fape_B, _, _ = compute_general_FAPE(
                 pred[:, mask_BBB,:,:3],
                 true[:,mask_BBB[0],:3,:3],
                 mask_crds[:,mask_BBB[0], :3],
@@ -247,14 +247,18 @@ class Trainer():
         if negative: # inter-chain fapes should be ignored for negative cases
             fracA = float(L1)/len(same_chain[0,0])
             tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
+            pae_loss = torch.tensor(0).to(gpu)
+            pae_loss = torch.tensor(0).to(gpu)
         else:
-            tot_str = compute_general_FAPE(
+            tot_str, pae_loss, pde_loss = compute_general_FAPE(
                 pred[:,mask_BB,:,:3],
                 true[:,mask_BB[0],:3],
                 mask_crds[:,mask_BB[0],:3],
                 frames_BB[:,mask_BB[0]],
                 frame_mask_BB[:,mask_BB[0]],
                 dclamp=dclamp, 
+                logit_pae=logit_pae[:,:,mask_BB[0]][:,:,:,mask_BB[0]],
+                logit_pde=logit_pde[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
             )
         num_layers = pred.shape[0]
         gamma = 0.99
@@ -264,15 +268,18 @@ class Trainer():
         bb_l_fape = (w_bb_fape*tot_str).sum()
 
         tot_loss += 0.5*w_str*bb_l_fape
-
         for i in range(len(tot_str)):
             loss_dict[f'bb_fape_layer{i}'] = tot_str[i].detach()
         loss_dict['bb_fape_full'] = bb_l_fape.detach()
 
+        tot_loss += w_pae*pae_loss + w_pde*pde_loss
+        loss_dict['pae_loss'] = pae_loss.detach()
+        loss_dict['pde_loss'] = pde_loss.detach()
+
         sm_res_mask = is_atom(label_aa_s[0,0])*mask_BB[0] # (L,)
         if bool(torch.any(sm_res_mask)):
             # ligand fape (layer-averaged fape on atom coordinates with atom frames)
-            l_fape_sm = compute_general_FAPE(
+            l_fape_sm, _, _ = compute_general_FAPE(
                 pred[:, sm_res_mask[None],:,:3],
                 true[:,sm_res_mask,:3,:3],
                 atom_mask = mask_crds[:,sm_res_mask, :3],
@@ -292,7 +299,7 @@ class Trainer():
             mask_crds_protein[:, sm_res_mask] = False
             frame_mask_BB_sm = frame_mask_BB.clone()
             frame_mask_BB_sm[:,~sm_res_mask] = False
-            l_fape_protein_sm = compute_general_FAPE(
+            l_fape_protein_sm, _, _ = compute_general_FAPE(
                 pred[:, mask_BB,:,:3],
                 true[:, mask_BB[0],:3,:3],
                 atom_mask = mask_crds_protein[:,mask_BB[0], :3],
@@ -306,7 +313,7 @@ class Trainer():
             mask_crds_sm[:, ~sm_res_mask] = False
             frame_mask_BB_protein = frame_mask_BB.clone()
             frame_mask_BB_protein[:,sm_res_mask] = False
-            l_fape_sm_protein = compute_general_FAPE(
+            l_fape_sm_protein, _, _ = compute_general_FAPE(
                 pred[:, mask_BB,:,:3],
                 true[:, mask_BB[0],:3,:3],
                 atom_mask = mask_crds_sm[:,mask_BB[0], :3],
@@ -378,7 +385,7 @@ class Trainer():
             # L1 = same_chain[0,0,:].sum()
             # mask_BBA = mask_BB.clone()
             # mask_BBA[0, L1:] = False
-            l_fape_A = compute_general_FAPE(
+            l_fape_A, _, _ = compute_general_FAPE(
                 pred_allatom[:,mask_BBA[0],:,:3],
                 nat_symm[None,mask_BBA[0],:,:3],
                 xs_mask[:,mask_BBA[0]],
@@ -387,7 +394,7 @@ class Trainer():
             )
             # mask_BBB = mask_BB.clone()
             # mask_BBB[0,:L1] = False
-            l_fape_B = compute_general_FAPE(
+            l_fape_B, _, _ = compute_general_FAPE(
                 pred_allatom[:,mask_BBB[0],:,:3],
                 nat_symm[None,mask_BBB[0],:,:3],
                 xs_mask[:,mask_BBB[0]],
@@ -398,7 +405,7 @@ class Trainer():
             l_fape = fracA*l_fape_A + (1.0-fracA)*l_fape_B
 
         else:
-            l_fape = compute_general_FAPE(
+            l_fape, _, _ = compute_general_FAPE(
                 pred_allatom[:,mask_BB[0],:,:3],
                 nat_symm[None,mask_BB[0],:,:3],
                 xs_mask[:,mask_BB[0]],
@@ -600,7 +607,8 @@ class Trainer():
         #new_chk = checkpoint['model_state_dict']
         model.module.model.load_state_dict(new_chk, strict=False)
         model.module.shadow.load_state_dict(new_chk, strict=False)
-        if resume_train and (not rename_model):
+        #if resume_train and (not rename_model):
+        if resume_train:
             print (' ... loading optimization params')
             loaded_epoch = checkpoint['epoch']
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -775,11 +783,6 @@ class Trainer():
             loader_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
-        valid_atomize_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.n_valid_pdb],
-            loader_atomize_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0
-        )
         valid_homo_set = Dataset(
             list(valid_homo.keys())[:self.dataset_param['n_valid_homo']],
             loader_pdb, valid_homo,
@@ -892,7 +895,6 @@ class Trainer():
         )
 
         valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
-        valid_atomize_pdb_sampler = data.distributed.DistributedSampler(valid_atomize_pdb_set, num_replicas=world_size, rank=rank)
         valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
         valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
         valid_na_compl_sampler = data.distributed.DistributedSampler(valid_na_compl_set, num_replicas=world_size, rank=rank)
@@ -902,6 +904,7 @@ class Trainer():
         valid_sm_compl_ligclus_sampler = data.distributed.DistributedSampler(valid_sm_compl_ligclus_set, num_replicas=world_size, rank=rank)
         valid_sm_compl_strict_sampler = data.distributed.DistributedSampler(valid_sm_compl_strict_set, num_replicas=world_size, rank=rank)
         valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
+        valid_atomize_pdb_sampler = data.distributed.DistributedSampler(valid_atomize_pdb_set, num_replicas=world_size, rank=rank)
         # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_neg_sampler = data.distributed.DistributedSampler(valid_na_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_from_scratch_neg_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_neg_set, num_replicas=world_size, rank=rank)
@@ -909,7 +912,6 @@ class Trainer():
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_atomize_pdb_sampler, **LOAD_PARAM)
         valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
@@ -920,7 +922,7 @@ class Trainer():
         valid_sm_compl_strict_loader = data.DataLoader(valid_sm_compl_strict_set, sampler=valid_sm_compl_strict_sampler, **LOAD_PARAM)
         valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
         
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_atomize_pdb_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
 #        valid_na_neg_loader = data.DataLoader(valid_na_neg_set, sampler=valid_na_neg_sampler, **LOAD_PARAM)
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
@@ -987,7 +989,6 @@ class Trainer():
         for epoch in range(loaded_epoch+1, self.n_epoch):
             train_sampler.set_epoch(epoch)
             valid_pdb_sampler.set_epoch(epoch)
-            valid_atomize_pdb_sampler.set_epoch(epoch)
             valid_homo_sampler.set_epoch(epoch)
             valid_compl_sampler.set_epoch(epoch)
             valid_na_compl_sampler.set_epoch(epoch)
@@ -997,14 +998,13 @@ class Trainer():
             valid_sm_compl_ligclus_sampler.set_epoch(epoch)
             valid_sm_compl_strict_sampler.set_epoch(epoch)
             valid_sm_sampler.set_epoch(epoch)
+            valid_atomize_pdb_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
                 epoch, verbose = self.eval)
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
-                epoch, header='Monomer atomize', verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
                 epoch, header="Homo", verbose = self.eval)
             if self.dataset_param["fraction_compl"] > 0:
@@ -1029,6 +1029,9 @@ class Trainer():
             if self.dataset_param["fraction_sm"] > 0:
                 _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
                     rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
+            if self.dataset_param["fraction_atomize_pdb"] > 0:
+                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
+                    epoch, header='Monomer atomize', verbose = self.eval)
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
@@ -1204,7 +1207,7 @@ class Trainer():
             if counter%self.ACCUM_STEP != 0:
                 with ddp_model.no_sync():
                     with torch.cuda.amp.autocast(enabled=USE_AMP):
-                        logit_s, logit_aa_s, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
+                        logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
                             msa_masked[:,i_cycle],
                             msa_full[:,i_cycle],
                             seq[:,i_cycle],
@@ -1242,7 +1245,7 @@ class Trainer():
                         ctrid = len(train_loader)*rank+counter
                         loss, loss_dict = self.calc_loss(
                             logit_s, c6d,
-                            logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
+                            logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle], logit_pae, logit_pde,
                             pred_crds, alphas, pred_allatom, true_crds_, 
                             atom_mask_, res_mask, mask_2d, same_chain,
                             pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
@@ -1253,7 +1256,7 @@ class Trainer():
                     scaler.scale(loss).backward()
             else:
                 with torch.cuda.amp.autocast(enabled=USE_AMP):
-                    logit_s, logit_aa_s, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
+                    logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
                         msa_masked[:,i_cycle],
                         msa_full[:,i_cycle],
                         seq[:,i_cycle],
@@ -1296,7 +1299,7 @@ class Trainer():
                     ctrid = len(train_loader)*rank+counter
                     loss, loss_dict = self.calc_loss(
                         logit_s, c6d,
-                        logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
+                        logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle], logit_pae, logit_pde,
                         pred_crds, alphas, pred_allatom, true_crds_, 
                         atom_mask_, res_mask, mask_2d, same_chain,
                         pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
@@ -1524,7 +1527,7 @@ class Trainer():
                     #mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 i_cycle = N_cycle-1
-                logit_s, logit_aa_s, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
+                logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
                     msa_masked[:,i_cycle],
                     msa_full[:,i_cycle],
                     seq[:,i_cycle],
@@ -1563,7 +1566,7 @@ class Trainer():
                 ctrid = len(valid_loader)*rank+counter
                 loss, loss_dict = self.calc_loss(
                     logit_s, c6d,
-                    logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
+                    logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle], logit_pae, logit_pde,
                     pred_crds, alphas, pred_allatom, true_crds_, 
                     atom_mask_, res_mask, mask_2d, same_chain,
                     pred_lddts, idx_pdb, bond_feats, atom_frames, unclamp=unclamp, negative=negative,

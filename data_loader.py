@@ -1726,7 +1726,12 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     i_start = torch.randint(flank+1, sc_residues.shape[0]-(n_res_atomize+flank+1),(1,))
     i_start = sc_residues[i_start] # index of the first residue to be atomized
 
-    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
+    try:
+        msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
+    except Exception as e:
+        print('in loader_atomize_pdb')
+        print('item', item)
+        raise e
         
     # generate blank template for atoms
     tplt_sm = {"ids":[]}

@@ -71,5 +71,17 @@ class LDDTNetwork(nn.Module):
 
         return logits.permute(0,2,1)
 
+class PAENetwork(nn.Module):
+    def __init__(self, n_feat, n_bin_pae=64):
+        super(PAENetwork, self).__init__()
+        self.proj = nn.Linear(n_feat, n_bin_pae)
+        self.reset_parameter()
+    def reset_parameter(self):
+        nn.init.zeros_(self.proj.weight)
+        nn.init.zeros_(self.proj.bias)
 
+    def forward(self, x):
+        logits = self.proj(x) # (B, L, L, 64)
+
+        return logits.permute(0,3,1,2)
 
