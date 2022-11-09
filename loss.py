@@ -357,16 +357,20 @@ def calc_BB_bond_geom(
 
     return blen_loss+bang_loss
 
-def calc_atom_bond_loss(pred, true, bond_feats, seq, clamp=4, eps=1e-6):
+def calc_atom_bond_loss(pred, true, bond_feats, seq, beta=0.2, eps=1e-6):
     """
-    L2 loss on distances between bonded atoms
+    loss on distances between bonded atoms
     """
+    loss_func_sum = SmoothL1Loss(reduction='sum', beta=beta)
+    loss_func_mean = SmoothL1Loss(reduction='mean', beta=beta)
+
     # intra-ligand bonds
     atom_bonds = (bond_feats>0)*(bond_feats < 5)
     b, i, j = torch.where(atom_bonds>0)
     nat_dist = torch.sum(torch.square(true[:,i,1]-true[:,j,1]),dim=-1)
     pred_dist = torch.sum(torch.square(pred[:,i,1]-pred[:,j,1]),dim=-1)
-    lig_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))
+    #lig_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp)) # from EquiBind
+    lig_dist_loss = loss_func_sum(nat_dist, pred_dist)
 
     # bonds between protein residues and ligand atoms (i.e. atomized protein)
     inter_bonds = bond_feats==6 
@@ -379,7 +383,8 @@ def calc_atom_bond_loss(pred, true, bond_feats, seq, clamp=4, eps=1e-6):
     j_atom = 1*a + 1*b + 0*c + 2*d # (B, N_res_atom_bonds)
     nat_dist = torch.sum(torch.square(true[0,i,i_atom[0],:]-true[0,j,j_atom[0],:]), dim=-1) # assumes B=1
     pred_dist = torch.sum(torch.square(pred[0,i,i_atom[0],:]-pred[0,j,j_atom[0],:]), dim=-1)
-    inter_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))
+    #inter_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))
+    inter_dist_loss = loss_func_sum(nat_dist, pred_dist)
 
     bond_dist_loss = (lig_dist_loss + inter_dist_loss)/(atom_bonds.sum() + inter_bonds.sum() + eps)
 
@@ -391,16 +396,19 @@ def calc_atom_bond_loss(pred, true, bond_feats, seq, clamp=4, eps=1e-6):
         paths = torch.tensor(paths, device=pred.device)
         nat_dist = torch.sum(torch.square(true[:,paths[:,0],1]-true[:,paths[:,2],1]),dim=-1)
         pred_dist = torch.sum(torch.square(pred[:,paths[:,0],1]-pred[:,paths[:,2],1]),dim=-1)
-        skip_bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(paths.shape[0]+eps)
+        #skip_bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(paths.shape[0]+eps)
+        skip_bond_dist_loss = loss_func_mean(nat_dist, pred_dist)
     else:
         skip_bond_dist_loss = torch.tensor(0, device=pred.device)
     rigid_groups = find_all_rigid_groups(bond_feats)
     if rigid_groups != None:
         nat_dist = torch.sum(torch.square(true[:,rigid_groups[:,0],1]-true[:,rigid_groups[:,1],1]),dim=-1)
         pred_dist = torch.sum(torch.square(pred[:,rigid_groups[:,0],1]-pred[:,rigid_groups[:,1],1]),dim=-1)
-        rigid_group_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(rigid_groups.shape[0]+eps)
+        #rigid_group_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(rigid_groups.shape[0]+eps)
+        rigid_group_dist_loss = loss_func_mean(nat_dist, pred_dist)
     else:
         rigid_group_dist_loss = torch.tensor(0, device=pred.device)
+
     return bond_dist_loss, skip_bond_dist_loss, rigid_group_dist_loss
 
 def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-6):
