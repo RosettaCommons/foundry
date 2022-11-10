@@ -473,15 +473,15 @@ class Trainer():
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
         atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats, seq)
-        if w_atom_bond > 0.0:
+        if w_atom_bond >= 0.0:
             tot_loss += w_atom_bond*atom_bond_loss
         loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
 
-        if w_skip_bond > 0.0:
+        if w_skip_bond >= 0.0:
             tot_loss += w_skip_bond*skip_bond_loss
         loss_dict['skip_bond_loss'] = ( skip_bond_loss.detach() )
 
-        if w_rigid > 0.0:
+        if w_rigid >= 0.0:
             tot_loss += w_rigid*rigid_loss
         loss_dict['rigid_loss'] = ( rigid_loss.detach() )
         L0 = same_chain[0,0,:].sum()
@@ -834,7 +834,7 @@ class Trainer():
         valid_atomize_pdb_set = Dataset(
             list(valid_pdb.keys())[:self.dataset_param['n_valid_atomize_pdb']],
             loader_atomize_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0
+            self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
         )
         # valid_neg_set = DatasetComplex(
         #     list(valid_neg.keys())[:self.n_valid_neg],
@@ -1034,7 +1034,7 @@ class Trainer():
                     rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
             if self.dataset_param["fraction_atomize_pdb"] > 0:
                 _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
-                    epoch, header='Monomer atomize', verbose = self.eval)
+                    epoch, header='Monomer atomize 3', verbose = self.eval)
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
