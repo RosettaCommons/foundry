@@ -211,6 +211,10 @@ def get_args():
             help="Weight on rigid body distance loss [0.0]")      
     loss_group.add_argument('-w_hb', type=float, default=0.0,
             help="Weight on hydrogen bond loss [0.0]")
+    loss_group.add_argument('-w_pae', type=float, default=0.05,
+            help="Weight on pae loss [0.05]")      
+    loss_group.add_argument('-w_pde', type=float, default=0.05,
+            help="Weight on pde loss [0.05]")      
     loss_group.add_argument('-lj_lin', type=float, default=0.75,
             help="linear inflection for lj [0.75]")
 
@@ -252,7 +256,8 @@ def get_args():
 
     loss_param = {}
     for param in ['w_dist', 'w_str', 'w_inter_fape', 'w_lig_fape', 'w_aa', 'w_lddt', 'w_bond', 
-                  'w_dih', 'w_clash', 'w_hb', 'lj_lin']:
+                  'w_dih', 'w_clash', 'w_hb', 'lj_lin', 'w_atom_bond', 'w_skip_bond', 'w_rigid', 'w_pae',
+                  'w_pde']:
         loss_param[param] = getattr(args, param)
 
     return args, dataset_param, trunk_param, loader_param, loss_param
