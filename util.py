@@ -374,8 +374,8 @@ def get_tips(xyz, seq):
         xyz_tips = torch.where(torch.isnan(xyz_tips), Cb, xyz_tips)
     return xyz_tips
 
-def writepdb(filename, atoms, seq, modelnum=None, idx_pdb=None, bfacts=None, bond_feats=None):
-    f = open(filename,"a")
+def writepdb(filename, atoms, seq, modelnum=None, idx_pdb=None, bfacts=None, bond_feats=None, file_mode="w"):
+    f = open(filename, file_mode)
     ctr = 1
     scpu = seq.cpu().squeeze(0)
     atomscpu = atoms.cpu().squeeze(0)

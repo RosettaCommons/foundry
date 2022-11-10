@@ -201,6 +201,8 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
 
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
+    pae_loss = None
+    pde_loss = None
 
     pae_loss = compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae) if logit_pae is not None else None
     pde_loss = compute_pde_loss(X, Y, logit_pde) if logit_pde is not None else None

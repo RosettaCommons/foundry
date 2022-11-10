@@ -98,7 +98,7 @@ def set_data_loader_params(args):
         "MAXATOMS"         : 100,
         "MAXSIM"           : 0.85,
         "MAXNSYMM"         : 1024,
-        "NRES_ATOMIZE_MIN" : 3,
+        "NRES_ATOMIZE_MIN" : 1,
         "NRES_ATOMIZE_MAX" : 5,
         "ATOMIZE_FLANK"    : 0,
         "CLUSTER_LIGANDS"  : False
@@ -1679,7 +1679,8 @@ def loader_sm_compl(item, params, pick_top=True,
            chain_idx, False, False, frames, bond_feats, chirals, "sm_compl", item
 
 
-def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, random_noise=5.0):
+def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False, 
+    pick_top=True, p_homo_cut=0.5, random_noise=5.0):
     """ load pdb with portions represented as atoms instead of residues """
     pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
     a3m = get_msa(params['PDB_DIR'] + '/a3m/' + item[1][:3] + '/' + item[1] + '.a3m.gz', item[1])
@@ -1726,9 +1727,6 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     can_atomize_mask[(num_atoms_per_res != num_atoms_exist)] = 0
     can_atomize_idx = torch.where(can_atomize_mask)[0]
 
-    n_res_atomize = np.random.randint(params['NRES_ATOMIZE_MIN'], params['NRES_ATOMIZE_MAX']+1)
-    flank = params['ATOMIZE_FLANK']
-
     # not enough valid residues to atomize and have space for flanks, treat as monomer example
     if flank + 1 >= can_atomize_idx.shape[0]-(n_res_atomize+flank+1):
         return featurize_single_chain(msa, ins, tplt, pdb, params, random_noise=random_noise) \
@@ -1740,7 +1738,8 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     for i_end in range(i_start+1, i_start + n_res_atomize):
         if i_end not in can_atomize_idx:
             n_res_atomize = int(i_end-i_start)
-            print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive fully-resolved residues to atomize.')
+            print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive '\
+                  f'fully-resolved residues to atomize. {item[0]} i_start={i_start}')
             break
 
     msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
@@ -1891,7 +1890,7 @@ def crop_sm(prot_xyz, lig_xyz,Ls, params):
 
 
 class Dataset(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0):
+    def __init__(self, IDs, loader, item_dict, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0, n_res_atomize=0, flank=0):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
@@ -1900,6 +1899,8 @@ class Dataset(data.Dataset):
         self.pick_top = pick_top
         self.unclamp_cut = unclamp_cut
         self.p_homo_cut = p_homo_cut
+        self.n_res_atomize = n_res_atomize
+        self.flank = flank
 
     def __len__(self):
         return len(self.IDs)
@@ -1908,15 +1909,21 @@ class Dataset(data.Dataset):
         ID = self.IDs[index]
         sel_idx = np.random.randint(0, len(self.item_dict[ID]))
         p_unclamp = np.random.rand()
+        kwargs = dict()
+        if self.n_res_atomize > 0:
+            kwargs['n_res_atomize'] = self.n_res_atomize
+            kwargs['flank'] = self.flank
         if p_unclamp > self.unclamp_cut:
             out = self.loader(self.item_dict[ID][sel_idx][0], self.params, self.homo,
                               unclamp=True, 
                               pick_top=self.pick_top, 
-                              p_homo_cut=self.p_homo_cut)
+                              p_homo_cut=self.p_homo_cut,
+                              **kwargs)
         else:
             out = self.loader(self.item_dict[ID][sel_idx][0], self.params, self.homo, 
                               pick_top=self.pick_top,
-                              p_homo_cut=self.p_homo_cut)
+                              p_homo_cut=self.p_homo_cut,
+                              **kwargs)
         return out
 
 class DatasetComplex(data.Dataset):
@@ -2250,8 +2257,11 @@ class DistilledDataset(data.Dataset):
         if index >= offset and index < offset + len(self.atomize_pdb_inds):
             ID = self.atomize_pdb_IDs[index-offset]
             sel_idx = np.random.randint(0, len(self.atomize_pdb_dict[ID]))
+            n_res_atomize = np.random.randint(self.params['NRES_ATOMIZE_MIN'], 
+                                              self.params['NRES_ATOMIZE_MAX']+1)
             out = self.atomize_pdb_loader(self.atomize_pdb_dict[ID][sel_idx][0], 
-                self.params, self.homo, unclamp=(p_unclamp > self.unclamp_cut))
+                self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'], 
+                unclamp=(p_unclamp > self.unclamp_cut))
         offset += len(self.atomize_pdb_inds)
 
         return out

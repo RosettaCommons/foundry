@@ -439,10 +439,10 @@ def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
 
     return xyz, f1d
 
-def parse_mol(filename, string=False):
+def parse_mol(filename, filetype="mol2", string=False):
 
     obConversion = openbabel.OBConversion()
-    obConversion.SetInFormat("mol2")
+    obConversion.SetInFormat(filetype)
 
     obmol = openbabel.OBMol()
     if string:
