@@ -12,7 +12,7 @@ from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP
 from kinematics import get_chirals
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
-    atomize_protein, center_and_realign_missing, random_rot_trans
+    atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -1538,13 +1538,16 @@ def loader_sm_compl(item, params, pick_top=True,
         else:
             print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same '\
                   f'atom order: {item[0]}: {ligands[i_lig]} vs {alt_lig}. Skipping latter ligand.')
-    if xyz_sm.shape[0] > params['MAXNSYMM']: # clip no. of symmetry variants to save GPU memory
+
+    # clamp number of symmetry variants to save GPU memory
+    if xyz_sm.shape[0] > params['MAXNSYMM']: 
         xyz_sm = xyz_sm[:params['MAXNSYMM']]
         mask_sm = mask_sm[:params['MAXNSYMM']]
 
     if xyz_sm.shape[0] ==0:
         print(f'ERROR [loader_sm_compl]: {item[0]} had no xyz coords')
         return (torch.tensor([-1]),)*21 
+
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
@@ -1710,18 +1713,35 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     mask_t_prot = mask_t_prot[:, crop_idx]
     protein_L, nprotatoms, _ = xyz_prot.shape
 
-    # choose a region to atomize
-    sc_residues = (torch.sum(mask_prot, dim=1)>3).nonzero()
+    # choose region to atomize
+    can_atomize_mask = torch.ones((protein_L,))
 
-    # not enough valid residues to atomize and have space for flanks, treat as monomer example
+    idx_missing_N = torch.where(~mask_prot[1:,0])[0]+1 # residues missing bb N, excluding 1st residue
+    idx_missing_C = torch.where(~mask_prot[:-1,2])[0] # residues missing bb C, excluding last residue
+    can_atomize_mask[idx_missing_N-1] = 0 # can't atomize residues before a missing N
+    can_atomize_mask[idx_missing_C+1] = 0 # can't atomize residues after a missing C
+
+    num_atoms_per_res = allatom_mask[msa_prot[0],:14].sum(dim=-1) # how many atoms should each residue have?
+    num_atoms_exist = mask_prot.sum(dim=-1) # how many atoms have coords in each residue?
+    can_atomize_mask[(num_atoms_per_res != num_atoms_exist)] = 0
+    can_atomize_idx = torch.where(can_atomize_mask)[0]
+
     n_res_atomize = np.random.randint(params['NRES_ATOMIZE_MIN'], params['NRES_ATOMIZE_MAX']+1)
     flank = params['ATOMIZE_FLANK']
-    if flank +1 >= sc_residues.shape[0]-(n_res_atomize+flank+1):
+
+    # not enough valid residues to atomize and have space for flanks, treat as monomer example
+    if flank + 1 >= can_atomize_idx.shape[0]-(n_res_atomize+flank+1):
         return featurize_single_chain(msa, ins, tplt, pdb, params, random_noise=random_noise) \
             + ("monomer", item,)
 
-    i_start = torch.randint(flank+1, sc_residues.shape[0]-(n_res_atomize+flank+1),(1,))
-    i_start = sc_residues[i_start] # index of the first residue to be atomized
+    i_start = torch.randint(flank+1, can_atomize_idx.shape[0]-(n_res_atomize+flank+1),(1,))
+    i_start = can_atomize_idx[i_start] # index of the first residue to be atomized
+
+    for i_end in range(i_start+1, i_start + n_res_atomize):
+        if i_end not in can_atomize_idx:
+            n_res_atomize = int(i_end-i_start)
+            print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive fully-resolved residues to atomize.')
+            break
 
     msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
         
@@ -1762,6 +1782,7 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
         bond_feats[Ls[0]+int(last_C.numpy()), i_start+n_res_atomize+flank] = 6
     else:
         print(f"ERROR: {item} has multiple values for last_C, {last_C.numpy()} with i_start= {i_start}")
+
     # handle res_idx
     last_res = idx[-1]
     idx_sm = torch.arange(Ls[1]) + last_res
@@ -1815,6 +1836,11 @@ def loader_sm(item, params, pick_top=True):
     a3m = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
+
+    if xyz_sm.shape[0] > params['MAXNSYMM']: # clip no. of symmetry variants to save GPU memory
+        xyz_sm = xyz_sm[:params['MAXNSYMM']]
+        mask_sm = mask_sm[:params['MAXNSYMM']]
+
     chirals = get_chirals(mol, xyz_sm[0])
     N_symmetry, sm_L, _ = xyz_sm.shape
 

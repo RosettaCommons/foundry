@@ -1,5 +1,6 @@
 import sys, os, time, datetime, subprocess, shutil
 import numpy as np
+import pandas as pd
 from copy import deepcopy
 from collections import OrderedDict
 import torch
@@ -44,7 +45,8 @@ LOAD_PARAM = {'shuffle': False,
 class Evaluator(Trainer):
     def __init__(self, model_name='BFF',
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
-                 model_param={}, dataset_params={}, loader_param={}, loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
+                 model_param={}, dataset_params={}, loader_param={},
+                 loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
                  eval=True, start_epoch=None, out_dir=None, wandb_prefix=None, model_dir='models/'):
 
         super(Evaluator, self).__init__(
@@ -185,9 +187,10 @@ class Evaluator(Trainer):
         valid_sm_compl_ligclus_sampler = data.distributed.DistributedSampler(valid_sm_compl_ligclus_set, num_replicas=world_size, rank=rank)
         valid_sm_compl_strict_sampler = data.distributed.DistributedSampler(valid_sm_compl_strict_set, num_replicas=world_size, rank=rank)
         valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
+        valid_atomize_pdb_sampler = data.distributed.DistributedSampler(valid_atomize_pdb_set, num_replicas=world_size, rank=rank)
 
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_atomize_pdb_sampler, **LOAD_PARAM)
         valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
@@ -237,6 +240,7 @@ class Evaluator(Trainer):
 
         for epoch in range(self.start_epoch, self.start_epoch+self.n_epoch):
             valid_pdb_sampler.set_epoch(epoch)
+            valid_atomize_pdb_sampler.set_epoch(epoch)
             valid_homo_sampler.set_epoch(epoch)
             valid_compl_sampler.set_epoch(epoch)
             valid_na_compl_sampler.set_epoch(epoch)
@@ -255,28 +259,39 @@ class Evaluator(Trainer):
                 dist.destroy_process_group()
                 return
 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
-                epoch, print_header=(epoch==self.start_epoch))
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
-                epoch, header="Homo", print_header=(epoch==self.start_epoch))
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
-                epoch, header="Hetero", print_header=(epoch==self.start_epoch))
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
-                epoch, header="NA", print_header=(epoch==self.start_epoch))
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
-                world_size, epoch, header="NAfs", print_header=(epoch==self.start_epoch))
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
-                epoch, header="RNA", print_header=(epoch==self.start_epoch))
-            valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
-                rank, gpu, world_size, epoch, header="SM Compl", print_header=(epoch==self.start_epoch)) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
-                rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", print_header=(epoch==self.start_epoch)) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
-                rank, gpu, world_size, epoch, header="SM Compl (strict)", print_header=(epoch==self.start_epoch)) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-                rank, gpu, world_size, epoch, header="SM_CSD", print_header=(epoch==self.start_epoch)) 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
-                epoch, header="Atomize PDB", print_header=(epoch==self.start_epoch))
+            df_s = []
+            #_, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
+            #    epoch, print_header=(epoch==self.start_epoch))
+            valid_tot, valid_loss, valid_acc, loss_df = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, 
+                gpu, world_size, epoch, header="Monomer atomize", print_header=(epoch==self.start_epoch))
+            df_s.append(loss_df)
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
+            #    epoch, header="Homo", print_header=(epoch==self.start_epoch))
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
+            #    epoch, header="Hetero", print_header=(epoch==self.start_epoch))
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
+            #    epoch, header="NA", print_header=(epoch==self.start_epoch))
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
+            #    world_size, epoch, header="NAfs", print_header=(epoch==self.start_epoch))
+            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
+            #    epoch, header="RNA", print_header=(epoch==self.start_epoch))
+            #valid_tot, valid_loss, valid_acc, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
+            #    rank, gpu, world_size, epoch, header="SM Compl", print_header=(epoch==self.start_epoch)) 
+            #df_s.append(loss_df)
+            #_, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
+            #    rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", print_header=(epoch==self.start_epoch)) 
+            #df_s.append(loss_df)
+            #_, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
+            #    rank, gpu, world_size, epoch, header="SM Compl (strict)", print_header=(epoch==self.start_epoch)) 
+            #df_s.append(loss_df)
+            #_, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+            #    rank, gpu, world_size, epoch, header="SM_CSD", print_header=(epoch==self.start_epoch)) 
+            #df_s.append(loss_df)
+
+            if rank==0:
+                loss_df = pd.concat(df_s)
+                loss_df.to_csv(self.out_dir+f'/loss_per_ex_valid_ep{epoch}.csv')
+
         dist.destroy_process_group()
 
 
@@ -296,11 +311,19 @@ if __name__ == "__main__":
                     batch_size=args.batch_size,
                     accum_step=args.accum,
                     maxcycle=args.maxcycle,
-                    eval=args.eval,
+                    eval=True,
                     start_epoch=args.start_epoch,
                     interactive=args.interactive,
                     out_dir=args.out_dir,
                     wandb_prefix=args.wandb_prefix,
                     model_dir=args.model_dir,
-                    )
+                    n_valid_pdb=args.n_valid_pdb, 
+                    n_valid_homo=args.n_valid_homo, 
+                    n_valid_compl=args.n_valid_compl, 
+                    n_valid_na_compl=args.n_valid_na_compl, 
+                    n_valid_rna=args.n_valid_rna,
+                    n_valid_sm_compl=args.n_valid_sm_compl,
+                    n_valid_sm_compl_ligclus=args.n_valid_sm_compl_ligclus, 
+                    n_valid_sm_compl_strict=args.n_valid_sm_compl_strict,
+                    n_valid_sm=args.n_valid_sm)
     evaluator.run_model_training(torch.cuda.device_count())

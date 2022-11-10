@@ -1,5 +1,6 @@
 import sys, os, time, datetime, subprocess, shutil
 import numpy as np
+import pandas as pd
 from copy import deepcopy
 from collections import OrderedDict
 import wandb
@@ -162,7 +163,7 @@ class Trainer():
         self.pdb_counter=0
         
     def calc_loss(self, logit_s, label_s,
-                  logit_aa_s, label_aa_s, mask_aa_s,
+                  logit_aa_s, label_aa_s, mask_aa_s, logit_pae, logit_pde,
                   pred, pred_tors, pred_allatom, true,
                   mask_crds, mask_BB, mask_2d, same_chain,
                   pred_lddt, idx, bond_feats, atom_frames=None, unclamp=False, 
@@ -170,7 +171,7 @@ class Trainer():
                   verbose=False, ctr=0,
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lig_fape=1.0, w_lddt=1.0, 
                   w_bond=1.0, w_clash=0.0, w_atom_bond=0.0, w_skip_bond=0.0, w_rigid=0.0, w_hb=0.0, w_dih=0.0,
-                  lj_lin=0.85, eps=1e-6, item=None, task=None, out_dir='./'
+                  w_pae=0.0, w_pde=0.0, lj_lin=0.85, eps=1e-6, item=None, task=None, out_dir='./'
     ):
         gpu = pred.device
 
@@ -215,7 +216,7 @@ class Trainer():
         mask_BBA = mask_BB.clone()
         mask_BBA[0, L1:] = False
         if torch.sum(mask_BBA) >0:
-            l_fape_A = compute_general_FAPE(
+            l_fape_A, _, _ = compute_general_FAPE(
                 pred[:,mask_BBA,:,:3],
                 true[:,mask_BBA[0],:3],
                 mask_crds[:,mask_BBA[0], :3],
@@ -230,7 +231,7 @@ class Trainer():
         mask_BBB = mask_BB.clone()
         mask_BBB[0,:L1] = False
         if torch.sum(mask_BBB) >0:
-            l_fape_B = compute_general_FAPE(
+            l_fape_B, _, _ = compute_general_FAPE(
                 pred[:, mask_BBB,:,:3],
                 true[:,mask_BBB[0],:3,:3],
                 mask_crds[:,mask_BBB[0], :3],
@@ -246,14 +247,18 @@ class Trainer():
         if negative: # inter-chain fapes should be ignored for negative cases
             fracA = float(L1)/len(same_chain[0,0])
             tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
+            pae_loss = torch.tensor(0).to(gpu)
+            pae_loss = torch.tensor(0).to(gpu)
         else:
-            tot_str = compute_general_FAPE(
+            tot_str, pae_loss, pde_loss = compute_general_FAPE(
                 pred[:,mask_BB,:,:3],
                 true[:,mask_BB[0],:3],
                 mask_crds[:,mask_BB[0],:3],
                 frames_BB[:,mask_BB[0]],
                 frame_mask_BB[:,mask_BB[0]],
                 dclamp=dclamp, 
+                logit_pae=logit_pae[:,:,mask_BB[0]][:,:,:,mask_BB[0]],
+                logit_pde=logit_pde[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
             )
         num_layers = pred.shape[0]
         gamma = 0.99
@@ -263,15 +268,18 @@ class Trainer():
         bb_l_fape = (w_bb_fape*tot_str).sum()
 
         tot_loss += 0.5*w_str*bb_l_fape
-
         for i in range(len(tot_str)):
             loss_dict[f'bb_fape_layer{i}'] = tot_str[i].detach()
         loss_dict['bb_fape_full'] = bb_l_fape.detach()
 
+        tot_loss += w_pae*pae_loss + w_pde*pde_loss
+        loss_dict['pae_loss'] = pae_loss.detach()
+        loss_dict['pde_loss'] = pde_loss.detach()
+
         sm_res_mask = is_atom(label_aa_s[0,0])*mask_BB[0] # (L,)
         if bool(torch.any(sm_res_mask)):
             # ligand fape (layer-averaged fape on atom coordinates with atom frames)
-            l_fape_sm = compute_general_FAPE(
+            l_fape_sm, _, _ = compute_general_FAPE(
                 pred[:, sm_res_mask[None],:,:3],
                 true[:,sm_res_mask,:3,:3],
                 atom_mask = mask_crds[:,sm_res_mask, :3],
@@ -291,7 +299,7 @@ class Trainer():
             mask_crds_protein[:, sm_res_mask] = False
             frame_mask_BB_sm = frame_mask_BB.clone()
             frame_mask_BB_sm[:,~sm_res_mask] = False
-            l_fape_protein_sm = compute_general_FAPE(
+            l_fape_protein_sm, _, _ = compute_general_FAPE(
                 pred[:, mask_BB,:,:3],
                 true[:, mask_BB[0],:3,:3],
                 atom_mask = mask_crds_protein[:,mask_BB[0], :3],
@@ -305,7 +313,7 @@ class Trainer():
             mask_crds_sm[:, ~sm_res_mask] = False
             frame_mask_BB_protein = frame_mask_BB.clone()
             frame_mask_BB_protein[:,sm_res_mask] = False
-            l_fape_sm_protein = compute_general_FAPE(
+            l_fape_sm_protein, _, _ = compute_general_FAPE(
                 pred[:, mask_BB,:,:3],
                 true[:, mask_BB[0],:3,:3],
                 atom_mask = mask_crds_sm[:,mask_BB[0], :3],
@@ -377,7 +385,7 @@ class Trainer():
             # L1 = same_chain[0,0,:].sum()
             # mask_BBA = mask_BB.clone()
             # mask_BBA[0, L1:] = False
-            l_fape_A = compute_general_FAPE(
+            l_fape_A, _, _ = compute_general_FAPE(
                 pred_allatom[:,mask_BBA[0],:,:3],
                 nat_symm[None,mask_BBA[0],:,:3],
                 xs_mask[:,mask_BBA[0]],
@@ -386,7 +394,7 @@ class Trainer():
             )
             # mask_BBB = mask_BB.clone()
             # mask_BBB[0,:L1] = False
-            l_fape_B = compute_general_FAPE(
+            l_fape_B, _, _ = compute_general_FAPE(
                 pred_allatom[:,mask_BBB[0],:,:3],
                 nat_symm[None,mask_BBB[0],:,:3],
                 xs_mask[:,mask_BBB[0]],
@@ -397,7 +405,7 @@ class Trainer():
             l_fape = fracA*l_fape_A + (1.0-fracA)*l_fape_B
 
         else:
-            l_fape = compute_general_FAPE(
+            l_fape, _, _ = compute_general_FAPE(
                 pred_allatom[:,mask_BB[0],:,:3],
                 nat_symm[None,mask_BB[0],:,:3],
                 xs_mask[:,mask_BB[0]],
@@ -464,7 +472,7 @@ class Trainer():
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
-        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats)
+        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats, seq)
         if w_atom_bond > 0.0:
             tot_loss += w_atom_bond*atom_bond_loss
         loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
@@ -561,26 +569,26 @@ class Trainer():
         best_valid_loss = 999999.9
         if not os.path.exists(chk_fn):
             print ('no model found', model_name)
-            return -1, best_valid_loss
+            return -2, best_valid_loss
         map_location = {"cuda:%d"%0: "cuda:%d"%rank}
         checkpoint = torch.load(chk_fn, map_location=map_location)
-        print ('loading model', model_name, 'from', chk_fn, 'epoch', checkpoint['epoch'])
-        rename_model = False
+        if rank == 0:
+            print ('loading model', model_name, 'from', chk_fn, 'epoch', checkpoint['epoch'])
+        new_params = False
         new_chk = {}
         msd_src = checkpoint['model_state_dict']
         msd_tgt = model.module.model.state_dict()
         for param in msd_tgt:
-
             if param not in msd_src:
-                print ('missing',param)
-                rename_model=True
+                if rank == 0: print ('missing',param)
+                new_params = True
                 #break
             elif (msd_tgt[param].shape == msd_src[param].shape):
                 new_chk[param] = msd_src[param]
             else:
                 # fd hack for new encoding
                 if (msd_src[param].shape[0]==30 and msd_tgt[param].shape[0]==32 and 'compute_allatom_coords' not in param):
-                    print ('Fixing',param)
+                    if rank == 0: print ('Fixing',param)
                     new_chk[param] = torch.zeros_like(msd_tgt[param])
                     new_chk[param][:26] =  msd_src[param][:26]
                     new_chk[param][27:31] =  msd_src[param][26:30]
@@ -590,27 +598,32 @@ class Trainer():
                     #wrong size templ_emb.emb.weight torch.Size([64, 104]) torch.Size([64, 108])
                     #wrong size full_emb.emb.weight torch.Size([64, 33]) torch.Size([64, 35])
 
-                    print (
-                        'wrong size',param,
-                        checkpoint['model_state_dict'][param].shape,
-                         model.module.model.state_dict()[param].shape )
-                    rename_model=True
+                    if rank == 0:
+                        print (
+                            'wrong size',param,
+                             checkpoint['model_state_dict'][param].shape,
+                             model.module.model.state_dict()[param].shape )
+                    new_params = True
 
         #new_chk = checkpoint['model_state_dict']
         model.module.model.load_state_dict(new_chk, strict=False)
         model.module.shadow.load_state_dict(new_chk, strict=False)
-        if resume_train and (not rename_model):
-            print (' ... loading optimization params')
+
+        #if resume_train and (not rename_model):
+        if resume_train:
             loaded_epoch = checkpoint['epoch']
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            scaler.load_state_dict(checkpoint['scaler_state_dict'])
+            if not new_params:
+                if rank == 0: print (' ... loading optimization params')
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                scaler.load_state_dict(checkpoint['scaler_state_dict'])
             if 'scheduler_state_dict' in checkpoint:
-                print (' ... loading scheduler params')
+                if rank == 0: print (' ... loading scheduler params')
                 scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
             else:
                 scheduler.last_epoch = loaded_epoch + 1
-            #if 'best_loss' in checkpoint:
-            #    best_valid_loss = checkpoint['best_loss']
+            if 'best_loss' in checkpoint:
+                best_valid_loss = checkpoint['best_loss']
+
         return loaded_epoch, best_valid_loss
 
     def checkpoint_fn(self, model_name, description):
@@ -630,7 +643,6 @@ class Trainer():
         if ('MASTER_PORT' not in os.environ):
             os.environ['MASTER_PORT'] = '%d'%self.port
 
-        print('master port',os.environ['MASTER_PORT'])
         if (not self.interactive and "SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
             world_size = int(os.environ["SLURM_NTASKS"])
             rank = int (os.environ["SLURM_PROCID"])
@@ -711,7 +723,7 @@ class Trainer():
         rna_IDs, rna_weights, rna_dict = rna_items
         sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
         sm_IDs, sm_weights, sm_dict = sm_items
-        
+
         if (rank==0):
             print ('Loaded (training)',
                 len(pdb_IDs),'monomers/homomers,',
@@ -754,7 +766,7 @@ class Trainer():
             )
 
         train_set = DistilledDataset(
-            pdb_IDs, loader_pdb, pdb_dict,
+            pdb_IDs, loader_atomize_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
             #neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
@@ -895,6 +907,7 @@ class Trainer():
         valid_sm_compl_ligclus_sampler = data.distributed.DistributedSampler(valid_sm_compl_ligclus_set, num_replicas=world_size, rank=rank)
         valid_sm_compl_strict_sampler = data.distributed.DistributedSampler(valid_sm_compl_strict_set, num_replicas=world_size, rank=rank)
         valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
+        valid_atomize_pdb_sampler = data.distributed.DistributedSampler(valid_atomize_pdb_set, num_replicas=world_size, rank=rank)
         # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_neg_sampler = data.distributed.DistributedSampler(valid_na_neg_set, num_replicas=world_size, rank=rank)
 #        valid_na_from_scratch_neg_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_neg_set, num_replicas=world_size, rank=rank)
@@ -912,7 +925,7 @@ class Trainer():
         valid_sm_compl_strict_loader = data.DataLoader(valid_sm_compl_strict_set, sampler=valid_sm_compl_strict_sampler, **LOAD_PARAM)
         valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
         
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
+        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_atomize_pdb_sampler, **LOAD_PARAM)
         # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
 #        valid_na_neg_loader = data.DataLoader(valid_na_neg_set, sampler=valid_na_neg_sampler, **LOAD_PARAM)
 #       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
@@ -988,35 +1001,40 @@ class Trainer():
             valid_sm_compl_ligclus_sampler.set_epoch(epoch)
             valid_sm_compl_strict_sampler.set_epoch(epoch)
             valid_sm_sampler.set_epoch(epoch)
+            valid_atomize_pdb_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
 
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
                 epoch, verbose = self.eval)
-            _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
                 epoch, header="Homo", verbose = self.eval)
             if self.dataset_param["fraction_compl"] > 0:
-                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
+                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
                     epoch, header="Hetero", verbose = self.eval)
             if self.dataset_param["fraction_na_compl"] > 0:
-                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
-                    epoch, header="NA", verbose = self.eval)
-                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
-                    world_size, epoch, header="NAfs", verbose = self.eval)
+                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, 
+                    world_size, epoch, header="NA", verbose = self.eval)
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
+                world_size, epoch, header="NAfs", verbose = self.eval)
             if self.dataset_param["fraction_rna"] > 0:
-                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
+                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
                     epoch, header="RNA", verbose = self.eval)
             if self.dataset_param["fraction_sm_compl"] > 0:
-                valid_tot, valid_loss, valid_acc = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
-                    rank, gpu, world_size, epoch, header="SM Compl", verbose = self.eval) 
-                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
+                valid_tot, valid_loss, valid_acc, _ = self.valid_pdb_cycle(ddp_model, 
+                    valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl", 
+                    verbose = self.eval) 
+                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
                     rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", verbose = self.eval) 
-                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
+                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
                     rank, gpu, world_size, epoch, header="SM Compl (strict)", verbose = self.eval) 
             if self.dataset_param["fraction_sm"] > 0:
-                _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
                     rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
+            if self.dataset_param["fraction_atomize_pdb"] > 0:
+                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
+                    epoch, header='Monomer atomize', verbose = self.eval)
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
@@ -1192,7 +1210,7 @@ class Trainer():
             if counter%self.ACCUM_STEP != 0:
                 with ddp_model.no_sync():
                     with torch.cuda.amp.autocast(enabled=USE_AMP):
-                        logit_s, logit_aa_s, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
+                        logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
                             msa_masked[:,i_cycle],
                             msa_full[:,i_cycle],
                             seq[:,i_cycle],
@@ -1230,7 +1248,7 @@ class Trainer():
                         ctrid = len(train_loader)*rank+counter
                         loss, loss_dict = self.calc_loss(
                             logit_s, c6d,
-                            logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
+                            logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle], logit_pae, logit_pde,
                             pred_crds, alphas, pred_allatom, true_crds_, 
                             atom_mask_, res_mask, mask_2d, same_chain,
                             pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
@@ -1241,7 +1259,7 @@ class Trainer():
                     scaler.scale(loss).backward()
             else:
                 with torch.cuda.amp.autocast(enabled=USE_AMP):
-                    logit_s, logit_aa_s, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
+                    logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
                         msa_masked[:,i_cycle],
                         msa_full[:,i_cycle],
                         seq[:,i_cycle],
@@ -1284,7 +1302,7 @@ class Trainer():
                     ctrid = len(train_loader)*rank+counter
                     loss, loss_dict = self.calc_loss(
                         logit_s, c6d,
-                        logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
+                        logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle], logit_pae, logit_pde,
                         pred_crds, alphas, pred_allatom, true_crds_, 
                         atom_mask_, res_mask, mask_2d, same_chain,
                         pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
@@ -1318,9 +1336,11 @@ class Trainer():
                     print('saving error',item)
                     raise e
                 writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_true.pdb', 
-                        torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask], bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
+                    torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask], 
+                    bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
                 writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_pred.pdb', 
-                    torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask], bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
+                    torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask], 
+                    bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
 
             local_tot += loss.detach()*self.ACCUM_STEP
             if local_loss is None:
@@ -1340,7 +1360,6 @@ class Trainer():
             if counter == 1 and rank == 0:
                 sys.stdout.write(f'Header: [epoch/num_epochs] Batch: [examples_seen_in_epoch/examples_per_epoch] Time: time | Total_loss: total_loss | {" ".join(loss_dict.keys())} | precision recall F1 | max_mem \n')
             
-            #if counter % N_PRINT_TRAIN == 0:
             if counter % self.ACCUM_STEP == 0:
                 if rank == 0:
                     max_mem = torch.cuda.max_memory_allocated()/1e9
@@ -1399,7 +1418,7 @@ class Trainer():
 
     def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False, print_header=False):
         if len(valid_loader) == 0:
-            return None, None, None
+            return None, None, None, None
 
         valid_tot = 0.0
         valid_loss = None
@@ -1410,16 +1429,18 @@ class Trainer():
 
         out_dir = self.out_dir+f'/valid_ep{epoch}{"_eval" if verbose else ""}/'
         os.makedirs(out_dir, exist_ok=True)
+
+        if self.eval:
+            records = []
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
             for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in valid_loader:
                 # skip known bad training examples
-                # loader will print warning message with item info for followup later
                 if torch.is_tensor(item) and torch.all(item==-1):
                     continue
 
-                save_pdbs = np.random.rand()<=0.1 or verbose
+                save_pdbs = np.random.rand()<=0.1 or self.eval
 
                 # transfer inputs to device
                 B, _, N, L = msa.shape
@@ -1509,7 +1530,7 @@ class Trainer():
                     #mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 i_cycle = N_cycle-1
-                logit_s, logit_aa_s, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
+                logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
                     msa_masked[:,i_cycle],
                     msa_full[:,i_cycle],
                     seq[:,i_cycle],
@@ -1548,7 +1569,7 @@ class Trainer():
                 ctrid = len(valid_loader)*rank+counter
                 loss, loss_dict = self.calc_loss(
                     logit_s, c6d,
-                    logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle],
+                    logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle], logit_pae, logit_pde,
                     pred_crds, alphas, pred_allatom, true_crds_, 
                     atom_mask_, res_mask, mask_2d, same_chain,
                     pred_lddts, idx_pdb, bond_feats, atom_frames, unclamp=unclamp, negative=negative,
@@ -1562,13 +1583,29 @@ class Trainer():
                 valid_loss += torch.stack(list(loss_dict.values()))
                 valid_acc += acc_s.detach()
 
+                # records results
+                if task[0].startswith('sm_compl'):
+                    name = item[2][0][0].replace('.mol2','')
+                elif task[0]=='sm_only':
+                    name = item[0]
+                else:
+                    name = item[0][0]
+                if self.eval:
+                    record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)
+                    record.update({k:float(v) for k,v in loss_dict.items()})
+                    records.append(record)
+                    
+                #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_prev.pdb',
-                        torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_true.pdb',
-                        torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask], bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{item[0][0]}_xyz_pred.pdb',
-                        torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask], bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_prev.pdb',
+                        torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
+                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_true.pdb',
+                        torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask],
+                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_pred.pdb',
+                        torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask],
+                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
 
                 counter += 1
 
@@ -1584,6 +1621,16 @@ class Trainer():
         valid_loss = valid_loss.cpu().detach().numpy()
         valid_acc = valid_acc.cpu().detach().numpy()
         
+        if self.eval:
+            # gather per-example losses
+            if rank == 0:
+                all_records = [None]*world_size 
+                dist.gather_object(records, all_records, dst=0)
+            else:
+                dist.gather_object(records, dst=0)
+
+        loss_df = None
+
         if rank == 0:
             if self.wandb_prefix is not None:
                 log_dict = {f"Valid_{header}":{task[0]:loss_dict}}
@@ -1599,7 +1646,15 @@ class Trainer():
                     " ".join(["%8.4f"%l for l in valid_loss]),\
                     valid_acc[0], valid_acc[1], valid_acc[2])) 
             sys.stdout.flush()
-        return valid_tot, valid_loss, valid_acc
+
+            if self.eval:
+                # save per-example losses
+                all_records_ = []
+                for records in all_records:
+                    all_records_.extend(records)
+                loss_df = pd.DataFrame.from_records(all_records_)
+
+        return valid_tot, valid_loss, valid_acc, loss_df
 
     def valid_ppi_cycle(self, ddp_model, valid_pos_loader, valid_neg_loader, rank, gpu, world_size, epoch, header='Protein', report_interface=True, verbose=False):
         valid_tot = 0.0
@@ -1967,7 +2022,8 @@ if __name__ == "__main__":
     from arguments import get_args
     args, dataset_param, model_param, loader_param, loss_param = get_args()
 
-    print (args)
+    if int(os.environ["SLURM_PROCID"])==0:
+        print (args)
 
     mp.freeze_support()
     train = Trainer(model_name=args.model_name,

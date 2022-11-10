@@ -1,8 +1,9 @@
-from asyncio.proactor_events import _ProactorBaseWritePipeTransport
 import sys
+import warnings
 
 import numpy as np
 import torch
+import warnings
 
 import scipy.sparse
 import networkx as nx
@@ -373,9 +374,7 @@ def get_tips(xyz, seq):
         xyz_tips = torch.where(torch.isnan(xyz_tips), Cb, xyz_tips)
     return xyz_tips
 
-
-# writepdb
-def writepdb(filename, atoms, seq, modelnum=0, idx_pdb=None, bfacts=None, bond_feats=None):
+def writepdb(filename, atoms, seq, modelnum=None, idx_pdb=None, bfacts=None, bond_feats=None):
     f = open(filename,"a")
     ctr = 1
     scpu = seq.cpu().squeeze(0)
@@ -388,7 +387,8 @@ def writepdb(filename, atoms, seq, modelnum=0, idx_pdb=None, bfacts=None, bond_f
 
     Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
     atom_idxs = {}
-    f.write(f"MODEL        {modelnum}\n")
+    if modelnum is not None:
+        f.write(f"MODEL        {modelnum}\n")
     for i,s in enumerate(scpu):
         natoms = atomscpu.shape[-2]
         if (natoms!=NHEAVY and natoms!=NTOTAL and natoms!=3):
@@ -426,11 +426,9 @@ def writepdb(filename, atoms, seq, modelnum=0, idx_pdb=None, bfacts=None, bond_f
         b, i, j = atom_bonds.nonzero(as_tuple=True)
         for start, end in zip(i,j):
             f.write(f"CONECT {atom_idxs[int(start.cpu().numpy())]} {atom_idxs[int(end.cpu().numpy())]}\n")
-    f.write("ENDMDL\n")
+    if modelnum is not None:
+        f.write("ENDMDL\n")
     
-######
-######
-
 # process ideal frames
 def make_frame(X, Y):
     Xn = X / torch.linalg.norm(X)
@@ -1065,7 +1063,7 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
     residue_atomize_mask = mask[i_start:i_start+n_res_atomize].float()
     xyz_atomize = xyz[i_start:i_start+n_res_atomize]
-    
+
     # handle symmetries
     xyz_alt = torch.zeros_like(xyz.unsqueeze(0))
     xyz_alt.scatter_(2, long2alt[msa[0],:,None].repeat(1,1,1,3), xyz.unsqueeze(0))
@@ -1076,8 +1074,10 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     swaps = torch.nonzero(~swaps).squeeze() # indices with a swap eg. [2,3]
     if swaps.numel() != 0:
         # if there are residues with alternate numbering scheme, create a stack of coordinate with each combo of swaps
-        combs = torch.combinations(torch.tensor([0,1]), r=swaps.numel(), with_replacement=True) #[[0,0], [0,1], [1,1]]
-        stack = torch.stack((combs, swaps.repeat(swaps.numel()+1,1)), dim=-1).squeeze() 
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",category=UserWarning)
+            combs = torch.combinations(torch.tensor([0,1]), r=swaps.numel(), with_replacement=True) #[[0,0], [0,1], [1,1]]
+        stack = torch.stack((combs, swaps.repeat(swaps.numel()+1,1)), dim=-1).squeeze()
         coords_stack = coords_stack.repeat(swaps.numel()+1,1,1,1)
         nat_symm = coords_stack[0].repeat(swaps.numel()+1,1,1,1) # (N_symm, num_atomize_residues, natoms, 3)
         swapped_coords = coords_stack[stack[...,0], stack[...,1]].squeeze(1) #
@@ -1095,5 +1095,6 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     frames = get_atomized_protein_frames(residues_atomize, ra)
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
+
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_mask, bond_feats)
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals

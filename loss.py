@@ -130,8 +130,32 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
 
     return loss
 
+def compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, pae_bin_step=0.5):
+    # predicted aligned error: C-alpha (or sm. mol atom) distances in backbone frames
+    xij_ca = torch.einsum('rji,rsj->rsi', uX[-1,:,0], X[-1,:,None,1] - X_y[-1,None,:,0,:]) # last bb prediction
+    xij_ca_t = torch.einsum('rji,rsj->rsi', uY[0,:,0], Y[0,:,None,1] - Y_y[0,None,:,0,:]) # assumes B=1
+    eij_label = torch.sqrt(torch.square(xij_ca - xij_ca_t).sum(dim=-1)+eps).clone().detach()
+
+    nbin = logit_pae.shape[1]
+    pae_bins = torch.linspace(pae_bin_step, pae_bin_step*(nbin-1), nbin-1, dtype=logit_pae.dtype, device=logit_pae.device)
+    true_pae_label = torch.bucketize(eij_label, pae_bins, right=True).long()
+    return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pae, true_pae_label[None]) # assumes B=1
+
+def compute_pde_loss(X, Y, logit_pde, pde_bin_step=0.3):
+    # predicted distance error: C-alpha (or sm. mol atom) pairwise distances
+    dX = torch.cdist(X[-1,:,1], X[-1,:,1], compute_mode='donot_use_mm_for_euclid_dist')
+    dY = torch.cdist(Y[0,:,1], Y[0,:,1], compute_mode='donot_use_mm_for_euclid_dist')
+    dist_err = torch.abs(dX-dY).clone().detach()
+
+    nbin = logit_pde.shape[1]
+    pde_bins = torch.linspace(pde_bin_step, pde_bin_step*(nbin-1), nbin-1, dtype=logit_pde.dtype, device=logit_pde.device)
+    true_pde_label = torch.bucketize(dist_err, pde_bins, right=True).long()
+    return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pde, true_pde_label[None]) # assumes B=1
+
+
 # from Ivan: FAPE generalized over atom sets & frames
-def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, Z=10.0, dclamp=10.0, gamma=0.99, eps=1e-4):
+def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, 
+    logit_pae=None, logit_pde=None, Z=10.0, dclamp=10.0, gamma=0.99, eps=1e-4):
 
     # X (predicted) N x L x natoms x 3
     # Y (native)    1 x L x natoms x 3
@@ -178,8 +202,10 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
 
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
 
+    pae_loss = compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae) if logit_pae is not None else None
+    pde_loss = compute_pde_loss(X, Y, logit_pde) if logit_pde is not None else None
 
-    return loss
+    return loss, pae_loss, pde_loss
 
 def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None):
     '''
@@ -332,15 +358,37 @@ def calc_BB_bond_geom(
 
     return blen_loss+bang_loss
 
-def calc_atom_bond_loss(pred, true, bond_feats, clamp=4, eps=1e-6):
+def calc_atom_bond_loss(pred, true, bond_feats, seq, beta=0.2, eps=1e-6):
     """
-    L2 loss on distances between bonded atoms
+    loss on distances between bonded atoms
     """
+    loss_func_sum = torch.nn.SmoothL1Loss(reduction='sum', beta=beta)
+    loss_func_mean = torch.nn.SmoothL1Loss(reduction='mean', beta=beta)
+
+    # intra-ligand bonds
     atom_bonds = (bond_feats>0)*(bond_feats < 5)
     b, i, j = torch.where(atom_bonds>0)
     nat_dist = torch.sum(torch.square(true[:,i,1]-true[:,j,1]),dim=-1)
     pred_dist = torch.sum(torch.square(pred[:,i,1]-pred[:,j,1]),dim=-1)
-    bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))/(atom_bonds.sum()+eps)
+    #lig_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp)) # from EquiBind
+    lig_dist_loss = loss_func_sum(nat_dist, pred_dist)
+
+    # bonds between protein residues and ligand atoms (i.e. atomized protein)
+    inter_bonds = bond_feats==6 
+    _, i, j = torch.where(inter_bonds)
+    a = (seq[:,i]<22) & (seq[:,j]==39) # res N - atom C: binary indicator
+    b = (seq[:,i]<22) & (seq[:,j]==55) # res C - atom N
+    c = (seq[:,i]==39) & (seq[:,j]<22) # atom C - res N
+    d = (seq[:,i]==55) & (seq[:,j]<22) # atom N - res C
+    i_atom = 0*a + 2*b + 1*c + 1*d # (B, N_bonds) : indexes of atom that is bonded (N:0, C:2, 1:ligand atom)
+    j_atom = 1*a + 1*b + 0*c + 2*d # (B, N_bonds)
+    nat_dist = torch.sum(torch.square(true[0,i,i_atom[0],:]-true[0,j,j_atom[0],:]), dim=-1) # assumes B=1
+    pred_dist = torch.sum(torch.square(pred[0,i,i_atom[0],:]-pred[0,j,j_atom[0],:]), dim=-1)
+    #inter_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))
+    inter_dist_loss = loss_func_sum(nat_dist, pred_dist)
+
+    bond_dist_loss = (lig_dist_loss + inter_dist_loss)/(atom_bonds.sum() + inter_bonds.sum() + eps)
+
     # enforce LAS constraints between atoms 2 bonds away and aromatic groups
     atom_bonds_np = atom_bonds[0].cpu().numpy()
     G = nx.from_numpy_matrix(atom_bonds_np)
@@ -349,16 +397,19 @@ def calc_atom_bond_loss(pred, true, bond_feats, clamp=4, eps=1e-6):
         paths = torch.tensor(paths, device=pred.device)
         nat_dist = torch.sum(torch.square(true[:,paths[:,0],1]-true[:,paths[:,2],1]),dim=-1)
         pred_dist = torch.sum(torch.square(pred[:,paths[:,0],1]-pred[:,paths[:,2],1]),dim=-1)
-        skip_bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(paths.shape[0]+eps)
+        #skip_bond_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(paths.shape[0]+eps)
+        skip_bond_dist_loss = loss_func_mean(nat_dist, pred_dist)
     else:
         skip_bond_dist_loss = torch.tensor(0, device=pred.device)
     rigid_groups = find_all_rigid_groups(bond_feats)
     if rigid_groups != None:
         nat_dist = torch.sum(torch.square(true[:,rigid_groups[:,0],1]-true[:,rigid_groups[:,1],1]),dim=-1)
         pred_dist = torch.sum(torch.square(pred[:,rigid_groups[:,0],1]-pred[:,rigid_groups[:,1],1]),dim=-1)
-        rigid_group_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(rigid_groups.shape[0]+eps)
+        #rigid_group_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist),max=clamp))/(rigid_groups.shape[0]+eps)
+        rigid_group_dist_loss = loss_func_mean(nat_dist, pred_dist)
     else:
         rigid_group_dist_loss = torch.tensor(0, device=pred.device)
+
     return bond_dist_loss, skip_bond_dist_loss, rigid_group_dist_loss
 
 def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-6):

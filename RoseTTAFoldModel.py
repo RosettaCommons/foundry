@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from Embeddings import MSA_emb, Extra_emb, Bond_emb, Templ_emb, Recycling
 from Track_module import IterativeSimulator
-from AuxiliaryPredictor import DistanceNetwork, MaskedTokenNetwork, LDDTNetwork
+from AuxiliaryPredictor import DistanceNetwork, MaskedTokenNetwork, LDDTNetwork, PAENetwork
 from chemical import INIT_CRDS,NAATOKENS, NBTYPES
 
 class RoseTTAFoldModule(nn.Module):
@@ -60,6 +60,8 @@ class RoseTTAFoldModule(nn.Module):
         self.c6d_pred = DistanceNetwork(d_pair, p_drop=p_drop)
         self.aa_pred = MaskedTokenNetwork(d_msa, p_drop=p_drop)
         self.lddt_pred = LDDTNetwork(d_state)
+        self.pae_pred = PAENetwork(d_pair)
+        self.pde_pred = PAENetwork(d_pair) # distance error, but use same architecture as aligned error
 
     def forward(
         self, msa_latent, msa_full, seq, seq_unmasked, xyz, sctors, idx, bond_feats, chirals, 
@@ -106,5 +108,9 @@ class RoseTTAFoldModule(nn.Module):
         # Predict LDDT
         lddt = self.lddt_pred(state)
 
-        return logits, logits_aa, xyz, alpha_s, xyz_allatom, lddt, msa[:,0], pair, state
+        # predict aligned error and distance error
+        logits_pae = self.pae_pred(pair)        
+        logits_pde = self.pde_pred(pair)        
 
+        return logits, logits_aa, logits_pae, logits_pde, xyz, alpha_s, xyz_allatom, \
+            lddt, msa[:,0], pair, state
