@@ -643,7 +643,6 @@ class Trainer():
         if ('MASTER_PORT' not in os.environ):
             os.environ['MASTER_PORT'] = '%d'%self.port
 
-        print('master port',os.environ['MASTER_PORT'])
         if (not self.interactive and "SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
             world_size = int(os.environ["SLURM_NTASKS"])
             rank = int (os.environ["SLURM_PROCID"])
@@ -2023,7 +2022,8 @@ if __name__ == "__main__":
     from arguments import get_args
     args, dataset_param, model_param, loader_param, loss_param = get_args()
 
-    print (args)
+    if int(os.environ["SLURM_PROCID"])==0:
+        print (args)
 
     mp.freeze_support()
     train = Trainer(model_name=args.model_name,
