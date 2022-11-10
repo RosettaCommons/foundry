@@ -1731,6 +1731,8 @@ def loader_atomize_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_
     except Exception as e:
         print('in loader_atomize_pdb')
         print('item', item)
+        print('i_start',i_start)
+        print('n_res_atomize',n_res_atomize)
         raise e
         
     # generate blank template for atoms

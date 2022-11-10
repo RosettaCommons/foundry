@@ -1,8 +1,8 @@
-from asyncio.proactor_events import _ProactorBaseWritePipeTransport
 import sys
 
 import numpy as np
 import torch
+import warnings
 
 import scipy.sparse
 import networkx as nx
@@ -1073,7 +1073,9 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     swaps = torch.nonzero(~swaps).squeeze() # indices with a swap eg. [2,3]
     if swaps.numel() != 0:
         # if there are residues with alternate numbering scheme, create a stack of coordinate with each combo of swaps
-        combs = torch.combinations(torch.tensor([0,1]), r=swaps.numel(), with_replacement=True) #[[0,0], [0,1], [1,1]]
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",category=UserWarning)
+            combs = torch.combinations(torch.tensor([0,1]), r=swaps.numel(), with_replacement=True) #[[0,0], [0,1], [1,1]]
         stack = torch.stack((combs, swaps.repeat(swaps.numel()+1,1)), dim=-1).squeeze()
         coords_stack = coords_stack.repeat(swaps.numel()+1,1,1,1)
         nat_symm = coords_stack[0].repeat(swaps.numel()+1,1,1,1) # (N_symm, num_atomize_residues, natoms, 3)

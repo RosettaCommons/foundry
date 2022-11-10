@@ -361,8 +361,8 @@ def calc_atom_bond_loss(pred, true, bond_feats, seq, beta=0.2, eps=1e-6):
     """
     loss on distances between bonded atoms
     """
-    loss_func_sum = SmoothL1Loss(reduction='sum', beta=beta)
-    loss_func_mean = SmoothL1Loss(reduction='mean', beta=beta)
+    loss_func_sum = torch.nn.SmoothL1Loss(reduction='sum', beta=beta)
+    loss_func_mean = torch.nn.SmoothL1Loss(reduction='mean', beta=beta)
 
     # intra-ligand bonds
     atom_bonds = (bond_feats>0)*(bond_feats < 5)
