@@ -1739,7 +1739,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
         if i_end not in can_atomize_idx:
             n_res_atomize = int(i_end-i_start)
             print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive '\
-                   'fully-resolved residues to atomize. {item[0]} i_start={i_start}')
+                  f'fully-resolved residues to atomize. {item[0]} i_start={i_start}')
             break
 
     msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
@@ -1910,7 +1910,7 @@ class Dataset(data.Dataset):
         sel_idx = np.random.randint(0, len(self.item_dict[ID]))
         p_unclamp = np.random.rand()
         kwargs = dict()
-        if n_res_atomize > 0:
+        if self.n_res_atomize > 0:
             kwargs['n_res_atomize'] = self.n_res_atomize
             kwargs['flank'] = self.flank
         if p_unclamp > self.unclamp_cut:
