@@ -1283,11 +1283,7 @@ class Trainer():
                         use_checkpoint=True
                     )
 
-                    try:
-                        true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-                    except Exception as e:
-                        print('error resolving equivalent natives',item, task)
-                        raise e
+                    true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
                     res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                     mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
@@ -1329,12 +1325,9 @@ class Trainer():
                 save_pdbs = True
 
             if save_pdbs:
-                try:
-                    writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_prev.pdb', 
-                        torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
-                except Exception as e:
-                    print('saving error',item)
-                    raise e
+                writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_prev.pdb', 
+                    torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask],
+                    bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
                 writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_true.pdb', 
                     torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask], 
                     bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
