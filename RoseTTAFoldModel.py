@@ -97,7 +97,7 @@ class RoseTTAFoldModule(nn.Module):
         if return_raw:
             # get last structure
             xyz_last = xyz_allatom[-1].unsqueeze(0)
-            return msa[:,0], pair, xyz_last, state, alpha_s[-1]
+            return msa[:,0], pair, xyz_last, state, alpha_s[-1], None
 
         # predict masked amino acids
         logits_aa = self.aa_pred(msa)

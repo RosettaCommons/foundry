@@ -336,6 +336,7 @@ class Predictor():
 
                 logit_aa_s = logit_aa_s.reshape(B,-1,N,L)[:,:,0].permute(0,2,1)
                 xyz_prev = pred_allatom[-1].unsqueeze(0)
+                mask_recycle = None
 
                 all_pred.append(pred_crds)
                 all_pred_allatom.append(pred_allatom[-1])
