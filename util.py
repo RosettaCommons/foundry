@@ -425,7 +425,7 @@ def writepdb(filename, atoms, seq, modelnum=None, idx_pdb=None, bfacts=None, bon
         atom_bonds = atom_bonds.cpu()
         b, i, j = atom_bonds.nonzero(as_tuple=True)
         for start, end in zip(i,j):
-            f.write(f"CONECT {atom_idxs[int(start.cpu().numpy())]} {atom_idxs[int(end.cpu().numpy())]}\n")
+            f.write(f"CONECT{atom_idxs[int(start.cpu().numpy())]:5d}{atom_idxs[int(end.cpu().numpy())]:5d}\n")
     if modelnum is not None:
         f.write("ENDMDL\n")
     
