@@ -1335,13 +1335,13 @@ class Trainer():
                 name = item[0][0]
 
             if save_pdbs:
-                writepdb(out_dir+f'ep{epoch}_{counter}.{rank}_{task[0]}_{name}_xyz_prev.pdb', 
+                writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb', 
                     torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask],
                     bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
-                writepdb(out_dir+f'ep{epoch}_{counter}.{rank}_{task[0]}_{name}_xyz_true.pdb', 
+                writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_true.pdb', 
                     torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask], 
                     bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
-                writepdb(out_dir+f'ep{epoch}_{counter}.{rank}_{task[0]}_{name}_xyz_pred.pdb', 
+                writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_pred.pdb', 
                     torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask], 
                     bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
 
@@ -1595,13 +1595,13 @@ class Trainer():
                     
                 #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
-                    writepdb(out_dir+f'ep{epoch}_{counter}.{rank}_{task[0]}_{name}_xyz_prev.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb',
                         torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
-                    writepdb(out_dir+f'ep{epoch}_{counter}.{rank}_{task[0]}_{name}_xyz_true.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_true.pdb',
                         torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
-                    writepdb(out_dir+f'ep{epoch}_{counter}.{rank}_{task[0]}_{name}_xyz_pred.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_pred.pdb',
                         torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
 
