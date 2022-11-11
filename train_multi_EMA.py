@@ -766,7 +766,7 @@ class Trainer():
             )
 
         train_set = DistilledDataset(
-            pdb_IDs, loader_pdb, pdb_dict,
+            pdb_IDs, loader_atomize_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
             #neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
