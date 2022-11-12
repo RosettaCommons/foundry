@@ -75,12 +75,14 @@ def get_msa(a3mfilename):
 
 
 class Predictor():
-    def __init__(self, chk_fn, device="cuda:0"):
+    def __init__(self, args, device="cuda:0"):
         # define model name
         self.device = device
         self.active_fn = nn.Softmax(dim=1)
 
         # define model & load model
+        MODEL_PARAM['use_extra_l1'] = args.use_extra_l1
+        MODEL_PARAM['use_atom_frames'] = args.use_atom_frames
         self.model = RoseTTAFoldModule(
             **MODEL_PARAM,
             aamask = util.allatom_mask.to(self.device),
@@ -93,7 +95,7 @@ class Predictor():
             cb_tor = util.cb_torsion_t.to(self.device),
         ).to(self.device)
 
-        checkpoint = torch.load(chk_fn, map_location=self.device)
+        checkpoint = torch.load(args.checkpoint, map_location=self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
 
         self.compute_allatom_coords = ComputeAllAtomCoords().to(self.device)
@@ -134,8 +136,8 @@ class Predictor():
 
         if fasta_fn is not None:
             a3m = get_msa(fasta_fn)
-            msa_prot = torch.tensor(a3m['msa']).long()
-            ins_prot = torch.tensor(a3m['ins']).long()
+            msa_prot = a3m['msa'].clone().long()
+            ins_prot = a3m['ins'].clone().long()
             protein_L = msa_prot.shape[-1]
             idx_prot = torch.arange(protein_L)
 
@@ -169,7 +171,7 @@ class Predictor():
             xyz[:, Ls[0]:, 1, :] = xyz_sm
             mask[:, protein_L:, 1] = mask_sm
         idx_sm = torch.arange(max(idx_prot),max(idx_prot)+Ls[1])+200
-        idx_pdb = torch.concat([torch.tensor(idx_prot),idx_sm])
+        idx_pdb = torch.concat([idx_prot.clone(),idx_sm])
         
         seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, 
             p_mask=0.0, params={'MAXLAT': 128, 'MAXSEQ': 1024, 'MAXCYCLE': n_cycle}, tocpu=True)
@@ -361,10 +363,12 @@ class Predictor():
         end = time.time()
 
         # output pdbs
-        util.writepdb(out_prefix+".pdb", best_xyz[0], seq[0, -1], bfacts=100*best_lddt[0].float())
+        util.writepdb(out_prefix+".pdb", best_xyz[0], seq[0, -1], bfacts=100*best_lddt[0].float(), 
+                      bond_feats=bond_feats)
         if args.dump_extra_pdbs:
-            util.writepdb(out_prefix+"_last.pdb", xyz_prev[0], seq[0, -1], bfacts=100*best_lddt[0].float())
-            util.writepdb(out_prefix+"_init.pdb", xyz_prev_orig[0], seq[0, -1])
+            util.writepdb(out_prefix+"_last.pdb", xyz_prev[0], seq[0, -1], bfacts=100*best_lddt[0].float(),
+                          bond_feats=bond_feats)
+            util.writepdb(out_prefix+"_init.pdb", xyz_prev_orig[0], seq[0, -1], bond_feats=bond_feats)
 
         # output folding trajectory
         if args.dump_traj:
@@ -385,7 +389,7 @@ class Predictor():
             util.writepdb(out_prefix+"_traj.pdb", Y[-1], seq[0,-1], 
                 modelnum=0, bond_feats=bond_feats, file_mode="w")
             for i in range(Y.shape[0]):
-                util.writepdb(out_prefix+"_traj.pdb", Y[-1], seq[0,-1], 
+                util.writepdb(out_prefix+"_traj.pdb", Y[i], seq[0,-1], 
                     modelnum=i+1, bond_feats=bond_feats, file_mode="a")
 
         if args.dump_aux:
@@ -420,6 +424,11 @@ def get_args():
     parser.add_argument("-num_interp", type=int, default=5, help='number of interpolation frames for trajectory output')
     parser.add_argument("-parse_hetatm", action="store_true", default=False, help="parse ligand information from input pdb")
     parser.add_argument("-n_cycle", type=int, default=10, help='number of recycles')
+    parser.add_argument("-no_extra_l1", dest='use_extra_l1', default='True', action='store_false',
+            help="Turn off chirality and LJ grad inputs to SE3 layers (for backwards compatibility).")
+    parser.add_argument("-no_atom_frames", dest='use_atom_frames', default='True', action='store_false',
+            help="Turn off l1 features from atom frames in SE3 layers (for backwards compatibility).")
+
     args = parser.parse_args()
     return args
 
@@ -427,7 +436,7 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
 
-    pred = Predictor(args.checkpoint)
+    pred = Predictor(args)
 
     pred.predict(args.out, 
                  fasta_fn=args.fasta,
