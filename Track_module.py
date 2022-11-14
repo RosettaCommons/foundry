@@ -191,7 +191,7 @@ class Str2Str(nn.Module):
         nn.init.zeros_(self.embed_e2.bias)
     
     @torch.cuda.amp.autocast(enabled=False)
-    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, atom_frames, extra_l0=None, extra_l1=None, top_k=128, eps=1e-5):
+    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, atom_frames, extra_l0=None, extra_l1=None, top_k=128, eps=1e-5, use_atom_frames=True):
         # process msa & pair features
         B, N, L = msa.shape[:3]
         node = self.norm_msa(msa[:,0])
@@ -213,9 +213,14 @@ class Str2Str(nn.Module):
             G, edge_feats = make_topk_graph(xyz[:,:,1,:], pair, idx, top_k=top_k)
         else:
             G, edge_feats = make_full_graph(xyz[:,:,1,:], pair, idx)
-        xyz_frame = xyz_frame_from_rotation_mask(xyz, rotation_mask, atom_frames)
-        l1_feats = xyz_frame - xyz_frame[:,:,1,:].unsqueeze(2)
+
+        if use_atom_frames: # ligand l1 features are vectors to neighboring atoms
+            xyz_frame = xyz_frame_from_rotation_mask(xyz, rotation_mask, atom_frames)
+            l1_feats = xyz_frame - xyz_frame[:,:,1,:].unsqueeze(2)
+        else: # old (incorrect) behavior: vectors to random initial coords of virtual N and C
+            l1_feats = xyz - xyz[:,:,1,:].unsqueeze(2)
         l1_feats = l1_feats.reshape(B*L, -1, 3)
+
         if extra_l1 is not None:
             l1_feats = torch.cat( (l1_feats,extra_l1), dim=1 )
         if extra_l0 is not None:
@@ -477,7 +482,7 @@ class IterBlock(nn.Module):
                                nextra_l1=nextra_l1)
         self.rbf_sigma = rbf_sigma
 
-    def forward(self, msa, pair, xyz, state, idx, bond_feats, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None):
+    def forward(self, msa, pair, xyz, state, idx, bond_feats, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True):
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas), self.rbf_sigma)
         if use_checkpoint:
@@ -486,14 +491,14 @@ class IterBlock(nn.Module):
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1)
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, use_atom_frames=use_atom_frames)
 
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
             pair = self.msa2pair(msa, pair)
             pair = self.pair2pair(pair, rbf_feat)
 
-            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, top_k=top_k)
+            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, top_k=top_k, use_atom_frames=use_atom_frames)
 
         return msa, pair, xyz, state, alpha
 
@@ -506,7 +511,7 @@ class IterativeSimulator(nn.Module):
          atom_type_index=None, aamask=None, 
          ljlk_parameters=None, lj_correction_parameters=None,
          cb_len=None, cb_ang=None, cb_tor=None,
-         num_bonds=None, lj_lin=0.6
+         num_bonds=None, lj_lin=0.6, use_extra_l1=True
     ):
         super(IterativeSimulator, self).__init__()
         self.n_extra_block = n_extra_block
@@ -523,6 +528,7 @@ class IterativeSimulator(nn.Module):
         self.cb_len = cb_len
         self.cb_ang = cb_ang
         self.cb_tor = cb_tor
+        self.use_extra_l1 = use_extra_l1 # set to False to not use chiral & LJ grads
 
         # Update with extra sequences
         if n_extra_block > 0:
@@ -535,7 +541,7 @@ class IterativeSimulator(nn.Module):
                                                         rbf_sigma=rbf_sigma,
                                                         use_global_attn=True,
                                                         SE3_param=SE3_param,
-                                                        nextra_l1=3)
+                                                        nextra_l1=3 if self.use_extra_l1 else 0)
                                                         for i in range(n_extra_block)])
 
         # Update with seed sequences
@@ -548,7 +554,7 @@ class IterativeSimulator(nn.Module):
                                                        rbf_sigma=rbf_sigma,
                                                        use_global_attn=False,
                                                        SE3_param=SE3_param,
-                                                       nextra_l1=3)
+                                                       nextra_l1=3 if self.use_extra_l1 else 0)
                                                        for i in range(n_main_block)])
 
         # Final SE(3) refinement
@@ -558,8 +564,8 @@ class IterativeSimulator(nn.Module):
                                        SE3_param=SE3_ref_param,
                                        rbf_sigma=rbf_sigma,
                                        p_drop=p_drop,
-                                       nextra_l0=2*NTOTALDOFS,
-                                       nextra_l1=6 
+                                       nextra_l0=2*NTOTALDOFS if self.use_extra_l1 else 0,
+                                       nextra_l1=6  if self.use_extra_l1 else 0
                                        )
 
         # Fine-tuning all-atom SE(3) refinement
@@ -593,7 +599,7 @@ class IterativeSimulator(nn.Module):
         self.compute_allatom_coords = ComputeAllAtomCoords()
 
 
-    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, chirals, atom_frames=None, use_checkpoint=False):
+    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, chirals, atom_frames=None, use_checkpoint=False, use_atom_frames=True):
         # input:
         #   msa: initial MSA embeddings (N, L, d_msa)
         #   pair: initial residue pair embeddings (L, L, d_pair)
@@ -601,52 +607,61 @@ class IterativeSimulator(nn.Module):
         xyz_s = list()
         alpha_s = list()
         for i_m in range(self.n_extra_block):
-            dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
             extra_l0 = None
-            extra_l1 = dchiraldxyz[0].detach()
+            extra_l1 = None
+            if self.use_extra_l1:
+                dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
+                extra_l1 = dchiraldxyz[0].detach()
             msa_full, pair, xyz, state, alpha = self.extra_block[i_m](msa_full, pair,
                                                                xyz, state, idx, bond_feats,
                                                                use_checkpoint=use_checkpoint, 
                                                                top_k=0, rotation_mask=rotation_mask, 
                                                                atom_frames=atom_frames,
                                                                extra_l0=extra_l0,
-                                                               extra_l1=extra_l1)
+                                                               extra_l1=extra_l1,
+                                                               use_atom_frames=use_atom_frames)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
         
         for i_m in range(self.n_main_block):
-            dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
             extra_l0 = None
-            extra_l1 = dchiraldxyz[0].detach()
+            extra_l1 = None
+            if self.use_extra_l1:
+                dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
+                extra_l1 = dchiraldxyz[0].detach()
             msa, pair, xyz, state, alpha = self.main_block[i_m](msa, pair,
                                                          xyz, state, idx, bond_feats,
                                                          use_checkpoint=use_checkpoint, 
                                                          top_k=0, rotation_mask=rotation_mask,
                                                          atom_frames=atom_frames,
                                                          extra_l0=extra_l0,
-                                                         extra_l1=extra_l1)
+                                                         extra_l1=extra_l1,
+                                                         use_atom_frames=use_atom_frames)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
 
         _, xyzallatom = self.compute_allatom_coords(seq_unmasked, xyz, alpha)  # think about detach here...
         # now use unmasked seq (no cross-talk for msa prediction)
         for i_m in range(self.n_ref_block):
-            # dbonddxyz, = calc_BB_bond_geom_grads(seq_unmasked[0], xyz.detach(), idx)
-            dljdxyz, dljdalpha = calc_lj_grads(
-                 seq_unmasked, xyz.detach(), alpha.detach(), 
-                 self.compute_allatom_coords, bond_feats,
-                 self.aamask, 
-                 self.ljlk_parameters, 
-                 self.lj_correction_parameters, 
-                 self.num_bonds, 
-                 lj_lin=self.lj_lin)
-            dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
-            extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
-            extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
+            extra_l0 = None
+            extra_l1 = None
+            if self.use_extra_l1:
+                # dbonddxyz, = calc_BB_bond_geom_grads(seq_unmasked[0], xyz.detach(), idx)
+                dljdxyz, dljdalpha = calc_lj_grads(
+                     seq_unmasked, xyz.detach(), alpha.detach(), 
+                     self.compute_allatom_coords, bond_feats,
+                     self.aamask, 
+                     self.ljlk_parameters, 
+                     self.lj_correction_parameters, 
+                     self.num_bonds, 
+                     lj_lin=self.lj_lin)
+                dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
+                extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
+                extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
 
             xyz, state, alpha = self.str_refiner(
                     msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats, atom_frames,
-                extra_l0, extra_l1, top_k=128)
+                extra_l0, extra_l1, top_k=128, use_atom_frames=use_atom_frames)
 
             xyz_s.append(xyz)
             alpha_s.append(alpha)

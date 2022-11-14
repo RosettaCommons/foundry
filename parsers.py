@@ -449,7 +449,16 @@ def parse_mol(filename, filetype="mol2", string=False):
         obConversion.ReadString(obmol,filename)
     else:
         obConversion.ReadFile(obmol,filename)
+
     obmol.DeleteHydrogens()
+    # the above sometimes fails to get all the hydrogens
+    i = 1
+    while i < obmol.NumAtoms()+1:
+        if obmol.GetAtom(i).GetAtomicNum()==1:
+            obmol.DeleteAtom(obmol.GetAtom(i))
+        else:
+            i += 1
+
     msa = torch.tensor([aa2num[atomnum2atomtype[obmol.GetAtom(i).GetAtomicNum()]] for i in range(1, obmol.NumAtoms()+1)])
     ins = torch.zeros_like(msa)
 

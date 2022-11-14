@@ -1859,7 +1859,7 @@ def loader_sm(item, params, pick_top=True):
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
 
     idx = torch.arange(sm_L)
-    chain_idx = torch.zeros((sm_L, sm_L)).long()
+    chain_idx = torch.ones((sm_L, sm_L)).long()
     bond_feats = get_bond_feats(mol, G)
 
     xyz_t, f1d_t, mask_t = TemplFeaturize({"ids":[]}, sm_L, params, offset=0,
