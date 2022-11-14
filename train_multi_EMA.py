@@ -766,7 +766,7 @@ class Trainer():
             )
 
         train_set = DistilledDataset(
-            pdb_IDs, loader_atomize_pdb, pdb_dict,
+            pdb_IDs, loader_pdb, pdb_dict,
             compl_IDs, loader_complex, compl_dict,
             #neg_IDs, loader_complex, neg_dict,
             na_compl_IDs, loader_na_complex, na_compl_dict,
@@ -1004,37 +1004,39 @@ class Trainer():
             valid_atomize_pdb_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
 
-            train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch)
+            rng = np.random.RandomState(seed=epoch*world_size+rank)
+
+            train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, rng)
 
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
-                epoch, verbose = self.eval)
+                epoch, rng, verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
-                epoch, header="Homo", verbose = self.eval)
+                epoch, rng, header="Homo", verbose = self.eval)
             if self.dataset_param["fraction_compl"] > 0:
                 _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
-                    epoch, header="Hetero", verbose = self.eval)
+                    epoch, rng, header="Hetero", verbose = self.eval)
             if self.dataset_param["fraction_na_compl"] > 0:
                 _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, 
-                    world_size, epoch, header="NA", verbose = self.eval)
+                    world_size, epoch, rng, header="NA", verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
-                world_size, epoch, header="NAfs", verbose = self.eval)
+                world_size, epoch, rng, header="NAfs", verbose = self.eval)
             if self.dataset_param["fraction_rna"] > 0:
                 _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
-                    epoch, header="RNA", verbose = self.eval)
+                    epoch, rng, header="RNA", verbose = self.eval)
             if self.dataset_param["fraction_sm_compl"] > 0:
                 valid_tot, valid_loss, valid_acc, _ = self.valid_pdb_cycle(ddp_model, 
-                    valid_sm_compl_loader, rank, gpu, world_size, epoch, header="SM Compl", 
+                    valid_sm_compl_loader, rank, gpu, world_size, epoch, rng, header="SM Compl", 
                     verbose = self.eval) 
                 _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
-                    rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", verbose = self.eval) 
+                    rank, gpu, world_size, epoch, rng, header="SM Compl (lig. clus.)", verbose = self.eval) 
                 _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
-                    rank, gpu, world_size, epoch, header="SM Compl (strict)", verbose = self.eval) 
+                    rank, gpu, world_size, epoch, rng, header="SM Compl (strict)", verbose = self.eval) 
             if self.dataset_param["fraction_sm"] > 0:
                 _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-                    rank, gpu, world_size, epoch, header="SM_CSD", verbose = self.eval) 
+                    rank, gpu, world_size, epoch, rng, header="SM_CSD", verbose = self.eval) 
             if self.dataset_param["fraction_atomize_pdb"] > 0:
                 _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
-                    epoch, header='Monomer atomize 3', verbose = self.eval)
+                    epoch, rng, header='Monomer atomize 3', verbose = self.eval)
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
@@ -1088,7 +1090,7 @@ class Trainer():
                     wandb.save(self.checkpoint_fn(self.model_name, str(epoch)))
         dist.destroy_process_group()
 
-    def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, verbose=False):
+    def train_cycle(self, ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, rng, verbose=False):
         # Turn on training mode
         ddp_model.train()
         
@@ -1116,7 +1118,10 @@ class Trainer():
             # loader will print warning message with item info for followup later
             if torch.is_tensor(item) and torch.all(item==-1):
                 continue
-            save_pdbs = np.random.rand()<=0.01
+
+            r = rng.rand()
+            save_pdbs = r<=0.01
+            #print('rank',rank, 'counter',counter, 'item',item, 'task',task, 'save_pdbs',save_pdbs, 'r',r)
             
             # transfer inputs to device
             B, _, N, L = msa.shape
@@ -1144,12 +1149,10 @@ class Trainer():
             # template masking
             seq_unmasked = msa[:, 0, 0, :] # (B, L)
             mask_t_2d = get_prot_sm_mask(mask_t, seq_unmasked[0]) # (B, T, L)
-            #mask_t_2d = mask_t[:,:,:,:3].all(dim=-1) # (B, T, L)
             mask_t_2d = mask_t_2d[:,:,None]*mask_t_2d[:,:,:,None] # (B, T, L, L)
             mask_t_2d = mask_t_2d.float() * same_chain.float()[:,None] # (ignore inter-chain region)
 
             mask_recycle = get_prot_sm_mask(mask_prev, seq_unmasked[0])
-            #mask_recycle = mask_prev[:,:,:3].bool().all(dim=-1)
             mask_recycle = mask_recycle[:,:,None]*mask_recycle[:,None,:] # (B, L, L)
             mask_recycle = same_chain.float()*mask_recycle.float()
 
@@ -1180,7 +1183,7 @@ class Trainer():
                 for i_cycle in range(N_cycle-1):
                     with ddp_model.no_sync():
                         with torch.cuda.amp.autocast(enabled=USE_AMP):
-                            msa_prev, pair_prev, xyz_prev, state_prev, alpha_prev = ddp_model(
+                            msa_prev, pair_prev, xyz_prev, state_prev, alpha_prev, mask_recycle = ddp_model(
                                 msa_masked[:,i_cycle],
                                 msa_full[:,i_cycle],
                                 seq[:,i_cycle],
@@ -1283,11 +1286,7 @@ class Trainer():
                         use_checkpoint=True
                     )
 
-                    try:
-                        true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-                    except Exception as e:
-                        print('error resolving equivalent natives',item, task)
-                        raise e
+                    true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
                     res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                     mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
@@ -1328,17 +1327,21 @@ class Trainer():
                 print('nan loss',item)
                 save_pdbs = True
 
+            if task[0].startswith('sm_compl'):
+                name = item[2][0][0].replace('.mol2','')
+            elif task[0]=='sm_only':
+                name = item[0]
+            else:
+                name = item[0][0]
+
             if save_pdbs:
-                try:
-                    writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_prev.pdb', 
-                        torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask])
-                except Exception as e:
-                    print('saving error',item)
-                    raise e
-                writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_true.pdb', 
+                writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb', 
+                    torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask],
+                    bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
+                writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_true.pdb', 
                     torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask], 
                     bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
-                writepdb(out_dir+f'ep{epoch}_{counter}_{task[0]}_{item[0][0]}_xyz_pred.pdb', 
+                writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_pred.pdb', 
                     torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask], 
                     bond_feats=bond_feats[:, res_mask[0]][:, :, res_mask[0]])
 
@@ -1416,7 +1419,7 @@ class Trainer():
             
         return train_tot, train_loss, train_acc
 
-    def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, header='Monomer', verbose=False, print_header=False):
+    def valid_pdb_cycle(self, ddp_model, valid_loader, rank, gpu, world_size, epoch, rng, header='Monomer', verbose=False, print_header=False):
         if len(valid_loader) == 0:
             return None, None, None, None
 
@@ -1440,7 +1443,9 @@ class Trainer():
                 if torch.is_tensor(item) and torch.all(item==-1):
                     continue
 
-                save_pdbs = np.random.rand()<=0.1 or self.eval
+                r = rng.rand()
+                save_pdbs = r<=0.1 or self.eval
+                #print('rank',rank, 'counter',counter, 'item',item, 'task',task, 'save_pdbs',save_pdbs, 'r',r)
 
                 # transfer inputs to device
                 B, _, N, L = msa.shape
@@ -1469,12 +1474,10 @@ class Trainer():
                 # template masking
                 seq_unmasked = msa[:, 0, 0, :] # (B, L)
                 mask_t_2d = get_prot_sm_mask(mask_t, seq_unmasked[0]) # (B, T, L)
-                #mask_t_2d = mask_t[:,:,:,:3].all(dim=-1) # (B, T, L)
                 mask_t_2d = mask_t_2d[:,:,None]*mask_t_2d[:,:,:,None] # (B, T, L, L)
                 mask_t_2d = mask_t_2d.float() * same_chain.float()[:,None] # (ignore inter-chain region)
 
                 mask_recycle = get_prot_sm_mask(mask_prev, seq_unmasked[0])
-                mask_recycle = mask_prev[:,:,:3].bool().all(dim=-1)
                 mask_recycle = mask_recycle[:,:,None]*mask_recycle[:,None,:] # (B, L, L)
                 mask_recycle = same_chain.float()*mask_recycle.float()
 
@@ -1499,7 +1502,7 @@ class Trainer():
                 state_prev = None
 
                 for i_cycle in range(N_cycle-1): 
-                    msa_prev, pair_prev, xyz_prev, state_prev, alpha_prev = ddp_model(
+                    msa_prev, pair_prev, xyz_prev, state_prev, alpha_prev, mask_recycle = ddp_model(
                         msa_masked[:,i_cycle],
                         msa_full[:,i_cycle],
                         seq[:,i_cycle],
@@ -1523,11 +1526,6 @@ class Trainer():
                         return_raw=True,
                         use_checkpoint=False
                     )
-
-                    #true_crds_i, atom_mask_i = resolve_equiv_natives(xyz_prev, true_crds, atom_mask)
-
-                    #res_mask = ~(atom_mask_i[:,:,:3].sum(dim=-1) < 3.0)
-                    #mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 i_cycle = N_cycle-1
                 logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
@@ -1597,13 +1595,13 @@ class Trainer():
                     
                 #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_prev.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb',
                         torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_true.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_true.pdb',
                         torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}_{name}_xyz_pred.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_pred.pdb',
                         torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
 

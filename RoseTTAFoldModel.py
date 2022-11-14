@@ -15,7 +15,7 @@ class RoseTTAFoldModule(nn.Module):
         SE3_param={}, SE3_ref_param={},
         atom_type_index=None, aamask=None, ljlk_parameters=None, lj_correction_parameters=None, 
         cb_len=None, cb_ang=None, cb_tor=None,
-        num_bonds=None, lj_lin=0.6
+        num_bonds=None, lj_lin=0.6, use_extra_l1=True, use_atom_frames=True
     ):
         super(RoseTTAFoldModule, self).__init__()
         #
@@ -53,15 +53,19 @@ class RoseTTAFoldModule(nn.Module):
             cb_len=cb_len,
             cb_ang=cb_ang,
             cb_tor=cb_tor,
-            lj_lin=lj_lin
+            lj_lin=lj_lin,
+            use_extra_l1=use_extra_l1,
         )
 
         ##
         self.c6d_pred = DistanceNetwork(d_pair, p_drop=p_drop)
         self.aa_pred = MaskedTokenNetwork(d_msa, p_drop=p_drop)
         self.lddt_pred = LDDTNetwork(d_state)
-        self.pae_pred = PAENetwork(d_pair)
-        self.pde_pred = PAENetwork(d_pair) # distance error, but use same architecture as aligned error
+        if use_extra_l1: # extra l1 features introduced at the same time as pAE/pDE heads
+            self.pae_pred = PAENetwork(d_pair)
+            self.pde_pred = PAENetwork(d_pair) # distance error, but use same architecture as aligned error
+        self.use_extra_l1 = use_extra_l1
+        self.use_atom_frames = use_atom_frames
 
     def forward(
         self, msa_latent, msa_full, seq, seq_unmasked, xyz, sctors, idx, bond_feats, chirals, 
@@ -92,12 +96,12 @@ class RoseTTAFoldModule(nn.Module):
 
         # Predict coordinates from given inputs
         msa, pair, xyz, alpha_s, xyz_allatom, state = self.simulator(
-            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, chirals, atom_frames, use_checkpoint=use_checkpoint)
+            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, chirals, atom_frames, use_checkpoint=use_checkpoint, use_atom_frames=self.use_atom_frames)
 
         if return_raw:
             # get last structure
             xyz_last = xyz_allatom[-1].unsqueeze(0)
-            return msa[:,0], pair, xyz_last, state, alpha_s[-1]
+            return msa[:,0], pair, xyz_last, state, alpha_s[-1], None
 
         # predict masked amino acids
         logits_aa = self.aa_pred(msa)
@@ -109,8 +113,12 @@ class RoseTTAFoldModule(nn.Module):
         lddt = self.lddt_pred(state)
 
         # predict aligned error and distance error
-        logits_pae = self.pae_pred(pair)        
-        logits_pde = self.pde_pred(pair)        
+        if self.use_extra_l1:
+            logits_pae = self.pae_pred(pair)        
+            logits_pde = self.pde_pred(pair)        
+        else:
+            logits_pae = None
+            logits_pde = None
 
         return logits, logits_aa, logits_pae, logits_pde, xyz, alpha_s, xyz_allatom, \
             lddt, msa[:,0], pair, state

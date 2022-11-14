@@ -130,7 +130,7 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
 
     return loss
 
-def compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, pae_bin_step=0.5):
+def compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, pae_bin_step=0.5, eps=1e-4):
     # predicted aligned error: C-alpha (or sm. mol atom) distances in backbone frames
     xij_ca = torch.einsum('rji,rsj->rsi', uX[-1,:,0], X[-1,:,None,1] - X_y[-1,None,:,0,:]) # last bb prediction
     xij_ca_t = torch.einsum('rji,rsj->rsi', uY[0,:,0], Y[0,:,None,1] - Y_y[0,None,:,0,:]) # assumes B=1
@@ -201,8 +201,6 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
 
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
-    pae_loss = None
-    pde_loss = None
 
     pae_loss = compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae) if logit_pae is not None else None
     pde_loss = compute_pde_loss(X, Y, logit_pde) if logit_pde is not None else None
