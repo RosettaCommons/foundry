@@ -250,6 +250,10 @@ class Trainer():
             pae_loss = torch.tensor(0).to(gpu)
             pae_loss = torch.tensor(0).to(gpu)
         else:
+            if logit_pae is not None:
+                logit_pae = logit_pae[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
+            if logit_pde is not None:
+                logit_pde = logit_pde[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
             tot_str, pae_loss, pde_loss = compute_general_FAPE(
                 pred[:,mask_BB,:,:3],
                 true[:,mask_BB[0],:3],
@@ -257,8 +261,8 @@ class Trainer():
                 frames_BB[:,mask_BB[0]],
                 frame_mask_BB[:,mask_BB[0]],
                 dclamp=dclamp, 
-                logit_pae=logit_pae[:,:,mask_BB[0]][:,:,:,mask_BB[0]],
-                logit_pde=logit_pde[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
+                logit_pae=logit_pae,
+                logit_pde=logit_pde
             )
         num_layers = pred.shape[0]
         gamma = 0.99
@@ -562,6 +566,52 @@ class Trainer():
 
         return torch.stack([prec, recall, F1])
 
+    def lddt_unbin(pred_lddt):
+        nbin = pred_lddt.shape[1]
+        bin_step = 1.0 / nbin
+        lddt_bins = torch.linspace(bin_step, 1.0, nbin, dtype=pred_lddt.dtype, device=pred_lddt.device)
+        pred_lddt = torch.nn.Softmax(dim=1)(pred_lddt)
+        return torch.sum(lddt_bins[None,:,None]*pred_lddt, dim=1)
+
+    def pae_unbin(logits_pae, bin_step=0.5):
+        nbin = logits_pae.shape[1]
+        bins = torch.linspace(bin_step*0.5, bin_step*nbin-bin_step*0.5, nbin, 
+                              dtype=logits_pae.dtype, device=logits_pae.device)
+        logits_pae = torch.nn.Softmax(dim=1)(logits_pae)
+        return torch.sum(bins[None,:,None,None]*logits_pae, dim=1)
+
+    def pde_unbin(logits_pde, bin_step=0.3):
+        nbin = logits_pde.shape[1]
+        bins = torch.linspace(bin_step*0.5, bin_step*nbin-bin_step*0.5, nbin, 
+                              dtype=logits_pde.dtype, device=logits_pde.device)
+        logits_pde = torch.nn.Softmax(dim=1)(logits_pde)
+        return torch.sum(bins[None,:,None,None]*logits_pde, dim=1)
+
+    def calc_pred_err(pred_lddts, logit_pae, logit_pde, seq):
+        """Calculates summary metrics on predicted lDDT and distance errors"""
+        plddts = lddt_unbin(pred_lddts)
+        pae = pae_unbin(logit_pae)
+        pde = pde_unbin(logit_pde)
+
+        sm_mask = is_atom(seq)
+        sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
+        prot_mask_2d = (~sm_mask[None,:])*(~sm_mask[:,None])
+        inter_mask_2d = sm_mask[None,:]*(~sm_mask[:,None]) + (~sm_mask[None,:])*sm_mask[:,None]
+
+        # assumes B=1
+        err_dict = dict(
+            plddt = float(plddts.mean()),
+            pae = float(pae.mean()),
+            pae_lig = float(pae[0,sm_mask_2d].mean()),
+            pae_prot = float(pae[0,prot_mask_2d].mean()),
+            pae_inter = float(pae[0,inter_mask_2d].mean()),
+            pde = float(pde.mean()),
+            pde_lig = float(pde[0,sm_mask_2d].mean()),
+            pde_prot = float(pde[0,prot_mask_2d].mean()),
+            pde_inter = float(pde[0,inter_mask_2d].mean()),
+        )
+        return err_dict
+
     def load_model(self, model, model_name, rank, suffix='last', resume_train=False, 
                    optimizer=None, scheduler=None, scaler=None):
         chk_fn = self.model_dir+"/%s_%s.pt"%(model_name, suffix)
@@ -723,6 +773,16 @@ class Trainer():
         rna_IDs, rna_weights, rna_dict = rna_items
         sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
         sm_IDs, sm_weights, sm_dict = sm_items
+
+        if self.dataset_param['n_valid_pdb'] is None: self.dataset_param["n_valid_pdb"] = len(valid_pdb.keys()) 
+        if self.dataset_param['n_valid_homo'] is None: self.dataset_param["n_valid_homo"] = len(valid_homo.keys()) 
+        if self.dataset_param["n_valid_compl"] is None: self.dataset_param["n_valid_compl"] = len(valid_compl.keys())
+        if self.dataset_param["n_valid_na_compl"] is None: self.dataset_param["n_valid_na_compl"] = len(valid_na_compl.keys())
+        if self.dataset_param["n_valid_rna"] is None: self.dataset_param["n_valid_rna"] = len(valid_rna.keys())
+        if self.dataset_param["n_valid_sm_compl"] is None: self.dataset_param["n_valid_sm_compl"] = len(valid_sm_compl.keys())
+        if self.dataset_param["n_valid_sm_compl_ligclus"] is None: self.dataset_param["n_valid_sm_compl_ligclus"] = len(valid_sm_compl_ligclus.keys())
+        if self.dataset_param["n_valid_sm_compl_strict"] is None: self.dataset_param["n_valid_sm_compl_strict"] = len(valid_sm_compl_strict.keys())
+        if self.dataset_param["n_valid_sm"] is None: self.dataset_param["n_valid_sm"] = len(valid_sm.keys())
 
         if (rank==0):
             print ('Loaded (training)',
@@ -1588,10 +1648,6 @@ class Trainer():
                     name = item[0]
                 else:
                     name = item[0][0]
-                if self.eval:
-                    record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)
-                    record.update({k:float(v) for k,v in loss_dict.items()})
-                    records.append(record)
                     
                 #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
@@ -1604,6 +1660,18 @@ class Trainer():
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_pred.pdb',
                         torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
+
+                if self.eval:
+                    record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)
+                    record.update({k:float(v) for k,v in loss_dict.items()})
+                    pred_err = calc_pred_err(pred_lddts, logit_pae, logit_pde)
+                    record.update(pred_err)
+                    records.append(record)
+
+                    torch.save({'logits_pae': logit_pae[...,res_mask[0]][...,res_mask[0],:] if logit_pae is not None else None, 
+                                'logits_pde': logit_pde[...,res_mask[0]][...,res_mask[0],:] if logit_pde is not None else None, 
+                                'pred_lddts': pred_lddts[...,res_mask[0]]},
+                               out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_outputs.pt')
 
                 counter += 1
 

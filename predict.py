@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, json
 import time
 import numpy as np
 import torch
@@ -171,7 +171,7 @@ class Predictor():
             xyz[:, Ls[0]:, 1, :] = xyz_sm
             mask[:, protein_L:, 1] = mask_sm
         idx_sm = torch.arange(max(idx_prot),max(idx_prot)+Ls[1])+200
-        idx_pdb = torch.concat([idx_prot.clone(),idx_sm])
+        idx_pdb = torch.concat([torch.tensor(idx_prot), idx_sm])
         
         seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, 
             p_mask=0.0, params={'MAXLAT': 128, 'MAXSEQ': 1024, 'MAXCYCLE': n_cycle}, tocpu=True)
@@ -310,6 +310,8 @@ class Predictor():
             best_xyz = None
             best_logit = None
             best_aa = None
+            best_pae = None
+            best_pde = None
 
             for i_cycle in range(n_cycle):
                 logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alpha, pred_allatom, pred_lddt_binned, \
@@ -349,6 +351,8 @@ class Predictor():
                     best_logit = logit_s
                     best_aa = logit_aa_s
                     best_lddt = pred_lddt.clone()
+                    best_pae = logit_pae.detach().cpu().numpy()
+                    best_pde = logit_pde.detach().cpu().numpy()
 
                 print(f'RECYCLE {i_cycle}\tcurrent lddt: {pred_lddt.mean():.3f}\t'\
                       f'best lddt: {best_lddt.mean():.3f}')
@@ -394,11 +398,14 @@ class Predictor():
 
         if args.dump_aux:
             prob_s = [prob.permute(1,2,0).detach().cpu().numpy().astype(np.float16) for prob in prob_s]
-            np.savez_compressed("%s.npz"%(out_prefix), dist=prob_s[0].astype(np.float16), \
-                                omega=prob_s[1].astype(np.float16),\
-                                theta=prob_s[2].astype(np.float16),\
-                                phi=prob_s[3].astype(np.float16),\
-                                lddt=best_lddt[0].detach().cpu().numpy().astype(np.float16))
+            np.savez_compressed("%s.npz"%(out_prefix), 
+                                dist = prob_s[0].astype(np.float16), \
+                                omega = prob_s[1].astype(np.float16),\
+                                theta = prob_s[2].astype(np.float16),\
+                                phi = prob_s[3].astype(np.float16),\
+                                lddt = best_lddt[0].detach().cpu().numpy().astype(np.float16),
+                                pae = best_pae,
+                                pde = best_pde)
         max_mem = torch.cuda.max_memory_allocated()/1e9
         print ("max mem", max_mem)
         print ("runtime", end-start)
@@ -407,12 +414,14 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser(description="RoseTTAFold: Protein structure prediction with 3-track attentions on 1D, 2D, and 3D features")
     parser.add_argument("-checkpoint", 
-        default="/home/jue/git/rf2a-big/big_pair128_20221004/models/rf2a_big_pair128_20221004_209.pt",
+        default="/home/jue/git/rf2a-big/big_pair128_20221004/models/rf2a_big_pair128_20221004_208.pt",
         help="Path to model weights")
     parser.add_argument("-fasta", help='FASTA of sequence/MSA to predict structure from')
     parser.add_argument("-pdb", help='PDB of sequence to predict structure from')
     parser.add_argument("-pt", help='PyTorch cached version of PDB')
     parser.add_argument("-mol2", help='mol2 of small molecule to predict structure from')
+    parser.add_argument('-input_json', help='json file containing a list of '
+        'dictionaries with sets of arguments for multiple prediction runs.')
     parser.add_argument("-out", help='prefix of output files')
     parser.add_argument("-dump_extra_pdbs", action='store_true', default=False, help='output initial and final prediction in addition to best prediction')
     parser.add_argument("-dump_traj", action='store_true', default=False, help='output trajectory pdb')
@@ -430,6 +439,7 @@ def get_args():
             help="Turn off l1 features from atom frames in SE3 layers (for backwards compatibility).")
 
     args = parser.parse_args()
+
     return args
 
 
@@ -438,14 +448,27 @@ if __name__ == "__main__":
 
     pred = Predictor(args)
 
-    pred.predict(args.out, 
-                 fasta_fn=args.fasta,
-                 pdb_fn=args.pdb,
-                 pt_fn=args.pt,
-                 mol2_fn=args.mol2, 
-                 init_protein_tmpl=args.init_protein_tmpl,
-                 init_ligand_tmpl=args.init_ligand_tmpl,
-                 init_protein_xyz=args.init_protein_xyz,
-                 init_ligand_xyz=args.init_ligand_xyz,
-                 parse_hetatm=args.parse_hetatm,
-                 n_cycle=args.n_cycle)
+    if args.input_json is not None:
+        with open(args.input_json) as f:
+            argdict_list = json.load(f)
+
+    for argdict in argdict_list:
+        for k,v in argdict.items():
+            if hasattr(args, k): setattr(args, k, v)
+
+        if args.out is None:
+            if args.fasta is not None: in_name = args.fasta
+            elif args.pdb is not None: in_name = args.pdb
+            args.out = '.'.join(os.path.basename(in_name).split('.')[:-1])+'_pred'
+
+        pred.predict(args.out, 
+                     fasta_fn=args.fasta,
+                     pdb_fn=args.pdb,
+                     pt_fn=args.pt,
+                     mol2_fn=args.mol2, 
+                     init_protein_tmpl=args.init_protein_tmpl,
+                     init_ligand_tmpl=args.init_ligand_tmpl,
+                     init_protein_xyz=args.init_protein_xyz,
+                     init_ligand_xyz=args.init_ligand_xyz,
+                     parse_hetatm=args.parse_hetatm,
+                     n_cycle=args.n_cycle)

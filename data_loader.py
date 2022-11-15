@@ -1730,7 +1730,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     # not enough valid residues to atomize and have space for flanks, treat as monomer example
     if flank + 1 >= can_atomize_idx.shape[0]-(n_res_atomize+flank+1):
         return featurize_single_chain(msa, ins, tplt, pdb, params, random_noise=random_noise) \
-            + ("monomer", item,)
+            + ("atomize_pdb", item,)
 
     i_start = torch.randint(flank+1, can_atomize_idx.shape[0]-(n_res_atomize+flank+1),(1,))
     i_start = can_atomize_idx[i_start] # index of the first residue to be atomized

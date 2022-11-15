@@ -45,7 +45,7 @@ LOAD_PARAM = {'shuffle': False,
 class Evaluator(Trainer):
     def __init__(self, model_name='BFF',
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
-                 model_param={}, dataset_params={}, loader_param={},
+                 model_param={}, dataset_param={}, loader_param={},
                  loss_param={}, batch_size=1, accum_step=1, maxcycle=4,
                  eval=True, start_epoch=None, out_dir=None, wandb_prefix=None, model_dir='models/'):
 
@@ -54,11 +54,10 @@ class Evaluator(Trainer):
             n_epoch=n_epoch, step_lr=step_lr, l2_coeff=l2_coeff, port=port, interactive=interactive,
             model_param=model_param, loader_param=loader_param, loss_param=loss_param, batch_size=batch_size,
             accum_step=accum_step, maxcycle=maxcycle, eval=eval, out_dir=out_dir,
-            wandb_prefix=wandb_prefix, model_dir=model_dir
+            wandb_prefix=wandb_prefix, model_dir=model_dir, dataset_param=dataset_param
         )
 
         self.start_epoch = start_epoch
-        self.dataset_param = dataset_param
 
     def train_model(self, rank, world_size):
        
@@ -86,15 +85,15 @@ class Evaluator(Trainer):
         sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
         sm_IDs, sm_weights, sm_dict = sm_items
        
-        if "n_valid_pdb" not in self.dataset_param: self.dataset_param["n_valid_pdb"] = len(valid_pdb.keys()) 
-        if "n_valid_homo" not in self.dataset_param: self.dataset_param["n_valid_homo"] = len(valid_homo.keys()) 
-        if "n_valid_compl" not in self.dataset_param: self.dataset_param["n_valid_compl"] = len(valid_compl.keys())
-        if "n_valid_na_compl" not in self.dataset_param: self.dataset_param["n_valid_na_compl"] = len(valid_na_compl.keys())
-        if "n_valid_rna" not in self.dataset_param: self.dataset_param["n_valid_rna"] = len(valid_rna.keys())
-        if "n_valid_sm_compl" not in self.dataset_param: self.dataset_param["n_valid_sm_compl"] = len(valid_sm_compl.keys())
-        if "n_valid_sm_compl_ligclus" not in self.dataset_param: self.dataset_param["n_valid_sm_compl_ligclus"] = len(valid_sm_compl_ligclus.keys())
-        if "n_valid_sm_compl_strict" not in self.dataset_param: self.dataset_param["n_valid_sm_compl_strict"] = len(valid_sm_compl_strict.keys())
-        if "n_valid_sm" not in self.dataset_param: self.dataset_param["n_valid_sm"] = len(valid_sm.keys())
+        if self.dataset_param['n_valid_pdb'] is None: self.dataset_param["n_valid_pdb"] = len(valid_pdb.keys()) 
+        if self.dataset_param['n_valid_homo'] is None: self.dataset_param["n_valid_homo"] = len(valid_homo.keys()) 
+        if self.dataset_param["n_valid_compl"] is None: self.dataset_param["n_valid_compl"] = len(valid_compl.keys())
+        if self.dataset_param["n_valid_na_compl"] is None: self.dataset_param["n_valid_na_compl"] = len(valid_na_compl.keys())
+        if self.dataset_param["n_valid_rna"] is None: self.dataset_param["n_valid_rna"] = len(valid_rna.keys())
+        if self.dataset_param["n_valid_sm_compl"] is None: self.dataset_param["n_valid_sm_compl"] = len(valid_sm_compl.keys())
+        if self.dataset_param["n_valid_sm_compl_ligclus"] is None: self.dataset_param["n_valid_sm_compl_ligclus"] = len(valid_sm_compl_ligclus.keys())
+        if self.dataset_param["n_valid_sm_compl_strict"] is None: self.dataset_param["n_valid_sm_compl_strict"] = len(valid_sm_compl_strict.keys())
+        if self.dataset_param["n_valid_sm"] is None: self.dataset_param["n_valid_sm"] = len(valid_sm.keys())
 
         if (rank==0):
             print ('Loaded (valid)',
@@ -124,11 +123,6 @@ class Evaluator(Trainer):
         valid_pdb_set = Dataset(
             list(valid_pdb.keys())[:self.dataset_param["n_valid_pdb"]],
             loader_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0
-        )
-        valid_atomize_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.dataset_param["n_valid_atomize_pdb"]],
-            loader_atomize_pdb, valid_pdb,
             self.loader_param, homo, p_homo_cut=-1.0
         )
         valid_homo_set = Dataset(
@@ -176,6 +170,11 @@ class Evaluator(Trainer):
             loader_sm, valid_sm,
             self.loader_param,
         )
+        valid_atomize_pdb_set = Dataset(
+            list(valid_pdb.keys())[:self.dataset_param["n_valid_atomize_pdb"]],
+            loader_atomize_pdb, valid_pdb,
+            self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
+        )
        
         valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
         valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
@@ -190,7 +189,6 @@ class Evaluator(Trainer):
         valid_atomize_pdb_sampler = data.distributed.DistributedSampler(valid_atomize_pdb_set, num_replicas=world_size, rank=rank)
 
         valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_atomize_pdb_sampler, **LOAD_PARAM)
         valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
         valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
         valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
@@ -200,6 +198,7 @@ class Evaluator(Trainer):
         valid_sm_compl_ligclus_loader = data.DataLoader(valid_sm_compl_ligclus_set, sampler=valid_sm_compl_ligclus_sampler, **LOAD_PARAM)
         valid_sm_compl_strict_loader = data.DataLoader(valid_sm_compl_strict_set, sampler=valid_sm_compl_strict_sampler, **LOAD_PARAM)
         valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
+        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_atomize_pdb_sampler, **LOAD_PARAM)
         
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -240,7 +239,6 @@ class Evaluator(Trainer):
 
         for epoch in range(self.start_epoch, self.start_epoch+self.n_epoch):
             valid_pdb_sampler.set_epoch(epoch)
-            valid_atomize_pdb_sampler.set_epoch(epoch)
             valid_homo_sampler.set_epoch(epoch)
             valid_compl_sampler.set_epoch(epoch)
             valid_na_compl_sampler.set_epoch(epoch)
@@ -250,6 +248,7 @@ class Evaluator(Trainer):
             valid_sm_compl_ligclus_sampler.set_epoch(epoch)
             valid_sm_compl_strict_sampler.set_epoch(epoch)
             valid_sm_sampler.set_epoch(epoch)
+            valid_atomize_pdb_sampler.set_epoch(epoch)
 
             # load this epoch's checkpoint
             loaded_epoch, best_valid_loss = self.load_model(ddp_model, self.model_name, gpu, 
@@ -259,34 +258,42 @@ class Evaluator(Trainer):
                 dist.destroy_process_group()
                 return
 
+            rng = np.random.RandomState(seed=epoch*world_size+rank)
+
             df_s = []
-            #_, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
-            #    epoch, print_header=(epoch==self.start_epoch))
-            valid_tot, valid_loss, valid_acc, loss_df = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, 
-                gpu, world_size, epoch, header="Monomer atomize", print_header=(epoch==self.start_epoch))
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
+                epoch, rng, print_header=(epoch==self.start_epoch))
             df_s.append(loss_df)
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
-            #    epoch, header="Homo", print_header=(epoch==self.start_epoch))
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
-            #    epoch, header="Hetero", print_header=(epoch==self.start_epoch))
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
-            #    epoch, header="NA", print_header=(epoch==self.start_epoch))
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
-            #    world_size, epoch, header="NAfs", print_header=(epoch==self.start_epoch))
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
-            #    epoch, header="RNA", print_header=(epoch==self.start_epoch))
-            #valid_tot, valid_loss, valid_acc, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
-            #    rank, gpu, world_size, epoch, header="SM Compl", print_header=(epoch==self.start_epoch)) 
-            #df_s.append(loss_df)
-            #_, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
-            #    rank, gpu, world_size, epoch, header="SM Compl (lig. clus.)", print_header=(epoch==self.start_epoch)) 
-            #df_s.append(loss_df)
-            #_, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
-            #    rank, gpu, world_size, epoch, header="SM Compl (strict)", print_header=(epoch==self.start_epoch)) 
-            #df_s.append(loss_df)
-            #_, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-            #    rank, gpu, world_size, epoch, header="SM_CSD", print_header=(epoch==self.start_epoch)) 
-            #df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
+                epoch, rng, header="Homo", print_header=(epoch==self.start_epoch))
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
+                epoch, rng, header="Hetero", print_header=(epoch==self.start_epoch))
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
+                epoch, rng, header="NA", print_header=(epoch==self.start_epoch))
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
+                world_size, epoch, rng, header="NAfs", print_header=(epoch==self.start_epoch))
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
+                epoch, rng, header="RNA", print_header=(epoch==self.start_epoch))
+            df_s.append(loss_df)
+            valid_tot, valid_loss, valid_acc, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM Compl", print_header=(epoch==self.start_epoch)) 
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM Compl (lig. clus.)", print_header=(epoch==self.start_epoch)) 
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM Compl (strict)", print_header=(epoch==self.start_epoch)) 
+            df_s.append(loss_df)
+            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM_CSD", print_header=(epoch==self.start_epoch)) 
+            df_s.append(loss_df)
+            valid_tot, valid_loss, valid_acc, loss_df = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, 
+                gpu, world_size, epoch, rng, header="Monomer atomize 3", print_header=(epoch==self.start_epoch))
+            df_s.append(loss_df)
 
             if rank==0:
                 loss_df = pd.concat(df_s)
@@ -317,13 +324,5 @@ if __name__ == "__main__":
                     out_dir=args.out_dir,
                     wandb_prefix=args.wandb_prefix,
                     model_dir=args.model_dir,
-                    n_valid_pdb=args.n_valid_pdb, 
-                    n_valid_homo=args.n_valid_homo, 
-                    n_valid_compl=args.n_valid_compl, 
-                    n_valid_na_compl=args.n_valid_na_compl, 
-                    n_valid_rna=args.n_valid_rna,
-                    n_valid_sm_compl=args.n_valid_sm_compl,
-                    n_valid_sm_compl_ligclus=args.n_valid_sm_compl_ligclus, 
-                    n_valid_sm_compl_strict=args.n_valid_sm_compl_strict,
-                    n_valid_sm=args.n_valid_sm)
+                    dataset_param=dataset_param)
     evaluator.run_model_training(torch.cuda.device_count())

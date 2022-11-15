@@ -498,7 +498,7 @@ class IterBlock(nn.Module):
             pair = self.msa2pair(msa, pair)
             pair = self.pair2pair(pair, rbf_feat)
 
-            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, top_k=top_k, use_atom_frames=use_atom_frames)
+            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, use_atom_frames, top_k=top_k)
 
         return msa, pair, xyz, state, alpha
 
