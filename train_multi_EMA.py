@@ -1072,31 +1072,25 @@ class Trainer():
                 epoch, rng, verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
                 epoch, rng, header="Homo", verbose = self.eval)
-            if self.dataset_param["fraction_compl"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
-                    epoch, rng, header="Hetero", verbose = self.eval)
-            if self.dataset_param["fraction_na_compl"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, 
-                    world_size, epoch, rng, header="NA", verbose = self.eval)
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
+                epoch, rng, header="Hetero", verbose = self.eval)
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, 
+                world_size, epoch, rng, header="NA", verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
                 world_size, epoch, rng, header="NAfs", verbose = self.eval)
-            if self.dataset_param["fraction_rna"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
-                    epoch, rng, header="RNA", verbose = self.eval)
-            if self.dataset_param["fraction_sm_compl"] > 0:
-                valid_tot, valid_loss, valid_acc, _ = self.valid_pdb_cycle(ddp_model, 
-                    valid_sm_compl_loader, rank, gpu, world_size, epoch, rng, header="SM Compl", 
-                    verbose = self.eval) 
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
-                    rank, gpu, world_size, epoch, rng, header="SM Compl (lig. clus.)", verbose = self.eval) 
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
-                    rank, gpu, world_size, epoch, rng, header="SM Compl (strict)", verbose = self.eval) 
-            if self.dataset_param["fraction_sm"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-                    rank, gpu, world_size, epoch, rng, header="SM_CSD", verbose = self.eval) 
-            if self.dataset_param["fraction_atomize_pdb"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
-                    epoch, rng, header='Monomer atomize 3', verbose = self.eval)
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
+                epoch, rng, header="RNA", verbose = self.eval)
+            valid_tot, valid_loss, valid_acc, _ = self.valid_pdb_cycle(ddp_model, 
+                valid_sm_compl_loader, rank, gpu, world_size, epoch, rng, header="SM Compl", 
+                verbose = self.eval) 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM Compl (lig. clus.)", verbose = self.eval) 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM Compl (strict)", verbose = self.eval) 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM_CSD", verbose = self.eval) 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
+                epoch, rng, header='Monomer atomize 3', verbose = self.eval)
             #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
             #    epoch, header="Atomize PDB")
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
