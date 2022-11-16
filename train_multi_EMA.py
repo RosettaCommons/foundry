@@ -566,32 +566,32 @@ class Trainer():
 
         return torch.stack([prec, recall, F1])
 
-    def lddt_unbin(pred_lddt):
+    def lddt_unbin(self, pred_lddt):
         nbin = pred_lddt.shape[1]
         bin_step = 1.0 / nbin
         lddt_bins = torch.linspace(bin_step, 1.0, nbin, dtype=pred_lddt.dtype, device=pred_lddt.device)
         pred_lddt = torch.nn.Softmax(dim=1)(pred_lddt)
         return torch.sum(lddt_bins[None,:,None]*pred_lddt, dim=1)
 
-    def pae_unbin(logits_pae, bin_step=0.5):
+    def pae_unbin(self, logits_pae, bin_step=0.5):
         nbin = logits_pae.shape[1]
         bins = torch.linspace(bin_step*0.5, bin_step*nbin-bin_step*0.5, nbin, 
                               dtype=logits_pae.dtype, device=logits_pae.device)
         logits_pae = torch.nn.Softmax(dim=1)(logits_pae)
         return torch.sum(bins[None,:,None,None]*logits_pae, dim=1)
 
-    def pde_unbin(logits_pde, bin_step=0.3):
+    def pde_unbin(self, logits_pde, bin_step=0.3):
         nbin = logits_pde.shape[1]
         bins = torch.linspace(bin_step*0.5, bin_step*nbin-bin_step*0.5, nbin, 
                               dtype=logits_pde.dtype, device=logits_pde.device)
         logits_pde = torch.nn.Softmax(dim=1)(logits_pde)
         return torch.sum(bins[None,:,None,None]*logits_pde, dim=1)
 
-    def calc_pred_err(pred_lddts, logit_pae, logit_pde, seq):
+    def calc_pred_err(self, pred_lddts, logit_pae, logit_pde, seq):
         """Calculates summary metrics on predicted lDDT and distance errors"""
-        plddts = lddt_unbin(pred_lddts)
-        pae = pae_unbin(logit_pae)
-        pde = pde_unbin(logit_pde)
+        plddts = self.lddt_unbin(pred_lddts)
+        pae = self.pae_unbin(logit_pae) if logit_pae is not None else None
+        pde = self.pde_unbin(logit_pde) if logit_pde is not None else None
 
         sm_mask = is_atom(seq)
         sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
@@ -601,14 +601,14 @@ class Trainer():
         # assumes B=1
         err_dict = dict(
             plddt = float(plddts.mean()),
-            pae = float(pae.mean()),
-            pae_lig = float(pae[0,sm_mask_2d].mean()),
-            pae_prot = float(pae[0,prot_mask_2d].mean()),
-            pae_inter = float(pae[0,inter_mask_2d].mean()),
-            pde = float(pde.mean()),
-            pde_lig = float(pde[0,sm_mask_2d].mean()),
-            pde_prot = float(pde[0,prot_mask_2d].mean()),
-            pde_inter = float(pde[0,inter_mask_2d].mean()),
+            pae = float(pae.mean()) if pae is not None else None,
+            pae_lig = float(pae[0,sm_mask_2d].mean()) if pae is not None else None,
+            pae_prot = float(pae[0,prot_mask_2d].mean()) if pae is not None else None,
+            pae_inter = float(pae[0,inter_mask_2d].mean()) if pae is not None else None,
+            pde = float(pde.mean()) if pde is not None else None,
+            pde_lig = float(pde[0,sm_mask_2d].mean()) if pde is not None else None,
+            pde_prot = float(pde[0,prot_mask_2d].mean()) if pde is not None else None,
+            pde_inter = float(pde[0,inter_mask_2d].mean()) if pde is not None else None,
         )
         return err_dict
 
@@ -1664,12 +1664,15 @@ class Trainer():
                 if self.eval:
                     record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)
                     record.update({k:float(v) for k,v in loss_dict.items()})
-                    pred_err = calc_pred_err(pred_lddts, logit_pae, logit_pde)
+                    logit_pae_ = logit_pae[...,res_mask[0]][...,res_mask[0],:] if logit_pae is not None else None
+                    logit_pde_ = logit_pde[...,res_mask[0]][...,res_mask[0],:] if logit_pde is not None else None
+                    pred_err = self.calc_pred_err(pred_lddts, logit_pae_, logit_pde_, 
+                                                  seq_unmasked[0,res_mask[0]]) 
                     record.update(pred_err)
                     records.append(record)
 
-                    torch.save({'logits_pae': logit_pae[...,res_mask[0]][...,res_mask[0],:] if logit_pae is not None else None, 
-                                'logits_pde': logit_pde[...,res_mask[0]][...,res_mask[0],:] if logit_pde is not None else None, 
+                    torch.save({'logits_pae': logit_pae_,
+                                'logits_pde': logit_pde_,
                                 'pred_lddts': pred_lddts[...,res_mask[0]]},
                                out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_outputs.pt')
 
