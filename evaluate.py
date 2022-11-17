@@ -120,60 +120,62 @@ class Evaluator(Trainer):
                 self.dataset_param["n_valid_sm"], "small molecule crystals."
             )
 
+        seed = 0 # always draw the same example from each cluster
+
         valid_pdb_set = Dataset(
             list(valid_pdb.keys())[:self.dataset_param["n_valid_pdb"]],
             loader_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0
+            self.loader_param, homo, p_homo_cut=-1.0, seed=seed
         )
         valid_homo_set = Dataset(
             list(valid_homo.keys())[:self.dataset_param["n_valid_homo"]],
             loader_pdb, valid_homo,
-            self.loader_param, homo, p_homo_cut=2.0
+            self.loader_param, homo, p_homo_cut=2.0, seed=seed
         )
         valid_compl_set = DatasetComplex(
             list(valid_compl.keys())[:self.dataset_param["n_valid_compl"]],
             loader_complex, valid_compl,
-            self.loader_param, negative=False
+            self.loader_param, negative=False, seed=seed
         )
         valid_na_compl_set = DatasetNAComplex(
             list(valid_na_compl.keys())[:self.dataset_param["n_valid_na_compl"]],
             loader_na_complex, valid_na_compl,
-            self.loader_param, negative=False, native_NA_frac=1.0
+            self.loader_param, negative=False, native_NA_frac=1.0, seed=seed
         )
         valid_na_from_scratch_compl_set = DatasetNAComplex(
             list(valid_na_compl.keys())[:self.dataset_param["n_valid_na_compl"]],
             loader_na_complex, valid_na_compl,
-            self.loader_param, negative=False, native_NA_frac=0.0
+            self.loader_param, negative=False, native_NA_frac=0.0, seed=seed
         )
         valid_rna_set = DatasetRNA(
             list(valid_rna.keys())[:self.dataset_param["n_valid_rna"]],
             loader_rna, valid_rna,
-            self.loader_param
+            self.loader_param, seed=seed
         )
         valid_sm_compl_set = DatasetSMComplex(
             list(valid_sm_compl.keys())[:self.dataset_param["n_valid_sm_compl"]],
             loader_sm_compl, valid_sm_compl,
-            self.loader_param,
+            self.loader_param, seed=seed
         )
         valid_sm_compl_ligclus_set = DatasetSMComplex(
             list(valid_sm_compl_ligclus.keys())[:self.dataset_param["n_valid_sm_compl_ligclus"]],
             loader_sm_compl, valid_sm_compl_ligclus,
-            self.loader_param, task='sm_compl_ligclus'
+            self.loader_param, task='sm_compl_ligclus', seed=seed
         )
         valid_sm_compl_strict_set = DatasetSMComplex(
             list(valid_sm_compl_strict.keys())[:self.dataset_param["n_valid_sm_compl_strict"]],
             loader_sm_compl, valid_sm_compl_strict,
-            self.loader_param, task='sm_compl_strict'
+            self.loader_param, task='sm_compl_strict', seed=seed
         )
         valid_sm_set = DatasetSM(
             list(valid_sm.keys())[:self.dataset_param["n_valid_sm"]],
             loader_sm, valid_sm,
-            self.loader_param,
+            self.loader_param
         )
         valid_atomize_pdb_set = Dataset(
             list(valid_pdb.keys())[:self.dataset_param["n_valid_atomize_pdb"]],
             loader_atomize_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
+            self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0, seed=seed
         )
        
         valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
@@ -238,17 +240,19 @@ class Evaluator(Trainer):
             print ("# of parameters:", count_parameters(ddp_model))
 
         for epoch in range(self.start_epoch, self.start_epoch+self.n_epoch):
-            valid_pdb_sampler.set_epoch(epoch)
-            valid_homo_sampler.set_epoch(epoch)
-            valid_compl_sampler.set_epoch(epoch)
-            valid_na_compl_sampler.set_epoch(epoch)
-            valid_na_from_scratch_compl_sampler.set_epoch(epoch)
-            valid_rna_sampler.set_epoch(epoch)
-            valid_sm_compl_sampler.set_epoch(epoch)
-            valid_sm_compl_ligclus_sampler.set_epoch(epoch)
-            valid_sm_compl_strict_sampler.set_epoch(epoch)
-            valid_sm_sampler.set_epoch(epoch)
-            valid_atomize_pdb_sampler.set_epoch(epoch)
+            # always draw the same examples
+            seed = 0 # epoch
+            valid_pdb_sampler.set_epoch(seed)
+            valid_homo_sampler.set_epoch(seed)
+            valid_compl_sampler.set_epoch(seed)
+            valid_na_compl_sampler.set_epoch(seed)
+            valid_na_from_scratch_compl_sampler.set_epoch(seed)
+            valid_rna_sampler.set_epoch(seed)
+            valid_sm_compl_sampler.set_epoch(seed)
+            valid_sm_compl_ligclus_sampler.set_epoch(seed)
+            valid_sm_compl_strict_sampler.set_epoch(seed)
+            valid_sm_sampler.set_epoch(seed)
+            valid_atomize_pdb_sampler.set_epoch(seed)
 
             # load this epoch's checkpoint
             loaded_epoch, best_valid_loss = self.load_model(ddp_model, self.model_name, gpu, 

@@ -1890,7 +1890,7 @@ def crop_sm(prot_xyz, lig_xyz,Ls, params):
 
 
 class Dataset(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0, n_res_atomize=0, flank=0):
+    def __init__(self, IDs, loader, item_dict, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
@@ -1901,14 +1901,15 @@ class Dataset(data.Dataset):
         self.p_homo_cut = p_homo_cut
         self.n_res_atomize = n_res_atomize
         self.flank = flank
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
-        p_unclamp = np.random.rand()
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
+        p_unclamp = self.rng.rand()
         kwargs = dict()
         if self.n_res_atomize > 0:
             kwargs['n_res_atomize'] = self.n_res_atomize
@@ -1927,20 +1928,21 @@ class Dataset(data.Dataset):
         return out
 
 class DatasetComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False):
+    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
         self.params = params
         self.pick_top = pick_top
         self.negative = negative
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
         out = self.loader(self.item_dict[ID][sel_idx][0],
                           self.item_dict[ID][sel_idx][1],
                           self.item_dict[ID][sel_idx][2],
@@ -1951,7 +1953,7 @@ class DatasetComplex(data.Dataset):
         return out
 
 class DatasetNAComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False, native_NA_frac=0.0):
+    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False, native_NA_frac=0.0, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
@@ -1959,13 +1961,14 @@ class DatasetNAComplex(data.Dataset):
         self.pick_top = pick_top
         self.negative = negative
         self.native_NA_frac = native_NA_frac
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
         out = self.loader(
                 self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][1],
@@ -1977,18 +1980,19 @@ class DatasetNAComplex(data.Dataset):
         return out
 
 class DatasetRNA(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params):
+    def __init__(self, IDs, loader, item_dict, params, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
         self.params = params
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][1],
@@ -1999,7 +2003,7 @@ class DatasetRNA(data.Dataset):
 
 class DatasetSMComplex(data.Dataset):
     def __init__(self, IDs, loader, item_dict, params, init_protein_tmpl=False, init_ligand_tmpl=False,
-                 init_protein_xyz=False, init_ligand_xyz=False, task=None):
+                 init_protein_xyz=False, init_ligand_xyz=False, task=None, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
@@ -2009,13 +2013,14 @@ class DatasetSMComplex(data.Dataset):
         self.init_protein_xyz = init_protein_xyz
         self.init_ligand_xyz = init_ligand_xyz
         self.task = task
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID])) # no weighting of samples during validation
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID])) # no weighting of samples during validation
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.params,

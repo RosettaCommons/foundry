@@ -460,7 +460,8 @@ def parse_mol(filename, filetype="mol2", string=False):
         else:
             i += 1
 
-    msa = torch.tensor([aa2num[atomnum2atomtype[obmol.GetAtom(i).GetAtomicNum()]] for i in range(1, obmol.NumAtoms()+1)])
+    atomtypes = [atomnum2atomtype.get(obmol.GetAtom(i).GetAtomicNum(), 'ATM') for i in range(1, obmol.NumAtoms()+1)]
+    msa = torch.tensor([aa2num[x] for x in atomtypes])
     ins = torch.zeros_like(msa)
 
     atom_coords = torch.tensor([[obmol.GetAtom(i).x(),obmol.GetAtom(i).y(), obmol.GetAtom(i).z()] 

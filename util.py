@@ -374,7 +374,46 @@ def get_tips(xyz, seq):
         xyz_tips = torch.where(torch.isnan(xyz_tips), Cb, xyz_tips)
     return xyz_tips
 
-def writepdb(filename, atoms, seq, modelnum=None, idx_pdb=None, bfacts=None, bond_feats=None, file_mode="w"):
+def superimpose(pred, true, atom_mask):
+    
+    def centroid(X):
+        return X.mean(dim=-2, keepdim=True)
+    
+    B, L, natoms = pred.shape[:3]
+
+    # center to centroid
+    pred_allatom = pred[atom_mask][None]
+    true_allatom = true[atom_mask][None]
+
+    cp = centroid(pred_allatom)
+    ct = centroid(true_allatom)
+    
+    pred_allatom_origin = pred_allatom - cp
+    true_allatom_origin = true_allatom - ct
+
+    # Computation of the covariance matrix
+    C = torch.matmul(pred_allatom_origin.permute(0,2,1), true_allatom_origin)
+
+    # Compute optimal rotation matrix using SVD
+    V, S, W = torch.svd(C)
+
+    # get sign to ensure right-handedness
+    d = torch.ones([B,3,3], device=pred.device)
+    d[:,:,-1] = torch.sign(torch.det(V)*torch.det(W)).unsqueeze(1)
+
+    # Rotation matrix U
+    U = torch.matmul(d*V, W.permute(0,2,1)) # (IB, 3, 3)
+    pred_rms = pred - cp
+    true_rms = true - ct
+    
+    # Rotate pred
+    rP = torch.matmul(pred_rms, U) # (IB, L*3, 3)
+    
+    return rP+ct
+
+def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None, 
+             bond_feats=None, file_mode="w"):
+
     f = open(filename, file_mode)
     ctr = 1
     scpu = seq.cpu().squeeze(0)
@@ -400,7 +439,7 @@ def writepdb(filename, atoms, seq, modelnum=None, idx_pdb=None, bfacts=None, bon
             atom_idxs[i] = ctr
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "HETATM", ctr, num2aa[s], lig_name,
-                    "A", torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
+                    chain, torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
                     1.0, Bfacts[i] ) )
             ctr += 1
             continue
@@ -417,7 +456,7 @@ def writepdb(filename, atoms, seq, modelnum=None, idx_pdb=None, bfacts=None, bon
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "ATOM", ctr, atm_j, num2aa[s],
-                    "A", idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
+                    chain, idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
                     1.0, Bfacts[i] ) )
                 ctr += 1
     if bond_feats != None:
