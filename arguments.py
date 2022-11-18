@@ -93,7 +93,7 @@ def get_args():
     
     # dataset parameters
     dataset_group = parser.add_argument_group("data loading parameters")
-    dataset_group.add_argument('-fraction_pdb', type=float, default=0.18, 
+    dataset_group.add_argument('-fraction_pdb', type=float, default=0.09, 
             help="how often to sample PDB monomers during training")
     dataset_group.add_argument('-fraction_fb', type=float, default=0.0, 
             help="how often to sample AF2 predictions from FB during training")

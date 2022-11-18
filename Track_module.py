@@ -491,7 +491,7 @@ class IterBlock(nn.Module):
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, use_atom_frames=use_atom_frames)
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1)
 
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)

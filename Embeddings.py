@@ -43,7 +43,7 @@ class PositionalEncoding2D(nn.Module):
 
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
-    def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=2*NAATOKENS+2+2,
+    def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=2*NAATOKENS+2+2+1, # add a token for binding site features
                  minpos=-32, maxpos=32, p_drop=0.1):
         super(MSA_emb, self).__init__()
         self.emb = nn.Linear(d_init, d_msa) # embedding for general MSA

@@ -155,7 +155,7 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
             term_info[start, 0] = 1.0 # flag for N-term
             term_info[start+L_chain-1,1] = 1.0 # flag for C-term
             start += L_chain
-        
+    binding_site = torch.zeros((L,1), device=msa.device).float()
     # raw MSA profile
     raw_profile = torch.nn.functional.one_hot(msa, num_classes=NAATOKENS)
     raw_profile = raw_profile.float().mean(dim=0) 
@@ -249,11 +249,11 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
         msa_clust_del = (2.0/np.pi)*torch.arctan(msa_clust_del.float()/3.0) # (from 0 to 1)
         ins_clust = torch.stack((ins_clust, msa_clust_del), dim=-1)
         #
-        msa_seed = torch.cat((msa_clust_onehot, msa_clust_profile, ins_clust, term_info[None].expand(Nclust,-1,-1)), dim=-1)
+        msa_seed = torch.cat((msa_clust_onehot, msa_clust_profile, ins_clust, term_info[None].expand(Nclust,-1,-1), binding_site[None].expand(Nclust,-1,-1)), dim=-1)
 
         # extra MSA features
         ins_extra = (2.0/np.pi)*torch.arctan(ins_extra[:Nextra].float()/3.0) # (from 0 to 1)
-        msa_extra = torch.cat((msa_extra_onehot[:Nextra], ins_extra[:,:,None], term_info[None].expand(Nextra,-1,-1)), dim=-1)
+        msa_extra = torch.cat((msa_extra_onehot[:Nextra], ins_extra[:,:,None], term_info[None].expand(Nextra,-1,-1),binding_site[None].expand(Nextra,-1,-1)), dim=-1)
 
         if (tocpu):
             b_msa_clust.append(msa_clust.cpu())
