@@ -1004,7 +1004,7 @@ class Trainer():
             valid_atomize_pdb_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
 
-            rng = np.random.RandomState(seed=epoch*world_size+rank)
+            rng = np.random.RandomState(seed=(epoch*world_size+rank)%1000)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, rng)
 

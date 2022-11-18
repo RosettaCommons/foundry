@@ -22,7 +22,7 @@ class RoseTTAFoldModule(nn.Module):
         # Input Embeddings
         d_state = SE3_param['l0_out_features']
         self.latent_emb = MSA_emb(d_msa=d_msa, d_pair=d_pair,  d_state=d_state, p_drop=p_drop)
-        self.full_emb = Extra_emb(d_msa=d_msa_full, d_init=NAATOKENS-1+4, p_drop=p_drop)
+        self.full_emb = Extra_emb(d_msa=d_msa_full, d_init=NAATOKENS-1+4+1, p_drop=p_drop) # add a token for binding site feature
         self.bond_emb = Bond_emb(d_pair=d_pair, d_init=NBTYPES)
         self.templ_emb = Templ_emb(d_pair=d_pair, d_templ=d_templ, d_state=d_state, n_head=n_head_templ,
                                    d_hidden=d_hidden_templ, p_drop=0.25)
