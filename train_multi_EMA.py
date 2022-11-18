@@ -423,7 +423,6 @@ class Trainer():
             xs_mask[:,mask_BB[0]]
             )
         loss_dict["rmsd"] = rmsd[0].detach()
-
         if torch.any(mask_BBB):
             xs_mask_c1, xs_mask_c2 = xs_mask.clone(), xs_mask.clone()
             xs_mask_c1[:,~mask_BBA[0]] = False
