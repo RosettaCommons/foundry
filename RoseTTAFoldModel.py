@@ -94,7 +94,7 @@ class RoseTTAFoldModule(nn.Module):
 
         # Predict coordinates from given inputs
         msa, pair, xyz, alpha_s, xyz_allatom, state = self.simulator(
-            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, chirals, atom_frames, use_checkpoint=use_checkpoint, use_atom_frames=self.use_atom_frames)
+            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, same_chain, chirals, atom_frames, use_checkpoint=use_checkpoint, use_atom_frames=self.use_atom_frames)
 
         if return_raw:
             # get last structure

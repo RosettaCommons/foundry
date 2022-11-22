@@ -18,6 +18,7 @@ class SE3TransformerWrapper(nn.Module):
         super().__init__()
         # Build the network
         self.l1_in = l1_in_features
+        self.l1_out = l1_out_features
         #
         fiber_edge = Fiber({0: num_edge_features})
         if l1_out_features > 0:
@@ -72,8 +73,11 @@ class SE3TransformerWrapper(nn.Module):
         # make last layers to be zero-initialized
         #self.se3.graph_modules[-1].to_kernel_self['0'] = init_lecun_normal_param(self.se3.graph_modules[-1].to_kernel_self['0'])
         #self.se3.graph_modules[-1].to_kernel_self['1'] = init_lecun_normal_param(self.se3.graph_modules[-1].to_kernel_self['1'])
-        nn.init.zeros_(self.se3.graph_modules[-1].to_kernel_self['0'])
-        nn.init.zeros_(self.se3.graph_modules[-1].to_kernel_self['1'])
+        #nn.init.zeros_(self.se3.graph_modules[-1].to_kernel_self['0'])
+        #nn.init.zeros_(self.se3.graph_modules[-1].to_kernel_self['1'])
+        nn.init.zeros_(self.se3.graph_modules[-1].weights['0'])
+        if self.l1_out > 0:
+            nn.init.zeros_(self.se3.graph_modules[-1].weights['1'])
 
     def forward(self, G, type_0_features, type_1_features=None, edge_features=None):
         if self.l1_in > 0:
@@ -81,4 +85,8 @@ class SE3TransformerWrapper(nn.Module):
         else:
             node_features = {'0': type_0_features}
         edge_features = {'0': edge_features}
+        print('in SE3_network')
+        print('type_0_features.shape',type_0_features.shape)
+        print('type_1_features.shape',type_1_features.shape)
+        print('edge_features.shape',edge_features.shape)
         return self.se3(G, node_features, edge_features)

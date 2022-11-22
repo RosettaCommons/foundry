@@ -14,11 +14,47 @@ from loss import (
 )
 from chemical import NTOTALDOFS
 
+
 # Components for three-track blocks
 # 1. MSA -> MSA update (biased attention. bias from pair & structure)
 # 2. Pair -> Pair update (biased attention. bias from structure)
 # 3. MSA -> Pair update (extract coevolution signal)
 # 4. Str -> Str update (node from MSA, edge from Pair)
+
+class PositionalEncoding2D(nn.Module):
+    # Add relative positional encoding to pair features
+    def __init__(self, d_pair, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1):
+        super(PositionalEncoding2D, self).__init__()
+        self.minpos = minpos
+        self.maxpos = maxpos
+        self.maxpos_atom = maxpos_atom
+        self.nbin_res = abs(minpos)+maxpos+2 # include 0 and "unknown" value (maxpos+1)
+        self.nbin_atom = maxpos_atom+2 # include 0 and "unknown" token (maxpos_sm + 1)
+        self.emb_res = nn.Embedding(self.nbin_res, d_pair)
+        self.emb_atom = nn.Embedding(self.nbin_atom, d_pair)
+        self.emb_chain = nn.Embedding(2, d_pair)
+
+    def forward(self, seq, idx, bond_feats, same_chain=None):
+        sm_mask = is_atom(seq[0])
+        res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, sm_mask,
+            minpos_res=self.minpos, maxpos_res=self.maxpos, maxpos_atom=self.maxpos_atom)
+
+        bins = torch.arange(self.minpos, self.maxpos+1, device=seq.device)
+        ib_res = torch.bucketize(res_dist, bins).long() # (B, L, L)
+        emb_res = self.emb_res(ib_res) #(B, L, L, d_pair)
+
+        bins = torch.arange(0, self.maxpos_atom+1, device=seq.device)
+        ib_atom = torch.bucketize(atom_dist, bins).long() # (B, L, L)
+        emb_atom = self.emb_atom(ib_atom) #(B, L, L, d_pair)
+
+        out = emb_res + emb_atom
+
+        if same_chain is not None:
+            emb_c = self.emb_chain(same_chain.long()) # this is used for MSA_emb but not in IterBlock
+            out += emb_c
+
+        return out
+
 
 # Update MSA with biased self-attention. bias from Pair & Str
 class MSAPairStr2MSA(nn.Module):
@@ -485,14 +521,15 @@ class IterBlock(nn.Module):
     def __init__(self, d_msa=256, d_pair=128, d_rbf=64,
                  n_head_msa=8, n_head_pair=4,
                  use_global_attn=False,
-                 d_hidden=32, d_hidden_msa=None, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.15,
+                 d_hidden=32, d_hidden_msa=None, 
+                 minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.15,
                  SE3_param={'l0_in_features':32, 'l0_out_features':16, 'num_edge_features':32},
                  nextra_l0=0, nextra_l1=0):
         super(IterBlock, self).__init__()
         if d_hidden_msa == None:
             d_hidden_msa = d_hidden
 
-        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, 
+        self.pos = PositionalEncoding2D(d_rbf, minpos=minpos, maxpos=maxpos, 
                                         maxpos_atom=maxpos_atom, p_drop=p_drop)
         self.msa2msa = MSAPairStr2MSA(d_msa=d_msa, d_pair=d_pair, d_rbf=d_rbf,
                                       n_head=n_head_msa,
@@ -502,6 +539,7 @@ class IterBlock(nn.Module):
         self.msa2pair = MSA2Pair(d_msa=d_msa, d_pair=d_pair,
                                  d_hidden=d_hidden//2, p_drop=p_drop)   
         self.pair2pair = PairStr2Pair(d_pair=d_pair, n_head=n_head_pair, d_rbf=d_rbf,
+                                      d_state=SE3_param['l0_out_features'],
                                       d_hidden=d_hidden, p_drop=p_drop)
         self.str2str = Str2Str(d_msa=d_msa, d_pair=d_pair, d_rbf=d_rbf,
                                d_state=SE3_param['l0_out_features'],
@@ -510,9 +548,9 @@ class IterBlock(nn.Module):
                                nextra_l0=nextra_l0,
                                nextra_l1=nextra_l1)
 
-    def forward(self, msa, pair, xyz, state, seq_unmasked, idx, bond_feats, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True):
+    def forward(self, msa, pair, xyz, state, seq_unmasked, idx, bond_feats, same_chain, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True):
         cas = xyz[:,:,1].contiguous()
-        rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats)
+        rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, same_chain)
         if use_checkpoint:
             msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state)
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair)
@@ -524,7 +562,7 @@ class IterBlock(nn.Module):
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
             pair = self.msa2pair(msa, pair)
-            pair = self.pair2pair(pair, rbf_feat)
+            pair = self.pair2pair(pair, rbf_feat, state)
 
             xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, use_atom_frames, top_k=top_k)
 
@@ -532,7 +570,7 @@ class IterBlock(nn.Module):
 
 class IterativeSimulator(nn.Module):
     def __init__(self, n_extra_block=4, n_main_block=12, n_ref_block=4, n_finetune_block=0,
-         d_msa=256, d_msa_full=64, d_pair=128, d_hidden=32,
+         d_msa=256, d_msa_full=64, d_pair=128, d_hidden=32, 
          n_head_msa=8, n_head_pair=4,
          SE3_param={}, SE3_ref_param={}, p_drop=0.15,
          atom_type_index=None, aamask=None, 
@@ -623,7 +661,7 @@ class IterativeSimulator(nn.Module):
         self.compute_allatom_coords = ComputeAllAtomCoords()
 
 
-    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, chirals, atom_frames=None, use_checkpoint=False, use_atom_frames=True):
+    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, same_chain, chirals, atom_frames=None, use_checkpoint=False, use_atom_frames=True):
         # input:
         #   msa: initial MSA embeddings (N, L, d_msa)
         #   pair: initial residue pair embeddings (L, L, d_pair)
@@ -638,6 +676,7 @@ class IterativeSimulator(nn.Module):
                 extra_l1 = dchiraldxyz[0].detach()
             msa_full, pair, xyz, state, alpha = self.extra_block[i_m](msa_full, pair,
                                                                xyz, state, seq_unmasked, idx, bond_feats,
+                                                               same_chain,
                                                                use_checkpoint=use_checkpoint, 
                                                                top_k=0, rotation_mask=rotation_mask, 
                                                                atom_frames=atom_frames,
@@ -655,6 +694,7 @@ class IterativeSimulator(nn.Module):
                 extra_l1 = dchiraldxyz[0].detach()
             msa, pair, xyz, state, alpha = self.main_block[i_m](msa, pair,
                                                          xyz, state, seq_unmasked, idx, bond_feats,
+                                                         same_chain,
                                                          use_checkpoint=use_checkpoint, 
                                                          top_k=0, rotation_mask=rotation_mask,
                                                          atom_frames=atom_frames,

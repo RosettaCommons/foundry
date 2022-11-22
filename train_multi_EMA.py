@@ -619,7 +619,7 @@ class Trainer():
         best_valid_loss = 999999.9
         if not os.path.exists(chk_fn):
             print ('no model found', model_name)
-            return -2, best_valid_loss
+            return -1, best_valid_loss
         map_location = {"cuda:%d"%0: "cuda:%d"%rank}
         checkpoint = torch.load(chk_fn, map_location=map_location)
         if rank == 0:

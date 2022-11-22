@@ -3,7 +3,7 @@ import torch
 from openbabel import openbabel
 from chemical import aachirals, NTOTAL, generate_Cbeta
 
-params = {
+PARAMS = {
     'DMIN':1, 
     'DMID':4, 
     'DMAX':20.0, 
@@ -176,7 +176,7 @@ def xyz_to_bbtor(xyz, params=PARAMS):
 # ============================================================
 def dist_to_onehot(dist, params=PARAMS):
     db = dist_to_bins(dist, params)
-    dist = torch.nn.functional.one_hot(db, num_classes=params['DBINS']+1).float()
+    dist = torch.nn.functional.one_hot(db, num_classes=params['DBINS1'] + params['DBINS2']+1).float()
     return dist
 
 # ============================================================

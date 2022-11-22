@@ -6,44 +6,10 @@ import torch.utils.checkpoint as checkpoint
 from util import *
 from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_res_atom_dist
 from Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
-from Track_module import PairStr2Pair
+from Track_module import PairStr2Pair, PositionalEncoding2D
 from chemical import NAATOKENS,NTOTALDOFS, NBTYPES
 
 # Module contains classes and functions to generate initial embeddings
-
-class PositionalEncoding2D(nn.Module):
-    # Add relative positional encoding to pair features
-    def __init__(self, d_pair, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1):
-        super(PositionalEncoding2D, self).__init__()
-        self.minpos = minpos
-        self.maxpos = maxpos                        
-        self.maxpos_atom = maxpos_atom
-        self.nbin_res = abs(minpos)+maxpos+2 # include 0 and "unknown" value (maxpos+1)
-        self.nbin_atom = maxpos_atom+2 # include 0 and "unknown" token (maxpos_sm + 1)
-        self.emb_res = nn.Embedding(self.nbin_res, d_pair)
-        self.emb_atom = nn.Embedding(self.nbin_atom, d_pair)
-        self.emb_chain = nn.Embedding(2, d_pair)
-
-    def forward(self, seq, idx, bond_feats, same_chain=None):
-        sm_mask = is_atom(seq[0])
-        res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, sm_mask,
-            minpos_res=self.minpos, maxpos_res=self.maxpos, maxpos_atom=self.maxpos_atom)
-
-        bins = torch.arange(self.minpos, self.maxpos+1, device=seq.device)
-        ib_res = torch.bucketize(res_dist, bins).long() # (B, L, L)
-        emb_res = self.emb_res(ib_res) #(B, L, L, d_pair)
-
-        bins = torch.arange(0, self.maxpos_atom+1, device=seq.device)
-        ib_atom = torch.bucketize(atom_dist, bins).long() # (B, L, L)
-        emb_atom = self.emb_atom(ib_atom) #(B, L, L, d_pair)
-
-        out = emb_res + emb_atom 
-
-        if same_chain is not None:
-            emb_c = self.emb_chain(same_chain.long()) # this is used for MSA_emb but not in IterBlock
-            out += emb_c
-
-        return out
 
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
@@ -141,25 +107,32 @@ class Bond_emb(nn.Module):
         bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
         return self.emb(bond_feats.float())
 
-# TODO: Update template embedding not to use triangles....
-# Use input xyz_t with biased attention
 class TemplatePairStack(nn.Module):
-    def __init__(self, n_block=2, d_templ=64, n_head=4, d_hidden=32, p_drop=0.25):
+    def __init__(self, n_block=2, d_templ=64, n_head=4, d_hidden=32, d_t1d=22, d_state=32, p_drop=0.25):
         super(TemplatePairStack, self).__init__()
         self.n_block = n_block
-        proc_s = [PairStr2Pair(d_pair=d_templ, n_head=n_head, d_hidden=d_hidden, p_drop=p_drop) for i in range(n_block)]
+        self.proj_t1d = nn.Linear(d_t1d, d_state)
+        proc_s = [PairStr2Pair(d_pair=d_templ, n_head=n_head, d_hidden=d_hidden, d_state=d_state, p_drop=p_drop) for i in range(n_block)]
         self.block = nn.ModuleList(proc_s)
         self.norm = nn.LayerNorm(d_templ)
+        self.reset_parameter()
 
-    def forward(self, templ, rbf_feat, use_checkpoint=False):
+    def reset_parameter(self):
+        self.proj_t1d = init_lecun_normal(self.proj_t1d)
+        nn.init.zeros_(self.proj_t1d.bias)
+
+    def forward(self, templ, rbf_feat, t1d, use_checkpoint=False):
         B, T, L = templ.shape[:3]
         templ = templ.reshape(B*T, L, L, -1)
+        t1d = t1d.reshape(B*T, L, -1)
+        state = self.proj_t1d(t1d)
 
         for i_block in range(self.n_block):
             if use_checkpoint:
-                templ = checkpoint.checkpoint(create_custom_forward(self.block[i_block]), templ, rbf_feat)
+                templ = checkpoint.checkpoint(create_custom_forward(self.block[i_block]), templ, 
+                                                                    rbf_feat, state)
             else:
-                templ = self.block[i_block](templ, rbf_feat)
+                templ = self.block[i_block](templ, rbf_feat, state)
         return self.norm(templ).reshape(B, T, L, L, -1)
 
 
@@ -167,20 +140,20 @@ class Templ_emb(nn.Module):
     # Get template embedding
     # Features are
     #   t2d:
-    #   - 37 distogram bins + 6 orientations (43)
+    #   - 61 distogram bins + 6 orientations (67)
     #   - Mask (missing/unaligned) (1)
     #   t1d:
     #   - tiled AA sequence (20 standard aa + gap)
     #   - confidence (1)
     #   
-    def __init__(self, d_t1d=(NAATOKENS-1)+1, d_t2d=43+1, d_tor=3*NTOTALDOFS, d_pair=128, d_state=32, 
+    def __init__(self, d_t1d=(NAATOKENS-1)+1, d_t2d=67+1, d_tor=3*NTOTALDOFS, d_pair=128, d_state=32, 
                  n_block=2, d_templ=64,
                  n_head=4, d_hidden=16, p_drop=0.25):
         super(Templ_emb, self).__init__()
         # process 2D features
         self.emb = nn.Linear(d_t1d*2+d_t2d, d_templ)
         self.templ_stack = TemplatePairStack(n_block=n_block, d_templ=d_templ, n_head=n_head,
-                                             d_hidden=d_hidden, p_drop=p_drop)
+                                             d_hidden=d_hidden, d_t1d=d_t1d, d_state=d_state, p_drop=p_drop)
         
         self.attn = Attention(d_pair, d_templ, n_head, d_hidden, d_pair, p_drop=p_drop)
         
@@ -237,7 +210,7 @@ class Templ_emb(nn.Module):
         rbf_feat = self._get_templ_rbf(xyz_t, mask_t)
 
         # process each template pair feature
-        templ = self.templ_stack(templ, rbf_feat, use_checkpoint=use_checkpoint) # (B, T, L,L, d_templ)
+        templ = self.templ_stack(templ, rbf_feat, t1d, use_checkpoint=use_checkpoint) # (B, T, L,L, d_templ)
 
         # Prepare 1D template torsion angle features
         t1d = torch.cat((t1d, alpha_t), dim=-1) # (B, T, L, 30+3*17)
@@ -271,9 +244,9 @@ class Templ_emb(nn.Module):
 
 
 class Recycling(nn.Module):
-    def __init__(self, d_msa=256, d_pair=128, d_state=32):
+    def __init__(self, d_msa=256, d_pair=128, d_state=32, d_rbf=64):
         super(Recycling, self).__init__()
-        self.proj_dist = nn.Linear(36+d_state*2, d_pair)
+        self.proj_dist = nn.Linear(d_rbf+d_state*2, d_pair)
         self.norm_pair = nn.LayerNorm(d_pair)
         self.proj_sctors = nn.Linear(2*NTOTALDOFS, d_msa)
         self.norm_msa = nn.LayerNorm(d_msa)
