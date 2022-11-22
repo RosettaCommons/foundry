@@ -410,6 +410,7 @@ class BiasedAxialAttention(nn.Module):
         #
         self.is_row = is_row
         self.norm_pair = nn.LayerNorm(d_pair)
+        self.norm_bias = nn.LayerNorm(d_bias)
 
         self.to_q = nn.Linear(d_pair, n_head*d_hidden, bias=False)
         self.to_k = nn.Linear(d_pair, n_head*d_hidden, bias=False)
@@ -448,8 +449,10 @@ class BiasedAxialAttention(nn.Module):
         
         if self.is_row:
             pair = pair.permute(0,2,1,3)
+            bias = bias.permute(0,2,1,3)
 
         pair = self.norm_pair(pair)
+        bias = self.norm_bias(bias)
         
         query = self.to_q(pair).reshape(B, L, L, self.h, self.dim)
         key = self.to_k(pair).reshape(B, L, L, self.h, self.dim)
@@ -458,12 +461,12 @@ class BiasedAxialAttention(nn.Module):
         gate = torch.sigmoid(self.to_g(pair)) # (B, L, L, h*dim) 
         
         query = query * self.scaling
-        key = key / math.sqrt(L) # normalize for tied attention
+        key = key / L # normalize for tied attention
         attn = einsum('bnihk,bnjhk->bijh', query, key) # tied attention
         attn = attn + bias # apply bias
         attn = F.softmax(attn, dim=-2) # (B, L, L, h)
         
-        out = einsum('bijh,bkjhd->bikhd', attn, value).reshape(B, L, L, -1)
+        out = einsum('bijh,bnjhd->bnihd', attn, value).reshape(B, L, L, -1)
         out = gate * out
         
         out = self.to_out(out)

@@ -10,8 +10,7 @@ class RoseTTAFoldModule(nn.Module):
         self, n_extra_block=4, n_main_block=8, n_ref_block=4, n_finetune_block=0,\
         d_msa=256, d_msa_full=64, d_pair=128, d_templ=64,
         n_head_msa=8, n_head_pair=4, n_head_templ=4,
-        d_hidden=32, d_hidden_templ=64,
-        rbf_sigma=1.0, p_drop=0.15,
+        d_hidden=32, d_hidden_templ=64, p_drop=0.15,
         SE3_param={}, SE3_ref_param={},
         atom_type_index=None, aamask=None, ljlk_parameters=None, lj_correction_parameters=None, 
         cb_len=None, cb_ang=None, cb_tor=None,
@@ -43,7 +42,6 @@ class RoseTTAFoldModule(nn.Module):
             n_head_pair=n_head_pair,
             SE3_param=SE3_param,
             SE3_ref_param=SE3_ref_param,
-            rbf_sigma=rbf_sigma,
             p_drop=p_drop,
             atom_type_index=atom_type_index, # change if encoding elements instead of atomtype
             aamask=aamask, 

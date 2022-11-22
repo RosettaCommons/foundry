@@ -46,8 +46,9 @@ class SE3TransformerWrapper(nn.Module):
                                   num_heads=n_heads,
                                   channels_div=div,
                                   fiber_edge=fiber_edge,
+                                  populate_edge="arcsin",
+                                  final_layer="lin",
                                   use_layer_norm=True)
-                                  #use_layer_norm=False)
 
         self.reset_parameter()
 

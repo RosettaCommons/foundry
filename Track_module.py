@@ -22,11 +22,11 @@ from chemical import NTOTALDOFS
 
 # Update MSA with biased self-attention. bias from Pair & Str
 class MSAPairStr2MSA(nn.Module):
-    def __init__(self, d_msa=256, d_pair=128, n_head=8, d_state=16,
+    def __init__(self, d_msa=256, d_pair=128, n_head=8, d_state=16, d_rbf=64,
                  d_hidden=32, p_drop=0.15, use_global_attn=False):
         super(MSAPairStr2MSA, self).__init__()
         self.norm_pair = nn.LayerNorm(d_pair)
-        self.proj_pair = nn.Linear(d_pair+36, d_pair)
+        self.emb_rbf = nn.Linear(d_rbf, d_pair)
         self.norm_state = nn.LayerNorm(d_state)
         self.proj_state = nn.Linear(d_state, d_msa)
         self.drop_row = Dropout(broadcast_dim=1, p_drop=p_drop)
@@ -43,11 +43,11 @@ class MSAPairStr2MSA(nn.Module):
 
     def reset_parameter(self):
         # initialize weights to normal distrib
-        self.proj_pair = init_lecun_normal(self.proj_pair)
+        self.emb_rbf= init_lecun_normal(self.emb_rbf)
         self.proj_state = init_lecun_normal(self.proj_state)
 
         # initialize bias to zeros
-        nn.init.zeros_(self.proj_pair.bias)
+        nn.init.zeros_(self.emb_rbf.bias)
         nn.init.zeros_(self.proj_state.bias)
 
     def forward(self, msa, pair, rbf_feat, state):
@@ -65,13 +65,13 @@ class MSAPairStr2MSA(nn.Module):
 
         # prepare input bias feature by combining pair & coordinate info
         pair = self.norm_pair(pair)
-        pair = torch.cat((pair, rbf_feat), dim=-1)
-        pair = self.proj_pair(pair) # (B, L, L, d_pair)
+        pair = pair + self.emb_rbf(rbf_feat)
         #
         # update query sequence feature (first sequence in the MSA) with feedbacks (state) from SE3
         state = self.norm_state(state)
         state = self.proj_state(state).reshape(B, 1, L, -1)
-        msa = msa.index_add(1, torch.tensor([0,], device=state.device), state.float())
+        msa = msa.type_as(state)
+        msa = msa.index_add(1, torch.tensor([0,], device=state.device), state)
         #
         # Apply row/column attention to msa & transform 
         msa = msa + self.drop_row(self.row_attn(msa, pair))
@@ -81,18 +81,56 @@ class MSAPairStr2MSA(nn.Module):
         return msa
 
 class PairStr2Pair(nn.Module):
-    def __init__(self, d_pair=128, n_head=4, d_hidden=32, d_rbf=36, p_drop=0.15):
+    def __init__(self, d_pair=128, n_head=4, d_hidden=32, d_hidden_state=16, d_rbf=64, d_state=32, p_drop=0.15):
         super(PairStr2Pair, self).__init__()
+
+        self.norm_state = nn.LayerNorm(d_state)
+        self.proj_left = nn.Linear(d_state, d_hidden_state)
+        self.proj_right = nn.Linear(d_state, d_hidden_state)
+        self.to_gate = nn.Linear(d_hidden_state*d_hidden_state, d_pair)
+
+        self.emb_rbf = nn.Linear(d_rbf, d_pair)
 
         self.drop_row = Dropout(broadcast_dim=1, p_drop=p_drop)
         self.drop_col = Dropout(broadcast_dim=2, p_drop=p_drop)
 
-        self.row_attn = BiasedAxialAttention(d_pair, d_rbf, n_head, d_hidden, p_drop=p_drop, is_row=True)
-        self.col_attn = BiasedAxialAttention(d_pair, d_rbf, n_head, d_hidden, p_drop=p_drop, is_row=False)
+        self.tri_mul_out = TriangleMultiplication(d_pair, d_hidden=d_hidden)
+        self.tri_mul_in = TriangleMultiplication(d_pair, d_hidden, outgoing=False)
+
+        self.row_attn = BiasedAxialAttention(d_pair, d_pair, n_head, d_hidden, p_drop=p_drop, is_row=True)
+        self.col_attn = BiasedAxialAttention(d_pair, d_pair, n_head, d_hidden, p_drop=p_drop, is_row=False)
 
         self.ff = FeedForwardLayer(d_pair, 2)
-        
-    def forward(self, pair, rbf_feat):
+
+        self.reset_parameter()
+
+    def reset_parameter(self):
+        self.emb_rbf = init_lecun_normal(self.emb_rbf)
+        nn.init.zeros_(self.emb_rbf.bias)
+
+        self.proj_left = init_lecun_normal(self.proj_left)
+        nn.init.zeros_(self.proj_left.bias)
+        self.proj_right = init_lecun_normal(self.proj_right)
+        nn.init.zeros_(self.proj_right.bias)
+
+        # gating: zero weights, one biases (mostly open gate at the begining)
+        nn.init.zeros_(self.to_gate.weight)
+        nn.init.ones_(self.to_gate.bias)
+
+    def forward(self, pair, rbf_feat, state):
+        B, L = pair.shape[:2]
+
+        rbf_feat = self.emb_rbf(rbf_feat)
+
+        state = self.norm_state(state)
+        left = self.proj_left(state)
+        right = self.proj_right(state)
+        gate = einsum('bli,bmj->blmij', left, right).reshape(B,L,L,-1)
+        gate = torch.sigmoid(self.to_gate(gate))
+        rbf_feat = gate*rbf_feat
+
+        pair = pair + self.drop_row(self.tri_mul_out(pair))
+        pair = pair + self.drop_row(self.tri_mul_in(pair))
         pair = pair + self.drop_row(self.row_attn(pair, rbf_feat))
         pair = pair + self.drop_col(self.col_attn(pair, rbf_feat))
         pair = pair + self.ff(pair)
@@ -106,23 +144,18 @@ class MSA2Pair(nn.Module):
         self.proj_right = nn.Linear(d_msa, d_hidden)
         self.proj_out = nn.Linear(d_hidden*d_hidden, d_pair)
 
-        #self.proj_down = nn.Linear(d_pair*2, d_pair)
-        #self.update = ResidualNetwork(1, d_pair, d_pair, d_pair, p_drop=p_drop)
-        
         self.reset_parameter()
 
     def reset_parameter(self):
         # normal initialization
         self.proj_left = init_lecun_normal(self.proj_left)
         self.proj_right = init_lecun_normal(self.proj_right)
-        self.proj_out = init_lecun_normal(self.proj_out)
         nn.init.zeros_(self.proj_left.bias)
         nn.init.zeros_(self.proj_right.bias)
-        nn.init.zeros_(self.proj_out.bias)
 
-        # Identity initialization for proj_down
-        #nn.init.eye_(self.proj_down.weight)
-        #nn.init.zeros_(self.proj_down.bias)
+        # zero initialize output
+        nn.init.zeros_(self.proj_out.weight)
+        nn.init.zeros_(self.proj_out.bias)
 
     def forward(self, msa, pair):
         B, N, L = msa.shape[:3]
@@ -133,19 +166,14 @@ class MSA2Pair(nn.Module):
         out = einsum('bsli,bsmj->blmij', left, right).reshape(B, L, L, -1)
         out = self.proj_out(out)
         
-        #pair = torch.cat((pair, out), dim=-1) # (B, L, L, d_pair*2)
-        #pair = self.proj_down(pair)
-        #pair = self.update(pair.permute(0,3,1,2).contiguous())
-        #pair = pair.permute(0,2,3,1).contiguous()
         pair = pair + out
 
         return pair
 
 class Str2Str(nn.Module):
-    def __init__(self, d_msa=256, d_pair=128, d_state=16, 
+    def __init__(self, d_msa=256, d_pair=128, d_state=16, d_rbf=64,
             SE3_param={'l0_in_features':32, 'l0_out_features':16, 'num_edge_features':32}, 
-            nextra_l0=0, nextra_l1=0,
-            rbf_sigma=1.0, p_drop=0.1
+            nextra_l0=0, nextra_l1=0, p_drop=0.1
     ):
         super(Str2Str, self).__init__()
         
@@ -154,20 +182,19 @@ class Str2Str(nn.Module):
         self.norm_pair = nn.LayerNorm(d_pair)
         self.norm_state = nn.LayerNorm(d_state)
     
-        self.embed_x = nn.Linear(d_msa+d_state, SE3_param['l0_in_features'])
-        self.embed_e1 = nn.Linear(d_pair, SE3_param['num_edge_features'])
-        self.embed_e2 = nn.Linear(SE3_param['num_edge_features']+36+1, SE3_param['num_edge_features'])
-        
+        self.embed_node = nn.Linear(d_msa+d_state, SE3_param['l0_in_features'])
+        self.ff_node = FeedForwardLayer(SE3_param['l0_in_features'], 2, p_drop=p_drop)
         self.norm_node = nn.LayerNorm(SE3_param['l0_in_features'])
-        self.norm_edge1 = nn.LayerNorm(SE3_param['num_edge_features'])
-        self.norm_edge2 = nn.LayerNorm(SE3_param['num_edge_features'])
+
+        self.embed_edge = nn.Linear(d_pair+d_rbf+1, SE3_param['num_edge_features'])
+        self.ff_edge = FeedForwardLayer(SE3_param['num_edge_features'], 2, p_drop=p_drop)
+        self.norm_edge = nn.LayerNorm(SE3_param['num_edge_features'])
 
         SE3_param_temp = SE3_param.copy()
         SE3_param_temp['l0_in_features'] += nextra_l0
         SE3_param_temp['l1_in_features'] += nextra_l1
         
         self.se3 = SE3TransformerWrapper(**SE3_param_temp)
-        self.rbf_sigma = rbf_sigma
 
         self.sc_predictor = SCPred(
             d_msa=d_msa,
@@ -181,32 +208,33 @@ class Str2Str(nn.Module):
 
     def reset_parameter(self):
         # initialize weights to normal distribution
-        self.embed_x = init_lecun_normal(self.embed_x)
-        self.embed_e1 = init_lecun_normal(self.embed_e1)
-        self.embed_e2 = init_lecun_normal(self.embed_e2)
+        self.embed_node = init_lecun_normal(self.embed_node)
+        self.embed_edge = init_lecun_normal(self.embed_edge)
 
         # initialize bias to zeros
-        nn.init.zeros_(self.embed_x.bias)
-        nn.init.zeros_(self.embed_e1.bias)
-        nn.init.zeros_(self.embed_e2.bias)
+        nn.init.zeros_(self.embed_node.bias)
+        nn.init.zeros_(self.embed_edge.bias)
     
     @torch.cuda.amp.autocast(enabled=False)
     def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, atom_frames, extra_l0=None, extra_l1=None, use_atom_frames=True, top_k=128, eps=1e-5):
         # process msa & pair features
         B, N, L = msa.shape[:3]
-        node = self.norm_msa(msa[:,0])
+        seq = self.norm_msa(msa[:,0])
         pair = self.norm_pair(pair)
         state = self.norm_state(state)
 
-        node = torch.cat((node, state), dim=-1)
-        node = self.norm_node(self.embed_x(node))
-        pair = self.norm_edge1(self.embed_e1(pair))
-        
+        node = torch.cat((seq, state), dim=-1)
+        node = self.embed_node(node)
+        node = node + self.ff_node(node)
+        node = self.norm_node(node)
+
         neighbor = get_seqsep_protein_sm(idx, bond_feats, rotation_mask)
         cas = xyz[:,:,1].contiguous()
-        rbf_feat = rbf(torch.cdist(cas, cas), self.rbf_sigma)
-        pair = torch.cat((pair, rbf_feat, neighbor), dim=-1)
-        pair = self.norm_edge2(self.embed_e2(pair))
+        rbf_feat = rbf(torch.cdist(cas, cas))
+        edge = torch.cat((pair, rbf_feat, neighbor), dim=-1)
+        edge = self.embed_edge(edge)
+        edge = edge + self.ff_edge(edge)
+        edge = self.norm_edge(edge)
         
         # define graph
         if top_k != 0:
@@ -454,37 +482,37 @@ class SCPred(nn.Module):
         return si.view(B, L, NTOTALDOFS, 2)
 
 class IterBlock(nn.Module):
-    def __init__(self, d_msa=256, d_pair=128,
+    def __init__(self, d_msa=256, d_pair=128, d_rbf=64,
                  n_head_msa=8, n_head_pair=4,
                  use_global_attn=False,
-                 d_hidden=32, d_hidden_msa=None, rbf_sigma=1.0, p_drop=0.15,
+                 d_hidden=32, d_hidden_msa=None, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.15,
                  SE3_param={'l0_in_features':32, 'l0_out_features':16, 'num_edge_features':32},
                  nextra_l0=0, nextra_l1=0):
         super(IterBlock, self).__init__()
         if d_hidden_msa == None:
             d_hidden_msa = d_hidden
 
-        self.msa2msa = MSAPairStr2MSA(d_msa=d_msa, d_pair=d_pair,
+        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, 
+                                        maxpos_atom=maxpos_atom, p_drop=p_drop)
+        self.msa2msa = MSAPairStr2MSA(d_msa=d_msa, d_pair=d_pair, d_rbf=d_rbf,
                                       n_head=n_head_msa,
                                       d_state=SE3_param['l0_out_features'],
                                       use_global_attn=use_global_attn,
                                       d_hidden=d_hidden_msa, p_drop=p_drop)
         self.msa2pair = MSA2Pair(d_msa=d_msa, d_pair=d_pair,
-                                 d_hidden=16, p_drop=p_drop)   # fd - use only 16 channels
-        self.pair2pair = PairStr2Pair(d_pair=d_pair, n_head=n_head_pair,
+                                 d_hidden=d_hidden//2, p_drop=p_drop)   
+        self.pair2pair = PairStr2Pair(d_pair=d_pair, n_head=n_head_pair, d_rbf=d_rbf,
                                       d_hidden=d_hidden, p_drop=p_drop)
-        self.str2str = Str2Str(d_msa=d_msa, d_pair=d_pair,
+        self.str2str = Str2Str(d_msa=d_msa, d_pair=d_pair, d_rbf=d_rbf,
                                d_state=SE3_param['l0_out_features'],
                                SE3_param=SE3_param,
-                               rbf_sigma=rbf_sigma,
                                p_drop=p_drop,
                                nextra_l0=nextra_l0,
                                nextra_l1=nextra_l1)
-        self.rbf_sigma = rbf_sigma
 
-    def forward(self, msa, pair, xyz, state, idx, bond_feats, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True):
+    def forward(self, msa, pair, xyz, state, seq_unmasked, idx, bond_feats, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True):
         cas = xyz[:,:,1].contiguous()
-        rbf_feat = rbf(torch.cdist(cas, cas), self.rbf_sigma)
+        rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats)
         if use_checkpoint:
             msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state)
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair)
@@ -506,8 +534,7 @@ class IterativeSimulator(nn.Module):
     def __init__(self, n_extra_block=4, n_main_block=12, n_ref_block=4, n_finetune_block=0,
          d_msa=256, d_msa_full=64, d_pair=128, d_hidden=32,
          n_head_msa=8, n_head_pair=4,
-         SE3_param={}, SE3_ref_param={},
-         rbf_sigma=1.0, p_drop=0.15,
+         SE3_param={}, SE3_ref_param={}, p_drop=0.15,
          atom_type_index=None, aamask=None, 
          ljlk_parameters=None, lj_correction_parameters=None,
          cb_len=None, cb_ang=None, cb_tor=None,
@@ -538,7 +565,6 @@ class IterativeSimulator(nn.Module):
                                                         d_hidden_msa=8,
                                                         d_hidden=d_hidden,
                                                         p_drop=p_drop,
-                                                        rbf_sigma=rbf_sigma,
                                                         use_global_attn=True,
                                                         SE3_param=SE3_param,
                                                         nextra_l1=3 if self.use_extra_l1 else 0)
@@ -551,7 +577,6 @@ class IterativeSimulator(nn.Module):
                                                        n_head_pair=n_head_pair,
                                                        d_hidden=d_hidden,
                                                        p_drop=p_drop,
-                                                       rbf_sigma=rbf_sigma,
                                                        use_global_attn=False,
                                                        SE3_param=SE3_param,
                                                        nextra_l1=3 if self.use_extra_l1 else 0)
@@ -562,7 +587,6 @@ class IterativeSimulator(nn.Module):
             self.str_refiner = Str2Str(d_msa=d_msa, d_pair=d_pair,
                                        d_state=SE3_param['l0_out_features'],
                                        SE3_param=SE3_ref_param,
-                                       rbf_sigma=rbf_sigma,
                                        p_drop=p_drop,
                                        nextra_l0=2*NTOTALDOFS if self.use_extra_l1 else 0,
                                        nextra_l1=6  if self.use_extra_l1 else 0
@@ -613,7 +637,7 @@ class IterativeSimulator(nn.Module):
                 dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
                 extra_l1 = dchiraldxyz[0].detach()
             msa_full, pair, xyz, state, alpha = self.extra_block[i_m](msa_full, pair,
-                                                               xyz, state, idx, bond_feats,
+                                                               xyz, state, seq_unmasked, idx, bond_feats,
                                                                use_checkpoint=use_checkpoint, 
                                                                top_k=0, rotation_mask=rotation_mask, 
                                                                atom_frames=atom_frames,
@@ -630,7 +654,7 @@ class IterativeSimulator(nn.Module):
                 dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
                 extra_l1 = dchiraldxyz[0].detach()
             msa, pair, xyz, state, alpha = self.main_block[i_m](msa, pair,
-                                                         xyz, state, idx, bond_feats,
+                                                         xyz, state, seq_unmasked, idx, bond_feats,
                                                          use_checkpoint=use_checkpoint, 
                                                          top_k=0, rotation_mask=rotation_mask,
                                                          atom_frames=atom_frames,

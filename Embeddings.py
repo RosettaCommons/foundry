@@ -13,45 +13,50 @@ from chemical import NAATOKENS,NTOTALDOFS, NBTYPES
 
 class PositionalEncoding2D(nn.Module):
     # Add relative positional encoding to pair features
-    def __init__(self, d_model, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1):
+    def __init__(self, d_pair, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1):
         super(PositionalEncoding2D, self).__init__()
         self.minpos = minpos
         self.maxpos = maxpos                        
         self.maxpos_atom = maxpos_atom
         self.nbin_res = abs(minpos)+maxpos+2 # include 0 and "unknown" value (maxpos+1)
         self.nbin_atom = maxpos_atom+2 # include 0 and "unknown" token (maxpos_sm + 1)
-        self.emb_res = nn.Embedding(self.nbin_res, d_model)
-        self.emb_atom = nn.Embedding(self.nbin_atom, d_model)
-        self.emb_chain = nn.Embedding(2, d_model)
+        self.emb_res = nn.Embedding(self.nbin_res, d_pair)
+        self.emb_atom = nn.Embedding(self.nbin_atom, d_pair)
+        self.emb_chain = nn.Embedding(2, d_pair)
 
-    def forward(self, x, seq, idx, bond_feats, same_chain):
+    def forward(self, seq, idx, bond_feats, same_chain=None):
         sm_mask = is_atom(seq[0])
         res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, sm_mask,
             minpos_res=self.minpos, maxpos_res=self.maxpos, maxpos_atom=self.maxpos_atom)
 
-        bins = torch.arange(self.minpos, self.maxpos+1, device=x.device)
+        bins = torch.arange(self.minpos, self.maxpos+1, device=seq.device)
         ib_res = torch.bucketize(res_dist, bins).long() # (B, L, L)
-        emb_res = self.emb_res(ib_res) #(B, L, L, d_model)
+        emb_res = self.emb_res(ib_res) #(B, L, L, d_pair)
 
-        bins = torch.arange(0, self.maxpos_atom+1, device=x.device)
+        bins = torch.arange(0, self.maxpos_atom+1, device=seq.device)
         ib_atom = torch.bucketize(atom_dist, bins).long() # (B, L, L)
-        emb_atom = self.emb_atom(ib_atom) #(B, L, L, d_model)
+        emb_atom = self.emb_atom(ib_atom) #(B, L, L, d_pair)
 
-        emb_c = self.emb_chain(same_chain.long())
+        out = emb_res + emb_atom 
 
-        return x + emb_res + emb_atom + emb_c # add relative positional encoding
+        if same_chain is not None:
+            emb_c = self.emb_chain(same_chain.long()) # this is used for MSA_emb but not in IterBlock
+            out += emb_c
+
+        return out
 
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
     def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=2*NAATOKENS+2+2,
-                 minpos=-32, maxpos=32, p_drop=0.1):
+                 minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1):
         super(MSA_emb, self).__init__()
         self.emb = nn.Linear(d_init, d_msa) # embedding for general MSA
         self.emb_q = nn.Embedding(NAATOKENS, d_msa) # embedding for query sequence -- used for MSA embedding
         self.emb_left = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_right = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_state = nn.Embedding(NAATOKENS, d_state)
-        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, p_drop=p_drop)
+        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, 
+                                        maxpos_atom=maxpos_atom, p_drop=p_drop)
         
         self.reset_parameter()
     
@@ -77,8 +82,8 @@ class MSA_emb(nn.Module):
         N = msa.shape[1] # number of sequenes in MSA
         
         # msa embedding
-        msa = self.emb(msa) # (B, N, L, d_model) # MSA embedding
-        tmp = self.emb_q(seq).unsqueeze(1) # (B, 1, L, d_model) -- query embedding
+        msa = self.emb(msa) # (B, N, L, d_pair) # MSA embedding
+        tmp = self.emb_q(seq).unsqueeze(1) # (B, 1, L, d_pair) -- query embedding
         msa = msa + tmp.expand(-1, N, -1, -1) # adding query embedding to MSA
         #msa = self.drop(msa)
 
@@ -86,7 +91,7 @@ class MSA_emb(nn.Module):
         left = self.emb_left(seq)[:,None] # (B, 1, L, d_pair)
         right = self.emb_right(seq)[:,:,None] # (B, L, 1, d_pair)
         pair = left + right # (B, L, L, d_pair)
-        pair = self.pos(pair, seq, idx, bond_feats, same_chain) # add relative position
+        pair = pair + self.pos(seq, idx, bond_feats, same_chain) # add relative position
 
         # state embedding
         state = self.emb_state(seq)

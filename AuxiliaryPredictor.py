@@ -7,7 +7,7 @@ class DistanceNetwork(nn.Module):
     def __init__(self, n_feat, p_drop=0.1):
         super(DistanceNetwork, self).__init__()
         #
-        self.proj_symm = nn.Linear(n_feat, 37*2)
+        self.proj_symm = nn.Linear(n_feat, 61+37) # must match bin counts defined in kinematics.py
         self.proj_asymm = nn.Linear(n_feat, 37+19)
     
         self.reset_parameter()
@@ -30,7 +30,7 @@ class DistanceNetwork(nn.Module):
         # predict dist, omega
         logits_symm = self.proj_symm(x)
         logits_symm = logits_symm + logits_symm.permute(0,2,1,3)
-        logits_dist = logits_symm[:,:,:,:37].permute(0,3,1,2)
+        logits_dist = logits_symm[:,:,:,:61].permute(0,3,1,2)
         logits_omega = logits_symm[:,:,:,37:].permute(0,3,1,2)
 
         return logits_dist, logits_omega, logits_theta, logits_phi

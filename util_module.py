@@ -83,12 +83,11 @@ class Dropout(nn.Module):
         x = mask * x / (1.0 - self.p_drop)
         return x
 
-def rbf(D, scale=1.0):
+def rbf(D, D_min=0.0, D_count=64, D_sigma=0.5):
     # Distance radial basis function
-    D_min, D_max, D_count = 0., 20., 36
+    D_max = D_min + (D_count-1) * D_sigma
     D_mu = torch.linspace(D_min, D_max, D_count).to(D.device)
     D_mu = D_mu[None,:]
-    D_sigma = scale * (D_max - D_min) / D_count  #fd add factor (?)
     D_expand = torch.unsqueeze(D, -1)
     RBF = torch.exp(-((D_expand - D_mu) / D_sigma)**2)
     return RBF

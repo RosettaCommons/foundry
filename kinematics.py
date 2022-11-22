@@ -3,11 +3,12 @@ import torch
 from openbabel import openbabel
 from chemical import aachirals, NTOTAL, generate_Cbeta
 
-PARAMS = {
-    "DMIN"    : 2.0,
-    "DMAX"    : 20.0,
-    "DBINS"   : 36,
-    "ABINS"   : 36,
+params = {
+    'DMIN':1, 
+    'DMID':4, 
+    'DMAX':20.0, 
+    'DBINS1':30, 
+    'DBINS2':30
 }
 
 # ============================================================
@@ -174,10 +175,7 @@ def xyz_to_bbtor(xyz, params=PARAMS):
 
 # ============================================================
 def dist_to_onehot(dist, params=PARAMS):
-    dist[torch.isnan(dist)] = 999.9
-    dstep = (params['DMAX'] - params['DMIN']) / params['DBINS']
-    dbins = torch.linspace(params['DMIN']+dstep, params['DMAX'], params['DBINS'],dtype=dist.dtype,device=dist.device)
-    db = torch.bucketize(dist.contiguous(),dbins).long()
+    db = dist_to_bins(dist, params)
     dist = torch.nn.functional.one_hot(db, num_classes=params['DBINS']+1).float()
     return dist
 
@@ -185,34 +183,33 @@ def dist_to_onehot(dist, params=PARAMS):
 def dist_to_bins(dist,params=PARAMS):
     """bin 2d distance maps
     """
+    dist[torch.isnan(dist)] = 999.9
+    dstep1 = (params['DMID'] - params['DMIN']) / params['DBINS1']
+    dstep2 = (params['DMAX'] - params['DMID']) / params['DBINS2']
+    dbins = torch.cat([
+        torch.linspace(params['DMIN']+dstep1, params['DMID'], params['DBINS1'], 
+                       dtype=dist.dtype,device=dist.device),
+        torch.linspace(params['DMID']+dstep2, params['DMAX'], params['DBINS2'], 
+                       dtype=dist.dtype,device=dist.device),
+    ])
+    db = torch.bucketize(dist.contiguous(),dbins).long()
 
-    dstep = (params['DMAX'] - params['DMIN']) / params['DBINS']
-    db = torch.round((dist-params['DMIN']-dstep/2)/dstep)
-
-    db[db<0] = 0
-    db[db>params['DBINS']] = params['DBINS']
-    
-    return db.long()
-
+    return db
 
 # ============================================================
 def c6d_to_bins(c6d, same_chain, negative=False, params=PARAMS):
     """bin 2d distance and orientation maps
     """
 
-    dstep = (params['DMAX'] - params['DMIN']) / params['DBINS']
-    astep = 2.0*np.pi / params['ABINS']
+    db = dist_to_bins(dist, params) # all dist < DMIN are in bin 0
 
-    db = torch.round((c6d[...,0]-params['DMIN']-dstep/2)/dstep)
+    astep = 2.0*np.pi / params['ABINS']
     ob = torch.round((c6d[...,1]+np.pi-astep/2)/astep)
     tb = torch.round((c6d[...,2]+np.pi-astep/2)/astep)
     pb = torch.round((c6d[...,3]-astep/2)/astep)
 
-    # put all d<dmin into one bin
-    db[db<0] = 0
-    
     # synchronize no-contact bins
-    db[db>params['DBINS']] = params['DBINS']
+    params['DBINS'] = params['DBINS1'] + params['DBINS2']
     ob[db==params['DBINS']] = params['ABINS']
     tb[db==params['DBINS']] = params['ABINS']
     pb[db==params['DBINS']] = params['ABINS']//2
