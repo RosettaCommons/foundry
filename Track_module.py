@@ -274,9 +274,9 @@ class Str2Str(nn.Module):
         
         # define graph
         if top_k != 0:
-            G, edge_feats = make_topk_graph(xyz[:,:,1,:], pair, idx, top_k=top_k)
+            G, edge_feats = make_topk_graph(xyz[:,:,1,:], edge, idx, top_k=top_k)
         else:
-            G, edge_feats = make_full_graph(xyz[:,:,1,:], pair, idx)
+            G, edge_feats = make_full_graph(xyz[:,:,1,:], edge, idx)
 
         if use_atom_frames: # ligand l1 features are vectors to neighboring atoms
             xyz_frame = xyz_frame_from_rotation_mask(xyz, rotation_mask, atom_frames)
@@ -554,7 +554,7 @@ class IterBlock(nn.Module):
         if use_checkpoint:
             msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state)
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair)
-            pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat)
+            pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
                 msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, use_atom_frames)

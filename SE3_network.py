@@ -85,8 +85,4 @@ class SE3TransformerWrapper(nn.Module):
         else:
             node_features = {'0': type_0_features}
         edge_features = {'0': edge_features}
-        print('in SE3_network')
-        print('type_0_features.shape',type_0_features.shape)
-        print('type_1_features.shape',type_1_features.shape)
-        print('edge_features.shape',edge_features.shape)
         return self.se3(G, node_features, edge_features)

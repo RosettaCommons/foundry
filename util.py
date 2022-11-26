@@ -1042,16 +1042,17 @@ def get_atomized_protein_frames(msa, ra):
     return frames.long() 
     
 ### Generate bond features for small molecules ###
-def get_bond_feats(mol, G):
+def get_bond_feats(mol):                                                                                 
     """creates 2d bond graph for small molecules"""
     N = mol.NumAtoms()
     bond_feats = torch.zeros((N, N)).long()
-    if not G.edges:
-        return bond_feats
-    i,j = np.array(G.edges).T
-    bond_feats[i,j] = torch.tensor([bond.GetBondOrder() if not bond.IsAromatic() else 4 for bond in openbabel.OBMolBondIter(mol)]).long()
-    bond_feats[j,i] = bond_feats[i,j]
-    return bond_feats
+
+    for bond in openbabel.OBMolBondIter(mol):
+        i,j = (bond.GetBeginAtomIdx()-1, bond.GetEndAtomIdx()-1)
+        bond_feats[i,j] = bond.GetBondOrder() if not bond.IsAromatic() else 4
+        bond_feats[j,i] = bond_feats[i,j]
+
+    return bond_feats.long()
 
 def get_protein_bond_feats(protein_L):
     """ creates protein residue connectivity graphs """

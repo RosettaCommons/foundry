@@ -8,7 +8,8 @@ PARAMS = {
     'DMID':4, 
     'DMAX':20.0, 
     'DBINS1':30, 
-    'DBINS2':30
+    'DBINS2':30,
+    'ABINS':36
 }
 
 # ============================================================
@@ -201,7 +202,7 @@ def c6d_to_bins(c6d, same_chain, negative=False, params=PARAMS):
     """bin 2d distance and orientation maps
     """
 
-    db = dist_to_bins(dist, params) # all dist < DMIN are in bin 0
+    db = dist_to_bins(c6d[...,0], params) # all dist < DMIN are in bin 0
 
     astep = 2.0*np.pi / params['ABINS']
     ob = torch.round((c6d[...,1]+np.pi-astep/2)/astep)

@@ -29,7 +29,7 @@ na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
-mol_dir = "/projects/ml/RF2_allatom/by-pdb"
+mol_dir = "/projects/ml/RF2_allatom/isdf"
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -38,7 +38,7 @@ if not os.path.exists(base_dir):
     na_dir = "/data/databases/nucleic"
     fb_dir = "/data/databases/fb_af"
     sm_compl_dir = "/data/databases/RF2_allatom"
-    mol_dir = "/data/databases/RF2_allatom/by-pdb"
+    mol_dir = "/data/databases/RF2_allatom/isdf"
     csd_dir = "/data/databases/csd543"
 
 if not os.path.exists(base_dir):
@@ -48,7 +48,7 @@ if not os.path.exists(base_dir):
     na_dir = "/gscratch2/nucleic"
     fb_dir = "/gscratch2/fb_af1"
     sm_compl_dir = "/gscratch2/RF2_allatom"
-    mol_dir = "/gscratch2/RF2_allatom/by-pdb"
+    mol_dir = "/gscratch2/RF2_allatom/isdf"
     csd_dir = "/gscratch2/RF2_allatom/csd543"
 
 def set_data_loader_params(args):
@@ -59,7 +59,7 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%sm_compl_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/list_v02_smcompl_20221017.csv"%sm_compl_dir, 
+        "SM_LIST"          : "%s/list_v02_smcompl_20221123.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
@@ -67,11 +67,11 @@ def set_data_loader_params(args):
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
-        "VAL_SM_LIGCLUS"   : "%s/list_v02_smcompl_ligclusvalid_20221018.csv"%sm_compl_dir, 
+        "VAL_SM_LIGCLUS"   : "%s/list_v02_smcompl_ligclusvalid_20221117.csv"%sm_compl_dir, 
         "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221102.csv"%sm_compl_dir, 
         "VAL_PEP"          : "%s/list_v02_peptide_benchmark_valid.csv"%sm_compl_dir,
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221102.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221123.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -1529,9 +1529,13 @@ def loader_sm_compl(item, params, pick_top=True,
  
     # Load small molecule
     i_lig = np.random.randint(len(ligands))
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+ligands[i_lig])
+    ligname = ligands[i_lig].split('_')[1]
+    filename = params["MOL_DIR"]+'/'+ligname[0]+'/'+ligname+'/'+ligands[i_lig].replace('.mol2','.isdf')
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(filename, filetype="sdf")
     for alt_lig in ligands[:i_lig]+ligands[i_lig+1:]:
-        mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+alt_lig)
+        ligname = alt_lig.split('_')[1]
+        filename = params["MOL_DIR"]+'/'+ligname[0]+'/'+ligname+'/'+alt_lig.replace('.mol2','.isdf')
+        mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(filename, filetype='sdf')
         if (msa_sm2.shape == msa_sm.shape) and all(msa_sm2==msa_sm):
             xyz_sm = torch.concat([xyz_sm, xyz_sm2],dim=0) # (N_symm1 + N_symm2, Natoms, 3)
             mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
@@ -1582,7 +1586,7 @@ def loader_sm_compl(item, params, pick_top=True,
     chain_idx[Ls[0]:, Ls[0]:] = 1 
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
-    bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol, G)
+    bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol)
     
     if init_protein_tmpl or init_ligand_tmpl:
         # make blank features for 2 templates
@@ -1860,7 +1864,7 @@ def loader_sm(item, params, pick_top=True):
 
     idx = torch.arange(sm_L)
     chain_idx = torch.ones((sm_L, sm_L)).long()
-    bond_feats = get_bond_feats(mol, G)
+    bond_feats = get_bond_feats(mol)
 
     xyz_t, f1d_t, mask_t = TemplFeaturize({"ids":[]}, sm_L, params, offset=0,
         npick=0, pick_top=pick_top)
