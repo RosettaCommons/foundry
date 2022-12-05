@@ -1746,7 +1746,11 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
                   f'fully-resolved residues to atomize. {item[0]} i_start={i_start}')
             break
 
-    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
+    try:
+        msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
+    except Exception as e:
+        print('atomize_protein failed on ', item, 'with n_res_atomize', n_res_atomize,', flank',flank, ', i_start',i_start)
+        raise e
         
     # generate blank template for atoms
     tplt_sm = {"ids":[]}
