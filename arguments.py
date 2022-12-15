@@ -14,7 +14,7 @@ TRUNK_PARAMS = [
     'n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_block',
     'd_msa', 'd_msa_full', 'd_pair', 'd_templ', 'n_head_msa', 'n_head_pair',
     'n_head_templ', 'd_hidden', 'd_hidden_templ', 'p_drop',
-    'rbf_sigma','use_extra_l1', 'use_atom_frames'
+    'use_extra_l1', 'use_atom_frames'
 ]
 SE3_PARAMS = [
     'num_layers', 'num_channels', 'num_degrees', 'n_heads', 'div',
@@ -153,8 +153,6 @@ def get_args():
             help="Number of hidden features for templates [64]")
     trunk_group.add_argument("-p_drop", type=float, default=0.15,
             help="Dropout ratio [0.15]")
-    trunk_group.add_argument("-rbf_sigma", type=float, default=1.0,
-            help="Sigma scale factor for RBF [1.0]")
     trunk_group.add_argument("-no_extra_l1", dest='use_extra_l1', default='True', action='store_false',
             help="Turn off chirality and LJ grad inputs to SE3 layers (for backwards compatibility).")
     trunk_group.add_argument("-no_atom_frames", dest='use_atom_frames', default='True', action='store_false',

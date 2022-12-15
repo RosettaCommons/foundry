@@ -412,10 +412,10 @@ def superimpose(pred, true, atom_mask):
     return rP+ct
 
 def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None, 
-             bond_feats=None, file_mode="w", atom_mask=None, atom_idx_offset=0):
+             bond_feats=None, file_mode="w"):
 
     f = open(filename, file_mode)
-    ctr = 1+atom_idx_offset
+    ctr = 1
     scpu = seq.cpu().squeeze(0)
     atomscpu = atoms.cpu().squeeze(0)
 
@@ -453,7 +453,6 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
         #        " HD1",  None,  None,  None,  None,  None,  None) # his_d
 
         for j,atm_j in enumerate(atms):
-            if atom_mask is not None and not atom_mask[i,j]: continue # skip missing atoms
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "ATOM", ctr, atm_j, num2aa[s],
@@ -1139,3 +1138,24 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
 
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_mask, bond_feats)
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
+
+def same_chain_2d_from_Ls(Ls):
+    """Given list of chain lengths, returns binary matrix with 1 if two residues are on the same chain."""
+    same_chain = torch.zeros((sum(Ls),sum(Ls))).long()
+    i_curr = 0
+    for L in Ls:
+        same_chain[i_curr:i_curr+L, i_curr:i_curr+L] = 1
+        i_curr += L
+    return same_chain
+
+def Ls_from_same_chain_2d(same_chain):
+    """Given binary matrix indicating whether two residues are on same chain, returns list of chain lengths"""
+    if len(same_chain.shape)==3: # remove batch dimension
+        same_chain = same_chain.squeeze(0)
+    Ls = []
+    i_curr = 0
+    while i_curr < len(same_chain):
+        idx = torch.where(same_chain[i_curr])[0]
+        Ls.append(idx[-1]-idx[0]+1)
+        i_curr = idx[-1]+1
+    return Ls       

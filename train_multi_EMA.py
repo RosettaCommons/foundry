@@ -421,12 +421,18 @@ class Trainer():
         loss_dict['allatom_fape'] = l_fape[0].detach()
 
         # rmsd loss (for logging only)
-        rmsd = calc_crd_rmsd(
-            pred_allatom[:,mask_BB[0],:,:3],
-            nat_symm[None,mask_BB[0],:,:3],
-            xs_mask[:,mask_BB[0]]
-            )
-        loss_dict["rmsd"] = rmsd[0].detach()
+        try:
+            rmsd = calc_crd_rmsd(
+                pred_allatom[:,mask_BB[0],:,:3],
+                nat_symm[None,mask_BB[0],:,:3],
+                xs_mask[:,mask_BB[0]]
+                )
+            loss_dict["rmsd"] = rmsd[0].detach()
+        except Exception as e:
+            print('calc_crd_rmsd failed on ',item)
+            rmsd = torch.tensor([0])
+            loss_dict['rmsd'] = torch.tensor([0])
+
         if torch.any(mask_BBB):
             xs_mask_c1, xs_mask_c2 = xs_mask.clone(), xs_mask.clone()
             xs_mask_c1[:,~mask_BBA[0]] = False
@@ -1063,7 +1069,6 @@ class Trainer():
             valid_atomize_pdb_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
 
-            #print('epoch',epoch,'world_size',world_size,'rank',rank)
             rng = np.random.RandomState(seed=epoch*world_size+rank)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, rng)
@@ -1648,6 +1653,7 @@ class Trainer():
                         torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]],
                         chain="A", atom_mask=atom_mask_[res_mask])
+
                     pred_sup = superimpose(torch.nan_to_num(pred_allatom[:,res_mask[0],:23]),
                                            torch.nan_to_num(true_crds_[:,res_mask[0],:23]),
                                            atom_mask_[:,res_mask[0],:23])
