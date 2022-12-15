@@ -191,7 +191,7 @@ class Str2Str(nn.Module):
         nn.init.zeros_(self.embed_e2.bias)
     
     @torch.cuda.amp.autocast(enabled=False)
-    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, atom_frames, extra_l0=None, extra_l1=None, top_k=128, eps=1e-5, use_atom_frames=True):
+    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, atom_frames, extra_l0=None, extra_l1=None, use_atom_frames=True, top_k=128, eps=1e-5):
         # process msa & pair features
         B, N, L = msa.shape[:3]
         node = self.norm_msa(msa[:,0])
@@ -491,14 +491,14 @@ class IterBlock(nn.Module):
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1)
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, use_atom_frames)
 
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
             pair = self.msa2pair(msa, pair)
             pair = self.pair2pair(pair, rbf_feat)
 
-            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, top_k=top_k, use_atom_frames=use_atom_frames)
+            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, use_atom_frames, top_k=top_k)
 
         return msa, pair, xyz, state, alpha
 

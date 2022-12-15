@@ -29,7 +29,7 @@ na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
-mol_dir = "/projects/ml/RF2_allatom/by-pdb"
+mol_dir = "/projects/ml/RF2_allatom/isdf"
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -38,7 +38,7 @@ if not os.path.exists(base_dir):
     na_dir = "/data/databases/nucleic"
     fb_dir = "/data/databases/fb_af"
     sm_compl_dir = "/data/databases/RF2_allatom"
-    mol_dir = "/data/databases/RF2_allatom/by-pdb"
+    mol_dir = "/data/databases/RF2_allatom/isdf"
     csd_dir = "/data/databases/csd543"
 
 if not os.path.exists(base_dir):
@@ -48,7 +48,7 @@ if not os.path.exists(base_dir):
     na_dir = "/gscratch2/nucleic"
     fb_dir = "/gscratch2/fb_af1"
     sm_compl_dir = "/gscratch2/RF2_allatom"
-    mol_dir = "/gscratch2/RF2_allatom/by-pdb"
+    mol_dir = "/gscratch2/RF2_allatom/isdf"
     csd_dir = "/gscratch2/RF2_allatom/csd543"
 
 def set_data_loader_params(args):
@@ -59,7 +59,7 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%sm_compl_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/list_v02_smcompl_20221115.csv"%sm_compl_dir, 
+        "SM_LIST"          : "%s/list_v02_smcompl_20221123.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
@@ -71,7 +71,7 @@ def set_data_loader_params(args):
         "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221102.csv"%sm_compl_dir, 
         "VAL_PEP"          : "%s/list_v02_peptide_benchmark_valid.csv"%sm_compl_dir,
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221102.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221123.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -1135,9 +1135,9 @@ def loader_fb(item, params, unclamp=False):
     
     idx = pdb['idx']
     xyz = torch.full((len(idx),NTOTAL,3),np.nan).float()
-    xyz[:,:27,:] = pdb['xyz']
+    xyz[:,:27,:] = pdb['xyz'][:,:27]
     mask = torch.full((len(idx),NTOTAL), False)
-    mask[:,:27] = pdb['mask']
+    mask[:,:27] = pdb['mask'][:,:27]
 
     # Residue cropping
     crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
@@ -1529,9 +1529,13 @@ def loader_sm_compl(item, params, pick_top=True,
  
     # Load small molecule
     i_lig = np.random.randint(len(ligands))
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+ligands[i_lig])
+    ligname = ligands[i_lig].split('_')[1]
+    filename = params["MOL_DIR"]+'/'+ligname[0]+'/'+ligname+'/'+ligands[i_lig].replace('.mol2','.isdf')
+    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(filename, filetype="sdf")
     for alt_lig in ligands[:i_lig]+ligands[i_lig+1:]:
-        mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(params["MOL_DIR"]+"/"+pdb_chain[1:3]+"/"+alt_lig)
+        ligname = alt_lig.split('_')[1]
+        filename = params["MOL_DIR"]+'/'+ligname[0]+'/'+ligname+'/'+alt_lig.replace('.mol2','.isdf')
+        mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(filename, filetype='sdf')
         if (msa_sm2.shape == msa_sm.shape) and all(msa_sm2==msa_sm):
             xyz_sm = torch.concat([xyz_sm, xyz_sm2],dim=0) # (N_symm1 + N_symm2, Natoms, 3)
             mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
@@ -1582,7 +1586,7 @@ def loader_sm_compl(item, params, pick_top=True,
     chain_idx[Ls[0]:, Ls[0]:] = 1 
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
-    bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol, G)
+    bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol)
     
     if init_protein_tmpl or init_ligand_tmpl:
         # make blank features for 2 templates
@@ -1730,7 +1734,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     # not enough valid residues to atomize and have space for flanks, treat as monomer example
     if flank + 1 >= can_atomize_idx.shape[0]-(n_res_atomize+flank+1):
         return featurize_single_chain(msa, ins, tplt, pdb, params, random_noise=random_noise) \
-            + ("monomer", item,)
+            + ("atomize_pdb", item,)
 
     i_start = torch.randint(flank+1, can_atomize_idx.shape[0]-(n_res_atomize+flank+1),(1,))
     i_start = can_atomize_idx[i_start] # index of the first residue to be atomized
@@ -1860,7 +1864,7 @@ def loader_sm(item, params, pick_top=True):
 
     idx = torch.arange(sm_L)
     chain_idx = torch.ones((sm_L, sm_L)).long()
-    bond_feats = get_bond_feats(mol, G)
+    bond_feats = get_bond_feats(mol)
 
     xyz_t, f1d_t, mask_t = TemplFeaturize({"ids":[]}, sm_L, params, offset=0,
         npick=0, pick_top=pick_top)
@@ -1890,7 +1894,7 @@ def crop_sm(prot_xyz, lig_xyz,Ls, params):
 
 
 class Dataset(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0, n_res_atomize=0, flank=0):
+    def __init__(self, IDs, loader, item_dict, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
@@ -1901,14 +1905,15 @@ class Dataset(data.Dataset):
         self.p_homo_cut = p_homo_cut
         self.n_res_atomize = n_res_atomize
         self.flank = flank
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
-        p_unclamp = np.random.rand()
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
+        p_unclamp = self.rng.rand()
         kwargs = dict()
         if self.n_res_atomize > 0:
             kwargs['n_res_atomize'] = self.n_res_atomize
@@ -1927,20 +1932,21 @@ class Dataset(data.Dataset):
         return out
 
 class DatasetComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False):
+    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
         self.params = params
         self.pick_top = pick_top
         self.negative = negative
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
         out = self.loader(self.item_dict[ID][sel_idx][0],
                           self.item_dict[ID][sel_idx][1],
                           self.item_dict[ID][sel_idx][2],
@@ -1951,7 +1957,7 @@ class DatasetComplex(data.Dataset):
         return out
 
 class DatasetNAComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False, native_NA_frac=0.0):
+    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False, native_NA_frac=0.0, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
@@ -1959,13 +1965,14 @@ class DatasetNAComplex(data.Dataset):
         self.pick_top = pick_top
         self.negative = negative
         self.native_NA_frac = native_NA_frac
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
         out = self.loader(
                 self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][1],
@@ -1977,18 +1984,19 @@ class DatasetNAComplex(data.Dataset):
         return out
 
 class DatasetRNA(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params):
+    def __init__(self, IDs, loader, item_dict, params, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
         self.params = params
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID]))
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.item_dict[ID][sel_idx][1],
@@ -1999,7 +2007,7 @@ class DatasetRNA(data.Dataset):
 
 class DatasetSMComplex(data.Dataset):
     def __init__(self, IDs, loader, item_dict, params, init_protein_tmpl=False, init_ligand_tmpl=False,
-                 init_protein_xyz=False, init_ligand_xyz=False, task=None):
+                 init_protein_xyz=False, init_ligand_xyz=False, task=None, seed=None):
         self.IDs = IDs
         self.item_dict = item_dict
         self.loader = loader
@@ -2009,13 +2017,14 @@ class DatasetSMComplex(data.Dataset):
         self.init_protein_xyz = init_protein_xyz
         self.init_ligand_xyz = init_ligand_xyz
         self.task = task
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = np.random.randint(0, len(self.item_dict[ID])) # no weighting of samples during validation
+        sel_idx = self.rng.randint(0, len(self.item_dict[ID])) # no weighting of samples during validation
         out = self.loader(
             self.item_dict[ID][sel_idx][0],
             self.params,
