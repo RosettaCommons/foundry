@@ -76,7 +76,7 @@ class SE3Transformer(nn.Module):
                  use_layer_norm: bool = True,
                  tensor_cores: bool = False,
                  low_memory: bool = False,
-                 populate_edge: bool = True,
+                 populate_edge: Optional[Literal['lin', 'arcsin', 'log', 'zero']] = 'lin',
                  sum_over_edge: bool = True,
                  **kwargs):
         """
@@ -168,8 +168,17 @@ class SE3Transformer(nn.Module):
         basis = update_basis_with_fused(basis, self.max_degree, use_pad_trick=self.tensor_cores and not self.low_memory,
                                         fully_fused=self.tensor_cores and not self.low_memory)
         
-        if self.populate_edge:
+        if self.populate_edge=='lin':
             edge_feats = get_populated_edge_features(graph.edata['rel_pos'], edge_feats)
+        elif self.populate_edge=='arcsin':
+            r = graph.edata['rel_pos'].norm(dim=-1, keepdim=True)
+            r = torch.maximum(r, torch.zeros_like(r) + 4.0) - 4.0
+            r = torch.arcsinh(r)/3.0
+            edge_feats['0'] = torch.cat([edge_feats['0'], r[..., None]], dim=1)
+        elif self.populate_edge=='log':
+            # fd - replace with log(1+x)
+            r = torch.log( 1 + graph.edata['rel_pos'].norm(dim=-1, keepdim=True) )
+            edge_feats['0'] = torch.cat([edge_feats['0'], r[..., None]], dim=1)
         else:
             edge_feats['0'] = torch.cat((edge_feats['0'], torch.zeros_like(edge_feats['0'][:,:1,:])), dim=1)
 

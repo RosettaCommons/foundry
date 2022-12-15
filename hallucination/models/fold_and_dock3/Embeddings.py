@@ -13,8 +13,8 @@ from chemical import NAATOKENS,NTOTALDOFS, NBTYPES
 
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
-    def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=2*NAATOKENS+2+2+1, # add a token for binding site features
-                 minpos=-32, maxpos=32, p_drop=0.1):
+    def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=2*NAATOKENS+2+2,
+                 minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1):
         super(MSA_emb, self).__init__()
         self.emb = nn.Linear(d_init, d_msa) # embedding for general MSA
         self.emb_q = nn.Embedding(NAATOKENS, d_msa) # embedding for query sequence -- used for MSA embedding
@@ -35,7 +35,7 @@ class MSA_emb(nn.Module):
 
         nn.init.zeros_(self.emb.bias)
 
-    def forward(self, msa, seq, idx, bond_feats, same_chain):
+    def forward(self, msa, seq1hot, idx, bond_feats, same_chain):
         # Inputs:
         #   - msa: Input MSA (B, N, L, d_init)
         #   - seq: Input Sequence (B, L)
@@ -49,18 +49,18 @@ class MSA_emb(nn.Module):
         
         # msa embedding
         msa = self.emb(msa) # (B, N, L, d_pair) # MSA embedding
-        tmp = self.emb_q(seq).unsqueeze(1) # (B, 1, L, d_pair) -- query embedding
+        tmp = (seq1hot @ self.emb_q.weight).unsqueeze(1) # (B, 1, L, d_pair) -- query embedding
         msa = msa + tmp.expand(-1, N, -1, -1) # adding query embedding to MSA
         #msa = self.drop(msa)
 
         # pair embedding 
-        left = self.emb_left(seq)[:,None] # (B, 1, L, d_pair)
-        right = self.emb_right(seq)[:,:,None] # (B, L, 1, d_pair)
+        left = (seq1hot @ self.emb_left.weight)[:,None] # (B, 1, L, d_pair)
+        right = (seq1hot @ self.emb_right.weight)[:,:,None] # (B, L, 1, d_pair)
         pair = left + right # (B, L, L, d_pair)
-        pair = pair + self.pos(seq, idx, bond_feats, same_chain) # add relative position
+        pair = pair + self.pos(seq1hot.argmax(-1), idx, bond_feats, same_chain) # add relative position
 
         # state embedding
-        state = self.emb_state(seq)
+        state = (seq1hot @ self.emb_state.weight)
 
         return msa, pair, state
 
@@ -78,7 +78,7 @@ class Extra_emb(nn.Module):
         self.emb = init_lecun_normal(self.emb)
         nn.init.zeros_(self.emb.bias)
 
-    def forward(self, msa, seq, idx):
+    def forward(self, msa, seq1hot, idx):
         # Inputs:
         #   - msa: Input MSA (B, N, L, d_init)
         #   - seq: Input Sequence (B, L)
@@ -87,8 +87,8 @@ class Extra_emb(nn.Module):
         #   - msa: Initial MSA embedding (B, N, L, d_msa)
         N = msa.shape[1] # number of sequenes in MSA
         msa = self.emb(msa) # (B, N, L, d_model) # MSA embedding
-        seq = self.emb_q(seq).unsqueeze(1) # (B, 1, L, d_model) -- query embedding
-        msa = msa + seq.expand(-1, N, -1, -1) # adding query embedding to MSA
+        seq_emb = (seq1hot @ self.emb_q.weight).unsqueeze(1) # (B, 1, L, d_model) -- query embedding
+        msa = msa + seq_emb.expand(-1, N, -1, -1) # adding query embedding to MSA
         #return self.drop(msa)
         return (msa)
 

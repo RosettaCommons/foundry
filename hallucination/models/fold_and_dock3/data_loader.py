@@ -124,6 +124,20 @@ def MSABlockDeletion(msa, ins, nb=5):
 
     return msa[mask], ins[mask]
 
+def get_term_feats(L,Ls):
+    """Creates N/C-terminus binary features"""
+    term_info = torch.zeros((L,2)).float()
+    if len(Ls) < 1:
+        term_info[0,0] = 1.0 # flag for N-term
+        term_info[-1,1] = 1.0 # flag for C-term
+    else:
+        start = 0
+        for L_chain in Ls:
+            term_info[start, 0] = 1.0 # flag for N-term
+            term_info[start+L_chain-1,1] = 1.0 # flag for C-term
+            start += L_chain
+    return term_info
+
 def cluster_sum(data, assignment, N_seq, N_res):
     csum = torch.zeros(N_seq, N_res, data.shape[-1], device=data.device).scatter_add(0, assignment.view(-1,1,1).expand(-1,N_res,data.shape[-1]), data.float())
     return csum
@@ -145,17 +159,8 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
     '''
     N, L = msa.shape
     
-    term_info = torch.zeros((L,2), device=msa.device).float()
-    if len(L_s) < 1:
-        term_info[0,0] = 1.0 # flag for N-term
-        term_info[-1,1] = 1.0 # flag for C-term
-    else:
-        start = 0
-        for L_chain in L_s:
-            term_info[start, 0] = 1.0 # flag for N-term
-            term_info[start+L_chain-1,1] = 1.0 # flag for C-term
-            start += L_chain
-    binding_site = torch.zeros((L,1), device=msa.device).float()
+    term_info = get_term_feats(L, L_s).to(msa.device)
+
     # raw MSA profile
     raw_profile = torch.nn.functional.one_hot(msa, num_classes=NAATOKENS)
     raw_profile = raw_profile.float().mean(dim=0) 
@@ -249,11 +254,11 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
         msa_clust_del = (2.0/np.pi)*torch.arctan(msa_clust_del.float()/3.0) # (from 0 to 1)
         ins_clust = torch.stack((ins_clust, msa_clust_del), dim=-1)
         #
-        msa_seed = torch.cat((msa_clust_onehot, msa_clust_profile, ins_clust, term_info[None].expand(Nclust,-1,-1), binding_site[None].expand(Nclust,-1,-1)), dim=-1)
+        msa_seed = torch.cat((msa_clust_onehot, msa_clust_profile, ins_clust, term_info[None].expand(Nclust,-1,-1)), dim=-1)
 
         # extra MSA features
         ins_extra = (2.0/np.pi)*torch.arctan(ins_extra[:Nextra].float()/3.0) # (from 0 to 1)
-        msa_extra = torch.cat((msa_extra_onehot[:Nextra], ins_extra[:,:,None], term_info[None].expand(Nextra,-1,-1),binding_site[None].expand(Nextra,-1,-1)), dim=-1)
+        msa_extra = torch.cat((msa_extra_onehot[:Nextra], ins_extra[:,:,None], term_info[None].expand(Nextra,-1,-1)), dim=-1)
 
         if (tocpu):
             b_msa_clust.append(msa_clust.cpu())
@@ -1135,9 +1140,9 @@ def loader_fb(item, params, unclamp=False):
     
     idx = pdb['idx']
     xyz = torch.full((len(idx),NTOTAL,3),np.nan).float()
-    xyz[:,:27,:] = pdb['xyz'][:,:27]
+    xyz[:,:27,:] = pdb['xyz']
     mask = torch.full((len(idx),NTOTAL), False)
-    mask[:,:27] = pdb['mask'][:,:27]
+    mask[:,:27] = pdb['mask']
 
     # Residue cropping
     crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)

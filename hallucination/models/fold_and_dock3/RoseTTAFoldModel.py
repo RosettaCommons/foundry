@@ -4,6 +4,8 @@ from Embeddings import MSA_emb, Extra_emb, Bond_emb, Templ_emb, Recycling
 from Track_module import IterativeSimulator
 from AuxiliaryPredictor import DistanceNetwork, MaskedTokenNetwork, LDDTNetwork, PAENetwork
 from chemical import INIT_CRDS,NAATOKENS, NBTYPES
+from util import Ls_from_same_chain_2d
+from data_loader import get_term_feats
 
 class RoseTTAFoldModule(nn.Module):
     def __init__(
@@ -21,7 +23,7 @@ class RoseTTAFoldModule(nn.Module):
         # Input Embeddings
         d_state = SE3_param['l0_out_features']
         self.latent_emb = MSA_emb(d_msa=d_msa, d_pair=d_pair,  d_state=d_state, p_drop=p_drop)
-        self.full_emb = Extra_emb(d_msa=d_msa_full, d_init=NAATOKENS-1+4+1, p_drop=p_drop) # add a token for binding site feature
+        self.full_emb = Extra_emb(d_msa=d_msa_full, d_init=NAATOKENS-1+4, p_drop=p_drop)
         self.bond_emb = Bond_emb(d_pair=d_pair, d_init=NBTYPES)
         self.templ_emb = Templ_emb(d_pair=d_pair, d_templ=d_templ, d_state=d_state, n_head=n_head_templ,
                                    d_hidden=d_hidden_templ, p_drop=0.25)
@@ -66,16 +68,31 @@ class RoseTTAFoldModule(nn.Module):
         self.use_atom_frames = use_atom_frames
 
     def forward(
-        self, msa_latent, msa_full, seq, seq_unmasked, xyz, sctors, idx, bond_feats, chirals, 
+        self, msa_one_hot, seq_unmasked, xyz, sctors, idx, bond_feats, chirals, 
         atom_frames=None, t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
         msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None,
         return_raw=False, return_full=False,
         use_checkpoint=False
     ):
-        B, N, L = msa_latent.shape[:3]
+        B, N, L = msa_one_hot.shape[:3]
+
+        seq1hot = msa_one_hot[:,0]
+
+        # generate input msa features
+        Ls = Ls_from_same_chain_2d(same_chain)
+        term_feats = get_term_feats(L,Ls).to(msa_one_hot.device)
+
+        msa_feat = torch.cat([msa_one_hot,
+                              msa_one_hot,
+                              torch.zeros(B,N,L,2).to(msa_one_hot.device),
+                              term_feats[None,None].expand(B,N,-1,-1)], dim=3)
+        extra_feat = torch.cat([msa_one_hot,
+                                torch.zeros(B,N,L,1).to(msa_one_hot.device),
+                                term_feats[None,None].expand(B,N,-1,-1)], dim=3)
+
         # Get embeddings
-        msa_latent, pair, state = self.latent_emb(msa_latent, seq, idx, bond_feats, same_chain)
-        msa_full = self.full_emb(msa_full, seq, idx)
+        msa_latent, pair, state = self.latent_emb(msa_feat, seq1hot, idx, bond_feats, same_chain)
+        msa_full = self.full_emb(extra_feat, seq1hot, idx)
         pair = pair + self.bond_emb(bond_feats)
         #
         # Do recycling
