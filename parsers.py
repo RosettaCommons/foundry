@@ -202,13 +202,13 @@ def parse_a3m(filename, unzip=True, maxseq=10000):
 
 # read and extract xyz coords of N,Ca,C atoms
 # from a PDB file
-def parse_pdb(filename, seq=False, parse_hetatom=False):
+def parse_pdb(filename, seq=False):
     lines = open(filename,'r').readlines()
     if seq:
         return parse_pdb_lines_w_seq(lines, parse_hetatom=parse_hetatom)
     return parse_pdb_lines(lines)
 
-def parse_pdb_lines_w_seq(lines, parse_hetatom=False):
+def parse_pdb_lines_w_seq(lines):
 
     # indices of residues observed in the structure
     #idx_s = [int(l[22:26]) for l in lines if l[:4]=="ATOM" and l[12:16].strip()=="CA"]
@@ -228,17 +228,18 @@ def parse_pdb_lines_w_seq(lines, parse_hetatom=False):
                 xyz[idx,i_atm,:] = [float(l[30:38]), float(l[38:46]), float(l[46:54])]
                 break
 
-    if parse_hetatom:
-        offset = max(idx_s)
-        res_lig = [l[12:16].strip() for l in lines if l[:6]=="HETATM"]
-        res_lig = [(i+offset+CHAIN_GAP,l) for i,l in enumerate(res_lig)]
-        idx_s_lig = [int(r[0]) for r in res_lig]
-        seq_lig = [aa2num[r[1]] if r[1] in aa2num.keys() else 20 for r in res_lig]
+    # parse ligand atoms
+    offset = max(idx_s)
+    res_lig = [l[12:16].strip() for l in lines if l[:6]=="HETATM"]
+    res_lig = [(i+offset+CHAIN_GAP,l) for i,l in enumerate(res_lig)]
+    idx_s_lig = [int(r[0]) for r in res_lig]
+    seq_lig = [aa2num[r[1]] if r[1] in aa2num.keys() else 20 for r in res_lig]
 
-        xyz_s_lig = [[float(l[30:38]), float(l[38:46]), float(l[46:54])] for l in lines if l[:6]=='HETATM']
+    xyz_s_lig = [[float(l[30:38]), float(l[38:46]), float(l[46:54])] for l in lines if l[:6]=='HETATM']
+
+    if len(xyz_s_lig)>0:
         xyz_lig = np.full((len(idx_s_lig), NTOTAL, 3), np.nan, dtype=np.float32)
         xyz_lig[:,1,:] = np.array(xyz_s_lig)
-
         xyz = np.concatenate([xyz, xyz_lig],axis=0)
         idx_s = idx_s + idx_s_lig
         seq = seq + seq_lig
@@ -439,6 +440,21 @@ def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
 
     return xyz, f1d
 
+def clean_sdffile(filename):
+    # lowercase the 2nd letter of the element name (e.g. FE->Fe) so openbabel can parse it correctly
+    lines2 = []
+    with open(filename) as f:
+        lines = f.readlines()
+        num_atoms = int(lines[3][:3])
+        for i in range(len(lines)):
+            if i>=4 and i<4+num_atoms:
+                lines2.append(lines[i][:32]+lines[i][32].lower()+lines[i][33:])
+            else:
+                lines2.append(lines[i])
+    molstring = ''.join(lines2)
+
+    return molstring
+
 def parse_mol(filename, filetype="mol2", string=False):
 
     obConversion = openbabel.OBConversion()
@@ -447,6 +463,9 @@ def parse_mol(filename, filetype="mol2", string=False):
     obmol = openbabel.OBMol()
     if string:
         obConversion.ReadString(obmol,filename)
+    elif filetype=='sdf':
+        molstring = clean_sdffile(filename)
+        obConversion.ReadString(obmol,molstring)
     else:
         obConversion.ReadFile(obmol,filename)
 
@@ -459,7 +478,8 @@ def parse_mol(filename, filetype="mol2", string=False):
         else:
             i += 1
 
-    msa = torch.tensor([aa2num[atomnum2atomtype[obmol.GetAtom(i).GetAtomicNum()]] for i in range(1, obmol.NumAtoms()+1)])
+    atomtypes = [atomnum2atomtype.get(obmol.GetAtom(i).GetAtomicNum(), 'ATM') for i in range(1, obmol.NumAtoms()+1)]
+    msa = torch.tensor([aa2num[x] for x in atomtypes])
     ins = torch.zeros_like(msa)
 
     atom_coords = torch.tensor([[obmol.GetAtom(i).x(),obmol.GetAtom(i).y(), obmol.GetAtom(i).z()] 

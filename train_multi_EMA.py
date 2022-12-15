@@ -250,6 +250,10 @@ class Trainer():
             pae_loss = torch.tensor(0).to(gpu)
             pae_loss = torch.tensor(0).to(gpu)
         else:
+            if logit_pae is not None:
+                logit_pae = logit_pae[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
+            if logit_pde is not None:
+                logit_pde = logit_pde[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
             tot_str, pae_loss, pde_loss = compute_general_FAPE(
                 pred[:,mask_BB,:,:3],
                 true[:,mask_BB[0],:3],
@@ -257,8 +261,8 @@ class Trainer():
                 frames_BB[:,mask_BB[0]],
                 frame_mask_BB[:,mask_BB[0]],
                 dclamp=dclamp, 
-                logit_pae=logit_pae[:,:,mask_BB[0]][:,:,:,mask_BB[0]],
-                logit_pde=logit_pde[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
+                logit_pae=logit_pae,
+                logit_pde=logit_pde
             )
         num_layers = pred.shape[0]
         gamma = 0.99
@@ -561,6 +565,52 @@ class Trainer():
 
         return torch.stack([prec, recall, F1])
 
+    def lddt_unbin(self, pred_lddt):
+        nbin = pred_lddt.shape[1]
+        bin_step = 1.0 / nbin
+        lddt_bins = torch.linspace(bin_step, 1.0, nbin, dtype=pred_lddt.dtype, device=pred_lddt.device)
+        pred_lddt = torch.nn.Softmax(dim=1)(pred_lddt)
+        return torch.sum(lddt_bins[None,:,None]*pred_lddt, dim=1)
+
+    def pae_unbin(self, logits_pae, bin_step=0.5):
+        nbin = logits_pae.shape[1]
+        bins = torch.linspace(bin_step*0.5, bin_step*nbin-bin_step*0.5, nbin, 
+                              dtype=logits_pae.dtype, device=logits_pae.device)
+        logits_pae = torch.nn.Softmax(dim=1)(logits_pae)
+        return torch.sum(bins[None,:,None,None]*logits_pae, dim=1)
+
+    def pde_unbin(self, logits_pde, bin_step=0.3):
+        nbin = logits_pde.shape[1]
+        bins = torch.linspace(bin_step*0.5, bin_step*nbin-bin_step*0.5, nbin, 
+                              dtype=logits_pde.dtype, device=logits_pde.device)
+        logits_pde = torch.nn.Softmax(dim=1)(logits_pde)
+        return torch.sum(bins[None,:,None,None]*logits_pde, dim=1)
+
+    def calc_pred_err(self, pred_lddts, logit_pae, logit_pde, seq):
+        """Calculates summary metrics on predicted lDDT and distance errors"""
+        plddts = self.lddt_unbin(pred_lddts)
+        pae = self.pae_unbin(logit_pae) if logit_pae is not None else None
+        pde = self.pde_unbin(logit_pde) if logit_pde is not None else None
+
+        sm_mask = is_atom(seq)
+        sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
+        prot_mask_2d = (~sm_mask[None,:])*(~sm_mask[:,None])
+        inter_mask_2d = sm_mask[None,:]*(~sm_mask[:,None]) + (~sm_mask[None,:])*sm_mask[:,None]
+
+        # assumes B=1
+        err_dict = dict(
+            plddt = float(plddts.mean()),
+            pae = float(pae.mean()) if pae is not None else None,
+            pae_lig = float(pae[0,sm_mask_2d].mean()) if pae is not None else None,
+            pae_prot = float(pae[0,prot_mask_2d].mean()) if pae is not None else None,
+            pae_inter = float(pae[0,inter_mask_2d].mean()) if pae is not None else None,
+            pde = float(pde.mean()) if pde is not None else None,
+            pde_lig = float(pde[0,sm_mask_2d].mean()) if pde is not None else None,
+            pde_prot = float(pde[0,prot_mask_2d].mean()) if pde is not None else None,
+            pde_inter = float(pde[0,inter_mask_2d].mean()) if pde is not None else None,
+        )
+        return err_dict
+
     def load_model(self, model, model_name, rank, suffix='last', resume_train=False, 
                    optimizer=None, scheduler=None, scaler=None):
         chk_fn = self.model_dir+"/%s_%s.pt"%(model_name, suffix)
@@ -568,7 +618,7 @@ class Trainer():
         best_valid_loss = 999999.9
         if not os.path.exists(chk_fn):
             print ('no model found', model_name)
-            return -2, best_valid_loss
+            return -1, best_valid_loss
         map_location = {"cuda:%d"%0: "cuda:%d"%rank}
         checkpoint = torch.load(chk_fn, map_location=map_location)
         if rank == 0:
@@ -702,7 +752,7 @@ class Trainer():
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
+        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
         #define dataset & data loader
@@ -722,6 +772,16 @@ class Trainer():
         rna_IDs, rna_weights, rna_dict = rna_items
         sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
         sm_IDs, sm_weights, sm_dict = sm_items
+
+        if self.dataset_param['n_valid_pdb'] is None: self.dataset_param["n_valid_pdb"] = len(valid_pdb.keys()) 
+        if self.dataset_param['n_valid_homo'] is None: self.dataset_param["n_valid_homo"] = len(valid_homo.keys()) 
+        if self.dataset_param["n_valid_compl"] is None: self.dataset_param["n_valid_compl"] = len(valid_compl.keys())
+        if self.dataset_param["n_valid_na_compl"] is None: self.dataset_param["n_valid_na_compl"] = len(valid_na_compl.keys())
+        if self.dataset_param["n_valid_rna"] is None: self.dataset_param["n_valid_rna"] = len(valid_rna.keys())
+        if self.dataset_param["n_valid_sm_compl"] is None: self.dataset_param["n_valid_sm_compl"] = len(valid_sm_compl.keys())
+        if self.dataset_param["n_valid_sm_compl_ligclus"] is None: self.dataset_param["n_valid_sm_compl_ligclus"] = len(valid_sm_compl_ligclus.keys())
+        if self.dataset_param["n_valid_sm_compl_strict"] is None: self.dataset_param["n_valid_sm_compl_strict"] = len(valid_sm_compl_strict.keys())
+        if self.dataset_param["n_valid_sm"] is None: self.dataset_param["n_valid_sm"] = len(valid_sm.keys())
 
         if (rank==0):
             print ('Loaded (training)',
@@ -1003,7 +1063,8 @@ class Trainer():
             valid_atomize_pdb_sampler.set_epoch(epoch)
             #valid_neg_sampler.set_epoch(epoch)
 
-            rng = np.random.RandomState(seed=(epoch*world_size+rank)%1000)
+            #print('epoch',epoch,'world_size',world_size,'rank',rank)
+            rng = np.random.RandomState(seed=epoch*world_size+rank)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, rng)
 
@@ -1011,33 +1072,25 @@ class Trainer():
                 epoch, rng, verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
                 epoch, rng, header="Homo", verbose = self.eval)
-            if self.dataset_param["fraction_compl"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
-                    epoch, rng, header="Hetero", verbose = self.eval)
-            if self.dataset_param["fraction_na_compl"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, 
-                    world_size, epoch, rng, header="NA", verbose = self.eval)
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
+                epoch, rng, header="Hetero", verbose = self.eval)
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, 
+                world_size, epoch, rng, header="NA", verbose = self.eval)
             _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
                 world_size, epoch, rng, header="NAfs", verbose = self.eval)
-            if self.dataset_param["fraction_rna"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
-                    epoch, rng, header="RNA", verbose = self.eval)
-            if self.dataset_param["fraction_sm_compl"] > 0:
-                valid_tot, valid_loss, valid_acc, _ = self.valid_pdb_cycle(ddp_model, 
-                    valid_sm_compl_loader, rank, gpu, world_size, epoch, rng, header="SM Compl", 
-                    verbose = self.eval) 
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
-                    rank, gpu, world_size, epoch, rng, header="SM Compl (lig. clus.)", verbose = self.eval) 
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
-                    rank, gpu, world_size, epoch, rng, header="SM Compl (strict)", verbose = self.eval) 
-            if self.dataset_param["fraction_sm"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-                    rank, gpu, world_size, epoch, rng, header="SM_CSD", verbose = self.eval) 
-            if self.dataset_param["fraction_atomize_pdb"] > 0:
-                _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
-                    epoch, rng, header='Monomer atomize 3', verbose = self.eval)
-            #_, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
-            #    epoch, header="Atomize PDB")
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
+                epoch, rng, header="RNA", verbose = self.eval)
+            valid_tot, valid_loss, valid_acc, _ = self.valid_pdb_cycle(ddp_model, 
+                valid_sm_compl_loader, rank, gpu, world_size, epoch, rng, header="SM Compl", 
+                verbose = self.eval) 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM Compl (lig. clus.)", verbose = self.eval) 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM Compl (strict)", verbose = self.eval) 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
+                rank, gpu, world_size, epoch, rng, header="SM_CSD", verbose = self.eval) 
+            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
+                epoch, rng, header='Monomer atomize 3', verbose = self.eval)
             #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
             #    world_size, epoch, report_interface=True)
 #            _, _, _ = self.valid_ppi_cycle(
@@ -1046,8 +1099,6 @@ class Trainer():
 #            _, _, _ = self.valid_ppi_cycle(
 #                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
 #                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
-#            _,_,_ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, epoch, header="RNA")
-            # _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, rank, gpu, world_size, epoch, header="SM Only") 
 
             if self.eval: break
 
@@ -1587,22 +1638,39 @@ class Trainer():
                     name = item[0]
                 else:
                     name = item[0][0]
-                if self.eval:
-                    record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)
-                    record.update({k:float(v) for k,v in loss_dict.items()})
-                    records.append(record)
                     
                 #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb',
-                        torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
-                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_true.pdb',
+                    #writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb',
+                    #    torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
+                    #    bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}.pdb',
                         torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask],
-                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_pred.pdb',
-                        torch.nan_to_num(pred_allatom[res_mask][:,:23]), seq_unmasked[res_mask],
-                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
+                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]],
+                        chain="A", atom_mask=atom_mask_[res_mask])
+                    pred_sup = superimpose(torch.nan_to_num(pred_allatom[:,res_mask[0],:23]),
+                                           torch.nan_to_num(true_crds_[:,res_mask[0],:23]),
+                                           atom_mask_[:,res_mask[0],:23])
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}.pdb',
+                        pred_sup, seq_unmasked[res_mask],
+                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]], 
+                        chain="B", file_mode='a', atom_mask=atom_mask_[res_mask],
+                        atom_idx_offset=atom_mask_[res_mask].sum())
+
+                if self.eval:
+                    record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)
+                    record.update({k:float(v) for k,v in loss_dict.items()})
+                    logit_pae_ = logit_pae[...,res_mask[0]][...,res_mask[0],:] if logit_pae is not None else None
+                    logit_pde_ = logit_pde[...,res_mask[0]][...,res_mask[0],:] if logit_pde is not None else None
+                    pred_err = self.calc_pred_err(pred_lddts, logit_pae_, logit_pde_, 
+                                                  seq_unmasked[0,res_mask[0]]) 
+                    record.update(pred_err)
+                    records.append(record)
+
+                    torch.save({'logits_pae': logit_pae_,
+                                'logits_pde': logit_pde_,
+                                'pred_lddts': pred_lddts[...,res_mask[0]]},
+                               out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_outputs.pt')
 
                 counter += 1
 

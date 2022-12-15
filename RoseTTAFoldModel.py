@@ -115,7 +115,7 @@ class RoseTTAFoldModule(nn.Module):
         # predict aligned error and distance error
         if self.use_extra_l1:
             logits_pae = self.pae_pred(pair)        
-            logits_pde = self.pde_pred(pair)        
+            logits_pde = self.pde_pred(pair + pair.permute(0,2,1,3)) # symmetrize pair features
         else:
             logits_pae = None
             logits_pde = None
