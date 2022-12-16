@@ -1,6 +1,6 @@
 import torch
 from torch.utils import data
-import os, csv, random, pickle
+import os, csv, random, pickle, gzip
 from dateutil import parser
 import numpy as np
 import pandas as pd
@@ -12,7 +12,8 @@ from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP
 from kinematics import get_chirals
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
-    atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask
+    atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
+    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -29,7 +30,7 @@ na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
-mol_dir = "/projects/ml/RF2_allatom/isdf"
+mol_dir = "/projects/ml/RF2_allatom/rcsv/pkl"
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -59,7 +60,8 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%sm_compl_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/list_v02_smcompl_20221123.csv"%sm_compl_dir, 
+        "SM_LIST"          : "%s/sm_compl_organic_20221214.csv"%sm_compl_dir, 
+        "MET_LIST"         : "%s/sm_compl_metal_20221214.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
@@ -336,6 +338,18 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
 
     return xyz, t1d, mask_t
 
+def load_df(filename, params, eval_cols=[]):
+    """Loads CSV into dataframe and applies general filters"""
+    df = pd.read_csv(filename)
+    df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') # restore leading zeros, make into string
+    for col in eval_cols:
+        df[col] = df[col].apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
+    df = df[
+        (df.RESOLUTION<=params['RESCUT']) &
+        (df.DEPOSITION.apply(lambda x: parser.parse(x))<=parser.parse(params['DATCUT']))
+    ]
+    return df
+
 
 def get_train_valid_set(params, OFFSET=1000000):
     if (not os.path.exists(params['DATAPKL'])):
@@ -366,19 +380,28 @@ def get_train_valid_set(params, OFFSET=1000000):
             else:
                 train_rna[i] = [(r[0], r[-1])]
 
-        # parse protein-small molecule complexes
-        def _load_df(filename, eval_cols=[]):
-            """Loads CSV into dataframe and applies general filters"""
-            df = pd.read_csv(filename)
-            df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') # restore leading zeros, make into string
-            for col in eval_cols:
-                df[col] = df[col].apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
-            df = df[
-                (df.RESOLUTION<=params['RESCUT']) &
-                (df.DEPOSITION.apply(lambda x: parser.parse(x))<=parser.parse(params['DATCUT']))
-            ]
-            return df
+        # protein-small molecule complexes
+        def _parse_sm_compl_df(filename):
 
+            df = load_df(filename, params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
+
+            seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
+            df['WEIGHT'] = seq_len_factor
+
+            train_df = df[~df['CLUSTER'].isin(val_pdb_ids)]
+            valid_df = df[df['CLUSTER'].isin(val_pdb_ids)]
+
+            IDs = train_df['CLUSTER'].drop_duplicates().values
+            df_clus = df[['CLUSTER','WEIGHT']].groupby('CLUSTER').mean().reset_index()
+            clus2weight = dict(zip(df_clus.CLUSTER, df_clus.WEIGHT))
+            weights = [clus2weight[i] for i in sm_compl_IDs]
+
+            return train_df, valid_df, weights
+
+        train_sm_compl, valid_sm_compl, sm_compl_weights = _parse_sm_compl_df(params['SM_LIST'])
+        train_metal_compl, valid_metal_compl, metal_compl_weights = _parse_sm_compl_df(params['MET_LIST'])
+
+        # stricter versions of protein-small mol validation set
         def _make_example_dict(df, make_entry_func, cluster_key='CLUSTER'):
             """Converts a dataframe of training examples to dictionary where keys are cluster IDs and values
                are lists of training examples formatted according to the function `make_entry_func`."""
@@ -391,41 +414,14 @@ def get_train_valid_set(params, OFFSET=1000000):
                 else:
                     data_dict[cluster] = [entry]
             return data_dict
-
-        df = _load_df(params['SM_LIST'], eval_cols=['LIGANDS'])
-        df = df[
-            ~df.LIGANDS.apply(lambda x: '1fcv_GCU_1_A_405__B___.mol2' in x) # tanimoto neighbors=0, weight=Inf
-        ]
-
-        # weight each example by various factors
-        seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
-        lig_copy_num = df.LIGANDS.apply(lambda x: len(x)).astype(float) # num copies of this ligand in this structure
-        multi_lig_factor = lig_copy_num/df.NUM_LIGANDS # correct for multiple unique ligands per protein
-        if params['CLUSTER_LIGANDS']:
-            ligand_cluster_factor = lig_copy_num/df.LIGAND_CLUSTER_SIZE # how many sm mol have tanimoto > 0.85 to this?
-        else:
-            ligand_cluster_factor = 1.0
-        seq_cluster_factor = 1./df.CLUSTER_SIZE # protein seq similarity cluster size
-        df['WEIGHT'] = seq_len_factor * multi_lig_factor * ligand_cluster_factor * seq_cluster_factor
-
-        # compile protein-sm. mol training & validation sets
         def _make_entry(row):
             return ((row.CHAINID, row.HASH, row.LIGANDS), row.LEN_EXIST, row.WEIGHT)
-        train_sm_compl = _make_example_dict(df[~df.CLUSTER.isin(val_pdb_ids)], make_entry_func=_make_entry)
-        valid_sm_compl = _make_example_dict(df[df.CLUSTER.isin(val_pdb_ids)], make_entry_func=_make_entry)
 
-        # protein-small mol cluster weights are the sum of cluster member weights
-        sm_compl_IDs = list(train_sm_compl.keys())
-        df_clus = df[['CLUSTER','WEIGHT']].groupby('CLUSTER').sum().reset_index()
-        clus2weight = dict(zip(df_clus.CLUSTER, df_clus.WEIGHT))
-        sm_compl_weights = [clus2weight[i] for i in sm_compl_IDs]
-
-        # stricter versions of protein-small mol validation set
-        df = _load_df(params['VAL_SM_LIGCLUS'], eval_cols=['LIGANDS']) # deduplicated ligand clusters
+        df = load_df(params['VAL_SM_LIGCLUS'], params, eval_cols=['LIGANDS']) # deduplicated ligand clusters
         df['WEIGHT'] = 1 # examples have already been redundancy-reduced
         valid_sm_compl_ligclus = _make_example_dict(df, make_entry_func=_make_entry)
 
-        df = _load_df(params['VAL_SM_STRICT'], eval_cols=['LIGANDS']) # removed ligand cluster overlap with train
+        df = load_df(params['VAL_SM_STRICT'], params, eval_cols=['LIGANDS']) # removed ligand cluster overlap with train
         df['WEIGHT'] = 1 # examples have already been redundancy-reduced
         valid_sm_compl_strict = _make_example_dict(df, make_entry_func=_make_entry, cluster_key='ID') # use all examples regardless of sequence cluster
 
@@ -621,7 +617,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         # protein-peptide complexes (validation only)
         def _make_entry(row):
             return ((row.CHAINID, row.HASH, row.PEP_CHAINID), row.LEN_EXIST)
-        df = _load_df(params['VAL_PEP'])
+        df = load_df(params['VAL_PEP'], params)
         valid_pep = _make_example_dict(df, make_entry_func=_make_entry)
 
         # Get average chain length in each cluster and calculate weights
@@ -660,11 +656,12 @@ def get_train_valid_set(params, OFFSET=1000000):
             na_neg_IDs, na_neg_weights, train_na_neg,
             rna_IDs, rna_weights, train_rna,
             sm_compl_IDs, sm_compl_weights, train_sm_compl,
+            metal_compl_IDs, metal_compl_weights, train_metal_compl,
             sm_IDs, sm_weights, train_sm,
             valid_pdb, valid_homo, 
             valid_compl, valid_neg,
             valid_na_compl, valid_na_neg,
-            valid_rna, valid_sm_compl, valid_sm_compl_ligclus, 
+            valid_rna, valid_sm_compl, valid_metal_compl, 
             valid_sm_compl_strict, valid_sm, valid_pep,
             homo
         )
@@ -684,11 +681,12 @@ def get_train_valid_set(params, OFFSET=1000000):
                 na_neg_IDs, na_neg_weights, train_na_neg,
                 rna_IDs, rna_weights, train_rna,
                 sm_compl_IDs, sm_compl_weights, train_sm_compl,
+                metal_compl_IDs, metal_compl_weights, train_metal_compl,
                 sm_IDs, sm_weights, train_sm, 
                 valid_pdb, valid_homo, 
                 valid_compl, valid_neg,
                 valid_na_compl, valid_na_neg,
-                valid_rna, valid_sm_compl, valid_sm_compl_ligclus, 
+                valid_rna, valid_sm_compl, 
                 valid_sm_compl_strict, valid_sm, valid_pep,
                 homo
             ) = pickle.load(f)
@@ -703,11 +701,12 @@ def get_train_valid_set(params, OFFSET=1000000):
         (na_neg_IDs, torch.tensor(na_neg_weights).float(), train_na_neg),\
         (rna_IDs, torch.tensor(rna_weights).float(), train_rna),\
         (sm_compl_IDs, torch.tensor(sm_compl_weights).float(), train_sm_compl), \
+        (metal_compl_IDs, torch.tensor(metal_compl_weights).float(), train_metal_compl), \
         (sm_IDs, torch.tensor(sm_weights).float(), train_sm), \
         valid_pdb, valid_homo, 
         valid_compl, valid_neg,
         valid_na_compl, valid_na_neg,
-        valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, valid_pep,
+        valid_rna, valid_sm_compl, valid_metal_compl, valid_sm_compl_strict, valid_sm, valid_pep,
         homo
     )
 
@@ -1504,19 +1503,19 @@ def loader_rna(item, Ls, params, random_noise=5.0):
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, "rna",item
 
-def loader_sm_compl(item, params, pick_top=True,
-    init_protein_tmpl=False, init_ligand_tmpl=False,
+def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_ligand_tmpl=False,
     init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0):
     """Load protein/SM complex with mixed residue and atom tokens. Also,
     compute frames for atom FAPE loss calc"""
 
-    pdb_chain, pdb_hash, ligands = item
+    pdb_chain, pdb_hash, ligand = item['CHAINID'], item['HASH'], item['LIGAND']
 
-    # Load protein information
-    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
+    pdb_id, i_ch_prot = pdb_chain.split('_')
+
+    # Load MSA and templates
     a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+pdb_hash[:3] + '/'+ pdb_hash + '.a3m.gz', pdb_hash)
     tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
-   
+
     # get msa features
     msa_prot = a3mA['msa'].long()
     ins_prot = a3mA['ins'].long()
@@ -1524,35 +1523,43 @@ def loader_sm_compl(item, params, pick_top=True,
     if len(msa_prot) > params['BLOCKCUT']:
         msa_prot, ins_prot = MSABlockDeletion(msa_prot, ins_prot)
     a3m_prot = {"msa": msa_prot, "ins": ins_prot}
-    xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
+
+    # load pre-parsed cif assembly - requires cifutils.py in path for object definitions
+    chains, asmb, covale, modres = pickle.load(gzip.open(params['MOL_DIR']+f'/{pdb_id[1:3]}/{pdb_id}.pkl.gz'))
+
+    # coordinate transforms to recreate this bio-assembly
+    i_a = str(item['ASSEMBLY'])
+    asmb_xfs = asmb[i_a]
+
+    # 1st protein chain in list is the main binding partner
+    for p in item['PARTNERS']:
+        if p[0]==i_ch_prot:
+            i_xf_prot = p[1]
+            break
+
+    ch = chains[i_ch_prot]
+    ch_xf = asmb_xfs[i_xf_prot]
+    xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot = cif_prot_to_xyz(ch, ch_xf, modres)
     protein_L, nprotatoms, _ = xyz_prot.shape
- 
-    # Load small molecule
-    i_lig = np.random.randint(len(ligands))
-    ligname = ligands[i_lig].split('_')[1]
-    filename = params["MOL_DIR"]+'/'+ligname[0]+'/'+ligname+'/'+ligands[i_lig].replace('.mol2','.isdf')
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(filename, filetype="sdf")
-    for alt_lig in ligands[:i_lig]+ligands[i_lig+1:]:
-        ligname = alt_lig.split('_')[1]
-        filename = params["MOL_DIR"]+'/'+ligname[0]+'/'+ligname+'/'+alt_lig.replace('.mol2','.isdf')
-        mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(filename, filetype='sdf')
-        if (msa_sm2.shape == msa_sm.shape) and all(msa_sm2==msa_sm):
-            xyz_sm = torch.concat([xyz_sm, xyz_sm2],dim=0) # (N_symm1 + N_symm2, Natoms, 3)
-            mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
-        else:
-            print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same '\
-                  f'atom order: {item[0]}: {ligands[i_lig]} vs {alt_lig}. Skipping latter ligand.')
+
+    # assume only 1 ligand chain
+    # TODO: generalize to multi-res ligands
+    # TODO: load multiple copies of the same ligand
+    ligand = ligand[0]
+
+    lig_ch2xf = dict(item['LIGXF'])
+    lig_atoms = {k:v for k,v in chains[ligand[0]].atoms.items() if k[:3]==ligand}
+    lig_bonds = [bond for bond in chains[ligand[0]].bonds if bond.a[:3]==ligand or bond.b[:3]==ligand]
+
+    xyz_sm, mask_sm, msa_sm, chid_sm, akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
+    mol, bond_feats = cif_ligand_to_obmol(xyz_sm, akeys, lig_atoms, lig_bonds)
+    xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
 
     # clamp number of symmetry variants to save GPU memory
-    if xyz_sm.shape[0] > params['MAXNSYMM']: 
+    if xyz_sm.shape[0] > params['MAXNSYMM']:
         xyz_sm = xyz_sm[:params['MAXNSYMM']]
         mask_sm = mask_sm[:params['MAXNSYMM']]
 
-    if xyz_sm.shape[0] ==0:
-        print(f'ERROR [loader_sm_compl]: {item[0]} had no xyz coords')
-        return (torch.tensor([-1]),)*21 
-
-    a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
     chirals = get_chirals(mol, xyz_sm[0])
@@ -1567,33 +1574,31 @@ def loader_sm_compl(item, params, pick_top=True,
     mask[:, protein_L:, 1] = mask_sm
 
     Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
-    
-    if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
-        print(f'WARNING [loader_sm_compl]: Sm. mol. XYZ and MSA lengths don\'t match: {item}. Skipping.')
-        return (torch.tensor([-1]),)*21
 
+    ins_sm = torch.zeros_like(msa_sm)
+    a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
 
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
-    
+
     idx = torch.arange(sum(Ls))
     idx[Ls[0]:] += CHAIN_GAP
-    
+
     chain_idx = torch.zeros((sum(Ls), sum(Ls))).long()
     chain_idx[:Ls[0], :Ls[0]] = 1
-    chain_idx[Ls[0]:, Ls[0]:] = 1 
+    chain_idx[Ls[0]:, Ls[0]:] = 1
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol)
-    
+
     if init_protein_tmpl or init_ligand_tmpl:
         # make blank features for 2 templates
         xyz_t = torch.full((2,sum(Ls),NTOTAL,3),np.nan).float()
         f1d_t = torch.cat((
             torch.nn.functional.one_hot(
-                torch.full((2, sum(Ls)), 20).long(), 
+                torch.full((2, sum(Ls)), 20).long(),
                 num_classes=NAATOKENS-1).float(), # all gaps (no mask token)
             torch.zeros((2, sum(Ls), 1)).float()
         ), -1) # (2, L_protein + L_sm, NAATOKENS)
@@ -1619,7 +1624,7 @@ def loader_sm_compl(item, params, pick_top=True,
         # same_chain argument prevents sm. mol from being initialized at one end of protein
         ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
         xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0,
-            npick=ntempl, pick_top=pick_top, same_chain=chain_idx, random_noise=random_noise) 
+            npick=ntempl, pick_top=pick_top, same_chain=chain_idx, random_noise=random_noise)
 
         if msa.shape[1] != xyz_t.shape[1]:
             print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
@@ -1662,20 +1667,22 @@ def loader_sm_compl(item, params, pick_top=True,
         msa_seed = msa_seed[:,:,sel]
         msa_extra = msa_extra[:,:,sel]
         mask_msa = mask_msa[:,:,sel]
-        xyz = xyz[:,sel] 
+        xyz = xyz[:,sel]
         mask = mask[:,sel]
         xyz_t = xyz_t[:,sel]
         f1d_t = f1d_t[:,sel]
         mask_t = mask_t[:,sel]
         xyz_prev = xyz_prev[sel]
-        mask_prev = mask_prev[sel] 
+        mask_prev = mask_prev[sel]
         idx = idx[sel]
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
+
     # need to reindex the chiral atom positions - assumes they are the second chain
     if chirals.shape[0]>0:
         L1 = chain_idx[0,:].sum()
-        chirals[:, :-1] = chirals[:, :-1] +L1 
+        chirals[:, :-1] = chirals[:, :-1] + L1
+
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
@@ -2008,12 +2015,30 @@ class DatasetRNA(data.Dataset):
         )
         return out
 
+def get_sm_compl_item(data_df, cluster_id)
+    """Sample a protein-ligand training example given the dataset dataframe and
+    a protein seq cluster ID"""
+
+    # get all examples in this cluster
+    clus_df = data_df[data_df.CLUSTER==cluster_id]
+
+    # choose uniform random PDB chain
+    chid = np.random.choice(clus_df.CHAINID.drop_duplicates().values)
+    ch_df = clus_df[clus_df.CHAINID==chid]
+
+    # choose uniform random ligand
+    lignames = list(set([x[0][2] for x in ch_df['LIGAND']]))
+    lig_df = ch_df[ch_df['LIGAND'].apply(lambda x: x[0][2]==np.random.choice(lignames))]
+
+    item = lig_df.sample(1).to_dict(orient='records')[0] # choose random instance of chosen ligand
+
+    return item
 
 class DatasetSMComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, init_protein_tmpl=False, init_ligand_tmpl=False,
+    def __init__(self, IDs, loader, item_df, params, init_protein_tmpl=False, init_ligand_tmpl=False,
                  init_protein_xyz=False, init_ligand_xyz=False, task=None, seed=None):
         self.IDs = IDs
-        self.item_dict = item_dict
+        self.item_df = item_df
         self.loader = loader
         self.params = params
         self.init_protein_tmpl = init_protein_tmpl
@@ -2028,9 +2053,9 @@ class DatasetSMComplex(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = self.rng.randint(0, len(self.item_dict[ID])) # no weighting of samples during validation
+        item = get_sm_compl_item(self.item_df, ID)
         out = self.loader(
-            self.item_dict[ID][sel_idx][0],
+            item,
             self.params,
             init_protein_tmpl = self.init_protein_tmpl,
             init_ligand_tmpl = self.init_ligand_tmpl,
@@ -2069,7 +2094,7 @@ class DistilledDataset(data.Dataset):
         #na_neg_IDs, na_neg_loader, na_neg_dict,
         fb_IDs, fb_loader, fb_dict,
         rna_IDs, rna_loader, rna_dict,
-        sm_compl_IDs, sm_compl_loader, sm_compl_dict, 
+        sm_compl_IDs, sm_compl_loader, sm_compl_df, 
         sm_IDs, sm_loader, sm_dict,
         atomize_pdb_IDs, atomize_pdb_loader, atomize_pdb_dict,
         homo, 
@@ -2101,7 +2126,7 @@ class DistilledDataset(data.Dataset):
         self.rna_loader = rna_loader
         self.sm_compl_IDs = sm_compl_IDs
         self.sm_compl_loader = sm_compl_loader
-        self.sm_compl_dict = sm_compl_dict
+        self.sm_compl_df = sm_compl_df
         self.sm_IDs = sm_IDs
         self.sm_loader = sm_loader
         self.sm_dict = sm_dict
@@ -2227,34 +2252,11 @@ class DistilledDataset(data.Dataset):
         if index >= offset and index < offset + len(self.sm_compl_inds):
             ID = self.sm_compl_IDs[index-offset]
 
-            # choose one of 4 protein-sm tasks
-            #i_task = np.random.randint(4)
-            i_task = 0
-            if i_task==0: # fold-and-dock
-                kwargs = {}
-                task = 'sm_compl_fold_dock'
-            elif i_task==1: # rigid body dock
-                kwargs = dict(
-                    init_protein_tmpl = True, init_ligand_tmpl = True,
-                )
-                task = 'sm_compl_dock'
-            elif i_task==2: # fold protein
-                kwargs = dict(
-                    init_ligand_tmpl = True, 
-                )
-                task = 'sm_compl_foldprot'
-            elif i_task==3: # fold ligand
-                kwargs = dict(
-                    init_protein_tmpl = True, 
-                )
-                task = 'sm_compl_foldsm'
-
-            weights = torch.tensor([item[2] for item in self.sm_compl_dict[ID]])
-            sel_idx = torch.multinomial(weights, 1)
+            task = 'sm_compl_fold_dock'
+            item = get_sm_compl_item(self.sm_compl_df, ID)
             out = self.sm_compl_loader(
-                self.sm_compl_dict[ID][sel_idx][0],
+                item,
                 self.params,
-                **kwargs
             )
             out = out[:-2]+(task,)+out[-1:]
         offset += len(self.sm_compl_inds)

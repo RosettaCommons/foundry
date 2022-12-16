@@ -11,6 +11,7 @@ from itertools import combinations
 from openbabel import openbabel
 from scipy.spatial.transform import Rotation
 
+import chemical
 from chemical import *
 from kinematics import get_atomize_protein_chirals
 from scoring import *
@@ -1139,3 +1140,127 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
 
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_mask, bond_feats)
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
+
+def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
+
+    assert(ch.type == 'polypeptide(L)')
+    assert(ch.id == ch_xf[0])
+
+    # atom names from cif don't have whitespace
+    aa2long_ = [[x.strip() if x is not None else None for x in y] for y in aa2long]
+
+    idx = [int(k[1]) for k in ch.atoms]
+    i_min, i_max = np.min(idx), np.max(idx)
+    L = i_max - i_min + 1
+
+    xyz = torch.zeros(L, NTOTAL, 3)
+    mask = torch.zeros(L, NTOTAL).bool()
+    seq = torch.full((L,), np.nan)
+    chid = ['-']*L
+    resi = ['-']*L
+
+    unrec_elements = set()
+
+    for k,v in ch.atoms.items():
+        i_res = int(k[1])-i_min
+        if k[2] in aa2num: # standard AA
+            aa = aa2num[k[2]]
+        elif k[2] in modres: # nonstandard AA, map to standard
+            print('nonstandard AA',k,modres[k[2]])
+            aa = aa2num[modres[k[2]]]
+        else: # unknown AA, still try to store BB atoms
+            print('unknown AA',k)
+            aa = 20
+        if k[3] in aa2long_[aa]: # atom name exists in RF nomenclature
+            i_atom = aa2long_[aa].index(k[3]) # atom index
+            xyz[i_res, i_atom, :] = torch.tensor(v.xyz)
+            mask[i_res, i_atom] = v.occ
+        seq[i_res] = aa
+        chid[i_res] = k[0]
+        resi[i_res] = k[1]
+
+    xf = torch.tensor(ch_xf[1]).float()
+    u,r = xf[:3,:3], xf[:3,3]
+    xyz_xf = torch.einsum('ij,raj->rai', u, xyz) + r[None,None]
+
+    return xyz_xf, mask, seq, chid, resi
+
+def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf):
+    
+    elnum_to_atom = dict(zip(atom_num, frame_priority2atom))
+    atoms_no_H = {k:v for k,v in atoms.items() if v.element != 1} # exclude hydrogens
+    L = len(atoms_no_H)
+    
+    xyz = torch.zeros(L, 3)
+    mask = torch.zeros(L,).bool()
+    seq = torch.full((L,), np.nan)
+    chid = ['-']*L
+    akeys = [None]*L
+    
+    # create coords, atom mask, and seq tokens
+    for i,(k,v) in enumerate(atoms_no_H.items()):
+        xyz[i, :] = torch.tensor(v.xyz)
+        mask[i] = v.occ
+        if v.element not in elnum_to_atom:
+            print('Element not in alphabet:',v.element)
+            seq[i] = chemical.aa2num['ATM']
+        else:
+            seq[i] = chemical.aa2num[elnum_to_atom[v.element]]
+        akeys[i] = k
+        chid[i] = k[0]
+        
+    # apply transforms
+    chid = np.array(chid)
+    for i_ch in np.unique(chid):
+        idx = chid==i_ch
+        xf = torch.tensor(asmb_xfs[ch2xf[i_ch]][1]).float()
+        u,r = xf[:3,:3], xf[:3,3]
+        xyz[idx] = torch.einsum('ij,aj->ai', u, xyz[idx]) + r[None,None]
+        
+    return xyz, mask, seq, chid, akeys
+
+def cif_ligand_to_obmol(xyz, akeys, atoms, bonds):
+    
+    mol = openbabel.OBMol()    
+    for i,k in enumerate(akeys):
+        a = mol.NewAtom()
+        a.SetAtomicNum(atoms[k].element)
+        a.SetVector(float(xyz[i,0]), float(xyz[i,1]), float(xyz[i,2]))
+
+    sm_L = len(akeys)
+    bond_feats = torch.zeros((sm_L,sm_L))
+    for bond in bonds:
+        if bond.a not in akeys or bond.b not in akeys: continue # intended to skip bonds to H's
+        i = akeys.index(bond.a)
+        j = akeys.index(bond.b)
+        bond_feats[i,j] = bond.order if not bond.aromatic else 4
+        bond_feats[j,i] = bond_feats[i,j]
+
+        obb = openbabel.OBBond()
+        obb.SetBegin(mol.GetAtom(i+1))
+        obb.SetEnd(mol.GetAtom(j+1))
+        obb.SetBondOrder(bond.order)
+        if bond.aromatic:
+            obb.SetAromatic()
+
+        mol.AddBond(obb)
+    
+    return mol, bond_feats
+
+def get_automorphs(mol, xyz_sm, mask_sm):
+    # enumerate atom symmetry permutations
+    automorphs = openbabel.vvpairUIntUInt()
+    openbabel.FindAutomorphisms(mol, automorphs)
+
+    automorphs = torch.tensor(automorphs)
+    n_symmetry = automorphs.shape[0]
+
+    xyz_sm = xyz_sm[None].repeat(n_symmetry,1,1)
+    mask_sm = mask_sm[None].repeat(n_symmetry,1)
+
+    xyz_sm = torch.scatter(xyz_sm, 1, automorphs[:,:,0:1].repeat(1,1,3),
+                                torch.gather(xyz_sm,1,automorphs[:,:,1:2].repeat(1,1,3)))
+    mask_sm = torch.scatter(mask_sm, 1, automorphs[:,:,0],
+                         torch.gather(mask_sm, 1, automorphs[:,:,1]))
+
+    return xyz_sm, mask_sm
