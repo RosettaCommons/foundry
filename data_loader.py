@@ -620,7 +620,7 @@ def get_train_valid_set(params, OFFSET=1000000):
 
         # Get average chain length in each cluster and calculate weights
         # protein-small mol complex weights are done separately above
-        IDs = dict(
+        train_ID_dict = dict(
             pdb = list(train_pdb.keys()),
             fb = list(fb.keys()),
             compl = list(train_compl.keys()),
@@ -634,7 +634,7 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm = list(train_sm.keys())
         )
 
-        weights = dict(
+        weights_dict = dict(
             pdb = (1/512.)*np.clip(
                 np.array([train_pdb[key][0][1] for key in pdb_IDs]), 256, 512),
             fb = (1/512.)*np.clip(
@@ -653,9 +653,9 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm_compl_multi = sm_compl_multi_weights,
             sm = np.array([train_sm[key][1] for key in sm_IDs])
         )
-        weights = {k:torch.tensor(v).float() for k,v in weights.items()}
+        weights_dict = {k:torch.tensor(v).float() for k,v in weights_dict.items()}
 
-        train_sets = dict(
+        train_set_dict = dict(
             pdb = train_pdb,
             fb = fb,
             compl = train_compl,
@@ -669,7 +669,7 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm = train_sm
         )
 
-        valid_sets = dict(
+        valid_set_dict = dict(
             pdb = valid_pdb,
             homo = valid_homo,
             compl = valid_compl,
@@ -683,19 +683,36 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm_compl_strict = valid_sm_compl_strict,
             sm = valid_sm
         )
-       
+
+        valid_ID_dict = dict(
+            pdb = np.array(valid_pdb.keys()),
+            homo = np.array(valid_homo.keys()),
+            compl = np.array(valid_compl.keys()),
+            neg = np.array(valid_neg.keys()),
+            na_compl = np.array(valid_na_compl.keys()),
+            na_neg = np.array(valid_na_neg.keys()),
+            rna = np.array(valid_rna.keys()),
+            sm_compl = valid_sm_compl['CLUSTER'].drop_duplicates().values,
+            metal_compl = valid_metal_compl['CLUSTER'].drop_duplicates().values,
+            sm_compl_multi = valid_sm_compl_multi['CLUSTER'].drop_duplicates().values,
+            sm_compl_strict = valid_sm_compl_strict['CLUSTER'].drop_duplicates().values,
+            sm = np.array(valid_sm.keys())
+        )
+      
         # save
         with open(params["DATAPKL"], "wb") as f:
             print ('Writing',params["DATAPKL"],'...')
-            pickle.dump((IDs, weights, train_sets, valid_sets, homo), f)
+            pickle.dump((train_ID_dict, valid_ID_dict, weights_dict, 
+                         train_set_dict, valid_set_dict, homo), f)
             print ('...done')
     else:
         with open(params["DATAPKL"], "rb") as f:
             print ('Loading',params["DATAPKL"],'...')
-            IDs, weights, train_sets, valid_sets, homo = pickle.load(f)
+            train_ID_dict, valid_ID_dict, weights_dict, \
+                train_set_dict, valid_set_dict, homo = pickle.load(f)
             print ('...done')
 
-    return IDs, weights, train_sets, valid_sets, homo
+    return train_ID_dict, valid_ID_dict, weights_dict, train_set_dict, valid_set_dict, homo
 
 # slice long chains
 def get_crop(l, mask, device, crop_size, unclamp=False):
