@@ -765,6 +765,11 @@ class Trainer():
         train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo = \
             get_train_valid_set(self.loader_param)
 
+        train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
+        weights_dict['atomize_pdb'] = weights_dict['pdb']
+        train_dict['atomize_pdb'] = train_dict['pdb']
+        valid_dict['atomize_pdb'] = valid_dict['pdb']
+
         if self.dataset_param['n_valid_pdb'] is None: 
             self.dataset_param["n_valid_pdb"] = len(valid_dict['pdb']) 
         if self.dataset_param['n_valid_homo'] is None: 
@@ -837,10 +842,18 @@ class Trainer():
                 self.dataset_param['n_valid_atomize_pdb'],'monomers (atomized)',
             )
 
-        train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
-        weights_dict['atomize_pdb'] = weights_dict['pdb']
-        train_dict['atomize_pdb'] = train_dict['pdb']
-        valid_dict['atomize_pdb'] = valid_dict['pdb']
+        loader_dict = dict(
+            pdb = loader_pdb,
+            compl = loader_complex,
+            na_compl = loader_na_complex,
+            fb = loader_fb,
+            rna = loader_rna,
+            sm_compl = loader_sm_compl,
+            metal_compl = loader_sm_compl,
+            sm_compl_multi = loader_sm_compl,
+            sm = loader_sm,
+            atomize_pdb = loader_atomize_pdb
+        )
 
         train_set = DistilledDataset(train_ID_dict, train_dict, loader_dict, homo, 
                                      self.loader_param, native_NA_frac=0.25)
