@@ -30,7 +30,7 @@ na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
-mol_dir = "/projects/ml/RF2_allatom/rcsv/pkl"
+mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl"
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -70,7 +70,7 @@ def set_data_loader_params(args):
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
-        "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20221216.csv"%sm_compl_dir, 
+        "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221102.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
         "DATAPKL"          : "%s/dataset_20221215.pkl"%sm_compl_dir, # cache for faster loading
         "PDB_DIR"          : base_dir,
@@ -362,6 +362,19 @@ def get_train_valid_set(params, OFFSET=1000000):
         val_rna_pdb_ids = set([l.rstrip() for l in open(params['VAL_RNA']).readlines()])
         test_sm_ids = set([int(l) for l in open(params['TEST_SM']).readlines()])
 
+        # read homo-oligomer list
+        homo = {}
+        with open(params['HOMO_LIST'], 'r') as f:
+            reader = csv.reader(f)
+            next(reader)
+            # read pdbA, pdbB, bioA, opA, bioB, opB
+            rows = [[r[0], r[1], int(r[2]), int(r[3]), int(r[4]), int(r[5])] for r in reader]
+        for r in rows:
+            if r[0] in homo.keys():
+                homo[r[0]].append(r[1:])
+            else:
+                homo[r[0]] = [r[1:]]
+
         # read & clean list.csv
         with open(params['PDB_LIST'], 'r') as f:
             reader = csv.reader(f)
@@ -395,20 +408,6 @@ def get_train_valid_set(params, OFFSET=1000000):
                     train_pdb[r[2]].append((r[:2], r[-1]))
                 else:
                     train_pdb[r[2]] = [(r[:2], r[-1])]
-
-
-        # read homo-oligomer list
-        homo = {}
-        with open(params['HOMO_LIST'], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            # read pdbA, pdbB, bioA, opA, bioB, opB
-            rows = [[r[0], r[1], int(r[2]), int(r[3]), int(r[4]), int(r[5])] for r in reader]
-        for r in rows:
-            if r[0] in homo.keys():
-                homo[r[0]].append(r[1:])
-            else:
-                homo[r[0]] = [r[1:]]
 
         # compile facebook model sets
         with open(params['FB_LIST'], 'r') as f:
@@ -588,10 +587,6 @@ def get_train_valid_set(params, OFFSET=1000000):
         def _make_entry(row):
             return ((row.CHAINID, row.HASH, row.LIGANDS), row.LEN_EXIST, row.WEIGHT)
 
-        df = load_df(params['VAL_SM_LIGCLUS'], params, eval_cols=['LIGANDS']) # deduplicated ligand clusters
-        df['WEIGHT'] = 1 # examples have already been redundancy-reduced
-        valid_sm_compl_ligclus = _make_example_dict(df, make_entry_func=_make_entry)
-
         df = load_df(params['VAL_SM_STRICT'], params, eval_cols=['LIGANDS']) # removed ligand cluster overlap with train
         df['WEIGHT'] = 1 # examples have already been redundancy-reduced
         valid_sm_compl_strict = _make_example_dict(df, make_entry_func=_make_entry, cluster_key='ID') # use all examples regardless of sequence cluster
@@ -636,22 +631,22 @@ def get_train_valid_set(params, OFFSET=1000000):
 
         weights_dict = dict(
             pdb = (1/512.)*np.clip(
-                np.array([train_pdb[key][0][1] for key in pdb_IDs]), 256, 512),
+                np.array([train_pdb[key][0][1] for key in train_ID_dict['pdb']]), 256, 512),
             fb = (1/512.)*np.clip(
-                np.array([fb[key][0][1] for key in fb_IDs]), 256, 512),
+                np.array([fb[key][0][1] for key in train_ID_dict['fb']]), 256, 512),
             compl = (1/512.)*np.clip(
-                np.array([sum(train_compl[key][0][1]) for key in compl_IDs]), 256, 512),
+                np.array([sum(train_compl[key][0][1]) for key in train_ID_dict['compl']]), 256, 512),
             neg = (1/512.)*np.clip(
-                np.array([sum(train_neg[key][0][1]) for key in neg_IDs]), 256, 512),
+                np.array([sum(train_neg[key][0][1]) for key in train_ID_dict['neg']]), 256, 512),
             na_compl = (1/512.)*np.clip(
-                np.array([sum(train_na_compl[key][0][1]) for key in na_compl_IDs]), 256, 512),
+                np.array([sum(train_na_compl[key][0][1]) for key in train_ID_dict['na_compl']]), 256, 512),
             na_neg = (1/512.)*np.clip(
-                np.array([sum(train_na_neg[key][0][1]) for key in na_neg_IDs]), 256, 512),
-            rna = np.ones(len(rna_IDs)), # no weighing
+                np.array([sum(train_na_neg[key][0][1]) for key in train_ID_dict['na_neg']]), 256, 512),
+            rna = np.ones(len(train_ID_dict['rna'])), # no weighing
             sm_compl = sm_compl_weights,
             metal_compl = metal_compl_weights,
             sm_compl_multi = sm_compl_multi_weights,
-            sm = np.array([train_sm[key][1] for key in sm_IDs])
+            sm = np.array([train_sm[key][1] for key in train_ID_dict['sm']])
         )
         weights_dict = {k:torch.tensor(v).float() for k,v in weights_dict.items()}
 
@@ -684,19 +679,20 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm = valid_sm
         )
 
+
         valid_ID_dict = dict(
-            pdb = np.array(valid_pdb.keys()),
-            homo = np.array(valid_homo.keys()),
-            compl = np.array(valid_compl.keys()),
-            neg = np.array(valid_neg.keys()),
-            na_compl = np.array(valid_na_compl.keys()),
-            na_neg = np.array(valid_na_neg.keys()),
-            rna = np.array(valid_rna.keys()),
+            pdb = np.array(list(valid_pdb.keys())),
+            homo = np.array(list(valid_homo.keys())),
+            compl = np.array(list(valid_compl.keys())),
+            neg = np.array(list(valid_neg.keys())),
+            na_compl = np.array(list(valid_na_compl.keys())),
+            na_neg = np.array(list(valid_na_neg.keys())),
+            rna = np.array(list(valid_rna.keys())),
             sm_compl = valid_sm_compl['CLUSTER'].drop_duplicates().values,
             metal_compl = valid_metal_compl['CLUSTER'].drop_duplicates().values,
             sm_compl_multi = valid_sm_compl_multi['CLUSTER'].drop_duplicates().values,
-            sm_compl_strict = valid_sm_compl_strict['CLUSTER'].drop_duplicates().values,
-            sm = np.array(valid_sm.keys())
+            sm_compl_strict = np.array(list(valid_sm_compl_strict.keys())),
+            sm = np.array(list(valid_sm.keys()))
         )
       
         # save
@@ -2112,7 +2108,7 @@ class DistilledDataset(data.Dataset):
         self.index_dict = {k:np.arange(len(self.ID_dict[k])) for k in self.dataset_dict.keys()}
 
     def __len__(self):
-        return sum([len(v) for k:v in self.index_dict.items()])
+        return sum([len(v) for k,v in self.index_dict.items()])
 
     # order:
     #    0            - nfb-1        = FB
