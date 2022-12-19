@@ -789,6 +789,9 @@ class Trainer():
         if self.dataset_param["n_valid_sm_compl_multi"] is None: 
             self.dataset_param["n_valid_sm_compl_multi"] = \
                 len(valid_dict['sm_compl_multi']['CLUSTER'].drop_duplicates())
+        if self.dataset_param["n_valid_sm_compl_covale"] is None: 
+            self.dataset_param["n_valid_sm_compl_covale"] = \
+                len(valid_dict['sm_compl_covale']['CLUSTER'].drop_duplicates())
         if self.dataset_param["n_valid_sm_compl_strict"] is None: 
             self.dataset_param["n_valid_sm_compl_strict"] = \
                 len(valid_dict['sm_compl_strict']['CLUSTER'].drop_duplicates())
@@ -1053,14 +1056,14 @@ class Trainer():
                                 #'model_state_dict': ddp_model.state_dict(),
                                 'model_state_dict': ddp_model.module.shadow.state_dict(),
                                 'optimizer_state_dict': optimizer.state_dict(),
-                                    'scheduler_state_dict': scheduler.state_dict(),
-                                    'scaler_state_dict': scaler.state_dict(),
-                                    'best_loss': best_valid_loss,
-                                    'train_loss': train_loss,
-                                    'train_acc': train_acc,
-                                    'valid_loss': valid_loss,
-                                    'valid_acc': valid_acc},
-                                    self.checkpoint_fn(self.model_name, 'best'))
+                                'scheduler_state_dict': scheduler.state_dict(),
+                                'scaler_state_dict': scaler.state_dict(),
+                                'best_loss': best_valid_loss,
+                                'train_loss': train_loss,
+                                'train_acc': train_acc,
+                                'valid_loss': valid_loss,
+                                'valid_acc': valid_acc},
+                                self.checkpoint_fn(self.model_name, 'best'))
                     if self.wandb_prefix is not None:
                         wandb.save(self.checkpoint_fn(self.model_name, 'best'))
 
