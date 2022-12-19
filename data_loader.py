@@ -1,6 +1,6 @@
 import torch
 from torch.utils import data
-import os, csv, random, pickle, gzip
+import os, csv, random, pickle, gzip, itertools
 from dateutil import parser
 import numpy as np
 import pandas as pd
@@ -9,7 +9,7 @@ import scipy
 from scipy.sparse.csgraph import shortest_path
 
 from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
-from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP
+from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP, num2aa, 
 from kinematics import get_chirals
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
@@ -63,6 +63,7 @@ def set_data_loader_params(args):
         "SM_LIST"          : "%s/sm_compl_20221214.csv"%sm_compl_dir, 
         "MET_LIST"         : "%s/metal_compl_20221214.csv"%sm_compl_dir, 
         "SM_MULTI_LIST"    : "%s/sm_compl_multi_20221215.csv"%sm_compl_dir, 
+        "SM_COVALE_LIST"      : "/home/rohith/RF2ligand/20221218_list_covalent_filtered_final.csv",
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
@@ -547,9 +548,11 @@ def get_train_valid_set(params, OFFSET=1000000):
                 train_rna[i] = [(r[0], r[-1])]
 
         # protein-small molecule complexes
-        def _parse_sm_compl_df(filename):
+        def _parse_sm_compl_df(filename, eval_cols=None):
+            if eval_cols is None:
+                eval_cols = []
 
-            df = load_df(filename, params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
+            df = load_df(filename, params, eval_cols=eval_cols)
 
             seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
             df['WEIGHT'] = seq_len_factor
@@ -565,11 +568,13 @@ def get_train_valid_set(params, OFFSET=1000000):
             return train_df, valid_df, IDs, weights
 
         train_sm_compl, valid_sm_compl, sm_compl_IDs, sm_compl_weights = \
-            _parse_sm_compl_df(params['SM_LIST'])
+            _parse_sm_compl_df(params['SM_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
         train_metal_compl, valid_metal_compl, metal_compl_IDs, metal_compl_weights = \
-            _parse_sm_compl_df(params['MET_LIST'])
+            _parse_sm_compl_df(params['MET_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
         train_sm_compl_multi, valid_sm_compl_multi, sm_compl_multi_IDs, sm_compl_multi_weights = \
-            _parse_sm_compl_df(params['SM_MULTI_LIST'])
+            _parse_sm_compl_df(params['SM_MULTI_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
+        train_sm_compl_covale, valid_sm_compl_covale, sm_compl_covale_IDs, sm_compl_covale_weights = \
+            _parse_sm_compl_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND_GROUP', 'QUERY_LIG_CHAIN_XFORM', 'PARTNERS'])
 
         # stricter versions of protein-small mol validation set
         def _make_example_dict(df, make_entry_func, cluster_key='CLUSTER'):
@@ -626,11 +631,13 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm_compl = sm_compl_IDs,
             metal_compl = metal_compl_IDs,
             sm_compl_multi = sm_compl_multi_IDs,
+            sm_compl_covale = sm_compl_covale_IDs,
             sm = list(train_sm.keys())
         )
 
         weights_dict = dict(
             pdb = (1/512.)*np.clip(
+<<<<<<< HEAD
                 np.array([train_pdb[key][0][1] for key in train_ID_dict['pdb']]), 256, 512),
             fb = (1/512.)*np.clip(
                 np.array([fb[key][0][1] for key in train_ID_dict['fb']]), 256, 512),
@@ -647,6 +654,25 @@ def get_train_valid_set(params, OFFSET=1000000):
             metal_compl = metal_compl_weights,
             sm_compl_multi = sm_compl_multi_weights,
             sm = np.array([train_sm[key][1] for key in train_ID_dict['sm']])
+=======
+                np.array([train_pdb[key][0][1] for key in train_ID_dict["pdb"]]), 256, 512),
+            fb = (1/512.)*np.clip(
+                np.array([fb[key][0][1] for key in train_ID_dict["fb"]]), 256, 512),
+            compl = (1/512.)*np.clip(
+                np.array([sum(train_compl[key][0][1]) for key in train_ID_dict["compl"]]), 256, 512),
+            neg = (1/512.)*np.clip(
+                np.array([sum(train_neg[key][0][1]) for key in train_ID_dict["neg"]]), 256, 512),
+            na_compl = (1/512.)*np.clip(
+                np.array([sum(train_na_compl[key][0][1]) for key in train_ID_dict["na_compl"]]), 256, 512),
+            na_neg = (1/512.)*np.clip(
+                np.array([sum(train_na_neg[key][0][1]) for key in train_ID_dict["na_neg"]]), 256, 512),
+            rna = np.ones(len(train_ID_dict["rna"])), # no weighing
+            sm_compl = sm_compl_weights,
+            metal_compl = metal_compl_weights,
+            sm_compl_multi = sm_compl_multi_weights,
+            sm_compl_covale = sm_compl_covale_weights,
+            sm = np.array([train_sm[key][1] for key in train_ID_dict["sm"]])
+>>>>>>> de3878f (fixed merge conflict in paths)
         )
         weights_dict = {k:torch.tensor(v).float() for k,v in weights_dict.items()}
 
@@ -661,6 +687,7 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm_compl = train_sm_compl,
             metal_compl = train_metal_compl,
             sm_compl_multi = train_sm_compl_multi,
+            sm_compl_covale = train_sm_compl_covale,
             sm = train_sm
         )
 
@@ -675,6 +702,7 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm_compl = valid_sm_compl,
             metal_compl = valid_metal_compl,
             sm_compl_multi = valid_sm_compl_multi,
+            sm_compl_covale = valid_sm_compl_covale,
             sm_compl_strict = valid_sm_compl_strict,
             sm = valid_sm
         )
@@ -691,8 +719,9 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm_compl = valid_sm_compl['CLUSTER'].drop_duplicates().values,
             metal_compl = valid_metal_compl['CLUSTER'].drop_duplicates().values,
             sm_compl_multi = valid_sm_compl_multi['CLUSTER'].drop_duplicates().values,
+            sm_compl_covale = valid_sm_compl_covale['CLUSTER'].drop_duplicates().values,
             sm_compl_strict = np.array(list(valid_sm_compl_strict.keys())),
-            sm = np.array(list(valid_sm.keys()))
+            sm = np.array(list(valid_sm.keys())),
         )
       
         # save
@@ -1697,6 +1726,197 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals, "sm_compl", item
 
+def loader_sm_compl_covale(item, params,pick_top=True,
+    init_protein_tmpl=False, init_ligand_tmpl=False,
+    init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0):
+
+    pdb_id, chain_id, pdb_hash, ligands, covalent = item["PDB_ID"], item["CHAINID"], item["HASH"], ast.literal_eval(item["LIGAND_GROUP"]), ast.literal_eval(item["COVALENT"])
+    pdb_fn = f"/projects/ml/RF2_allatom/rcsb/pkl/{pdb_id[1:3]}/{pdb_id}.pkl.gz"
+    pdb_chain = f"{pdb_id}_{chain_id}"
+    ### Load protein
+    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
+    a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+pdb_hash[:3] + '/'+ pdb_hash + '.a3m.gz', pdb_hash)
+    tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
+    
+    # get msa features
+    msa_prot = a3mA['msa'].long()
+    ins_prot = a3mA['ins'].long()
+
+    if len(msa_prot) > params['BLOCKCUT']:
+        msa_prot, ins_prot = MSABlockDeletion(msa_prot, ins_prot)
+    # a3m_prot = {"msa": msa_prot, "ins": ins_prot}
+    xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
+    
+    ### Load small molecule
+    chains, asmb, covale, nonstandard = pickle.loads(gzip.open(pdb_fn.strip(), "rb").read())
+    pdb_chain = chains[chain_id]
+
+    residues_to_atomize = list(itertools.chain.from_iterable([[a[:3] for a in b if a[2] in num2aa] for b in covalent ]))
+    ligands.update(residues_to_atomize)
+    ### Handle when ligands appear multiple times in a structure 
+    atom_keys, seq_sm, ins_sm, xyz_sm, mask_sm, bond_feats_sm, chirals_sm = parse_ligands(ligands, chains, covale)
+    
+    if xyz_sm.shape[0] > params['MAXNSYMM']: 
+        xyz_sm = xyz_sm[:params['MAXNSYMM']]
+        mask_sm = mask_sm[:params['MAXNSYMM']]
+
+    if xyz_sm.shape[0] == 0:
+        print(f'ERROR [loader_sm_compl]: {item[0]} had no xyz coords')
+        return (torch.tensor([-1]),)*21 
+    
+    a3m_sm = {"msa": seq_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
+    G = get_nxgraph(seq_sm.unsqueeze(0), bond_feats_sm)
+    frames = get_atom_frames(seq_sm, G)
+    # remove residues that are going to be atomized from msa
+    if residues_to_atomize:
+        for residue in residues_to_atomize:
+            residue_index = int(residue[1]) - 1 # residues are 1 indexed in the cif files
+            msa_prot = torch.cat((msa_prot[:, :residue_index], msa_prot[:, residue_index+1:]), dim=1)
+            ins_prot = torch.cat((ins_prot[:, :residue_index], ins_prot[:, residue_index+1:]), dim=1)
+
+            xyz_prot = torch.cat((xyz_prot[:residue_index], xyz_prot[residue_index+1:]), dim=0)
+            mask_prot = torch.cat((mask_prot[:residue_index],mask_prot[residue_index+1:]), dim=0)
+
+    a3m_prot = {"msa": msa_prot, "ins": ins_prot}
+    protein_L, nprotatoms, _ = xyz_prot.shape
+
+    # Generate ground truth structure: account for ligand symmetry
+    N_symmetry, sm_L, _ = xyz_sm.shape
+    xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
+    mask = torch.full(xyz.shape[:-1], False).bool()
+    xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
+    xyz[:, protein_L:, 1, :] = xyz_sm
+    mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, protein_L, nprotatoms)
+    mask[:, protein_L:, 1] = mask_sm
+
+    Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
+    
+    if not ((a3m_prot['msa'].shape[1]==Ls[0]) and (a3m_sm['msa'].shape[1]==Ls[1])):
+        print(f'WARNING [loader_sm_compl]: Sm. mol. XYZ and MSA lengths don\'t match: {item}. Skipping.')
+        return (torch.tensor([-1]),)*21
+
+    a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+    msa = a3m['msa'].long()
+    ins = a3m['ins'].long()
+
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+    idx = torch.arange(sum(Ls))
+    idx[Ls[0]:] += CHAIN_GAP
+    
+    node_type = torch.zeros((sum(Ls), sum(Ls))).long() # holds 2D information on whether atom to atom interaction or residue to residue
+    node_type[:Ls[0], :Ls[0]] = 1
+    node_type[Ls[0]:, Ls[0]:] = 1 
+    chain_idx = torch.ones_like(node_type)
+
+    bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
+    bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
+    bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
+    if residues_to_atomize:
+        for residue in residues_to_atomize:
+            atomize_N = residue + ("N",)
+            atomize_C = residue + ("C",)
+            N_index = atom_keys.index(atomize_N) + Ls[0]
+            C_index = atom_keys.index(atomize_C) + Ls[0]
+            residue_index = int(residue[1]) - 1 # residues are 1 indexed in the cif files 
+            bond_feats[residue_index-1, N_index] = 6
+            bond_feats[residue_index+1, C_index] = 6
+            bond_feats[N_index, residue_index-1] = 6
+            bond_feats[C_index,residue_index+1] = 6            
+            
+    if init_protein_tmpl or init_ligand_tmpl:
+        # make blank features for 2 templates
+        xyz_t = torch.full((2,sum(Ls),NTOTAL,3),np.nan).float()
+        f1d_t = torch.cat((
+            torch.nn.functional.one_hot(
+                torch.full((2, sum(Ls)), 20).long(), 
+                num_classes=NAATOKENS-1).float(), # all gaps (no mask token)
+            torch.zeros((2, sum(Ls), 1)).float()
+        ), -1) # (2, L_protein + L_sm, NAATOKENS)
+        mask_t = torch.full((2, sum(Ls), NTOTAL), False)
+
+        if init_protein_tmpl: # input true protein xyz as template 0
+            xyz_t[0, :Ls[0], :3] = xyz[0, :Ls[0], :3]
+            f1d_t[0, :Ls[0]] = torch.cat((
+                torch.nn.functional.one_hot(msa_seed_orig[0,0, :Ls[0] ], num_classes=NAATOKENS-1).float(),
+                torch.ones((Ls[0], 1)).float()
+            ), -1) # (1, L_protein, NAATOKENS)
+            mask_t[0, :Ls[0], :nprotatoms] = mask_prot
+
+        if init_ligand_tmpl: # input true s.m. xyz as template 1
+            xyz_t[1, Ls[0]:, :3] = xyz[0, Ls[0]:, :3]
+            f1d_t[1, Ls[0]:] = torch.cat((
+                torch.nn.functional.one_hot(msa_seed_orig[0,0, Ls[0]: ]-1, num_classes=NAATOKENS-1).float(),
+                torch.ones((Ls[1], 1)).float()
+            ), -1) # (1, L_sm, NAATOKENS)
+            mask_t[1, Ls[0]:, 1] = mask_sm[0] # all symmetry variants have same mask
+    else:
+        # standard template featurization
+        # same_chain argument prevents sm. mol from being initialized at one end of protein
+        ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
+        xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0,
+            npick=ntempl, pick_top=pick_top, same_chain=chain_idx, random_noise=random_noise) 
+
+        if msa.shape[1] != xyz_t.shape[1]:
+            print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
+            return (torch.tensor([-1]),)*21
+
+    if init_protein_xyz or init_ligand_xyz:
+        # initialize coords to ground truth, move to origin, rotate randomly
+        xyz_prev = torch.full((sum(Ls), NTOTAL, 3), np.nan).float()
+        mask_prev = torch.full((sum(Ls), NTOTAL), False)
+        R = scipy.spatial.transform.Rotation.random(2).as_matrix()
+        R = torch.tensor(R).float()
+        if init_protein_xyz:
+            xyz1 = xyz[0, :Ls[0], :3]
+            xyz1 = xyz1 - xyz1[:,1].nanmean(0)
+            xyz_prev[:Ls[0], :3] = xyz1 @ R[0].T
+            mask_prev[:Ls[0]] = mask[0,:Ls[0]]
+        if init_ligand_xyz:
+            xyz2 = xyz[0, Ls[0]:, :3]
+            xyz2 = xyz2 - xyz2[:,1].nanmean(0)
+            xyz_prev[Ls[0]:, :3] = xyz2 @ R[1].T
+            mask_prev[Ls[0]:] = mask[0,Ls[0]:]
+
+        # initialize missing positions in ground truth structures
+        init = INIT_CRDS.reshape(1,NTOTAL,3).repeat(sum(Ls),1,1)
+        init = init + torch.rand(sum(Ls),1,3)*random_noise - random_noise/2
+        xyz_prev = torch.where(mask_prev[:,:,None], xyz_prev, init).contiguous()
+
+    else:
+        xyz_prev = xyz_t[0].clone()
+        xyz_prev = torch.nan_to_num(xyz_prev)
+        mask_prev = mask_t[0].clone()
+
+    xyz = torch.nan_to_num(xyz)
+    xyz_t = torch.nan_to_num(xyz_t)
+      
+    if sum(Ls) > params["CROP"]:
+        sel = crop_sm(xyz_prot, xyz_sm[0], Ls, params)
+        seq = seq[:,sel]
+        msa_seed_orig = msa_seed_orig[:,:,sel]
+        msa_seed = msa_seed[:,:,sel]
+        msa_extra = msa_extra[:,:,sel]
+        mask_msa = mask_msa[:,:,sel]
+        xyz = xyz[:,sel] 
+        mask = mask[:,sel]
+        xyz_t = xyz_t[:,sel]
+        f1d_t = f1d_t[:,sel]
+        mask_t = mask_t[:,sel]
+        xyz_prev = xyz_prev[sel]
+        mask_prev = mask_prev[sel] 
+        idx = idx[sel]
+        node_type = node_type[sel][:,sel]
+        chain_idx = chain_idx[sel][:,sel]
+        bond_feats = bond_feats[sel][:, sel]
+    # need to reindex the chiral atom positions - assumes they are the second chain
+    if chirals_sm.shape[0]>0:
+        L1 = node_type[0,:].sum()
+        chirals_sm[:, :-1] = chirals_sm[:, :-1] +L1 
+    return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+           xyz.float(), mask, idx.long(), \
+           xyz_t.float(), f1d_t.float(), mask_t, \
+           xyz_prev.float(), mask_prev, \
+           chain_idx, False, False, frames, bond_feats, chirals_sm, "sm_compl", item
 
 def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False, 
     pick_top=True, p_homo_cut=0.5, random_noise=5.0):
