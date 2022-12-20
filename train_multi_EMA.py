@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils import data
 from functools import partial
 from data_loader import (
-    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_atomize_pdb,
+    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale, loader_atomize_pdb, 
     Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
 )
 from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
@@ -42,7 +42,7 @@ USE_AMP = False
 torch.set_num_threads(4)
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 5,
+              'num_workers': 0,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -230,7 +230,8 @@ class Trainer():
 
         mask_BBB = mask_BB.clone()
         mask_BBB[0,:L1] = False
-        if torch.sum(mask_BBB) >0:
+        print(torch.sum(mask_BBB))
+        if torch.sum(mask_BBB) > 0:
             l_fape_B, _, _ = compute_general_FAPE(
                 pred[:, mask_BBB,:,:3],
                 true[:,mask_BBB[0],:3,:3],
@@ -467,7 +468,7 @@ class Trainer():
             bond_loss = calc_cart_bonded(seq, pred_allatom[1:], idx, self.cb_len, self.cb_ang, self.cb_tor)
             if w_bond > 0.0:
                 tot_loss += w_bond*bond_loss.mean()
-            oss_dict['clash_loss'] = ( bond_loss.detach() )
+            loss_dict['clash_loss'] = ( bond_loss.detach() )
         else:
             bond_loss = torch.tensor(0).to(gpu)
         loss_dict['bond_loss'] = bond_loss.detach()
@@ -766,6 +767,7 @@ class Trainer():
             get_train_valid_set(self.loader_param)
 
         train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
+        valid_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
         weights_dict['atomize_pdb'] = weights_dict['pdb']
         train_dict['atomize_pdb'] = train_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
@@ -794,7 +796,7 @@ class Trainer():
                 len(valid_dict['sm_compl_covale']['CLUSTER'].drop_duplicates())
         if self.dataset_param["n_valid_sm_compl_strict"] is None: 
             self.dataset_param["n_valid_sm_compl_strict"] = \
-                len(valid_dict['sm_compl_strict']['CLUSTER'].drop_duplicates())
+                len(valid_dict['sm_compl_strict'])
         if self.dataset_param["n_valid_sm"] is None: 
             self.dataset_param["n_valid_sm"] = len(valid_dict['sm'])
         if self.dataset_param["n_valid_atomize_pdb"] is None: 
@@ -812,6 +814,7 @@ class Trainer():
                 len(train_ID_dict['sm_compl']), 'small molecule complexes, and',
                 len(train_ID_dict['metal_compl']), 'metal ion complexes, and',
                 len(train_ID_dict['sm_compl_multi']), 'multi-res ligand complexes, and',
+                len(train_ID_dict['sm_compl_covale']), 'covalent ligand complexes, and',
                 len(train_ID_dict['sm']), "small molecule crystals."
             )
             print ('Loaded (valid)',
@@ -825,6 +828,7 @@ class Trainer():
                 len(valid_ID_dict['sm_compl']), 'small molecule complexes,',
                 len(valid_ID_dict['metal_compl']), 'metal ion complexes,',
                 len(valid_ID_dict['sm_compl_multi']), 'multi-res ligand complexes,',
+                len(valid_ID_dict['sm_compl_covale']), 'covalent ligand complexes,',
                 len(valid_ID_dict['sm_compl_strict']), 'small molecule complexes (strict),',
                 len(valid_ID_dict['sm']), 'small molecule crystals.'
             )
@@ -840,6 +844,7 @@ class Trainer():
                 self.dataset_param['n_valid_sm_compl'], 'small mol. complexes,',
                 self.dataset_param['n_valid_metal_compl'], 'metal ion complexes,',
                 self.dataset_param['n_valid_sm_compl_multi'], 'multi-res ligand complexes,',
+                self.dataset_param['n_valid_sm_compl_covale'], 'covalent ligand complexes,',
                 self.dataset_param['n_valid_sm_compl_strict'], 'small molecule complexes (strict),',
                 self.dataset_param['n_valid_sm'], "small molecule crystals,",
                 self.dataset_param['n_valid_atomize_pdb'],'monomers (atomized)',
@@ -854,6 +859,7 @@ class Trainer():
             sm_compl = loader_sm_compl,
             metal_compl = loader_sm_compl,
             sm_compl_multi = loader_sm_compl,
+            sm_compl_covale = loader_sm_compl_covale,
             sm = loader_sm,
             atomize_pdb = loader_atomize_pdb
         )
@@ -902,6 +908,7 @@ class Trainer():
                 loader_sm_compl, valid_dict['sm_compl_strict'],
                 self.loader_param, task='sm_compl_strict'
             ),
+            #TODO: add a validation set for metals, multiresidue and covalents
             sm = DatasetSM(
                 valid_ID_dict['sm'][:self.dataset_param['n_valid_sm']],
                 loader_sm, valid_dict['sm'],
@@ -939,6 +946,7 @@ class Trainer():
             sm_compl = 'SM Compl',
             metal_compl = 'Metal ion',
             sm_compl_multi = 'Multires ligand',
+            sm_compl_covale = "Covalent ligand",
             sm_compl_strict = 'SM Compl (strict)',
             sm = 'SM_CSD',
             atomize_pdb = 'Monomer atomize 3'
@@ -958,6 +966,7 @@ class Trainer():
             fraction_sm_compl=self.dataset_param['fraction_sm_compl'],
             fraction_metal_compl=self.dataset_param['fraction_metal_compl'],
             fraction_sm_compl_multi=self.dataset_param['fraction_sm_compl_multi'],
+            fraction_sm_compl_covale=self.dataset_param['fraction_sm_compl_covale'],
             fraction_sm=self.dataset_param['fraction_sm'], 
             fraction_atomize_pdb=self.dataset_param['fraction_atomize_pdb'], 
             replacement=True
@@ -1115,7 +1124,6 @@ class Trainer():
             # loader will print warning message with item info for followup later
             if torch.is_tensor(item) and torch.all(item==-1):
                 continue
-
             r = rng.rand()
             save_pdbs = r<=0.01
             #print('rank',rank, 'counter',counter, 'item',item, 'task',task, 'save_pdbs',save_pdbs, 'r',r)
@@ -1284,8 +1292,8 @@ class Trainer():
                     )
 
                     true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+                    res_mask = ~((atom_mask_[0,:,:3][None].sum(dim=-1) < 3.0) * ~(is_atom(msa[:, i_cycle,0])))
 
-                    res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                     mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                     true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
@@ -1324,8 +1332,8 @@ class Trainer():
                 print('nan loss',item)
                 save_pdbs = True
 
-            if task[0].startswith('sm_compl'):
-                name = item[2][0][0].replace('.mol2','')
+            if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
+                name = f"{item['CHAINID'][0]}_{item['LIGAND'][0][2][0]}"
             elif task[0]=='sm_only':
                 name = item[0]
             else:

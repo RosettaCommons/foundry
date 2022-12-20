@@ -1005,7 +1005,7 @@ def get_atom_frames(msa, G):
             frames_with_n = [frame for frame in frames if n in frame]
         # if the atom isn't in a 3 atom frame, it should be ignored in loss calc, set all the atoms to n
         if not frames_with_n:
-            selected_frames.append([(0,0),(0,0),(0, 0)])
+            selected_frames.append([(0,1),(0,1),(0, 1)])
             continue
         frame_priorities = []
         for frame in frames_with_n:
@@ -1218,6 +1218,21 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf):
         xyz[idx] = torch.einsum('ij,aj->ai', u, xyz[idx]) + r[None,None]
         
     return xyz, mask, seq, chid, akeys
+
+def get_ligand_atoms_bonds(ligand, chains, covale):
+    lig_atoms = dict()
+    lig_bonds = []
+    for i_ch,ch in chains.items():
+        for k,v in ch.atoms.items():
+            if k[:3] in ligand:
+                lig_atoms[k] = v
+        for bond in ch.bonds:
+            if bond.a[:3] in ligand or bond.b[:3] in ligand:
+                lig_bonds.append(bond)
+    for bond in covale:
+        if bond.a[:3] in ligand and bond.b[:3] in ligand:
+            lig_bonds.append(bond)
+    return lig_atoms, lig_bonds
 
 def cif_ligand_to_obmol(xyz, akeys, atoms, bonds):
     

@@ -4,11 +4,13 @@ import os, datetime
 
 DATASET_PARAMS = [
     'fraction_pdb','fraction_fb', 'fraction_compl', 'fraction_na_compl',
-    'fraction_rna', 'fraction_sm_compl', 'fraction_sm',
+    'fraction_rna', 'fraction_sm_compl', 'fraction_sm_compl_multi', 
+    'fraction_metal_compl', 'fraction_sm_compl_covale', 'fraction_sm',
     'fraction_atomize_pdb','n_train', 'n_valid_pdb', 'n_valid_atomize_pdb',
     'n_valid_homo', 'n_valid_compl', 'n_valid_neg', 'n_valid_na_compl',
     'n_valid_na_neg', 'n_valid_rna', 'n_valid_sm_compl',
-    'n_valid_sm_compl_ligclus', 'n_valid_sm_compl_strict', 'n_valid_sm',
+    'n_valid_sm_compl_multi', 'n_valid_metal_compl', 'n_valid_sm_compl_covale',
+    'n_valid_sm_compl_strict', 'n_valid_sm',
 ]
 TRUNK_PARAMS = [
     'n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_block',
@@ -103,12 +105,19 @@ def get_args():
             help="how often to sample protein-nucleic acid complexes during training")
     dataset_group.add_argument('-fraction_rna', type=float, default=0.09,
             help="how often to sample rna during training")
-    dataset_group.add_argument('-fraction_sm_compl', type=float, default=0.28,
+    dataset_group.add_argument('-fraction_sm_compl', type=float, default=0.1,
             help="how often to sample protein small molecule complexes during training")
+    dataset_group.add_argument('-fraction_sm_compl_multi', type=float, default=0.09,
+            help="how often to sample protein/multiresidue small molecule complexes during training")
+    dataset_group.add_argument('-fraction_metal_compl', type=float, default=0.09,
+            help="how often to sample protein/metal complexes during training")    
+    dataset_group.add_argument('-fraction_sm_compl_covale', type=float, default=0.09,
+            help="how often to sample covalent protein/small molecule complexes during training")    
     dataset_group.add_argument('-fraction_sm', type=float, default=0.09,
             help="how often to sample small molecule crystals during training")
     dataset_group.add_argument('-fraction_atomize_pdb', type=float, default=0.09,
             help="how often to sample atomized pdb monomers during training")
+
     dataset_group.add_argument('-n_train', type=int, default=12288)
     dataset_group.add_argument('-n_valid_pdb', type=int)
     dataset_group.add_argument('-n_valid_homo', type=int)
@@ -118,7 +127,9 @@ def get_args():
     dataset_group.add_argument('-n_valid_na_neg', type=int)
     dataset_group.add_argument('-n_valid_rna', type=int)
     dataset_group.add_argument('-n_valid_sm_compl', type=int)
-    dataset_group.add_argument('-n_valid_sm_compl_ligclus', type=int)
+    dataset_group.add_argument('-n_valid_sm_compl_multi', type=int)
+    dataset_group.add_argument('-n_valid_metal_compl', type=int)
+    dataset_group.add_argument('-n_valid_sm_compl_covale', type=int)
     dataset_group.add_argument('-n_valid_sm_compl_strict', type=int)
     dataset_group.add_argument('-n_valid_sm', type=int)
     dataset_group.add_argument('-n_valid_atomize_pdb', type=int)

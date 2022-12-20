@@ -9,11 +9,11 @@ import scipy
 from scipy.sparse.csgraph import shortest_path
 
 from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
-from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP, num2aa, 
+from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP, num2aa
 from kinematics import get_chirals
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
-    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs
+    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -63,7 +63,7 @@ def set_data_loader_params(args):
         "SM_LIST"          : "%s/sm_compl_20221214.csv"%sm_compl_dir, 
         "MET_LIST"         : "%s/metal_compl_20221214.csv"%sm_compl_dir, 
         "SM_MULTI_LIST"    : "%s/sm_compl_multi_20221215.csv"%sm_compl_dir, 
-        "SM_COVALE_LIST"      : "/home/rohith/RF2ligand/20221218_list_covalent_filtered_final.csv",
+        "SM_COVALE_LIST"   : "%s/20221218_list_covalent_filtered_final.csv"%sm_compl_dir,
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
@@ -73,7 +73,7 @@ def set_data_loader_params(args):
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221102.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221215.pkl"%sm_compl_dir, # cache for faster loading
+        "DATAPKL"          : "%s/dataset_20221219.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -574,7 +574,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         train_sm_compl_multi, valid_sm_compl_multi, sm_compl_multi_IDs, sm_compl_multi_weights = \
             _parse_sm_compl_df(params['SM_MULTI_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
         train_sm_compl_covale, valid_sm_compl_covale, sm_compl_covale_IDs, sm_compl_covale_weights = \
-            _parse_sm_compl_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND_GROUP', 'QUERY_LIG_CHAIN_XFORM', 'PARTNERS'])
+            _parse_sm_compl_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
 
         # stricter versions of protein-small mol validation set
         def _make_example_dict(df, make_entry_func, cluster_key='CLUSTER'):
@@ -637,24 +637,6 @@ def get_train_valid_set(params, OFFSET=1000000):
 
         weights_dict = dict(
             pdb = (1/512.)*np.clip(
-<<<<<<< HEAD
-                np.array([train_pdb[key][0][1] for key in train_ID_dict['pdb']]), 256, 512),
-            fb = (1/512.)*np.clip(
-                np.array([fb[key][0][1] for key in train_ID_dict['fb']]), 256, 512),
-            compl = (1/512.)*np.clip(
-                np.array([sum(train_compl[key][0][1]) for key in train_ID_dict['compl']]), 256, 512),
-            neg = (1/512.)*np.clip(
-                np.array([sum(train_neg[key][0][1]) for key in train_ID_dict['neg']]), 256, 512),
-            na_compl = (1/512.)*np.clip(
-                np.array([sum(train_na_compl[key][0][1]) for key in train_ID_dict['na_compl']]), 256, 512),
-            na_neg = (1/512.)*np.clip(
-                np.array([sum(train_na_neg[key][0][1]) for key in train_ID_dict['na_neg']]), 256, 512),
-            rna = np.ones(len(train_ID_dict['rna'])), # no weighing
-            sm_compl = sm_compl_weights,
-            metal_compl = metal_compl_weights,
-            sm_compl_multi = sm_compl_multi_weights,
-            sm = np.array([train_sm[key][1] for key in train_ID_dict['sm']])
-=======
                 np.array([train_pdb[key][0][1] for key in train_ID_dict["pdb"]]), 256, 512),
             fb = (1/512.)*np.clip(
                 np.array([fb[key][0][1] for key in train_ID_dict["fb"]]), 256, 512),
@@ -672,7 +654,6 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm_compl_multi = sm_compl_multi_weights,
             sm_compl_covale = sm_compl_covale_weights,
             sm = np.array([train_sm[key][1] for key in train_ID_dict["sm"]])
->>>>>>> de3878f (fixed merge conflict in paths)
         )
         weights_dict = {k:torch.tensor(v).float() for k,v in weights_dict.items()}
 
@@ -1573,18 +1554,19 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
 
     # load ligand
     # TODO: load multiple copies of the same ligand
-    lig_atoms = dict()
-    lig_bonds = []
-    for i_ch,ch in chains.items():
-        for k,v in ch.atoms.items():
-            if k[:3] in ligand:
-                lig_atoms[k] = v
-        for bond in ch.bonds:
-            if bond.a[:3] in ligand or bond.b[:3] in ligand:
-                lig_bonds.append(bond)
-    for bond in covale:
-        if bond.a[:3] in ligand and bond.b[:3] in ligand:
-            lig_bonds.append(bond)
+    lig_atoms, lig_bonds = get_ligand_atoms_bonds(ligand, chains, covale)
+    # lig_atoms = dict()
+    # lig_bonds = []
+    # for i_ch,ch in chains.items():
+    #     for k,v in ch.atoms.items():
+    #         if k[:3] in ligand:
+    #             lig_atoms[k] = v
+    #     for bond in ch.bonds:
+    #         if bond.a[:3] in ligand or bond.b[:3] in ligand:
+    #             lig_bonds.append(bond)
+    # for bond in covale:
+    #     if bond.a[:3] in ligand and bond.b[:3] in ligand:
+    #         lig_bonds.append(bond)
 
     lig_ch2xf = dict(item['LIGXF'])
 
@@ -1698,7 +1680,7 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
     xyz_t = torch.nan_to_num(xyz_t)
 
     if sum(Ls) > params["CROP"]:
-        sel = crop_sm(xyz_prot, xyz_sm[0], Ls, params)
+        sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls, params)
         seq = seq[:,sel]
         msa_seed_orig = msa_seed_orig[:,:,sel]
         msa_seed = msa_seed[:,:,sel]
@@ -1726,15 +1708,18 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals, "sm_compl", item
 
-def loader_sm_compl_covale(item, params,pick_top=True,
+def loader_sm_compl_covale(item, params, pick_top=True,
     init_protein_tmpl=False, init_ligand_tmpl=False,
     init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0):
+    """
+    dataloader for covalently linked small molecule protein complexes
+    """
+    pdb_chain, pdb_hash = item['CHAINID'], item['HASH'] 
+    ligand = item['LIGAND'] # list of (lig_chain, lig_res_num, lig_name)
+    covalent = item["COVALENT"] 
+    pdb_id, i_ch_prot = pdb_chain.split('_')
 
-    pdb_id, chain_id, pdb_hash, ligands, covalent = item["PDB_ID"], item["CHAINID"], item["HASH"], ast.literal_eval(item["LIGAND_GROUP"]), ast.literal_eval(item["COVALENT"])
-    pdb_fn = f"/projects/ml/RF2_allatom/rcsb/pkl/{pdb_id[1:3]}/{pdb_id}.pkl.gz"
-    pdb_chain = f"{pdb_id}_{chain_id}"
     ### Load protein
-    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
     a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+pdb_hash[:3] + '/'+ pdb_hash + '.a3m.gz', pdb_hash)
     tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
     
@@ -1745,17 +1730,39 @@ def loader_sm_compl_covale(item, params,pick_top=True,
     if len(msa_prot) > params['BLOCKCUT']:
         msa_prot, ins_prot = MSABlockDeletion(msa_prot, ins_prot)
     # a3m_prot = {"msa": msa_prot, "ins": ins_prot}
-    xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
-    
-    ### Load small molecule
-    chains, asmb, covale, nonstandard = pickle.loads(gzip.open(pdb_fn.strip(), "rb").read())
-    pdb_chain = chains[chain_id]
+    # xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
 
-    residues_to_atomize = list(itertools.chain.from_iterable([[a[:3] for a in b if a[2] in num2aa] for b in covalent ]))
-    ligands.update(residues_to_atomize)
-    ### Handle when ligands appear multiple times in a structure 
-    atom_keys, seq_sm, ins_sm, xyz_sm, mask_sm, bond_feats_sm, chirals_sm = parse_ligands(ligands, chains, covale)
+    pdb_fn = params['MOL_DIR']+f'/{pdb_id[1:3]}/{pdb_id}.pkl.gz'
+    chains, asmb, covale, modres = pickle.loads(gzip.open(pdb_fn.strip(), "rb").read())
     
+    # coordinate transforms to recreate this bio-assembly
+    i_a = str(item['ASSEMBLY'])
+    asmb_xfs = asmb[i_a]
+
+    # 1st protein chain in list is the main binding partner
+    for p in item['PARTNERS']:
+        if p[0]==i_ch_prot:
+            prot_ch2xf = dict([p[:2]])
+            break
+
+    # load protein chain
+    ch = chains[i_ch_prot]
+    ch_xf = asmb_xfs[prot_ch2xf[i_ch_prot]]
+    xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot = cif_prot_to_xyz(ch, ch_xf, modres)
+    protein_L, nprotatoms, _ = xyz_prot.shape
+
+    # prepare atomized residue and small molecule
+    residues_to_atomize = list(itertools.chain.from_iterable([[a[:3] for a in b if a[2] in num2aa] for b in covalent ]))
+    ligand.extend(residues_to_atomize)
+    #TODO: Handle when ligands appear multiple times in a structure 
+    lig_atoms, lig_bonds = get_ligand_atoms_bonds(ligand, chains, covale)
+    lig_ch2xf = dict(item['LIGXF'])
+    lig_ch2xf.update(prot_ch2xf) # add protein transform for atomized portion
+
+    xyz_sm, mask_sm, msa_sm, chid_sm, akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
+    mol, bond_feats_sm = cif_ligand_to_obmol(xyz_sm, akeys, lig_atoms, lig_bonds)
+    xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
+
     if xyz_sm.shape[0] > params['MAXNSYMM']: 
         xyz_sm = xyz_sm[:params['MAXNSYMM']]
         mask_sm = mask_sm[:params['MAXNSYMM']]
@@ -1763,10 +1770,11 @@ def loader_sm_compl_covale(item, params,pick_top=True,
     if xyz_sm.shape[0] == 0:
         print(f'ERROR [loader_sm_compl]: {item[0]} had no xyz coords')
         return (torch.tensor([-1]),)*21 
-    
-    a3m_sm = {"msa": seq_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
-    G = get_nxgraph(seq_sm.unsqueeze(0), bond_feats_sm)
-    frames = get_atom_frames(seq_sm, G)
+    ins_sm = torch.zeros_like(msa_sm)
+    a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
+    G = get_nxgraph(mol)
+    frames = get_atom_frames(msa_sm, G)
+    chirals_sm = get_chirals(mol, xyz_sm[0])
     # remove residues that are going to be atomized from msa
     if residues_to_atomize:
         for residue in residues_to_atomize:
@@ -1815,8 +1823,8 @@ def loader_sm_compl_covale(item, params,pick_top=True,
         for residue in residues_to_atomize:
             atomize_N = residue + ("N",)
             atomize_C = residue + ("C",)
-            N_index = atom_keys.index(atomize_N) + Ls[0]
-            C_index = atom_keys.index(atomize_C) + Ls[0]
+            N_index = akeys.index(atomize_N) + Ls[0]
+            C_index = akeys.index(atomize_C) + Ls[0]
             residue_index = int(residue[1]) - 1 # residues are 1 indexed in the cif files 
             bond_feats[residue_index-1, N_index] = 6
             bond_feats[residue_index+1, C_index] = 6
@@ -1891,7 +1899,7 @@ def loader_sm_compl_covale(item, params,pick_top=True,
     xyz_t = torch.nan_to_num(xyz_t)
       
     if sum(Ls) > params["CROP"]:
-        sel = crop_sm(xyz_prot, xyz_sm[0], Ls, params)
+        sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls, params)
         seq = seq[:,sel]
         msa_seed_orig = msa_seed_orig[:,:,sel]
         msa_seed = msa_seed[:,:,sel]
@@ -2119,7 +2127,7 @@ def loader_sm(item, params, pick_top=True):
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals, "sm_only", item
 
-def crop_sm(prot_xyz, lig_xyz,Ls, params):
+def crop_sm_compl(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to a random ligand atom"""
     # ligand_com = torch.nanmean(lig_xyz, dim=[0,1]).expand(1,3)
     i_face_xyz = lig_xyz[np.random.randint(len(lig_xyz))]
@@ -2438,6 +2446,14 @@ class DistilledDataset(data.Dataset):
             out = out[:-2]+(task,)+out[-1:]
         offset += len(self.index_dict['sm_compl_multi'])
 
+        if index >= offset and index < offset + len(self.index_dict['sm_compl_covale']):
+            ID = self.ID_dict['sm_compl_covale'][index-offset]
+            task = 'sm_compl_covale_fold_dock'
+            item = get_sm_compl_item(self.dataset_dict['sm_compl_covale'], ID)
+            out = self.loader_dict['sm_compl_covale'](item, self.params)
+            out = out[:-2]+(task,)+out[-1:]
+        offset += len(self.index_dict['sm_compl_covale'])
+
         if index >= offset and index < offset + len(self.index_dict['sm']):
             ID = self.ID_dict['sm'][index-offset]
             out = self.loader_dict['sm'](
@@ -2464,16 +2480,17 @@ class DistributedWeightedSampler(data.Sampler):
         dataset,
         weights_dict,
         num_example_per_epoch=25600,
-        fraction_pdb=0.125,
-        fraction_fb=0.125,
-        fraction_compl=0.125,  # half neg, half pos
-        fraction_na_compl=0.125, # half neg, half pos
-        fraction_rna=0.125,
-        fraction_sm_compl=0.125, 
-        fraction_metal_compl=0.125, 
-        fraction_sm_compl_multi=0.125, 
-        fraction_sm=0.125,
-        fraction_atomize_pdb=0.125,
+        fraction_pdb=0.11,
+        fraction_fb=0.11,
+        fraction_compl=0.11,  # half neg, half pos
+        fraction_na_compl=0.11, # half neg, half pos
+        fraction_rna=0.11,
+        fraction_sm_compl=0.12, 
+        fraction_metal_compl=0.11, 
+        fraction_sm_compl_multi=0.11, 
+        fraction_sm_compl_covale=0.11,
+        fraction_sm=0.11,
+        fraction_atomize_pdb=0.11,
         num_replicas=None,
         rank=None,
         replacement=False
@@ -2488,14 +2505,16 @@ class DistributedWeightedSampler(data.Sampler):
             rank = dist.get_rank()
 
         assert num_example_per_epoch % num_replicas == 0
-        assert (fraction_pdb + fraction_fb + fraction_compl + fraction_na_compl + \
+        total_examples = fraction_pdb + fraction_fb + fraction_compl + fraction_na_compl + \
                 fraction_rna + fraction_sm_compl + fraction_metal_compl + fraction_sm_compl_multi + \
-                fraction_sm + fraction_atomize_pdb == 1.0)
+                fraction_sm + fraction_atomize_pdb
+        assert (np.allclose(total_examples, 1.0)), f"Fractions of datasets add up to {total_examples}, should add up to 1.0"
 
         self.dataset = dataset
         self.weights_dict = weights_dict
 
         self.num_replicas = num_replicas
+        self.num_pdb_per_epoch = int(round(num_example_per_epoch*fraction_pdb))
         self.num_fb_per_epoch = int(round(num_example_per_epoch*fraction_fb))
         self.num_compl_per_epoch = int(round(num_example_per_epoch*fraction_compl))
         #self.num_neg_per_epoch = 0 #manually set to 0
@@ -2505,22 +2524,24 @@ class DistributedWeightedSampler(data.Sampler):
         self.num_sm_compl_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl))
         self.num_metal_compl_per_epoch = int(round(num_example_per_epoch*fraction_metal_compl))
         self.num_sm_compl_multi_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl_multi))
+        self.num_sm_compl_covale_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl_covale))
         self.num_sm_per_epoch = int(round(num_example_per_epoch*fraction_sm))
         self.num_atomize_pdb_per_epoch = int(round(num_example_per_epoch*fraction_atomize_pdb))
 
-        self.num_pdb_per_epoch = num_example_per_epoch - (
-            self.num_fb_per_epoch 
-            + self.num_compl_per_epoch
-            + self.num_na_compl_per_epoch
-            + self.num_rna_per_epoch
-            + self.num_sm_compl_per_epoch
-            + self.num_metal_compl_per_epoch
-            + self.num_sm_compl_multi_per_epoch
-            + self.num_sm_per_epoch
-            + self.num_atomize_pdb_per_epoch
-        #    + self.num_neg_per_epoch
-        #    + self.num_neg_na_compl_per_epoch
-        )
+        # self.num_pdb_per_epoch = num_example_per_epoch - (
+        #     self.num_fb_per_epoch 
+        #     + self.num_compl_per_epoch
+        #     + self.num_na_compl_per_epoch
+        #     + self.num_rna_per_epoch
+        #     + self.num_sm_compl_per_epoch
+        #     + self.num_metal_compl_per_epoch
+        #     + self.num_sm_compl_multi_per_epoch
+        #     + self.num_sm_compl_covale_per_epoch
+        #     + self.num_sm_per_epoch
+        #     + self.num_atomize_pdb_per_epoch
+        # #    + self.num_neg_per_epoch
+        # #    + self.num_neg_na_compl_per_epoch
+        # )
 
         if (rank==0):
             print (
@@ -2535,6 +2556,7 @@ class DistributedWeightedSampler(data.Sampler):
                 self.num_sm_compl_per_epoch, "SM Compl,",
                 self.num_metal_compl_per_epoch, "Metal ion,",
                 self.num_sm_compl_multi_per_epoch, "Multi-res ligand,",
+                self.num_sm_compl_covale_per_epoch, "Covalently linked ligands",
                 self.num_sm_per_epoch, "SM crystals."
             )
 
@@ -2604,15 +2626,19 @@ class DistributedWeightedSampler(data.Sampler):
         offset += len(self.dataset.ID_dict['sm_compl'])
 
         if (self.num_metal_compl_per_epoch>0):
-            sampled = torch.multinomial(self.weights_dict['metal_compl'], self.num_metal_compl_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[sampled + offset]))
+            metal_sampled = torch.multinomial(self.weights_dict['metal_compl'], self.num_metal_compl_per_epoch, self.replacement, generator=g)
+            sel_indices = torch.cat((sel_indices, indices[metal_sampled + offset]))
         offset += len(self.dataset.ID_dict['metal_compl'])
 
         if (self.num_sm_compl_multi_per_epoch>0):
-            sm_compl_sampled = torch.multinomial(self.weights_dict['sm_compl_multi'], self.num_sm_compl_multi_per_epoch, self.replacement, generator=g)
+            sm_compl_multi_sampled = torch.multinomial(self.weights_dict['sm_compl_multi'], self.num_sm_compl_multi_per_epoch, self.replacement, generator=g)
             sel_indices = torch.cat((sel_indices, indices[sm_compl_multi_sampled + offset]))
         offset += len(self.dataset.ID_dict['sm_compl_multi'])
-
+        
+        if (self.num_sm_compl_covale_per_epoch>0):
+            sm_compl_covale_sampled = torch.multinomial(self.weights_dict['sm_compl_multi'], self.num_sm_compl_multi_per_epoch, self.replacement, generator=g)
+            sel_indices = torch.cat((sel_indices, indices[sm_compl_covale_sampled + offset]))
+        offset += len(self.dataset.ID_dict['sm_compl_covale'])
         if (self.num_sm_per_epoch>0):
             sm_sampled = torch.multinomial(self.weights_dict['sm'], self.num_sm_per_epoch, self.replacement, generator=g)
             sel_indices = torch.cat((sel_indices, indices[sm_sampled + offset]))
