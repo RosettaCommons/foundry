@@ -600,15 +600,8 @@ def calc_lj(
 
     # mask out bonds next to atomized regions of proteins 
     protein_atom_bonds_mask = bond_feats != 6 # protein-atom bond
-    b, i, j = (~protein_atom_bonds_mask).nonzero(as_tuple=True)
-    print(protein_atom_bonds_mask[:,:, None, :, None].expand(-1,-1, 6, -1, 6).shape)
-    print(mask.shape)
-    print("i and j shapes")
-    print(i.shape)
-    print(j.shape)
-    print(torch.sum(mask[i, :6, j, :6]))
+    # mask out all atoms until Cbeta for residues bonded to an atom (this approximates to 4 bonds away)
     mask[:,:6, :, :6] *= protein_atom_bonds_mask[0,:, None, :, None].expand(-1, 6, -1, 6)
-    print(torch.sum(mask[i, :6, j, :6]))
     si,ai,sj,aj = mask.nonzero(as_tuple=True)
 
     ds = torch.sqrt( torch.sum ( torch.square( xs[:,si,ai]-xs[:,sj,aj] ), dim=-1 ) + eps )
