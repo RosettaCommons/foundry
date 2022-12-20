@@ -230,7 +230,6 @@ class Trainer():
 
         mask_BBB = mask_BB.clone()
         mask_BBB[0,:L1] = False
-        print(torch.sum(mask_BBB))
         if torch.sum(mask_BBB) > 0:
             l_fape_B, _, _ = compute_general_FAPE(
                 pred[:, mask_BBB,:,:3],
@@ -909,6 +908,21 @@ class Trainer():
                 self.loader_param, task='sm_compl_strict'
             ),
             #TODO: add a validation set for metals, multiresidue and covalents
+            metal_compl = DatasetSMComplex(
+                valid_ID_dict['metal_compl'][:self.dataset_param['n_valid_metal_compl']],
+                loader_sm_compl, valid_dict['metal_compl'],
+                self.loader_param, task='metal_compl'
+            ),
+            sm_compl_multi = DatasetSMComplex(
+                valid_ID_dict['sm_compl_multi'][:self.dataset_param['n_valid_sm_compl_multi']],
+                loader_sm_compl, valid_dict['sm_compl_multi'],
+                self.loader_param, task='sm_compl_multi'
+            ),
+            sm_compl_covale = DatasetSMComplex(
+                valid_ID_dict['sm_compl_covale'][:self.dataset_param['n_valid_sm_compl_covale']],
+                loader_sm_compl_covale, valid_dict['sm_compl_covale'],
+                self.loader_param, task='sm_compl_covale'
+            ),
             sm = DatasetSM(
                 valid_ID_dict['sm'][:self.dataset_param['n_valid_sm']],
                 loader_sm, valid_dict['sm'],

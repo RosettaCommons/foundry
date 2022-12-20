@@ -597,6 +597,18 @@ def calc_lj(
     dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds[0].long().detach().cpu().numpy(), directed=False)
     dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0), device=mask.device) # protein portion is inf and you don't want to mask it out
     mask[:,1,:,1] *= dist_matrix >=4
+
+    # mask out bonds next to atomized regions of proteins 
+    protein_atom_bonds_mask = bond_feats != 6 # protein-atom bond
+    b, i, j = (~protein_atom_bonds_mask).nonzero(as_tuple=True)
+    print(protein_atom_bonds_mask[:,:, None, :, None].expand(-1,-1, 6, -1, 6).shape)
+    print(mask.shape)
+    print("i and j shapes")
+    print(i.shape)
+    print(j.shape)
+    print(torch.sum(mask[i, :6, j, :6]))
+    mask[:,:6, :, :6] *= protein_atom_bonds_mask[0,:, None, :, None].expand(-1, 6, -1, 6)
+    print(torch.sum(mask[i, :6, j, :6]))
     si,ai,sj,aj = mask.nonzero(as_tuple=True)
 
     ds = torch.sqrt( torch.sum ( torch.square( xs[:,si,ai]-xs[:,sj,aj] ), dim=-1 ) + eps )
