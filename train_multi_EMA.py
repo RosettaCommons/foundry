@@ -907,7 +907,6 @@ class Trainer():
                 loader_sm_compl, valid_dict['sm_compl_strict'],
                 self.loader_param, task='sm_compl_strict'
             ),
-            #TODO: add a validation set for metals, multiresidue and covalents
             metal_compl = DatasetSMComplex(
                 valid_ID_dict['metal_compl'][:self.dataset_param['n_valid_metal_compl']],
                 loader_sm_compl, valid_dict['metal_compl'],
