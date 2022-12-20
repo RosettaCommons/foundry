@@ -924,15 +924,15 @@ class Trainer():
                 loader_sm_compl, valid_dict['sm_compl_multi'],
                 self.loader_param, task='sm_compl_multi'
             ),
-            sm_compl_strict = DatasetSMComplex(
-                valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
-                loader_sm_compl, valid_dict['sm_compl_strict'],
-                self.loader_param, task='sm_compl_strict'
-            ),
             sm_compl_covale = DatasetSMComplex(
                 valid_ID_dict['sm_compl_covale'][:self.dataset_param['n_valid_sm_compl_covale']],
                 loader_sm_compl_covale, valid_dict['sm_compl_covale'],
                 self.loader_param, task='sm_compl_covale'
+            ),
+            sm_compl_strict = DatasetSMComplex(
+                valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
+                loader_sm_compl, valid_dict['sm_compl_strict'],
+                self.loader_param, task='sm_compl_strict'
             ),
             sm = DatasetSM(
                 valid_ID_dict['sm'][:self.dataset_param['n_valid_sm']],
@@ -945,6 +945,7 @@ class Trainer():
                 self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
             )
         )
+
         # valid_neg_set = DatasetComplex(
         #     list(valid_neg.keys())[:self.n_valid_neg],
         #     loader_complex, valid_neg,

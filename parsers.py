@@ -459,8 +459,8 @@ def parse_mol(filename, filetype="mol2", string=False):
 
     obConversion = openbabel.OBConversion()
     obConversion.SetInFormat(filetype)
-
     obmol = openbabel.OBMol()
+
     if string:
         obConversion.ReadString(obmol,filename)
     elif filetype=='sdf':
@@ -505,4 +505,3 @@ def parse_mol(filename, filetype="mol2", string=False):
         print(f"ERROR: automorphs for {filename} yielded invalid tensor")
 
     return obmol, msa, ins, atom_coords, mask
-

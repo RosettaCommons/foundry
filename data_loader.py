@@ -684,7 +684,7 @@ def get_train_valid_set(params, OFFSET=1000000):
             metal_compl = valid_metal_compl['CLUSTER'].drop_duplicates().values,
             sm_compl_multi = valid_sm_compl_multi['CLUSTER'].drop_duplicates().values,
             sm_compl_covale = valid_sm_compl_covale['CLUSTER'].drop_duplicates().values,
-            sm_compl_strict = np.array(list(valid_sm_compl_strict.keys())),
+            sm_compl_strict = valid_sm_compl_strict['CLUSTER'].drop_duplicates().values,
             sm = np.array(list(valid_sm.keys())),
         )
       
@@ -2252,7 +2252,6 @@ class DatasetRNA(data.Dataset):
 def get_sm_compl_item(data_df, cluster_id, dedup_ligand=True):
     """Sample a protein-ligand training example given the dataset dataframe and
     a protein seq cluster ID"""
-
     # get all examples in this cluster
     tmp_df = data_df[data_df.CLUSTER==cluster_id]
 
@@ -2653,8 +2652,6 @@ class DistributedWeightedSampler(data.Sampler):
 
         # per each gpu
         indices = indices[self.rank:self.total_size:self.num_replicas]
-        print('len(indices)',len(indices))
-        print('self.num_samples',self.num_samples)
         assert len(indices) == self.num_samples
 
         return iter(indices.tolist())
