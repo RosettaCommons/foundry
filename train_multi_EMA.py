@@ -45,7 +45,7 @@ USE_AMP = False
 torch.set_num_threads(4)
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 0,
+              'num_workers': 5,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
