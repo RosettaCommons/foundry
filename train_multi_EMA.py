@@ -9,8 +9,11 @@ import torch.nn as nn
 from torch.utils import data
 from functools import partial
 from data_loader import (
-    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale, loader_atomize_pdb, 
-    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
+    get_train_valid_set, loader_pdb, loader_fb, loader_complex,
+    loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale,
+    loader_atomize_pdb, Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA,
+    DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler,
+    unbatch_item
 )
 from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
 from RoseTTAFoldModel  import RoseTTAFoldModule
@@ -184,11 +187,26 @@ class Trainer():
         assert (B==1) # fd - code assumes a batch size of 1
         
         tot_loss = 0.0
-        
+
+        # set up frames
+        frames, frame_mask = get_frames(
+            pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
+        # update frames and frames_mask to only include BB frames (have to update both for compatibility with compute_general_FAPE)
+        frames_BB = frames.clone()
+        frames_BB[..., 1:, :, :] = 0
+        frame_mask_BB = frame_mask.clone()
+        frame_mask_BB[...,1:] =False
+       
         # c6d loss
         for i in range(4):
             loss = self.loss_fn(logit_s[i], label_s[...,i]) # (B, L, L)
-            loss = (mask_2d*loss).sum() / (mask_2d.sum() + eps)
+            if i==0: # apply distogram loss to all residue pairs with valid BB atoms
+                mask_2d_ = mask_2d
+            else: # apply anglegram loss only when both residues have valid BB frames (i.e. not metal ions)
+                bb_frame_good = frame_mask[:,:,0]
+                loss_mask_2d = bb_frame_good & bb_frame_good[...,None]
+                mask_2d_ = mask_2d & loss_mask_2d
+            loss = (mask_2d_*loss).sum() / (mask_2d_.sum() + eps)
             tot_loss += w_dist*loss
             loss_dict[f'c6d_{i}'] = loss.detach()
 
@@ -203,14 +221,6 @@ class Trainer():
         # Structural loss (layer-wise backbone FAPE)
         dclamp = 300.0 if unclamp else 30.0 # protein & NA FAPE distance cutoffs
         dclamp_sm, Z_sm = 4, 4  # sm mol FAPE distance cutoffs
-
-        frames, frame_mask = get_frames(
-            pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
-        # update frames and frames_mask to only include BB frames (have to update both for compatibility with compute_general_FAPE)
-        frames_BB = frames.clone()
-        frames_BB[..., 1:, :, :] = 0
-        frame_mask_BB = frame_mask.clone()
-        frame_mask_BB[...,1:] =False
 
         L1 = same_chain[0,0,:].sum()
         mask_BBA = mask_BB.clone()
@@ -280,6 +290,7 @@ class Trainer():
         loss_dict['pae_loss'] = pae_loss.detach()
         loss_dict['pde_loss'] = pde_loss.detach()
 
+        # small-molecule ligands
         sm_res_mask = is_atom(label_aa_s[0,0])*mask_BB[0] # (L,)
         if bool(torch.any(sm_res_mask)):
             # ligand fape (layer-averaged fape on atom coordinates with atom frames)
@@ -769,6 +780,7 @@ class Trainer():
         valid_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
         weights_dict['atomize_pdb'] = weights_dict['pdb']
         train_dict['atomize_pdb'] = train_dict['pdb']
+        valid_ID_dict['atomize_pdb'] = valid_ID_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
 
         if self.dataset_param['n_valid_pdb'] is None: 
@@ -902,11 +914,6 @@ class Trainer():
                 loader_sm_compl, valid_dict['sm_compl'],
                 self.loader_param,
             ),
-            sm_compl_strict = DatasetSMComplex(
-                valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
-                loader_sm_compl, valid_dict['sm_compl_strict'],
-                self.loader_param, task='sm_compl_strict'
-            ),
             metal_compl = DatasetSMComplex(
                 valid_ID_dict['metal_compl'][:self.dataset_param['n_valid_metal_compl']],
                 loader_sm_compl, valid_dict['metal_compl'],
@@ -916,6 +923,11 @@ class Trainer():
                 valid_ID_dict['sm_compl_multi'][:self.dataset_param['n_valid_sm_compl_multi']],
                 loader_sm_compl, valid_dict['sm_compl_multi'],
                 self.loader_param, task='sm_compl_multi'
+            ),
+            sm_compl_strict = DatasetSMComplex(
+                valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
+                loader_sm_compl, valid_dict['sm_compl_strict'],
+                self.loader_param, task='sm_compl_strict'
             ),
             sm_compl_covale = DatasetSMComplex(
                 valid_ID_dict['sm_compl_covale'][:self.dataset_param['n_valid_sm_compl_covale']],
@@ -1066,7 +1078,7 @@ class Trainer():
                     v, rank, gpu, world_size, epoch, rng, header=valid_headers[k], 
                     verbose = self.eval) 
 
-                if k == 'SM Compl':
+                if k == 'sm_compl':
                     valid_tot, valid_loss, valid_acc = valid_tot_, valid_loss_, valid_acc_
 
             if self.eval: break
@@ -1256,7 +1268,8 @@ class Trainer():
                         )
 
                         true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-                        res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                        #res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                        res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
                         mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                         true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
@@ -1305,8 +1318,8 @@ class Trainer():
                     )
 
                     true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-                    res_mask = ~((atom_mask_[0,:,:3][None].sum(dim=-1) < 3.0) * ~(is_atom(msa[:, i_cycle,0])))
-
+                    #res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                    res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
                     mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                     true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
@@ -1341,12 +1354,18 @@ class Trainer():
                     scheduler.step()
                 ddp_model.module.update() # apply EMA
 
+            item_ = unbatch_item(item) # remove nested lists to make more readable when printed
+
             if torch.isnan(loss):
-                print('nan loss',item)
+                print('nan loss',item_)
                 save_pdbs = True
 
             if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
-                name = f"{item['CHAINID'][0]}_{item['LIGAND'][0][2][0]}"
+                if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
+                    lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
+                else:
+                    lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
+                name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
             elif task[0]=='sm_only':
                 name = item[0]
             else:
@@ -1572,7 +1591,8 @@ class Trainer():
 
                 true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
-                res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                #res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
                 mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
@@ -1600,8 +1620,13 @@ class Trainer():
                 valid_acc += acc_s.detach()
 
                 # records results
-                if task[0].startswith('sm_compl'):
-                    name = item[2][0][0].replace('.mol2','')
+                if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
+                    item_ = unbatch_item(item)
+                    if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
+                        lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
+                    else:
+                        lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
+                    name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
                 elif task[0]=='sm_only':
                     name = item[0]
                 else:

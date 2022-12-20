@@ -71,9 +71,9 @@ def set_data_loader_params(args):
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
-        "VAL_SM_STRICT"    : "%s/list_v02_smcompl_validstrict_20221102.csv"%sm_compl_dir, 
+        "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20221216.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221219.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20221220.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -157,7 +157,8 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
             term_info[start, 0] = 1.0 # flag for N-term
             term_info[start+L_chain-1,1] = 1.0 # flag for C-term
             start += L_chain
-    binding_site = torch.zeros((L,1), device=msa.device).float()
+    #binding_site = torch.zeros((L,1), device=msa.device).float()
+    binding_site = torch.zeros((L,0), device=msa.device).float() # keeping this off for now (Jue 12/19)
     # raw MSA profile
     raw_profile = torch.nn.functional.one_hot(msa, num_classes=NAATOKENS)
     raw_profile = raw_profile.float().mean(dim=0) 
@@ -576,25 +577,7 @@ def get_train_valid_set(params, OFFSET=1000000):
         train_sm_compl_covale, valid_sm_compl_covale, sm_compl_covale_IDs, sm_compl_covale_weights = \
             _parse_sm_compl_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
 
-        # stricter versions of protein-small mol validation set
-        def _make_example_dict(df, make_entry_func, cluster_key='CLUSTER'):
-            """Converts a dataframe of training examples to dictionary where keys are cluster IDs and values
-               are lists of training examples formatted according to the function `make_entry_func`."""
-            data_dict = {}
-            for i,row in df.iterrows():
-                entry = make_entry_func(row)
-                cluster = row[cluster_key] # cluster of this example
-                if cluster in data_dict.keys():
-                    data_dict[cluster].append(entry)
-                else:
-                    data_dict[cluster] = [entry]
-            return data_dict
-        def _make_entry(row):
-            return ((row.CHAINID, row.HASH, row.LIGANDS), row.LEN_EXIST, row.WEIGHT)
-
-        df = load_df(params['VAL_SM_STRICT'], params, eval_cols=['LIGANDS']) # removed ligand cluster overlap with train
-        df['WEIGHT'] = 1 # examples have already been redundancy-reduced
-        valid_sm_compl_strict = _make_example_dict(df, make_entry_func=_make_entry, cluster_key='ID') # use all examples regardless of sequence cluster
+        valid_sm_compl_strict = load_df(params['VAL_SM_STRICT'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
 
         # cambridge small molecule crystals
         sim_idx = int(params["MAXSIM"]*100-50)
@@ -2139,6 +2122,21 @@ def crop_sm_compl(prot_xyz, lig_xyz,Ls, params):
     lig_sel = torch.arange(lig_xyz.shape[0])+Ls[0]
     return torch.cat((sel, lig_sel))
 
+def unbatch_item(item):
+    """Flattens batched dictionaries returned from dataloaders to remove unecessary nested lists"""
+    def flatten_value(v):
+        if (type(v) is list and len(v)==1) or \
+           (type(v) is torch.Tensor and len(v.shape)>0 and v.shape[0]==1):
+            v = v[0]
+        if (type(v) is list and len(v)>1):
+            for i,x in enumerate(v):
+                v[i] = flatten_value(x)
+        return v
+
+    new_item = dict()
+    for k in item:
+        new_item[k] = flatten_value(item[k])
+    return new_item
 
 class Dataset(data.Dataset):
     def __init__(self, IDs, loader, item_dict, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None):
@@ -2507,7 +2505,7 @@ class DistributedWeightedSampler(data.Sampler):
         assert num_example_per_epoch % num_replicas == 0
         total_examples = fraction_pdb + fraction_fb + fraction_compl + fraction_na_compl + \
                 fraction_rna + fraction_sm_compl + fraction_metal_compl + fraction_sm_compl_multi + \
-                fraction_sm + fraction_atomize_pdb
+                fraction_sm_compl_covale + fraction_sm + fraction_atomize_pdb
         assert (np.allclose(total_examples, 1.0)), f"Fractions of datasets add up to {total_examples}, should add up to 1.0"
 
         self.dataset = dataset
@@ -2636,9 +2634,10 @@ class DistributedWeightedSampler(data.Sampler):
         offset += len(self.dataset.ID_dict['sm_compl_multi'])
         
         if (self.num_sm_compl_covale_per_epoch>0):
-            sm_compl_covale_sampled = torch.multinomial(self.weights_dict['sm_compl_multi'], self.num_sm_compl_multi_per_epoch, self.replacement, generator=g)
+            sm_compl_covale_sampled = torch.multinomial(self.weights_dict['sm_compl_covale'], self.num_sm_compl_covale_per_epoch, self.replacement, generator=g)
             sel_indices = torch.cat((sel_indices, indices[sm_compl_covale_sampled + offset]))
         offset += len(self.dataset.ID_dict['sm_compl_covale'])
+
         if (self.num_sm_per_epoch>0):
             sm_sampled = torch.multinomial(self.weights_dict['sm'], self.num_sm_per_epoch, self.replacement, generator=g)
             sel_indices = torch.cat((sel_indices, indices[sm_sampled + offset]))
@@ -2654,6 +2653,8 @@ class DistributedWeightedSampler(data.Sampler):
 
         # per each gpu
         indices = indices[self.rank:self.total_size:self.num_replicas]
+        print('len(indices)',len(indices))
+        print('self.num_samples',self.num_samples)
         assert len(indices) == self.num_samples
 
         return iter(indices.tolist())

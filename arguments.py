@@ -107,10 +107,10 @@ def get_args():
             help="how often to sample rna during training")
     dataset_group.add_argument('-fraction_sm_compl', type=float, default=0.1,
             help="how often to sample protein small molecule complexes during training")
-    dataset_group.add_argument('-fraction_sm_compl_multi', type=float, default=0.09,
-            help="how often to sample protein/multiresidue small molecule complexes during training")
     dataset_group.add_argument('-fraction_metal_compl', type=float, default=0.09,
             help="how often to sample protein/metal complexes during training")    
+    dataset_group.add_argument('-fraction_sm_compl_multi', type=float, default=0.09,
+            help="how often to sample protein/multiresidue small molecule complexes during training")
     dataset_group.add_argument('-fraction_sm_compl_covale', type=float, default=0.09,
             help="how often to sample covalent protein/small molecule complexes during training")    
     dataset_group.add_argument('-fraction_sm', type=float, default=0.09,
@@ -127,8 +127,8 @@ def get_args():
     dataset_group.add_argument('-n_valid_na_neg', type=int)
     dataset_group.add_argument('-n_valid_rna', type=int)
     dataset_group.add_argument('-n_valid_sm_compl', type=int)
-    dataset_group.add_argument('-n_valid_sm_compl_multi', type=int)
     dataset_group.add_argument('-n_valid_metal_compl', type=int)
+    dataset_group.add_argument('-n_valid_sm_compl_multi', type=int)
     dataset_group.add_argument('-n_valid_sm_compl_covale', type=int)
     dataset_group.add_argument('-n_valid_sm_compl_strict', type=int)
     dataset_group.add_argument('-n_valid_sm', type=int)

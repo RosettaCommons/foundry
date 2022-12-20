@@ -1166,10 +1166,10 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
         if k[2] in aa2num: # standard AA
             aa = aa2num[k[2]]
         elif k[2] in modres: # nonstandard AA, map to standard
-            print('nonstandard AA',k,modres[k[2]])
+            #print('nonstandard AA',k,modres[k[2]])
             aa = aa2num[modres[k[2]]]
         else: # unknown AA, still try to store BB atoms
-            print('unknown AA',k)
+            #print('unknown AA',k)
             aa = 20
         if k[3] in aa2long_[aa]: # atom name exists in RF nomenclature
             i_atom = aa2long_[aa].index(k[3]) # atom index
