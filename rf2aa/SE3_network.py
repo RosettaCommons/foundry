@@ -1,13 +1,21 @@
 import torch
 import torch.nn as nn
+from icecream import ic
+import inspect
 
 import sys, os
 script_dir = os.path.dirname(os.path.realpath(__file__))+'/'
-sys.path.insert(0,script_dir+'SE3Transformer/')
+sys.path.insert(0,script_dir+'SE3Transformer')
+sys.path.insert(0, '/home/ahern/projects/rf_diffusion/RF2-allatom/rf2aa/SE3Transformer')
 
-from util_module import init_lecun_normal_param
+from rf2aa.util_module import init_lecun_normal_param
+
 from se3_transformer.model import SE3Transformer
 from se3_transformer.model.fiber import Fiber
+se3_transformer_path = inspect.getfile(SE3Transformer)
+se3_fiber_path = inspect.getfile(Fiber)
+ic(se3_transformer_path, se3_fiber_path)
+assert 'RF2-allatom' in se3_transformer_path
 
 class SE3TransformerWrapper(nn.Module):
     """SE(3) equivariant GCN with attention"""

@@ -1,9 +1,10 @@
 import torch
+from icecream import ic
 import numpy as np
 import scipy
 import networkx as nx
 
-from util import (
+from rf2aa.util import (
     rigid_from_3_points,
     cb_lengths_CN,
     cb_angles_CACN,
@@ -14,10 +15,10 @@ from util import (
     find_all_paths_of_length_n,
     find_all_rigid_groups
 )
-from chemical import NFRAMES, NTOTAL
+from rf2aa.chemical import NFRAMES, NTOTAL
 
-from kinematics import get_dih, get_ang
-from scoring import HbHybType
+from rf2aa.kinematics import get_dih, get_ang
+from rf2aa.scoring import HbHybType
 
 # Loss functions for the training
 # 1. BB rmsd loss

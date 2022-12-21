@@ -3,11 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from opt_einsum import contract as einsum
 import torch.utils.checkpoint as checkpoint
-from util import *
-from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_res_atom_dist
-from Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
-from Track_module import PairStr2Pair, PositionalEncoding2D
-from chemical import NAATOKENS,NTOTALDOFS, NBTYPES
+from rf2aa.util import *
+from rf2aa.util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_res_atom_dist
+from rf2aa.Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
+from rf2aa.Track_module import PairStr2Pair, PositionalEncoding2D
+from rf2aa.chemical import NAATOKENS,NTOTALDOFS, NBTYPES
 
 # Module contains classes and functions to generate initial embeddings
 

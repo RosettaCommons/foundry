@@ -1,9 +1,20 @@
 import torch
 import torch.nn as nn
-from Embeddings import MSA_emb, Extra_emb, Bond_emb, Templ_emb, Recycling
-from Track_module import IterativeSimulator
-from AuxiliaryPredictor import DistanceNetwork, MaskedTokenNetwork, LDDTNetwork, PAENetwork
-from chemical import INIT_CRDS,NAATOKENS, NBTYPES
+import assertpy
+from icecream import ic
+from rf2aa.Embeddings import MSA_emb, Extra_emb, Bond_emb, Templ_emb, Recycling
+from rf2aa.Track_module import IterativeSimulator
+from rf2aa.AuxiliaryPredictor import DistanceNetwork, MaskedTokenNetwork, LDDTNetwork, PAENetwork
+from rf2aa.chemical import INIT_CRDS,NAATOKENS, NBTYPES, NTOTAL
+from rf2aa.tensor_util import assert_shape
+
+def get_shape(t):
+    if hasattr(t, 'shape'):
+        return t.shape
+    if type(t) is tuple:
+        return [get_shape(e) for e in t]
+    else:
+        return type(t)
 
 class RoseTTAFoldModule(nn.Module):
     def __init__(
@@ -14,9 +25,14 @@ class RoseTTAFoldModule(nn.Module):
         SE3_param={}, SE3_ref_param={},
         atom_type_index=None, aamask=None, ljlk_parameters=None, lj_correction_parameters=None, 
         cb_len=None, cb_ang=None, cb_tor=None,
-        num_bonds=None, lj_lin=0.6, use_extra_l1=True, use_atom_frames=True
+        num_bonds=None, lj_lin=0.6, use_extra_l1=True, use_atom_frames=True,
+        # New for diffusion
+        freeze_track_motif=False,
+        assert_single_sequence_input=False,
     ):
         super(RoseTTAFoldModule, self).__init__()
+        self.freeze_track_motif=freeze_track_motif
+        self.assert_single_sequence_input=assert_single_sequence_input
         #
         # Input Embeddings
         d_state = SE3_param['l0_out_features']
@@ -66,13 +82,65 @@ class RoseTTAFoldModule(nn.Module):
         self.use_atom_frames = use_atom_frames
 
     def forward(
-        self, msa_latent, msa_full, seq, seq_unmasked, xyz, sctors, idx, bond_feats, chirals, 
+        self,
+        msa_latent,
+        msa_full,
+        seq,
+        seq_unmasked,
+        xyz,
+        sctors,
+        idx,
+        bond_feats,
+        chirals, 
         atom_frames=None, t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
-        msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None,
+        msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None, is_motif=None,
         return_raw=False, return_full=False,
         use_checkpoint=False
     ):
+        # ic(get_shape(msa_latent))
+        # ic(get_shape(msa_full))
+        # ic(get_shape(seq))
+        # ic(get_shape(seq_unmasked))
+        # ic(get_shape(xyz))
+        # ic(get_shape(sctors))
+        # ic(get_shape(idx))
+        # ic(get_shape(bond_feats))
+        # ic(get_shape(chirals))
+        # ic(get_shape(atom_frames))
+        # ic(get_shape(t1d))
+        # ic(get_shape(t2d))
+        # ic(get_shape(xyz_t))
+        # ic(get_shape(alpha_t))
+        # ic(get_shape(mask_t))
+        # ic(get_shape(same_chain))
+        # ic(get_shape(msa_prev))
+        # ic(get_shape(pair_prev))
+        # ic(get_shape(state_prev))
+        # ic(get_shape(mask_recycle))
+        # ic()
+        # ic()
         B, N, L = msa_latent.shape[:3]
+        A = atom_frames.shape[1]
+        
+        if self.assert_single_sequence_input:
+            assert_shape(msa_latent,  (1, 1, L, 164))
+            assert_shape(msa_full,    (1, 1, L, 83))
+            assert_shape(seq,         (1, L))
+            assert_shape(seq_unmasked,(1, L))
+            assert_shape(xyz,         (1, L, NTOTAL, 3))
+            assert_shape(sctors,      (1, L, 20, 2))
+            assert_shape(idx,         (1, L))
+            assert_shape(bond_feats,  (1, L, L))
+            #assert_shape(chirals,     (1, 0))
+            #assert_shape(atom_frames, (1, 4, L)) # This is set to 4 for the recycle count, but that can't be right
+            assert_shape(atom_frames, (1, A, 3, 2)) # What is 4?
+            assert_shape(t1d,         (1, 1, L, 80))
+            assert_shape(t2d,         (1, 1, L, L, 68))
+            assert_shape(xyz_t,       (1, 1, L, 3))
+            assert_shape(alpha_t,     (1, 1, L, 60))
+            assert_shape(mask_t,      (1, 1, L, L))
+            assert_shape(same_chain,  (1, L, L))
+
         # Get embeddings
         msa_latent, pair, state = self.latent_emb(msa_latent, seq, idx, bond_feats, same_chain)
         msa_full = self.full_emb(msa_full, seq, idx)
@@ -93,8 +161,9 @@ class RoseTTAFoldModule(nn.Module):
         pair, state = self.templ_emb(t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=use_checkpoint)
 
         # Predict coordinates from given inputs
+        is_motif = is_motif if self.freeze_track_motif else torch.zeros_like(seq).bool()
         msa, pair, xyz, alpha_s, xyz_allatom, state = self.simulator(
-            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, same_chain, chirals, atom_frames, use_checkpoint=use_checkpoint, use_atom_frames=self.use_atom_frames)
+            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, same_chain, chirals, is_motif, atom_frames, use_checkpoint=use_checkpoint, use_atom_frames=self.use_atom_frames)
 
         if return_raw:
             # get last structure

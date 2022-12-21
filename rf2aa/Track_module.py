@@ -3,16 +3,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 from opt_einsum import contract as einsum
 import torch.utils.checkpoint as checkpoint
-from util_module import *
-from Attention_module import *
-from SE3_network import SE3TransformerWrapper
-from resnet import ResidualNetwork
-from util import INIT_CRDS, is_atom, xyz_frame_from_rotation_mask
-from loss import (
+from icecream import ic
+from rf2aa.util_module import *
+from rf2aa.Attention_module import *
+from rf2aa.SE3_network import SE3TransformerWrapper
+from rf2aa.resnet import ResidualNetwork
+from rf2aa.util import INIT_CRDS, is_atom, xyz_frame_from_rotation_mask
+from rf2aa.loss import (
     calc_BB_bond_geom_grads, calc_lj_grads, calc_hb_grads, calc_cart_bonded_grads, calc_ljallatom_grads, 
     calc_lj, calc_cart_bonded, calc_chiral_grads
 )
-from chemical import NTOTALDOFS
+from rf2aa.chemical import NTOTALDOFS
 
 
 # Components for three-track blocks
@@ -252,7 +253,7 @@ class Str2Str(nn.Module):
         nn.init.zeros_(self.embed_edge.bias)
     
     @torch.cuda.amp.autocast(enabled=False)
-    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, atom_frames, extra_l0=None, extra_l1=None, use_atom_frames=True, top_k=128, eps=1e-5):
+    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, atom_frames, is_motif, extra_l0=None, extra_l1=None, use_atom_frames=True, top_k=128, eps=1e-5):
         # process msa & pair features
         B, N, L = msa.shape[:3]
         seq = self.norm_msa(msa[:,0])
@@ -296,6 +297,7 @@ class Str2Str(nn.Module):
         state = shift['0'].reshape(B, L, -1) # (B, L, C)
         
         offset = shift['1'].reshape(B, L, 2, 3)
+        offset[:,is_motif,...] = 0            # NOTE: DJ - frozen motif!! 
         T = offset[:,:,0,:] / 10.0
         R = offset[:,:,1,:] / 100.0
 
@@ -333,6 +335,7 @@ class Allatom2Allatom(nn.Module):
 
     @torch.cuda.amp.autocast(enabled=False)
     def forward(self, seq, xyz, aamask, num_bonds, state, grads, top_k=24, eps=1e-5):
+        raise Exception('not implemented for diffusion')
         # seq  (B,L)
         # xyz  (B,L,27,3)
         # aamask (22,27) [per-amino-acid]
@@ -548,7 +551,7 @@ class IterBlock(nn.Module):
                                nextra_l0=nextra_l0,
                                nextra_l1=nextra_l1)
 
-    def forward(self, msa, pair, xyz, state, seq_unmasked, idx, bond_feats, same_chain, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True):
+    def forward(self, msa, pair, xyz, state, seq_unmasked, idx, bond_feats, same_chain, is_motif, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True):
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, same_chain)
         if use_checkpoint:
@@ -557,14 +560,14 @@ class IterBlock(nn.Module):
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, use_atom_frames)
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames)
 
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
             pair = self.msa2pair(msa, pair)
             pair = self.pair2pair(pair, rbf_feat, state)
 
-            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, extra_l0, extra_l1, use_atom_frames, top_k=top_k)
+            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames, top_k=top_k)
 
         return msa, pair, xyz, state, alpha
 
@@ -661,7 +664,7 @@ class IterativeSimulator(nn.Module):
         self.compute_allatom_coords = ComputeAllAtomCoords()
 
 
-    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, same_chain, chirals, atom_frames=None, use_checkpoint=False, use_atom_frames=True):
+    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, same_chain, chirals, is_motif, atom_frames=None, use_checkpoint=False, use_atom_frames=True):
         # input:
         #   msa: initial MSA embeddings (N, L, d_msa)
         #   pair: initial residue pair embeddings (L, L, d_pair)
@@ -682,6 +685,7 @@ class IterativeSimulator(nn.Module):
                                                                atom_frames=atom_frames,
                                                                extra_l0=extra_l0,
                                                                extra_l1=extra_l1,
+                                                               is_motif=is_motif,
                                                                use_atom_frames=use_atom_frames)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
@@ -700,6 +704,7 @@ class IterativeSimulator(nn.Module):
                                                          atom_frames=atom_frames,
                                                          extra_l0=extra_l0,
                                                          extra_l1=extra_l1,
+                                                         is_motif=is_motif,
                                                          use_atom_frames=use_atom_frames)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
@@ -724,7 +729,7 @@ class IterativeSimulator(nn.Module):
                 extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
 
             xyz, state, alpha = self.str_refiner(
-                    msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats, atom_frames,
+                    msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats, atom_frames, is_motif,
                 extra_l0, extra_l1, top_k=128, use_atom_frames=use_atom_frames)
 
             xyz_s.append(xyz)

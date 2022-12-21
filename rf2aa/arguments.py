@@ -1,5 +1,5 @@
 import argparse
-import data_loader
+from rf2aa import data_loader
 import os, datetime
 
 DATASET_PARAMS = [
@@ -56,6 +56,8 @@ def get_args():
             help='Output folder for model weights. [models/]')
     train_group.add_argument('-interactive', action='store_true', default=False,
             help='Start training in interactive mode. [False]')
+    train_group.add_argument('-debug', action='store_true', default=False,
+            help='Run in debugging mode. [False]')
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")

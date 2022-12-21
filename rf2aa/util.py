@@ -1,5 +1,6 @@
 import sys
 import warnings
+import assertpy
 
 import numpy as np
 import torch
@@ -10,10 +11,11 @@ import networkx as nx
 from itertools import combinations
 from openbabel import openbabel
 from scipy.spatial.transform import Rotation
+from icecream import ic
 
-from chemical import *
-from kinematics import get_atomize_protein_chirals
-from scoring import *
+from rf2aa.chemical import *
+from rf2aa.kinematics import get_atomize_protein_chirals
+from rf2aa.scoring import *
 
 
 def random_rot_trans(xyz, random_noise=20.0):
@@ -324,7 +326,7 @@ def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
     """
     xyz_t (1, T, L, natoms, 3)
     seq_unmasked (B, L)
-    atom_frames (1, L, 3, 2)
+    atom_frames (1, A, 3, 2)
     """
     xyz_t_frame = xyz_t.clone()
     atoms = is_atom(seq_unmasked[0])
