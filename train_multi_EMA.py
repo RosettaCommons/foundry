@@ -1362,13 +1362,13 @@ class Trainer():
                     scheduler.step()
                 ddp_model.module.update() # apply EMA
 
-            item_ = unbatch_item(item) # remove nested lists to make more readable when printed
-
             if torch.isnan(loss):
                 print('nan loss',item_)
                 save_pdbs = True
 
             if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
+                item_ = unbatch_item(item) # remove nested lists to make more readable when printed
+
                 if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
                     lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
                 else:
