@@ -1758,8 +1758,25 @@ def loader_sm_compl_covale(item, params, pick_top=True,
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
     chirals_sm = get_chirals(mol, xyz_sm[0])
+
+    Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
+    bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
     # remove residues that are going to be atomized from msa
     if residues_to_atomize:
+        
+        for residue in residues_to_atomize:
+            atomize_N = residue + ("N",)
+            atomize_C = residue + ("C",)
+            N_index = akeys.index(atomize_N) + Ls[0]
+            C_index = akeys.index(atomize_C) + Ls[0]
+            residue_index = int(residue[1]) - 1 # residues are 1 indexed in the cif files 
+
+            if residue_index != 0: # if first residue in chain, no extra bond feats to previous residue
+                bond_feats[residue_index-1, N_index] = 6
+                bond_feats[N_index, residue_index-1] = 6
+            if residue_index != Ls[0]: #if residue is last in chain, no extra bonds feats to following residue
+                bond_feats[residue_index+1, C_index] = 6
+                bond_feats[C_index,residue_index+1] = 6
         for residue in residues_to_atomize:
             residue_index = int(residue[1]) - 1 # residues are 1 indexed in the cif files
             msa_prot = torch.cat((msa_prot[:, :residue_index], msa_prot[:, residue_index+1:]), dim=1)
@@ -1767,7 +1784,10 @@ def loader_sm_compl_covale(item, params, pick_top=True,
 
             xyz_prot = torch.cat((xyz_prot[:residue_index], xyz_prot[residue_index+1:]), dim=0)
             mask_prot = torch.cat((mask_prot[:residue_index],mask_prot[residue_index+1:]), dim=0)
-
+            bond_feats = torch.cat((bond_feats[ :residue_index], bond_feats[residue_index+1:]), dim=0)
+            bond_feats = torch.cat((bond_feats[ :, :residue_index], bond_feats[:, residue_index+1:]), dim=1)
+            
+    
     a3m_prot = {"msa": msa_prot, "ins": ins_prot}
     protein_L, nprotatoms, _ = xyz_prot.shape
 
@@ -1799,20 +1819,9 @@ def loader_sm_compl_covale(item, params, pick_top=True,
     node_type[Ls[0]:, Ls[0]:] = 1 
     chain_idx = torch.ones_like(node_type)
 
-    bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
     bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
-    if residues_to_atomize:
-        for residue in residues_to_atomize:
-            atomize_N = residue + ("N",)
-            atomize_C = residue + ("C",)
-            N_index = akeys.index(atomize_N) + Ls[0]
-            C_index = akeys.index(atomize_C) + Ls[0]
-            residue_index = int(residue[1]) - 1 # residues are 1 indexed in the cif files 
-            bond_feats[residue_index-1, N_index] = 6
-            bond_feats[residue_index+1, C_index] = 6
-            bond_feats[N_index, residue_index-1] = 6
-            bond_feats[C_index,residue_index+1] = 6            
+            
             
     if init_protein_tmpl or init_ligand_tmpl:
         # make blank features for 2 templates
