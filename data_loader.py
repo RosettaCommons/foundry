@@ -1119,11 +1119,9 @@ def loader_fb(item, params, unclamp=False):
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
     
     # get template features -- None
-    xyz_t = torch.full((1,l_orig,NTOTAL,3),np.nan).float()
-    f1d_t = torch.nn.functional.one_hot(torch.full((1, l_orig), 20).long(), num_classes=NAATOKENS-1).float() # all gaps
-    conf = torch.zeros((1,l_orig,1)).float() # zero confidence
-    f1d_t = torch.cat((f1d_t, conf), -1)
-    
+    tplt_blank = {"ids":[]}
+    xyz_t, f1d_t, mask_t = TemplFeaturize(tplt_blank, l_orig, params, offset=0, npick=0)  
+
     idx = pdb['idx']
     xyz = torch.full((len(idx),NTOTAL,3),np.nan).float()
     xyz[:,:27,:] = pdb['xyz'][:,:27]
@@ -1139,20 +1137,22 @@ def loader_fb(item, params, unclamp=False):
     mask_msa = mask_msa[:,:,crop_idx]
     xyz_t = xyz_t[:,crop_idx]
     f1d_t = f1d_t[:,crop_idx]
+    mask_t = mask_t[:, crop_idx]
     xyz = xyz[crop_idx]
     mask = mask[crop_idx]
     idx = idx[crop_idx]
 
     # initial structure
     xyz_prev = xyz_t[0].clone()
+    mask_prev = mask_t[0].clone()
     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
     chirals = torch.Tensor()
     #print ("loader_fb", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
-
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
-           xyz_t.float(), f1d_t.float(), xyz_prev.float(), \
+           xyz_t.float(), f1d_t.float(), mask_t, \
+           xyz_prev.float(), mask_prev, \
            chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats,chirals,"fb", item
 
 
@@ -2031,9 +2031,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     idx = torch.cat((idx, idx_sm))
 
     # handle chain_idx
-    chain_idx = torch.zeros((sum(Ls), sum(Ls))).long()
-    chain_idx[:Ls[0], :Ls[0]] = 1
-    chain_idx[Ls[0]:, Ls[0]:] = 1 
+    chain_idx = torch.ones((sum(Ls), sum(Ls))).long()
     
     # remove msa features for atomized portion
     i1 = i_start - flank
@@ -2132,7 +2130,10 @@ def crop_sm_compl(prot_xyz, lig_xyz,Ls, params):
     return torch.cat((sel, lig_sel))
 
 def unbatch_item(item):
-    """Flattens batched dictionaries returned from dataloaders to remove unecessary nested lists"""
+    """
+    Flattens batched dictionaries returned from dataloaders to remove unecessary nested lists
+    Only used for SM compl datasets where item is a dictionary
+    """
     def flatten_value(v):
         if (type(v) is list and len(v)==1) or \
            (type(v) is torch.Tensor and len(v.shape)>0 and v.shape[0]==1):
@@ -2141,7 +2142,7 @@ def unbatch_item(item):
             for i,x in enumerate(v):
                 v[i] = flatten_value(x)
         return v
-
+    
     new_item = dict()
     for k in item:
         new_item[k] = flatten_value(item[k])
