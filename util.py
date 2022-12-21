@@ -1142,7 +1142,33 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
 
 def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
+    """Given a protein chain and coordinate transform parsed from CIF file,
+    return tensors with coordinates and masks
 
+    Parameters
+    ----------
+    ch: dict
+        Key-value pairs representing a protein chain, as parsed by cifutils
+    ch_xf : 2-tuple (chain_id, np.array:(4,4))
+        The coordinate transform for this chain
+    modres : dict
+        Maps modified residue names to their canonical equivalents. Any
+        modified residue will be converted to its standard equivalent and
+        coordinates for atoms with matching names will be saved.
+
+    Returns
+    -------
+    xyz_xf : torch.Tensor (L, NTOTAL, 3), float
+        Transformed coordinates for all the atoms in each residue
+    mask : torch.Tensor (L, NTOTAL,), bool
+        Boolean mask with True if a certain atom is present
+    seq : torch.Tensor (L,), long
+        Integer encoded amino acid sequence
+    chid : list of str (L,)
+        Chain IDs for each residue
+    resi : list of str (L,)
+        Residue numbers for each residue
+    """ 
     assert(ch.type == 'polypeptide(L)')
     assert(ch.id == ch_xf[0])
 
@@ -1185,11 +1211,59 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
 
     return xyz_xf, mask, seq, chid, resi
 
-def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf):
-    
-    elnum_to_atom = dict(zip(atom_num, frame_priority2atom))
+
+def get_ligand_atoms_bonds(ligand, chains, covale):
+    """Gets the atoms and bonds belonging to a certain ligand, as identified by
+    the ligand's chain ID(s) and residue number(s). Includes
+    inter-chain bonds, for multi-residue ligands. `chains`, `covale`,
+    `lig_atoms`, and `lig_bonds` are as parsed by cifutils.
+    """
+    lig_atoms = dict()
+    lig_bonds = []
+    for i_ch,ch in chains.items():
+        for k,v in ch.atoms.items():
+            if k[:3] in ligand:
+                lig_atoms[k] = v
+        for bond in ch.bonds:
+            if bond.a[:3] in ligand or bond.b[:3] in ligand:
+                lig_bonds.append(bond)
+    for bond in covale:
+        if bond.a[:3] in ligand and bond.b[:3] in ligand:
+            lig_bonds.append(bond)
+    return lig_atoms, lig_bonds
+
+
+def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
+    """Given ligand atoms from a parsed CIF file and coordinate transforms
+    specific to a bio-assembly of interest, returns tensors with transformed
+    coordinates and a mask for valid atoms. 
+
+    Parameters
+    ----------
+    atoms: dict
+        Atom key-value pairs for the query ligand, as parsed by cifutils
+    asmb_xfs : list of 2-tuples (chain_id, torch.Tensor(4,4))
+        Coordinate transforms for the current assembly
+    ch2xf : dict
+        Maps chain letters to transform indices
+    input_akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
+        Atom keys for the query ligand, used to enforce a specific atom order
+
+    Returns
+    -------
+    xyz : torch.Tensor (N_atoms, 3), float
+    mask : torch.Tensor (N_atoms,), bool
+    seq : torch.Tensor (N_atoms,), long
+    chid : list (N_atoms,)
+        Chain IDs for each ligand atom
+    akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
+        Atom keys with information about each atom, in the same order as the returned coordinates
+    """ 
+    elnum_to_atom = dict(zip(chemical.atom_num, chemical.frame_priority2atom))
     atoms_no_H = {k:v for k,v in atoms.items() if v.element != 1} # exclude hydrogens
     L = len(atoms_no_H)
+    if input_akeys is None:
+        input_akeys = atoms_no_H.keys()
     
     xyz = torch.zeros(L, 3)
     mask = torch.zeros(L,).bool()
@@ -1198,7 +1272,8 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf):
     akeys = [None]*L
     
     # create coords, atom mask, and seq tokens
-    for i,(k,v) in enumerate(atoms_no_H.items()):
+    for i,k in enumerate(input_akeys):
+        v = atoms_no_H[k]
         xyz[i, :] = torch.tensor(v.xyz)
         mask[i] = v.occ
         if v.element not in elnum_to_atom:
@@ -1219,23 +1294,27 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf):
         
     return xyz, mask, seq, chid, akeys
 
-def get_ligand_atoms_bonds(ligand, chains, covale):
-    lig_atoms = dict()
-    lig_bonds = []
-    for i_ch,ch in chains.items():
-        for k,v in ch.atoms.items():
-            if k[:3] in ligand:
-                lig_atoms[k] = v
-        for bond in ch.bonds:
-            if bond.a[:3] in ligand or bond.b[:3] in ligand:
-                lig_bonds.append(bond)
-    for bond in covale:
-        if bond.a[:3] in ligand and bond.b[:3] in ligand:
-            lig_bonds.append(bond)
-    return lig_atoms, lig_bonds
 
 def cif_ligand_to_obmol(xyz, akeys, atoms, bonds):
-    
+    """Given a ligand's coordinates and atom and bond information, return an
+    openbabel molecule representing the ligand as well as its 2D bond features.
+
+    Parameters
+    ----------
+    xyz : torch.Tensor (N_atoms, 3), float
+    akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
+    atoms : dict
+        Ligand atoms, as parsed by cifutils
+    bonds : list of Bond
+        Ligand bonds, as parsed by cifutils
+
+    Returns
+    -------
+    mol : OBMol object
+        Openbabel molecule containing coordinate, atom, and bond information for the ligand
+    bond_feats : torch.Tensor (L,L)
+        Bond features for the ligand
+    """
     mol = openbabel.OBMol()    
     for i,k in enumerate(akeys):
         a = mol.NewAtom()
@@ -1262,8 +1341,67 @@ def cif_ligand_to_obmol(xyz, akeys, atoms, bonds):
     
     return mol, bond_feats
 
+def get_alt_query_ligand(ligand_name, partners, lig_akeys, asmb_xfs):
+    """Given a query ligand name and its contacting chains & transforms, return coordinates
+    of other ligands with the same name but different chain, transform, and/or residue number.
+
+    Parameters
+    ----------
+    ligand_name : str
+        Name of query ligand
+    partners : list of 4-tuples (chain_id, transform_index, num_contacts, chain_type)
+        Chains making contacts to the query ligand
+    lig_akeys : list of atom keys (4-tuples) (chain_id, residue_num, residue_name, atom_name)
+        Atom keys for the query ligand, used to ensure alternate ligands have same atom order
+    asmb_xfs : list of 2-tuples (chain_id, torch.Tensor:(4,4))
+        Coordinate transforms for the current assembly
+
+    Returns
+    -------
+    xyz_alt_s : list of float tensors (N_symm, N_atoms, 3)
+    mask_alt_s : list of bool tensors (N_symm, N_atoms)
+    """
+    lig_anames = [k[3] for k in lig_akeys]
+    xyz_alt_s = []
+    mask_alt_s = []
+    for partner in partners:
+
+        # gather all atoms and bonds on partner chain with the same name as query ligand
+        alt_lig_atoms = dict()
+        alt_lig_bonds = []
+        for k,v in chains[partner[0]].atoms.items():
+            if ligand_name==k[2]:
+                alt_lig_atoms[k] = v
+        for bond in chains[partner[0]].bonds:
+            if bond.a[2]==ligand_name and bond.b[2]==ligand_name:
+                alt_lig_bonds.append(bond)
+
+        lig_ch2xf = {partner[0]:partner[1]}
+
+        # iterate through all unique residue numbers on partner chain
+        # usually a ligand chain will only have one residue with a given ligand name, but this is to be safe
+        alt_lig_res = set([k[:3] for k in alt_lig_atoms])
+        for res in alt_lig_res:
+            res_atoms = {k:v for k,v in alt_lig_atoms.items() if k[:3]==res}
+            res_bonds = [bond for bond in alt_lig_bonds if bond.a[:3]==res and bond.b[:3]==res]
+
+            res_anames = [k[3] for k in res_atoms.keys()]
+            if not set(lig_anames).issubset(res_anames):
+                print('Alternate ligand position/conformation does not match query ligand atom names. Skipping.', partner, res)
+                continue
+
+            res_akeys = [res+(aname,) for aname in lig_anames]
+            xyz_alt, mask_alt, msa_alt, chid_alt, akeys_alt = cif_ligand_to_xyz(res_atoms, asmb_xfs, lig_ch2xf, input_akeys=res_akeys)
+            mol_alt, bond_feats_alt = cif_ligand_to_obmol(xyz_alt, akeys_alt, res_atoms, res_bonds)
+            xyz_alt, mask_alt = get_automorphs(mol_alt, xyz_alt, mask_alt)
+
+            xyz_alt_s.append(xyz_alt)
+            mask_alt_s.append(mask_alt)
+
+    return xyz_alt_s, mask_alt_s
+
 def get_automorphs(mol, xyz_sm, mask_sm):
-    # enumerate atom symmetry permutations
+    """Enumerate atom symmetry permutations."""
     automorphs = openbabel.vvpairUIntUInt()
     openbabel.FindAutomorphisms(mol, automorphs)
 

@@ -1535,27 +1535,19 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
     xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot = cif_prot_to_xyz(ch, ch_xf, modres)
     protein_L, nprotatoms, _ = xyz_prot.shape
 
-    # load ligand
-    # TODO: load multiple copies of the same ligand
+    # load query ligand (the "focus ligand" for this training example)
     lig_atoms, lig_bonds = get_ligand_atoms_bonds(ligand, chains, covale)
-    # lig_atoms = dict()
-    # lig_bonds = []
-    # for i_ch,ch in chains.items():
-    #     for k,v in ch.atoms.items():
-    #         if k[:3] in ligand:
-    #             lig_atoms[k] = v
-    #     for bond in ch.bonds:
-    #         if bond.a[:3] in ligand or bond.b[:3] in ligand:
-    #             lig_bonds.append(bond)
-    # for bond in covale:
-    #     if bond.a[:3] in ligand and bond.b[:3] in ligand:
-    #         lig_bonds.append(bond)
-
     lig_ch2xf = dict(item['LIGXF'])
 
-    xyz_sm, mask_sm, msa_sm, chid_sm, akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
-    mol, bond_feats_sm = cif_ligand_to_obmol(xyz_sm, akeys, lig_atoms, lig_bonds)
+    xyz_sm, mask_sm, msa_sm, chid_sm, lig_akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
+    mol, bond_feats_sm = cif_ligand_to_obmol(xyz_sm, lig_akeys, lig_atoms, lig_bonds)
     xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
+
+    # add alternate instances (binding sites, conformations) of the query ligand to symmetry dimension
+    if len(ligand) == 1: # only do this for single-residue ligands (TODO: implement multi-res case)
+        xyz_alt_s, mask_alt_s = get_alt_query_ligand(ligand[0][2], item['PARTNERS'], lig_akeys, asmb_xfs)
+        xyz_sm = torch.cat([xyz_sm]+xyz_alt_s, dim=0)
+        mask_sm = torch.cat([mask_sm]+mask_alt_s, dim=0)
 
     # clamp number of symmetry variants to save GPU memory
     if xyz_sm.shape[0] > params['MAXNSYMM']:
