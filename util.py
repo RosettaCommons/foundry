@@ -1147,8 +1147,8 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
 
     Parameters
     ----------
-    ch: dict
-        Key-value pairs representing a protein chain, as parsed by cifutils
+    ch: namedtuple
+        A protein chain as parsed by cifutils
     ch_xf : 2-tuple (chain_id, np.array:(4,4))
         The coordinate transform for this chain
     modres : dict
@@ -1341,12 +1341,14 @@ def cif_ligand_to_obmol(xyz, akeys, atoms, bonds):
     
     return mol, bond_feats
 
-def get_alt_query_ligand(ligand_name, partners, lig_akeys, asmb_xfs):
+def get_alt_query_ligand(chains, ligand_name, partners, lig_akeys, asmb_xfs):
     """Given a query ligand name and its contacting chains & transforms, return coordinates
     of other ligands with the same name but different chain, transform, and/or residue number.
 
     Parameters
     ----------
+    chains : dict
+        All the chains for this PDB entry, as parsed by cifutils
     ligand_name : str
         Name of query ligand
     partners : list of 4-tuples (chain_id, transform_index, num_contacts, chain_type)

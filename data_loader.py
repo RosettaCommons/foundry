@@ -13,7 +13,7 @@ from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTY
 from kinematics import get_chirals
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
-    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds
+    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, get_alt_query_ligand
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -1545,7 +1545,8 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
 
     # add alternate instances (binding sites, conformations) of the query ligand to symmetry dimension
     if len(ligand) == 1: # only do this for single-residue ligands (TODO: implement multi-res case)
-        xyz_alt_s, mask_alt_s = get_alt_query_ligand(ligand[0][2], item['PARTNERS'], lig_akeys, asmb_xfs)
+        xyz_alt_s, mask_alt_s = get_alt_query_ligand(chains, ligand[0][2], item['PARTNERS'], 
+                                                     lig_akeys, asmb_xfs)
         xyz_sm = torch.cat([xyz_sm]+xyz_alt_s, dim=0)
         mask_sm = torch.cat([mask_sm]+mask_alt_s, dim=0)
 
