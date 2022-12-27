@@ -30,10 +30,10 @@ ob.obErrorLog.SetOutputLevel(0)
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
-#torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -45,7 +45,7 @@ USE_AMP = False
 torch.set_num_threads(4)
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 5,
+              'num_workers': 0,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -1633,6 +1633,8 @@ class Trainer():
                 # records results
                 if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
                     item_ = unbatch_item(item)
+                    print('rank',rank)
+                    print('item',item)
                     if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
                         lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
                     else:
@@ -1683,6 +1685,9 @@ class Trainer():
         valid_loss /= float(counter*world_size)
         valid_acc /= float(counter*world_size)
 
+        print('at end')
+        print('rank',rank)
+        print('valid_tot',valid_tot)
         dist.all_reduce(valid_tot, op=dist.ReduceOp.SUM)
         dist.all_reduce(valid_loss, op=dist.ReduceOp.SUM)
         dist.all_reduce(valid_acc, op=dist.ReduceOp.SUM)
