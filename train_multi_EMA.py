@@ -539,16 +539,16 @@ class Trainer():
 
         loss_dict['total_loss'] = tot_loss.detach()
 
-        if (verbose):
-            print (
-                ctr,
-                tot_str.cpu().detach().numpy(),
-                allatom_lddt.cpu().detach().numpy(),
-                allatom_lddt_c2.cpu().detach().numpy(),
-                l_fape.cpu().detach().numpy(),
-                l_fape_B.cpu().detach().numpy(),
-                mask_BB[0].sum()
-            )
+        #if (verbose):
+            #print (
+            #    ctr,
+            #    tot_str.cpu().detach().numpy(),
+            #    allatom_lddt.cpu().detach().numpy(),
+            #    allatom_lddt_c2.cpu().detach().numpy(),
+            #    l_fape.cpu().detach().numpy(),
+            #    l_fape_B.cpu().detach().numpy(),
+            #    mask_BB[0].sum()
+            #)
             #writepdb(out_dir+"p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
             #writepdb(out_dir+"n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
             #writepdb(out_dir+"nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
@@ -645,6 +645,7 @@ class Trainer():
             return -1, best_valid_loss
         map_location = {"cuda:%d"%0: "cuda:%d"%rank}
         checkpoint = torch.load(chk_fn, map_location=map_location)
+        loaded_epoch = checkpoint['epoch']
         if rank == 0:
             print ('loading model', model_name, 'from', chk_fn, 'epoch', checkpoint['epoch'])
         new_params = False
@@ -684,7 +685,6 @@ class Trainer():
 
         #if resume_train and (not rename_model):
         if resume_train:
-            loaded_epoch = checkpoint['epoch']
             if not new_params:
                 if rank == 0: print (' ... loading optimization params')
                 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -1475,7 +1475,7 @@ class Trainer():
         
         start_time = time.time()
 
-        out_dir = self.out_dir+f'/valid_ep{epoch}{"_eval" if verbose else ""}/'
+        out_dir = self.out_dir+f'/valid_ep{epoch}/'
         os.makedirs(out_dir, exist_ok=True)
 
         if self.eval:
@@ -1489,8 +1489,7 @@ class Trainer():
                     continue
 
                 r = rng.rand()
-                save_pdbs = r<=0.1 or self.eval
-                #print('rank',rank, 'counter',counter, 'item',item, 'task',task, 'save_pdbs',save_pdbs, 'r',r)
+                save_pdbs = r<=0.1 
 
                 # transfer inputs to device
                 B, _, N, L = msa.shape
@@ -1627,6 +1626,8 @@ class Trainer():
                 valid_loss += torch.stack(list(loss_dict.values()))
                 valid_acc += acc_s.detach()
 
+                print('item',item)
+                print('valid_tot',valid_tot)
                 # records results
                 if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
                     item_ = unbatch_item(item)
@@ -1669,10 +1670,10 @@ class Trainer():
                     record.update(pred_err)
                     records.append(record)
 
-                    torch.save({'logits_pae': logit_pae_,
-                                'logits_pde': logit_pde_,
-                                'pred_lddts': pred_lddts[...,res_mask[0]]},
-                               out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_outputs.pt')
+                    #torch.save({'logits_pae': logit_pae_,
+                    #            'logits_pde': logit_pde_,
+                    #            'pred_lddts': pred_lddts[...,res_mask[0]]},
+                    #           out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_outputs.pt')
 
                 counter += 1
 
@@ -1680,7 +1681,11 @@ class Trainer():
         valid_loss /= float(counter*world_size)
         valid_acc /= float(counter*world_size)
 
-        dist.all_reduce(valid_tot, op=dist.ReduceOp.SUM)
+        try:
+            dist.all_reduce(valid_tot, op=dist.ReduceOp.SUM)
+        except Exception as e:
+            print('valid_tot.shape',valid_tot.shape)
+            raise e
         dist.all_reduce(valid_loss, op=dist.ReduceOp.SUM)
         dist.all_reduce(valid_acc, op=dist.ReduceOp.SUM)
        

@@ -49,7 +49,7 @@ if not os.path.exists(base_dir):
     na_dir = "/gscratch2/nucleic"
     fb_dir = "/gscratch2/fb_af1"
     sm_compl_dir = "/gscratch2/RF2_allatom"
-    mol_dir = "/gscratch2/RF2_allatom/isdf"
+    mol_dir = "/gscratch2/RF2_allatom/rcsb/pkl"
     csd_dir = "/gscratch2/RF2_allatom/csd543"
 
 def set_data_loader_params(args):
@@ -2265,7 +2265,8 @@ def get_sm_compl_item(data_df, cluster_id, dedup_ligand=True):
     if dedup_ligand:
         # uniform sample from unique ligands
         lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
-        tmp_df = tmp_df[tmp_df['LIGAND'].apply(lambda x: x[0][2]==np.random.choice(lignames))]
+        lig_choice = np.random.choice(lignames)
+        tmp_df = tmp_df[tmp_df['LIGAND'].apply(lambda x: x[0][2]==lig_choice)]
 
     item = tmp_df.sample(1).to_dict(orient='records')[0] # choose 1 random row
 
@@ -2290,7 +2291,12 @@ class DatasetSMComplex(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        item = get_sm_compl_item(self.item_df, ID)
+        try:
+            item = get_sm_compl_item(self.item_df, ID)
+        except Exception as e:
+            print('task',self.task)
+            print('ID',ID)
+            raise e
         out = self.loader(
             item,
             self.params,

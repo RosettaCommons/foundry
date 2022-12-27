@@ -1366,7 +1366,9 @@ def get_alt_query_ligand(chains, ligand_name, partners, lig_akeys, asmb_xfs):
     lig_anames = [k[3] for k in lig_akeys]
     xyz_alt_s = []
     mask_alt_s = []
+
     for partner in partners:
+        if partner[3] != 'nonpoly': continue # skip non-small-molecule chains
 
         # gather all atoms and bonds on partner chain with the same name as query ligand
         alt_lig_atoms = dict()

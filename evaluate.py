@@ -72,9 +72,8 @@ class Evaluator(Trainer):
             get_train_valid_set(self.loader_param)
 
         train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
-        valid_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
-        weights_dict['atomize_pdb'] = weights_dict['pdb']
         train_dict['atomize_pdb'] = train_dict['pdb']
+        weights_dict['atomize_pdb'] = weights_dict['pdb']
         valid_ID_dict['atomize_pdb'] = valid_ID_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
 
@@ -295,16 +294,17 @@ class Evaluator(Trainer):
             # load this epoch's checkpoint
             loaded_epoch, best_valid_loss = self.load_model(ddp_model, self.model_name, gpu, 
                                                             suffix=str(epoch), resume_train=False)
-            if loaded_epoch == -2:
+            if loaded_epoch == -1:
                 print(f'Checkpoint doesn\'t exist for epoch {epoch}. Quitting.')
                 dist.destroy_process_group()
                 return
 
-            rng = np.random.RandomState(seed=epoch*world_size+rank)
+            #rng = np.random.RandomState(seed=epoch*world_size+rank)
+            rng = np.random.RandomState(seed=rank) # output pdbs for the same examples on each epoch
 
             df_s = []
             for k,v in valid_loaders.items():
-                valid_tot_, valid_loss_, valid_acc_, loss_df= self.valid_pdb_cycle(ddp_model, 
+                valid_tot_, valid_loss_, valid_acc_, loss_df = self.valid_pdb_cycle(ddp_model, 
                     v, rank, gpu, world_size, epoch, rng, header=valid_headers[k], 
                     verbose = self.eval) 
                 df_s.append(loss_df)
