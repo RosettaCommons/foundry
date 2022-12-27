@@ -2025,6 +2025,9 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
 
     # handle chain_idx
     chain_idx = torch.ones((sum(Ls), sum(Ls))).long()
+    node_type = torch.zeros((sum(Ls), sum(Ls))).long() # holds 2D information on whether atom to atom interaction or residue to residue
+    node_type[:Ls[0], :Ls[0]] = 1
+    node_type[Ls[0]:, Ls[0]:] = 1 
     
     # remove msa features for atomized portion
     i1 = i_start - flank
@@ -2043,6 +2046,8 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     mask_t = torch.cat((mask_t[:, :i1], mask_t[:, i2:]), dim=1)
     chain_idx = torch.cat((chain_idx[ :i1], chain_idx[i2:]), dim=0)
     chain_idx = torch.cat((chain_idx[ :, :i1], chain_idx[:, i2:]), dim=1)
+    node_type = torch.cat((node_type[ :i1], node_type[i2:]), dim=0)
+    node_type = torch.cat((node_type[ :, :i1], node_type[:, i2:]), dim=1)
     bond_feats = torch.cat((bond_feats[ :i1], bond_feats[i2:]), dim=0)
     bond_feats = torch.cat((bond_feats[ :, :i1], bond_feats[:, i2:]), dim=1)
 
@@ -2051,7 +2056,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     mask_prev = mask_t[0].clone()
     xyz = torch.nan_to_num(xyz)
     if chirals.shape[0]>0:
-        L1 = chain_idx[0,:].sum()
+        L1 = node_type[0,:].sum()
         chirals[:, :-1] = chirals[:, :-1] +L1
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
