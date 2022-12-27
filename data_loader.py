@@ -2265,8 +2265,8 @@ def get_sm_compl_item(data_df, cluster_id, dedup_ligand=True):
     if dedup_ligand:
         # uniform sample from unique ligands
         lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
-        lig_choice = np.random.choice(lignames)
-        tmp_df = tmp_df[tmp_df['LIGAND'].apply(lambda x: x[0][2]==lig_choice)]
+        chosen_lig = np.random.choice(lignames)
+        tmp_df = tmp_df[tmp_df['LIGAND'].apply(lambda x: x[0][2]==chosen_lig)]
 
     item = tmp_df.sample(1).to_dict(orient='records')[0] # choose 1 random row
 
