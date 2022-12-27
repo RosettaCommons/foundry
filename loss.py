@@ -191,7 +191,7 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     # flatten middle dims so can gather across residues
     X_prime = X.reshape(N, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
     Y_prime = Y.reshape(1, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
-    
+
     # reindex frames for flat X
     frames_reindex = torch.zeros(frames.shape[:-1], device=frames.device)
     for i in range(L):
@@ -199,6 +199,7 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     frames_reindex = frames_reindex.long()
 
     masked_atom_frames = torch.any(frames_reindex>L*natoms, dim=-1) # find frames with atoms that aren't resolved
+    masked_atom_frames *= torch.any(frames_reindex<0, dim=-1)
     frame_mask *= ~masked_atom_frames 
     # There are currently indices for frames that aren't in the coordinates bc they arent resolved, reset these indices to 0 to avoid 
     # indexing errors

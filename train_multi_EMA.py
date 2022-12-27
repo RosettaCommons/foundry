@@ -187,7 +187,6 @@ class Trainer():
         assert (B==1) # fd - code assumes a batch size of 1
         
         tot_loss = 0.0
-
         # set up frames
         frames, frame_mask = get_frames(
             pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
@@ -221,32 +220,36 @@ class Trainer():
         # Structural loss (layer-wise backbone FAPE)
         dclamp = 300.0 if unclamp else 30.0 # protein & NA FAPE distance cutoffs
         dclamp_sm, Z_sm = 4, 4  # sm mol FAPE distance cutoffs
+        # residue mask for FAPE calculation only masks unresolved backbone atoms
+        # whereas other losses also maks unresolved ligand atoms (mask_BB)
+        # frames with unresolved ligand atoms are masked in compute_general_FAPE
+        res_mask = ~((mask_crds[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(seq)))
 
         L1 = same_chain[0,0,:].sum()
-        mask_BBA = mask_BB.clone()
-        mask_BBA[0, L1:] = False
-        if torch.sum(mask_BBA)>0 and torch.sum(frame_mask_BB[:,mask_BBA[0]])>0:
+        res_mask_A = res_mask.clone()
+        res_mask_A[0, L1:] = False
+        if torch.sum(res_mask_A)>0 and torch.sum(frame_mask_BB[:,res_mask_A[0]])>0:
             l_fape_A, _, _ = compute_general_FAPE(
-                pred[:,mask_BBA,:,:3],
-                true[:,mask_BBA[0],:3],
-                mask_crds[:,mask_BBA[0], :3],
-                frames_BB[:,mask_BBA[0]],
-                frame_mask_BB[:,mask_BBA[0]],
+                pred[:,res_mask_A,:,:3],
+                true[:,res_mask_A[0],:3],
+                mask_crds[:,res_mask_A[0], :3],
+                frames_BB[:,res_mask_A[0]],
+                frame_mask_BB[:,res_mask_A[0]],
                 dclamp=dclamp
             )
         else:
             l_fape_A = torch.tensor([0]).to(gpu)
         loss_dict['bb_fape_c1'] = l_fape_A[-1].detach()
 
-        mask_BBB = mask_BB.clone()
-        mask_BBB[0,:L1] = False
-        if torch.sum(mask_BBB)>0 and torch.sum(frame_mask_BB[:,mask_BBB[0]])>0:
+        res_mask_B = res_mask.clone()
+        res_mask_B[0,:L1] = False
+        if torch.sum(res_mask_B)>0 and torch.sum(frame_mask_BB[:,res_mask_B[0]])>0:
             l_fape_B, _, _ = compute_general_FAPE(
-                pred[:, mask_BBB,:,:3],
-                true[:,mask_BBB[0],:3,:3],
-                mask_crds[:,mask_BBB[0], :3],
-                frames_BB[:,mask_BBB[0]],
-                frame_mask_BB[:,mask_BBB[0]],
+                pred[:, res_mask_B,:,:3],
+                true[:,res_mask_B[0],:3,:3],
+                mask_crds[:,res_mask_B[0], :3],
+                frames_BB[:,res_mask_B[0]],
+                frame_mask_BB[:,res_mask_B[0]],
                 dclamp=dclamp
             )
         else:
@@ -291,7 +294,7 @@ class Trainer():
         loss_dict['pde_loss'] = pde_loss.detach()
 
         # small-molecule ligands
-        sm_res_mask = is_atom(label_aa_s[0,0])*mask_BB[0] # (L,)
+        sm_res_mask = is_atom(label_aa_s[0,0])*res_mask[0] # (L,)
         if bool(torch.any(sm_res_mask)) and torch.any(frame_mask_BB[0,sm_res_mask]):
             # ligand fape (layer-averaged fape on atom coordinates with atom frames)
             l_fape_sm, _, _ = compute_general_FAPE(
@@ -405,23 +408,23 @@ class Trainer():
         #     pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
         if negative: # inter-chain fapes should be ignored for negative cases
             # L1 = same_chain[0,0,:].sum()
-            # mask_BBA = mask_BB.clone()
-            # mask_BBA[0, L1:] = False
+            # res_mask_A = mask_BB.clone()
+            # res_mask_A[0, L1:] = False
             l_fape_A, _, _ = compute_general_FAPE(
-                pred_allatom[:,mask_BBA[0],:,:3],
-                nat_symm[None,mask_BBA[0],:,:3],
-                xs_mask[:,mask_BBA[0]],
-                frames[:,mask_BBA[0]],
-                frame_mask[:,mask_BBA[0]]
+                pred_allatom[:,res_mask_A[0],:,:3],
+                nat_symm[None,res_mask_A[0],:,:3],
+                xs_mask[:,res_mask_A[0]],
+                frames[:,res_mask_A[0]],
+                frame_mask[:,res_mask_A[0]]
             )
-            # mask_BBB = mask_BB.clone()
-            # mask_BBB[0,:L1] = False
+            # res_mask_B = mask_BB.clone()
+            # res_mask_B[0,:L1] = False
             l_fape_B, _, _ = compute_general_FAPE(
-                pred_allatom[:,mask_BBB[0],:,:3],
-                nat_symm[None,mask_BBB[0],:,:3],
-                xs_mask[:,mask_BBB[0]],
-                frames[:,mask_BBB[0]],
-                frame_mask[:,mask_BBB[0]]
+                pred_allatom[:,res_mask_B[0],:,:3],
+                nat_symm[None,res_mask_B[0],:,:3],
+                xs_mask[:,res_mask_B[0]],
+                frames[:,res_mask_B[0]],
+                frame_mask[:,res_mask_B[0]]
             )
             fracA = float(L1)/len(same_chain[0,0])
             l_fape = fracA*l_fape_A + (1.0-fracA)*l_fape_B
@@ -451,10 +454,10 @@ class Trainer():
             rmsd = torch.tensor([0])
             loss_dict['rmsd'] = torch.tensor([0])
 
-        if torch.any(mask_BBB):
+        if torch.any(res_mask_B):
             xs_mask_c1, xs_mask_c2 = xs_mask.clone(), xs_mask.clone()
-            xs_mask_c1[:,~mask_BBA[0]] = False
-            xs_mask_c2[:,~mask_BBB[0]] = False
+            xs_mask_c1[:,~res_mask_A[0]] = False
+            xs_mask_c2[:,~res_mask_B[0]] = False
             rmsd_c1_c1 = calc_crd_rmsd(
                 pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
                 atom_mask=xs_mask_c1[:,mask_BB[0]], rmsd_mask=xs_mask_c1[:,mask_BB[0]]
@@ -1326,7 +1329,7 @@ class Trainer():
                     )
 
                     true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-                    #res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                    # res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
                     res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
                     mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
@@ -1599,8 +1602,8 @@ class Trainer():
 
                 true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
-                #res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
-                res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
+                res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                # res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
                 mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
