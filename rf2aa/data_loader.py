@@ -717,10 +717,17 @@ def get_train_valid_set(params, OFFSET=1000000, no_match_okay = False):
             print (f'Loaded {params["DATAPKL"]} in {elapsed:.1f}s')
             diff = deepdiff.DeepDiff(params, gen_params, ignore_order=True)
             if diff:
-                print(f'cache miss: dataset generation parameters passed to train multi differ from those in the dataset pkl:')
-                print(diff)
-                if not no_match_okay:
-                    raise Exception(diff)
+                ignore = ['DATASETS', 'DATASET_PROB']
+                changed = set(diff['values_changed'])
+                ic(changed)
+                for ig in ignore:
+                    changed.remove(f"root['{ig}']")
+                if changed:
+                    ic(changed)
+                    print(f'cache miss: dataset generation parameters passed to train multi differ from those in the dataset pkl:')
+                    print(diff)
+                    if not no_match_okay:
+                        raise Exception(diff)
 
     return (
         (pdb_IDs, torch.tensor(pdb_weights).float(), train_pdb), \
