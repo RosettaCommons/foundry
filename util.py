@@ -1191,7 +1191,7 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
         i_res = int(k[1])-i_min
         if k[2] in aa2num: # standard AA
             aa = aa2num[k[2]]
-        elif k[2] in modres: # nonstandard AA, map to standard
+        elif k[2] in modres and modres[k[2]] in aa2num: # nonstandard AA, map to standard
             #print('nonstandard AA',k,modres[k[2]])
             aa = aa2num[modres[k[2]]]
         else: # unknown AA, still try to store BB atoms

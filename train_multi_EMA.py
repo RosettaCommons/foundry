@@ -1629,13 +1629,9 @@ class Trainer():
                 valid_loss += torch.stack(list(loss_dict.values()))
                 valid_acc += acc_s.detach()
 
-                print('item',item)
-                print('valid_tot',valid_tot)
                 # records results
                 if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
                     item_ = unbatch_item(item)
-                    print('rank',rank)
-                    print('item',item)
                     if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
                         lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
                     else:
