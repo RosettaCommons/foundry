@@ -1287,6 +1287,7 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
     # apply transforms
     chid = np.array(chid)
     for i_ch in np.unique(chid):
+        if i_ch not in ch2xf: continue # indicates ligand chains with zero occupied atoms
         idx = chid==i_ch
         xf = torch.tensor(asmb_xfs[ch2xf[i_ch]][1]).float()
         u,r = xf[:3,:3], xf[:3,3]

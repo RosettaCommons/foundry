@@ -62,7 +62,7 @@ def set_data_loader_params(args):
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
         "SM_LIST"          : "%s/sm_compl_20221214.csv"%sm_compl_dir, 
         "MET_LIST"         : "%s/metal_compl_20221214.csv"%sm_compl_dir, 
-        "SM_MULTI_LIST"    : "%s/sm_compl_multi_20221215.csv"%sm_compl_dir, 
+        "SM_MULTI_LIST"    : "%s/sm_compl_multi_20221227.csv"%sm_compl_dir, 
         "SM_COVALE_LIST"   : "%s/20221218_list_covalent_filtered_final.csv"%sm_compl_dir,
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
@@ -73,7 +73,7 @@ def set_data_loader_params(args):
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20221216.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221220.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20221227.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -574,6 +574,8 @@ def get_train_valid_set(params, OFFSET=1000000):
             _parse_sm_compl_df(params['MET_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
         train_sm_compl_multi, valid_sm_compl_multi, sm_compl_multi_IDs, sm_compl_multi_weights = \
             _parse_sm_compl_df(params['SM_MULTI_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
+        train_sm_compl_multi = train_sm_compl_multi[train_sm_compl_multi['LIGATOMS']<=params['CROP']//2]
+        valid_sm_compl_multi = valid_sm_compl_multi[valid_sm_compl_multi['LIGATOMS']<=params['CROP']//2]
         train_sm_compl_covale, valid_sm_compl_covale, sm_compl_covale_IDs, sm_compl_covale_weights = \
             _parse_sm_compl_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
 
