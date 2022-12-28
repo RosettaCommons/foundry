@@ -30,10 +30,10 @@ ob.obErrorLog.SetOutputLevel(0)
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
-torch.autograd.set_detect_anomaly(True)
+#torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -45,7 +45,7 @@ USE_AMP = False
 torch.set_num_threads(4)
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 0,
+              'num_workers': 5,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
