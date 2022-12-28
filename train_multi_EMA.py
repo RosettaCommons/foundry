@@ -1158,7 +1158,6 @@ class Trainer():
         for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in train_loader:
             # skip known bad training examples
             # loader will print warning message with item info for followup later
-            print(item)
             if torch.is_tensor(item) and torch.all(item==-1):
                 continue
             r = rng.rand()
