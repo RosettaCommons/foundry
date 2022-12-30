@@ -1,6 +1,6 @@
 import torch
 from torch.utils import data
-import os, csv, random, pickle, gzip, itertools
+import os, csv, random, pickle, gzip, itertools, time
 from dateutil import parser
 import numpy as np
 import pandas as pd
@@ -135,7 +135,7 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
     Input: full MSA information (after Block deletion if necessary) & full insertion information
     Output: seed MSA features & extra sequences
     
-    Seed MSA features:
+    Seed MSA features:, time
         - aatype of seed sequence (20 regular aa + 1 gap/unknown + 1 mask)
         - profile of clustered sequences (22)
         - insertion statistics (2)
@@ -357,6 +357,8 @@ def get_train_valid_set(params, OFFSET=1000000):
         print(f'cached train/valid datasets {params["DATAPKL"]} not found. '\
               f're-parsing train/valid metadata...')
 
+        t0 = time.time()
+
         # read validation IDs for PDB set
         val_pdb_ids = set([int(l) for l in open(params['VAL_PDB']).readlines()])
         val_compl_ids = set([int(l) for l in open(params['VAL_COMPL']).readlines()])
@@ -575,6 +577,10 @@ def get_train_valid_set(params, OFFSET=1000000):
             _prep_sm_compl_data(df)
 
         df = load_df(params['SM_COVALE_LIST'], params, eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
+        df = df[
+            (df['CHAINID']!='3dpm_A') & # has mismatched ligand cif & sdf files
+            (df['CHAINID']!='3dpm_B')   # has mismatched ligand cif & sdf files
+        ] 
         train_sm_compl_covale, valid_sm_compl_covale, sm_compl_covale_IDs, sm_compl_covale_weights = \
             _prep_sm_compl_data(df)
 
@@ -689,6 +695,8 @@ def get_train_valid_set(params, OFFSET=1000000):
             sm = np.array(list(valid_sm.keys())),
         )
       
+        print(f'Data parsing done in {time.time() - t0} seconds')
+
         # save
         with open(params["DATAPKL"], "wb") as f:
             print ('Writing',params["DATAPKL"],'...')
