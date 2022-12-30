@@ -549,12 +549,7 @@ def get_train_valid_set(params, OFFSET=1000000):
                 train_rna[i] = [(r[0], r[-1])]
 
         # protein-small molecule complexes
-        def _parse_sm_compl_df(filename, eval_cols=None):
-            if eval_cols is None:
-                eval_cols = []
-
-            df = load_df(filename, params, eval_cols=eval_cols)
-
+        def _prep_sm_compl_data(df):
             seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
             df['WEIGHT'] = seq_len_factor
 
@@ -568,16 +563,20 @@ def get_train_valid_set(params, OFFSET=1000000):
 
             return train_df, valid_df, IDs, weights
 
-        train_sm_compl, valid_sm_compl, sm_compl_IDs, sm_compl_weights = \
-            _parse_sm_compl_df(params['SM_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
-        train_metal_compl, valid_metal_compl, metal_compl_IDs, metal_compl_weights = \
-            _parse_sm_compl_df(params['MET_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
+        df = load_df(params['SM_LIST'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
+        train_sm_compl, valid_sm_compl, sm_compl_IDs, sm_compl_weights = _prep_sm_compl_data(df)
+
+        df = load_df(params['MET_LIST'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
+        train_metal_compl, valid_metal_compl, metal_compl_IDs, metal_compl_weights = _prep_sm_compl_data(df)
+
+        df = load_df(params['SM_MULTI_LIST'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
+        df = df[df['LIGATOMS']<=params['CROP']//2]
         train_sm_compl_multi, valid_sm_compl_multi, sm_compl_multi_IDs, sm_compl_multi_weights = \
-            _parse_sm_compl_df(params['SM_MULTI_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
-        train_sm_compl_multi = train_sm_compl_multi[train_sm_compl_multi['LIGATOMS']<=params['CROP']//2]
-        valid_sm_compl_multi = valid_sm_compl_multi[valid_sm_compl_multi['LIGATOMS']<=params['CROP']//2]
+            _prep_sm_compl_data(df)
+
+        df = load_df(params['SM_COVALE_LIST'], params, eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
         train_sm_compl_covale, valid_sm_compl_covale, sm_compl_covale_IDs, sm_compl_covale_weights = \
-            _parse_sm_compl_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
+            _prep_sm_compl_data(df)
 
         valid_sm_compl_strict = load_df(params['VAL_SM_STRICT'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
 
@@ -1739,7 +1738,11 @@ def loader_sm_compl_covale(item, params, pick_top=True,
 
     xyz_sm, mask_sm, msa_sm, chid_sm, akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
     mol, bond_feats_sm = cif_ligand_to_obmol(xyz_sm, akeys, lig_atoms, lig_bonds)
-    xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
+    try:
+        xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
+    except Exception as e:
+        print('error in loader_sm_compl',item)
+        raise e
 
     if xyz_sm.shape[0] > params['MAXNSYMM']: 
         xyz_sm = xyz_sm[:params['MAXNSYMM']]
@@ -2266,7 +2269,11 @@ def get_sm_compl_item(data_df, cluster_id, dedup_ligand=True):
     tmp_df = data_df[data_df.CLUSTER==cluster_id]
 
     # uniformly sample from unique PDB chains
-    chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
+    try:
+        chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
+    except Exception as e:
+        print('error in get_sm_compl_item',cluster_id)
+        raise e
     tmp_df = tmp_df[tmp_df.CHAINID==chid]
 
     if dedup_ligand:
