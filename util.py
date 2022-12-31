@@ -1407,18 +1407,23 @@ def get_alt_query_ligand(chains, ligand_name, partners, lig_akeys, asmb_xfs):
 
 def get_automorphs(mol, xyz_sm, mask_sm):
     """Enumerate atom symmetry permutations."""
-    automorphs = openbabel.vvpairUIntUInt()
-    openbabel.FindAutomorphisms(mol, automorphs)
+    try:
 
-    automorphs = torch.tensor(automorphs)
-    n_symmetry = automorphs.shape[0]
+        automorphs = openbabel.vvpairUIntUInt()
+        openbabel.FindAutomorphisms(mol, automorphs)
 
-    xyz_sm = xyz_sm[None].repeat(n_symmetry,1,1)
-    mask_sm = mask_sm[None].repeat(n_symmetry,1)
+        automorphs = torch.tensor(automorphs)
+        n_symmetry = automorphs.shape[0]
 
-    xyz_sm = torch.scatter(xyz_sm, 1, automorphs[:,:,0:1].repeat(1,1,3),
-                                torch.gather(xyz_sm,1,automorphs[:,:,1:2].repeat(1,1,3)))
-    mask_sm = torch.scatter(mask_sm, 1, automorphs[:,:,0],
-                         torch.gather(mask_sm, 1, automorphs[:,:,1]))
+        xyz_sm = xyz_sm[None].repeat(n_symmetry,1,1)
+        mask_sm = mask_sm[None].repeat(n_symmetry,1)
+
+        xyz_sm = torch.scatter(xyz_sm, 1, automorphs[:,:,0:1].repeat(1,1,3),
+                                    torch.gather(xyz_sm,1,automorphs[:,:,1:2].repeat(1,1,3)))
+        mask_sm = torch.scatter(mask_sm, 1, automorphs[:,:,0],
+                            torch.gather(mask_sm, 1, automorphs[:,:,1]))
+    except Exception as e:
+        xyz_sm = xyz_sm.unsqueeze(0)
+        mask_sm = mask_sm.unsqueeze(0)
 
     return xyz_sm, mask_sm
