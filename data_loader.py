@@ -1591,6 +1591,12 @@ def loader_sm_compl_covale(item, params, pick_top=True, task='sm_compl_covale',
     pdb_chain, pdb_hash = item['CHAINID'], item['HASH'] 
     ligand = item['LIGAND'] # list of (lig_chain, lig_res_num, lig_name)
     covalent = item["COVALENT"] 
+    # Check if any of the covalent bonds are to hyodrgens, these are sent to the loader_sm_compl
+    for bond in covalent:
+        for atom in bond:
+            if atom[3][0] == "H":
+                return loader_sm_compl(item, params, pick_top, init_protein_tmpl, init_ligand_tmpl, init_protein_xyz, init_ligand_xyz, random_noise)
+    
     pdb_id, i_ch_prot = pdb_chain.split('_')
 
     ### Load protein
@@ -2060,7 +2066,6 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
     # uniformly sample from unique PDB chains
     chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
     tmp_df = tmp_df[tmp_df.CHAINID==chid]
-
     if dedup_ligand:
         # uniform sample from unique ligands
         lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
