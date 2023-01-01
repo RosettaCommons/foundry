@@ -1882,11 +1882,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
                   f'fully-resolved residues to atomize. {item} i_start={i_start}')
             break
 
-    try:
-        msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
-    except Exception as e:
-        print('atomize_protein failed on ', item, 'with n_res_atomize', n_res_atomize,', flank',flank, ', i_start',i_start)
-        raise e
+    msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
         
     # generate blank template for atoms
     tplt_sm = {"ids":[]}
@@ -2255,7 +2251,7 @@ class DistilledDataset(data.Dataset):
         offset += len(self.index_dict['pdb'])
 
         if index >= offset and index < offset + len(self.index_dict['fb']):
-            ID = self.ID_dict['fb'][index]
+            ID = self.ID_dict['fb'][index-offset]
             item = sample_item(self.dataset_dict['fb'], ID)
             out = self.loader_dict['fb'](item, self.params, unclamp=(p_unclamp > self.unclamp_cut))
         offset += len(self.index_dict['fb'])
