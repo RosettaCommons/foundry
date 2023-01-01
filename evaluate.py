@@ -72,88 +72,28 @@ class Evaluator(Trainer):
             get_train_valid_set(self.loader_param)
 
         train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
-        train_dict['atomize_pdb'] = train_dict['pdb']
-        weights_dict['atomize_pdb'] = weights_dict['pdb']
         valid_ID_dict['atomize_pdb'] = valid_ID_dict['pdb']
+        weights_dict['atomize_pdb'] = weights_dict['pdb']
+        train_dict['atomize_pdb'] = train_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
 
-        if self.dataset_param['n_valid_pdb'] is None: 
-            self.dataset_param["n_valid_pdb"] = len(valid_dict['pdb']) 
-        if self.dataset_param['n_valid_homo'] is None: 
-            self.dataset_param["n_valid_homo"] = len(valid_dict['homo']) 
-        if self.dataset_param["n_valid_compl"] is None: 
-            self.dataset_param["n_valid_compl"] = len(valid_dict['compl'])
-        if self.dataset_param["n_valid_na_compl"] is None: 
-            self.dataset_param["n_valid_na_compl"] = len(valid_dict['na_compl'])
-        if self.dataset_param["n_valid_rna"] is None: 
-            self.dataset_param["n_valid_rna"] = len(valid_dict['rna'])
-        if self.dataset_param["n_valid_sm_compl"] is None: 
-            self.dataset_param["n_valid_sm_compl"] = \
-                len(valid_dict['sm_compl']['CLUSTER'].drop_duplicates())
-        if self.dataset_param["n_valid_metal_compl"] is None: 
-            self.dataset_param["n_valid_metal_compl"] = \
-                len(valid_dict['metal_compl']['CLUSTER'].drop_duplicates())
-        if self.dataset_param["n_valid_sm_compl_multi"] is None: 
-            self.dataset_param["n_valid_sm_compl_multi"] = \
-                len(valid_dict['sm_compl_multi']['CLUSTER'].drop_duplicates())
-        if self.dataset_param["n_valid_sm_compl_covale"] is None: 
-            self.dataset_param["n_valid_sm_compl_covale"] = \
-                len(valid_dict['sm_compl_covale']['CLUSTER'].drop_duplicates())
-        if self.dataset_param["n_valid_sm_compl_strict"] is None: 
-            self.dataset_param["n_valid_sm_compl_strict"] = \
-                len(valid_dict['sm_compl_strict'])
-        if self.dataset_param["n_valid_sm"] is None: 
-            self.dataset_param["n_valid_sm"] = len(valid_dict['sm'])
-        if self.dataset_param["n_valid_atomize_pdb"] is None: 
-            self.dataset_param["n_valid_atomize_pdb"] = len(valid_dict['pdb'])
+        # set number of validation examples being used
+        for k in valid_dict:
+            if self.dataset_param['n_valid_'+k] is None:
+                self.dataset_param["n_valid_"+k] = len(valid_dict[k])
 
         if (rank==0):
-            print ('Loaded (training)',
-                len(train_ID_dict['pdb']),'monomers/homomers,',
-                len(train_ID_dict['fb']),'distilled monomers,',
-                len(train_ID_dict['compl']),'heteromers,',
-                len(train_ID_dict['neg']),'negative heteromers,',
-                len(train_ID_dict['na_compl']),'nucleic-acid complexes,',
-                len(train_ID_dict['na_neg']),'negative nucleic-acid complexes,',
-                len(train_ID_dict['rna']),'RNA structures,',
-                len(train_ID_dict['sm_compl']), 'small molecule complexes, and',
-                len(train_ID_dict['metal_compl']), 'metal ion complexes, and',
-                len(train_ID_dict['sm_compl_multi']), 'multi-res ligand complexes, and',
-                len(train_ID_dict['sm_compl_covale']), 'covalent ligand complexes, and',
-                len(train_ID_dict['sm']), "small molecule crystals."
-            )
-            print ('Loaded (valid)',
-                len(valid_ID_dict['pdb']),'monomers,',
-                len(valid_ID_dict['homo']),'homomers,',
-                len(valid_ID_dict['compl']),'heteromers,',
-                len(valid_ID_dict['neg']),'negative heteromers,',
-                len(valid_ID_dict['na_compl']),'nucleic-acid complexes,',
-                len(valid_ID_dict['na_neg']),'negative nucleic-acid complexes,',
-                len(valid_ID_dict['rna']),'RNA structures,',
-                len(valid_ID_dict['sm_compl']), 'small molecule complexes,',
-                len(valid_ID_dict['metal_compl']), 'metal ion complexes,',
-                len(valid_ID_dict['sm_compl_multi']), 'multi-res ligand complexes,',
-                len(valid_ID_dict['sm_compl_covale']), 'covalent ligand complexes,',
-                len(valid_ID_dict['sm_compl_strict']), 'small molecule complexes (strict),',
-                len(valid_ID_dict['sm']), 'small molecule crystals.'
-            )
+            print('Number of training clusters / examples:')
+            for k in train_ID_dict:
+                print('  '+k, ':', len(train_ID_dict[k]), '/', len(train_dict[k]))
 
-            print ('Using',
-                self.dataset_param['n_valid_pdb'],'monomers,',
-                self.dataset_param['n_valid_homo'],'homomers,',
-                self.dataset_param['n_valid_compl'],'heteromers,',
-                self.dataset_param['n_valid_neg'],'negative heteromers,',
-                self.dataset_param['n_valid_na_compl'],'nucleic-acid complexes,',
-                self.dataset_param['n_valid_na_neg'],'negative nucleic-acid complexes,',
-                self.dataset_param['n_valid_rna'],'RNA structures,',
-                self.dataset_param['n_valid_sm_compl'], 'small mol. complexes,',
-                self.dataset_param['n_valid_metal_compl'], 'metal ion complexes,',
-                self.dataset_param['n_valid_sm_compl_multi'], 'multi-res ligand complexes,',
-                self.dataset_param['n_valid_sm_compl_covale'], 'covalent ligand complexes,',
-                self.dataset_param['n_valid_sm_compl_strict'], 'small molecule complexes (strict),',
-                self.dataset_param['n_valid_sm'], "small molecule crystals,",
-                self.dataset_param['n_valid_atomize_pdb'],'monomers (atomized)',
-            )
+            print('Number of validation clusters / examples:')
+            for k in valid_ID_dict:
+                print('  '+k, ':', len(valid_ID_dict[k]), '/', len(valid_dict[k]))
+
+            print('Using number of validation examples:')
+            for k in valid_dict:
+                print('  '+k, ':', self.dataset_param['n_valid_'+k])
 
         seed = 0 # always draw the same example from each cluster
 
@@ -161,67 +101,67 @@ class Evaluator(Trainer):
             pdb = Dataset(
                 valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
                 loader_pdb, valid_dict['pdb'],
-                self.loader_param, homo, p_homo_cut=-1.0
+                self.loader_param, homo, p_homo_cut=-1.0, seed=seed
             ),
             homo = Dataset(
                 valid_ID_dict['homo'][:self.dataset_param['n_valid_homo']],
                 loader_pdb, valid_dict['homo'],
-                self.loader_param, homo, p_homo_cut=2.0
+                self.loader_param, homo, p_homo_cut=2.0, seed=seed
             ),
             compl = DatasetComplex(
                 valid_ID_dict['compl'][:self.dataset_param['n_valid_compl']],
                 loader_complex, valid_dict['compl'],
-                self.loader_param, negative=False
+                self.loader_param, negative=False, seed=seed
             ),
             na_compl = DatasetNAComplex(
                 valid_ID_dict['na_compl'][:self.dataset_param['n_valid_na_compl']],
                 loader_na_complex, valid_dict['na_compl'],
-                self.loader_param, negative=False, native_NA_frac=1.0
+                self.loader_param, negative=False, native_NA_frac=1.0, seed=seed
             ),
             na_from_scratch_compl = DatasetNAComplex(
                 valid_ID_dict['na_compl'][:self.dataset_param['n_valid_na_compl']],
                 loader_na_complex, valid_dict['na_compl'],
-                self.loader_param, negative=False, native_NA_frac=0.0
+                self.loader_param, negative=False, native_NA_frac=0.0, seed=seed
             ),
             rna = DatasetRNA(
                 valid_ID_dict['rna'][:self.dataset_param['n_valid_rna']],
                 loader_rna, valid_dict['rna'],
-                self.loader_param
+                self.loader_param, seed=seed
             ),
             sm_compl = DatasetSMComplex(
                 valid_ID_dict['sm_compl'][:self.dataset_param['n_valid_sm_compl']],
                 loader_sm_compl, valid_dict['sm_compl'],
-                self.loader_param,
+                self.loader_param, seed=seed
             ),
             metal_compl = DatasetSMComplex(
                 valid_ID_dict['metal_compl'][:self.dataset_param['n_valid_metal_compl']],
                 loader_sm_compl, valid_dict['metal_compl'],
-                self.loader_param, task='metal_compl'
+                self.loader_param, task='metal_compl', seed=seed
             ),
             sm_compl_multi = DatasetSMComplex(
                 valid_ID_dict['sm_compl_multi'][:self.dataset_param['n_valid_sm_compl_multi']],
                 loader_sm_compl, valid_dict['sm_compl_multi'],
-                self.loader_param, task='sm_compl_multi'
+                self.loader_param, task='sm_compl_multi', seed=seed
             ),
             sm_compl_covale = DatasetSMComplex(
                 valid_ID_dict['sm_compl_covale'][:self.dataset_param['n_valid_sm_compl_covale']],
                 loader_sm_compl_covale, valid_dict['sm_compl_covale'],
-                self.loader_param, task='sm_compl_covale'
+                self.loader_param, task='sm_compl_covale', seed=seed
             ),
             sm_compl_strict = DatasetSMComplex(
                 valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
                 loader_sm_compl, valid_dict['sm_compl_strict'],
-                self.loader_param, task='sm_compl_strict'
+                self.loader_param, task='sm_compl_strict', seed=seed
             ),
             sm = DatasetSM(
                 valid_ID_dict['sm'][:self.dataset_param['n_valid_sm']],
                 loader_sm, valid_dict['sm'],
-                self.loader_param,
+                self.loader_param, seed=seed
             ),
             atomize_pdb = Dataset(
                 valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
                 loader_atomize_pdb, valid_dict['atomize_pdb'],
-                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
+                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0, seed=seed
             )
         )
         valid_headers = dict(

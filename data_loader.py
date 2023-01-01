@@ -7,6 +7,7 @@ import pandas as pd
 import ast
 import scipy
 from scipy.sparse.csgraph import shortest_path
+from collections import OrderedDict
 
 from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP, num2aa
@@ -73,7 +74,7 @@ def set_data_loader_params(args):
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20221216.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221228.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20221229.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -339,378 +340,260 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
 
     return xyz, t1d, mask_t
 
-def load_df(filename, params, eval_cols=[]):
-    """Loads CSV into dataframe and applies general filters"""
-    df = pd.read_csv(filename)
-    df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') # restore leading zeros, make into string
-    for col in eval_cols:
-        df[col] = df[col].apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
-    df = df[
-        (df.RESOLUTION<=params['RESCUT']) &
-        (df.DEPOSITION.apply(lambda x: parser.parse(x))<=parser.parse(params['DATCUT']))
-    ]
-    return df
 
+def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
+    """Loads training/validation sets as pandas DataFrames and returns them in
+    dictionaries keyed by their dataset names.
 
-def get_train_valid_set(params, OFFSET=1000000):
-    if (not os.path.exists(params['DATAPKL'])):
-        print(f'cached train/valid datasets {params["DATAPKL"]} not found. '\
-              f're-parsing train/valid metadata...')
+    Parameters
+    ----------
+    params : dict
+        Config info with paths to various data csv files
+    NEG_CLUSID_OFFSET : int
+        Offset to add to cluster IDs of negative (compl, NA compl) examples to
+        make them distinct from positive examples
 
-        t0 = time.time()
-
-        # read validation IDs for PDB set
-        val_pdb_ids = set([int(l) for l in open(params['VAL_PDB']).readlines()])
-        val_compl_ids = set([int(l) for l in open(params['VAL_COMPL']).readlines()])
-        val_neg_ids = set([int(l)+OFFSET for l in open(params['VAL_NEG']).readlines()])
-        val_rna_pdb_ids = set([l.rstrip() for l in open(params['VAL_RNA']).readlines()])
-        test_sm_ids = set([int(l) for l in open(params['TEST_SM']).readlines()])
-
-        # read homo-oligomer list
-        homo = {}
-        with open(params['HOMO_LIST'], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            # read pdbA, pdbB, bioA, opA, bioB, opB
-            rows = [[r[0], r[1], int(r[2]), int(r[3]), int(r[4]), int(r[5])] for r in reader]
-        for r in rows:
-            if r[0] in homo.keys():
-                homo[r[0]].append(r[1:])
-            else:
-                homo[r[0]] = [r[1:]]
-
-        # read & clean list.csv
-        with open(params['PDB_LIST'], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            rows = [[r[0],r[3],int(r[4]), int(r[-1].strip())] for r in reader
-                    if float(r[2])<=params['RESCUT'] and
-                    parser.parse(r[1])<=parser.parse(params['DATCUT'])]
-
-        # compile training and validation sets
-        val_hash = list()
-        train_pdb = {}
-        valid_pdb = {}
-        valid_homo = {}
-        for r in rows:
-            if r[2] in test_sm_ids:
-                continue # completely held out test set examples
-            if r[2] in val_pdb_ids: 
-                val_hash.append(r[1])
-                if r[2] in valid_pdb.keys():
-                    valid_pdb[r[2]].append((r[:2], r[-1]))
-                else:
-                    valid_pdb[r[2]] = [(r[:2], r[-1])]
-                #
-                if r[0] in homo:
-                    if r[2] in valid_homo.keys():
-                        valid_homo[r[2]].append((r[:2], r[-1]))
-                    else:
-                        valid_homo[r[2]] = [(r[:2], r[-1])]
-            else:
-                if r[2] in train_pdb.keys():
-                    train_pdb[r[2]].append((r[:2], r[-1]))
-                else:
-                    train_pdb[r[2]] = [(r[:2], r[-1])]
-
-        # compile facebook model sets
-        with open(params['FB_LIST'], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            rows = [[r[0],r[2],int(r[3]),len(r[-1].strip())] for r in reader
-                     if float(r[1]) > 80.0 and
-                     len(r[-1].strip()) > 200]
-        fb = {}
-        for r in rows:
-            if r[2] in fb.keys():
-                fb[r[2]].append((r[:2], r[-1]))
-            else:
-                fb[r[2]] = [(r[:2], r[-1])]
-
-        # compile complex sets
-        with open(params['COMPL_LIST'], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            # read complex_pdb, pMSA_hash, complex_cluster, length, taxID, assembly (bioA,opA,bioB,opB)
-            rows = [[r[0], r[3], int(r[4]), [int(plen) for plen in r[5].split(':')], r[6] , [int(r[7]), int(r[8]), int(r[9]), int(r[10])]] for r in reader
-                    if float(r[2]) <= params['RESCUT'] and
-                    parser.parse(r[1]) <= parser.parse(params['DATCUT'])]
-
-        train_compl = {}
-        valid_compl = {}
-        for r in rows:
-            if r[2] in val_compl_ids:
-                if r[2] in valid_compl.keys():
-                    valid_compl[r[2]].append((r[:2], r[-3], r[-2], r[-1])) # ((pdb, hash), length, taxID, assembly, negative?)
-                else:
-                    valid_compl[r[2]] = [(r[:2], r[-3], r[-2], r[-1])]
-            else:
-                # if subunits are included in PDB validation set, exclude them from training
-                hashA, hashB = r[1].split('_')
-                if hashA in val_hash:
-                    continue
-                if hashB in val_hash:
-                    continue
-                if r[2] in train_compl.keys():
-                    train_compl[r[2]].append((r[:2], r[-3], r[-2], r[-1]))
-                else:
-                    train_compl[r[2]] = [(r[:2], r[-3], r[-2], r[-1])]
-
-        # compile negative examples
-        # remove pairs if any of the subunits are included in validation set
-        with open(params['NEGATIVE_LIST'], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            # read complex_pdb, pMSA_hash, complex_cluster, length, taxonomy
-            rows = [[r[0],r[3],OFFSET+int(r[4]),[int(plen) for plen in r[5].split(':')],r[6]] for r in reader
-                    if float(r[2])<=params['RESCUT'] and
-                    parser.parse(r[1])<=parser.parse(params['DATCUT'])]
-
-        train_neg = {}
-        valid_neg = {}
-        for r in rows:
-            if r[2] in val_neg_ids:
-                if r[2] in valid_neg.keys():
-                    valid_neg[r[2]].append((r[:2], r[-2], r[-1], []))
-                else:
-                    valid_neg[r[2]] = [(r[:2], r[-2], r[-1], [])]
-            else:
-                hashA, hashB = r[1].split('_')
-                if hashA in val_hash:
-                    continue
-                if hashB in val_hash:
-                    continue
-                if r[2] in train_neg.keys():
-                    train_neg[r[2]].append((r[:2], r[-2], r[-1], []))
-                else:
-                    train_neg[r[2]] = [(r[:2], r[-2], r[-1], [])]
-
-        # compile NA complex sets
-        # use PDB validation set as validation set
-        with open(params['NA_COMPL_LIST'], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            # read complex_pdb, pMSA_hash, complex_cluster, length
-            rows = [[r[0], r[3], int(r[4]), [int(plen) for plen in r[5].split(':')]] for r in reader
-                    if float(r[2]) <= params['RESCUT'] and
-                    parser.parse(r[1]) <= parser.parse(params['DATCUT'])]
-
-        train_na_compl = {}
-        valid_na_compl = {}
-        for r in rows:
-            if r[2] in val_compl_ids:
-                if r[2] in valid_na_compl.keys():
-                    valid_na_compl[r[2]].append((r[:2], r[-1])) # ((pdb, hash), length)
-                else:
-                    valid_na_compl[r[2]] = [(r[:2], r[-1])]
-            else:
-                if r[2] in train_na_compl.keys():
-                    train_na_compl[r[2]].append((r[:2], r[-1]))
-                else:
-                    train_na_compl[r[2]] = [(r[:2], r[-1])]
-
-        # compile negative examples
-        # remove pairs if any of the subunits are included in validation set
-        with open(params['NEG_NA_COMPL_LIST'], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            # read complex_pdb, pMSA_hash, complex_cluster, length, taxonomy
-            rows = [[r[0],r[3],OFFSET+int(r[4]),[int(plen) for plen in r[5].split(':')]] for r in reader
-                    if float(r[2])<=params['RESCUT'] and
-                    parser.parse(r[1])<=parser.parse(params['DATCUT'])]
-
-        train_na_neg = {}
-        valid_na_neg = {}
-        for r in rows:
-            if r[2] in val_neg_ids:
-                if r[2] in valid_na_neg.keys():
-                    valid_na_neg[r[2]].append((r[:2], r[-1]))
-                else:
-                    valid_na_neg[r[2]] = [(r[:2], r[-1])]
-            else:
-                if r[2] in train_na_neg.keys():
-                    train_na_neg[r[2]].append((r[:2], r[-1]))
-                else:
-                    train_na_neg[r[2]] = [(r[:2], r[-1])]
-        
-        # read & clean RNA list
-        with open(params['RNA_LIST'], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            rows = [[r[0],[int(clid) for clid in r[3].split(':')], [int(plen) for plen in r[4].split(':')]] for r in reader
-                    if float(r[2]) <= params['RESCUT'] and
-                    parser.parse(r[1]) <= parser.parse(params['DATCUT'])]
-
-        # compile training and validation sets
-        train_rna = {}
-        valid_rna = {}
-        for i,r in enumerate(rows):
-            if any([x in val_rna_pdb_ids for x in r[0].split(":")]):
-                valid_rna[i] = [(r[0], r[-1])]
-            else:
-                train_rna[i] = [(r[0], r[-1])]
-
-        # protein-small molecule complexes
-        def _prep_sm_compl_data(df):
-            seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # sample longer sequences more often
-            df['WEIGHT'] = seq_len_factor
-
-            train_df = df[~df['CLUSTER'].isin(val_pdb_ids)]
-            valid_df = df[df['CLUSTER'].isin(val_pdb_ids)]
-
-            IDs = train_df['CLUSTER'].drop_duplicates().values
-            df_clus = df[['CLUSTER','WEIGHT']].groupby('CLUSTER').mean().reset_index()
-            clus2weight = dict(zip(df_clus.CLUSTER, df_clus.WEIGHT))
-            weights = [clus2weight[i] for i in IDs]
-
-            return train_df, valid_df, IDs, weights
-
-        df = load_df(params['SM_LIST'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
-        train_sm_compl, valid_sm_compl, sm_compl_IDs, sm_compl_weights = _prep_sm_compl_data(df)
-
-        df = load_df(params['MET_LIST'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
-        train_metal_compl, valid_metal_compl, metal_compl_IDs, metal_compl_weights = _prep_sm_compl_data(df)
-
-        df = load_df(params['SM_MULTI_LIST'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
-        df = df[df['LIGATOMS']<=params['CROP']//2]
-        train_sm_compl_multi, valid_sm_compl_multi, sm_compl_multi_IDs, sm_compl_multi_weights = \
-            _prep_sm_compl_data(df)
-
-        df = load_df(params['SM_COVALE_LIST'], params, eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
-        df = df[
-            (df['CHAINID']!='3dpm_A') & # has mismatched ligand cif & sdf files
-            (df['CHAINID']!='3dpm_B')   # has mismatched ligand cif & sdf files
-        ] 
-        train_sm_compl_covale, valid_sm_compl_covale, sm_compl_covale_IDs, sm_compl_covale_weights = \
-            _prep_sm_compl_data(df)
-
-        valid_sm_compl_strict = load_df(params['VAL_SM_STRICT'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
-
-        # cambridge small molecule crystals
-        sim_idx = int(params["MAXSIM"]*100-50)
-        with open(params["CSD_LIST"], 'r') as f:
-            reader = csv.reader(f)
-            next(reader)
-            rows = [[r[1], # name
-                    ast.literal_eval(r[11])[sim_idx], # train similarity 
-                    ast.literal_eval(r[13])[sim_idx]] # valid similarity
-                    for r in reader if float(r[4]) <= params["RMAX"] 
-                    and float(r[8]) <= params["MAXRES"] 
-                    and float(r[9]) <= params["MAXATOMS"] 
-                    and float(r[9]) >= params["MINATOMS"] 
-                    and ast.literal_eval(r[12])[sim_idx]==0] # not in test set
-
-        train_sm = {}
-        valid_sm = {}
-        for i, row in enumerate(rows):
-            if row[2] != 0:
-                valid_sm[i] = row[:2]
-            else:
-                train_sm[i] = row[:2]
-
-        # Get average chain length in each cluster and calculate weights
-        # protein-small mol complex weights are done separately above
-        train_ID_dict = dict(
-            pdb = list(train_pdb.keys()),
-            fb = list(fb.keys()),
-            compl = list(train_compl.keys()),
-            neg = list(train_neg.keys()),
-            na_compl = list(train_na_compl.keys()),
-            na_neg = list(train_na_neg.keys()),
-            rna = list(train_rna.keys()),
-            sm_compl = sm_compl_IDs,
-            metal_compl = metal_compl_IDs,
-            sm_compl_multi = sm_compl_multi_IDs,
-            sm_compl_covale = sm_compl_covale_IDs,
-            sm = list(train_sm.keys())
-        )
-
-        weights_dict = dict(
-            pdb = (1/512.)*np.clip(
-                np.array([train_pdb[key][0][1] for key in train_ID_dict["pdb"]]), 256, 512),
-            fb = (1/512.)*np.clip(
-                np.array([fb[key][0][1] for key in train_ID_dict["fb"]]), 256, 512),
-            compl = (1/512.)*np.clip(
-                np.array([sum(train_compl[key][0][1]) for key in train_ID_dict["compl"]]), 256, 512),
-            neg = (1/512.)*np.clip(
-                np.array([sum(train_neg[key][0][1]) for key in train_ID_dict["neg"]]), 256, 512),
-            na_compl = (1/512.)*np.clip(
-                np.array([sum(train_na_compl[key][0][1]) for key in train_ID_dict["na_compl"]]), 256, 512),
-            na_neg = (1/512.)*np.clip(
-                np.array([sum(train_na_neg[key][0][1]) for key in train_ID_dict["na_neg"]]), 256, 512),
-            rna = np.ones(len(train_ID_dict["rna"])), # no weighing
-            sm_compl = sm_compl_weights,
-            metal_compl = metal_compl_weights,
-            sm_compl_multi = sm_compl_multi_weights,
-            sm_compl_covale = sm_compl_covale_weights,
-            sm = np.array([train_sm[key][1] for key in train_ID_dict["sm"]])
-        )
-        weights_dict = {k:torch.tensor(v).float() for k,v in weights_dict.items()}
-
-        train_set_dict = dict(
-            pdb = train_pdb,
-            fb = fb,
-            compl = train_compl,
-            neg = train_neg,
-            na_compl = train_na_compl,
-            na_neg = train_na_neg,
-            rna = train_rna,
-            sm_compl = train_sm_compl,
-            metal_compl = train_metal_compl,
-            sm_compl_multi = train_sm_compl_multi,
-            sm_compl_covale = train_sm_compl_covale,
-            sm = train_sm
-        )
-
-        valid_set_dict = dict(
-            pdb = valid_pdb,
-            homo = valid_homo,
-            compl = valid_compl,
-            neg = valid_neg,
-            na_compl = valid_na_compl,
-            na_neg = valid_na_neg,
-            rna = valid_rna,
-            sm_compl = valid_sm_compl,
-            metal_compl = valid_metal_compl,
-            sm_compl_multi = valid_sm_compl_multi,
-            sm_compl_covale = valid_sm_compl_covale,
-            sm_compl_strict = valid_sm_compl_strict,
-            sm = valid_sm
-        )
-
-
-        valid_ID_dict = dict(
-            pdb = np.array(list(valid_pdb.keys())),
-            homo = np.array(list(valid_homo.keys())),
-            compl = np.array(list(valid_compl.keys())),
-            neg = np.array(list(valid_neg.keys())),
-            na_compl = np.array(list(valid_na_compl.keys())),
-            na_neg = np.array(list(valid_na_neg.keys())),
-            rna = np.array(list(valid_rna.keys())),
-            sm_compl = valid_sm_compl['CLUSTER'].drop_duplicates().values,
-            metal_compl = valid_metal_compl['CLUSTER'].drop_duplicates().values,
-            sm_compl_multi = valid_sm_compl_multi['CLUSTER'].drop_duplicates().values,
-            sm_compl_covale = valid_sm_compl_covale['CLUSTER'].drop_duplicates().values,
-            sm_compl_strict = valid_sm_compl_strict['CLUSTER'].drop_duplicates().values,
-            sm = np.array(list(valid_sm.keys())),
-        )
-      
-        print(f'Data parsing done in {time.time() - t0} seconds')
-
-        # save
-        with open(params["DATAPKL"], "wb") as f:
-            print ('Writing',params["DATAPKL"],'...')
-            pickle.dump((train_ID_dict, valid_ID_dict, weights_dict, 
-                         train_set_dict, valid_set_dict, homo), f)
-            print ('...done')
-    else:
+    Returns
+    ------
+    train_ID_dict : dict
+        keys are names of datasets, values are np.arrays of cluster IDs to sample
+    valid_ID_dict : dict 
+        keys are names of datasets, values are np.arrays of cluster IDs to sample
+    weights_dict : dict
+        keys are names of datasets, values are np.arrays of weights for
+        sampling the IDs in train_ID_dict 
+    train_set_dict : dict
+        keys are names of datasets, values are pandas DataFrames
+    valid_set_dict : dict
+        keys are names of datasets, values are pandas DataFrames
+    """
+    # try to load cached datasets 
+    if os.path.exists(params['DATAPKL']):
         with open(params["DATAPKL"], "rb") as f:
             print ('Loading',params["DATAPKL"],'...')
             train_ID_dict, valid_ID_dict, weights_dict, \
-                train_set_dict, valid_set_dict, homo = pickle.load(f)
+                train_dict, valid_dict, homo = pickle.load(f)
             print ('...done')
+        return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo
 
-    return train_ID_dict, valid_ID_dict, weights_dict, train_set_dict, valid_set_dict, homo
+    t0 = time.time()
+    print(f'cached train/valid datasets {params["DATAPKL"]} not found. '\
+          f're-parsing train/valid metadata...')
+    
+    # helper functions
+    def _load_df(filename, pad_hash=True, eval_cols=[]):
+        """load dataframe, zero-pad hash string, parse columns as python objects"""
+        df = pd.read_csv(filename)
+        if pad_hash: # restore leading zeros, make into string
+            df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') 
+        for col in eval_cols:
+            df[col] = df[col].apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
+        return df
+
+    def _apply_date_res_cutoffs(df):
+        """filter dataframe by date and resolution cutoffs"""
+        return df[(df.RESOLUTION <= params['RESCUT']) & 
+                  (df.DEPOSITION.apply(lambda x: parser.parse(x)) <= parser.parse(params['DATCUT']))]
+    
+    def _get_IDs_weights(df):
+        """return unique cluster IDs and AF2-style sampling weights based on seq length"""
+        tmp_df = df.drop_duplicates('CLUSTER')
+        IDs = tmp_df.CLUSTER.values
+        weights = (1/512.)*np.clip(tmp_df.LEN_EXIST.values, 256, 512)
+        return IDs, torch.tensor(weights)
+    
+    # containers for returning the training data/metadata
+    train_dict, valid_dict, train_ID_dict, valid_ID_dict, weights_dict = \
+        OrderedDict(), OrderedDict(), OrderedDict(), OrderedDict(), OrderedDict()
+    
+    # validation IDs for PDB set
+    val_pdb_ids = set([int(l) for l in open(params['VAL_PDB']).readlines()])
+    val_compl_ids = set([int(l) for l in open(params['VAL_COMPL']).readlines()])
+    val_neg_ids = set([int(l)+NEG_CLUSID_OFFSET for l in open(params['VAL_NEG']).readlines()])
+    val_rna_pdb_ids = set([l.rstrip() for l in open(params['VAL_RNA']).readlines()])
+    test_sm_ids = set([int(l) for l in open(params['TEST_SM']).readlines()])
+
+    # pdb monomers
+    pdb = _load_df(params['PDB_LIST'])
+    pdb = _apply_date_res_cutoffs(pdb)
+    train_dict['pdb'] = pdb[(~pdb.CLUSTER.isin(val_pdb_ids)) & (~pdb.CLUSTER.isin(test_sm_ids))]
+    valid_dict['pdb'] = pdb[pdb.CLUSTER.isin(val_pdb_ids) & (~pdb.CLUSTER.isin(test_sm_ids))]
+    val_hash = set(valid_dict['pdb'].HASH.values)
+    
+    train_ID_dict['pdb'], weights_dict['pdb'] = _get_IDs_weights(train_dict['pdb'])
+    valid_ID_dict['pdb'] = valid_dict['pdb'].CLUSTER.drop_duplicates().values    
+
+    # homo-oligomers
+    homo = pd.read_csv(params['HOMO_LIST'])
+    tmp_df = pdb[pdb.CLUSTER.isin(val_pdb_ids) & 
+                 (pdb.CHAINID.isin(homo['CHAIN_A'])) & 
+                 (~pdb.CLUSTER.isin(test_sm_ids))]
+    valid_dict['homo'] = homo.merge(tmp_df[['CHAINID','HASH','CLUSTER']], 
+                                    left_on='CHAIN_A', right_on='CHAINID', how='right')
+    valid_ID_dict['homo'] = valid_dict['homo'].CLUSTER.drop_duplicates().values
+
+    # facebook AF2 distillation set
+    fb = pd.read_csv(params['FB_LIST'])
+    fb = fb.rename(columns={'#CHAINID':'CHAINID'})
+    fb = fb[(fb.plDDT>80) & (fb.SEQUENCE.apply(len) > 200)]
+    fb['LEN_EXIST'] = fb.SEQUENCE.apply(len)
+    train_dict['fb'] = fb    
+    train_ID_dict['fb'], weights_dict['fb'] = _get_IDs_weights(train_dict['fb'])
+
+    # pdb hetero complexes
+    compl = pd.read_csv(params['COMPL_LIST'],skiprows=1,header=None)
+    compl.columns = ['CHAINID','DEPOSITION','RESOLUTION','HASH','CLUSTER',
+                     'LENA:B','TAXONOMY','ASSM_A','OP_A','ASSM_B','OP_B','HETERO']
+    compl = _apply_date_res_cutoffs(compl)
+    compl['HASH_A'] = compl.HASH.apply(lambda x: x.split('_')[0])
+    compl['HASH_B'] = compl.HASH.apply(lambda x: x.split('_')[1])
+    compl['LEN'] = compl['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
+    compl['LEN_EXIST'] = compl['LEN'].apply(lambda x: sum(x)) # total length, for computing weights
+    
+    valid_dict['compl'] = compl[compl.CLUSTER.isin(val_compl_ids)]
+    train_dict['compl'] = compl[(~compl.CLUSTER.isin(val_compl_ids)) &
+                                (~compl.HASH_A.isin(val_hash)) &
+                                (~compl.HASH_B.isin(val_hash))]
+    train_ID_dict['compl'], weights_dict['compl'] = _get_IDs_weights(train_dict['compl'])
+    valid_ID_dict['compl'] = valid_dict['compl'].CLUSTER.drop_duplicates().values
+
+    # negative complexes
+    #neg = pd.read_csv(params['NEGATIVE_LIST'])
+    #neg = _apply_date_res_cutoffs(neg)
+    #neg['CLUSTER'] = neg.CLUSTER + NEG_CLUSID_OFFSET
+    #neg['HASH_A'] = neg.HASH.apply(lambda x: x.split('_')[0])
+    #neg['HASH_B'] = neg.HASH.apply(lambda x: x.split('_')[1])
+    #neg['LEN'] = neg['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
+    #neg['LEN_EXIST'] = neg['LEN'].apply(lambda x: sum(x))
+
+    #valid_dict['neg'] = neg[neg.CLUSTER.isin(val_neg_ids)]
+    #train_dict['neg'] = neg[(~neg.CLUSTER.isin(val_neg_ids)) &
+    #                        (~neg.HASH_A.isin(val_hash)) &
+    #                        (~neg.HASH_B.isin(val_hash))]
+    #train_ID_dict['neg'], weights_dict['neg'] = _get_IDs_weights(train_dict['neg'])
+    #valid_ID_dict['neg'] = valid_dict['neg'].CLUSTER.drop_duplicates().values
+
+    # nucleic acid complexes
+    na = _load_df(params['NA_COMPL_LIST'])
+    na = _apply_date_res_cutoffs(na)
+    na['LEN'] = na['LENA:B:C'].apply(lambda x: [int(y) for y in x.split(':')])
+    na['LEN_EXIST'] = na['LEN'].apply(lambda x: sum(x))
+
+    valid_dict['na_compl'] = na[na.CLUSTER.isin(val_compl_ids)]
+    train_dict['na_compl'] = na[(~na.CLUSTER.isin(val_compl_ids))]
+    train_ID_dict['na_compl'], weights_dict['na_compl'] = _get_IDs_weights(train_dict['na_compl'])
+    valid_ID_dict['na_compl'] = valid_dict['na_compl'].CLUSTER.drop_duplicates().values
+
+    # negative nucleic acid complexes
+    #na_neg = _load_df(params['NEG_NA_COMPL_LIST'])
+    #na_neg = _apply_date_res_cutoffs(na)
+    #na_neg['CLUSTER'] = na_neg.CLUSTER + NEG_CLUSID_OFFSET
+
+    #na_neg['LEN'] = na_neg['LENA:B:C'].apply(lambda x: [int(y) for y in x.split(':')])
+    #na_neg['LEN_EXIST'] = na_neg['LEN'].apply(lambda x: sum(x))
+
+    #valid_dict['na_neg'] = na_neg[na_neg.CLUSTER.isin(val_neg_ids)]
+    #train_dict['na_neg'] = na_neg[(~na_neg.CLUSTER.isin(val_neg_ids))]
+    #train_ID_dict['na_neg'], weights_dict['na_neg'] = _get_IDs_weights(train_dict['na_neg'])
+    #valid_ID_dict['na_neg'] = valid_dict['na_neg'].CLUSTER.drop_duplicates().values
+
+    # rna
+    rna = pd.read_csv(params['RNA_LIST'])
+    rna = _apply_date_res_cutoffs(rna)
+    rna['LEN'] = rna['LENA:B:C'].apply(lambda x: [int(y) for y in x.split(':')])
+    rna['CLUSTER'] = range(len(rna)) # for unweighted sampling
+
+    in_val = rna['CHAINID'].apply(lambda x: any([y in val_rna_pdb_ids for y in x.split(':')]))
+    train_dict['rna'] = rna[~in_val]
+    valid_dict['rna'] = rna[in_val]
+    train_ID_dict['rna'] = train_dict['rna'].CLUSTER.values # all unique
+    valid_ID_dict['rna'] = valid_dict['rna'].CLUSTER.values
+    weights_dict['rna'] = torch.ones(len(valid_ID_dict['rna']))
+
+    # protein-small molecule complexes
+    def _prep_sm_compl_data(df):
+        """repeated operations for protein / small molecule datasets"""
+        train_df = df[~df.CLUSTER.isin(val_pdb_ids)]
+        valid_df = df[df.CLUSTER.isin(val_pdb_ids)]
+
+        seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # standard seq length weighting
+        df['WEIGHT'] = seq_len_factor # can potentially include other factors (ligand cluster size, etc)
+        df_clus = df[['CLUSTER','WEIGHT']].groupby('CLUSTER').mean().reset_index()
+        clus2weight = dict(zip(df_clus.CLUSTER, df_clus.WEIGHT))
+
+        train_IDs = train_df.CLUSTER.drop_duplicates().values
+        weights = [clus2weight[i] for i in train_IDs]
+        
+        valid_IDs = valid_df.CLUSTER.drop_duplicates().values
+
+        return train_df, valid_df, train_IDs, valid_IDs, torch.tensor(weights)
+
+    # protein / small molecule complexes
+    df = _load_df(params['SM_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
+    df = _apply_date_res_cutoffs(df)
+    train_dict['sm_compl'], valid_dict['sm_compl'], train_ID_dict['sm_compl'], \
+        valid_ID_dict['sm_compl'], weights_dict['sm_compl'] = _prep_sm_compl_data(df)
+
+    # protein / metal ion complexes
+    df = _load_df(params['MET_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
+    df = _apply_date_res_cutoffs(df)
+    train_dict['metal_compl'], valid_dict['metal_compl'], train_ID_dict['metal_compl'], \
+        valid_ID_dict['metal_compl'], weights_dict['metal_compl'] = _prep_sm_compl_data(df)
+    
+    # protein / multi-residue ligand complexes
+    df = _load_df(params['SM_MULTI_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
+    df = _apply_date_res_cutoffs(df)
+    df = df[df['LIGATOMS']<=params['CROP']//2]
+    train_dict['sm_compl_multi'], valid_dict['sm_compl_multi'], train_ID_dict['sm_compl_multi'], \
+        valid_ID_dict['sm_compl_multi'], weights_dict['sm_compl_multi'] = _prep_sm_compl_data(df)
+
+    # protein / covalent ligand complexes
+    df = _load_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
+    df = _apply_date_res_cutoffs(df)
+    df = df[
+        (df['CHAINID']!='3dpm_A') & # has mismatched ligand cif and sdf files
+        (df['CHAINID']!='3dpm_B')   # has mismatched ligand cif and sdf files
+    ]
+    train_dict['sm_compl_covale'], valid_dict['sm_compl_covale'], train_ID_dict['sm_compl_covale'], \
+        valid_ID_dict['sm_compl_covale'], weights_dict['sm_compl_covale'] = _prep_sm_compl_data(df)
+
+    # strict protein / ligand validation set
+    val_df = _load_df(params['VAL_SM_STRICT'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
+    val_df = _apply_date_res_cutoffs(val_df)
+    valid_dict['sm_compl_strict'] = val_df
+    valid_ID_dict['sm_compl_strict'] = val_df.CLUSTER.drop_duplicates().values
+
+    # cambridge small molecule database
+    sm = _load_df(params['CSD_LIST'], pad_hash=False, eval_cols=['sim','sim_valid','sim_test'])
+    sim_idx = int(params["MAXSIM"]*100-50)
+    sm = sm[
+        (sm['r_factor'] <= params['RMAX']) &
+        (sm['nres'] <= params['MAXRES']) &
+        (sm['nheavy'] <= params['MAXATOMS']) &
+        (sm['nheavy'] >= params['MINATOMS']) &
+        (sm['sim_test'].apply(lambda x: x[sim_idx]==0))
+    ]
+    sm['CLUSTER'] = range(len(sm)) # for unweighted sampling
+    sm['train_sim'] = sm['sim'].apply(lambda x: x[sim_idx])
+    sm['valid_sim'] = sm['sim_valid'].apply(lambda x: x[sim_idx])
+    sm = sm.drop(['sim','sim_test','sim_valid'],axis=1) # drop these memory-intensive columns
+
+    train_dict['sm'] = sm[sm['valid_sim'] == 0]
+    valid_dict['sm'] = sm[sm['valid_sim'] > 0]
+    train_ID_dict['sm'] = train_dict['sm'].CLUSTER.values
+    valid_ID_dict['sm'] = valid_dict['sm'].CLUSTER.values
+    weights_dict['sm'] = torch.ones(len(valid_ID_dict['sm']))
+
+    print(f'Done loading datasets in {time.time()-t0} seconds')
+
+    # cache datasets for faster loading next time
+    with open(params["DATAPKL"], "wb") as f:
+        print ('Writing',params["DATAPKL"],'...')
+        pickle.dump((train_ID_dict, valid_ID_dict, weights_dict, 
+                     train_dict, valid_dict, homo), f)
+        print ('...done')
+
+    return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo
 
 # slice long chains
 def get_crop(l, mask, device, crop_size, unclamp=False):
@@ -1015,9 +898,9 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
     xyz = torch.full((npairs, 2*L, NTOTAL, 3), np.nan).float()
     mask = torch.full((npairs, 2*L, NTOTAL), False)
     for i_int,interface in enumerate(interfaces):
-        pdbB = torch.load(params['PDB_DIR']+'/torch/pdb/'+interface[0][1:3]+'/'+interface[0]+'.pt')
-        xformA = meta['asmb_xform%d'%interface[1]][interface[2]]
-        xformB = meta['asmb_xform%d'%interface[3]][interface[4]]
+        pdbB = torch.load(params['PDB_DIR']+'/torch/pdb/'+interface['CHAIN_B'][1:3]+'/'+interface['CHAIN_B']+'.pt')
+        xformA = meta['asmb_xform%d'%interface['ASSM_A']][interface['OP_A']]
+        xformB = meta['asmb_xform%d'%interface['ASSM_B']][interface['OP_B']]
         xyzA = torch.einsum('ij,raj->rai', xformA[:3,:3], pdbA['xyz']) + xformA[:3,3][None,None,:]
         xyzB = torch.einsum('ij,raj->rai', xformB[:3,:3], pdbB['xyz']) + xformB[:3,3][None,None,:]
         xyz[i_int,:,:14] = torch.cat((xyzA, xyzB), dim=0)
@@ -1039,7 +922,7 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
     if 2*L > params['CROP']:
         if np.random.rand() < 0.5: # 50% --> interface crop
             spatial_crop_tgt = np.random.randint(0, npairs)
-            crop_idx = get_spatial_crop(xyz[spatial_crop_tgt], mask[spatial_crop_tgt], torch.arange(L*2), [L,L], params, interfaces[spatial_crop_tgt][0])
+            crop_idx = get_spatial_crop(xyz[spatial_crop_tgt], mask[spatial_crop_tgt], torch.arange(L*2), [L,L], params, interfaces[spatial_crop_tgt]['CHAIN_B'])
         else: # 50% --> have same cropped regions across all copies
             crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//2, unclamp=False) # cropped region for first copy
             crop_idx = torch.cat((crop_idx, crop_idx+L)) # get same crops
@@ -1086,21 +969,22 @@ def get_msa(a3mfilename, item, unzip=True):
 # Load PDB examples
 def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5):
     # load MSA, PDB, template info
-    pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
-    a3m = get_msa(params['PDB_DIR'] + '/a3m/' + item[1][:3] + '/' + item[1] + '.a3m.gz', item[1])
-    tplt = torch.load(params['PDB_DIR']+'/torch/hhr/'+item[1][:3]+'/'+item[1]+'.pt')
-   
+    pdb_chain, pdb_hash = item['CHAINID'], item['HASH']
+    pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
+    a3m = get_msa(params['PDB_DIR'] + '/a3m/' + pdb_hash[:3] + '/' + pdb_hash + '.a3m.gz', pdb_hash)
+    tplt = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
+
     # get msa features
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
 
-    if item[0] in homo: # Target is homo-oligomer
+    if pdb_chain in homo['CHAIN_A'].values: # Target is homo-oligomer
         p_homo = np.random.rand()
         if p_homo < p_homo_cut: # model as homo-oligomer with p_homo_cut prob
-            pdbid = item[0].split('_')[0]
-            interfaces = homo[item[0]]
+            pdbid = pdb_chain.split('_')[0]
+            interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
             feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top)
             return feats + ("homo",item,)
         else:
@@ -1113,12 +997,13 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5)
     
 def loader_fb(item, params, unclamp=False):
     
-    # loads sequence/structure/plddt information 
-    a3m = get_msa(os.path.join(params["FB_DIR"], "a3m", item[-1][:2], item[-1][2:], item[0]+".a3m.gz"), item[0])
-    pdb = get_pdb(os.path.join(params["FB_DIR"], "pdb", item[-1][:2], item[-1][2:], item[0]+".pdb"),
-                  os.path.join(params["FB_DIR"], "pdb", item[-1][:2], item[-1][2:], item[0]+".plddt.npy"),
-                  item[0], params['PLDDTCUT'], params['SCCUT'])
-    
+    # loads sequence/structure/plddt information
+    pdb_chain, hashstr = item['CHAINID'], item['HASH']
+    a3m = get_msa(os.path.join(params["FB_DIR"], "a3m", hashstr[:2], hashstr[2:], pdb_chain+".a3m.gz"), pdb_chain)
+    pdb = get_pdb(os.path.join(params["FB_DIR"], "pdb", hashstr[:2], hashstr[2:], pdb_chain+".pdb"),
+                  os.path.join(params["FB_DIR"], "pdb", hashstr[:2], hashstr[2:], pdb_chain+".plddt.npy"),
+                  pdb_chain, params['PLDDTCUT'], params['SCCUT'])
+   
     # get msa features
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
@@ -1165,11 +1050,11 @@ def loader_fb(item, params, unclamp=False):
            chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats,chirals,"fb", item
 
 
-def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=True, random_noise=5.0):
-    pdb_pair = item[0]
-    pMSA_hash = item[1]
-    
+def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0):
+
+    pdb_pair, pMSA_hash, L_s, taxID = item['CHAINID'], item['HASH'], item['LEN'], item['TAXONOMY']
     msaA_id, msaB_id = pMSA_hash.split('_')
+    
     if len(set(taxID.split(':'))) == 1: # two proteins have same taxID -- use paired MSA
         # read pMSA
         if negative:
@@ -1217,15 +1102,15 @@ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=Tru
     pdbA_id, pdbB_id = pdb_pair.split(':')
     pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdbA_id[1:3]+'/'+pdbA_id+'.pt')
     pdbB = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdbB_id[1:3]+'/'+pdbB_id+'.pt')
-    
-    if len(assem) > 0:
+
+    if not negative:
         # read metadata
         pdbid = pdbA_id.split('_')[0]
         meta = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdbid[1:3]+'/'+pdbid+'.pt')
 
         # get transform
-        xformA = meta['asmb_xform%d'%assem[0]][assem[1]]
-        xformB = meta['asmb_xform%d'%assem[2]][assem[3]]
+        xformA = meta['asmb_xform%d'%item['ASSM_A']][item['OP_A']]
+        xformB = meta['asmb_xform%d'%item['ASSM_B']][item['OP_B']]    
         
         # apply transform
         xyzA = torch.einsum('ij,raj->rai', xformA[:3,:3], pdbA['xyz']) + xformA[:3,3][None,None,:]
@@ -1282,9 +1167,10 @@ def loader_complex(item, L_s, taxID, assem, params, negative=False, pick_top=Tru
            chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals,"compl", item
 
 
-def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pick_top=True, random_noise=5.0):
-    pdb_set = item[0]
-    msa_id = item[1]
+def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_top=True, random_noise=5.0):
+    pdb_set = item['CHAINID']
+    msa_id = item['HASH']
+    Ls = item['LEN']
 
     # read MSA for protein
     a3mA = get_msa(params['PDB_DIR'] + '/a3m/' + msa_id[:3] + '/' + msa_id + '.a3m.gz', msa_id)
@@ -1428,9 +1314,11 @@ def loader_na_complex(item, Ls, params, native_NA_frac=0.25, negative=False, pic
            xyz_prev.float(), mask_prev, \
            chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals, "na_compl", item
 
-def loader_rna(item, Ls, params, random_noise=5.0):
+def loader_rna(item, params, random_noise=5.0):
     # read PDBs
-    pdb_ids = item.split(':')
+    pdb_ids = item['CHAINID'].split(':')
+    Ls = item['LEN']
+
     pdbA = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt')
     pdbB = None
     if (len(pdb_ids)==2):
@@ -1505,7 +1393,7 @@ def loader_rna(item, Ls, params, random_noise=5.0):
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, "rna",item
 
 def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_ligand_tmpl=False,
-    init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0):
+    init_protein_xyz=False, init_ligand_xyz=False, task='sm_compl', random_noise=5.0):
     """Load protein/SM complex with mixed residue and atom tokens. Also,
     compute frames for atom FAPE loss calc"""
 
@@ -1691,9 +1579,9 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, chirals, "sm_compl", item
+           chain_idx, False, False, frames, bond_feats, chirals, task, item
 
-def loader_sm_compl_covale(item, params, pick_top=True,
+def loader_sm_compl_covale(item, params, pick_top=True, task='sm_compl_covale',
     init_protein_tmpl=False, init_ligand_tmpl=False,
     init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0):
     """
@@ -1928,14 +1816,15 @@ def loader_sm_compl_covale(item, params, pick_top=True,
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, chirals_sm, "sm_compl", item
+           chain_idx, False, False, frames, bond_feats, chirals_sm, task, item
 
 def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False, 
     pick_top=True, p_homo_cut=0.5, random_noise=5.0):
     """ load pdb with portions represented as atoms instead of residues """
-    pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+item[0][1:3]+'/'+item[0]+'.pt')
-    a3m = get_msa(params['PDB_DIR'] + '/a3m/' + item[1][:3] + '/' + item[1] + '.a3m.gz', item[1])
-    tplt = torch.load(params['PDB_DIR']+'/torch/hhr/'+item[1][:3]+'/'+item[1]+'.pt')
+    pdb_chain, pdb_hash = item['CHAINID'], item['HASH']
+    pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
+    a3m = get_msa(params['PDB_DIR'] + '/a3m/' + pdb_hash[:3] + '/' + pdb_hash + '.a3m.gz', pdb_hash)
+    tplt = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
     
     # get msa features
     msa = a3m['msa'].long()
@@ -1990,7 +1879,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
         if i_end not in can_atomize_idx:
             n_res_atomize = int(i_end-i_start)
             print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive '\
-                  f'fully-resolved residues to atomize. {item[0]} i_start={i_start}')
+                  f'fully-resolved residues to atomize. {item} i_start={i_start}')
             break
 
     try:
@@ -2086,7 +1975,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
 def loader_sm(item, params, pick_top=True):
     """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
     # Load small molecule
-    fname = params['CSD_DIR']+'/torch/'+item[:2]+'/'+item+'.pt'
+    fname = params['CSD_DIR']+'/torch/'+item['label'][:2]+'/'+item['label']+'.pt'
     data = torch.load(fname)
 
     mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(data["mol2"], string=True)
@@ -2132,7 +2021,7 @@ def loader_sm(item, params, pick_top=True):
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, chirals, "sm_only", item
+           chain_idx, False, False, frames, bond_feats, chirals, "sm", item
 
 def crop_sm_compl(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to a random ligand atom"""
@@ -2165,10 +2054,36 @@ def unbatch_item(item):
         new_item[k] = flatten_value(item[k])
     return new_item
 
+def sample_item(df, ID, rng=None):
+    """Sample a training example from a sequence cluster `ID` from the dataset
+    represented by DataFrame `df`"""
+    clus_df = df[df['CLUSTER']==ID]
+    return clus_df.sample(1, random_state=rng).to_dict(orient='records')[0]
+
+def sample_item_sm_compl(df, ID, dedup_ligand=True):
+    """Sample a protein-ligand training example from sequence cluster `ID` from
+    the dataset represented by DataFrame `df`"""
+    # get all examples in this cluster
+    tmp_df = df[df.CLUSTER==ID]
+
+    # uniformly sample from unique PDB chains
+    chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
+    tmp_df = tmp_df[tmp_df.CHAINID==chid]
+    if dedup_ligand:
+        # uniform sample from unique ligands
+        lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
+        chosen_lig = np.random.choice(lignames)
+        tmp_df = tmp_df[tmp_df['LIGAND'].apply(lambda x: x[0][2]==chosen_lig)]
+
+    item = tmp_df.sample(1).to_dict(orient='records')[0] # choose 1 random row
+
+    return item
+
+
 class Dataset(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None):
+    def __init__(self, IDs, loader, data_df, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None):
         self.IDs = IDs
-        self.item_dict = item_dict
+        self.data_df = data_df
         self.loader = loader
         self.params = params
         self.homo = homo
@@ -2184,29 +2099,24 @@ class Dataset(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
-        p_unclamp = self.rng.rand()
+        item = sample_item(self.data_df, ID, self.rng)
+
         kwargs = dict()
         if self.n_res_atomize > 0:
             kwargs['n_res_atomize'] = self.n_res_atomize
             kwargs['flank'] = self.flank
-        if p_unclamp > self.unclamp_cut:
-            out = self.loader(self.item_dict[ID][sel_idx][0], self.params, self.homo,
-                              unclamp=True, 
-                              pick_top=self.pick_top, 
-                              p_homo_cut=self.p_homo_cut,
-                              **kwargs)
-        else:
-            out = self.loader(self.item_dict[ID][sel_idx][0], self.params, self.homo, 
-                              pick_top=self.pick_top,
-                              p_homo_cut=self.p_homo_cut,
-                              **kwargs)
+            
+        out = self.loader(item, self.params, self.homo,
+                          unclamp = (self.rng.rand() > self.unclamp_cut),
+                          pick_top = self.pick_top, 
+                          p_homo_cut = self.p_homo_cut,
+                          **kwargs)
         return out
 
 class DatasetComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False, seed=None):
+    def __init__(self, IDs, loader, data_df, params, pick_top=True, negative=False, seed=None):
         self.IDs = IDs
-        self.item_dict = item_dict
+        self.data_df = data_df
         self.loader = loader
         self.params = params
         self.pick_top = pick_top
@@ -2218,20 +2128,17 @@ class DatasetComplex(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
-        out = self.loader(self.item_dict[ID][sel_idx][0],
-                          self.item_dict[ID][sel_idx][1],
-                          self.item_dict[ID][sel_idx][2],
-                          self.item_dict[ID][sel_idx][3],
+        item = sample_item(self.data_df, ID, self.rng)
+        out = self.loader(item,
                           self.params,
                           pick_top = self.pick_top,
                           negative = self.negative)
         return out
 
 class DatasetNAComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, pick_top=True, negative=False, native_NA_frac=0.0, seed=None):
+    def __init__(self, IDs, loader, data_df, params, pick_top=True, negative=False, native_NA_frac=0.0, seed=None):
         self.IDs = IDs
-        self.item_dict = item_dict
+        self.data_df = data_df
         self.loader = loader
         self.params = params
         self.pick_top = pick_top
@@ -2244,21 +2151,19 @@ class DatasetNAComplex(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
-        out = self.loader(
-                self.item_dict[ID][sel_idx][0],
-            self.item_dict[ID][sel_idx][1],
-            self.params,
-            pick_top = self.pick_top,
-            negative = self.negative,
-            native_NA_frac = self.native_NA_frac
+        item = sample_item(self.data_df, ID, self.rng)
+        out = self.loader(item,
+                          self.params,
+                          pick_top = self.pick_top,
+                          negative = self.negative,
+                          native_NA_frac = self.native_NA_frac
         )
         return out
 
 class DatasetRNA(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params, seed=None):
+    def __init__(self, IDs, loader, data_df, params, seed=None):
         self.IDs = IDs
-        self.item_dict = item_dict
+        self.data_df = data_df
         self.loader = loader
         self.params = params
         self.rng = np.random.RandomState(seed)
@@ -2268,42 +2173,15 @@ class DatasetRNA(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        sel_idx = self.rng.randint(0, len(self.item_dict[ID]))
-        out = self.loader(
-            self.item_dict[ID][sel_idx][0],
-            self.item_dict[ID][sel_idx][1],
-            self.params
-        )
+        item = sample_item(self.data_df, ID, self.rng)
+        out = self.loader(item, self.params)
         return out
 
-def get_sm_compl_item(data_df, cluster_id, dedup_ligand=True):
-    """Sample a protein-ligand training example given the dataset dataframe and
-    a protein seq cluster ID"""
-    # get all examples in this cluster
-    tmp_df = data_df[data_df.CLUSTER==cluster_id]
-
-    # uniformly sample from unique PDB chains
-    try:
-        chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
-    except Exception as e:
-        print('error in get_sm_compl_item',cluster_id)
-        raise e
-    tmp_df = tmp_df[tmp_df.CHAINID==chid]
-    if dedup_ligand:
-        # uniform sample from unique ligands
-        lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
-        chosen_lig = np.random.choice(lignames)
-        tmp_df = tmp_df[tmp_df['LIGAND'].apply(lambda x: x[0][2]==chosen_lig)]
-
-    item = tmp_df.sample(1).to_dict(orient='records')[0] # choose 1 random row
-
-    return item
-
 class DatasetSMComplex(data.Dataset):
-    def __init__(self, IDs, loader, item_df, params, init_protein_tmpl=False, init_ligand_tmpl=False,
-                 init_protein_xyz=False, init_ligand_xyz=False, task=None, seed=None):
+    def __init__(self, IDs, loader, data_df, params, init_protein_tmpl=False, init_ligand_tmpl=False,
+                 init_protein_xyz=False, init_ligand_xyz=False, task='sm_compl', seed=None):
         self.IDs = IDs
-        self.item_df = item_df
+        self.data_df = data_df
         self.loader = loader
         self.params = params
         self.init_protein_tmpl = init_protein_tmpl
@@ -2318,40 +2196,33 @@ class DatasetSMComplex(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        try:
-            item = get_sm_compl_item(self.item_df, ID)
-        except Exception as e:
-            print('task',self.task)
-            print('ID',ID)
-            raise e
+        item = sample_item_sm_compl(self.data_df, ID)
         out = self.loader(
             item,
             self.params,
             init_protein_tmpl = self.init_protein_tmpl,
             init_ligand_tmpl = self.init_ligand_tmpl,
             init_protein_xyz = self.init_protein_xyz,
-            init_ligand_xyz = self.init_ligand_xyz
+            init_ligand_xyz = self.init_ligand_xyz,
+            task = self.task
         )
-        if self.task is not None:
-            out = out[:-2]+(self.task,)+out[-1:] # custom task name
         return out
 
 class DatasetSM(data.Dataset):
-    def __init__(self, IDs, loader, item_dict, params):
+    def __init__(self, IDs, loader, data_df, params, seed=None):
         self.IDs = IDs
-        self.item_dict = item_dict
+        self.data_df = data_df
         self.loader = loader
         self.params = params
+        self.rng = np.random.RandomState(seed)
 
     def __len__(self):
         return len(self.IDs)
 
     def __getitem__(self, index):
         ID = self.IDs[index]
-        out = self.loader(
-            self.item_dict[ID][0],
-            self.params
-        )
+        item = sample_item(self.data_df, ID, self.rng)
+        out = self.loader(item, self.params)
         return out
 
 class DistilledDataset(data.Dataset):
@@ -2365,47 +2236,34 @@ class DistilledDataset(data.Dataset):
         self.params = params
         self.unclamp_cut = unclamp_cut
         self.native_NA_frac = native_NA_frac
-
-        self.index_dict = {k:np.arange(len(self.ID_dict[k])) for k in self.dataset_dict.keys()}
+        self.index_dict = OrderedDict([
+            (k, np.arange(len(self.ID_dict[k]))) for k in self.dataset_dict.keys()
+        ])
 
     def __len__(self):
         return sum([len(v) for k,v in self.index_dict.items()])
 
-    # order:
-    #    0            - nfb-1        = FB
-    #    nfb          - nfb+npdb-1   = PDB
-    #    "+npdb       - "+ncmpl-1    = COMPLEX
-    #    "+ncmpl      - "+nneg-1     = COMPLEX NEGATIVES
-    #    "+nneg       - "+nna_cmpl-1 = NA COMPLEX
-    #    "+nna_cmpl   - "+nrna-1     = NA COMPLEX NEGATIVES
-    #    "+nrna-1     - "nsm_compl-1 = RNA
-    #    nsm_compl -1 -              = SM COMPLEX
     def __getitem__(self, index):
         p_unclamp = np.random.rand()
 
-        if index < len(self.index_dict['fb']):
-            ID = self.ID_dict['fb'][index]
-            sel_idx = np.random.randint(0, len(self.dataset_dict['fb'][ID]))
-            out = self.loader_dict['fb'](self.dataset_dict['fb'][ID][sel_idx][0], self.params, unclamp=(p_unclamp > self.unclamp_cut))
-        offset = len(self.index_dict['fb'])
-
+        # order of datasets here must match key order in self.dataset_dict
+        offset = 0
         if index >= offset and index < offset + len(self.index_dict['pdb']):
             ID = self.ID_dict['pdb'][index-offset]
-            sel_idx = np.random.randint(0, len(self.dataset_dict['pdb'][ID]))
-            out = self.loader_dict['pdb'](self.dataset_dict['pdb'][ID][sel_idx][0], self.params, self.homo, unclamp=(p_unclamp > self.unclamp_cut))
+            item = sample_item(self.dataset_dict['pdb'], ID)
+            out = self.loader_dict['pdb'](item, self.params, self.homo, unclamp=(p_unclamp > self.unclamp_cut))
         offset += len(self.index_dict['pdb'])
+
+        if index >= offset and index < offset + len(self.index_dict['fb']):
+            ID = self.ID_dict['fb'][index]
+            item = sample_item(self.dataset_dict['fb'], ID)
+            out = self.loader_dict['fb'](item, self.params, unclamp=(p_unclamp > self.unclamp_cut))
+        offset += len(self.index_dict['fb'])
 
         if index >= offset and index < offset + len(self.index_dict['compl']):
             ID = self.ID_dict['compl'][index-offset]
-            sel_idx = np.random.randint(0, len(self.dataset_dict['compl'][ID]))
-            out = self.loader_dict['compl'](
-                self.dataset_dict['compl'][ID][sel_idx][0], 
-                self.dataset_dict['compl'][ID][sel_idx][1],
-                self.dataset_dict['compl'][ID][sel_idx][2], 
-                self.dataset_dict['compl'][ID][sel_idx][3], 
-                self.params,
-                negative=False
-            )
+            item = sample_item(self.dataset_dict['compl'], ID)
+            out = self.loader_dict['compl'](item, self.params, negative=False)
         offset += len(self.index_dict['compl'])
 
         #if index >= offset and index < offset + len(self.neg_inds):
@@ -2423,14 +2281,8 @@ class DistilledDataset(data.Dataset):
 
         if index >= offset and index < offset + len(self.index_dict['na_compl']):
             ID = self.ID_dict['na_compl'][index-offset]
-            sel_idx = np.random.randint(0, len(self.dataset_dict['na_compl'][ID]))
-            out = self.loader_dict['na_compl'](
-                self.dataset_dict['na_compl'][ID][sel_idx][0],
-                self.dataset_dict['na_compl'][ID][sel_idx][1],
-                self.params,
-                negative=False,
-                native_NA_frac=self.native_NA_frac
-            )
+            item = sample_item(self.dataset_dict['na_compl'], ID)
+            out = self.loader_dict['na_compl'](item, self.params, negative=False, native_NA_frac=self.native_NA_frac)
         offset += len(self.index_dict['na_compl'])
 
         #if index >= offset and index < offset + len(self.na_neg_inds):
@@ -2447,64 +2299,50 @@ class DistilledDataset(data.Dataset):
 
         if index >= offset and index < offset + len(self.index_dict['rna']):
             ID = self.ID_dict['rna'][index-offset]
-            sel_idx = np.random.randint(0, len(self.dataset_dict['rna'][ID]))
-            out = self.loader_dict['rna'](
-                self.dataset_dict['rna'][ID][sel_idx][0],
-                self.dataset_dict['rna'][ID][sel_idx][1],
-                self.params
-            )
+            item = sample_item(self.dataset_dict['rna'], ID)
+            out = self.loader_dict['rna'](item, self.params)
         offset += len(self.index_dict['rna'])
 
         if index >= offset and index < offset + len(self.index_dict['sm_compl']):
             ID = self.ID_dict['sm_compl'][index-offset]
-            task = 'sm_compl_fold_dock'
-            item = get_sm_compl_item(self.dataset_dict['sm_compl'], ID)
-            out = self.loader_dict['sm_compl'](item, self.params)
-            out = out[:-2]+(task,)+out[-1:]
+            item = sample_item_sm_compl(self.dataset_dict['sm_compl'], ID)
+            out = self.loader_dict['sm_compl'](item, self.params, task='sm_compl')
         offset += len(self.index_dict['sm_compl'])
 
         if index >= offset and index < offset + len(self.index_dict['metal_compl']):
             ID = self.ID_dict['metal_compl'][index-offset]
-            task = 'metal_compl_fold_dock'
-            item = get_sm_compl_item(self.dataset_dict['metal_compl'], ID)
-            out = self.loader_dict['metal_compl'](item, self.params)
-            out = out[:-2]+(task,)+out[-1:]
+            item = sample_item_sm_compl(self.dataset_dict['metal_compl'], ID)
+            out = self.loader_dict['metal_compl'](item, self.params, task='metal_compl')
         offset += len(self.index_dict['metal_compl'])
 
         if index >= offset and index < offset + len(self.index_dict['sm_compl_multi']):
             ID = self.ID_dict['sm_compl_multi'][index-offset]
-            task = 'sm_compl_multi_fold_dock'
-            item = get_sm_compl_item(self.dataset_dict['sm_compl_multi'], ID)
-            out = self.loader_dict['sm_compl_multi'](item, self.params)
-            out = out[:-2]+(task,)+out[-1:]
+            item = sample_item_sm_compl(self.dataset_dict['sm_compl_multi'], ID)
+            out = self.loader_dict['sm_compl_multi'](item, self.params, task='sm_compl_multi')
         offset += len(self.index_dict['sm_compl_multi'])
 
         if index >= offset and index < offset + len(self.index_dict['sm_compl_covale']):
             ID = self.ID_dict['sm_compl_covale'][index-offset]
-            task = 'sm_compl_covale_fold_dock'
-            item = get_sm_compl_item(self.dataset_dict['sm_compl_covale'], ID)
+            item = sample_item_sm_compl(self.dataset_dict['sm_compl_covale'], ID)
             try:
-                out = self.loader_dict['sm_compl_covale'](item, self.params)
+                out = self.loader_dict['sm_compl_covale'](item, self.params, task='sm_compl_covale')
             except Exception as e:
                 print('error loading covale example', item)
                 return (torch.tensor([-1]),)*21
-            out = out[:-2]+(task,)+out[-1:]
         offset += len(self.index_dict['sm_compl_covale'])
 
         if index >= offset and index < offset + len(self.index_dict['sm']):
             ID = self.ID_dict['sm'][index-offset]
-            out = self.loader_dict['sm'](
-                self.dataset_dict['sm'][ID][0],
-                self.params,
-            )
+            item = sample_item(self.dataset_dict['sm'], ID)
+            out = self.loader_dict['sm'](item, self.params)
         offset += len(self.index_dict['sm'])
 
         if index >= offset and index < offset + len(self.index_dict['atomize_pdb']):
             ID = self.ID_dict['atomize_pdb'][index-offset]
-            sel_idx = np.random.randint(0, len(self.dataset_dict['atomize_pdb'][ID]))
+            item = sample_item(self.dataset_dict['atomize_pdb'], ID)
             n_res_atomize = np.random.randint(self.params['NRES_ATOMIZE_MIN'], 
                                               self.params['NRES_ATOMIZE_MAX']+1)
-            out = self.loader_dict['atomize_pdb'](self.dataset_dict['atomize_pdb'][ID][sel_idx][0], 
+            out = self.loader_dict['atomize_pdb'](item,
                 self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'], 
                 unclamp=(p_unclamp > self.unclamp_cut))
         offset += len(self.index_dict['atomize_pdb'])
@@ -2517,17 +2355,19 @@ class DistributedWeightedSampler(data.Sampler):
         dataset,
         weights_dict,
         num_example_per_epoch=25600,
-        fraction_pdb=0.11,
-        fraction_fb=0.11,
-        fraction_compl=0.11,  # half neg, half pos
-        fraction_na_compl=0.11, # half neg, half pos
-        fraction_rna=0.11,
-        fraction_sm_compl=0.12, 
-        fraction_metal_compl=0.11, 
-        fraction_sm_compl_multi=0.11, 
-        fraction_sm_compl_covale=0.11,
-        fraction_sm=0.11,
-        fraction_atomize_pdb=0.11,
+        fractions = OrderedDict(
+            pdb=1.,
+            fb=0,
+            compl=0,
+            na_compl=0,
+            rna=0,
+            sm_compl=0,
+            metal_compl=0,
+            sm_compl_multi=0,
+            sm_compl_covale=0,
+            sm=0,
+            atomize_pdb=0
+        ),
         num_replicas=None,
         rank=None,
         replacement=False
@@ -2542,66 +2382,26 @@ class DistributedWeightedSampler(data.Sampler):
             rank = dist.get_rank()
 
         assert num_example_per_epoch % num_replicas == 0
-        total_examples = fraction_pdb + fraction_fb + fraction_compl + fraction_na_compl + \
-                fraction_rna + fraction_sm_compl + fraction_metal_compl + fraction_sm_compl_multi + \
-                fraction_sm_compl_covale + fraction_sm + fraction_atomize_pdb
-        assert (np.allclose(total_examples, 1.0)), f"Fractions of datasets add up to {total_examples}, should add up to 1.0"
+        assert (np.allclose(sum([v for k,v in fractions.items()]), 1.0)), \
+            f"Fractions of datasets add up to {sum([v for k,v in fractions.items()])}, should add up to 1.0"
 
         self.dataset = dataset
         self.weights_dict = weights_dict
-
         self.num_replicas = num_replicas
-        self.num_pdb_per_epoch = int(round(num_example_per_epoch*fraction_pdb))
-        self.num_fb_per_epoch = int(round(num_example_per_epoch*fraction_fb))
-        self.num_compl_per_epoch = int(round(num_example_per_epoch*fraction_compl))
-        #self.num_neg_per_epoch = 0 #manually set to 0
-        self.num_na_compl_per_epoch = int(round(num_example_per_epoch*fraction_na_compl))
-        #self.num_neg_na_compl_per_epoch = 0 # manually set to 0
-        self.num_rna_per_epoch = int(round(num_example_per_epoch*fraction_rna))
-        self.num_sm_compl_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl))
-        self.num_metal_compl_per_epoch = int(round(num_example_per_epoch*fraction_metal_compl))
-        self.num_sm_compl_multi_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl_multi))
-        self.num_sm_compl_covale_per_epoch = int(round(num_example_per_epoch*fraction_sm_compl_covale))
-        self.num_sm_per_epoch = int(round(num_example_per_epoch*fraction_sm))
-        self.num_atomize_pdb_per_epoch = int(round(num_example_per_epoch*fraction_atomize_pdb))
-
-        # self.num_pdb_per_epoch = num_example_per_epoch - (
-        #     self.num_fb_per_epoch 
-        #     + self.num_compl_per_epoch
-        #     + self.num_na_compl_per_epoch
-        #     + self.num_rna_per_epoch
-        #     + self.num_sm_compl_per_epoch
-        #     + self.num_metal_compl_per_epoch
-        #     + self.num_sm_compl_multi_per_epoch
-        #     + self.num_sm_compl_covale_per_epoch
-        #     + self.num_sm_per_epoch
-        #     + self.num_atomize_pdb_per_epoch
-        # #    + self.num_neg_per_epoch
-        # #    + self.num_neg_na_compl_per_epoch
-        # )
-
-        if (rank==0):
-            print (
-                "Per epoch:",
-                self.num_pdb_per_epoch,"pdb,",
-                self.num_fb_per_epoch,"fb,",
-                self.num_compl_per_epoch,"compl,",
-        #        self.num_neg_per_epoch,"neg,",
-                self.num_na_compl_per_epoch,"NA compl,",
-        #        self.num_neg_na_compl_per_epoch,"NA neg,",
-                self.num_rna_per_epoch,"RNA,",
-                self.num_sm_compl_per_epoch, "SM Compl,",
-                self.num_metal_compl_per_epoch, "Metal ion,",
-                self.num_sm_compl_multi_per_epoch, "Multi-res ligand,",
-                self.num_sm_compl_covale_per_epoch, "Covalently linked ligands",
-                self.num_sm_per_epoch, "SM crystals."
-            )
-
+        self.num_per_epoch_dict = OrderedDict([
+            (dataset_name, int(round(num_example_per_epoch * fractions[dataset_name]))) 
+            for dataset_name in self.dataset.dataset_dict.keys()
+        ])
         self.total_size = num_example_per_epoch
         self.num_samples = self.total_size // self.num_replicas
         self.rank = rank
         self.epoch = 0
         self.replacement = replacement
+
+        if (rank==0):
+            print(f"Training examples per epoch ({self.total_size} total):")
+            for k,v in self.num_per_epoch_dict.items():
+                print('  '+k, ':', v)
 
     def __iter__(self):
         # deterministically shuffle based on epoch
@@ -2612,80 +2412,17 @@ class DistributedWeightedSampler(data.Sampler):
         indices = torch.arange(len(self.dataset))
 
         # weighted subsampling
-        # order:
-        #    0          - nfb-1        = FB
-        #    nfb        - nfb+npdb-1   = PDB
-        #    "+npdb     - "+ncmpl-1    = COMPLEX
-        #    "+ncmpl    - "+nneg-1     = COMPLEX NEGATIVES
-        #    "+nneg     - "+nna_cmpl-1 = NA COMPLEX
-        #    "+nna_cmpl - "+nrna-1     = NA COMPLEX NEGATIVES
-        #    "+nrna-1   -              = RNA
+        # order of datasets in this loop should match order in DistilledDataset.__getitem__()
         offset = 0
         sel_indices = torch.tensor((),dtype=int)
-        if (self.num_fb_per_epoch>0):
-            fb_sampled = torch.multinomial(self.weights_dict['fb'], self.num_fb_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[fb_sampled]))
-        offset += len(self.dataset.ID_dict['fb'])
-
-        if (self.num_pdb_per_epoch>0):
-            pdb_sampled = torch.multinomial(self.weights_dict['pdb'], self.num_pdb_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[pdb_sampled + offset]))
-        offset += len(self.dataset.ID_dict['pdb'])
-
-        if (self.num_compl_per_epoch>0):
-            compl_sampled = torch.multinomial(self.weights_dict['compl'], self.num_compl_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[compl_sampled + offset]))
-        offset += len(self.dataset.ID_dict['compl'])
-        
-        #if (self.num_neg_per_epoch>0):
-        #   neg_sampled = torch.multinomial(self.neg_weights, self.num_neg_per_epoch, self.replacement, generator=g)
-        #   sel_indices = torch.cat((sel_indices, indices[neg_sampled + offset]))
-        #offset += len(self.dataset.neg_IDs)
-
-        if (self.num_na_compl_per_epoch>0):
-            na_compl_sampled = torch.multinomial(self.weights_dict['na_compl'], self.num_na_compl_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[na_compl_sampled + offset]))
-        offset += len(self.dataset.ID_dict['na_compl'])
-
-        #if (self.num_neg_na_compl_per_epoch>0):
-        #   neg_na_sampled = torch.multinomial(self.neg_na_compl_weights, self.num_neg_na_compl_per_epoch, self.replacement, generator=g)
-        #   sel_indices = torch.cat((sel_indices, indices[neg_na_sampled + offset]))
-        #offset += len(self.dataset.na_neg_IDs)
-
-        if (self.num_rna_per_epoch>0):
-            rna_sampled = torch.multinomial(self.weights_dict['rna'], self.num_rna_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[rna_sampled + offset]))
-        offset += len(self.dataset.ID_dict['rna'])
-
-        if (self.num_sm_compl_per_epoch>0):
-            sm_compl_sampled = torch.multinomial(self.weights_dict['sm_compl'], self.num_sm_compl_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[sm_compl_sampled + offset]))
-        offset += len(self.dataset.ID_dict['sm_compl'])
-
-        if (self.num_metal_compl_per_epoch>0):
-            metal_sampled = torch.multinomial(self.weights_dict['metal_compl'], self.num_metal_compl_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[metal_sampled + offset]))
-        offset += len(self.dataset.ID_dict['metal_compl'])
-
-        if (self.num_sm_compl_multi_per_epoch>0):
-            sm_compl_multi_sampled = torch.multinomial(self.weights_dict['sm_compl_multi'], self.num_sm_compl_multi_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[sm_compl_multi_sampled + offset]))
-        offset += len(self.dataset.ID_dict['sm_compl_multi'])
-        
-        if (self.num_sm_compl_covale_per_epoch>0):
-            sm_compl_covale_sampled = torch.multinomial(self.weights_dict['sm_compl_covale'], self.num_sm_compl_covale_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[sm_compl_covale_sampled + offset]))
-        offset += len(self.dataset.ID_dict['sm_compl_covale'])
-
-        if (self.num_sm_per_epoch>0):
-            sm_sampled = torch.multinomial(self.weights_dict['sm'], self.num_sm_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[sm_sampled + offset]))
-        offset += len(self.dataset.ID_dict['sm'])
-
-        if (self.num_atomize_pdb_per_epoch>0):
-            atomize_pdb_sampled = torch.multinomial(self.weights_dict['atomize_pdb'], self.num_atomize_pdb_per_epoch, self.replacement, generator=g)
-            sel_indices = torch.cat((sel_indices, indices[atomize_pdb_sampled + offset]))
-        offset += len(self.dataset.ID_dict['atomize_pdb'])
+        for dataset_name in self.dataset.dataset_dict.keys():
+            if (self.num_per_epoch_dict[dataset_name]> 0):
+                sampled_idx = torch.multinomial(self.weights_dict[dataset_name], 
+                                                self.num_per_epoch_dict[dataset_name], 
+                                                self.replacement, 
+                                                generator=g)
+                sel_indices = torch.cat((sel_indices, indices[sampled_idx + offset]))
+            offset += len(self.dataset.ID_dict[dataset_name])
 
         # shuffle indices
         indices = sel_indices[torch.randperm(len(sel_indices), generator=g)]

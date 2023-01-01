@@ -30,10 +30,10 @@ ob.obErrorLog.SetOutputLevel(0)
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
-#torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -782,94 +782,34 @@ class Trainer():
         dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
-        #define dataset & data loader
+        # define dataset & data loader
         train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo = \
             get_train_valid_set(self.loader_param)
 
+        # define atomize_pdb train/valid sets, which use the same examples as pdb set
         train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
-        valid_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
+        valid_ID_dict['atomize_pdb'] = valid_ID_dict['pdb']
         weights_dict['atomize_pdb'] = weights_dict['pdb']
         train_dict['atomize_pdb'] = train_dict['pdb']
-        valid_ID_dict['atomize_pdb'] = valid_ID_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
 
-        if self.dataset_param['n_valid_pdb'] is None: 
-            self.dataset_param["n_valid_pdb"] = len(valid_dict['pdb']) 
-        if self.dataset_param['n_valid_homo'] is None: 
-            self.dataset_param["n_valid_homo"] = len(valid_dict['homo']) 
-        if self.dataset_param["n_valid_compl"] is None: 
-            self.dataset_param["n_valid_compl"] = len(valid_dict['compl'])
-        if self.dataset_param["n_valid_na_compl"] is None: 
-            self.dataset_param["n_valid_na_compl"] = len(valid_dict['na_compl'])
-        if self.dataset_param["n_valid_rna"] is None: 
-            self.dataset_param["n_valid_rna"] = len(valid_dict['rna'])
-        if self.dataset_param["n_valid_sm_compl"] is None: 
-            self.dataset_param["n_valid_sm_compl"] = \
-                len(valid_dict['sm_compl']['CLUSTER'].drop_duplicates())
-        if self.dataset_param["n_valid_metal_compl"] is None: 
-            self.dataset_param["n_valid_metal_compl"] = \
-                len(valid_dict['metal_compl']['CLUSTER'].drop_duplicates())
-        if self.dataset_param["n_valid_sm_compl_multi"] is None: 
-            self.dataset_param["n_valid_sm_compl_multi"] = \
-                len(valid_dict['sm_compl_multi']['CLUSTER'].drop_duplicates())
-        if self.dataset_param["n_valid_sm_compl_covale"] is None: 
-            self.dataset_param["n_valid_sm_compl_covale"] = \
-                len(valid_dict['sm_compl_covale']['CLUSTER'].drop_duplicates())
-        if self.dataset_param["n_valid_sm_compl_strict"] is None: 
-            self.dataset_param["n_valid_sm_compl_strict"] = \
-                len(valid_dict['sm_compl_strict'])
-        if self.dataset_param["n_valid_sm"] is None: 
-            self.dataset_param["n_valid_sm"] = len(valid_dict['sm'])
-        if self.dataset_param["n_valid_atomize_pdb"] is None: 
-            self.dataset_param["n_valid_atomize_pdb"] = len(valid_dict['pdb'])
+        # set number of validation examples being used
+        for k in valid_dict:
+            if self.dataset_param['n_valid_'+k] is None: 
+                self.dataset_param["n_valid_"+k] = len(valid_dict[k]) 
 
         if (rank==0):
-            print ('Loaded (training)',
-                len(train_ID_dict['pdb']),'monomers/homomers,',
-                len(train_ID_dict['fb']),'distilled monomers,',
-                len(train_ID_dict['compl']),'heteromers,',
-                len(train_ID_dict['neg']),'negative heteromers,',
-                len(train_ID_dict['na_compl']),'nucleic-acid complexes,',
-                len(train_ID_dict['na_neg']),'negative nucleic-acid complexes,',
-                len(train_ID_dict['rna']),'RNA structures,',
-                len(train_ID_dict['sm_compl']), 'small molecule complexes, and',
-                len(train_ID_dict['metal_compl']), 'metal ion complexes, and',
-                len(train_ID_dict['sm_compl_multi']), 'multi-res ligand complexes, and',
-                len(train_ID_dict['sm_compl_covale']), 'covalent ligand complexes, and',
-                len(train_ID_dict['sm']), "small molecule crystals."
-            )
-            print ('Loaded (valid)',
-                len(valid_ID_dict['pdb']),'monomers,',
-                len(valid_ID_dict['homo']),'homomers,',
-                len(valid_ID_dict['compl']),'heteromers,',
-                len(valid_ID_dict['neg']),'negative heteromers,',
-                len(valid_ID_dict['na_compl']),'nucleic-acid complexes,',
-                len(valid_ID_dict['na_neg']),'negative nucleic-acid complexes,',
-                len(valid_ID_dict['rna']),'RNA structures,',
-                len(valid_ID_dict['sm_compl']), 'small molecule complexes,',
-                len(valid_ID_dict['metal_compl']), 'metal ion complexes,',
-                len(valid_ID_dict['sm_compl_multi']), 'multi-res ligand complexes,',
-                len(valid_ID_dict['sm_compl_covale']), 'covalent ligand complexes,',
-                len(valid_ID_dict['sm_compl_strict']), 'small molecule complexes (strict),',
-                len(valid_ID_dict['sm']), 'small molecule crystals.'
-            )
+            print('Number of training clusters / examples:')
+            for k in train_ID_dict:
+                print('  '+k, ':', len(train_ID_dict[k]), '/', len(train_dict[k]))
 
-            print ('Using',
-                self.dataset_param['n_valid_pdb'],'monomers,',
-                self.dataset_param['n_valid_homo'],'homomers,',
-                self.dataset_param['n_valid_compl'],'heteromers,',
-                self.dataset_param['n_valid_neg'],'negative heteromers,',
-                self.dataset_param['n_valid_na_compl'],'nucleic-acid complexes,',
-                self.dataset_param['n_valid_na_neg'],'negative nucleic-acid complexes,',
-                self.dataset_param['n_valid_rna'],'RNA structures,',
-                self.dataset_param['n_valid_sm_compl'], 'small mol. complexes,',
-                self.dataset_param['n_valid_metal_compl'], 'metal ion complexes,',
-                self.dataset_param['n_valid_sm_compl_multi'], 'multi-res ligand complexes,',
-                self.dataset_param['n_valid_sm_compl_covale'], 'covalent ligand complexes,',
-                self.dataset_param['n_valid_sm_compl_strict'], 'small molecule complexes (strict),',
-                self.dataset_param['n_valid_sm'], "small molecule crystals,",
-                self.dataset_param['n_valid_atomize_pdb'],'monomers (atomized)',
-            )
+            print('Number of validation clusters / examples:')
+            for k in valid_ID_dict:
+                print('  '+k, ':', len(valid_ID_dict[k]), '/', len(valid_dict[k]))
+
+            print('Using number of validation examples:')
+            for k in valid_dict:
+                print('  '+k, ':', self.dataset_param['n_valid_'+k])
 
         loader_dict = dict(
             pdb = loader_pdb,
@@ -891,7 +831,7 @@ class Trainer():
         valid_sets = dict(
             pdb = Dataset(
                 valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
-                loader_pdb, valid_dict['pdb'],
+                loader_pdb, valid_dict['pdb'], 
                 self.loader_param, homo, p_homo_cut=-1.0
             ),
             homo = Dataset(
@@ -992,32 +932,22 @@ class Trainer():
             train_set, 
             weights_dict,
             num_example_per_epoch=self.dataset_param['n_train'],
+            fractions=OrderedDict([(k, self.dataset_param['fraction_'+k]) for k in train_dict]),
             num_replicas=world_size, 
             rank=rank, 
-            fraction_pdb=self.dataset_param['fraction_pdb'],
-            fraction_fb=self.dataset_param['fraction_fb'],
-            fraction_compl=self.dataset_param['fraction_compl'],
-            fraction_na_compl=self.dataset_param['fraction_na_compl'],
-            fraction_rna=self.dataset_param['fraction_rna'],
-            fraction_sm_compl=self.dataset_param['fraction_sm_compl'],
-            fraction_metal_compl=self.dataset_param['fraction_metal_compl'],
-            fraction_sm_compl_multi=self.dataset_param['fraction_sm_compl_multi'],
-            fraction_sm_compl_covale=self.dataset_param['fraction_sm_compl_covale'],
-            fraction_sm=self.dataset_param['fraction_sm'], 
-            fraction_atomize_pdb=self.dataset_param['fraction_atomize_pdb'], 
             replacement=True
         )
 
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
 
-        valid_samplers = {
-            k : data.distributed.DistributedSampler(v, num_replicas=world_size, rank=rank)
+        valid_samplers = OrderedDict([
+            (k, data.distributed.DistributedSampler(v, num_replicas=world_size, rank=rank))
             for k,v in valid_sets.items()
-        }
-        valid_loaders = {
-            k : data.DataLoader(v, sampler=valid_samplers[k], **LOAD_PARAM)
+        ])
+        valid_loaders = OrderedDict([
+            (k, data.DataLoader(v, sampler=valid_samplers[k], **LOAD_PARAM))
             for k,v in valid_sets.items()
-        }
+        ])
 
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -1084,12 +1014,12 @@ class Trainer():
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, rng)
 
-            for k,v in valid_loaders.items():
+            for dataset_name, valid_loader in valid_loaders.items():
                 valid_tot_, valid_loss_, valid_acc_, _ = self.valid_pdb_cycle(ddp_model, 
-                    v, rank, gpu, world_size, epoch, rng, header=valid_headers[k], 
-                    verbose = self.eval) 
+                    valid_loader, rank, gpu, world_size, epoch, rng, 
+                    header=valid_headers[dataset_name], verbose = self.eval) 
 
-                if k == 'sm_compl':
+                if dataset_name == 'sm_compl':
                     valid_tot, valid_loss, valid_acc = valid_tot_, valid_loss_, valid_acc_
 
             if self.eval: break
@@ -1371,16 +1301,15 @@ class Trainer():
 
             if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
                 item_ = unbatch_item(item) # remove nested lists to make more readable when printed
-
                 if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
                     lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
                 else:
                     lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
                 name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
-            elif task[0]=='sm_only':
-                name = item[0]
+            elif task[0]=='sm':
+                name = item['label']
             else:
-                name = item[0][0]
+                name = item['CHAINID']
 
             if save_pdbs:
                 writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb', 
@@ -1637,10 +1566,10 @@ class Trainer():
                     else:
                         lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
                     name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
-                elif task[0]=='sm_only':
-                    name = item[0]
+                elif task[0]=='sm':
+                    name = item['label']
                 else:
-                    name = item[0][0]
+                    name = item['CHAINID']
                     
                 #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
