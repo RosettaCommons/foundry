@@ -2483,7 +2483,11 @@ class DistilledDataset(data.Dataset):
             ID = self.ID_dict['sm_compl_covale'][index-offset]
             task = 'sm_compl_covale_fold_dock'
             item = get_sm_compl_item(self.dataset_dict['sm_compl_covale'], ID)
-            out = self.loader_dict['sm_compl_covale'](item, self.params)
+            try:
+                out = self.loader_dict['sm_compl_covale'](item, self.params)
+            except Exception as e:
+                print('error loading covale example', item)
+                return (torch.tensor([-1]),)*21
             out = out[:-2]+(task,)+out[-1:]
         offset += len(self.index_dict['sm_compl_covale'])
 
