@@ -14,7 +14,8 @@ from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTY
 from kinematics import get_chirals
 from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
-    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, get_alt_query_ligand
+    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, get_alt_query_ligand, \
+        remove_unresolved_substructures
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -1639,12 +1640,20 @@ def loader_sm_compl_covale(item, params, pick_top=True,
     # prepare atomized residue and small molecule (first 20 elements of num2aa are amino acids)
     residues_to_atomize = list(itertools.chain.from_iterable([[a[:3] for a in b if a[2] in num2aa[:20]] for b in covalent ])) 
     ligand.extend(residues_to_atomize)
-    #TODO: Handle when ligands appear multiple times in a structure 
+
     lig_atoms, lig_bonds = get_ligand_atoms_bonds(ligand, chains, covale)
     lig_ch2xf = dict(item['LIGXF'])
     lig_ch2xf.update(prot_ch2xf) # add protein transform for atomized portion
 
-    xyz_sm, mask_sm, msa_sm, chid_sm, akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
+    xyz_sm, mask_sm, msa_sm, _, akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
+    # remove atoms that are not resolved and do not have any bonds to resolved atoms
+    atoms_without_resolved_neighbors = remove_unresolved_substructures(akeys, lig_bonds, mask_sm)
+    # update indexing of all lists, tensors to remove unresolved substructures
+    akeys = [akey for i, akey in enumerate(akeys) if atoms_without_resolved_neighbors[i].item() != 0]
+    xyz_sm = xyz_sm[atoms_without_resolved_neighbors]
+    mask_sm = mask_sm[atoms_without_resolved_neighbors]
+    msa_sm = msa_sm[atoms_without_resolved_neighbors]
+
     mol, bond_feats_sm = cif_ligand_to_obmol(xyz_sm, akeys, lig_atoms, lig_bonds)
     try:
         xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
