@@ -1557,19 +1557,19 @@ class Trainer():
                     valid_acc = torch.zeros_like(acc_s.detach())
                 valid_loss += torch.stack(list(loss_dict.values()))
                 valid_acc += acc_s.detach()
-
+                
+                item_ = unbatch_item(item)
                 # records results
                 if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
-                    item_ = unbatch_item(item)
                     if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
                         lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
                     else:
                         lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
                     name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
                 elif task[0]=='sm':
-                    name = item['label']
+                    name = item_['label']
                 else:
-                    name = item['CHAINID']
+                    name = item_['CHAINID']
                     
                 #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
@@ -1588,7 +1588,7 @@ class Trainer():
                         pred_sup, seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]], 
                         chain="B", file_mode='a', atom_mask=atom_mask_[res_mask],
-                        atom_idx_offset=atom_mask_[res_mask].sum())
+                        atom_idx_offset=int(atom_mask_[res_mask].sum().item()))
 
                 if self.eval:
                     record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)

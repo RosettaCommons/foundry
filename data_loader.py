@@ -1636,8 +1636,8 @@ def loader_sm_compl_covale(item, params, pick_top=True,
     xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot = cif_prot_to_xyz(ch, ch_xf, modres)
     protein_L, nprotatoms, _ = xyz_prot.shape
 
-    # prepare atomized residue and small molecule
-    residues_to_atomize = list(itertools.chain.from_iterable([[a[:3] for a in b if a[2] in num2aa] for b in covalent ]))
+    # prepare atomized residue and small molecule (first 20 elements of num2aa are amino acids)
+    residues_to_atomize = list(itertools.chain.from_iterable([[a[:3] for a in b if a[2] in num2aa[:20]] for b in covalent ])) 
     ligand.extend(residues_to_atomize)
     #TODO: Handle when ligands appear multiple times in a structure 
     lig_atoms, lig_bonds = get_ligand_atoms_bonds(ligand, chains, covale)
