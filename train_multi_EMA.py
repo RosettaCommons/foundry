@@ -1422,7 +1422,7 @@ class Trainer():
 
                 r = rng.rand()
                 save_pdbs = r<=0.1 
-
+                
                 # transfer inputs to device
                 B, _, N, L = msa.shape
 
@@ -1530,8 +1530,8 @@ class Trainer():
 
                 true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
-                res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
-                # res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
+                # res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
                 mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
