@@ -45,7 +45,7 @@ USE_AMP = False
 torch.set_num_threads(4)
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 5,
+              'num_workers': 0,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -1298,21 +1298,18 @@ class Trainer():
             if torch.isnan(loss):
                 print('nan loss',item_)
                 save_pdbs = True
-            try:
-                if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
-                    item_ = unbatch_item(item) # remove nested lists to make more readable when printed
-                    if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
-                        lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
-                    else:
-                        lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
-                    name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
-                elif task[0]=='sm':
-                    name = item['label']
+
+            if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
+                item_ = unbatch_item(item) # remove nested lists to make more readable when printed
+                if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
+                    lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
                 else:
-                    name = item['CHAINID']
-            except Exception as e:
-                print('task error',item)
-                raise
+                    lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
+                name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
+            elif task[0]=='sm':
+                name = item['label']
+            else:
+                name = item['CHAINID']
 
             if save_pdbs:
                 writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb', 

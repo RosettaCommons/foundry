@@ -74,7 +74,7 @@ def set_data_loader_params(args):
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20221216.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221229.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230103.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -552,7 +552,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     df = _apply_date_res_cutoffs(df)
     df = df[
         (df['CHAINID']!='3dpm_A') & # has mismatched ligand cif and sdf files
-        (df['CHAINID']!='3dpm_B')   # has mismatched ligand cif and sdf files
+        (df['CHAINID']!='3dpm_B') & # has mismatched ligand cif and sdf files
+        (df['CHAINID']!='4ztt_F')   # bond_feats problem
     ]
     train_dict['sm_compl_covale'], valid_dict['sm_compl_covale'], train_ID_dict['sm_compl_covale'], \
         valid_ID_dict['sm_compl_covale'], weights_dict['sm_compl_covale'] = _prep_sm_compl_data(df)
@@ -1581,9 +1582,9 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals, task, item
 
-def loader_sm_compl_covale(item, params, pick_top=True, task='sm_compl_covale',
+def loader_sm_compl_covale(item, params, pick_top=True, 
     init_protein_tmpl=False, init_ligand_tmpl=False,
-    init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0):
+    init_protein_xyz=False, init_ligand_xyz=False, task='sm_compl_covale', random_noise=5.0):
     """
     dataloader for covalently linked small molecule protein complexes
     """
@@ -1594,7 +1595,12 @@ def loader_sm_compl_covale(item, params, pick_top=True, task='sm_compl_covale',
     for bond in covalent:
         for atom in bond:
             if atom[3][0] == "H":
-                return loader_sm_compl(item, params, pick_top, init_protein_tmpl, init_ligand_tmpl, init_protein_xyz, init_ligand_xyz, random_noise)
+                return loader_sm_compl(item, params, pick_top, 
+                    init_protein_tmpl=init_protein_tmpl, 
+                    init_ligand_tmpl=init_ligand_tmpl, 
+                    init_protein_xyz=init_protein_xyz, 
+                    init_ligand_xyz=init_ligand_xyz, 
+                    task=task, random_noise=random_noise)
     
     pdb_id, i_ch_prot = pdb_chain.split('_')
 
