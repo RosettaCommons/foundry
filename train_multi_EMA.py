@@ -502,7 +502,12 @@ class Trainer():
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
-        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats, seq)
+        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(
+            pred=pred_allatom[:,mask_BB[0]],
+            true=nat_symm[None,mask_BB[0]],
+            bond_feats=bond_feats[:,mask_BB[0]][:,:,mask_BB[0]],
+            seq=seq[:,mask_BB[0]]
+        )
         if w_atom_bond >= 0.0:
             tot_loss += w_atom_bond*atom_bond_loss
         loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
@@ -1422,7 +1427,7 @@ class Trainer():
 
                 r = rng.rand()
                 save_pdbs = r<=0.1 
-
+                
                 # transfer inputs to device
                 B, _, N, L = msa.shape
 
@@ -1530,8 +1535,8 @@ class Trainer():
 
                 true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
-                res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
-                # res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
+                # res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
                 mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
@@ -1557,25 +1562,21 @@ class Trainer():
                     valid_acc = torch.zeros_like(acc_s.detach())
                 valid_loss += torch.stack(list(loss_dict.values()))
                 valid_acc += acc_s.detach()
-
-                # records results
+                
+                # record results
+                item_ = unbatch_item(item)
                 if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
-                    item_ = unbatch_item(item)
                     if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
                         lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
                     else:
                         lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
                     name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
                 elif task[0]=='sm':
-                    name = item['label']
+                    name = item_['label']
                 else:
-                    name = item['CHAINID']
+                    name = item_['CHAINID']
                     
-                #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
-                    #writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb',
-                    #    torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
-                    #    bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}.pdb',
                         torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]],
@@ -1588,7 +1589,7 @@ class Trainer():
                         pred_sup, seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]], 
                         chain="B", file_mode='a', atom_mask=atom_mask_[res_mask],
-                        atom_idx_offset=atom_mask_[res_mask].sum())
+                        atom_idx_offset=int(atom_mask_[res_mask].sum().item()))
 
                 if self.eval:
                     record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)

@@ -246,7 +246,7 @@ class Evaluator(Trainer):
             for k,v in valid_loaders.items():
                 valid_tot_, valid_loss_, valid_acc_, loss_df = self.valid_pdb_cycle(ddp_model, 
                     v, rank, gpu, world_size, epoch, rng, header=valid_headers[k], 
-                    verbose = self.eval) 
+                    verbose = self.eval, print_header=True) 
                 df_s.append(loss_df)
 
             if rank==0:

@@ -1292,8 +1292,30 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
         xf = torch.tensor(asmb_xfs[ch2xf[i_ch]][1]).float()
         u,r = xf[:3,:3], xf[:3,3]
         xyz[idx] = torch.einsum('ij,aj->ai', u, xyz[idx]) + r[None,None]
-        
+     
     return xyz, mask, seq, chid, akeys
+
+def remove_unresolved_substructures(akeys, lig_bonds, mask_sm):
+    """
+    returns a tensor mask of indices of atoms that are not resolved and do not have any resolved neighbors
+    atoms with resolved neigbors =1, atoms without resolved neighbors =0
+    """
+    L = len(akeys)
+    bond_feats = torch.zeros(L, L)
+    for bond in lig_bonds:
+        if bond.a not in akeys or bond.b not in akeys: continue # intended to skip bonds to H's
+        i = akeys.index(bond.a)
+        j = akeys.index(bond.b)
+        bond_feats[i,j] = bond.order if not bond.aromatic else 4
+        bond_feats[j,i] = bond_feats[i,j] 
+    
+    no_resolved_neighbors = torch.ones(L)
+    for i in range(len(akeys)):
+        neighbors = bond_feats[i].nonzero()
+        resolved_neighbors = mask_sm[neighbors]
+        if torch.sum(resolved_neighbors) == 0 and ~mask_sm[i]:
+            no_resolved_neighbors[i] = 0
+    return no_resolved_neighbors.bool()
 
 
 def cif_ligand_to_obmol(xyz, akeys, atoms, bonds):
@@ -1407,6 +1429,7 @@ def get_alt_query_ligand(chains, ligand_name, partners, lig_akeys, asmb_xfs):
 
 def get_automorphs(mol, xyz_sm, mask_sm):
     """Enumerate atom symmetry permutations."""
+
     automorphs = openbabel.vvpairUIntUInt()
     openbabel.FindAutomorphisms(mol, automorphs)
 
@@ -1419,6 +1442,6 @@ def get_automorphs(mol, xyz_sm, mask_sm):
     xyz_sm = torch.scatter(xyz_sm, 1, automorphs[:,:,0:1].repeat(1,1,3),
                                 torch.gather(xyz_sm,1,automorphs[:,:,1:2].repeat(1,1,3)))
     mask_sm = torch.scatter(mask_sm, 1, automorphs[:,:,0],
-                         torch.gather(mask_sm, 1, automorphs[:,:,1]))
+                        torch.gather(mask_sm, 1, automorphs[:,:,1]))
 
     return xyz_sm, mask_sm
