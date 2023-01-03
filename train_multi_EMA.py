@@ -502,7 +502,12 @@ class Trainer():
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
-        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats, seq)
+        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(
+            pred=pred_allatom[:,mask_BB[0]],
+            true=nat_symm[None,mask_BB[0]],
+            bond_feats=bond_feats[:,mask_BB[0]][:,:,mask_BB[0]],
+            seq=seq[:,mask_BB[0]]
+        )
         if w_atom_bond >= 0.0:
             tot_loss += w_atom_bond*atom_bond_loss
         loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
@@ -1558,8 +1563,8 @@ class Trainer():
                 valid_loss += torch.stack(list(loss_dict.values()))
                 valid_acc += acc_s.detach()
                 
+                # record results
                 item_ = unbatch_item(item)
-                # records results
                 if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
                     if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
                         lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
@@ -1571,11 +1576,7 @@ class Trainer():
                 else:
                     name = item_['CHAINID']
                     
-                #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
-                    #writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb',
-                    #    torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
-                    #    bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}.pdb',
                         torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]],
