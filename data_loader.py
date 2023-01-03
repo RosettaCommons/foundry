@@ -553,6 +553,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     df = df[
         (df['CHAINID']!='3dpm_A') & # has mismatched ligand cif and sdf files
         (df['CHAINID']!='3dpm_B') & # has mismatched ligand cif and sdf files
+        (df['CHAINID']!='1bs3_A') & 
+        (df['CHAINID']!='1bs3_B') &
         (df['CHAINID']!='4ztt_F')   # bond_feats problem
     ]
     train_dict['sm_compl_covale'], valid_dict['sm_compl_covale'], train_ID_dict['sm_compl_covale'], \
