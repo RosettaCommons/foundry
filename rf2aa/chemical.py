@@ -26,9 +26,25 @@ num2aa=[
 
 aa2num= {x:i for i,x in enumerate(num2aa)}
 
+
+# Mapping 3 letter AA to 1 letter AA (e.g. ALA to A)
+one_letter = ["A", "R", "N", "D", "C", \
+             "Q", "E", "G", "H", "I", \
+             "L", "K", "M", "F", "P", \
+             "S", "T", "W", "Y", "V", "?", "-"]
+
+n_non_protein = len(num2aa) - len(one_letter)
+
+aa_321 = {a:b for a,b in zip(num2aa,one_letter+['a']*n_non_protein)}
+def seq2chars(seq):
+    out = ''.join([aa_321[num2aa[a]] for a in seq])
+    return out
+
 NAATOKENS = 20+2+10+1+47 # 20 AAs, UNK, MASK, 8 NAs,HIS_D, 47 atoms
+UNKINDEX = 20  # residue unknown
 MASKINDEX = 21  # protein mask
 
+NHEAVYPROT = 14
 NHEAVY = 23
 NTOTAL = 36
 NNAPROTAAS = 32

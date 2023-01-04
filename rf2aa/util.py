@@ -5,6 +5,7 @@ import assertpy
 import numpy as np
 import torch
 import warnings
+from assertpy import assert_that
 
 import scipy.sparse
 import networkx as nx
@@ -39,7 +40,15 @@ def get_prot_sm_mask(atom_mask, seq):
     mask : (..., L) 
     """
     sm_mask = is_atom(seq).to(atom_mask.device) # (L)
-    mask_prot = atom_mask[...,:3].all(dim=-1) & ~sm_mask # valid protein/NA residues (L)
+    # Asserting that atom_mask is full for masked regions of proteins [should be]
+    has_backbone = atom_mask[...,:3].all(dim=-1)
+    has_backbone_prot = has_backbone[~sm_mask]
+    n_protein_with_backbone = has_backbone.sum()
+    n_protein = (~sm_mask).sum()
+    ic(n_protein_with_backbone, n_protein)
+    assert_that(n_protein/n_protein_with_backbone).is_greater_than(0.8)
+
+    mask_prot = has_backbone & ~sm_mask # valid protein/NA residues (L)
     mask_ca_sm = atom_mask[...,1] & sm_mask # valid sm mol positions (L)
     mask = mask_prot | mask_ca_sm # valid positions
     return mask
@@ -322,14 +331,17 @@ def xyz_frame_from_rotation_mask(xyz,rotation_mask, atom_frames):
     xyz_frame[rotation_mask, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
     return xyz_frame
 
-def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
+def xyz_t_to_frame_xyz(xyz_t, is_sm, atom_frames):
     """
-    xyz_t (1, T, L, natoms, 3)
-    seq_unmasked (B, L)
-    atom_frames (1, A, 3, 2)
+    Parameters:
+        xyz_t (1, T, L, natoms, 3)
+        seq_unmasked (B, L)
+        atom_frames (1, A, 3, 2)
+    Returns:
+	xyz_t_frame (B, T, L, natoms, 3)
     """
     xyz_t_frame = xyz_t.clone()
-    atoms = is_atom(seq_unmasked[0])
+    atoms = is_sm
     if torch.all(~atoms):
         return xyz_t_frame
     atom_crds_t = xyz_t_frame[:, :, atoms]

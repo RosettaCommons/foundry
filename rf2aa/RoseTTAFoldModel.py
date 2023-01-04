@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import assertpy
+from assertpy import assert_that
 from icecream import ic
 from rf2aa.Embeddings import MSA_emb, Extra_emb, Bond_emb, Templ_emb, Recycling
 from rf2aa.Track_module import IterativeSimulator
@@ -95,7 +96,8 @@ class RoseTTAFoldModule(nn.Module):
         atom_frames=None, t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
         msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None, is_motif=None,
         return_raw=False, return_full=False,
-        use_checkpoint=False
+        use_checkpoint=False,
+        return_infer=False
     ):
         # ic(get_shape(msa_latent))
         # ic(get_shape(msa_full))
@@ -140,6 +142,23 @@ class RoseTTAFoldModule(nn.Module):
             assert_shape(alpha_t,     (1, 1, L, 60))
             assert_shape(mask_t,      (1, 1, L, L))
             assert_shape(same_chain,  (1, L, L))
+            device = msa_latent.device
+            assert_that(msa_full.device).is_equal_to(device)
+            assert_that(seq.device).is_equal_to(device)
+            assert_that(seq_unmasked.device).is_equal_to(device)
+            assert_that(xyz.device).is_equal_to(device)
+            assert_that(sctors.device).is_equal_to(device)
+            assert_that(idx.device).is_equal_to(device)
+            assert_that(bond_feats.device).is_equal_to(device)
+            assert_that(atom_frames.device).is_equal_to(device)
+            assert_that(t1d.device).is_equal_to(device)
+            assert_that(t2d.device).is_equal_to(device)
+            assert_that(xyz_t.device).is_equal_to(device)
+            assert_that(alpha_t.device).is_equal_to(device)
+            assert_that(mask_t.device).is_equal_to(device)
+            assert_that(same_chain.device).is_equal_to(device)
+        # Sanity check for now, feel free to remove.
+        assert self.freeze_track_motif
 
         # Get embeddings
         msa_latent, pair, state = self.latent_emb(msa_latent, seq, idx, bond_feats, same_chain)
@@ -161,7 +180,7 @@ class RoseTTAFoldModule(nn.Module):
         pair, state = self.templ_emb(t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=use_checkpoint)
 
         # Predict coordinates from given inputs
-        is_motif = is_motif if self.freeze_track_motif else torch.zeros_like(seq).bool()
+        is_motif = is_motif if self.freeze_track_motif else torch.zeros_like(seq).bool()[0]
         msa, pair, xyz, alpha_s, xyz_allatom, state = self.simulator(
             seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx, bond_feats, same_chain, chirals, is_motif, atom_frames, use_checkpoint=use_checkpoint, use_atom_frames=self.use_atom_frames)
 
@@ -178,6 +197,10 @@ class RoseTTAFoldModule(nn.Module):
 
         # Predict LDDT
         lddt = self.lddt_pred(state)
+
+        if return_infer:
+            xyz_last = xyz_allatom[-1].unsqueeze(0)
+            return msa[:,0], pair, xyz_last, state, alpha_s[-1], logits_aa.permute(0,2,1), lddt
 
         # predict aligned error and distance error
         if self.use_extra_l1:
