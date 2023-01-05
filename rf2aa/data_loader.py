@@ -721,7 +721,7 @@ def get_train_valid_set(params, OFFSET=1000000, no_match_okay = False):
                 changed = set(diff['values_changed'])
                 ic(changed)
                 for ig in ignore:
-                    changed.remove(f"root['{ig}']")
+                    changed.discard(f"root['{ig}']")
                 if changed:
                     ic(changed)
                     print(f'cache miss: dataset generation parameters passed to train multi differ from those in the dataset pkl:')

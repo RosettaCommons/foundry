@@ -46,7 +46,7 @@ def get_prot_sm_mask(atom_mask, seq):
     n_protein_with_backbone = has_backbone.sum()
     n_protein = (~sm_mask).sum()
     ic(n_protein_with_backbone, n_protein)
-    assert_that(n_protein/n_protein_with_backbone).is_greater_than(0.8)
+    assert_that((n_protein/n_protein_with_backbone).item()).is_greater_than(0.8)
 
     mask_prot = has_backbone & ~sm_mask # valid protein/NA residues (L)
     mask_ca_sm = atom_mask[...,1] & sm_mask # valid sm mol positions (L)
