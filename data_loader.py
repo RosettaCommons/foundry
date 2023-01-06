@@ -65,7 +65,7 @@ def set_data_loader_params(args):
         "SM_LIST"          : "%s/sm_compl_20221228.csv"%sm_compl_dir, 
         "MET_LIST"         : "%s/metal_compl_20221228.csv"%sm_compl_dir, 
         "SM_MULTI_LIST"    : "%s/sm_compl_multi_20221228.csv"%sm_compl_dir, 
-        "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20221228.csv"%sm_compl_dir,
+        "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20230104.csv"%sm_compl_dir,
         "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
@@ -75,7 +75,7 @@ def set_data_loader_params(args):
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20221216.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230103.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230105.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -532,6 +532,18 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     # protein / small molecule complexes
     df = _load_df(params['SM_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
     df = _apply_date_res_cutoffs(df)
+    df = df[
+        (df['CHAINID']!='6fpi_B') &
+        ~((df['CHAINID']=='1q9x_K') & (df['LIGAND'].apply(lambda x: x[0][0]=='S'))) &
+        ~((df['CHAINID']=='4s0n_A') & (df['LIGAND'].apply(lambda x: x[0][0]=='J'))) &
+        ~((df['CHAINID']=='3agv_A') & (df['LIGAND'].apply(lambda x: x[0][0]=='F'))) &
+        (df['CHAINID']!='4u9i_B') &
+        (df['CHAINID']!='6fpw_D') &
+        (df['CHAINID']!='6fpi_D') & 
+        (df['CHAINID']!='6g7r_D') &
+        (df['CHAINID']!='6g7r_B') &
+        (df['CHAINID']!='6gal_D')
+    ]
     train_dict['sm_compl'], valid_dict['sm_compl'], train_ID_dict['sm_compl'], \
         valid_ID_dict['sm_compl'], weights_dict['sm_compl'] = _prep_sm_compl_data(df)
 
@@ -551,13 +563,10 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     # protein / covalent ligand complexes
     df = _load_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
     df = _apply_date_res_cutoffs(df)
-    df = df[
-        (df['CHAINID']!='3dpm_A') & # has mismatched ligand cif and sdf files
-        (df['CHAINID']!='3dpm_B') & # has mismatched ligand cif and sdf files
-        (df['CHAINID']!='1bs3_A') & 
-        (df['CHAINID']!='1bs3_B') &
-        (df['CHAINID']!='4ztt_F')   # bond_feats problem
-    ]
+    df = df[~df['CHAINID'].isin([
+        '3dpm_A','3dpm_B','1bs3_A', '1bs3_B', '2b4b_B', '1etu_A', 
+        '4ztt_F', '1btx_A','1q1k_A','1bxw_A','6mhb_F','1jkj_B','1qga_B',
+    ])]
     train_dict['sm_compl_covale'], valid_dict['sm_compl_covale'], train_ID_dict['sm_compl_covale'], \
         valid_ID_dict['sm_compl_covale'], weights_dict['sm_compl_covale'] = _prep_sm_compl_data(df)
 
@@ -2310,55 +2319,55 @@ class DistilledDataset(data.Dataset):
         #   )
         #offset += len(self.na_neg_inds)
 
-        if index >= offset and index < offset + len(self.index_dict['rna']):
-            ID = self.ID_dict['rna'][index-offset]
-            item = sample_item(self.dataset_dict['rna'], ID)
-            out = self.loader_dict['rna'](item, self.params)
-        offset += len(self.index_dict['rna'])
+        try:
+            if index >= offset and index < offset + len(self.index_dict['rna']):
+                ID = self.ID_dict['rna'][index-offset]
+                item = sample_item(self.dataset_dict['rna'], ID)
+                out = self.loader_dict['rna'](item, self.params)
+            offset += len(self.index_dict['rna'])
 
-        if index >= offset and index < offset + len(self.index_dict['sm_compl']):
-            ID = self.ID_dict['sm_compl'][index-offset]
-            item = sample_item_sm_compl(self.dataset_dict['sm_compl'], ID)
-            out = self.loader_dict['sm_compl'](item, self.params, task='sm_compl')
-        offset += len(self.index_dict['sm_compl'])
+            if index >= offset and index < offset + len(self.index_dict['sm_compl']):
+                ID = self.ID_dict['sm_compl'][index-offset]
+                item = sample_item_sm_compl(self.dataset_dict['sm_compl'], ID)
+                out = self.loader_dict['sm_compl'](item, self.params, task='sm_compl')
+            offset += len(self.index_dict['sm_compl'])
 
-        if index >= offset and index < offset + len(self.index_dict['metal_compl']):
-            ID = self.ID_dict['metal_compl'][index-offset]
-            item = sample_item_sm_compl(self.dataset_dict['metal_compl'], ID)
-            out = self.loader_dict['metal_compl'](item, self.params, task='metal_compl')
-        offset += len(self.index_dict['metal_compl'])
+            if index >= offset and index < offset + len(self.index_dict['metal_compl']):
+                ID = self.ID_dict['metal_compl'][index-offset]
+                item = sample_item_sm_compl(self.dataset_dict['metal_compl'], ID)
+                out = self.loader_dict['metal_compl'](item, self.params, task='metal_compl')
+            offset += len(self.index_dict['metal_compl'])
 
-        if index >= offset and index < offset + len(self.index_dict['sm_compl_multi']):
-            ID = self.ID_dict['sm_compl_multi'][index-offset]
-            item = sample_item_sm_compl(self.dataset_dict['sm_compl_multi'], ID)
-            out = self.loader_dict['sm_compl_multi'](item, self.params, task='sm_compl_multi')
-        offset += len(self.index_dict['sm_compl_multi'])
+            if index >= offset and index < offset + len(self.index_dict['sm_compl_multi']):
+                ID = self.ID_dict['sm_compl_multi'][index-offset]
+                item = sample_item_sm_compl(self.dataset_dict['sm_compl_multi'], ID)
+                out = self.loader_dict['sm_compl_multi'](item, self.params, task='sm_compl_multi')
+            offset += len(self.index_dict['sm_compl_multi'])
 
-        if index >= offset and index < offset + len(self.index_dict['sm_compl_covale']):
-            ID = self.ID_dict['sm_compl_covale'][index-offset]
-            item = sample_item_sm_compl(self.dataset_dict['sm_compl_covale'], ID)
-            try:
+            if index >= offset and index < offset + len(self.index_dict['sm_compl_covale']):
+                ID = self.ID_dict['sm_compl_covale'][index-offset]
+                item = sample_item_sm_compl(self.dataset_dict['sm_compl_covale'], ID)
                 out = self.loader_dict['sm_compl_covale'](item, self.params, task='sm_compl_covale')
-            except Exception as e:
-                print('error loading covale example', item)
-                return (torch.tensor([-1]),)*21
-        offset += len(self.index_dict['sm_compl_covale'])
+            offset += len(self.index_dict['sm_compl_covale'])
 
-        if index >= offset and index < offset + len(self.index_dict['sm']):
-            ID = self.ID_dict['sm'][index-offset]
-            item = sample_item(self.dataset_dict['sm'], ID)
-            out = self.loader_dict['sm'](item, self.params)
-        offset += len(self.index_dict['sm'])
+            if index >= offset and index < offset + len(self.index_dict['sm']):
+                ID = self.ID_dict['sm'][index-offset]
+                item = sample_item(self.dataset_dict['sm'], ID)
+                out = self.loader_dict['sm'](item, self.params)
+            offset += len(self.index_dict['sm'])
 
-        if index >= offset and index < offset + len(self.index_dict['atomize_pdb']):
-            ID = self.ID_dict['atomize_pdb'][index-offset]
-            item = sample_item(self.dataset_dict['atomize_pdb'], ID)
-            n_res_atomize = np.random.randint(self.params['NRES_ATOMIZE_MIN'], 
-                                              self.params['NRES_ATOMIZE_MAX']+1)
-            out = self.loader_dict['atomize_pdb'](item,
-                self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'], 
-                unclamp=(p_unclamp > self.unclamp_cut))
-        offset += len(self.index_dict['atomize_pdb'])
+            if index >= offset and index < offset + len(self.index_dict['atomize_pdb']):
+                ID = self.ID_dict['atomize_pdb'][index-offset]
+                item = sample_item(self.dataset_dict['atomize_pdb'], ID)
+                n_res_atomize = np.random.randint(self.params['NRES_ATOMIZE_MIN'], 
+                                                  self.params['NRES_ATOMIZE_MAX']+1)
+                out = self.loader_dict['atomize_pdb'](item,
+                    self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'], 
+                    unclamp=(p_unclamp > self.unclamp_cut))
+            offset += len(self.index_dict['atomize_pdb'])
+        except Exception as e:
+            print('error loading',item)
+            raise e
 
         return out
 
