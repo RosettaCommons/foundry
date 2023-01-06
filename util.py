@@ -72,7 +72,7 @@ def center_and_realign_missing(xyz, mask_t, seq=None, same_chain=None):
         mask = get_prot_sm_mask(mask_t, seq)
 
     # center c.o.m of existing residues at the origin
-    center_CA = (mask[...,None]*xyz[:,1]).sum(dim=0) / (mask[...,None].sum(dim=0) + 1e-5) # (3)
+    center_CA = xyz[mask,1].mean(dim=0) # (3)
     xyz = torch.where(mask.view(L,1,1), xyz - center_CA.view(1, 1, 3), xyz)
 
     # move missing residues to the closest valid residues on same chain
