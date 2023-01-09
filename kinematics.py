@@ -253,7 +253,6 @@ def get_chirals(obmol, xyz):
         chirals = chirals.repeat(3,1).float()
         chirals[n:2*n,1:-1] = torch.roll(chirals[n:2*n,1:-1],1,1)
         chirals[2*n: ,1:-1] = torch.roll(chirals[2*n: ,1:-1],2,1)
-        chirals[:,:-1] -= 1
         dih = get_dih(*xyz[chirals[:,:4].long()].split(split_size=1,dim=1))[:,0]
         chirals[dih<0.0,-1] = -angle
     else:
