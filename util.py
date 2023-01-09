@@ -1445,3 +1445,24 @@ def get_automorphs(mol, xyz_sm, mask_sm):
                         torch.gather(mask_sm, 1, automorphs[:,:,1]))
 
     return xyz_sm, mask_sm
+
+def same_chain_2d_from_Ls(Ls):
+    """Given list of chain lengths, returns binary matrix with 1 if two residues are on the same chain."""
+    same_chain = torch.zeros((sum(Ls),sum(Ls))).long()
+    i_curr = 0
+    for L in Ls:
+        same_chain[i_curr:i_curr+L, i_curr:i_curr+L] = 1
+        i_curr += L
+    return same_chain
+
+def Ls_from_same_chain_2d(same_chain):
+    """Given binary matrix indicating whether two residues are on same chain, returns list of chain lengths"""
+    if len(same_chain.shape)==3: # remove batch dimension
+        same_chain = same_chain.squeeze(0)
+    Ls = []
+    i_curr = 0
+    while i_curr < len(same_chain):
+        idx = torch.where(same_chain[i_curr])[0]
+        Ls.append(idx[-1]-idx[0]+1)
+        i_curr = idx[-1]+1
+    return Ls

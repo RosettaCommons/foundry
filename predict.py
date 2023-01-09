@@ -612,7 +612,7 @@ class Predictor():
 
         if mol2_fn is not None:
             a3m_prot = {"msa": msa_prot, "ins": ins_prot}
-            mol, msa_sm, ins_sm, xyz_sm, mask_sm = parsers.parse_mol(args.mol2)
+            mol, msa_sm, ins_sm, xyz_sm, mask_sm = parsers.parse_mol(mol2_fn)
             a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
             G = util.get_nxgraph(mol)
             atom_frames = util.get_atom_frames(msa_sm, G)

@@ -202,48 +202,48 @@ def parse_a3m(filename, unzip=True, maxseq=10000):
 
 # read and extract xyz coords of N,Ca,C atoms
 # from a PDB file
-def parse_pdb(filename, seq=False, parse_hetatom=True):
+def parse_pdb(filename, seq=False):
     lines = open(filename,'r').readlines()
     if seq:
-        return parse_pdb_lines_w_seq(lines, parse_hetatom=parse_hetatom)
+        return parse_pdb_lines_w_seq(lines)
     return parse_pdb_lines(lines)
 
-def parse_pdb_lines_w_seq(lines, parse_hetatom=True):
+def parse_pdb_lines_w_seq(lines):
 
     # indices of residues observed in the structure
-    #idx_s = [int(l[22:26]) for l in lines if l[:4]=="ATOM" and l[12:16].strip()=="CA"]
-    res = [(l[22:26],l[17:20]) for l in lines if l[:4]=="ATOM" and l[12:16].strip()=="CA"]
-    idx_s = [int(r[0]) for r in res]
-    seq = [aa2num[r[1]] if r[1] in aa2num.keys() else 20 for r in res]
+    res = [(l[21:22].strip(), l[22:26],l[17:20]) for l in lines if l[:4]=="ATOM" and l[12:16].strip()=="CA"] # (chain letter, res num, aa)
+    pdb_idx_s = [(r[0], int(r[1])) for r in res]
+    idx_s = [int(r[1]) for r in res]
+    seq = [aa2num[r[2]] if r[2] in aa2num.keys() else 20 for r in res]
 
     # 4 BB + up to 10 SC atoms
     xyz = np.full((len(idx_s), NTOTAL, 3), np.nan, dtype=np.float32)
     for l in lines:
         if l[:4] != "ATOM":
             continue
-        resNo, atom, aa = int(l[22:26]), l[12:16], l[17:20]
-        idx = idx_s.index(resNo)
+        chain, resNo, atom, aa = l[21:22].strip(), int(l[22:26]), l[12:16], l[17:20]
+        idx = pdb_idx_s.index((chain,resNo))
         for i_atm, tgtatm in enumerate(aa2long[aa2num[aa]]):
             if tgtatm == atom:
                 xyz[idx,i_atm,:] = [float(l[30:38]), float(l[38:46]), float(l[46:54])]
                 break
 
-    if parse_hetatom:
-        # parse ligand atoms
-        offset = max(idx_s)
-        res_lig = [l[12:16].strip() for l in lines if l[:6]=="HETATM"]
-        res_lig = [(i+offset+CHAIN_GAP,l) for i,l in enumerate(res_lig)]
-        idx_s_lig = [int(r[0]) for r in res_lig]
-        seq_lig = [aa2num[r[1]] if r[1] in aa2num.keys() else 20 for r in res_lig]
+    #if parse_hetatom:
+    #    # parse ligand atoms
+    #    offset = max(idx_s)
+    #    res_lig = [l[12:16].strip() for l in lines if l[:6]=="HETATM"]
+    #    res_lig = [(i+offset+CHAIN_GAP,l) for i,l in enumerate(res_lig)]
+    #    idx_s_lig = [int(r[0]) for r in res_lig]
+    #    seq_lig = [aa2num[r[1]] if r[1] in aa2num.keys() else 20 for r in res_lig]
 
-        xyz_s_lig = [[float(l[30:38]), float(l[38:46]), float(l[46:54])] for l in lines if l[:6]=='HETATM']
+    #    xyz_s_lig = [[float(l[30:38]), float(l[38:46]), float(l[46:54])] for l in lines if l[:6]=='HETATM']
 
-        if len(xyz_s_lig)>0:
-            xyz_lig = np.full((len(idx_s_lig), NTOTAL, 3), np.nan, dtype=np.float32)
-            xyz_lig[:,1,:] = np.array(xyz_s_lig)
-            xyz = np.concatenate([xyz, xyz_lig],axis=0)
-            idx_s = idx_s + idx_s_lig
-            seq = seq + seq_lig
+    #    if len(xyz_s_lig)>0:
+    #        xyz_lig = np.full((len(idx_s_lig), NTOTAL, 3), np.nan, dtype=np.float32)
+    #        xyz_lig[:,1,:] = np.array(xyz_s_lig)
+    #        xyz = np.concatenate([xyz, xyz_lig],axis=0)
+    #        idx_s = idx_s + idx_s_lig
+    #        seq = seq + seq_lig
 
     # save atom mask
     mask = np.logical_not(np.isnan(xyz[...,0]))
@@ -255,15 +255,15 @@ def parse_pdb_lines_w_seq(lines, parse_hetatom=True):
 def parse_pdb_lines(lines):
 
     # indices of residues observed in the structure
-    idx_s = [int(l[22:26]) for l in lines if l[:4]=="ATOM" and l[12:16].strip()=="CA"]
+    idx_s = [(l[21:22].strip(), int(l[22:26])) for l in lines if l[:4]=="ATOM" and l[12:16].strip()=="CA"] # (chain letter, res num)
 
     # 4 BB + up to 10 SC atoms
     xyz = np.full((len(idx_s), NTOTAL, 3), np.nan, dtype=np.float32)
     for l in lines:
         if l[:4] != "ATOM":
             continue
-        resNo, atom, aa = int(l[22:26]), l[12:16], l[17:20]
-        idx = idx_s.index(resNo)
+        chain, resNo, atom, aa = l[21:22].strip(), int(l[22:26]), l[12:16], l[17:20]
+        idx = idx_s.index((chain,resNo))
         for i_atm, tgtatm in enumerate(aa2long[aa2num[aa]]):
             if tgtatm == atom:
                 xyz[idx,i_atm,:] = [float(l[30:38]), float(l[38:46]), float(l[46:54])]
