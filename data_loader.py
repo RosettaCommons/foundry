@@ -75,7 +75,7 @@ def set_data_loader_params(args):
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20221216.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230105.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230108.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -508,8 +508,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     train_dict['rna'] = rna[~in_val]
     valid_dict['rna'] = rna[in_val]
     train_ID_dict['rna'] = train_dict['rna'].CLUSTER.values # all unique
+    weights_dict['rna'] = torch.ones(len(train_ID_dict['rna']))
     valid_ID_dict['rna'] = valid_dict['rna'].CLUSTER.values
-    weights_dict['rna'] = torch.ones(len(valid_ID_dict['rna']))
 
     # protein-small molecule complexes
     def _prep_sm_compl_data(df):
@@ -533,16 +533,17 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     df = _load_df(params['SM_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
     df = _apply_date_res_cutoffs(df)
     df = df[
-        (df['CHAINID']!='6fpi_B') &
         ~((df['CHAINID']=='1q9x_K') & (df['LIGAND'].apply(lambda x: x[0][0]=='S'))) &
         ~((df['CHAINID']=='4s0n_A') & (df['LIGAND'].apply(lambda x: x[0][0]=='J'))) &
         ~((df['CHAINID']=='3agv_A') & (df['LIGAND'].apply(lambda x: x[0][0]=='F'))) &
-        (df['CHAINID']!='4u9i_B') &
-        (df['CHAINID']!='6fpw_D') &
-        (df['CHAINID']!='6fpi_D') & 
-        (df['CHAINID']!='6g7r_D') &
-        (df['CHAINID']!='6g7r_B') &
-        (df['CHAINID']!='6gal_D')
+        ~((df['CHAINID']=='5l6x_B') & (df['LIGAND'].apply(lambda x: x[0][0]=='O'))) &
+        ~((df['CHAINID']=='5l6x_A') & (df['LIGAND'].apply(lambda x: x[0][0]=='I'))) &
+        ~(df['CHAINID'].isin([
+            '1khz_B', '1g9q_A', '1g9q_B', # cuda indexing errors during forward pass
+            '4u9i_B', '4u9h_B', '4jhq_A', '4jhq_B', '5myq_A', '5myq_B', # error during loading
+            '5myq_C', '5myq_D', '6g7r_D', '6g7r_B', '6gal_D', '6fpi_B', # error during loading
+            '6fpi_D', '6fpw_B', '6fpw_D', # error during loading
+        ]))
     ]
     train_dict['sm_compl'], valid_dict['sm_compl'], train_ID_dict['sm_compl'], \
         valid_ID_dict['sm_compl'], weights_dict['sm_compl'] = _prep_sm_compl_data(df)
@@ -564,8 +565,9 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     df = _load_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
     df = _apply_date_res_cutoffs(df)
     df = df[~df['CHAINID'].isin([
-        '3dpm_A','3dpm_B','1bs3_A', '1bs3_B', '2b4b_B', '1etu_A', 
-        '4ztt_F', '1btx_A','1q1k_A','1bxw_A','6mhb_F','1jkj_B','1qga_B',
+        '1adl_A', '1bs3_A', '1bs3_B', '1btx_A', '1bxw_A', '1etu_A', '1gjm_A',
+        '1h3v_B', '1jkj_B', '1l0i_A', '1q1k_A', '1qga_A', '1qga_B', '1nte_A',
+        '1x83_B', '2b4b_B', '3dpm_A', '3dpm_B', '4ztt_F', '5kxd_A', '6mhb_F'
     ])]
     train_dict['sm_compl_covale'], valid_dict['sm_compl_covale'], train_ID_dict['sm_compl_covale'], \
         valid_ID_dict['sm_compl_covale'], weights_dict['sm_compl_covale'] = _prep_sm_compl_data(df)
@@ -1531,10 +1533,6 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
         xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0,
             npick=ntempl, pick_top=pick_top, same_chain=chain_idx, random_noise=random_noise)
 
-        if msa.shape[1] != xyz_t.shape[1]:
-            print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
-            return (torch.tensor([-1]),)*21
-
     if init_protein_xyz or init_ligand_xyz:
         # initialize coords to ground truth, move to origin, rotate randomly
         xyz_prev = torch.full((sum(Ls), NTOTAL, 3), np.nan).float()
@@ -1666,11 +1664,7 @@ def loader_sm_compl_covale(item, params, pick_top=True,
     msa_sm = msa_sm[atoms_without_resolved_neighbors]
 
     mol, bond_feats_sm = cif_ligand_to_obmol(xyz_sm, akeys, lig_atoms, lig_bonds)
-    try:
-        xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
-    except Exception as e:
-        print('error in loader_sm_compl',item)
-        raise e
+    xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
 
     if xyz_sm.shape[0] > params['MAXNSYMM']: 
         xyz_sm = xyz_sm[:params['MAXNSYMM']]
@@ -1679,6 +1673,7 @@ def loader_sm_compl_covale(item, params, pick_top=True,
     if xyz_sm.shape[0] == 0:
         print(f'ERROR [loader_sm_compl]: {item[0]} had no xyz coords')
         return (torch.tensor([-1]),)*21 
+
     ins_sm = torch.zeros_like(msa_sm)
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)

@@ -37,6 +37,8 @@ def get_args():
             help="Learning rate [5.0e-4]")
     train_group.add_argument('-num_epochs', type=int, default=300,
             help="Number of epochs [300]")
+    train_group.add_argument('-skip_valid', type=int, default=1,
+            help="Do valid cycles every <skip_valid> epochs [1]")
     train_group.add_argument("-step_lr", type=int, default=300,
             help="Parameter for Step LR scheduler [300]")
     train_group.add_argument("-port", type=int, default=12319,
