@@ -202,13 +202,13 @@ def parse_a3m(filename, unzip=True, maxseq=10000):
 
 # read and extract xyz coords of N,Ca,C atoms
 # from a PDB file
-def parse_pdb(filename, seq=False):
+def parse_pdb(filename, seq=False, parse_hetatom=True):
     lines = open(filename,'r').readlines()
     if seq:
         return parse_pdb_lines_w_seq(lines, parse_hetatom=parse_hetatom)
     return parse_pdb_lines(lines)
 
-def parse_pdb_lines_w_seq(lines):
+def parse_pdb_lines_w_seq(lines, parse_hetatom=True):
 
     # indices of residues observed in the structure
     #idx_s = [int(l[22:26]) for l in lines if l[:4]=="ATOM" and l[12:16].strip()=="CA"]
@@ -228,21 +228,22 @@ def parse_pdb_lines_w_seq(lines):
                 xyz[idx,i_atm,:] = [float(l[30:38]), float(l[38:46]), float(l[46:54])]
                 break
 
-    # parse ligand atoms
-    offset = max(idx_s)
-    res_lig = [l[12:16].strip() for l in lines if l[:6]=="HETATM"]
-    res_lig = [(i+offset+CHAIN_GAP,l) for i,l in enumerate(res_lig)]
-    idx_s_lig = [int(r[0]) for r in res_lig]
-    seq_lig = [aa2num[r[1]] if r[1] in aa2num.keys() else 20 for r in res_lig]
+    if parse_hetatom:
+        # parse ligand atoms
+        offset = max(idx_s)
+        res_lig = [l[12:16].strip() for l in lines if l[:6]=="HETATM"]
+        res_lig = [(i+offset+CHAIN_GAP,l) for i,l in enumerate(res_lig)]
+        idx_s_lig = [int(r[0]) for r in res_lig]
+        seq_lig = [aa2num[r[1]] if r[1] in aa2num.keys() else 20 for r in res_lig]
 
-    xyz_s_lig = [[float(l[30:38]), float(l[38:46]), float(l[46:54])] for l in lines if l[:6]=='HETATM']
+        xyz_s_lig = [[float(l[30:38]), float(l[38:46]), float(l[46:54])] for l in lines if l[:6]=='HETATM']
 
-    if len(xyz_s_lig)>0:
-        xyz_lig = np.full((len(idx_s_lig), NTOTAL, 3), np.nan, dtype=np.float32)
-        xyz_lig[:,1,:] = np.array(xyz_s_lig)
-        xyz = np.concatenate([xyz, xyz_lig],axis=0)
-        idx_s = idx_s + idx_s_lig
-        seq = seq + seq_lig
+        if len(xyz_s_lig)>0:
+            xyz_lig = np.full((len(idx_s_lig), NTOTAL, 3), np.nan, dtype=np.float32)
+            xyz_lig[:,1,:] = np.array(xyz_s_lig)
+            xyz = np.concatenate([xyz, xyz_lig],axis=0)
+            idx_s = idx_s + idx_s_lig
+            seq = seq + seq_lig
 
     # save atom mask
     mask = np.logical_not(np.isnan(xyz[...,0]))
@@ -348,12 +349,14 @@ def parse_templates(item, params):
         
     return xyz,mask,qmap,f0d,f1d,ids
 
-def parse_templates_raw(ffdb, hhr_fn, atab_fn):
+def parse_templates_raw(ffdb, hhr_fn, atab_fn, max_templ=20):
     # process tabulated hhsearch output to get
     # matched positions and positional scores
     hits = []
     for l in open(atab_fn, "r").readlines():
         if l[0]=='>':
+            if len(hits) == max_templ:
+                break
             key = l[1:].split()[0]
             hits.append([key,[],[]])
         elif "score" in l or "dssp" in l:
@@ -365,19 +368,20 @@ def parse_templates_raw(ffdb, hhr_fn, atab_fn):
 
     # get per-hit statistics from an .hhr file
     # (!!! assume that .hhr and .atab have the same hits !!!)
-    # [Probab, E-value, Score, Aligned_cols, 
+    # [Probab, E-value, Score, Aligned_cols,
     # Identities, Similarity, Sum_probs, Template_Neff]
     lines = open(hhr_fn, "r").readlines()
     pos = [i+1 for i,l in enumerate(lines) if l[0]=='>']
-    for i,posi in enumerate(pos):
+    for i,posi in enumerate(pos[:len(hits)]):
         hits[i].append([float(s) for s in re.sub('[=%]',' ',lines[posi]).split()[1::2]])
-        
+
     # parse templates from FFDB
     for hi in hits:
         #if hi[0] not in ffids:
         #    continue
         entry = get_entry_by_name(hi[0], ffdb.index)
         if entry == None:
+            print ("Failed to find %s in *_pdb.ffindex"%hi[0])
             continue
         data = read_entry_lines(entry, ffdb.data)
         hi += list(parse_pdb_lines_w_seq(data))
@@ -388,13 +392,14 @@ def parse_templates_raw(ffdb, hhr_fn, atab_fn):
     for data in hits:
         if len(data)<7:
             continue
-        
+        print ("Process %s..."%data[0])
+
         qi,ti = np.array(data[1]).T
         _,sel1,sel2 = np.intersect1d(ti, data[6], return_indices=True)
         ncol = sel1.shape[0]
         if ncol < 10:
             continue
-        
+
         ids.append(data[0])
         f0d.append(data[3])
         f1d.append(np.array(data[2])[sel1])
@@ -403,28 +408,32 @@ def parse_templates_raw(ffdb, hhr_fn, atab_fn):
         seq.append(data[-1][sel2])
         qmap.append(np.stack([qi[sel1]-1,[counter]*ncol],axis=-1))
         counter += 1
-    
+
     xyz = np.vstack(xyz).astype(np.float32)
+    mask = np.vstack(mask).astype(np.bool)
     qmap = np.vstack(qmap).astype(np.long)
     f1d = np.vstack(f1d).astype(np.float32)
     seq = np.hstack(seq).astype(np.long)
     ids = ids
 
-    return torch.from_numpy(xyz), torch.from_numpy(qmap), \
+    return torch.from_numpy(xyz), torch.from_numpy(mask), torch.from_numpy(qmap), \
            torch.from_numpy(f1d), torch.from_numpy(seq), ids
 
 def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
-    xyz_t, qmap, t1d, seq, ids = parse_templates_raw(ffdb, hhr_fn, atab_fn)
+    xyz_t, mask_t, qmap, t1d, seq, ids = parse_templates_raw(ffdb, hhr_fn, atab_fn, max_templ=max(n_templ, 20))
+    ntmplatoms = xyz_t.shape[1]
+
     npick = min(n_templ, len(ids))
     if npick < 1: # no templates
-        xyz = torch.full((1,qlen,27,3),np.nan).float()
+        xyz = torch.full((1,qlen,NTOTAL,3),np.nan).float()
         t1d = torch.nn.functional.one_hot(torch.full((1, qlen), 20).long(), num_classes=21).float() # all gaps
         t1d = torch.cat((t1d, torch.zeros((1,qlen,1)).float()), -1)
         return xyz, t1d
 
     sample = torch.arange(npick)
     #
-    xyz = torch.full((npick, qlen, 27, 3), np.nan).float()
+    xyz = torch.full((npick, qlen, NTOTAL, 3), np.nan).float()
+    mask = torch.full((npick, qlen, NTOTAL), False)
     f1d = torch.full((npick, qlen), 20).long()
     f1d_val = torch.zeros((npick, qlen, 1)).float()
     #
@@ -432,13 +441,16 @@ def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
         sel = torch.where(qmap[:,1] == nt)[0]
         pos = qmap[sel, 0]
         xyz[i, pos] = xyz_t[sel]
+        mask[i, pos, :ntmplatoms] = mask_t[sel].bool()
         f1d[i, pos] = seq[sel]
         f1d_val[i,pos] = t1d[sel, 2].unsqueeze(-1)
-    
-    f1d = torch.nn.functional.one_hot(f1d, num_classes=21).float()
+        xyz[i] = util.center_and_realign_missing(xyz[i], mask[i], seq=f1d[i])
+
+    f1d = torch.nn.functional.one_hot(f1d, num_classes=NAATOKENS-1).float()
     f1d = torch.cat((f1d, f1d_val), dim=-1)
 
-    return xyz, f1d
+    return xyz, mask, f1d
+
 
 def clean_sdffile(filename):
     # lowercase the 2nd letter of the element name (e.g. FE->Fe) so openbabel can parse it correctly

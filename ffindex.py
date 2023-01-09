@@ -18,7 +18,7 @@ FFindexEntry = namedtuple("FFindexEntry", "name, offset, length")
 def read_index(ffindex_filename):
     entries = []
     
-    fh = open(ffindex_filename)
+    fh = open(ffindex_filename, "r")
     for line in fh:
         tokens = line.split("\t")
         entries.append(FFindexEntry(tokens[0], int(tokens[1]), int(tokens[2])))
@@ -28,8 +28,8 @@ def read_index(ffindex_filename):
 
 
 def read_data(ffdata_filename):
-    fh = open(ffdata_filename, "r+b")
-    data = mmap.mmap(fh.fileno(), 0)
+    fh = open(ffdata_filename, "rb")
+    data = mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ)
     fh.close()
     return data
 

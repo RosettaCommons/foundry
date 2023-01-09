@@ -2214,15 +2214,19 @@ class DatasetSMComplex(data.Dataset):
     def __getitem__(self, index):
         ID = self.IDs[index]
         item = sample_item_sm_compl(self.data_df, ID)
-        out = self.loader(
-            item,
-            self.params,
-            init_protein_tmpl = self.init_protein_tmpl,
-            init_ligand_tmpl = self.init_ligand_tmpl,
-            init_protein_xyz = self.init_protein_xyz,
-            init_ligand_xyz = self.init_ligand_xyz,
-            task = self.task
-        )
+        try:
+            out = self.loader(
+                item,
+                self.params,
+                init_protein_tmpl = self.init_protein_tmpl,
+                init_ligand_tmpl = self.init_ligand_tmpl,
+                init_protein_xyz = self.init_protein_xyz,
+                init_ligand_xyz = self.init_ligand_xyz,
+                task = self.task
+            )
+        except Exception as e:
+            print('error in DatasetSMComplex',item)
+            #raise e
         return out
 
 class DatasetSM(data.Dataset):
