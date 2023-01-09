@@ -357,7 +357,10 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
     return xyz, t1d, mask_t
 
 
-def get_train_valid_set(params, OFFSET=1000000, no_match_okay = False):
+def get_train_valid_set(all_params, OFFSET=1000000, no_match_okay = False):
+
+    ignore = ['DATASETS', 'DATASET_PROB', 'DIFF_MASK_PROBS']
+    params = {k:v for k,v in all_params.items() if k not in ignore}
     if (not os.path.exists(params['DATAPKL'])):
         print(f'cached train/valid datasets {params["DATAPKL"]} not found. '\
               f're-parsing train/valid metadata...')
@@ -716,8 +719,8 @@ def get_train_valid_set(params, OFFSET=1000000, no_match_okay = False):
             elapsed = time.time() - start
             print (f'Loaded {params["DATAPKL"]} in {elapsed:.1f}s')
             diff = deepdiff.DeepDiff(params, gen_params, ignore_order=True)
-            if diff:
-                ignore = ['DATASETS', 'DATASET_PROB']
+            ic(diff)
+            if diff and 'values_changed' in diff:
                 changed = set(diff['values_changed'])
                 ic(changed)
                 for ig in ignore:
@@ -1612,14 +1615,12 @@ def loader_sm_compl(item, params, pick_top=True,
         G = get_nxgraph(mol)
         frames = get_atom_frames(msa_sm, G)
         chirals = get_chirals(mol, xyz_sm[0])
-        ic(chirals.shape)
         if chirals.shape[0] == 0:
             chirals = torch.zeros((0,4))
     else:
         xyz_sm = torch.zeros((1,0,1))
         mask_sm = torch.zeros((1,0))
         chirals = torch.zeros((0,4)) # 4 might not be right but it's empty
-        ic(chirals.shape)
 
     # Generate ground truth structure: account for ligand symmetry
     N_symmetry, sm_L, _ = xyz_sm.shape
