@@ -124,6 +124,8 @@ def get_args():
     dataset_group.add_argument('-n_valid_sm_compl_strict', type=int)
     dataset_group.add_argument('-n_valid_sm', type=int)
     dataset_group.add_argument('-n_valid_atomize_pdb', type=int)
+    dataset_group.add_argument('-datapkl', type=str, default='/projects/ml/RF2_allatom/dataset_20221123.pkl',
+            help='Path to pickled dataset to load for training on. If path doesn\'t exist, will write new pickle with that name.')
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")

@@ -42,11 +42,10 @@ def get_prot_sm_mask(atom_mask, seq):
     sm_mask = is_atom(seq).to(atom_mask.device) # (L)
     # Asserting that atom_mask is full for masked regions of proteins [should be]
     has_backbone = atom_mask[...,:3].all(dim=-1)
-    has_backbone_prot = has_backbone[~sm_mask]
+    has_backbone_prot = has_backbone[...,~sm_mask]
     n_protein_with_backbone = has_backbone.sum()
     n_protein = (~sm_mask).sum()
-    ic(n_protein_with_backbone, n_protein)
-    assert_that((n_protein/n_protein_with_backbone).item()).is_greater_than(0.8)
+    #assert_that((n_protein/n_protein_with_backbone).item()).is_greater_than(0.8)
 
     mask_prot = has_backbone & ~sm_mask # valid protein/NA residues (L)
     mask_ca_sm = atom_mask[...,1] & sm_mask # valid sm mol positions (L)
@@ -331,15 +330,31 @@ def xyz_frame_from_rotation_mask(xyz,rotation_mask, atom_frames):
     xyz_frame[rotation_mask, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
     return xyz_frame
 
-def xyz_t_to_frame_xyz(xyz_t, is_sm, atom_frames):
+def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
     """
     Parameters:
         xyz_t (1, T, L, natoms, 3)
         seq_unmasked (B, L)
         atom_frames (1, A, 3, 2)
     Returns:
+	    xyz_t_frame (B, T, L, natoms, 3)
+    """
+    is_sm = is_atom(seq_unmasked[0])
+    return xyz_t_to_frame_xyz_sm_mask(xyz_t, is_sm, atom_frames)
+
+def xyz_t_to_frame_xyz_sm_mask(xyz_t, is_sm, atom_frames):
+    """
+    Parameters:
+        xyz_t (1, T, L, natoms, 3)
+        is_sm (L)
+        atom_frames (1, A, 3, 2)
+    Returns:
 	xyz_t_frame (B, T, L, natoms, 3)
     """
+    # ic(xyz_t.shape, is_sm.shape, atom_frames.shape)
+    # xyz_t.shape: torch.Size([1, 1, 194, 36, 3]) 
+    # is_sm.shape: torch.Size([194])
+    # atom_frames.shape: torch.Size([1, 29, 3, 2])
     xyz_t_frame = xyz_t.clone()
     atoms = is_sm
     if torch.all(~atoms):

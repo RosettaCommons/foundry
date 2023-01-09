@@ -7,7 +7,8 @@ from rf2aa.Embeddings import MSA_emb, Extra_emb, Bond_emb, Templ_emb, Recycling
 from rf2aa.Track_module import IterativeSimulator
 from rf2aa.AuxiliaryPredictor import DistanceNetwork, MaskedTokenNetwork, LDDTNetwork, PAENetwork
 from rf2aa.chemical import INIT_CRDS,NAATOKENS, NBTYPES, NTOTAL
-from rf2aa.tensor_util import assert_shape
+from rf2aa.tensor_util import assert_shape, assert_equal
+import rf2aa.util
 
 def get_shape(t):
     if hasattr(t, 'shape'):
@@ -158,7 +159,82 @@ class RoseTTAFoldModule(nn.Module):
             assert_that(mask_t.device).is_equal_to(device)
             assert_that(same_chain.device).is_equal_to(device)
         # Sanity check for now, feel free to remove.
-        assert self.freeze_track_motif
+        # assert self.freeze_track_motif
+
+        # ic(is_motif.shape)
+        # is_sm = rf2aa.util.is_atom(seq[0]) # (L)
+        # is_protein_motif = is_motif & ~is_sm
+        # motif_protein_i = torch.where(is_motif)[0][0]
+        # is_motif_sm = is_motif & is_sm
+        # if is_sm.any():
+        #     motif_sm_i = torch.where(is_motif_sm)[0][0]
+        # diffused_protein_i = torch.where(~is_sm & ~is_motif)[0][0]
+
+
+
+        # '''
+        # msa_full: NSEQ,N_INDEL,N_TERMINUS,
+        # msa_masked: NSEQ,NSEQ,N_INDEL,N_INDEL,N_TERMINUS
+        # '''
+        # import numpy as np
+        # from rf2aa.chemical import NAATOKENS
+        # NINDEL=1
+        # NTERMINUS=2
+        # NMSAFULL=NAATOKENS+NINDEL+NTERMINUS
+        # NMSAMASKED=NAATOKENS+NAATOKENS+NINDEL+NINDEL+NTERMINUS
+        # assert_that(msa_latent.shape[-1]).is_equal_to(NMSAMASKED)
+        # assert_that(msa_full.shape[-1]).is_equal_to(NMSAFULL)
+
+        # msa_full_seq = np.r_[0:NAATOKENS]
+        # msa_full_indel = np.r_[NAATOKENS:NAATOKENS+NINDEL]
+        # msa_full_term = np.r_[NAATOKENS+NINDEL:NMSAFULL]
+
+        # msa_latent_seq1 = np.r_[0:NAATOKENS]
+        # msa_latent_seq2 = np.r_[NAATOKENS:2*NAATOKENS]
+        # msa_latent_indel1 = np.r_[2*NAATOKENS:2*NAATOKENS+NINDEL]
+        # msa_latent_indel2 = np.r_[2*NAATOKENS+NINDEL:2*NAATOKENS+NINDEL+NINDEL]
+        # msa_latent_terminus = np.r_[2*NAATOKENS+2*NINDEL:NMSAMASKED]
+
+        # i_name = [
+        #     (motif_protein_i, 'motif_protein'),
+        #     (diffused_protein_i, 'diffused_protein')]
+        # if is_sm.any():
+        #     i_name.insert(1, (motif_sm_i, 'motif_sm'))
+            
+        # for i, name in i_name:
+        #     ic(f'------------------{name}:{i}----------------')
+        #     msa_full_seq = msa_full[0,0,i,np.r_[0:NAATOKENS]]
+        #     msa_full_indel = msa_full[0,0,i,np.r_[NAATOKENS:NAATOKENS+NINDEL]]
+        #     msa_full_term = msa_full[0,0,i, np.r_[NAATOKENS+NINDEL:NMSAFULL]]
+
+        #     msa_latent_seq1 = msa_latent[0,0,i, np.r_[0:NAATOKENS]]
+        #     msa_latent_seq2 = msa_latent[0,0,i, np.r_[NAATOKENS:2*NAATOKENS]]
+        #     msa_latent_indel1 = msa_latent[0,0,i, np.r_[2*NAATOKENS:2*NAATOKENS+NINDEL]]
+        #     msa_latent_indel2 = msa_latent[0,0,i, np.r_[2*NAATOKENS+NINDEL:2*NAATOKENS+NINDEL+NINDEL]]
+        #     msa_latent_term = msa_latent[0,0,i, np.r_[2*NAATOKENS+2*NINDEL:NMSAMASKED]]
+
+
+        #     assert_equal(msa_full_seq, msa_latent_seq1)
+        #     assert_equal(msa_full_seq, msa_latent_seq2)
+        #     assert_equal(msa_full_indel, msa_latent_indel1)
+        #     assert_equal(msa_full_indel, msa_latent_indel2)
+        #     assert_equal(msa_full_term, msa_latent_term)
+        #     # if 'motif' in name:
+        #     msa_cat = torch.where(msa_full_seq)[0]
+        #     ic(msa_cat, seq[0,i])
+        #     assert_equal(seq[0,i:i+1], msa_cat)
+        #     assert_equal(seq[0,i], seq_unmasked[0,i])
+        #     ic(
+        #         name,
+        #         # torch.where(msa_latent[0,0,i,:80]),
+        #         # torch.where(msa_full[0,0,i]),
+        #         seq[0, i],
+        #         seq_unmasked[0, i],
+        #         torch.where(t1d[0,0,i]),
+        #         xyz[0,i,:4, 0],
+        #         xyz_t[0,0,i, 0],
+        #     )
+
 
         # Get embeddings
         msa_latent, pair, state = self.latent_emb(msa_latent, seq, idx, bond_feats, same_chain)
