@@ -255,7 +255,9 @@ def parse_pdb_lines_w_seq(lines):
 def parse_pdb_lines(lines):
 
     # indices of residues observed in the structure
-    idx_s = [(l[21:22].strip(), int(l[22:26])) for l in lines if l[:4]=="ATOM" and l[12:16].strip()=="CA"] # (chain letter, res num)
+    res = [(l[21:22].strip(), l[22:26],l[17:20]) for l in lines if l[:4]=="ATOM" and l[12:16].strip()=="CA"] # (chain letter, res num, aa)
+    pdb_idx_s = [(r[0], int(r[1])) for r in res]
+    idx_s = [int(r[1]) for r in res]
 
     # 4 BB + up to 10 SC atoms
     xyz = np.full((len(idx_s), NTOTAL, 3), np.nan, dtype=np.float32)
@@ -263,7 +265,7 @@ def parse_pdb_lines(lines):
         if l[:4] != "ATOM":
             continue
         chain, resNo, atom, aa = l[21:22].strip(), int(l[22:26]), l[12:16], l[17:20]
-        idx = idx_s.index((chain,resNo))
+        idx = pdb_idx_s.index((chain,resNo))
         for i_atm, tgtatm in enumerate(aa2long[aa2num[aa]]):
             if tgtatm == atom:
                 xyz[idx,i_atm,:] = [float(l[30:38]), float(l[38:46]), float(l[46:54])]
