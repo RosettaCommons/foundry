@@ -412,8 +412,9 @@ def superimpose(pred, true, atom_mask):
     
     return rP+ct
 
-def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None, 
-             bond_feats=None, file_mode="w", atom_mask=None, atom_idx_offset=0):
+
+def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None,
+             bond_feats=None, file_mode="w", atom_mask=None, atom_idx_offset=0, chain_Ls=None):
 
     f = open(filename, file_mode)
     ctr = 1+atom_idx_offset
@@ -425,11 +426,17 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
     if idx_pdb is None:
         idx_pdb = 1 + torch.arange(atomscpu.shape[0])
 
+    alphabet = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    if chain_Ls is not None:
+        chain_letters = np.concatenate([np.full(L, alphabet[i]) for i,L in enumerate(chain_Ls)])
+    else:
+        chain_letters = [chain]*len(scpu)
+        
     Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
     atom_idxs = {}
     if modelnum is not None:
         f.write(f"MODEL        {modelnum}\n")
-    for i,s in enumerate(scpu):
+    for i,s,ch in zip(range(len(scpu)), scpu, chain_letters):
         natoms = atomscpu.shape[-2]
         if (natoms!=NHEAVY and natoms!=NTOTAL and natoms!=3):
             print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
@@ -440,25 +447,19 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
             atom_idxs[i] = ctr
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "HETATM", ctr, num2aa[s], lig_name,
-                    chain, torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
+                    ch, torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
                     1.0, Bfacts[i] ) )
             ctr += 1
             continue
 
         atms = aa2long[s]
-        # his prot hack
-        #if (s==8 and torch.linalg.norm( atomscpu[i,9,:]-atomscpu[i,5,:] ) < 1.7):
-        #    atms = (
-        #        " N  "," CA "," C  "," O  "," CB "," CG "," NE2"," CD2"," CE1"," ND1",
-        #          None,  None,  None,  None," H  "," HA ","1HB ","2HB "," HD2"," HE1",
-        #        " HD1",  None,  None,  None,  None,  None,  None) # his_d
 
         for j,atm_j in enumerate(atms):
             if atom_mask is not None and not atom_mask[i,j]: continue # skip missing atoms
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "ATOM", ctr, atm_j, num2aa[s],
-                    chain, idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
+                    ch, idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
                     1.0, Bfacts[i] ) )
                 ctr += 1
     if bond_feats != None:
@@ -469,6 +470,7 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
             f.write(f"CONECT{atom_idxs[int(start.cpu().numpy())]:5d}{atom_idxs[int(end.cpu().numpy())]:5d}\n")
     if modelnum is not None:
         f.write("ENDMDL\n")
+
     
 # process ideal frames
 def make_frame(X, Y):

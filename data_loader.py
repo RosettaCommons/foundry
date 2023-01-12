@@ -280,16 +280,17 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
 
     return b_seq, b_msa_clust, b_msa_seed, b_msa_extra, b_mask_pos
 
-def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pick_top=True, same_chain=None, random_noise=5):
+def blank_template(n_tmpl, L, random_noise=5.0):
+    xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(n_tmpl,L,1,1) \
+        + torch.rand(n_tmpl,L,1,3)*random_noise - random_noise/2
+    t1d = torch.nn.functional.one_hot(torch.full((n_tmpl, L), 20).long(), num_classes=NAATOKENS-1).float() # all gaps
+    conf = torch.zeros((n_tmpl, L, 1)).float()
+    t1d = torch.cat((t1d, conf), -1)
+    mask_t = torch.full((n_tmpl,L,NTOTAL), False)
+    return xyz, t1d, mask_t
 
-    def _blank_template():
-        xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(npick_global,qlen,1,1) \
-            + torch.rand(npick_global,qlen,1,3)*random_noise - random_noise/2
-        t1d = torch.nn.functional.one_hot(torch.full((npick_global, qlen), 20).long(), num_classes=NAATOKENS-1).float() # all gaps
-        conf = torch.zeros((npick_global, qlen, 1)).float()
-        t1d = torch.cat((t1d, conf), -1)
-        mask_t = torch.full((npick_global,qlen,NTOTAL), False)
-        return xyz, t1d, mask_t
+
+def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pick_top=True, same_chain=None, random_noise=5):
 
     seqID_cut = params['SEQID']
 
@@ -298,12 +299,12 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
 
     ntplt = len(tplt['ids'])
     if (ntplt < 1) or (npick < 1): #no templates in hhsearch file or not want to use templ
-        return _blank_template()
+        return blank_template(npick_global, qlen, random_noise)
     
     # ignore templates having too high seqID
     if seqID_cut <= 100.0:
         tplt_valid_idx = torch.where(tplt['f0d'][0,:,4] < seqID_cut)[0]
-        tplt['ids'] = np.array(tplt['ids'])[sel]
+        tplt['ids'] = np.array(tplt['ids'])[tplt_valid_idx]
     else:
         tplt_valid_idx = torch.arange(len(tplt['ids']))
     
@@ -311,7 +312,7 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
     ntplt = len(tplt['ids'])
     npick = min(npick, ntplt)
     if npick<1: # no templates
-        return _blank_template()
+        return blank_template(npick_global, qlen, random_noise)
 
     if not pick_top: # select randomly among all possible templates
         sample = torch.randperm(ntplt)[:npick]
