@@ -203,9 +203,10 @@ def parse_a3m(filename, unzip=True, maxseq=10000):
 # read and extract xyz coords of N,Ca,C atoms
 # from a PDB file
 def parse_pdb(filename, seq=False):
+    parse_hetatom = False
     lines = open(filename,'r').readlines()
     if seq:
-        return parse_pdb_lines_w_seq(lines, parse_hetatom=parse_hetatom)
+        return parse_pdb_lines_w_seq(lines)
     return parse_pdb_lines(lines)
 
 def parse_pdb_lines_w_seq(lines):

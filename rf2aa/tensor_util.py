@@ -1,5 +1,8 @@
 import torch
+import pprint
 import assertpy
+import dataclasses
+from collections import OrderedDict
 
 def assert_shape(t, s):
     assertpy.assert_that(tuple(t.shape)).is_equal_to(s)
@@ -18,3 +21,20 @@ def assert_equal(got, want):
     if torch.numel(got) < 10:
         msg = f'got {got}, want: {want}'
     assert len(unequal_idx) == 0, msg
+
+# Dataclass functions
+
+def to_ordered_dict(dc):
+    return OrderedDict((field.name, getattr(dc, field.name)) for field in dataclasses.fields(dc))
+
+def to_device(dc, device):
+    d = to_ordered_dict(dc)
+    for k, v in d.items():
+        setattr(dc, k, v.to(device))
+
+def shapes(dc):
+    d = to_ordered_dict(dc)
+    return {k:v.shape if hasattr(v, 'shape') else None for k,v in d.items()}
+
+def pprint_obj(obj):
+    pprint.pprint(obj.__dict__, indent=4)

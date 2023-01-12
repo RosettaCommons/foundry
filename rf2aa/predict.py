@@ -125,7 +125,7 @@ class Predictor():
                 a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
                 msa = a3m['msa'].long()
                 ins = a3m['ins'].long()
-                chirals = get_chirals(mol, xyz_sm[0]) 
+                chirals = get_chirals(mol, xyz_sm[0]) + protein_L
         if pt_fn is not None:
             pdbA = torch.load(pt_fn)
             xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
