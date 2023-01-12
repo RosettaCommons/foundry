@@ -8,6 +8,7 @@ import ast
 import scipy
 from scipy.sparse.csgraph import shortest_path
 from collections import OrderedDict
+import networkx as nx
 
 from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP, num2aa
@@ -75,7 +76,7 @@ def set_data_loader_params(args):
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20221216.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230109.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230112.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -577,6 +578,17 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     val_df = _apply_date_res_cutoffs(val_df)
     valid_dict['sm_compl_strict'] = val_df
     valid_ID_dict['sm_compl_strict'] = val_df.CLUSTER.drop_duplicates().values
+
+    # remove sm compl protein chains from pdb set
+    df = train_dict['pdb']
+    sm_compl_chains = np.concatenate([
+        train_dict['sm_compl']['CHAINID'].values,
+        train_dict['metal_compl']['CHAINID'].values,
+        train_dict['sm_compl_multi']['CHAINID'].values,
+        train_dict['sm_compl_covale']['CHAINID'].values
+    ])
+    train_dict['pdb'] = df[~df['CHAINID'].isin(sm_compl_chains)]
+    train_ID_dict['pdb'], weights_dict['pdb'] = _get_IDs_weights(train_dict['pdb'])
 
     # cambridge small molecule database
     sm = _load_df(params['CSD_LIST'], pad_hash=False, eval_cols=['sim','sim_valid','sim_test'])
@@ -1470,6 +1482,9 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
     G = get_nxgraph(mol)
     frames = get_atom_frames(msa_sm, G)
     chirals = get_chirals(mol, xyz_sm[0])
+
+    if len(list(nx.connected_components(G))) > 1:
+        print('WARNING: More than one connected component in ligand graph', item)
 
     # Generate ground truth structure: account for ligand symmetry
     N_symmetry, sm_L, _ = xyz_sm.shape

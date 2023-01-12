@@ -1019,7 +1019,7 @@ class Trainer():
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, rng)
 
-            if epoch % args.skip_valid == 0:
+            if (epoch % args.skip_valid == 0) or (epoch==loaded_epoch+1):
                 for dataset_name, valid_loader in valid_loaders.items():
                     valid_tot_, valid_loss_, valid_acc_, _ = self.valid_pdb_cycle(ddp_model, 
                         valid_loader, rank, gpu, world_size, epoch, rng, 
