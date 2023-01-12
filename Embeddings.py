@@ -21,8 +21,7 @@ class MSA_emb(nn.Module):
         self.emb_left = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_right = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_state = nn.Embedding(NAATOKENS, d_state)
-        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, 
-                                        maxpos_atom=maxpos_atom, p_drop=p_drop)
+        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, p_drop=p_drop)
         
         self.reset_parameter()
     
@@ -66,12 +65,13 @@ class MSA_emb(nn.Module):
 
 class Extra_emb(nn.Module):
     # Get initial seed MSA embedding
-    def __init__(self, d_msa=256, d_init=NAATOKENS+1+2, p_drop=0.1):
+    def __init__(self, d_msa=256, d_init=NAATOKENS-1+4, p_drop=0.1):
         super(Extra_emb, self).__init__()
         self.emb = nn.Linear(d_init, d_msa) # embedding for general MSA
         self.emb_q = nn.Embedding(NAATOKENS, d_msa) # embedding for query sequence
         #self.drop = nn.Dropout(p_drop)
         
+
         self.reset_parameter()
     
     def reset_parameter(self):

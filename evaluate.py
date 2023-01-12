@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 from torch.utils import data
 from data_loader import (
-    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_atomize_pdb,
-    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
+    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale,
+    loader_atomize_pdb, Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
 )
 from RoseTTAFoldModel  import RoseTTAFoldModule
 from loss import *
@@ -68,139 +68,125 @@ class Evaluator(Trainer):
         torch.cuda.set_device("cuda:%d"%gpu)
 
         #define dataset & data loader
-        (
-            pdb_items, fb_items, compl_items, neg_items, na_compl_items, na_neg_items, rna_items,
-            sm_compl_items, sm_items, valid_pdb, valid_homo, valid_compl, valid_neg, valid_na_compl, 
-            valid_na_neg, valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, 
-            valid_sm,valid_pep, homo
-        ) = get_train_valid_set(self.loader_param)
+        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo = \
+            get_train_valid_set(self.loader_param)
 
-        pdb_IDs, pdb_weights, pdb_dict = pdb_items
-        fb_IDs, fb_weights, fb_dict = fb_items
-        compl_IDs, compl_weights, compl_dict = compl_items
-        neg_IDs, neg_weights, neg_dict = neg_items
-        na_compl_IDs, na_compl_weights, na_compl_dict = na_compl_items
-        na_neg_IDs, na_neg_weights, na_neg_dict = na_neg_items
-        rna_IDs, rna_weights, rna_dict = rna_items
-        sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
-        sm_IDs, sm_weights, sm_dict = sm_items
-       
-        if self.dataset_param['n_valid_pdb'] is None: self.dataset_param["n_valid_pdb"] = len(valid_pdb.keys()) 
-        if self.dataset_param['n_valid_homo'] is None: self.dataset_param["n_valid_homo"] = len(valid_homo.keys()) 
-        if self.dataset_param["n_valid_compl"] is None: self.dataset_param["n_valid_compl"] = len(valid_compl.keys())
-        if self.dataset_param["n_valid_na_compl"] is None: self.dataset_param["n_valid_na_compl"] = len(valid_na_compl.keys())
-        if self.dataset_param["n_valid_rna"] is None: self.dataset_param["n_valid_rna"] = len(valid_rna.keys())
-        if self.dataset_param["n_valid_sm_compl"] is None: self.dataset_param["n_valid_sm_compl"] = len(valid_sm_compl.keys())
-        if self.dataset_param["n_valid_sm_compl_ligclus"] is None: self.dataset_param["n_valid_sm_compl_ligclus"] = len(valid_sm_compl_ligclus.keys())
-        if self.dataset_param["n_valid_sm_compl_strict"] is None: self.dataset_param["n_valid_sm_compl_strict"] = len(valid_sm_compl_strict.keys())
-        if self.dataset_param["n_valid_sm"] is None: self.dataset_param["n_valid_sm"] = len(valid_sm.keys())
+        train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
+        valid_ID_dict['atomize_pdb'] = valid_ID_dict['pdb']
+        weights_dict['atomize_pdb'] = weights_dict['pdb']
+        train_dict['atomize_pdb'] = train_dict['pdb']
+        valid_dict['atomize_pdb'] = valid_dict['pdb']
+
+        # set number of validation examples being used
+        for k in valid_dict:
+            if self.dataset_param['n_valid_'+k] is None:
+                self.dataset_param["n_valid_"+k] = len(valid_dict[k])
 
         if (rank==0):
-            print ('Loaded (valid)',
-                len(valid_pdb.keys()),'monomers,',
-                len(valid_homo.keys()),'homomers,',
-                len(valid_compl.keys()),'heteromers,',
-                len(valid_na_compl.keys()),'nucleic-acid complexes,',
-                len(valid_rna),'RNA structures,',
-                len(valid_sm_compl), 'small molecule complexes,',
-                len(valid_sm_compl_ligclus), 'small molecule complexes (ligand-clustered),',
-                len(valid_sm_compl_strict), 'small molecule complexes (strict),',
-                len(valid_sm), 'small molecule crystals.'
+            print('Number of training clusters / examples:')
+            for k in train_ID_dict:
+                print('  '+k, ':', len(train_ID_dict[k]), '/', len(train_dict[k]))
 
-            )
-            print ('Using',
-                self.dataset_param["n_valid_pdb"],'monomers,',
-                self.dataset_param["n_valid_homo"],'homomers,',
-                self.dataset_param["n_valid_compl"],'heteromers,',
-                self.dataset_param["n_valid_na_compl"],'nucleic-acid complexes,',
-                self.dataset_param["n_valid_rna"],'RNA structures,',
-                self.dataset_param["n_valid_sm_compl"], 'small mol. complexes (fold & dock),',
-                self.dataset_param["n_valid_sm_compl_ligclus"], 'small molecule complexes (ligand-clustered),',
-                self.dataset_param["n_valid_sm_compl_strict"], 'small molecule complexes (strict),',
-                self.dataset_param["n_valid_sm"], "small molecule crystals."
-            )
+            print('Number of validation clusters / examples:')
+            for k in valid_ID_dict:
+                print('  '+k, ':', len(valid_ID_dict[k]), '/', len(valid_dict[k]))
+
+            print('Using number of validation examples:')
+            for k in valid_dict:
+                print('  '+k, ':', self.dataset_param['n_valid_'+k])
 
         seed = 0 # always draw the same example from each cluster
 
-        valid_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.dataset_param["n_valid_pdb"]],
-            loader_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0, seed=seed
+        valid_sets = dict(
+            pdb = Dataset(
+                valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
+                loader_pdb, valid_dict['pdb'],
+                self.loader_param, homo, p_homo_cut=-1.0, seed=seed
+            ),
+            homo = Dataset(
+                valid_ID_dict['homo'][:self.dataset_param['n_valid_homo']],
+                loader_pdb, valid_dict['homo'],
+                self.loader_param, homo, p_homo_cut=2.0, seed=seed
+            ),
+            compl = DatasetComplex(
+                valid_ID_dict['compl'][:self.dataset_param['n_valid_compl']],
+                loader_complex, valid_dict['compl'],
+                self.loader_param, negative=False, seed=seed
+            ),
+            na_compl = DatasetNAComplex(
+                valid_ID_dict['na_compl'][:self.dataset_param['n_valid_na_compl']],
+                loader_na_complex, valid_dict['na_compl'],
+                self.loader_param, negative=False, native_NA_frac=1.0, seed=seed
+            ),
+            na_from_scratch_compl = DatasetNAComplex(
+                valid_ID_dict['na_compl'][:self.dataset_param['n_valid_na_compl']],
+                loader_na_complex, valid_dict['na_compl'],
+                self.loader_param, negative=False, native_NA_frac=0.0, seed=seed
+            ),
+            rna = DatasetRNA(
+                valid_ID_dict['rna'][:self.dataset_param['n_valid_rna']],
+                loader_rna, valid_dict['rna'],
+                self.loader_param, seed=seed
+            ),
+            sm_compl = DatasetSMComplex(
+                valid_ID_dict['sm_compl'][:self.dataset_param['n_valid_sm_compl']],
+                loader_sm_compl, valid_dict['sm_compl'],
+                self.loader_param, seed=seed
+            ),
+            metal_compl = DatasetSMComplex(
+                valid_ID_dict['metal_compl'][:self.dataset_param['n_valid_metal_compl']],
+                loader_sm_compl, valid_dict['metal_compl'],
+                self.loader_param, task='metal_compl', seed=seed
+            ),
+            sm_compl_multi = DatasetSMComplex(
+                valid_ID_dict['sm_compl_multi'][:self.dataset_param['n_valid_sm_compl_multi']],
+                loader_sm_compl, valid_dict['sm_compl_multi'],
+                self.loader_param, task='sm_compl_multi', seed=seed
+            ),
+            sm_compl_covale = DatasetSMComplex(
+                valid_ID_dict['sm_compl_covale'][:self.dataset_param['n_valid_sm_compl_covale']],
+                loader_sm_compl_covale, valid_dict['sm_compl_covale'],
+                self.loader_param, task='sm_compl_covale', seed=seed
+            ),
+            sm_compl_strict = DatasetSMComplex(
+                valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
+                loader_sm_compl, valid_dict['sm_compl_strict'],
+                self.loader_param, task='sm_compl_strict', seed=seed
+            ),
+            sm = DatasetSM(
+                valid_ID_dict['sm'][:self.dataset_param['n_valid_sm']],
+                loader_sm, valid_dict['sm'],
+                self.loader_param, seed=seed
+            ),
+            atomize_pdb = Dataset(
+                valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
+                loader_atomize_pdb, valid_dict['atomize_pdb'],
+                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0, seed=seed
+            )
         )
-        valid_homo_set = Dataset(
-            list(valid_homo.keys())[:self.dataset_param["n_valid_homo"]],
-            loader_pdb, valid_homo,
-            self.loader_param, homo, p_homo_cut=2.0, seed=seed
-        )
-        valid_compl_set = DatasetComplex(
-            list(valid_compl.keys())[:self.dataset_param["n_valid_compl"]],
-            loader_complex, valid_compl,
-            self.loader_param, negative=False, seed=seed
-        )
-        valid_na_compl_set = DatasetNAComplex(
-            list(valid_na_compl.keys())[:self.dataset_param["n_valid_na_compl"]],
-            loader_na_complex, valid_na_compl,
-            self.loader_param, negative=False, native_NA_frac=1.0, seed=seed
-        )
-        valid_na_from_scratch_compl_set = DatasetNAComplex(
-            list(valid_na_compl.keys())[:self.dataset_param["n_valid_na_compl"]],
-            loader_na_complex, valid_na_compl,
-            self.loader_param, negative=False, native_NA_frac=0.0, seed=seed
-        )
-        valid_rna_set = DatasetRNA(
-            list(valid_rna.keys())[:self.dataset_param["n_valid_rna"]],
-            loader_rna, valid_rna,
-            self.loader_param, seed=seed
-        )
-        valid_sm_compl_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.dataset_param["n_valid_sm_compl"]],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param, seed=seed
-        )
-        valid_sm_compl_ligclus_set = DatasetSMComplex(
-            list(valid_sm_compl_ligclus.keys())[:self.dataset_param["n_valid_sm_compl_ligclus"]],
-            loader_sm_compl, valid_sm_compl_ligclus,
-            self.loader_param, task='sm_compl_ligclus', seed=seed
-        )
-        valid_sm_compl_strict_set = DatasetSMComplex(
-            list(valid_sm_compl_strict.keys())[:self.dataset_param["n_valid_sm_compl_strict"]],
-            loader_sm_compl, valid_sm_compl_strict,
-            self.loader_param, task='sm_compl_strict', seed=seed
-        )
-        valid_sm_set = DatasetSM(
-            list(valid_sm.keys())[:self.dataset_param["n_valid_sm"]],
-            loader_sm, valid_sm,
-            self.loader_param
-        )
-        valid_atomize_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.dataset_param["n_valid_atomize_pdb"]],
-            loader_atomize_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0, seed=seed
-        )
-       
-        valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
-        valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
-        valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
-        valid_na_compl_sampler = data.distributed.DistributedSampler(valid_na_compl_set, num_replicas=world_size, rank=rank)
-        valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
-        valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_ligclus_sampler = data.distributed.DistributedSampler(valid_sm_compl_ligclus_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_strict_sampler = data.distributed.DistributedSampler(valid_sm_compl_strict_set, num_replicas=world_size, rank=rank)
-        valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
-        valid_atomize_pdb_sampler = data.distributed.DistributedSampler(valid_atomize_pdb_set, num_replicas=world_size, rank=rank)
-
-        valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
-        valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
-        valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
-        valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
-        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
-        valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        valid_sm_compl_ligclus_loader = data.DataLoader(valid_sm_compl_ligclus_set, sampler=valid_sm_compl_ligclus_sampler, **LOAD_PARAM)
-        valid_sm_compl_strict_loader = data.DataLoader(valid_sm_compl_strict_set, sampler=valid_sm_compl_strict_sampler, **LOAD_PARAM)
-        valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_atomize_pdb_sampler, **LOAD_PARAM)
+        valid_headers = dict(
+                pdb = 'Monomer',
+                homo = 'Homo',
+                compl = 'Hetero',
+                na_compl = 'NA',
+                na_from_scratch_compl = 'NAfs',
+                rna = 'RNA',
+                sm_compl = 'SM Compl',
+                metal_compl = 'Metal ion',
+                sm_compl_multi = 'Multires ligand',
+                sm_compl_covale = "Covalent ligand",
+                sm_compl_strict = 'SM Compl (strict)',
+                sm = 'SM_CSD',
+                atomize_pdb = 'Monomer atomize 3'
+            )
+        valid_samplers = {
+            k : data.distributed.DistributedSampler(v, num_replicas=world_size, rank=rank)
+            for k,v in valid_sets.items()
+        }
+        valid_loaders = {
+            k : data.DataLoader(v, sampler=valid_samplers[k], **LOAD_PARAM)
+            for k,v in valid_sets.items()
+        }
         
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -242,62 +228,26 @@ class Evaluator(Trainer):
         for epoch in range(self.start_epoch, self.start_epoch+self.n_epoch):
             # always draw the same examples
             seed = 0 # epoch
-            valid_pdb_sampler.set_epoch(seed)
-            valid_homo_sampler.set_epoch(seed)
-            valid_compl_sampler.set_epoch(seed)
-            valid_na_compl_sampler.set_epoch(seed)
-            valid_na_from_scratch_compl_sampler.set_epoch(seed)
-            valid_rna_sampler.set_epoch(seed)
-            valid_sm_compl_sampler.set_epoch(seed)
-            valid_sm_compl_ligclus_sampler.set_epoch(seed)
-            valid_sm_compl_strict_sampler.set_epoch(seed)
-            valid_sm_sampler.set_epoch(seed)
-            valid_atomize_pdb_sampler.set_epoch(seed)
-
+            for k, sampler in valid_samplers.items():
+                sampler.set_epoch(seed)
+            
             # load this epoch's checkpoint
             loaded_epoch, best_valid_loss = self.load_model(ddp_model, self.model_name, gpu, 
                                                             suffix=str(epoch), resume_train=False)
-            if loaded_epoch == -2:
+            if loaded_epoch == -1:
                 print(f'Checkpoint doesn\'t exist for epoch {epoch}. Quitting.')
                 dist.destroy_process_group()
                 return
 
-            rng = np.random.RandomState(seed=epoch*world_size+rank)
+            #rng = np.random.RandomState(seed=epoch*world_size+rank)
+            rng = np.random.RandomState(seed=rank) # output pdbs for the same examples on each epoch
 
             df_s = []
-            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
-                epoch, rng, print_header=(epoch==self.start_epoch))
-            df_s.append(loss_df)
-            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
-                epoch, rng, header="Homo", print_header=(epoch==self.start_epoch))
-            df_s.append(loss_df)
-            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
-                epoch, rng, header="Hetero", print_header=(epoch==self.start_epoch))
-            df_s.append(loss_df)
-            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, world_size, 
-                epoch, rng, header="NA", print_header=(epoch==self.start_epoch))
-            df_s.append(loss_df)
-            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
-                world_size, epoch, rng, header="NAfs", print_header=(epoch==self.start_epoch))
-            df_s.append(loss_df)
-            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
-                epoch, rng, header="RNA", print_header=(epoch==self.start_epoch))
-            df_s.append(loss_df)
-            valid_tot, valid_loss, valid_acc, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_loader, 
-                rank, gpu, world_size, epoch, rng, header="SM Compl", print_header=(epoch==self.start_epoch)) 
-            df_s.append(loss_df)
-            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
-                rank, gpu, world_size, epoch, rng, header="SM Compl (lig. clus.)", print_header=(epoch==self.start_epoch)) 
-            df_s.append(loss_df)
-            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
-                rank, gpu, world_size, epoch, rng, header="SM Compl (strict)", print_header=(epoch==self.start_epoch)) 
-            df_s.append(loss_df)
-            _, _, _, loss_df = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-                rank, gpu, world_size, epoch, rng, header="SM_CSD", print_header=(epoch==self.start_epoch)) 
-            df_s.append(loss_df)
-            valid_tot, valid_loss, valid_acc, loss_df = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, 
-                gpu, world_size, epoch, rng, header="Monomer atomize 3", print_header=(epoch==self.start_epoch))
-            df_s.append(loss_df)
+            for k,v in valid_loaders.items():
+                valid_tot_, valid_loss_, valid_acc_, loss_df = self.valid_pdb_cycle(ddp_model, 
+                    v, rank, gpu, world_size, epoch, rng, header=valid_headers[k], 
+                    verbose = self.eval, print_header=True) 
+                df_s.append(loss_df)
 
             if rank==0:
                 loss_df = pd.concat(df_s)
