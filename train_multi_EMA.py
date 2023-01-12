@@ -9,8 +9,11 @@ import torch.nn as nn
 from torch.utils import data
 from functools import partial
 from data_loader import (
-    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_atomize_pdb,
-    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
+    get_train_valid_set, loader_pdb, loader_fb, loader_complex,
+    loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale,
+    loader_atomize_pdb, Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA,
+    DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler,
+    unbatch_item
 )
 from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
 from RoseTTAFoldModel  import RoseTTAFoldModule
@@ -184,11 +187,25 @@ class Trainer():
         assert (B==1) # fd - code assumes a batch size of 1
         
         tot_loss = 0.0
-        
+        # set up frames
+        frames, frame_mask = get_frames(
+            pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
+        # update frames and frames_mask to only include BB frames (have to update both for compatibility with compute_general_FAPE)
+        frames_BB = frames.clone()
+        frames_BB[..., 1:, :, :] = 0
+        frame_mask_BB = frame_mask.clone()
+        frame_mask_BB[...,1:] =False
+       
         # c6d loss
         for i in range(4):
             loss = self.loss_fn(logit_s[i], label_s[...,i]) # (B, L, L)
-            loss = (mask_2d*loss).sum() / (mask_2d.sum() + eps)
+            if i==0: # apply distogram loss to all residue pairs with valid BB atoms
+                mask_2d_ = mask_2d
+            else: # apply anglegram loss only when both residues have valid BB frames (i.e. not metal ions)
+                bb_frame_good = frame_mask[:,:,0]
+                loss_mask_2d = bb_frame_good & bb_frame_good[...,None]
+                mask_2d_ = mask_2d & loss_mask_2d
+            loss = (mask_2d_*loss).sum() / (mask_2d_.sum() + eps)
             tot_loss += w_dist*loss
             loss_dict[f'c6d_{i}'] = loss.detach()
 
@@ -203,40 +220,36 @@ class Trainer():
         # Structural loss (layer-wise backbone FAPE)
         dclamp = 300.0 if unclamp else 30.0 # protein & NA FAPE distance cutoffs
         dclamp_sm, Z_sm = 4, 4  # sm mol FAPE distance cutoffs
-
-        frames, frame_mask = get_frames(
-            pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
-        # update frames and frames_mask to only include BB frames (have to update both for compatibility with compute_general_FAPE)
-        frames_BB = frames.clone()
-        frames_BB[..., 1:, :, :] = 0
-        frame_mask_BB = frame_mask.clone()
-        frame_mask_BB[...,1:] =False
+        # residue mask for FAPE calculation only masks unresolved protein backbone atoms
+        # whereas other losses also maks unresolved ligand atoms (mask_BB)
+        # frames with unresolved ligand atoms are masked in compute_general_FAPE
+        res_mask = ~((mask_crds[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(seq)))
 
         L1 = same_chain[0,0,:].sum()
-        mask_BBA = mask_BB.clone()
-        mask_BBA[0, L1:] = False
-        if torch.sum(mask_BBA) >0:
+        res_mask_A = res_mask.clone()
+        res_mask_A[0, L1:] = False
+        if torch.sum(res_mask_A)>0 and torch.sum(frame_mask_BB[:,res_mask_A[0]])>0:
             l_fape_A, _, _ = compute_general_FAPE(
-                pred[:,mask_BBA,:,:3],
-                true[:,mask_BBA[0],:3],
-                mask_crds[:,mask_BBA[0], :3],
-                frames_BB[:,mask_BBA[0]],
-                frame_mask_BB[:,mask_BBA[0]],
+                pred[:,res_mask_A,:,:3],
+                true[:,res_mask_A[0],:3],
+                mask_crds[:,res_mask_A[0], :3],
+                frames_BB[:,res_mask_A[0]],
+                frame_mask_BB[:,res_mask_A[0]],
                 dclamp=dclamp
             )
         else:
             l_fape_A = torch.tensor([0]).to(gpu)
         loss_dict['bb_fape_c1'] = l_fape_A[-1].detach()
 
-        mask_BBB = mask_BB.clone()
-        mask_BBB[0,:L1] = False
-        if torch.sum(mask_BBB) >0:
+        res_mask_B = res_mask.clone()
+        res_mask_B[0,:L1] = False
+        if torch.sum(res_mask_B)>0 and torch.sum(frame_mask_BB[:,res_mask_B[0]])>0:
             l_fape_B, _, _ = compute_general_FAPE(
-                pred[:, mask_BBB,:,:3],
-                true[:,mask_BBB[0],:3,:3],
-                mask_crds[:,mask_BBB[0], :3],
-                frames_BB[:,mask_BBB[0]],
-                frame_mask_BB[:,mask_BBB[0]],
+                pred[:, res_mask_B,:,:3],
+                true[:,res_mask_B[0],:3,:3],
+                mask_crds[:,res_mask_B[0], :3],
+                frames_BB[:,res_mask_B[0]],
+                frame_mask_BB[:,res_mask_B[0]],
                 dclamp=dclamp
             )
         else:
@@ -251,15 +264,15 @@ class Trainer():
             pae_loss = torch.tensor(0).to(gpu)
         else:
             if logit_pae is not None:
-                logit_pae = logit_pae[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
+                logit_pae = logit_pae[:,:,res_mask[0]][:,:,:,res_mask[0]]
             if logit_pde is not None:
-                logit_pde = logit_pde[:,:,mask_BB[0]][:,:,:,mask_BB[0]]
+                logit_pde = logit_pde[:,:,res_mask[0]][:,:,:,res_mask[0]]
             tot_str, pae_loss, pde_loss = compute_general_FAPE(
-                pred[:,mask_BB,:,:3],
-                true[:,mask_BB[0],:3],
-                mask_crds[:,mask_BB[0],:3],
-                frames_BB[:,mask_BB[0]],
-                frame_mask_BB[:,mask_BB[0]],
+                pred[:,res_mask,:,:3],
+                true[:,res_mask[0],:3],
+                mask_crds[:,res_mask[0],:3],
+                frames_BB[:,res_mask[0]],
+                frame_mask_BB[:,res_mask[0]],
                 dclamp=dclamp, 
                 logit_pae=logit_pae,
                 logit_pde=logit_pde
@@ -280,8 +293,9 @@ class Trainer():
         loss_dict['pae_loss'] = pae_loss.detach()
         loss_dict['pde_loss'] = pde_loss.detach()
 
-        sm_res_mask = is_atom(label_aa_s[0,0])*mask_BB[0] # (L,)
-        if bool(torch.any(sm_res_mask)):
+        # small-molecule ligands
+        sm_res_mask = is_atom(label_aa_s[0,0])*res_mask[0] # (L,)
+        if bool(torch.any(sm_res_mask)) and torch.any(frame_mask_BB[0,sm_res_mask]):
             # ligand fape (layer-averaged fape on atom coordinates with atom frames)
             l_fape_sm, _, _ = compute_general_FAPE(
                 pred[:, sm_res_mask[None],:,:3],
@@ -296,6 +310,8 @@ class Trainer():
             tot_loss += 0.5*w_lig_fape*lig_fape
         else:
             lig_fape = torch.tensor(0).to(gpu)
+        loss_dict['bb_fape_lig'] = lig_fape.detach()
+
         if not bool(torch.all(sm_res_mask)) and bool(torch.any(sm_res_mask)):    # not all atoms but some atoms    
             # calculate interchain fape 
             # fape of protein coordinates wrt ligand frames 
@@ -303,39 +319,44 @@ class Trainer():
             mask_crds_protein[:, sm_res_mask] = False
             frame_mask_BB_sm = frame_mask_BB.clone()
             frame_mask_BB_sm[:,~sm_res_mask] = False
-            l_fape_protein_sm, _, _ = compute_general_FAPE(
-                pred[:, mask_BB,:,:3],
-                true[:, mask_BB[0],:3,:3],
-                atom_mask = mask_crds_protein[:,mask_BB[0], :3],
-                frames = frames_BB[:,mask_BB[0]],
-                frame_mask = frame_mask_BB_sm[:,mask_BB[0]],
-                frame_atom_mask = mask_crds[:,mask_BB[0],:3],
-                dclamp=dclamp
-            )
+            if torch.any(mask_crds_protein[:,res_mask[0], :3]) and torch.any(frame_mask_BB_sm[:,res_mask[0]]):
+                l_fape_protein_sm, _, _ = compute_general_FAPE(
+                    pred[:, res_mask,:,:3],
+                    true[:, res_mask[0],:3,:3],
+                    atom_mask = mask_crds_protein[:,res_mask[0], :3],
+                    frames = frames_BB[:,res_mask[0]],
+                    frame_mask = frame_mask_BB_sm[:,res_mask[0]],
+                    frame_atom_mask = mask_crds[:,res_mask[0],:3],
+                    dclamp=dclamp
+                )
+            else:
+                l_fape_protein_sm = torch.tensor(0).to(gpu)
+                
             # fape of ligand coordinates wrt protein frames
             mask_crds_sm = mask_crds.clone()
             mask_crds_sm[:, ~sm_res_mask] = False
             frame_mask_BB_protein = frame_mask_BB.clone()
             frame_mask_BB_protein[:,sm_res_mask] = False
-            l_fape_sm_protein, _, _ = compute_general_FAPE(
-                pred[:, mask_BB,:,:3],
-                true[:, mask_BB[0],:3,:3],
-                atom_mask = mask_crds_sm[:,mask_BB[0], :3],
-                frames = frames_BB[:,mask_BB[0]],
-                frame_mask = frame_mask_BB_protein[:,mask_BB[0]],
-                frame_atom_mask = mask_crds[:,mask_BB[0],:3],
-                dclamp=dclamp
-            )
-            frac_sm = torch.sum(frame_mask_BB_sm[:,mask_BB[0]])/ torch.sum(frame_mask_BB[:,mask_BB[0]])
+            if torch.any(mask_crds_sm[:,res_mask[0], :3]) and torch.any(frame_mask_BB_protein[:,res_mask[0]]):
+                l_fape_sm_protein, _, _ = compute_general_FAPE(
+                    pred[:, res_mask,:,:3],
+                    true[:, res_mask[0],:3,:3],
+                    atom_mask = mask_crds_sm[:,res_mask[0], :3],
+                    frames = frames_BB[:,res_mask[0]],
+                    frame_mask = frame_mask_BB_protein[:,res_mask[0]],
+                    frame_atom_mask = mask_crds[:,res_mask[0],:3],
+                    dclamp=dclamp
+                )
+            else:
+                l_fape_sm_protein = torch.tensor(0).to(gpu)
+
+            frac_sm = torch.sum(frame_mask_BB_sm[:,res_mask[0]])/ torch.sum(frame_mask_BB[:,res_mask[0]])
             inter_fape = frac_sm*l_fape_protein_sm + (1.0-frac_sm)*l_fape_sm_protein
             bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
             tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
         else:
             bb_l_fape_inter = torch.tensor(0).to(gpu)
-            #l_fape_sm = torch.tensor([0]).to(gpu)
 
-        #loss_dict['bb_fape_lig'] = l_fape_sm[-1].detach()
-        loss_dict['bb_fape_lig'] = lig_fape.detach()
         loss_dict['bb_fape_inter'] = bb_l_fape_inter.detach()
 
         # AllAtom loss
@@ -387,34 +408,34 @@ class Trainer():
         #     pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
         if negative: # inter-chain fapes should be ignored for negative cases
             # L1 = same_chain[0,0,:].sum()
-            # mask_BBA = mask_BB.clone()
-            # mask_BBA[0, L1:] = False
+            # res_mask_A = mask_BB.clone()
+            # res_mask_A[0, L1:] = False
             l_fape_A, _, _ = compute_general_FAPE(
-                pred_allatom[:,mask_BBA[0],:,:3],
-                nat_symm[None,mask_BBA[0],:,:3],
-                xs_mask[:,mask_BBA[0]],
-                frames[:,mask_BBA[0]],
-                frame_mask[:,mask_BBA[0]]
+                pred_allatom[:,res_mask_A[0],:,:3],
+                nat_symm[None,res_mask_A[0],:,:3],
+                xs_mask[:,res_mask_A[0]],
+                frames[:,res_mask_A[0]],
+                frame_mask[:,res_mask_A[0]]
             )
-            # mask_BBB = mask_BB.clone()
-            # mask_BBB[0,:L1] = False
+            # res_mask_B = mask_BB.clone()
+            # res_mask_B[0,:L1] = False
             l_fape_B, _, _ = compute_general_FAPE(
-                pred_allatom[:,mask_BBB[0],:,:3],
-                nat_symm[None,mask_BBB[0],:,:3],
-                xs_mask[:,mask_BBB[0]],
-                frames[:,mask_BBB[0]],
-                frame_mask[:,mask_BBB[0]]
+                pred_allatom[:,res_mask_B[0],:,:3],
+                nat_symm[None,res_mask_B[0],:,:3],
+                xs_mask[:,res_mask_B[0]],
+                frames[:,res_mask_B[0]],
+                frame_mask[:,res_mask_B[0]]
             )
             fracA = float(L1)/len(same_chain[0,0])
             l_fape = fracA*l_fape_A + (1.0-fracA)*l_fape_B
 
         else:
             l_fape, _, _ = compute_general_FAPE(
-                pred_allatom[:,mask_BB[0],:,:3],
-                nat_symm[None,mask_BB[0],:,:3],
-                xs_mask[:,mask_BB[0]],
-                frames[:,mask_BB[0]],
-                frame_mask[:,mask_BB[0]]
+                pred_allatom[:,res_mask[0],:,:3],
+                nat_symm[None,res_mask[0],:,:3],
+                xs_mask[:,res_mask[0]],
+                frames[:,res_mask[0]],
+                frame_mask[:,res_mask[0]]
             )
 
         tot_loss += w_str*l_fape[0]
@@ -433,10 +454,10 @@ class Trainer():
             rmsd = torch.tensor([0])
             loss_dict['rmsd'] = torch.tensor([0])
 
-        if torch.any(mask_BBB):
+        if torch.any(res_mask_B):
             xs_mask_c1, xs_mask_c2 = xs_mask.clone(), xs_mask.clone()
-            xs_mask_c1[:,~mask_BBA[0]] = False
-            xs_mask_c2[:,~mask_BBB[0]] = False
+            xs_mask_c1[:,~res_mask_A[0]] = False
+            xs_mask_c2[:,~res_mask_B[0]] = False
             rmsd_c1_c1 = calc_crd_rmsd(
                 pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
                 atom_mask=xs_mask_c1[:,mask_BB[0]], rmsd_mask=xs_mask_c1[:,mask_BB[0]]
@@ -467,7 +488,7 @@ class Trainer():
             bond_loss = calc_cart_bonded(seq, pred_allatom[1:], idx, self.cb_len, self.cb_ang, self.cb_tor)
             if w_bond > 0.0:
                 tot_loss += w_bond*bond_loss.mean()
-            oss_dict['clash_loss'] = ( bond_loss.detach() )
+            loss_dict['clash_loss'] = ( bond_loss.detach() )
         else:
             bond_loss = torch.tensor(0).to(gpu)
         loss_dict['bond_loss'] = bond_loss.detach()
@@ -481,7 +502,12 @@ class Trainer():
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
-        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(pred_allatom, nat_symm[None], bond_feats, seq)
+        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(
+            pred=pred_allatom[:,mask_BB[0]],
+            true=nat_symm[None,mask_BB[0]],
+            bond_feats=bond_feats[:,mask_BB[0]][:,:,mask_BB[0]],
+            seq=seq[:,mask_BB[0]]
+        )
         if w_atom_bond >= 0.0:
             tot_loss += w_atom_bond*atom_bond_loss
         loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
@@ -521,16 +547,16 @@ class Trainer():
 
         loss_dict['total_loss'] = tot_loss.detach()
 
-        if (verbose):
-            print (
-                ctr,
-                tot_str.cpu().detach().numpy(),
-                allatom_lddt.cpu().detach().numpy(),
-                allatom_lddt_c2.cpu().detach().numpy(),
-                l_fape.cpu().detach().numpy(),
-                l_fape_B.cpu().detach().numpy(),
-                mask_BB[0].sum()
-            )
+        #if (verbose):
+            #print (
+            #    ctr,
+            #    tot_str.cpu().detach().numpy(),
+            #    allatom_lddt.cpu().detach().numpy(),
+            #    allatom_lddt_c2.cpu().detach().numpy(),
+            #    l_fape.cpu().detach().numpy(),
+            #    l_fape_B.cpu().detach().numpy(),
+            #    mask_BB[0].sum()
+            #)
             #writepdb(out_dir+"p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
             #writepdb(out_dir+"n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
             #writepdb(out_dir+"nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
@@ -627,6 +653,7 @@ class Trainer():
             return -1, best_valid_loss
         map_location = {"cuda:%d"%0: "cuda:%d"%rank}
         checkpoint = torch.load(chk_fn, map_location=map_location)
+        loaded_epoch = checkpoint['epoch']
         if rank == 0:
             print ('loading model', model_name, 'from', chk_fn, 'epoch', checkpoint['epoch'])
         new_params = False
@@ -666,7 +693,6 @@ class Trainer():
 
         #if resume_train and (not rename_model):
         if resume_train:
-            loaded_epoch = checkpoint['epoch']
             if not new_params:
                 if rank == 0: print (' ... loading optimization params')
                 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -758,149 +784,123 @@ class Trainer():
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
+        dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
-        #define dataset & data loader
-        (
-            pdb_items, fb_items, compl_items, neg_items, na_compl_items, na_neg_items, rna_items,
-            sm_compl_items, sm_items, valid_pdb, valid_homo, valid_compl, valid_neg, valid_na_compl, 
-            valid_na_neg, valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, 
-            valid_sm, valid_pep, homo
-        ) = get_train_valid_set(self.loader_param)
+        # define dataset & data loader
+        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo = \
+            get_train_valid_set(self.loader_param)
 
-        pdb_IDs, pdb_weights, pdb_dict = pdb_items
-        fb_IDs, fb_weights, fb_dict = fb_items
-        compl_IDs, compl_weights, compl_dict = compl_items
-        neg_IDs, neg_weights, neg_dict = neg_items
-        na_compl_IDs, na_compl_weights, na_compl_dict = na_compl_items
-        na_neg_IDs, na_neg_weights, na_neg_dict = na_neg_items
-        rna_IDs, rna_weights, rna_dict = rna_items
-        sm_compl_IDs, sm_compl_weights, sm_compl_dict = sm_compl_items
-        sm_IDs, sm_weights, sm_dict = sm_items
+        # define atomize_pdb train/valid sets, which use the same examples as pdb set
+        train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
+        valid_ID_dict['atomize_pdb'] = valid_ID_dict['pdb']
+        weights_dict['atomize_pdb'] = weights_dict['pdb']
+        train_dict['atomize_pdb'] = train_dict['pdb']
+        valid_dict['atomize_pdb'] = valid_dict['pdb']
 
-        if self.dataset_param['n_valid_pdb'] is None: self.dataset_param["n_valid_pdb"] = len(valid_pdb.keys()) 
-        if self.dataset_param['n_valid_homo'] is None: self.dataset_param["n_valid_homo"] = len(valid_homo.keys()) 
-        if self.dataset_param["n_valid_compl"] is None: self.dataset_param["n_valid_compl"] = len(valid_compl.keys())
-        if self.dataset_param["n_valid_na_compl"] is None: self.dataset_param["n_valid_na_compl"] = len(valid_na_compl.keys())
-        if self.dataset_param["n_valid_rna"] is None: self.dataset_param["n_valid_rna"] = len(valid_rna.keys())
-        if self.dataset_param["n_valid_sm_compl"] is None: self.dataset_param["n_valid_sm_compl"] = len(valid_sm_compl.keys())
-        if self.dataset_param["n_valid_sm_compl_ligclus"] is None: self.dataset_param["n_valid_sm_compl_ligclus"] = len(valid_sm_compl_ligclus.keys())
-        if self.dataset_param["n_valid_sm_compl_strict"] is None: self.dataset_param["n_valid_sm_compl_strict"] = len(valid_sm_compl_strict.keys())
-        if self.dataset_param["n_valid_sm"] is None: self.dataset_param["n_valid_sm"] = len(valid_sm.keys())
+        # set number of validation examples being used
+        for k in valid_dict:
+            if self.dataset_param['n_valid_'+k] is None: 
+                self.dataset_param["n_valid_"+k] = len(valid_dict[k]) 
 
         if (rank==0):
-            print ('Loaded (training)',
-                len(pdb_IDs),'monomers/homomers,',
-                len(fb_IDs),'distilled monomers,',
-                len(compl_IDs),'heteromers,',
-                len(neg_IDs),'negative heteromers,',
-                len(na_compl_IDs),'nucleic-acid complexes,',
-                len(na_neg_IDs),'negative nucleic-acid complexes,',
-                len(rna_IDs),'RNA structures,',
-                len(sm_compl_IDs), 'small molecule complexes, and',
-                len(sm_IDs), "small molecule crystals."
-            )
-            print ('Loaded (valid)',
-                len(valid_pdb.keys()),'monomers,',
-                len(valid_homo.keys()),'homomers,',
-                len(valid_compl.keys()),'heteromers,',
-                len(valid_neg.keys()),'negative heteromers,',
-                len(valid_na_compl.keys()),'nucleic-acid complexes,',
-                len(valid_na_neg.keys()),'negative nucleic-acid complexes,',
-                len(valid_rna),'RNA structures,',
-                len(valid_sm_compl), 'small molecule complexes,',
-                len(valid_sm_compl_ligclus), 'small molecule complexes (ligand-clustered),',
-                len(valid_sm_compl_strict), 'small molecule complexes (strict),',
-                len(valid_sm), 'small molecule crystals.'
+            print('Number of training clusters / examples:')
+            for k in train_ID_dict:
+                print('  '+k, ':', len(train_ID_dict[k]), '/', len(train_dict[k]))
 
-            )
-            print ('Using',
-                self.dataset_param['n_valid_pdb'],'monomers,',
-                self.dataset_param['n_valid_homo'],'homomers,',
-                self.dataset_param['n_valid_compl'],'heteromers,',
-                self.dataset_param['n_valid_neg'],'negative heteromers,',
-                self.dataset_param['n_valid_na_compl'],'nucleic-acid complexes,',
-                self.dataset_param['n_valid_na_neg'],'negative nucleic-acid complexes,',
-                self.dataset_param['n_valid_rna'],'RNA structures,',
-                self.dataset_param['n_valid_sm_compl'], 'small mol. complexes (fold & dock),',
-                self.dataset_param['n_valid_sm_compl_ligclus'], 'small molecule complexes (ligand-clustered),',
-                self.dataset_param['n_valid_sm_compl_strict'], 'small molecule complexes (strict),',
-                self.dataset_param['n_valid_sm'], "small molecule crystals,",
-                self.dataset_param['n_valid_atomize_pdb'],'monomers (atomized)',
-            )
+            print('Number of validation clusters / examples:')
+            for k in valid_ID_dict:
+                print('  '+k, ':', len(valid_ID_dict[k]), '/', len(valid_dict[k]))
 
-        train_set = DistilledDataset(
-            pdb_IDs, loader_pdb, pdb_dict,
-            compl_IDs, loader_complex, compl_dict,
-            #neg_IDs, loader_complex, neg_dict,
-            na_compl_IDs, loader_na_complex, na_compl_dict,
-            #na_neg_IDs, loader_na_complex, na_neg_dict,
-            fb_IDs, loader_fb, fb_dict,
-            rna_IDs, loader_rna, rna_dict,
-            sm_compl_IDs, loader_sm_compl, sm_compl_dict,
-            sm_IDs, loader_sm, sm_dict,
-            pdb_IDs, loader_atomize_pdb, pdb_dict,
-            homo, 
-            self.loader_param,
-            native_NA_frac=0.25
+            print('Using number of validation examples:')
+            for k in valid_dict:
+                print('  '+k, ':', self.dataset_param['n_valid_'+k])
+
+        loader_dict = dict(
+            pdb = loader_pdb,
+            compl = loader_complex,
+            na_compl = loader_na_complex,
+            fb = loader_fb,
+            rna = loader_rna,
+            sm_compl = loader_sm_compl,
+            metal_compl = loader_sm_compl,
+            sm_compl_multi = loader_sm_compl,
+            sm_compl_covale = loader_sm_compl_covale,
+            sm = loader_sm,
+            atomize_pdb = loader_atomize_pdb
         )
 
-        valid_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.dataset_param['n_valid_pdb']],
-            loader_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0
+        train_set = DistilledDataset(train_ID_dict, train_dict, loader_dict, homo, 
+                                     self.loader_param, native_NA_frac=0.25)
+
+        valid_sets = dict(
+            pdb = Dataset(
+                valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
+                loader_pdb, valid_dict['pdb'], 
+                self.loader_param, homo, p_homo_cut=-1.0
+            ),
+            homo = Dataset(
+                valid_ID_dict['homo'][:self.dataset_param['n_valid_homo']],
+                loader_pdb, valid_dict['homo'],
+                self.loader_param, homo, p_homo_cut=2.0
+            ),
+            compl = DatasetComplex(
+                valid_ID_dict['compl'][:self.dataset_param['n_valid_compl']],
+                loader_complex, valid_dict['compl'],
+                self.loader_param, negative=False
+            ),
+            na_compl = DatasetNAComplex(
+                valid_ID_dict['na_compl'][:self.dataset_param['n_valid_na_compl']],
+                loader_na_complex, valid_dict['na_compl'],
+                self.loader_param, negative=False, native_NA_frac=1.0
+            ),
+            na_from_scratch_compl = DatasetNAComplex(
+                valid_ID_dict['na_compl'][:self.dataset_param['n_valid_na_compl']],
+                loader_na_complex, valid_dict['na_compl'],
+                self.loader_param, negative=False, native_NA_frac=0.0
+            ),
+            rna = DatasetRNA(
+                valid_ID_dict['rna'][:self.dataset_param['n_valid_rna']],
+                loader_rna, valid_dict['rna'],
+                self.loader_param
+            ),
+            sm_compl = DatasetSMComplex(
+                valid_ID_dict['sm_compl'][:self.dataset_param['n_valid_sm_compl']],
+                loader_sm_compl, valid_dict['sm_compl'],
+                self.loader_param,
+            ),
+            metal_compl = DatasetSMComplex(
+                valid_ID_dict['metal_compl'][:self.dataset_param['n_valid_metal_compl']],
+                loader_sm_compl, valid_dict['metal_compl'],
+                self.loader_param, task='metal_compl'
+            ),
+            sm_compl_multi = DatasetSMComplex(
+                valid_ID_dict['sm_compl_multi'][:self.dataset_param['n_valid_sm_compl_multi']],
+                loader_sm_compl, valid_dict['sm_compl_multi'],
+                self.loader_param, task='sm_compl_multi'
+            ),
+            sm_compl_covale = DatasetSMComplex(
+                valid_ID_dict['sm_compl_covale'][:self.dataset_param['n_valid_sm_compl_covale']],
+                loader_sm_compl_covale, valid_dict['sm_compl_covale'],
+                self.loader_param, task='sm_compl_covale'
+            ),
+            sm_compl_strict = DatasetSMComplex(
+                valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
+                loader_sm_compl, valid_dict['sm_compl_strict'],
+                self.loader_param, task='sm_compl_strict'
+            ),
+            sm = DatasetSM(
+                valid_ID_dict['sm'][:self.dataset_param['n_valid_sm']],
+                loader_sm, valid_dict['sm'],
+                self.loader_param,
+            ),
+            atomize_pdb = Dataset(
+                valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
+                loader_atomize_pdb, valid_dict['atomize_pdb'],
+                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
+            )
         )
-        valid_homo_set = Dataset(
-            list(valid_homo.keys())[:self.dataset_param['n_valid_homo']],
-            loader_pdb, valid_homo,
-            self.loader_param, homo, p_homo_cut=2.0
-        )
-        valid_compl_set = DatasetComplex(
-            list(valid_compl.keys())[:self.dataset_param['n_valid_compl']],
-            loader_complex, valid_compl,
-            self.loader_param, negative=False
-        )
-        valid_na_compl_set = DatasetNAComplex(
-            list(valid_na_compl.keys())[:self.dataset_param['n_valid_na_compl']],
-            loader_na_complex, valid_na_compl,
-            self.loader_param, negative=False, native_NA_frac=1.0
-        )
-        valid_na_from_scratch_compl_set = DatasetNAComplex(
-            list(valid_na_compl.keys())[:self.dataset_param['n_valid_na_compl']],
-            loader_na_complex, valid_na_compl,
-            self.loader_param, negative=False, native_NA_frac=0.0
-        )
-        valid_rna_set = DatasetRNA(
-            list(valid_rna.keys())[:self.dataset_param['n_valid_rna']],
-            loader_rna, valid_rna,
-            self.loader_param
-        )
-        valid_sm_compl_set = DatasetSMComplex(
-            list(valid_sm_compl.keys())[:self.dataset_param['n_valid_sm_compl']],
-            loader_sm_compl, valid_sm_compl,
-            self.loader_param,
-        )
-        valid_sm_compl_ligclus_set = DatasetSMComplex(
-            list(valid_sm_compl_ligclus.keys())[:self.dataset_param['n_valid_sm_compl_ligclus']],
-            loader_sm_compl, valid_sm_compl_ligclus,
-            self.loader_param, task='sm_compl_ligclus'
-        )
-        valid_sm_compl_strict_set = DatasetSMComplex(
-            list(valid_sm_compl_strict.keys())[:self.dataset_param['n_valid_sm_compl_strict']],
-            loader_sm_compl, valid_sm_compl_strict,
-            self.loader_param, task='sm_compl_strict'
-        )
-        valid_sm_set = DatasetSM(
-            list(valid_sm.keys())[:self.dataset_param['n_valid_sm']],
-            loader_sm, valid_sm,
-            self.loader_param,
-        )
-        valid_atomize_pdb_set = Dataset(
-            list(valid_pdb.keys())[:self.dataset_param['n_valid_atomize_pdb']],
-            loader_atomize_pdb, valid_pdb,
-            self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
-        )
+
         # valid_neg_set = DatasetComplex(
         #     list(valid_neg.keys())[:self.n_valid_neg],
         #     loader_complex, valid_neg,
@@ -916,87 +916,43 @@ class Trainer():
 #            loader_na_complex, valid_na_neg,
 #            self.loader_param, negative=True, native_NA_frac=0.0
 #        )
-        #valid_sm_compl_dock_set = DatasetSMComplex(
-        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-        #    loader_sm_compl, valid_sm_compl,
-        #    self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=True, 
-        #)
-        #valid_sm_compl_foldprot_set = DatasetSMComplex(
-        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-        #    loader_sm_compl, valid_sm_compl,
-        #    self.loader_param, init_protein_tmpl=False, init_ligand_tmpl=True, 
-        #)
-        #valid_sm_compl_foldlig_set = DatasetSMComplex(
-        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-        #    loader_sm_compl, valid_sm_compl,
-        #    self.loader_param, init_protein_tmpl=True, init_ligand_tmpl=False, 
-        #)
-        #valid_sm_set = DatasetSM(
-        #    list(valid_sm_compl.keys())[:self.n_valid_sm_compl],
-        #    loader_small_molecule, valid_sm_compl, self.loader_param
-        #)
-        
+
+        valid_headers = dict(
+            pdb = 'Monomer',
+            homo = 'Homo',
+            compl = 'Hetero',
+            na_compl = 'NA',
+            na_from_scratch_compl = 'NAfs',
+            rna = 'RNA',
+            sm_compl = 'SM Compl',
+            metal_compl = 'Metal ion',
+            sm_compl_multi = 'Multires ligand',
+            sm_compl_covale = "Covalent ligand",
+            sm_compl_strict = 'SM Compl (strict)',
+            sm = 'SM_CSD',
+            atomize_pdb = 'Monomer atomize 3'
+        )
+
         train_sampler = DistributedWeightedSampler(
             train_set, 
-            pdb_weights,
-            fb_weights,
-            compl_weights,
-            #neg_weights,
-            na_compl_weights,
-            #na_neg_weights,
-            rna_weights,
-            sm_compl_weights,
-            sm_weights, 
-            pdb_weights, # for atomize pdb
+            weights_dict,
             num_example_per_epoch=self.dataset_param['n_train'],
+            fractions=OrderedDict([(k, self.dataset_param['fraction_'+k]) for k in train_dict]),
             num_replicas=world_size, 
             rank=rank, 
-            fraction_pdb=self.dataset_param['fraction_pdb'],
-            fraction_fb=self.dataset_param['fraction_fb'],
-            fraction_compl=self.dataset_param['fraction_compl'],
-            fraction_na_compl=self.dataset_param['fraction_na_compl'],
-            fraction_rna=self.dataset_param['fraction_rna'],
-            fraction_sm_compl=self.dataset_param['fraction_sm_compl'],
-            fraction_sm=self.dataset_param['fraction_sm'], 
-            fraction_atomize_pdb=self.dataset_param['fraction_atomize_pdb'], 
             replacement=True
         )
 
-        valid_pdb_sampler = data.distributed.DistributedSampler(valid_pdb_set, num_replicas=world_size, rank=rank)
-        valid_homo_sampler = data.distributed.DistributedSampler(valid_homo_set, num_replicas=world_size, rank=rank)
-        valid_compl_sampler = data.distributed.DistributedSampler(valid_compl_set, num_replicas=world_size, rank=rank)
-        valid_na_compl_sampler = data.distributed.DistributedSampler(valid_na_compl_set, num_replicas=world_size, rank=rank)
-        valid_na_from_scratch_compl_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_compl_set, num_replicas=world_size, rank=rank)
-        valid_rna_sampler = data.distributed.DistributedSampler(valid_rna_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_sampler = data.distributed.DistributedSampler(valid_sm_compl_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_ligclus_sampler = data.distributed.DistributedSampler(valid_sm_compl_ligclus_set, num_replicas=world_size, rank=rank)
-        valid_sm_compl_strict_sampler = data.distributed.DistributedSampler(valid_sm_compl_strict_set, num_replicas=world_size, rank=rank)
-        valid_sm_sampler = data.distributed.DistributedSampler(valid_sm_set, num_replicas=world_size, rank=rank)
-        valid_atomize_pdb_sampler = data.distributed.DistributedSampler(valid_atomize_pdb_set, num_replicas=world_size, rank=rank)
-        # valid_neg_sampler = data.distributed.DistributedSampler(valid_neg_set, num_replicas=world_size, rank=rank)
-#        valid_na_neg_sampler = data.distributed.DistributedSampler(valid_na_neg_set, num_replicas=world_size, rank=rank)
-#        valid_na_from_scratch_neg_sampler = data.distributed.DistributedSampler(valid_na_from_scratch_neg_set, num_replicas=world_size, rank=rank)
-
-
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
-        valid_pdb_loader = data.DataLoader(valid_pdb_set, sampler=valid_pdb_sampler, **LOAD_PARAM)
-        valid_homo_loader = data.DataLoader(valid_homo_set, sampler=valid_homo_sampler, **LOAD_PARAM)
-        valid_compl_loader = data.DataLoader(valid_compl_set, sampler=valid_compl_sampler, **LOAD_PARAM)
-        valid_na_compl_loader = data.DataLoader(valid_na_compl_set, sampler=valid_na_compl_sampler, **LOAD_PARAM)
-        valid_na_from_scratch_compl_loader = data.DataLoader(valid_na_from_scratch_compl_set, sampler=valid_na_from_scratch_compl_sampler, **LOAD_PARAM)
-        valid_rna_loader = data.DataLoader(valid_rna_set, sampler=valid_rna_sampler, **LOAD_PARAM)
-        valid_sm_compl_loader = data.DataLoader(valid_sm_compl_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        valid_sm_compl_ligclus_loader = data.DataLoader(valid_sm_compl_ligclus_set, sampler=valid_sm_compl_ligclus_sampler, **LOAD_PARAM)
-        valid_sm_compl_strict_loader = data.DataLoader(valid_sm_compl_strict_set, sampler=valid_sm_compl_strict_sampler, **LOAD_PARAM)
-        valid_sm_loader = data.DataLoader(valid_sm_set, sampler=valid_sm_sampler, **LOAD_PARAM)
-        
-        valid_atomize_pdb_loader = data.DataLoader(valid_atomize_pdb_set, sampler=valid_atomize_pdb_sampler, **LOAD_PARAM)
-        # valid_neg_loader = data.DataLoader(valid_neg_set, sampler=valid_neg_sampler, **LOAD_PARAM)
-#        valid_na_neg_loader = data.DataLoader(valid_na_neg_set, sampler=valid_na_neg_sampler, **LOAD_PARAM)
-#       valid_na_from_scratch_neg_loader = data.DataLoader(valid_na_from_scratch_neg_set, sampler=valid_na_from_scratch_neg_sampler, **LOAD_PARAM)
-        #valid_sm_compl_dock_loader = data.DataLoader(valid_sm_compl_dock_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        #valid_sm_compl_foldprot_loader = data.DataLoader(valid_sm_compl_foldprot_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
-        #valid_sm_compl_foldlig_loader = data.DataLoader(valid_sm_compl_foldlig_set, sampler=valid_sm_compl_sampler, **LOAD_PARAM)
+
+        valid_samplers = OrderedDict([
+            (k, data.distributed.DistributedSampler(v, num_replicas=world_size, rank=rank))
+            for k,v in valid_sets.items()
+        ])
+        valid_loaders = OrderedDict([
+            (k, data.DataLoader(v, sampler=valid_samplers[k], **LOAD_PARAM))
+            for k,v in valid_sets.items()
+        ])
 
         # move some global data to cuda device
         self.ti_dev = self.ti_dev.to(gpu)
@@ -1056,54 +1012,21 @@ class Trainer():
 
         for epoch in range(loaded_epoch+1, self.n_epoch):
             train_sampler.set_epoch(epoch)
-            valid_pdb_sampler.set_epoch(epoch)
-            valid_homo_sampler.set_epoch(epoch)
-            valid_compl_sampler.set_epoch(epoch)
-            valid_na_compl_sampler.set_epoch(epoch)
-            valid_na_from_scratch_compl_sampler.set_epoch(epoch)
-            valid_rna_sampler.set_epoch(epoch)
-            valid_sm_compl_sampler.set_epoch(epoch)
-            valid_sm_compl_ligclus_sampler.set_epoch(epoch)
-            valid_sm_compl_strict_sampler.set_epoch(epoch)
-            valid_sm_sampler.set_epoch(epoch)
-            valid_atomize_pdb_sampler.set_epoch(epoch)
-            #valid_neg_sampler.set_epoch(epoch)
+            for k, sampler in valid_samplers.items():
+                sampler.set_epoch(epoch)
 
             rng = np.random.RandomState(seed=epoch*world_size+rank)
 
             train_tot, train_loss, train_acc = self.train_cycle(ddp_model, train_loader, optimizer, scheduler, scaler, rank, gpu, world_size, epoch, rng)
 
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_pdb_loader, rank, gpu, world_size, 
-                epoch, rng, verbose = self.eval)
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_homo_loader, rank, gpu, world_size, 
-                epoch, rng, header="Homo", verbose = self.eval)
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_compl_loader, rank, gpu, world_size, 
-                epoch, rng, header="Hetero", verbose = self.eval)
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_compl_loader, rank, gpu, 
-                world_size, epoch, rng, header="NA", verbose = self.eval)
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_na_from_scratch_compl_loader, rank, gpu, 
-                world_size, epoch, rng, header="NAfs", verbose = self.eval)
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_rna_loader, rank, gpu, world_size, 
-                epoch, rng, header="RNA", verbose = self.eval)
-            valid_tot, valid_loss, valid_acc, _ = self.valid_pdb_cycle(ddp_model, 
-                valid_sm_compl_loader, rank, gpu, world_size, epoch, rng, header="SM Compl", 
-                verbose = self.eval) 
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_ligclus_loader, 
-                rank, gpu, world_size, epoch, rng, header="SM Compl (lig. clus.)", verbose = self.eval) 
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_compl_strict_loader, 
-                rank, gpu, world_size, epoch, rng, header="SM Compl (strict)", verbose = self.eval) 
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_sm_loader, 
-                rank, gpu, world_size, epoch, rng, header="SM_CSD", verbose = self.eval) 
-            _, _, _, _ = self.valid_pdb_cycle(ddp_model, valid_atomize_pdb_loader, rank, gpu, world_size, 
-                epoch, rng, header='Monomer atomize 3', verbose = self.eval)
-            #_, _, _ = self.valid_ppi_cycle(ddp_model, valid_compl_loader, valid_neg_loader, rank, gpu, 
-            #    world_size, epoch, report_interface=True)
-#            _, _, _ = self.valid_ppi_cycle(
-#                ddp_model, valid_na_compl_loader, valid_na_neg_loader, 
-#                rank, gpu, world_size, epoch, header="NA", report_interface=False)
-#            _, _, _ = self.valid_ppi_cycle(
-#                ddp_model, valid_na_from_scratch_compl_loader, valid_na_from_scratch_neg_loader, 
-#                rank, gpu, world_size, epoch, header="NAfs", report_interface=False)
+            if (epoch % args.skip_valid == 0) or (epoch==loaded_epoch+1):
+                for dataset_name, valid_loader in valid_loaders.items():
+                    valid_tot_, valid_loss_, valid_acc_, _ = self.valid_pdb_cycle(ddp_model, 
+                        valid_loader, rank, gpu, world_size, epoch, rng, 
+                        header=valid_headers[dataset_name], verbose = self.eval) 
+
+                    if dataset_name == 'sm_compl':
+                        valid_tot, valid_loss, valid_acc = valid_tot_, valid_loss_, valid_acc_
 
             if self.eval: break
 
@@ -1114,14 +1037,14 @@ class Trainer():
                                 #'model_state_dict': ddp_model.state_dict(),
                                 'model_state_dict': ddp_model.module.shadow.state_dict(),
                                 'optimizer_state_dict': optimizer.state_dict(),
-                                    'scheduler_state_dict': scheduler.state_dict(),
-                                    'scaler_state_dict': scaler.state_dict(),
-                                    'best_loss': best_valid_loss,
-                                    'train_loss': train_loss,
-                                    'train_acc': train_acc,
-                                    'valid_loss': valid_loss,
-                                    'valid_acc': valid_acc},
-                                    self.checkpoint_fn(self.model_name, 'best'))
+                                'scheduler_state_dict': scheduler.state_dict(),
+                                'scaler_state_dict': scaler.state_dict(),
+                                'best_loss': best_valid_loss,
+                                'train_loss': train_loss,
+                                'train_acc': train_acc,
+                                'valid_loss': valid_loss,
+                                'valid_acc': valid_acc},
+                                self.checkpoint_fn(self.model_name, 'best'))
                     if self.wandb_prefix is not None:
                         wandb.save(self.checkpoint_fn(self.model_name, 'best'))
 
@@ -1173,7 +1096,6 @@ class Trainer():
             # loader will print warning message with item info for followup later
             if torch.is_tensor(item) and torch.all(item==-1):
                 continue
-
             r = rng.rand()
             save_pdbs = r<=0.01
             #print('rank',rank, 'counter',counter, 'item',item, 'task',task, 'save_pdbs',save_pdbs, 'r',r)
@@ -1234,11 +1156,42 @@ class Trainer():
             alpha_prev = torch.zeros((B,L,NTOTALDOFS,2)).to(gpu, non_blocking=True)
             state_prev = None
 
-            with torch.no_grad():
-                for i_cycle in range(N_cycle-1):
+            try:
+                with torch.no_grad():
+                    for i_cycle in range(N_cycle-1):
+                        with ddp_model.no_sync():
+                            with torch.cuda.amp.autocast(enabled=USE_AMP):
+                                msa_prev, pair_prev, xyz_prev, state_prev, alpha_prev, mask_recycle = ddp_model(
+                                    msa_masked[:,i_cycle],
+                                    msa_full[:,i_cycle],
+                                    seq[:,i_cycle],
+                                    msa[:,i_cycle,0], # unmasked seq
+                                    xyz_prev,
+                                    alpha_prev,
+                                    idx_pdb,
+                                    bond_feats,
+                                    chirals,
+                                    atom_frames=atom_frames,
+                                    t1d=t1d,
+                                    t2d=t2d,
+                                    xyz_t=xyz_t[...,1,:],
+                                    alpha_t=alpha_t,
+                                    mask_t=mask_t_2d,
+                                    same_chain=same_chain,
+                                    msa_prev=msa_prev,
+                                    pair_prev=pair_prev,
+                                    state_prev=state_prev,
+                                    mask_recycle=mask_recycle,
+                                    return_raw=True,
+                                    use_checkpoint=False
+                                )
+
+                i_cycle = N_cycle-1
+
+                if counter%self.ACCUM_STEP != 0:
                     with ddp_model.no_sync():
                         with torch.cuda.amp.autocast(enabled=USE_AMP):
-                            msa_prev, pair_prev, xyz_prev, state_prev, alpha_prev, mask_recycle = ddp_model(
+                            logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
                                 msa_masked[:,i_cycle],
                                 msa_full[:,i_cycle],
                                 seq[:,i_cycle],
@@ -1259,14 +1212,34 @@ class Trainer():
                                 pair_prev=pair_prev,
                                 state_prev=state_prev,
                                 mask_recycle=mask_recycle,
-                                return_raw=True,
-                                use_checkpoint=False
+                                use_checkpoint=True
                             )
 
-            i_cycle = N_cycle-1
+                            true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+                            #res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                            res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
+                            mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
-            if counter%self.ACCUM_STEP != 0:
-                with ddp_model.no_sync():
+                            true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
+                            c6d = xyz_to_c6d(true_crds_frame)
+                            c6d = c6d_to_bins(c6d, same_chain, negative=negative)
+
+                            prob = self.active_fn(logit_s[0]) # distogram
+                            acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
+
+                            ctrid = len(train_loader)*rank+counter
+                            loss, loss_dict = self.calc_loss(
+                                logit_s, c6d,
+                                logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle], logit_pae, logit_pde,
+                                pred_crds, alphas, pred_allatom, true_crds_, 
+                                atom_mask_, res_mask, mask_2d, same_chain,
+                                pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
+                                unclamp=unclamp, negative=negative,
+                                verbose=verbose, ctr=ctrid, item=item, task=task, **self.loss_param
+                            )
+                        loss = loss / self.ACCUM_STEP
+                        scaler.scale(loss).backward()
+                else:
                     with torch.cuda.amp.autocast(enabled=USE_AMP):
                         logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
                             msa_masked[:,i_cycle],
@@ -1293,7 +1266,8 @@ class Trainer():
                         )
 
                         true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
-                        res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                        # res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                        res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
                         mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                         true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
@@ -1315,79 +1289,37 @@ class Trainer():
                         )
                     loss = loss / self.ACCUM_STEP
                     scaler.scale(loss).backward()
-            else:
-                with torch.cuda.amp.autocast(enabled=USE_AMP):
-                    logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = ddp_model(
-                        msa_masked[:,i_cycle],
-                        msa_full[:,i_cycle],
-                        seq[:,i_cycle],
-                        msa[:,i_cycle,0], # unmasked seq
-                        xyz_prev,
-                        alpha_prev,
-                        idx_pdb,
-                        bond_feats,
-                        chirals,
-                        atom_frames=atom_frames,
-                        t1d=t1d,
-                        t2d=t2d,
-                        xyz_t=xyz_t[...,1,:],
-                        alpha_t=alpha_t,
-                        mask_t=mask_t_2d,
-                        same_chain=same_chain,
-                        msa_prev=msa_prev,
-                        pair_prev=pair_prev,
-                        state_prev=state_prev,
-                        mask_recycle=mask_recycle,
-                        use_checkpoint=True
-                    )
+                    scaler.unscale_(optimizer) # gradient clipping
 
-                    true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
+                    torch.nn.utils.clip_grad_norm_(ddp_model.parameters(), 0.2)
 
-                    res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
-                    mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
+                    scaler.step(optimizer)
+                    scale = scaler.get_scale()
+                    scaler.update()
+                    skip_lr_sched = (scale != scaler.get_scale())
+                    optimizer.zero_grad()
+                    if not skip_lr_sched:
+                        scheduler.step()
+                    ddp_model.module.update() # apply EMA
+            except Exception as e:
+                print('error in train',item)
+                raise e
 
-                    true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
-                    c6d = xyz_to_c6d(true_crds_frame)
-                    c6d = c6d_to_bins(c6d, same_chain, negative=negative)
-
-                    prob = self.active_fn(logit_s[0]) # distogram
-                    acc_s = self.calc_acc(prob, c6d[...,0], idx_pdb, mask_2d)
-
-                    ctrid = len(train_loader)*rank+counter
-                    loss, loss_dict = self.calc_loss(
-                        logit_s, c6d,
-                        logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle], logit_pae, logit_pde,
-                        pred_crds, alphas, pred_allatom, true_crds_, 
-                        atom_mask_, res_mask, mask_2d, same_chain,
-                        pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
-                        unclamp=unclamp, negative=negative,
-                        verbose=verbose, ctr=ctrid, item=item, task=task, **self.loss_param
-                    )
-                loss = loss / self.ACCUM_STEP
-                scaler.scale(loss).backward()
-                scaler.unscale_(optimizer) # gradient clipping
-
-                torch.nn.utils.clip_grad_norm_(ddp_model.parameters(), 0.2)
-
-                scaler.step(optimizer)
-                scale = scaler.get_scale()
-                scaler.update()
-                skip_lr_sched = (scale != scaler.get_scale())
-                optimizer.zero_grad()
-                if not skip_lr_sched:
-                    scheduler.step()
-                ddp_model.module.update() # apply EMA
-
+            item_ = unbatch_item(item) # remove nested lists to make more readable when printed
             if torch.isnan(loss):
-                print('nan loss',item)
+                print('nan loss',item_)
                 save_pdbs = True
 
-            if task[0].startswith('sm_compl'):
-                name = item[2][0][0].replace('.mol2','')
-            elif task[0]=='sm_only':
-                name = item[0]
+            if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
+                if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
+                    lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
+                else:
+                    lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
+                name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
+            elif task[0]=='sm':
+                name = item['label']
             else:
-                name = item[0][0]
+                name = item['CHAINID']
 
             if save_pdbs:
                 writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb', 
@@ -1485,7 +1417,7 @@ class Trainer():
         
         start_time = time.time()
 
-        out_dir = self.out_dir+f'/valid_ep{epoch}{"_eval" if verbose else ""}/'
+        out_dir = self.out_dir+f'/valid_ep{epoch}/'
         os.makedirs(out_dir, exist_ok=True)
 
         if self.eval:
@@ -1499,9 +1431,8 @@ class Trainer():
                     continue
 
                 r = rng.rand()
-                save_pdbs = r<=0.1 or self.eval
-                #print('rank',rank, 'counter',counter, 'item',item, 'task',task, 'save_pdbs',save_pdbs, 'r',r)
-
+                save_pdbs = r<=0.1 
+                
                 # transfer inputs to device
                 B, _, N, L = msa.shape
 
@@ -1609,7 +1540,8 @@ class Trainer():
 
                 true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
-                res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                # res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
+                res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
                 mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
 
                 true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
@@ -1635,20 +1567,21 @@ class Trainer():
                     valid_acc = torch.zeros_like(acc_s.detach())
                 valid_loss += torch.stack(list(loss_dict.values()))
                 valid_acc += acc_s.detach()
-
-                # records results
-                if task[0].startswith('sm_compl'):
-                    name = item[2][0][0].replace('.mol2','')
-                elif task[0]=='sm_only':
-                    name = item[0]
+                
+                # record results
+                item_ = unbatch_item(item)
+                if task[0].startswith('sm_compl') or task[0].startswith('metal_compl'):
+                    if type(item_['LIGAND'][0]) is list: # multires or covalent ligands
+                        lig_str = '_'.join([x[0]+x[1]+'-'+x[2] for x in item_['LIGAND']])[:20]
+                    else:
+                        lig_str = item_['LIGAND'][0]+item_['LIGAND'][1]+'-'+item_['LIGAND'][2]
+                    name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
+                elif task[0]=='sm':
+                    name = item_['label']
                 else:
-                    name = item[0][0]
+                    name = item_['CHAINID']
                     
-                #print('in valid_pdb_cycle', 'save_pdbs=',save_pdbs, header, task[0], counter, name)
                 if save_pdbs:
-                    #writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb',
-                    #    torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), seq_unmasked[res_mask], 
-                    #    bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]])
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}.pdb',
                         torch.nan_to_num(true_crds_[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]],
@@ -1661,7 +1594,7 @@ class Trainer():
                         pred_sup, seq_unmasked[res_mask],
                         bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]], 
                         chain="B", file_mode='a', atom_mask=atom_mask_[res_mask],
-                        atom_idx_offset=atom_mask_[res_mask].sum())
+                        atom_idx_offset=int(atom_mask_[res_mask].sum().item()))
 
                 if self.eval:
                     record = OrderedDict(name = name, Header=header, task = task[0], epoch = epoch)
@@ -1673,10 +1606,10 @@ class Trainer():
                     record.update(pred_err)
                     records.append(record)
 
-                    torch.save({'logits_pae': logit_pae_,
-                                'logits_pde': logit_pde_,
-                                'pred_lddts': pred_lddts[...,res_mask[0]]},
-                               out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_outputs.pt')
+                    #torch.save({'logits_pae': logit_pae_,
+                    #            'logits_pde': logit_pde_,
+                    #            'pred_lddts': pred_lddts[...,res_mask[0]]},
+                    #           out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_outputs.pt')
 
                 counter += 1
 

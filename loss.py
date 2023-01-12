@@ -130,28 +130,47 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
 
     return loss
 
-def compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, pae_bin_step=0.5, eps=1e-4):
-    # predicted aligned error: C-alpha (or sm. mol atom) distances in backbone frames
-    xij_ca = torch.einsum('rji,rsj->rsi', uX[-1,:,0], X[-1,:,None,1] - X_y[-1,None,:,0,:]) # last bb prediction
-    xij_ca_t = torch.einsum('rji,rsj->rsi', uY[0,:,0], Y[0,:,None,1] - Y_y[0,None,:,0,:]) # assumes B=1
+def compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask, pae_bin_step=0.5, eps=1e-4):
+    """Predicted Aligned Error: C-alpha (or sm. mol atom) distances in backbone frames from final layer"""
+
+    frame_mask_bb = frame_mask[0,:,0] # valid backbone frames (L,)
+    atom_mask_ca = atom_mask[0,:,1] # valid CA atoms (L,)
+
+    xij_ca = torch.einsum(
+        'fji,faj->fai',
+        uX[-1,frame_mask_bb,0],
+        X[-1,None,atom_mask_ca,1] - X_y[-1,frame_mask_bb,None,0]
+    ) # (N_valid_frames, N_valid_ca, 3)
+
+    xij_ca_t = torch.einsum(
+        'fji,faj->fai',
+        uY[-1,frame_mask_bb,0],
+        Y[-1,None,atom_mask_ca,1] - Y_y[-1,frame_mask_bb,None,0]
+    ) # (N_valid_frames, N_valid_ca, 3)
+
     eij_label = torch.sqrt(torch.square(xij_ca - xij_ca_t).sum(dim=-1)+eps).clone().detach()
 
     nbin = logit_pae.shape[1]
     pae_bins = torch.linspace(pae_bin_step, pae_bin_step*(nbin-1), nbin-1, dtype=logit_pae.dtype, device=logit_pae.device)
     true_pae_label = torch.bucketize(eij_label, pae_bins, right=True).long()
-    return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pae, true_pae_label[None]) # assumes B=1
 
-def compute_pde_loss(X, Y, logit_pde, pde_bin_step=0.3):
-    # predicted distance error: C-alpha (or sm. mol atom) pairwise distances
-    dX = torch.cdist(X[-1,:,1], X[-1,:,1], compute_mode='donot_use_mm_for_euclid_dist')
-    dY = torch.cdist(Y[0,:,1], Y[0,:,1], compute_mode='donot_use_mm_for_euclid_dist')
+    logit_pae_masked = logit_pae[:,:,frame_mask_bb][...,atom_mask_ca] # (1, nbins, N_valid_frames, N_valid_ca)
+
+    return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pae_masked, true_pae_label[None]) # assumes B=1
+
+def compute_pde_loss(X, Y, logit_pde, atom_mask, pde_bin_step=0.3):
+    """Predicted Distance Error: C-alpha (or sm. mol atom) pairwise distances"""
+    atom_mask_ca = atom_mask[0,:,1] # valid CA atoms (L,)
+
+    dX = torch.cdist(X[-1,atom_mask_ca,1], X[-1,atom_mask_ca,1], compute_mode='donot_use_mm_for_euclid_dist')
+    dY = torch.cdist(Y[0,atom_mask_ca,1], Y[0,atom_mask_ca,1], compute_mode='donot_use_mm_for_euclid_dist')
     dist_err = torch.abs(dX-dY).clone().detach()
 
     nbin = logit_pde.shape[1]
     pde_bins = torch.linspace(pde_bin_step, pde_bin_step*(nbin-1), nbin-1, dtype=logit_pde.dtype, device=logit_pde.device)
     true_pde_label = torch.bucketize(dist_err, pde_bins, right=True).long()
-    return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pde, true_pde_label[None]) # assumes B=1
-
+    logit_pde_masked = logit_pde[:,:,atom_mask_ca][...,atom_mask_ca] # (1, nbins, N_valid_ca, N_valid_ca)
+    return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pde_masked, true_pde_label[None]) # assumes B=1
 
 # from Ivan: FAPE generalized over atom sets & frames
 def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, 
@@ -172,13 +191,19 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     # flatten middle dims so can gather across residues
     X_prime = X.reshape(N, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
     Y_prime = Y.reshape(1, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
-    
+
     # reindex frames for flat X
     frames_reindex = torch.zeros(frames.shape[:-1], device=frames.device)
     for i in range(L):
         frames_reindex[:, i, :, :] = (i+frames[..., i, :, :, 0])*natoms + frames[..., i, :, :, 1]
     frames_reindex = frames_reindex.long()
 
+    masked_atom_frames = torch.any(frames_reindex>L*natoms, dim=-1) # find frames with atoms that aren't resolved
+    masked_atom_frames *= torch.any(frames_reindex<0, dim=-1)
+    frame_mask *= ~masked_atom_frames 
+    # There are currently indices for frames that aren't in the coordinates bc they arent resolved, reset these indices to 0 to avoid 
+    # indexing errors
+    frames_reindex[masked_atom_frames, :] = 0 
     frame_mask *= torch.all(
         torch.gather(frame_atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
         axis=-1)
@@ -201,9 +226,10 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
 
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
-    pae_loss = compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae) if logit_pae is not None \
+    pae_loss = compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask) \
+                   if logit_pae is not None \
                    else torch.tensor(0).to(frames.device)
-    pde_loss = compute_pde_loss(X, Y, logit_pde) if logit_pde is not None \
+    pde_loss = compute_pde_loss(X, Y, logit_pde, atom_mask) if logit_pde is not None \
                    else torch.tensor(0).to(frames.device)
 
     return loss, pae_loss, pde_loss
@@ -597,6 +623,11 @@ def calc_lj(
     dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds[0].long().detach().cpu().numpy(), directed=False)
     dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0), device=mask.device) # protein portion is inf and you don't want to mask it out
     mask[:,1,:,1] *= dist_matrix >=4
+
+    # mask out bonds next to atomized regions of proteins 
+    protein_atom_bonds_mask = bond_feats != 6 # protein-atom bond
+    # mask out all atoms until Cbeta for residues bonded to an atom (this approximates to 4 bonds away)
+    mask[:,:6, :, :6] *= protein_atom_bonds_mask[0,:, None, :, None].expand(-1, 6, -1, 6)
     si,ai,sj,aj = mask.nonzero(as_tuple=True)
 
     ds = torch.sqrt( torch.sum ( torch.square( xs[:,si,ai]-xs[:,sj,aj] ), dim=-1 ) + eps )

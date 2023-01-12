@@ -11,6 +11,7 @@ from itertools import combinations
 from openbabel import openbabel
 from scipy.spatial.transform import Rotation
 
+import chemical
 from chemical import *
 from kinematics import get_atomize_protein_chirals
 from scoring import *
@@ -71,7 +72,7 @@ def center_and_realign_missing(xyz, mask_t, seq=None, same_chain=None):
         mask = get_prot_sm_mask(mask_t, seq)
 
     # center c.o.m of existing residues at the origin
-    center_CA = (mask[...,None]*xyz[:,1]).sum(dim=0) / (mask[...,None].sum(dim=0) + 1e-5) # (3)
+    center_CA = xyz[mask,1].mean(dim=0) # (3)
     xyz = torch.where(mask.view(L,1,1), xyz - center_CA.view(1, 1, 3), xyz)
 
     # move missing residues to the closest valid residues on same chain
@@ -411,8 +412,9 @@ def superimpose(pred, true, atom_mask):
     
     return rP+ct
 
-def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None, 
-             bond_feats=None, file_mode="w", atom_mask=None, atom_idx_offset=0):
+
+def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None,
+             bond_feats=None, file_mode="w", atom_mask=None, atom_idx_offset=0, chain_Ls=None):
 
     f = open(filename, file_mode)
     ctr = 1+atom_idx_offset
@@ -424,11 +426,17 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
     if idx_pdb is None:
         idx_pdb = 1 + torch.arange(atomscpu.shape[0])
 
+    alphabet = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    if chain_Ls is not None:
+        chain_letters = np.concatenate([np.full(L, alphabet[i]) for i,L in enumerate(chain_Ls)])
+    else:
+        chain_letters = [chain]*len(scpu)
+        
     Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
     atom_idxs = {}
     if modelnum is not None:
         f.write(f"MODEL        {modelnum}\n")
-    for i,s in enumerate(scpu):
+    for i,s,ch in zip(range(len(scpu)), scpu, chain_letters):
         natoms = atomscpu.shape[-2]
         if (natoms!=NHEAVY and natoms!=NTOTAL and natoms!=3):
             print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
@@ -439,25 +447,19 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
             atom_idxs[i] = ctr
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "HETATM", ctr, num2aa[s], lig_name,
-                    chain, torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
+                    ch, torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
                     1.0, Bfacts[i] ) )
             ctr += 1
             continue
 
         atms = aa2long[s]
-        # his prot hack
-        #if (s==8 and torch.linalg.norm( atomscpu[i,9,:]-atomscpu[i,5,:] ) < 1.7):
-        #    atms = (
-        #        " N  "," CA "," C  "," O  "," CB "," CG "," NE2"," CD2"," CE1"," ND1",
-        #          None,  None,  None,  None," H  "," HA ","1HB ","2HB "," HD2"," HE1",
-        #        " HD1",  None,  None,  None,  None,  None,  None) # his_d
 
         for j,atm_j in enumerate(atms):
             if atom_mask is not None and not atom_mask[i,j]: continue # skip missing atoms
             if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
                     "ATOM", ctr, atm_j, num2aa[s],
-                    chain, idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
+                    ch, idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
                     1.0, Bfacts[i] ) )
                 ctr += 1
     if bond_feats != None:
@@ -468,6 +470,7 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
             f.write(f"CONECT{atom_idxs[int(start.cpu().numpy())]:5d}{atom_idxs[int(end.cpu().numpy())]:5d}\n")
     if modelnum is not None:
         f.write("ENDMDL\n")
+
     
 # process ideal frames
 def make_frame(X, Y):
@@ -1004,7 +1007,7 @@ def get_atom_frames(msa, G):
             frames_with_n = [frame for frame in frames if n in frame]
         # if the atom isn't in a 3 atom frame, it should be ignored in loss calc, set all the atoms to n
         if not frames_with_n:
-            selected_frames.append([(0,0),(0,0),(0, 0)])
+            selected_frames.append([(0,1),(0,1),(0, 1)])
             continue
         frame_priorities = []
         for frame in frames_with_n:
@@ -1139,3 +1142,329 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
 
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_mask, bond_feats)
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
+
+def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
+    """Given a protein chain and coordinate transform parsed from CIF file,
+    return tensors with coordinates and masks
+
+    Parameters
+    ----------
+    ch: namedtuple
+        A protein chain as parsed by cifutils
+    ch_xf : 2-tuple (chain_id, np.array:(4,4))
+        The coordinate transform for this chain
+    modres : dict
+        Maps modified residue names to their canonical equivalents. Any
+        modified residue will be converted to its standard equivalent and
+        coordinates for atoms with matching names will be saved.
+
+    Returns
+    -------
+    xyz_xf : torch.Tensor (L, NTOTAL, 3), float
+        Transformed coordinates for all the atoms in each residue
+    mask : torch.Tensor (L, NTOTAL,), bool
+        Boolean mask with True if a certain atom is present
+    seq : torch.Tensor (L,), long
+        Integer encoded amino acid sequence
+    chid : list of str (L,)
+        Chain IDs for each residue
+    resi : list of str (L,)
+        Residue numbers for each residue
+    """ 
+    assert(ch.type == 'polypeptide(L)')
+    assert(ch.id == ch_xf[0])
+
+    # atom names from cif don't have whitespace
+    aa2long_ = [[x.strip() if x is not None else None for x in y] for y in aa2long]
+
+    idx = [int(k[1]) for k in ch.atoms]
+    i_min, i_max = np.min(idx), np.max(idx)
+    L = i_max - i_min + 1
+
+    xyz = torch.zeros(L, NTOTAL, 3)
+    mask = torch.zeros(L, NTOTAL).bool()
+    seq = torch.full((L,), np.nan)
+    chid = ['-']*L
+    resi = ['-']*L
+
+    unrec_elements = set()
+
+    for k,v in ch.atoms.items():
+        i_res = int(k[1])-i_min
+        if k[2] in aa2num: # standard AA
+            aa = aa2num[k[2]]
+        elif k[2] in modres and modres[k[2]] in aa2num: # nonstandard AA, map to standard
+            #print('nonstandard AA',k,modres[k[2]])
+            aa = aa2num[modres[k[2]]]
+        else: # unknown AA, still try to store BB atoms
+            #print('unknown AA',k)
+            aa = 20
+        if k[3] in aa2long_[aa]: # atom name exists in RF nomenclature
+            i_atom = aa2long_[aa].index(k[3]) # atom index
+            xyz[i_res, i_atom, :] = torch.tensor(v.xyz)
+            mask[i_res, i_atom] = v.occ
+        seq[i_res] = aa
+        chid[i_res] = k[0]
+        resi[i_res] = k[1]
+
+    xf = torch.tensor(ch_xf[1]).float()
+    u,r = xf[:3,:3], xf[:3,3]
+    xyz_xf = torch.einsum('ij,raj->rai', u, xyz) + r[None,None]
+
+    return xyz_xf, mask, seq, chid, resi
+
+
+def get_ligand_atoms_bonds(ligand, chains, covale):
+    """Gets the atoms and bonds belonging to a certain ligand, as identified by
+    the ligand's chain ID(s) and residue number(s). Includes
+    inter-chain bonds, for multi-residue ligands. `chains`, `covale`,
+    `lig_atoms`, and `lig_bonds` are as parsed by cifutils.
+    """
+    lig_atoms = dict()
+    lig_bonds = []
+    for i_ch,ch in chains.items():
+        for k,v in ch.atoms.items():
+            if k[:3] in ligand:
+                lig_atoms[k] = v
+        for bond in ch.bonds:
+            if bond.a[:3] in ligand or bond.b[:3] in ligand:
+                lig_bonds.append(bond)
+    for bond in covale:
+        if bond.a[:3] in ligand and bond.b[:3] in ligand:
+            lig_bonds.append(bond)
+    return lig_atoms, lig_bonds
+
+
+def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
+    """Given ligand atoms from a parsed CIF file and coordinate transforms
+    specific to a bio-assembly of interest, returns tensors with transformed
+    coordinates and a mask for valid atoms. 
+
+    Parameters
+    ----------
+    atoms: dict
+        Atom key-value pairs for the query ligand, as parsed by cifutils
+    asmb_xfs : list of 2-tuples (chain_id, torch.Tensor(4,4))
+        Coordinate transforms for the current assembly
+    ch2xf : dict
+        Maps chain letters to transform indices
+    input_akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
+        Atom keys for the query ligand, used to enforce a specific atom order
+
+    Returns
+    -------
+    xyz : torch.Tensor (N_atoms, 3), float
+    mask : torch.Tensor (N_atoms,), bool
+    seq : torch.Tensor (N_atoms,), long
+    chid : list (N_atoms,)
+        Chain IDs for each ligand atom
+    akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
+        Atom keys with information about each atom, in the same order as the returned coordinates
+    """ 
+    elnum_to_atom = dict(zip(chemical.atom_num, chemical.frame_priority2atom))
+    atoms_no_H = {k:v for k,v in atoms.items() if v.element != 1} # exclude hydrogens
+    L = len(atoms_no_H)
+    if input_akeys is None:
+        input_akeys = atoms_no_H.keys()
+    
+    xyz = torch.zeros(L, 3)
+    mask = torch.zeros(L,).bool()
+    seq = torch.full((L,), np.nan)
+    chid = ['-']*L
+    akeys = [None]*L
+    
+    # create coords, atom mask, and seq tokens
+    for i,k in enumerate(input_akeys):
+        v = atoms_no_H[k]
+        xyz[i, :] = torch.tensor(v.xyz)
+        mask[i] = v.occ
+        if v.element not in elnum_to_atom:
+            print('Element not in alphabet:',v.element)
+            seq[i] = chemical.aa2num['ATM']
+        else:
+            seq[i] = chemical.aa2num[elnum_to_atom[v.element]]
+        akeys[i] = k
+        chid[i] = k[0]
+        
+    # apply transforms
+    chid = np.array(chid)
+    for i_ch in np.unique(chid):
+        if i_ch not in ch2xf: continue # indicates ligand chains with zero occupied atoms
+        idx = chid==i_ch
+        xf = torch.tensor(asmb_xfs[ch2xf[i_ch]][1]).float()
+        u,r = xf[:3,:3], xf[:3,3]
+        xyz[idx] = torch.einsum('ij,aj->ai', u, xyz[idx]) + r[None,None]
+     
+    return xyz, mask, seq, chid, akeys
+
+def remove_unresolved_substructures(akeys, lig_bonds, mask_sm):
+    """
+    returns a tensor mask of indices of atoms that are not resolved and do not have any resolved neighbors
+    atoms with resolved neigbors =1, atoms without resolved neighbors =0
+    """
+    L = len(akeys)
+    bond_feats = torch.zeros(L, L)
+    for bond in lig_bonds:
+        if bond.a not in akeys or bond.b not in akeys: continue # intended to skip bonds to H's
+        i = akeys.index(bond.a)
+        j = akeys.index(bond.b)
+        bond_feats[i,j] = bond.order if not bond.aromatic else 4
+        bond_feats[j,i] = bond_feats[i,j] 
+    
+    no_resolved_neighbors = torch.ones(L)
+    for i in range(len(akeys)):
+        neighbors = bond_feats[i].nonzero()
+        resolved_neighbors = mask_sm[neighbors]
+        if torch.sum(resolved_neighbors) == 0 and ~mask_sm[i]:
+            no_resolved_neighbors[i] = 0
+    return no_resolved_neighbors.bool()
+
+
+def cif_ligand_to_obmol(xyz, akeys, atoms, bonds):
+    """Given a ligand's coordinates and atom and bond information, return an
+    openbabel molecule representing the ligand as well as its 2D bond features.
+
+    Parameters
+    ----------
+    xyz : torch.Tensor (N_atoms, 3), float
+    akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
+    atoms : dict
+        Ligand atoms, as parsed by cifutils
+    bonds : list of Bond
+        Ligand bonds, as parsed by cifutils
+
+    Returns
+    -------
+    mol : OBMol object
+        Openbabel molecule containing coordinate, atom, and bond information for the ligand
+    bond_feats : torch.Tensor (L,L)
+        Bond features for the ligand
+    """
+    mol = openbabel.OBMol()    
+    for i,k in enumerate(akeys):
+        a = mol.NewAtom()
+        a.SetAtomicNum(atoms[k].element)
+        a.SetVector(float(xyz[i,0]), float(xyz[i,1]), float(xyz[i,2]))
+
+    sm_L = len(akeys)
+    bond_feats = torch.zeros((sm_L,sm_L))
+    for bond in bonds:
+        if bond.a not in akeys or bond.b not in akeys: continue # intended to skip bonds to H's
+        i = akeys.index(bond.a)
+        j = akeys.index(bond.b)
+        bond_feats[i,j] = bond.order if not bond.aromatic else 4
+        bond_feats[j,i] = bond_feats[i,j]
+
+        obb = openbabel.OBBond()
+        obb.SetBegin(mol.GetAtom(i+1))
+        obb.SetEnd(mol.GetAtom(j+1))
+        obb.SetBondOrder(bond.order)
+        if bond.aromatic:
+            obb.SetAromatic()
+
+        mol.AddBond(obb)
+    
+    return mol, bond_feats
+
+def get_alt_query_ligand(chains, ligand_name, partners, lig_akeys, asmb_xfs):
+    """Given a query ligand name and its contacting chains & transforms, return coordinates
+    of other ligands with the same name but different chain, transform, and/or residue number.
+
+    Parameters
+    ----------
+    chains : dict
+        All the chains for this PDB entry, as parsed by cifutils
+    ligand_name : str
+        Name of query ligand
+    partners : list of 4-tuples (chain_id, transform_index, num_contacts, chain_type)
+        Chains making contacts to the query ligand
+    lig_akeys : list of atom keys (4-tuples) (chain_id, residue_num, residue_name, atom_name)
+        Atom keys for the query ligand, used to ensure alternate ligands have same atom order
+    asmb_xfs : list of 2-tuples (chain_id, torch.Tensor:(4,4))
+        Coordinate transforms for the current assembly
+
+    Returns
+    -------
+    xyz_alt_s : list of float tensors (N_symm, N_atoms, 3)
+    mask_alt_s : list of bool tensors (N_symm, N_atoms)
+    """
+    lig_anames = [k[3] for k in lig_akeys]
+    xyz_alt_s = []
+    mask_alt_s = []
+
+    for partner in partners:
+        if partner[3] != 'nonpoly': continue # skip non-small-molecule chains
+
+        # gather all atoms and bonds on partner chain with the same name as query ligand
+        alt_lig_atoms = dict()
+        alt_lig_bonds = []
+        for k,v in chains[partner[0]].atoms.items():
+            if ligand_name==k[2]:
+                alt_lig_atoms[k] = v
+        for bond in chains[partner[0]].bonds:
+            if bond.a[2]==ligand_name and bond.b[2]==ligand_name:
+                alt_lig_bonds.append(bond)
+
+        lig_ch2xf = {partner[0]:partner[1]}
+
+        # iterate through all unique residue numbers on partner chain
+        # usually a ligand chain will only have one residue with a given ligand name, but this is to be safe
+        alt_lig_res = set([k[:3] for k in alt_lig_atoms])
+        for res in alt_lig_res:
+            res_atoms = {k:v for k,v in alt_lig_atoms.items() if k[:3]==res}
+            res_bonds = [bond for bond in alt_lig_bonds if bond.a[:3]==res and bond.b[:3]==res]
+
+            res_anames = [k[3] for k in res_atoms.keys()]
+            if not set(lig_anames).issubset(res_anames):
+                print('Alternate ligand position/conformation does not match query ligand atom names. Skipping.', partner, res)
+                continue
+
+            res_akeys = [res+(aname,) for aname in lig_anames]
+            xyz_alt, mask_alt, msa_alt, chid_alt, akeys_alt = cif_ligand_to_xyz(res_atoms, asmb_xfs, lig_ch2xf, input_akeys=res_akeys)
+            mol_alt, bond_feats_alt = cif_ligand_to_obmol(xyz_alt, akeys_alt, res_atoms, res_bonds)
+            xyz_alt, mask_alt = get_automorphs(mol_alt, xyz_alt, mask_alt)
+
+            xyz_alt_s.append(xyz_alt)
+            mask_alt_s.append(mask_alt)
+
+    return xyz_alt_s, mask_alt_s
+
+def get_automorphs(mol, xyz_sm, mask_sm):
+    """Enumerate atom symmetry permutations."""
+
+    automorphs = openbabel.vvpairUIntUInt()
+    openbabel.FindAutomorphisms(mol, automorphs)
+
+    automorphs = torch.tensor(automorphs)
+    n_symmetry = automorphs.shape[0]
+
+    xyz_sm = xyz_sm[None].repeat(n_symmetry,1,1)
+    mask_sm = mask_sm[None].repeat(n_symmetry,1)
+
+    xyz_sm = torch.scatter(xyz_sm, 1, automorphs[:,:,0:1].repeat(1,1,3),
+                                torch.gather(xyz_sm,1,automorphs[:,:,1:2].repeat(1,1,3)))
+    mask_sm = torch.scatter(mask_sm, 1, automorphs[:,:,0],
+                        torch.gather(mask_sm, 1, automorphs[:,:,1]))
+
+    return xyz_sm, mask_sm
+
+def same_chain_2d_from_Ls(Ls):
+    """Given list of chain lengths, returns binary matrix with 1 if two residues are on the same chain."""
+    same_chain = torch.zeros((sum(Ls),sum(Ls))).long()
+    i_curr = 0
+    for L in Ls:
+        same_chain[i_curr:i_curr+L, i_curr:i_curr+L] = 1
+        i_curr += L
+    return same_chain
+
+def Ls_from_same_chain_2d(same_chain):
+    """Given binary matrix indicating whether two residues are on same chain, returns list of chain lengths"""
+    if len(same_chain.shape)==3: # remove batch dimension
+        same_chain = same_chain.squeeze(0)
+    Ls = []
+    i_curr = 0
+    while i_curr < len(same_chain):
+        idx = torch.where(same_chain[i_curr])[0]
+        Ls.append(idx[-1]-idx[0]+1)
+        i_curr = idx[-1]+1
+    return Ls
