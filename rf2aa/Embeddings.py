@@ -3,25 +3,26 @@ import torch.nn as nn
 import torch.nn.functional as F
 from opt_einsum import contract as einsum
 import torch.utils.checkpoint as checkpoint
-from util import *
-from util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_res_atom_dist
-from Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
-from Track_module import PairStr2Pair, PositionalEncoding2D
-from chemical import NAATOKENS,NTOTALDOFS, NBTYPES
+from rf2aa.util import *
+from rf2aa.util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_res_atom_dist
+from rf2aa.Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
+from rf2aa.Track_module import PairStr2Pair, PositionalEncoding2D
+from rf2aa.chemical import NAATOKENS,NTOTALDOFS, NBTYPES
 
 # Module contains classes and functions to generate initial embeddings
 
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
     def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=2*NAATOKENS+2+2,
-                 minpos=-32, maxpos=32, p_drop=0.1):
+                 minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1):
         super(MSA_emb, self).__init__()
         self.emb = nn.Linear(d_init, d_msa) # embedding for general MSA
         self.emb_q = nn.Embedding(NAATOKENS, d_msa) # embedding for query sequence -- used for MSA embedding
         self.emb_left = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_right = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_state = nn.Embedding(NAATOKENS, d_state)
-        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, p_drop=p_drop)
+        self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, 
+                                        maxpos_atom=maxpos_atom, p_drop=p_drop)
         
         self.reset_parameter()
     

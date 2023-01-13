@@ -1,26 +1,32 @@
 import sys, os, time, datetime, subprocess, shutil
+from icecream import ic
+ic.configureOutput(includeContext=True)
+        
 import numpy as np
 import pandas as pd
 from copy import deepcopy
 from collections import OrderedDict
+from icecream import ic
 import wandb
 import torch
 import torch.nn as nn
 from torch.utils import data
 from functools import partial
-from data_loader import (
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from rf2aa.data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex,
     loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale,
     loader_atomize_pdb, Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA,
     DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler,
     unbatch_item
 )
-from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
-from RoseTTAFoldModel  import RoseTTAFoldModule
-from loss import *
-from util import *
-from util_module import ComputeAllAtomCoords
-from scheduler import get_linear_schedule_with_warmup, get_stepwise_decay_schedule_with_warmup
+from rf2aa.kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
+from rf2aa.RoseTTAFoldModel  import RoseTTAFoldModule
+from rf2aa.loss import *
+from rf2aa.util import *
+from rf2aa.util_module import ComputeAllAtomCoords
+from rf2aa.scheduler import get_linear_schedule_with_warmup, get_stepwise_decay_schedule_with_warmup
 
 # disable openbabel warnings
 from openbabel import openbabel as ob
@@ -36,6 +42,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 #os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
+global DEBUG
+DEBUG=False
 import random
 random.seed(0)
 torch.manual_seed(5924)
@@ -645,6 +653,9 @@ class Trainer():
 
     def load_model(self, model, model_name, rank, suffix='last', resume_train=False, 
                    optimizer=None, scheduler=None, scaler=None):
+        ic(DEBUG)
+        if DEBUG:
+            return -1, 99999999.9
         chk_fn = self.model_dir+"/%s_%s.pt"%(model_name, suffix)
         loaded_epoch = -1
         best_valid_loss = 999999.9
@@ -724,6 +735,10 @@ class Trainer():
         if ('MASTER_PORT' not in os.environ):
             os.environ['MASTER_PORT'] = '%d'%self.port
 
+        if DEBUG:
+            world_size = 1
+            rank = 0
+            self.train_model(rank, world_size)
         if (not self.interactive and "SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
             world_size = int(os.environ["SLURM_NTASKS"])
             rank = int (os.environ["SLURM_PROCID"])
@@ -765,6 +780,7 @@ class Trainer():
         if rank==0: self.record_git_commit()
 
         # wandb logging
+        if DEBUG: self.wandb_prefix = None
         if self.wandb_prefix is not None and rank == 0:
             print('initializing wandb')
             #wandb.require("service")
@@ -802,6 +818,16 @@ class Trainer():
         for k in valid_dict:
             if self.dataset_param['n_valid_'+k] is None: 
                 self.dataset_param["n_valid_"+k] = len(valid_dict[k]) 
+
+        if self.dataset_param['n_valid_pdb'] is None: self.dataset_param["n_valid_pdb"] = len(valid_pdb.keys()) 
+        if self.dataset_param['n_valid_homo'] is None: self.dataset_param["n_valid_homo"] = len(valid_homo.keys()) 
+        if self.dataset_param["n_valid_compl"] is None: self.dataset_param["n_valid_compl"] = len(valid_compl.keys())
+        if self.dataset_param["n_valid_na_compl"] is None: self.dataset_param["n_valid_na_compl"] = len(valid_na_compl.keys())
+        if self.dataset_param["n_valid_rna"] is None: self.dataset_param["n_valid_rna"] = len(valid_rna.keys())
+        if self.dataset_param["n_valid_sm_compl"] is None: self.dataset_param["n_valid_sm_compl"] = len(valid_sm_compl.keys())
+        if self.dataset_param["n_valid_sm_compl_ligclus"] is None: self.dataset_param["n_valid_sm_compl_ligclus"] = len(valid_sm_compl_ligclus.keys())
+        if self.dataset_param["n_valid_sm_compl_strict"] is None: self.dataset_param["n_valid_sm_compl_strict"] = len(valid_sm_compl_strict.keys())
+        if self.dataset_param["n_valid_sm"] is None: self.dataset_param["n_valid_sm"] = len(valid_sm.keys())
 
         if (rank==0):
             print('Number of training clusters / examples:')
@@ -1096,6 +1122,7 @@ class Trainer():
             # loader will print warning message with item info for followup later
             if torch.is_tensor(item) and torch.all(item==-1):
                 continue
+
             r = rng.rand()
             save_pdbs = r<=0.01
             #print('rank',rank, 'counter',counter, 'item',item, 'task',task, 'save_pdbs',save_pdbs, 'r',r)
@@ -1290,9 +1317,7 @@ class Trainer():
                     loss = loss / self.ACCUM_STEP
                     scaler.scale(loss).backward()
                     scaler.unscale_(optimizer) # gradient clipping
-
                     torch.nn.utils.clip_grad_norm_(ddp_model.parameters(), 0.2)
-
                     scaler.step(optimizer)
                     scale = scaler.get_scale()
                     scaler.update()
@@ -2025,7 +2050,9 @@ class Trainer():
 if __name__ == "__main__":
     from arguments import get_args
     args, dataset_param, model_param, loader_param, loss_param = get_args()
-
+    if args.debug:
+        DEBUG=True
+        LOAD_PARAM['num_workers'] = 0
     if int(os.environ["SLURM_PROCID"])==0:
         print (args)
 

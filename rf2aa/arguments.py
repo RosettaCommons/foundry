@@ -1,5 +1,5 @@
 import argparse
-import data_loader
+from rf2aa import data_loader
 import os, datetime
 
 DATASET_PARAMS = [
@@ -60,6 +60,8 @@ def get_args():
             help='Output folder for model weights. [models/]')
     train_group.add_argument('-interactive', action='store_true', default=False,
             help='Start training in interactive mode. [False]')
+    train_group.add_argument('-debug', action='store_true', default=False,
+            help='Run in debugging mode. [False]')
 
     # data-loading parameters
     data_group = parser.add_argument_group("data loading parameters")
@@ -135,6 +137,11 @@ def get_args():
     dataset_group.add_argument('-n_valid_sm_compl_strict', type=int)
     dataset_group.add_argument('-n_valid_sm', type=int)
     dataset_group.add_argument('-n_valid_atomize_pdb', type=int)
+    dataset_group.add_argument('-n_valid_sm_compl_strict', type=int)
+    dataset_group.add_argument('-n_valid_sm', type=int)
+    dataset_group.add_argument('-n_valid_atomize_pdb', type=int)
+    dataset_group.add_argument('-datapkl', type=str, default='/projects/ml/RF2_allatom/dataset_20221123.pkl',
+            help='Path to pickled dataset to load for training on. If path doesn\'t exist, will write new pickle with that name.')
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")

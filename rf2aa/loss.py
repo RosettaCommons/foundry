@@ -1,9 +1,10 @@
 import torch
+from icecream import ic
 import numpy as np
 import scipy
 import networkx as nx
 
-from util import (
+from rf2aa.util import (
     rigid_from_3_points,
     cb_lengths_CN,
     cb_angles_CACN,
@@ -14,10 +15,10 @@ from util import (
     find_all_paths_of_length_n,
     find_all_rigid_groups
 )
-from chemical import NFRAMES, NTOTAL
+from rf2aa.chemical import NFRAMES, NTOTAL
 
-from kinematics import get_dih, get_ang
-from scoring import HbHybType
+from rf2aa.kinematics import get_dih, get_ang
+from rf2aa.scoring import HbHybType
 
 # Loss functions for the training
 # 1. BB rmsd loss
@@ -204,6 +205,7 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     # There are currently indices for frames that aren't in the coordinates bc they arent resolved, reset these indices to 0 to avoid 
     # indexing errors
     frames_reindex[masked_atom_frames, :] = 0 
+
     frame_mask *= torch.all(
         torch.gather(frame_atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
         axis=-1)
@@ -226,6 +228,7 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
 
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
+
     pae_loss = compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask) \
                    if logit_pae is not None \
                    else torch.tensor(0).to(frames.device)
@@ -628,6 +631,7 @@ def calc_lj(
     protein_atom_bonds_mask = bond_feats != 6 # protein-atom bond
     # mask out all atoms until Cbeta for residues bonded to an atom (this approximates to 4 bonds away)
     mask[:,:6, :, :6] *= protein_atom_bonds_mask[0,:, None, :, None].expand(-1, 6, -1, 6)
+
     si,ai,sj,aj = mask.nonzero(as_tuple=True)
 
     ds = torch.sqrt( torch.sum ( torch.square( xs[:,si,ai]-xs[:,sj,aj] ), dim=-1 ) + eps )

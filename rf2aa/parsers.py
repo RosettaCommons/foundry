@@ -7,9 +7,9 @@ from os.path import exists
 import random
 import util
 import gzip
-from ffindex import *
+from rf2aa.ffindex import *
 import torch
-from chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP
+from rf2aa.chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP
 from openbabel import openbabel
 
 to1letter = {
@@ -401,7 +401,7 @@ def parse_templates_raw(ffdb, hhr_fn, atab_fn, max_templ=20):
         ncol = sel1.shape[0]
         if ncol < 10:
             continue
-
+        
         ids.append(data[0])
         f0d.append(data[3])
         f1d.append(np.array(data[2])[sel1])

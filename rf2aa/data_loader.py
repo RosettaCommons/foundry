@@ -1,4 +1,8 @@
 import torch
+import warnings
+import time
+import deepdiff
+from icecream import ic
 from torch.utils import data
 import os, csv, random, pickle, gzip, itertools, time
 from dateutil import parser
@@ -10,13 +14,14 @@ from scipy.sparse.csgraph import shortest_path
 from collections import OrderedDict
 import networkx as nx
 
-from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
-from chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, NTOTAL, NBTYPES, CHAIN_GAP, num2aa
-from kinematics import get_chirals
-from util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
+from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
+from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX,
+    NTOTAL, NBTYPES, CHAIN_GAP, num2aa
+from rf2aa.kinematics import get_chirals
+from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
-    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, get_alt_query_ligand, \
-        remove_unresolved_substructures
+    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, \
+    get_ligand_atoms_bonds, get_alt_query_ligand, remove_unresolved_substructures
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -55,8 +60,7 @@ if not os.path.exists(base_dir):
     mol_dir = "/gscratch2/RF2_allatom/rcsb/pkl"
     csd_dir = "/gscratch2/RF2_allatom/csd543"
 
-def set_data_loader_params(args):
-    params = {
+default_dataloader_params = {
         "COMPL_LIST"       : "%s/list.hetero.csv"%compl_dir,
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
         "NEGATIVE_LIST"    : "%s/list.negative.csv"%compl_dir,
@@ -108,10 +112,12 @@ def set_data_loader_params(args):
         "ATOMIZE_FLANK"    : 0,
         "CLUSTER_LIGANDS"  : False
     }
-    for param in params:
+
+def set_data_loader_params(args):
+    for param in default_dataloader_params:
         if hasattr(args, param.lower()):
-            params[param] = getattr(args, param.lower())
-    return params
+            default_dataloader_params[param] = getattr(args, param.lower())
+    return default_dataloader_params
 
 def MSABlockDeletion(msa, ins, nb=5):
     '''
@@ -133,12 +139,12 @@ def cluster_sum(data, assignment, N_seq, N_res):
     csum = torch.zeros(N_seq, N_res, data.shape[-1], device=data.device).scatter_add(0, assignment.view(-1,1,1).expand(-1,N_res,data.shape[-1]), data.float())
     return csum
 
-def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=False):
+def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=False, fixbb=False):
     '''
     Input: full MSA information (after Block deletion if necessary) & full insertion information
     Output: seed MSA features & extra sequences
     
-    Seed MSA features:, time
+    Seed MSA features:
         - aatype of seed sequence (20 regular aa + 1 gap/unknown + 1 mask)
         - profile of clustered sequences (22)
         - insertion statistics (2)
@@ -148,6 +154,10 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
         - insertion info (1)
         - N-term or C-term? (2)
     '''
+    if fixbb:
+        p_mask = 0
+        msa = msa[:1]
+        ins = ins[:1]
     N, L = msa.shape
     
     term_info = torch.zeros((L,2), device=msa.device).float()
@@ -162,6 +172,7 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
             start += L_chain
     #binding_site = torch.zeros((L,1), device=msa.device).float()
     binding_site = torch.zeros((L,0), device=msa.device).float() # keeping this off for now (Jue 12/19)
+        
     # raw MSA profile
     raw_profile = torch.nn.functional.one_hot(msa, num_classes=NAATOKENS)
     raw_profile = raw_profile.float().mean(dim=0) 
@@ -206,8 +217,9 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
 
         mask_pos = torch.rand(msa_clust.shape, device=msa_clust.device) < p_mask
         mask_pos[msa_clust>MASKINDEX]=False # no masking on NAs
-
-        msa_masked = torch.where(mask_pos, mask_sample, msa_clust)
+        
+        use_seq = msa_clust
+        msa_masked = torch.where(mask_pos, mask_sample, use_seq)
         b_seq.append(msa_masked[0].clone())
 
         ## get extra sequenes
@@ -255,11 +267,21 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
         msa_clust_del = (2.0/np.pi)*torch.arctan(msa_clust_del.float()/3.0) # (from 0 to 1)
         ins_clust = torch.stack((ins_clust, msa_clust_del), dim=-1)
         #
-        msa_seed = torch.cat((msa_clust_onehot, msa_clust_profile, ins_clust, term_info[None].expand(Nclust,-1,-1), binding_site[None].expand(Nclust,-1,-1)), dim=-1)
+        if fixbb:
+            assert params['MAXCYCLE'] == 1
+            msa_clust_profile = msa_clust_onehot
+            msa_extra_onehot = msa_clust_onehot
+            ins_clust[:] = 0
+            ins_extra[:] = 0
+            # This is how it is done in rfdiff, but really it seems like it should be all 0.
+            # Keeping as-is for now for consistency, as it may be used in downstream masking done
+            # by apply_masks.
+            mask_pos = torch.full_like(msa_clust, 1).bool()
+        msa_seed = torch.cat((msa_clust_onehot, msa_clust_profile, ins_clust, term_info[None].expand(Nclust,-1,-1)), dim=-1)
 
         # extra MSA features
         ins_extra = (2.0/np.pi)*torch.arctan(ins_extra[:Nextra].float()/3.0) # (from 0 to 1)
-        msa_extra = torch.cat((msa_extra_onehot[:Nextra], ins_extra[:,:,None], term_info[None].expand(Nextra,-1,-1),binding_site[None].expand(Nextra,-1,-1)), dim=-1)
+        msa_extra = torch.cat((msa_extra_onehot[:Nextra], ins_extra[:,:,None], term_info[None].expand(Nextra,-1,-1)), dim=-1)
 
         if (tocpu):
             b_msa_clust.append(msa_clust.cpu())
@@ -852,13 +874,13 @@ def merge_a3m_homo(msa_orig, ins_orig, nmer):
     return msa, ins
 
 # Generate input features for single-chain
-def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=True, random_noise=5.0):
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
-    
-    # get template features
-    ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
-    xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, msa.shape[1], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
-    
+def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=True, random_noise=5.0, fixbb=False):
+    msa_featurization_kwargs = {}
+    if fixbb:
+        ic('setting msa feat kwargs')
+        msa_featurization_kwargs['p_mask'] = 0.0
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb, **msa_featurization_kwargs)
+
     # get ground-truth structures
     idx = torch.arange(len(pdb['xyz'])) 
     xyz = torch.full((len(idx),NTOTAL,3),np.nan).float()
@@ -866,6 +888,19 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     mask = torch.full((len(idx), NTOTAL), False)
     mask[:,:14] = pdb['mask']
     xyz = torch.nan_to_num(xyz)
+
+    # get template features
+    ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
+    if not fixbb:
+        xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, msa.shape[1], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+    if fixbb:
+        xyz_t = torch.clone(xyz)[None]
+        mask = torch.full((len(idx), N_TOTAL), False)
+        mask[:,:14] = pdb['mask']
+        t1d = torch.nn_functional.one_hot(seq, num_classes=NAATOKENS-1)
+        #L = seq.shape[-1]
+        conf = torch.ones_like(seq[:1])[...,None]
+        f1d_t = torch.cat((t1d, conf), dim=-1)
 
     # Residue cropping
     crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
@@ -1194,7 +1229,6 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
            xyz_prev.float(), mask_prev, \
            chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals,"compl", item
 
-
 def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_top=True, random_noise=5.0):
     pdb_set = item['CHAINID']
     msa_id = item['HASH']
@@ -1421,7 +1455,7 @@ def loader_rna(item, params, random_noise=5.0):
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, "rna",item
 
 def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_ligand_tmpl=False,
-    init_protein_xyz=False, init_ligand_xyz=False, task='sm_compl', random_noise=5.0):
+    init_protein_xyz=False, init_ligand_xyz=False, task='sm_compl', random_noise=5.0, fixbb=False):
     """Load protein/SM complex with mixed residue and atom tokens. Also,
     compute frames for atom FAPE loss calc"""
 
@@ -1460,32 +1494,42 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
     xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot = cif_prot_to_xyz(ch, ch_xf, modres)
     protein_L, nprotatoms, _ = xyz_prot.shape
 
-    # load query ligand (the "focus ligand" for this training example)
-    lig_atoms, lig_bonds = get_ligand_atoms_bonds(ligand, chains, covale)
-    lig_ch2xf = dict(item['LIGXF'])
+    if len(ligands):
+        # load query ligand (the "focus ligand" for this training example)
+        lig_atoms, lig_bonds = get_ligand_atoms_bonds(ligand, chains, covale)
+        lig_ch2xf = dict(item['LIGXF'])
 
-    xyz_sm, mask_sm, msa_sm, chid_sm, lig_akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
-    mol, bond_feats_sm = cif_ligand_to_obmol(xyz_sm, lig_akeys, lig_atoms, lig_bonds)
-    xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
+        xyz_sm, mask_sm, msa_sm, chid_sm, lig_akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
+        mol, bond_feats_sm = cif_ligand_to_obmol(xyz_sm, lig_akeys, lig_atoms, lig_bonds)
+        xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
 
-    # add alternate instances (binding sites, conformations) of the query ligand to symmetry dimension
-    if len(ligand) == 1: # only do this for single-residue ligands (TODO: implement multi-res case)
-        xyz_alt_s, mask_alt_s = get_alt_query_ligand(chains, ligand[0][2], item['PARTNERS'], 
-                                                     lig_akeys, asmb_xfs)
-        xyz_sm = torch.cat([xyz_sm]+xyz_alt_s, dim=0)
-        mask_sm = torch.cat([mask_sm]+mask_alt_s, dim=0)
+        # add alternate instances (binding sites, conformations) of the query ligand to symmetry dimension
+        if len(ligand) == 1: # only do this for single-residue ligands (TODO: implement multi-res case)
+            xyz_alt_s, mask_alt_s = get_alt_query_ligand(chains, ligand[0][2], item['PARTNERS'], 
+                                                         lig_akeys, asmb_xfs)
+            xyz_sm = torch.cat([xyz_sm]+xyz_alt_s, dim=0)
+            mask_sm = torch.cat([mask_sm]+mask_alt_s, dim=0)
 
-    # clamp number of symmetry variants to save GPU memory
-    if xyz_sm.shape[0] > params['MAXNSYMM']:
-        xyz_sm = xyz_sm[:params['MAXNSYMM']]
-        mask_sm = mask_sm[:params['MAXNSYMM']]
+        # clamp number of symmetry variants to save GPU memory
+        USENSYM = params['MAXNSYMM']
+        if fixbb:
+            USENSYM = 1 # no symmetry variants during design training
+        if xyz_sm.shape[0] > USENSYM: 
+            xyz_sm = xyz_sm[:USENSYM]
+            mask_sm = mask_sm[:USENSYM]
 
-    G = get_nxgraph(mol)
-    frames = get_atom_frames(msa_sm, G)
-    chirals = get_chirals(mol, xyz_sm[0])
+        G = get_nxgraph(mol)
+        frames = get_atom_frames(msa_sm, G)
+        chirals = get_chirals(mol, xyz_sm[0])
+        if chirals.shape[0] == 0:
+            chirals = torch.zeros((0,4))
 
-    if len(list(nx.connected_components(G))) > 1:
-        print('WARNING: More than one connected component in ligand graph', item)
+        if len(list(nx.connected_components(G))) > 1:
+            print('WARNING: More than one connected component in ligand graph', item)
+    else:
+        xyz_sm = torch.zeros((1,0,1))
+        mask_sm = torch.zeros((1,0))
+        chirals = torch.zeros((0,4)) # 4 might not be right but it's empty
 
     # Generate ground truth structure: account for ligand symmetry
     N_symmetry, sm_L, _ = xyz_sm.shape
@@ -1497,14 +1541,28 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
     mask[:, protein_L:, 1] = mask_sm
 
     Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
-
     ins_sm = torch.zeros_like(msa_sm)
     a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
-    a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+
+    a3m_to_check = [('protein', a3m_prot)]
+    if len(ligands):
+        a3m_to_check.append(('ligand', a3m_sm))
+    else:
+        frames = torch.zeros((0,3,2))
+
+    for i, (a3m_name, a3m) in enumerate(a3m_to_check):
+        if not (a3m['msa'].shape[1]==Ls[i]):
+            print(f'WARNING [loader_sm_compl]: {a3m_name} XYZ and MSA lengths don\'t match: {item}. Skipping.')
+            return (torch.tensor([-1]),)*21
+
+    if len(ligands):
+        a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+    else:
+        a3m = a3m_prot
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
 
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb)
 
     idx = torch.arange(sum(Ls))
     idx[Ls[0]:] += CHAIN_GAP
@@ -1514,7 +1572,8 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
     chain_idx[Ls[0]:, Ls[0]:] = 1
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
     bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
-    bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol)
+    if len(ligands):
+        bond_feats[Ls[0]:, Ls[0]:] = get_bond_feats(mol)
 
     if init_protein_tmpl or init_ligand_tmpl:
         # make blank features for 2 templates
@@ -1546,8 +1605,17 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
         # standard template featurization
         # same_chain argument prevents sm. mol from being initialized at one end of protein
         ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
-        xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0,
-            npick=ntempl, pick_top=pick_top, same_chain=chain_idx, random_noise=random_noise)
+        if not fixbb:
+            xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0,
+                npick=ntempl, pick_top=pick_top, same_chain=chain_idx, random_noise=random_noise)
+        if fixbb:
+            xyz_t = torch.clone(xyz[0])[None]
+            mask_t = torch.clone(mask)
+            seq_mask_shifted = torch.clone(seq)
+            seq_mask_shifted[seq_mask_shifted>=MASKINDEX] -= 1
+            f1d_t = torch.nn.functional.one_hot(seq_mask_shifted, num_classes=NAATOKENS-1)
+            conf = torch.ones_like(seq[:1])[...,None]
+            f1d_t = torch.cat((f1d_t, conf), dim=-1)
 
     if init_protein_xyz or init_ligand_xyz:
         # initialize coords to ground truth, move to origin, rotate randomly
@@ -1573,14 +1641,18 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
 
     else:
         xyz_prev = xyz_t[0].clone()
-        xyz_prev = torch.nan_to_num(xyz_prev)
+        if not fixbb:
+            xyz_prev = torch.nan_to_num(xyz_prev)
         mask_prev = mask_t[0].clone()
 
     xyz = torch.nan_to_num(xyz)
     xyz_t = torch.nan_to_num(xyz_t)
 
     if sum(Ls) > params["CROP"]:
-        sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls, params)
+        if len(ligands):
+            sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls, params)
+        else:
+            sel = get_crop(len(idx), mask[0], msa_seed_orig.device, params['CROP'], unclamp=False)
         seq = seq[:,sel]
         msa_seed_orig = msa_seed_orig[:,:,sel]
         msa_seed = msa_seed[:,:,sel]
@@ -1601,6 +1673,10 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
     if chirals.shape[0]>0:
         L1 = chain_idx[0,:].sum()
         chirals[:, :-1] = chirals[:, :-1] + L1
+    if fixbb:
+        # Remove symmetry from ground-truth since we are currently not predicting ligands
+        xyz = xyz[0]
+        mask = mask[0]
 
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
@@ -1796,7 +1872,6 @@ def loader_sm_compl_covale(item, params, pick_top=True,
         if msa.shape[1] != xyz_t.shape[1]:
             print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
             return (torch.tensor([-1]),)*21
-
     if init_protein_xyz or init_ligand_xyz:
         # initialize coords to ground truth, move to origin, rotate randomly
         xyz_prev = torch.full((sum(Ls), NTOTAL, 3), np.nan).float()
@@ -1861,8 +1936,6 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     pdb_chain, pdb_hash = item['CHAINID'], item['HASH']
     pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
     a3m = get_msa(params['PDB_DIR'] + '/a3m/' + pdb_hash[:3] + '/' + pdb_hash + '.a3m.gz', pdb_hash)
-    tplt = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
-    
     # get msa features
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
@@ -2133,12 +2206,10 @@ class Dataset(data.Dataset):
     def __getitem__(self, index):
         ID = self.IDs[index]
         item = sample_item(self.data_df, ID, self.rng)
-
         kwargs = dict()
         if self.n_res_atomize > 0:
             kwargs['n_res_atomize'] = self.n_res_atomize
             kwargs['flank'] = self.flank
-            
         out = self.loader(item, self.params, self.homo,
                           unclamp = (self.rng.rand() > self.unclamp_cut),
                           pick_top = self.pick_top, 

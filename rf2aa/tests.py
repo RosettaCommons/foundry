@@ -3,11 +3,11 @@ import torch
 from torch.utils import data
 
 # from chemical import NFRAMES
-from data_loader import get_train_valid_set, Dataset, DatasetNAComplex, DatasetRNA, DatasetSMComplex, loader_pdb, loader_na_complex, loader_rna, loader_sm_compl,set_data_loader_params, loader_atomize_pdb
-from kinematics import xyz_to_c6d, xyz_to_t2d
-from chemical import num2aa, aa2elt, aa2num, aabonds,aa2long, aabtypes, atomized_protein_frames
-from loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss, calc_chiral_loss
-from util import get_frames, frame_indices, is_atom, xyz_to_frame_xyz, xyz_t_to_frame_xyz, long2alt, writepdb
+from rf2aa.data_loader import get_train_valid_set, Dataset, DatasetNAComplex, DatasetRNA, DatasetSMComplex, loader_pdb, loader_na_complex, loader_rna, loader_sm_compl,set_data_loader_params, loader_atomize_pdb
+from rf2aa.kinematics import xyz_to_c6d, xyz_to_t2d
+from rf2aa.chemical import num2aa, aa2elt, aa2num, aabonds,aa2long, aabtypes, atomized_protein_frames
+from rf2aa.loss import compute_general_FAPE, resolve_equiv_natives, calc_str_loss, calc_chiral_loss
+from rf2aa.util import get_frames, frame_indices, is_atom, xyz_to_frame_xyz, xyz_t_to_frame_xyz, long2alt, writepdb
 
 class LossTestCase(unittest.TestCase):
 

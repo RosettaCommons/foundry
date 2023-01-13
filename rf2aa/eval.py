@@ -4,17 +4,17 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils import data
-from parsers import parse_a3m, parse_fasta, read_template_pdb
-from RoseTTAFoldModel  import RoseTTAFoldModule
+from rf2aa.parsers import parse_a3m, parse_fasta, read_template_pdb
+from rf2aa.RoseTTAFoldModel  import RoseTTAFoldModule
 import util
 from collections import namedtuple
-from ffindex import *
-from data_loader import MSAFeaturize, MSABlockDeletion, merge_a3m_homo
-from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, get_init_xyz
-from util_module import ComputeAllAtomCoords
-from chemical import NTOTAL, NTOTALDOFS, NAATOKENS
+from rf2aa.ffindex import *
+from rf2aa.data_loader import MSAFeaturize, MSABlockDeletion, merge_a3m_homo
+from rf2aa.kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, get_init_xyz
+from rf2aa.util_module import ComputeAllAtomCoords
+from rf2aa.chemical import NTOTAL, NTOTALDOFS, NAATOKENS
 
-from memory import mem_report
+from rf2aa.memory import mem_report
 
 MAX_CYCLE = 30
 NREPLICATES = 5

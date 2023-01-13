@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from chemical import NAATOKENS
+from rf2aa.chemical import NAATOKENS
 
 class DistanceNetwork(nn.Module):
     def __init__(self, n_feat, p_drop=0.1):

@@ -1,20 +1,22 @@
 import sys
 import warnings
+import assertpy
 
 import numpy as np
 import torch
 import warnings
+from assertpy import assert_that
 
 import scipy.sparse
 import networkx as nx
 from itertools import combinations
 from openbabel import openbabel
 from scipy.spatial.transform import Rotation
+from icecream import ic
 
-import chemical
-from chemical import *
-from kinematics import get_atomize_protein_chirals
-from scoring import *
+from rf2aa.chemical import *
+from rf2aa.kinematics import get_atomize_protein_chirals
+from rf2aa.scoring import *
 
 
 def random_rot_trans(xyz, random_noise=20.0):
@@ -38,7 +40,14 @@ def get_prot_sm_mask(atom_mask, seq):
     mask : (..., L) 
     """
     sm_mask = is_atom(seq).to(atom_mask.device) # (L)
-    mask_prot = atom_mask[...,:3].all(dim=-1) & ~sm_mask # valid protein/NA residues (L)
+    # Asserting that atom_mask is full for masked regions of proteins [should be]
+    has_backbone = atom_mask[...,:3].all(dim=-1)
+    has_backbone_prot = has_backbone[...,~sm_mask]
+    n_protein_with_backbone = has_backbone.sum()
+    n_protein = (~sm_mask).sum()
+    #assert_that((n_protein/n_protein_with_backbone).item()).is_greater_than(0.8)
+
+    mask_prot = has_backbone & ~sm_mask # valid protein/NA residues (L)
     mask_ca_sm = atom_mask[...,1] & sm_mask # valid sm mol positions (L)
     mask = mask_prot | mask_ca_sm # valid positions
     return mask
@@ -323,12 +332,31 @@ def xyz_frame_from_rotation_mask(xyz,rotation_mask, atom_frames):
 
 def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
     """
-    xyz_t (1, T, L, natoms, 3)
-    seq_unmasked (B, L)
-    atom_frames (1, L, 3, 2)
+    Parameters:
+        xyz_t (1, T, L, natoms, 3)
+        seq_unmasked (B, L)
+        atom_frames (1, A, 3, 2)
+    Returns:
+	    xyz_t_frame (B, T, L, natoms, 3)
     """
+    is_sm = is_atom(seq_unmasked[0])
+    return xyz_t_to_frame_xyz_sm_mask(xyz_t, is_sm, atom_frames)
+
+def xyz_t_to_frame_xyz_sm_mask(xyz_t, is_sm, atom_frames):
+    """
+    Parameters:
+        xyz_t (1, T, L, natoms, 3)
+        is_sm (L)
+        atom_frames (1, A, 3, 2)
+    Returns:
+	xyz_t_frame (B, T, L, natoms, 3)
+    """
+    # ic(xyz_t.shape, is_sm.shape, atom_frames.shape)
+    # xyz_t.shape: torch.Size([1, 1, 194, 36, 3]) 
+    # is_sm.shape: torch.Size([194])
+    # atom_frames.shape: torch.Size([1, 29, 3, 2])
     xyz_t_frame = xyz_t.clone()
-    atoms = is_atom(seq_unmasked[0])
+    atoms = is_sm
     if torch.all(~atoms):
         return xyz_t_frame
     atom_crds_t = xyz_t_frame[:, :, atoms]
@@ -1006,7 +1034,6 @@ def get_atom_frames(msa, G):
         if not frames_with_n:
             frames_with_n = [frame for frame in frames if n in frame]
         # if the atom isn't in a 3 atom frame, it should be ignored in loss calc, set all the atoms to n
-        if not frames_with_n:
             selected_frames.append([(0,1),(0,1),(0, 1)])
             continue
         frame_priorities = []

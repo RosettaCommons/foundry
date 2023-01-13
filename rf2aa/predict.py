@@ -5,18 +5,15 @@ import torch
 import torch.nn as nn
 from torch.utils import data
 import parsers
-from RoseTTAFoldModel  import RoseTTAFoldModule
+from rf2aa.RoseTTAFoldModel  import RoseTTAFoldModule
 import util
-from util import *
-from loss import *
-from collections import namedtuple, OrderedDict
-from ffindex import *
-from data_loader import MSAFeaturize, MSABlockDeletion, merge_a3m_homo, merge_a3m_hetero
-from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, get_chirals
-from util_module import ComputeAllAtomCoords
-from chemical import NTOTAL, NTOTALDOFS, NAATOKENS, INIT_CRDS
-from parsers import read_templates
-from memory import mem_report
+from collections import namedtuple
+from rf2aa.ffindex import *
+from rf2aa.data_loader import MSAFeaturize, MSABlockDeletion, merge_a3m_homo, merge_a3m_hetero
+from rf2aa.kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, get_chirals
+from rf2aa.util_module import ComputeAllAtomCoords
+from rf2aa.chemical import NTOTAL, NTOTALDOFS, NAATOKENS, INIT_CRDS
+from rf2aa.memory import mem_report
 from scipy.interpolate import Akima1DInterpolator
 
 MODEL_PARAM ={
