@@ -1,5 +1,5 @@
 import argparse
-import data_loader
+import rf2aa.data_loader as data_loader
 import os, datetime
 
 DATASET_PARAMS = [

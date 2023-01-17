@@ -3,16 +3,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 from opt_einsum import contract as einsum
 import torch.utils.checkpoint as checkpoint
-from util_module import *
-from Attention_module import *
-from SE3_network import SE3TransformerWrapper
-from resnet import ResidualNetwork
-from util import INIT_CRDS, is_atom, xyz_frame_from_rotation_mask
-from loss import (
+from rf2aa.util_module import *
+from rf2aa.Attention_module import *
+from rf2aa.SE3_network import SE3TransformerWrapper
+from rf2aa.resnet import ResidualNetwork
+from rf2aa.util import INIT_CRDS, is_atom, xyz_frame_from_rotation_mask
+from rf2aa.loss import (
     calc_BB_bond_geom_grads, calc_lj_grads, calc_hb_grads, calc_cart_bonded_grads, calc_ljallatom_grads, 
     calc_lj, calc_cart_bonded, calc_chiral_grads
 )
-from chemical import NTOTALDOFS
+from rf2aa.chemical import NTOTALDOFS
 
 
 # Components for three-track blocks

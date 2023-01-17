@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from openbabel import openbabel
-from chemical import aachirals, NTOTAL, generate_Cbeta
+from rf2aa.chemical import aachirals, NTOTAL, generate_Cbeta
 
 PARAMS = {
     'DMIN':1, 
