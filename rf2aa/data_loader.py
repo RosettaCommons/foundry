@@ -386,7 +386,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     # helper functions
     def _load_df(filename, pad_hash=True, eval_cols=[]):
         """load dataframe, zero-pad hash string, parse columns as python objects"""
-        df = pd.read_csv(filename)
+        df = pd.read_csv(filename, na_filter=False) # chain "NA" doesn't get converted to NaN
         if pad_hash: # restore leading zeros, make into string
             df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') 
         for col in eval_cols:
