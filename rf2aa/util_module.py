@@ -6,7 +6,7 @@ from opt_einsum import contract as einsum
 import copy
 import dgl
 import networkx as nx
-from util import base_indices, RTs_by_torsion, xyzs_in_base_frame, \
+from rf2aa.util import base_indices, RTs_by_torsion, xyzs_in_base_frame, \
     rigid_from_3_points, is_nucleic, is_atom
 
 def init_lecun_normal(module, scale=1.0):

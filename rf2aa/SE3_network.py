@@ -5,7 +5,7 @@ import sys, os
 script_dir = os.path.dirname(os.path.realpath(__file__))+'/'
 sys.path.insert(0,script_dir+'SE3Transformer/')
 
-from util_module import init_lecun_normal_param
+from rf2aa.util_module import init_lecun_normal_param
 from se3_transformer.model import SE3Transformer
 from se3_transformer.model.fiber import Fiber
 

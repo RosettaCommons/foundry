@@ -8,19 +8,23 @@ import torch
 import torch.nn as nn
 from torch.utils import data
 from functools import partial
-from data_loader import (
+
+script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(script_dir)
+
+from rf2aa.data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex,
     loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale,
     loader_atomize_pdb, Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA,
     DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler,
     unbatch_item
 )
-from kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
-from RoseTTAFoldModel  import RoseTTAFoldModule
-from loss import *
-from util import *
-from util_module import ComputeAllAtomCoords
-from scheduler import get_linear_schedule_with_warmup, get_stepwise_decay_schedule_with_warmup
+from rf2aa.kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
+from rf2aa.RoseTTAFoldModel  import RoseTTAFoldModule
+from rf2aa.loss import *
+from rf2aa.util import *
+from rf2aa.util_module import ComputeAllAtomCoords
+from rf2aa.scheduler import get_linear_schedule_with_warmup, get_stepwise_decay_schedule_with_warmup
 
 # disable openbabel warnings
 from openbabel import openbabel as ob
@@ -737,7 +741,7 @@ class Trainer():
     def record_git_commit(self):
         # git hash of current commit
         try:
-            commit = subprocess.check_output(f'git --git-dir {script_dir}/.git rev-parse HEAD',
+            commit = subprocess.check_output(f'git --git-dir {script_dir}/../.git rev-parse HEAD',
                                                   shell=True).decode().strip()
         except subprocess.CalledProcessError:
             print('WARNING: Failed to determine git commit hash.')

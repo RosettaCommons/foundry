@@ -6,15 +6,15 @@ from collections import OrderedDict
 import torch
 import torch.nn as nn
 from torch.utils import data
-from data_loader import (
+from rf2aa.data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale,
     loader_atomize_pdb, Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
 )
-from RoseTTAFoldModel  import RoseTTAFoldModule
-from loss import *
-from util import *
+from rf2aa.RoseTTAFoldModel  import RoseTTAFoldModule
+from rf2aa.loss import *
+from rf2aa.util import *
 
-from train_multi_EMA import Trainer, EMA, count_parameters
+from rf2aa.train_multi_EMA import Trainer, EMA, count_parameters
 
 # disable openbabel warnings
 from openbabel import openbabel as ob

@@ -11,10 +11,10 @@ from itertools import combinations
 from openbabel import openbabel
 from scipy.spatial.transform import Rotation
 
-import chemical
-from chemical import *
-from kinematics import get_atomize_protein_chirals
-from scoring import *
+import rf2aa.chemical as chemical
+from rf2aa.chemical import *
+from rf2aa.kinematics import get_atomize_protein_chirals
+from rf2aa.scoring import *
 
 
 def random_rot_trans(xyz, random_noise=20.0):
