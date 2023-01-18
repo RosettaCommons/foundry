@@ -418,6 +418,20 @@ def superimpose(pred, true, atom_mask):
 def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None,
              bond_feats=None, file_mode="w", atom_mask=None, atom_idx_offset=0, chain_Ls=None):
 
+    # correct mistake in atomic number assignment during encoding of atom types
+    atom_names_ = [
+        "F",  "Cl", "Br", "I",  "O",  "S",  "Se", "Te", "N",  "P",  "As", "Sb",
+        "C",  "Si", "Ge", "Sn", "Pb", "B",  "Al", "Zn", "Hg", "Cu", "Au", "Ni", 
+        "Pd", "Pt", "Co", "Rh", "Ir", "Pr", "Fe", "Ru", "Os", "Mn", "Re", "Cr", 
+        "Mo", "W",  "V",  "U",  "Tb", "Y",  "Be", "Mg", "Ca", "Li", "K",  "ATM"]
+    atom_num = [
+        9,    17,   35,   53,   8,    16,   34,   52,   7,    15,   33,   51,
+        6,    14,   32,   50,   82,   5,    13,   30,   80,   29,   79,   28,
+        46,   78,   27,   45,   77,   59,   26,   44,   76,   25,   75,   24,   
+        42,   74,   23,   92,   65,   39,   4,    12,   20,   3,    19,   0] 
+    atomnum2atomtype_ = dict(zip(atom_num,atom_names_))
+    wrongtype2correcttype = {v:atomnum2atomtype_[k] for k,v in chemical.atomnum2atomtype.items()}
+
     f = open(filename, file_mode)
     ctr = 1+atom_idx_offset
     scpu = seq.cpu().squeeze(0)
@@ -448,7 +462,7 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
             lig_name = "LG1"
             atom_idxs[i] = ctr
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
-                    "HETATM", ctr, num2aa[s], lig_name,
+                    "HETATM", ctr, wrongtype2correcttype[num2aa[s]], lig_name,
                     ch, torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
                     1.0, Bfacts[i] ) )
             ctr += 1
@@ -1263,7 +1277,6 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
     akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
         Atom keys with information about each atom, in the same order as the returned coordinates
     """ 
-    elnum_to_atom = dict(zip(chemical.atom_num, chemical.frame_priority2atom))
     atoms_no_H = {k:v for k,v in atoms.items() if v.element != 1} # exclude hydrogens
     L = len(atoms_no_H)
     if input_akeys is None:
@@ -1279,12 +1292,12 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
     for i,k in enumerate(input_akeys):
         v = atoms_no_H[k]
         xyz[i, :] = torch.tensor(v.xyz)
-        mask[i] = v.occ
-        if v.element not in elnum_to_atom:
+        mask[i] = (v.occ > 0) # include fractionally occupied atom positions
+        if v.element not in chemical.atomnum2atomtype:
             print('Element not in alphabet:',v.element)
             seq[i] = chemical.aa2num['ATM']
         else:
-            seq[i] = chemical.aa2num[elnum_to_atom[v.element]]
+            seq[i] = chemical.aa2num[chemical.atomnum2atomtype[v.element]]
         akeys[i] = k
         chid[i] = k[0]
         

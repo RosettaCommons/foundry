@@ -1755,6 +1755,7 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals, task, item
 
+
 def loader_sm_compl_covale(item, params, pick_top=True, 
     init_protein_tmpl=False, init_ligand_tmpl=False,
     init_protein_xyz=False, init_ligand_xyz=False, task='sm_compl_covale', random_noise=5.0):

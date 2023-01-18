@@ -26,6 +26,23 @@ num2aa=[
 
 aa2num= {x:i for i,x in enumerate(num2aa)}
 
+frame_priority2atom = [
+    "F",  "Cl", "Br", "I",  "O",  "S",  "Se", "Te", "N",  "P",  "As", "Sb", 
+    "C",  "Si", "Sn", "Pb", "B",  "Al", "Zn", "Hg", "Cu", "Au", "Ni", "Pd", 
+    "Pt", "Co", "Rh", "Ir", "Pr", "Fe", "Ru", "Os", "Mn", "Re", "Cr", "Mo", 
+    "W",  "V",  "U",  "Tb", "Y",  "Be", "Mg", "Ca", "Li", "K",  "ATM"]
+
+# these atomic numbers are incorrect, but keeping for fold&dock3 and correcting it 
+# in util.writepdb() during output.
+atom_num= [
+    9,    17,   35,   53,   8,    16,   34,   52,   7,    15,   33,   51, 
+    6,    14,   32,   50,   82,   5,    13,   30,   80,   29,   79,   28, 
+    46,   78,   27,   45,   77,   26,   44,   76,   25,   75,   24,   42, 
+    23,   74,   92,   65,   39,   4,    12,   20,   3,    19,   0] # in same order as frame priority
+
+atom2frame_priority = {x:i for i,x in enumerate(frame_priority2atom)}
+atomnum2atomtype = dict(zip(atom_num, frame_priority2atom))
+
 NAATOKENS = 20+2+10+1+47 # 20 AAs, UNK, MASK, 8 NAs,HIS_D, 47 atoms
 MASKINDEX = 21  # protein mask
 
@@ -1186,13 +1203,5 @@ ideal_coords = [
         [" H3'",12, ( 0.3215, -0.4857, -0.7888)],
     ],
 ]
-
-frame_priority2atom = ["F", "Cl", "Br", "I", "O", "S", "Se", "Te", "N", "P", "As", "Sb", "C", "Si", "Sn", "Pb", "B", "Al",
-                         "Zn", "Hg", "Cu", "Au", "Ni", "Pd", "Pt", "Co", "Rh", "Ir", "Pr", "Fe", "Ru", "Os", "Mn", "Re", "Cr", "Mo", "W", "V", "U", "Tb", "Y", "Be", "Mg", "Ca", "Li", "K", "ATM"]
-atom2frame_priority = {x:i for i,x in enumerate(frame_priority2atom)}
-
-atom_num= [9, 17, 35, 53, 8, 16, 34, 52, 7, 15, 33, 51, 6, 14, 32, 50, 82, 5, 13,30, 80, 29, 79, 28, 46,78,27,45, 77,26,
-                        44,76,25,75,24, 42, 23, 74,92, 65, 39, 4, 12, 20, 3, 19, 0] # in same order as frame priority
-atomnum2atomtype = dict(zip(atom_num, frame_priority2atom))
 
 atomized_protein_frames = torch.load(script_dir+"atomized_protein_frames.pt")
