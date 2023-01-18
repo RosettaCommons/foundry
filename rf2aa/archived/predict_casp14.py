@@ -123,7 +123,7 @@ class Predictor():
         return True
     
     def predict(self, a3m_fn, out_prefix, hhr_fn=None, atab_fn=None, window=1e9, shift=50, n_latent=256):
-        msa_orig, ins_orig = parse_a3m(a3m_fn, unzip=False)
+        msa_orig, ins_orig, _ = parse_a3m(a3m_fn, unzip=False)
         N, L = msa_orig.shape
         #
         if os.path.exists(hhr_fn):

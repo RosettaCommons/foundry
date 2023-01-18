@@ -112,7 +112,7 @@ def lddt_unbin(pred_lddt):
 
 
 def get_msa(a3mfilename):                                                                       
-    msa,ins = parsers.parse_a3m(a3mfilename, unzip='.gz' in a3mfilename)
+    msa,ins, _ = parsers.parse_a3m(a3mfilename, unzip='.gz' in a3mfilename)
     return {'msa':torch.tensor(msa), 'ins':torch.tensor(ins)}
 
 

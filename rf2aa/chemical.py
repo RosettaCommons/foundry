@@ -47,6 +47,16 @@ NTOTALDOFS = NTOTALTORS+NPROTANGS
 num2btype = [0,1,2,3,4,5,6,7] # UNK, SINGLE, DOUBLE, TRIPLE, AROMATIC, PEPTIDE, PROTEIN-LIGAND (PEPTIDE), PROTEIN-LIGAND (OTHER)
 
 NBTYPES = len(num2btype)
+
+to1letter = {
+    "ALA":'A', "ARG":'R', "ASN":'N', "ASP":'D', "CYS":'C',
+    "GLN":'Q', "GLU":'E', "GLY":'G', "HIS":'H', "ILE":'I',
+    "LEU":'L', "LYS":'K', "MET":'M', "PHE":'F', "PRO":'P',
+    "SER":'S', "THR":'T', "TRP":'W', "TYR":'Y', "VAL":'V',
+    "DA":'a', "DC":'c', "DG":'g', "DT":'t',
+    "A":'b', "C":'d', "G":'h', "U":'u',
+}
+
 # full sc atom representation
 aa2long=[
     (" N  "," CA "," C  "," O  "," CB ",  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None," H  "," HA ","1HB ","2HB ","3HB ",  None,  None,  None,  None,  None,  None,  None,  None), #0  ala

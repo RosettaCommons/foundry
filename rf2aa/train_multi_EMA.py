@@ -15,7 +15,8 @@ sys.path.append(script_dir)
 from rf2aa.data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex,
     loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale,
-    loader_atomize_pdb, Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA,
+    loader_atomize_pdb, loader_sm_compl_assembly,
+    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA,
     DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler,
     unbatch_item
 )
@@ -49,7 +50,7 @@ USE_AMP = False
 torch.set_num_threads(4)
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 5,
+              'num_workers': 0,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -792,7 +793,7 @@ class Trainer():
         torch.cuda.set_device("cuda:%d"%gpu)
 
         # define dataset & data loader
-        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo = \
+        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2L, chid2taxid = \
             get_train_valid_set(self.loader_param)
 
         # define atomize_pdb train/valid sets, which use the same examples as pdb set
@@ -801,6 +802,13 @@ class Trainer():
         weights_dict['atomize_pdb'] = weights_dict['pdb']
         train_dict['atomize_pdb'] = train_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
+
+        # define sm_compl_assemb train/valid sets which use the same examples as sm_compl
+        train_ID_dict['sm_compl_assemb'] = train_ID_dict['sm_compl']
+        valid_ID_dict['sm_compl_assemb'] = valid_ID_dict['sm_compl']
+        weights_dict['sm_compl_assemb'] = weights_dict['sm_compl']
+        train_dict['sm_compl_assemb'] = train_dict['sm_compl']
+        valid_dict['sm_compl_assemb'] = valid_dict['sm_compl']
 
         # set number of validation examples being used
         for k in valid_dict:
@@ -831,10 +839,11 @@ class Trainer():
             sm_compl_multi = loader_sm_compl,
             sm_compl_covale = loader_sm_compl_covale,
             sm = loader_sm,
-            atomize_pdb = loader_atomize_pdb
+            atomize_pdb = loader_atomize_pdb,
+            sm_compl_assemb = loader_sm_compl_assembly,
         )
 
-        train_set = DistilledDataset(train_ID_dict, train_dict, loader_dict, homo, 
+        train_set = DistilledDataset(train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2L, chid2taxid,
                                      self.loader_param, native_NA_frac=0.25)
 
         valid_sets = dict(
@@ -1095,7 +1104,7 @@ class Trainer():
 
         counter = 0
         
-        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in train_loader:
+        for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, ch_label, task, item in train_loader:
             # skip known bad training examples
             # loader will print warning message with item info for followup later
             if torch.is_tensor(item) and torch.all(item==-1):
@@ -1429,7 +1438,7 @@ class Trainer():
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in valid_loader:
+            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, ch_label, task, item in valid_loader:
                 # skip known bad training examples
                 if torch.is_tensor(item) and torch.all(item==-1):
                     continue
@@ -1680,7 +1689,7 @@ class Trainer():
         
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, task, item in valid_pos_loader:
+            for seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, xyz_t, t1d, xyz_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, ch_label, task, item in valid_pos_loader:
                 # transfer inputs to device
                 B, _, N, L = msa.shape
 
@@ -2030,8 +2039,9 @@ if __name__ == "__main__":
     from arguments import get_args
     args, dataset_param, model_param, loader_param, loss_param = get_args()
 
-    if int(os.environ["SLURM_PROCID"])==0:
-        print (args)
+    if "SLURM_PROC_ID" in os.environ:
+        if int(os.environ["SLURM_PROCID"])==0:
+            print (args)
 
     mp.freeze_support()
     train = Trainer(model_name=args.model_name,

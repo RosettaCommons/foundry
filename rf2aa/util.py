@@ -8,6 +8,7 @@ import warnings
 import scipy.sparse
 import networkx as nx
 from itertools import combinations
+from collections import OrderedDict
 from openbabel import openbabel
 from scipy.spatial.transform import Rotation
 
@@ -297,6 +298,7 @@ def xyz_to_frame_xyz(xyz, seq_unmasked, atom_frames):
     for i in range(atom_L):
         frames_reindex[:, i, :] = (i+atom_frames[..., i, :, 0])*natoms + atom_frames[..., i, :, 1]
     frames_reindex = frames_reindex.long()
+
     xyz_frame[atoms, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
     return xyz_frame
 
@@ -344,7 +346,7 @@ def xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames):
 def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
     B,L,natoms = xyz_in.shape[:3]
     frames = frame_indices[seq]
-    atoms = seq > NNAPROTAAS
+    atoms = is_atom(seq)
     if torch.any(atoms):
         frames[:,atoms[0].nonzero().flatten(), 0] = atom_frames
 
@@ -1468,3 +1470,73 @@ def Ls_from_same_chain_2d(same_chain):
         Ls.append(idx[-1]-idx[0]+1)
         i_curr = idx[-1]+1
     return Ls
+
+def get_prot_seqstring(ch, modres):
+    """Return string representing amino acid sequence of a parsed CIF chain."""
+    idx = [int(k[1]) for k in ch.atoms]
+    i_min, i_max = np.min(idx), np.max(idx)
+    L = i_max - i_min + 1
+    seq = [20]*L
+
+    for k,v in ch.atoms.items():
+        i_res = int(k[1])-i_min
+        if k[2] in to1letter: # standard AA
+            aa = to1letter[k[2]]
+        elif k[2] in modres and modres[k[2]] in to1letter: # nonstandard AA, map to standard
+            aa = to1letter[modres[k[2]]]
+        else: # unknown AA, still try to store BB atoms
+            aa = 'X'
+        seq[i_res] = aa
+    return ''.join(seq)
+
+
+def map_identical_prot_chains(item, chains, modres):
+    """Identifies which chain letters represent unique protein sequences, 
+    assigns a number to each unique sequence, and returns dicts mapping sequence 
+    numbers to chain letters and vice versa."""
+    chlet2seq = OrderedDict()
+    for p in item['PARTNERS']:
+        if p[-1] != 'polypeptide(L)': continue
+        if p[0] not in chlet2seq:
+            chlet2seq[p[0]] = get_prot_seqstring(chains[p[0]], modres)
+
+    seq2chlet = OrderedDict()
+    for chlet, seq in chlet2seq.items():
+        if seq not in seq2chlet:
+            seq2chlet[seq] = set()
+        seq2chlet[seq].add(chlet)
+        
+    chnum2chlet = OrderedDict([(i,v) for i,(k,v) in enumerate(seq2chlet.items())])
+    chlet2chnum = OrderedDict([(chlet,chnum) for chnum,chlet_s in chnum2chlet.items() for chlet in chlet_s])
+    
+    return chnum2chlet, chlet2chnum
+
+
+def cartprodcat(X_s):
+    """Concatenate list of tensors on dimension 1 while taking their cartesian product 
+    over dimension 0."""
+    X = X_s[0]
+    N, L = X.shape[:2]
+    for X_ in X_s[1:]:
+        N_, L_ = X_.shape[:2]
+        X_out = torch.full((N, N_, L+L_)+X.shape[2:], np.nan)
+        for i in range(N):
+            for j in range(N_):
+                X_out[i,j] = torch.concat([X[i], X_[j]], dim=0)
+        dims = (N*N_,L+L_)+X.shape[2:]
+        X = X_out.view(*dims)
+    return X
+
+
+def idx_from_Ls(Ls):
+    """Generate residue indexes from a list of chain lengths, 
+    with a chain gap offset between indexes for each chain."""
+    idx = []
+    offset = 0
+    for L in Ls:
+        idx.append(torch.arange(L)+offset)
+        offset = offset+L+CHAIN_GAP
+    return torch.cat(idx, dim=0)
+
+
+
