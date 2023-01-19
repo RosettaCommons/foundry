@@ -2579,7 +2579,6 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
     chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
     tmp_df = tmp_df[tmp_df.CHAINID==chid]
 
-    tmp_df = df[df.CHAINID=="5nb3_M"]
     if dedup_ligand:
         # uniform sample from unique ligands
         lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
