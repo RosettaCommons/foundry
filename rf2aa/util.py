@@ -1254,7 +1254,7 @@ def get_ligand_atoms_bonds(ligand, chains, covale):
 def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
     """Given ligand atoms from a parsed CIF file and coordinate transforms
     specific to a bio-assembly of interest, returns tensors with transformed
-    coordinates and a mask for valid atoms. 
+    coordinates and a mask for valid atoms.
 
     Parameters
     ----------
@@ -1270,29 +1270,31 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
     Returns
     -------
     xyz : torch.Tensor (N_atoms, 3), float
-    mask : torch.Tensor (N_atoms,), bool
+    occ : torch.Tensor (N_atoms,), float
+        These values represent atom position occupancies and can be fractional.
     seq : torch.Tensor (N_atoms,), long
     chid : list (N_atoms,)
         Chain IDs for each ligand atom
     akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
         Atom keys with information about each atom, in the same order as the returned coordinates
-    """ 
+    """
+    elnum_to_atom = dict(zip(chemical.atom_num, chemical.frame_priority2atom))
     atoms_no_H = {k:v for k,v in atoms.items() if v.element != 1} # exclude hydrogens
     L = len(atoms_no_H)
     if input_akeys is None:
         input_akeys = atoms_no_H.keys()
-    
+
     xyz = torch.zeros(L, 3)
-    mask = torch.zeros(L,).bool()
+    occ = torch.zeros(L,)
     seq = torch.full((L,), np.nan)
     chid = ['-']*L
     akeys = [None]*L
-    
+
     # create coords, atom mask, and seq tokens
     for i,k in enumerate(input_akeys):
         v = atoms_no_H[k]
         xyz[i, :] = torch.tensor(v.xyz)
-        mask[i] = (v.occ > 0) # include fractionally occupied atom positions
+        occ[i] = v.occ # can contain fractionally occupied atom positions
         if v.element not in chemical.atomnum2atomtype:
             print('Element not in alphabet:',v.element)
             seq[i] = chemical.aa2num['ATM']
@@ -1300,7 +1302,7 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
             seq[i] = chemical.aa2num[chemical.atomnum2atomtype[v.element]]
         akeys[i] = k
         chid[i] = k[0]
-        
+
     # apply transforms
     chid = np.array(chid)
     for i_ch in np.unique(chid):
@@ -1309,8 +1311,8 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
         xf = torch.tensor(asmb_xfs[ch2xf[i_ch]][1]).float()
         u,r = xf[:3,:3], xf[:3,3]
         xyz[idx] = torch.einsum('ij,aj->ai', u, xyz[idx]) + r[None,None]
-     
-    return xyz, mask, seq, chid, akeys
+
+    return xyz, occ, seq, chid, akeys
 
 def remove_unresolved_substructures(akeys, lig_bonds, mask_sm):
     """
@@ -1502,13 +1504,38 @@ def get_prot_seqstring(ch, modres):
         seq[i_res] = aa
     return ''.join(seq)
 
+def map_identical_prot_chains(partners, chains, modres):
+    """Identifies which chain letters represent unique protein sequences,
+    assigns a number to each unique sequence, and returns dicts mapping sequence
+    numbers to chain letters and vice versa.
+    
+    Parameters
+    ----------
+    partners : list of tuples (partner, transform_index, num_contacts, partner_type)
+        Information about neighboring chains to the query ligand in an
+        assembly. This function will use the subset of these tuples that
+        represent protein chains, where `partner_type = 'polypeptide(L)'`
+        and `partner` contains the chain letter. `transform_index` is an
+        integer index of the coordinate transform for each partner chain.
+    chains : dict
+        Dictionary mapping chain letters to cifutils.Chain objects representing
+        the chains in a PDB entry.
+    modres : dict
+        Maps modified residue names to their canonical equivalents. Any
+        modified residue will be converted to its standard equivalent and
+        coordinates for atoms with matching names will be saved.
 
-def map_identical_prot_chains(item, chains, modres):
-    """Identifies which chain letters represent unique protein sequences, 
-    assigns a number to each unique sequence, and returns dicts mapping sequence 
-    numbers to chain letters and vice versa."""
+    Returns
+    -------
+    chnum2chlet : dict
+        Dictionary mapping integers to lists of chain letters which represent
+        identical chains
+    chlet2chnum : dict
+        Dictionary mapping chain letters to integers, the inverse of
+        `chlet2chnum`
+    """
     chlet2seq = OrderedDict()
-    for p in item['PARTNERS']:
+    for p in partners:
         if p[-1] != 'polypeptide(L)': continue
         if p[0] not in chlet2seq:
             chlet2seq[p[0]] = get_prot_seqstring(chains[p[0]], modres)
@@ -1518,15 +1545,14 @@ def map_identical_prot_chains(item, chains, modres):
         if seq not in seq2chlet:
             seq2chlet[seq] = set()
         seq2chlet[seq].add(chlet)
-        
+
     chnum2chlet = OrderedDict([(i,v) for i,(k,v) in enumerate(seq2chlet.items())])
     chlet2chnum = OrderedDict([(chlet,chnum) for chnum,chlet_s in chnum2chlet.items() for chlet in chlet_s])
-    
+
     return chnum2chlet, chlet2chnum
 
-
 def cartprodcat(X_s):
-    """Concatenate list of tensors on dimension 1 while taking their cartesian product 
+    """Concatenate list of tensors on dimension 1 while taking their cartesian product
     over dimension 0."""
     X = X_s[0]
     for X_ in X_s[1:]:
@@ -1539,7 +1565,6 @@ def cartprodcat(X_s):
         dims = (N*N_,L+L_,)+X.shape[2:]
         X = X_out.view(*dims)
     return X
-
 
 def idx_from_Ls(Ls):
     """Generate residue indexes from a list of chain lengths, 

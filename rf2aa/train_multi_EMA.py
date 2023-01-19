@@ -846,6 +846,18 @@ class Trainer():
         train_set = DistilledDataset(train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2L, chid2taxid,
                                      self.loader_param, native_NA_frac=0.25)
 
+        train_sampler = DistributedWeightedSampler(
+            train_set, 
+            weights_dict,
+            num_example_per_epoch=self.dataset_param['n_train'],
+            fractions=OrderedDict([(k, self.dataset_param['fraction_'+k]) for k in train_dict]),
+            num_replicas=world_size, 
+            rank=rank, 
+            replacement=True
+        )
+
+        train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
+
         valid_sets = dict(
             pdb = Dataset(
                 valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
@@ -952,18 +964,6 @@ class Trainer():
             atomize_pdb = 'Monomer atomize 3',
             sm_compl_assemb = 'SM Compl Assembly',
         )
-
-        train_sampler = DistributedWeightedSampler(
-            train_set, 
-            weights_dict,
-            num_example_per_epoch=self.dataset_param['n_train'],
-            fractions=OrderedDict([(k, self.dataset_param['fraction_'+k]) for k in train_dict]),
-            num_replicas=world_size, 
-            rank=rank, 
-            replacement=True
-        )
-
-        train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **LOAD_PARAM)
 
         valid_samplers = OrderedDict([
             (k, data.distributed.DistributedSampler(v, num_replicas=world_size, rank=rank))
