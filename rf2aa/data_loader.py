@@ -2482,7 +2482,7 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, task='
             "hash": chid2hash[f"{pdb_id}_{chid}"], 
             "len": chid2L[f"{pdb_id}_{chid}"],
             "query_taxid": chid2taxid[f"{pdb_id}_{chid}"]} for chid in prot_chains]
-    a3m_prot, _, _= get_assembly_msa(protein_chain_info, params)
+    a3m_prot = get_assembly_msa(protein_chain_info, params)
 
     a3m_sm = dict(msa=msa_sm, ins=torch.zeros_like(msa_sm))
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, [sum(Ls_prot), sum(Ls_sm)])
