@@ -1529,14 +1529,14 @@ def cartprodcat(X_s):
     """Concatenate list of tensors on dimension 1 while taking their cartesian product 
     over dimension 0."""
     X = X_s[0]
-    N, L = X.shape[:2]
     for X_ in X_s[1:]:
+        N, L = X.shape[:2]
         N_, L_ = X_.shape[:2]
-        X_out = torch.full((N, N_, L+L_)+X.shape[2:], np.nan)
+        X_out = torch.full((N, N_, L+L_,)+X.shape[2:], np.nan)
         for i in range(N):
             for j in range(N_):
                 X_out[i,j] = torch.concat([X[i], X_[j]], dim=0)
-        dims = (N*N_,L+L_)+X.shape[2:]
+        dims = (N*N_,L+L_,)+X.shape[2:]
         X = X_out.view(*dims)
     return X
 

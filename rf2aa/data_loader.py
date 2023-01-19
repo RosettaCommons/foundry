@@ -830,14 +830,10 @@ def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein
 
     return sel
 
-def get_assembly_msa(protein_chain_info, params):
+def find_msa_hashes(protein_chain_info, params):
     """
-    takes a list of dictionaries containing relevant information about protein chains and returns an MSA (paired if possible)
-    for those chains
-
-    WARNING: this code is the general case that can make Nmer assembly chain MSAs from the currently generated MSAs (single 
-    chain and two paired chains) but a preferable approach would be to regenerate all the MSAs from scratch using hhblits and 
-    pair them before filtering
+    given a list of protein chains, this function searches through all the pregenerated MSAs and identifies the correct MSA hashes/metadata to load for each protein chain
+    it returns a list of dictionaries with msa hash and other relevant metadata for constructing a paired MSA for multiple chains
     """
     updated_protein_chain_info = []
     msas_to_load = []  
@@ -878,13 +874,38 @@ def get_assembly_msa(protein_chain_info, params):
                       "seq_range": (0,info["len"]), 
                       "paired": False} for info in unpaired_items]
     updated_protein_chain_info.extend(unpaired_items) # maps the order of the chains to the order of loaded MSAs so coordinates and msa match
-    msas_to_load.extend(unpaired_msas) # msas_to_load will be the same lenght as updated_protein_chain_info
+    msas_to_load.extend(unpaired_msas) # msas_to_load will be the same length as updated_protein_chain_info
+    
+    # currently updated_protein_chain_info and msas_to_load have items in the same order
+    # explicitly update the order of msas_to_load to match the initial input protein_chain_info which will match the xyz coordinates generated in the dataloader
+    try:
+        original_pci_order = [updated_protein_chain_info.index(info) for info in protein_chain_info]
+    except Exception as e:
+        print(f"ERROR: there is a protein chain that was supposed to be loaded that was not: input chains: {str(protein_chain_info)}   output_chains: {str(updated_protein_chain_info)}")
+        raise e
+    msas_to_load = [msas_to_load[i] for i in original_pci_order]
+
+    assert len(protein_chain_info) == len(msas_to_load), f"not all protein chains had corresponding MSAs: {str(protein_chain_info)} "
+    return msas_to_load
+
+
+def get_assembly_msa(protein_chain_info, params):
+    """
+    takes a list of dictionaries containing relevant information about protein chains and returns an MSA (paired if possible)
+    for those chains
+
+    WARNING: this code is the general case that can make Nmer assembly chain MSAs from the currently generated MSAs (single 
+    chain and two paired chains) but a preferable approach would be to regenerate all the MSAs from scratch using hhblits and 
+    pair them before filtering
+    """
+    msas_to_load = find_msa_hashes(protein_chain_info, params)
+     
     msa_hashes = [msa["hash"] for msa in msas_to_load]
-    assert protein_chain_info == updated_protein_chain_info, "order of protein chains has changed "
+    
     # merge msas
     a3m = None
     if len(msa_hashes) == 0:
-        return None, None, None
+        raise NotImplementedError(f"No MSAs were found for these protein chains {str(protein_chain_info)}")
     elif len(set(msa_hashes)) == 1: # monomer/homomer case (all same msas)
         msa_vals = msas_to_load[0]
         num_copies = len(msa_hashes)
@@ -896,7 +917,7 @@ def get_assembly_msa(protein_chain_info, params):
         if num_copies >1:
             msa, ins = merge_a3m_homo(msa, ins, num_copies)
             a3m = {"msa": msa, "ins": ins}
-    else: # heteromer case
+    else: # heteromer case (at least two different MSAs will handle things like AB, AAB, ABC...)
         a3m_list = []
         L_s = []
         for i in range(len(msa_hashes)):
@@ -2578,7 +2599,6 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
     # uniformly sample from unique PDB chains
     chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
     tmp_df = tmp_df[tmp_df.CHAINID==chid]
-
     if dedup_ligand:
         # uniform sample from unique ligands
         lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
@@ -2733,6 +2753,10 @@ class DatasetSMComplexAssembly(data.Dataset):
         self.params = params
         self.rng = np.random.RandomState(seed)
 
+
+    def __len__(self):
+        return len(self.IDs)
+        
     def __getitem__(self, index):
         ID = self.IDs[index]
         item = sample_item_sm_compl(self.data_df, ID)

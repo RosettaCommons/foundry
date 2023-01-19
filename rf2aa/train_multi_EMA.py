@@ -17,7 +17,7 @@ from rf2aa.data_loader import (
     loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_sm_compl_covale,
     loader_atomize_pdb, loader_sm_compl_assembly,
     Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA,
-    DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler,
+    DatasetSM, DatasetSMComplex, DatasetSMComplexAssembly, DistilledDataset, DistributedWeightedSampler,
     unbatch_item
 )
 from rf2aa.kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, xyz_to_bbtor
