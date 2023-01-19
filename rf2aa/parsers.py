@@ -5,11 +5,11 @@ import string
 import os,re
 from os.path import exists
 import random
-import util
+import rf2aa.util
 import gzip
-from ffindex import *
+from rf2aa.ffindex import *
 import torch
-from chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP, to1letter
+from rf2aa.chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP, to1letter
 from openbabel import openbabel
 
 

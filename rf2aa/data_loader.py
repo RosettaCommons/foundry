@@ -63,19 +63,11 @@ def set_data_loader_params(args):
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%sm_compl_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-<<<<<<< HEAD
-        "SM_LIST"          : "%s/sm_compl_20230116.csv"%sm_compl_dir, 
-        "MET_LIST"         : "%s/metal_compl_20230116.csv"%sm_compl_dir, 
-        "SM_MULTI_LIST"    : "%s/sm_compl_multi_20230116.csv"%sm_compl_dir, 
-        "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20230116.csv"%sm_compl_dir,
-        "PDB_LIST"         : "%s/list_v02.csv"%base_dir, # on digs
-=======
         "SM_LIST"          : "%s/sm_compl_20230117.csv"%sm_compl_dir, 
         "MET_LIST"         : "%s/metal_compl_20230117.csv"%sm_compl_dir, 
         "SM_MULTI_LIST"    : "%s/sm_compl_multi_20221228.csv"%sm_compl_dir, 
         "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20230117.csv"%sm_compl_dir,
         "PDB_LIST"         : "%s/list_v02_w_taxid.csv"%base_dir, # on digs
->>>>>>> 7a780b7 (added in assembly dataloader)
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
         "VAL_PDB"          : "%s/valid_remapped"%sm_compl_dir,
@@ -844,12 +836,11 @@ def get_assembly_msa(protein_chain_info, params):
     for those chains
 
     WARNING: this code is the general case that can make Nmer assembly chain MSAs from the currently generated MSAs (single 
-    chain and two paired chains) but a preferable approach would be to regenerate all the MSAs from scratch using hhblits and '
+    chain and two paired chains) but a preferable approach would be to regenerate all the MSAs from scratch using hhblits and 
     pair them before filtering
     """
     updated_protein_chain_info = []
     msas_to_load = []  
-    # protein_chain_info = sorted(protein_chain_info, key=lambda x: x["hash"])
     # handles checking all pairs of chains if they have paired MSAs
     for item1, item2 in itertools.permutations(protein_chain_info, 2):
         # if you already have a MSA for item1 skip the other pairings
@@ -857,8 +848,8 @@ def get_assembly_msa(protein_chain_info, params):
             continue
 
         if item1["hash"] != item2["hash"] and item1["query_taxid"] == item2["query_taxid"]: # different hashes but same tax id, means there is a pMSA generated
-            msaA_id = item1[1]
-            msaB_id = item2[1]
+            msaA_id = item1["hash"]
+            msaB_id = item2["hash"]
             pMSA_hash = "_".join([msaA_id, msaB_id])
             pMSA_fn = params['COMPL_DIR'] + '/pMSA/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m.gz'
             if os.path.exists(pMSA_fn):
@@ -869,8 +860,8 @@ def get_assembly_msa(protein_chain_info, params):
                                      "paired": True})
             else: 
                 # check if the sequence is the second sequence in the paired MSA
-                msaA_id = item2[1]
-                msaB_id = item1[1]
+                msaA_id = item2["hash"]
+                msaB_id = item1["hash"]
                 pMSA_hash = "_".join([msaA_id, msaB_id])
                 pMSA_fn = params['COMPL_DIR'] + '/pMSA/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m.gz'
                 if os.path.exists(pMSA_fn):
@@ -889,6 +880,7 @@ def get_assembly_msa(protein_chain_info, params):
     updated_protein_chain_info.extend(unpaired_items) # maps the order of the chains to the order of loaded MSAs so coordinates and msa match
     msas_to_load.extend(unpaired_msas) # msas_to_load will be the same lenght as updated_protein_chain_info
     msa_hashes = [msa["hash"] for msa in msas_to_load]
+    assert protein_chain_info == updated_protein_chain_info, "order of protein chains has changed "
     # merge msas
     a3m = None
     if len(msa_hashes) == 0:
@@ -916,7 +908,7 @@ def get_assembly_msa(protein_chain_info, params):
             L_s.append(msa_vals["seq_range"][1]-msa_vals["seq_range"][0])
         msaA, insA = merge_msas(a3m_list, L_s)
         a3m = {"msa": msaA, "ins": insA}
-    return a3m, L_s, updated_protein_chain_info
+    return a3m
 
 # merge msa & insertion statistics of two proteins having different taxID
 def merge_a3m_hetero(a3mA, a3mB, L_s):
@@ -2166,7 +2158,7 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, pick_t
             "hash": chid2hash[f"{pdb_id}_{chid}"], 
             "len": chid2L[f"{pdb_id}_{chid}"],
             "query_taxid": chid2taxid[f"{pdb_id}_{chid}"]} for chid in prot_chains]
-    a3m_prot, _, _= get_assembly_msa(protein_chain_info, params)
+    a3m_prot = get_assembly_msa(protein_chain_info, params)
     # load pre-parsed cif assembly - requires cifutils.py in path for object definitions
     chains, asmb, covale, modres = pickle.load(gzip.open(params['MOL_DIR']+f'/{pdb_id[1:3]}/{pdb_id}.pkl.gz'))
 
@@ -2538,10 +2530,16 @@ def crop_chirals(chirals, atom_sel):
     """
     if chirals.numel() == 0: # no chirals in this selection
         return chirals
+
+    ncrop_atoms  = atom_sel.shape[0]
+    # update absolute indexing if there are ligands "cropped". There will never be part of a ligand that is cropped, only entire ligands
+    idx_update = dict(zip(atom_sel.numpy().tolist(), range(ncrop_atoms))) 
     cropped_chirals = []
     for chiral_center in chirals:
         if all([chiral_neighbor in atom_sel for chiral_neighbor in chiral_center[:-1]]):
-            cropped_chirals.append(chiral_center)
+            updated_chiral_center = np.array([idx_update[chiral_neighbor.item()] for chiral_neighbor in chiral_center[:-1]] + [chiral_center[-1]])
+            updated_chiral_center = torch.from_numpy(updated_chiral_center)
+            cropped_chirals.append(updated_chiral_center)
     if not cropped_chirals: # all the chiral centers were in ligands that were removed
         return torch.Tensor()
     return torch.stack(cropped_chirals)
@@ -2580,6 +2578,8 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
     # uniformly sample from unique PDB chains
     chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
     tmp_df = tmp_df[tmp_df.CHAINID==chid]
+
+    tmp_df = df[df.CHAINID=="5nb3_M"]
     if dedup_ligand:
         # uniform sample from unique ligands
         lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
@@ -2720,6 +2720,33 @@ class DatasetSMComplex(data.Dataset):
             )
         except Exception as e:
             print('error in DatasetSMComplex',item)
+            #raise e
+        return out
+
+class DatasetSMComplexAssembly(data.Dataset):
+    def __init__(self, IDs, loader, data_df, chid2hash, chid2L, chid2taxid, params, seed=None):
+        self.IDs = IDs
+        self.data_df = data_df
+        self.loader = loader
+        self.chid2hash = chid2hash
+        self.chid2L = chid2L
+        self.chid2taxid = chid2taxid
+        self.params = params
+        self.rng = np.random.RandomState(seed)
+
+    def __getitem__(self, index):
+        ID = self.IDs[index]
+        item = sample_item_sm_compl(self.data_df, ID)
+        try:
+            out = self.loader(
+                item,
+                self.params,
+                self.chid2hash,
+                self.chid2L,
+                self.chid2taxid,
+            )
+        except Exception as e:
+            print('error in DatasetSMComplexAssembly',item)
             #raise e
         return out
 
