@@ -38,7 +38,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 #torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+# os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 import random
@@ -50,7 +50,7 @@ USE_AMP = False
 torch.set_num_threads(4)
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 0,
+              'num_workers': 5,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -911,6 +911,12 @@ class Trainer():
                 valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
                 loader_atomize_pdb, valid_dict['atomize_pdb'],
                 self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
+            ),
+            sm_compl_assemb = DatasetSMComplexAssembly(
+                valid_ID_dict['sm_compl_assemb'][:self.dataset_param['n_valid_sm_compl_assemb']],
+                loader_sm_compl_assembly, valid_dict['sm_compl_assemb'],
+                chid2hash, chid2L, chid2taxid, # used for MSA generation of assemblies
+                self.loader_param,
             )
         )
 
@@ -943,7 +949,8 @@ class Trainer():
             sm_compl_covale = "Covalent ligand",
             sm_compl_strict = 'SM Compl (strict)',
             sm = 'SM_CSD',
-            atomize_pdb = 'Monomer atomize 3'
+            atomize_pdb = 'Monomer atomize 3',
+            sm_compl_assemb = 'SM Compl Assembly',
         )
 
         train_sampler = DistributedWeightedSampler(
