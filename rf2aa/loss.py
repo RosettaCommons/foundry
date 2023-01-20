@@ -102,7 +102,7 @@ def resolve_equiv_natives(xs, natstack, maskstack):
     delta = torch.sum( torch.abs(dnat-dx), dim=(-2,-1))
     return natstack[:,torch.argmin(delta),...], maskstack[:,torch.argmin(delta),...]
 
-def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label):
+def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_sm):
     """Resolves multiple chain and atom permutations of a protein-ligand
     assembly to a single set of coordinates with the lowest C-alpha distance
     error to predicted coordinates. Protein chains are assigned to the chain
@@ -128,6 +128,10 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label):
         Integer labels for each unique chain, assigned to each residue. Used to
         determine which ligand chains are equivalent and can be considered for
         alternate ligand chain assignments.
+    Ls_prot : list
+        Lengths of protein chains
+    Ls_sm : list
+        Lengths of ligand chains. All ligand chains come after all protein chains
 
     Returns
     -------
@@ -140,10 +144,6 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label):
         return xyz_true, mask
     if (xyz_true.shape[1]==1):
         return xyz_true[:,0,...], mask[:,0,...]
-
-    sm_mask = is_atom(seq[0,0])
-    Ls_prot = Ls_from_same_chain_2d(same_chain[:,~sm_mask][:,:,~sm_mask])
-    Ls_sm = Ls_from_same_chain_2d(same_chain[:,sm_mask][:,:,sm_mask])
 
     # choose true protein chain permutation with lowest distance error to prediction
     dx_pred = torch.norm(xyz_pred[:,None,:sum(Ls_prot),None,1,:]-xyz_pred[:,None,None,:sum(Ls_prot),1,:], dim=-1)
