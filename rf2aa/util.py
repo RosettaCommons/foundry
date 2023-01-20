@@ -1482,7 +1482,7 @@ def Ls_from_same_chain_2d(same_chain):
     i_curr = 0
     while i_curr < len(same_chain):
         idx = torch.where(same_chain[i_curr])[0]
-        Ls.append(idx[-1]-idx[0]+1)
+        Ls.append(int(idx[-1]-idx[0]+1))
         i_curr = idx[-1]+1
     return Ls
 
