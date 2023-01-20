@@ -1235,12 +1235,12 @@ class Trainer():
                                 use_checkpoint=True
                             )
 
-                            if task[0]=='sm_compl_assemb':
+                            if task[0]=='sm_compl_asmb':
                                 sm_mask = is_atom(seq[0,0])
                                 Ls_prot = Ls_from_same_chain_2d(same_chain[:,~sm_mask][:,:,~sm_mask])
                                 Ls_sm = Ls_from_same_chain_2d(same_chain[:,sm_mask][:,:,sm_mask])
                                 true_crds_, atom_mask_ = resolve_equiv_natives_asmb(
-                                    pred_crds[-1], true_crds, atom_mask, Ls_prot, Ls_sm)
+                                    pred_crds[-1], true_crds, atom_mask, ch_label, Ls_prot, Ls_sm)
                             else:
                                 true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
                             #res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
@@ -1292,12 +1292,12 @@ class Trainer():
                             use_checkpoint=True
                         )
 
-                        if task[0]=='sm_compl_assemb':
+                        if task[0]=='sm_compl_asmb':
                             sm_mask = is_atom(seq[0,0])
                             Ls_prot = Ls_from_same_chain_2d(same_chain[:,~sm_mask][:,:,~sm_mask])
                             Ls_sm = Ls_from_same_chain_2d(same_chain[:,sm_mask][:,:,sm_mask])
                             true_crds_, atom_mask_ = resolve_equiv_natives_asmb(
-                                pred_crds[-1], true_crds, atom_mask, Ls_prot, Ls_sm)
+                                pred_crds[-1], true_crds, atom_mask, ch_label, Ls_prot, Ls_sm)
                         else:
                             true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
                         # res_mask = ~((atom_mask_[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(msa[:,i_cycle,0])))
@@ -1572,12 +1572,12 @@ class Trainer():
                     use_checkpoint=False
                 )
 
-                if task[0]=='sm_compl_assemb':
+                if task[0]=='sm_compl_asmb':
                     sm_mask = is_atom(seq[0,0])
                     Ls_prot = Ls_from_same_chain_2d(same_chain[:,~sm_mask][:,:,~sm_mask])
                     Ls_sm = Ls_from_same_chain_2d(same_chain[:,sm_mask][:,:,sm_mask])
                     true_crds_, atom_mask_ = resolve_equiv_natives_asmb(
-                        pred_crds[-1], true_crds, atom_mask, Ls_prot, Ls_sm)
+                        pred_crds[-1], true_crds, atom_mask, ch_label, Ls_prot, Ls_sm)
                 else:
                     true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
