@@ -871,10 +871,10 @@ def find_msa_hashes(protein_chain_info, params):
                                      "paired": True})
             else: 
                 # check if the sequence is the second sequence in the paired MSA
-                msaA_id = item2["hash"]
-                msaB_id = item1["hash"]
-                pMSA_hash = "_".join([msaA_id, msaB_id])
-                pMSA_fn = params['COMPL_DIR'] + '/pMSA/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m.gz'
+                # msaA_id = item2["hash"]
+                # msaB_id = item1["hash"]
+                pMSA_hash = "_".join([msaB_id, msaA_id])
+                pMSA_fn = params['COMPL_DIR'] + '/pMSA/' + msaB_id[:3] + '/' + msaA_id[:3] + '/' + pMSA_hash + '.a3m.gz'
                 if os.path.exists(pMSA_fn):
                     updated_protein_chain_info.append(item1)
                     msas_to_load.append({"path": pMSA_fn, 
@@ -890,7 +890,7 @@ def find_msa_hashes(protein_chain_info, params):
                       "paired": False} for info in unpaired_items]
     updated_protein_chain_info.extend(unpaired_items) # maps the order of the chains to the order of loaded MSAs so coordinates and msa match
     msas_to_load.extend(unpaired_msas) # msas_to_load will be the same length as updated_protein_chain_info
-    
+
     # currently updated_protein_chain_info and msas_to_load have items in the same order
     # explicitly update the order of msas_to_load to match the initial input protein_chain_info which will match the xyz coordinates generated in the dataloader
     try:
@@ -914,9 +914,7 @@ def get_assembly_msa(protein_chain_info, params):
     pair them before filtering
     """
     msas_to_load = find_msa_hashes(protein_chain_info, params)
-     
     msa_hashes = [msa["hash"] for msa in msas_to_load]
-    
     # merge msas
     a3m = None
     if len(msa_hashes) == 0:
@@ -2491,14 +2489,13 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, task='
     protein_chain_info = [{
             "chid": f"{pdb_id}_{chid}", 
             "hash": chid2hash[f"{pdb_id}_{chid}"], 
-            "len": chid2L[f"{pdb_id}_{chid}"],
-            "query_taxid": chid2taxid[f"{pdb_id}_{chid}"]} for chid in prot_chains]
+            "len": Ls_prot[i],
+            "query_taxid": chid2taxid[f"{pdb_id}_{chid}"]} for i, chid in enumerate(prot_chains)]
     a3m_prot = get_assembly_msa(protein_chain_info, params)
-
     a3m_sm = dict(msa=msa_sm, ins=torch.zeros_like(msa_sm))
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, [sum(Ls_prot), sum(Ls_sm)])
     msa, ins = a3m['msa'].long(), a3m['ins'].long()
-
+    assert msa.shape[1] == xyz.shape[1], "msa shape and xyz shape don't match"
     # keep track of protein positions for reindexing chirals after crop
     is_prot = torch.zeros(L_total) 
     is_prot[:sum(Ls_prot)] = 1
@@ -2533,6 +2530,7 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, task='
 
     # create MSA features from cropped msa and insertions
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+    
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
