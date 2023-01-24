@@ -361,7 +361,7 @@ def merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot):
         if i_tmpl == 0:
             i1, i2 = 1, N_tmpl
         else:
-            i1, i2 = i_tmpl, N_tmpl - 1
+            i1, i2 = i_tmpl, i_tmpl+N_tmpl - 1
 
         # 1st template is concatenated directly
         xyz_t_out[0, i_res:i_res+L_tmpl] = random_rot_trans(xyz_[0:1])
@@ -373,7 +373,10 @@ def merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot):
         f1d_t_out[i1:i2, i_res:i_res+L_tmpl] = f1d_[1:]
         mask_t_out[i1:i2, i_res:i_res+L_tmpl] = mask_[1:]
 
-        i_tmpl += N_tmpl
+        if i_tmpl == 0:
+            i_tmpl += N_tmpl
+        else:
+            i_tmpl += N_tmpl-1
         i_res += L_tmpl
 
     return xyz_t_out, f1d_t_out, mask_t_out
@@ -2167,7 +2170,7 @@ def featurize_asmb_prot(item, params, chains, asmb_xfs, modres, chid2hash,
     ch_label_prot = torch.cat(ch_label_prot, dim=0)
     seq_prot = torch.cat(seq_prot, dim=0)
 
-    return xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
+    return xyz_prot, mask_prot.bool(), seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
            mask_t_prot, Ls_prot
 
 def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, offset, params):
@@ -2502,7 +2505,9 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, task='
 
     # crop around query ligand (1st sm chain)
     if L_total > params["CROP"]:
-        sel = crop_sm_compl_assembly(xyz[0], Ls_prot, Ls_sm, params['CROP'])
+        res_mask = get_prot_sm_mask(mask[0], msa[0,0])
+        sel = crop_sm_compl_assembly(xyz[0], res_mask, Ls_prot, Ls_sm, params['CROP'])
+
         msa = msa[:, sel]
         ins = ins[:, sel]
         xyz = xyz[:,sel]
@@ -2753,14 +2758,19 @@ def crop_sm_compl(prot_xyz, lig_xyz,Ls, params):
     lig_sel = torch.arange(lig_xyz.shape[0])+Ls[0]
     return torch.cat((sel, lig_sel))
 
-def crop_sm_compl_assembly(all_xyz, Ls_prot, Ls_sm, n_crop):
-    """Choose residues with C-alphas close to a random atom on query ligand.
+def crop_sm_compl_assembly(all_xyz, res_mask, Ls_prot, Ls_sm, n_crop):
+    """Choose residues with the `n_crop` closest C-alphas to a random atom on
+    query ligand. Operates on multi-chain assemblies. Nearby ligands are
+    included if all of their (unmasked) atoms are in the crop. Otherwise none
+    of the atoms of that ligand are included in crop.
     
     Parameters
     ----------
-    ca_xyz : torch.Tensor (L_total, 3)
+    all_xyz : torch.Tensor (L_total, N_atoms, 3)
         Coordinates of full assembly with all protein chains, followed by all ligand chains. 
         1st ligand chain is assumed to be query ligand.
+    res_mask : torch.Tensor (L_total,) bool
+        Boolean mask for which residues/ligand atoms exist.
     Ls_prot : list (N_prot_chains,)
         Lengths of protein chains
     Ls_sm : list (N_lig_chains,)
@@ -2780,7 +2790,9 @@ def crop_sm_compl_assembly(all_xyz, Ls_prot, Ls_sm, n_crop):
     dist = torch.cdist(ca_xyz.unsqueeze(0), query_atom.unsqueeze(0)).flatten()
     dist = torch.nan_to_num(dist, nan=999999)
 
-    _, idx = torch.topk(dist, n_crop, largest=False)
+    idx = torch.argsort(dist)
+    idx = idx[torch.isin(idx, torch.where(res_mask)[0])] # exclude invalid residues from crop
+    idx = idx[:n_crop]
 
     # always include every query ligand atom, regardless of if they're in topk
     query_lig_idx = np.arange(Ls_sm[0]) + sum(Ls_prot)
@@ -2789,7 +2801,10 @@ def crop_sm_compl_assembly(all_xyz, Ls_prot, Ls_sm, n_crop):
     # remove any ligands who don't have all of their atoms in the topk
     offset = sum(Ls_prot)
     for L in Ls_sm:
+        # only look for unmasked atoms to be in crop
         curr_lig_idx = np.arange(L) + offset
+        curr_lig_idx = np.where(res_mask[curr_lig_idx])[0]+offset 
+
         if not np.isin(curr_lig_idx, sel).all():
             sel = np.setdiff1d(sel,curr_lig_idx)
         offset += L

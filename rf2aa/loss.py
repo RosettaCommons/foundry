@@ -104,11 +104,11 @@ def resolve_equiv_natives(xs, natstack, maskstack):
 
 def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_sm):
     """Resolves multiple chain and atom permutations of a protein-ligand
-    assembly to a single set of coordinates with the lowest C-alpha distance
-    error to predicted coordinates. Protein chains are assigned to the chain
-    permutation with the lowest distance error. Ligand chains are assigned
-    using a greedy search to minimize the distance error within that ligand
-    chain and between it and the already-assigned protein chains.
+    assembly to a single set of true coordinates with the lowest C-alpha
+    distance error to predicted coordinates. Protein chains are assigned to the
+    chain permutation with the lowest distance error. Ligand chains are
+    assigned using a greedy search to minimize the distance error within that
+    ligand chain and between it and the already-assigned protein chains.
 
     Parameters
     ----------
