@@ -293,15 +293,16 @@ def compute_pde_loss(X, Y, logit_pde, atom_mask, pde_bin_step=0.3):
     return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pde_masked, true_pde_label[None]) # assumes B=1
 
 # from Ivan: FAPE generalized over atom sets & frames
-def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, 
+def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, frame_atom_mask_2d=None,
     logit_pae=None, logit_pde=None, Z=10.0, dclamp=10.0, gamma=0.99, eps=1e-4):
 
     # X (predicted) N x L x natoms x 3
     # Y (native)    1 x L x natoms x 3
-    # atom_mask     1 x L x natoms
+    # atom_mask     1 x L x natoms masks the atoms over which fape is calculated
     # frames        1 x L x nframes x 3 x 2
-    # frame_mask    1 x L x nframes
-    # frame_atom_mask     1 x L x natoms
+    # frame_mask    1 x L x nframes 
+    # frame_atom_mask     1 x L x natoms masks the frames over which fape is calculated
+    # frame_atom_mask_2d 1 x L x L x natoms 2d mask, 2nd dimension frames, 3rd/4th dimension atoms so fape can be taken over some atoms for some frames (only works for BB fape)
 
     if frame_atom_mask is None:
         frame_atom_mask = atom_mask
@@ -344,6 +345,10 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     )
     xij_t = torch.einsum('rji,rsj->rsi', uY[frame_mask], Y[atom_mask][None,...] - Y_y[frame_mask][:,None,...])
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
+    
+    # multiply diff by frame_atom_mask_2d if frame_atom_mask_2d not None
+    if frame_atom_mask_2d is not None:
+        diff = diff*frame_atom_mask_2d[:,frame_mask[0]][:, :, atom_mask[0]]
 
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
     pae_loss = compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask) \
@@ -987,7 +992,7 @@ def calc_hb_grads(
         threshold_distance,
         eps,
         normalize)
-    return torch.autograd.grad(Ehb, xs)
+    return torch.autograd.grad(Ehb, (xyz, alpha))
 
 @torch.enable_grad()
 def calc_chiral_grads(xyz, chirals):

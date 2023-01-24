@@ -158,12 +158,15 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-4):
     return R, Ca
 
 # note: needs consistency with chemical.py
+def is_protein(seq):
+    return seq < NPROTAAS
+
 def is_nucleic(seq):
     return (seq>=NPROTAAS) * (seq <= NNAPROTAAS)
 
 def is_atom(seq):
     return seq > NNAPROTAAS
-    
+
 def idealize_reference_frame(seq, xyz_in):
     xyz = xyz_in.clone()
 

@@ -943,7 +943,7 @@ def get_assembly_msa(protein_chain_info, params):
             a3m_list.append({"msa":msa, "ins":ins, "taxID":taxID, "hash":msa_vals["hash"]})
             L_s.append(msa_vals["seq_range"][1]-msa_vals["seq_range"][0])
         msaA, insA = merge_msas(a3m_list, L_s)
-        a3m = {"msa": msaA, "ins": insA}
+        a3m = {"msa": torch.tensor(msaA), "ins": torch.tensor(insA)}
     return a3m
 
 # merge msa & insertion statistics of two proteins having different taxID
@@ -1246,12 +1246,13 @@ def loader_fb(item, params, unclamp=False):
     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
     chirals = torch.Tensor()
+    ch_label = torch.zeros(seq[0].shape)
     #print ("loader_fb", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats,chirals,"fb", item
+           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label, "fb", item
 
 def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0):
 
@@ -1363,11 +1364,14 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:,sel]
     chirals = torch.Tensor()
+    L1 = chain_idx[0,:].sum()
+    ch_label = torch.zeros(seq[0].shape)
+    ch_label[L1:] = 1
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals,"compl", item
+           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals, ch_label, "compl", item
 
 
 def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_top=True, random_noise=5.0):
@@ -1511,11 +1515,14 @@ def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_to
     xyz_prev = xyz_t[0].clone()
     mask_prev = mask_t[0].clone()
     chirals = torch.Tensor()
+    L1 = chain_idx[0,:].sum()
+    ch_label = torch.zeros(seq[0].shape)
+    ch_label[L1:] = 1
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals, "na_compl", item
+           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals, ch_label, "na_compl", item
 
 def loader_rna(item, params, random_noise=5.0):
     # read PDBs
@@ -1589,11 +1596,12 @@ def loader_rna(item, params, random_noise=5.0):
     xyz_prev = xyz_t[0].clone()
     mask_prev = mask_t[0].clone()   
     chirals = torch.Tensor()
+    ch_label = torch.zeros(seq[0].shape)
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, "rna",item
+           chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, ch_label, "rna",item
 
 def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_ligand_tmpl=False,
     init_protein_xyz=False, init_ligand_xyz=False, task='sm_compl', random_noise=5.0):
@@ -1774,15 +1782,16 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
         bond_feats = bond_feats[sel][:, sel]
 
     # need to reindex the chiral atom positions - assumes they are the second chain
+    L1 = chain_idx[0,:].sum()
     if chirals.shape[0]>0:
-        L1 = chain_idx[0,:].sum()
         chirals[:, :-1] = chirals[:, :-1] + L1
-
+    ch_label = torch.zeros(seq[0].shape)
+    ch_label[L1:] = 1
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, chirals, task, item
+           chain_idx, False, False, frames, bond_feats, chirals, ch_label, task, item
 
 
 def loader_sm_compl_covale(item, params, pick_top=True, 
@@ -2024,14 +2033,16 @@ def loader_sm_compl_covale(item, params, pick_top=True,
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
     # need to reindex the chiral atom positions - assumes they are the second chain
+    L1 = node_type[0,:].sum()
     if chirals_sm.shape[0]>0:
-        L1 = node_type[0,:].sum()
         chirals_sm[:, :-1] = chirals_sm[:, :-1] +L1 
+    ch_label = torch.zeros(seq[0].shape)
+    ch_label[L1:] = 1
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, chirals_sm, task, item
+           chain_idx, False, False, frames, bond_feats, chirals_sm, ch_label, task, item
 
 def featurize_asmb_prot(item, params, chains, asmb_xfs, modres, chid2hash, 
     pick_top=True, random_noise=5.0):
@@ -2522,7 +2533,6 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, task='
 
     # create MSA features from cropped msa and insertions
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
-
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
@@ -2675,11 +2685,12 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     if chirals.shape[0]>0:
         L1 = node_type[0,:].sum()
         chirals[:, :-1] = chirals[:, :-1] +L1
+    ch_label = torch.zeros(seq[0].shape)
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats,chirals,"atomize_pdb", item
+           chain_idx, False, False, frames, bond_feats,chirals, ch_label, "atomize_pdb", item
 
 def loader_sm(item, params, pick_top=True):
     """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
@@ -2725,12 +2736,12 @@ def loader_sm(item, params, pick_top=True):
     mask_prev = mask_t[0].clone()
 
     xyz = torch.nan_to_num(xyz)
-    
+    ch_label = torch.zeros(seq[0].shape)
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, chirals, "sm", item
+           chain_idx, False, False, frames, bond_feats, chirals, ch_label, "sm", item
 
 def crop_sm_compl(prot_xyz, lig_xyz,Ls, params):
     """choose residues with calphas close to a random ligand atom"""
