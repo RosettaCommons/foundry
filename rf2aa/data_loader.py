@@ -2167,11 +2167,11 @@ def loader_sm_compl_covale(item, params, pick_top=True,
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals_sm, ch_label, task, item
 
-def featurize_asmb_prot(item, params, chains, asmb_xfs, modres, chid2hash, 
+def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, chid2hash, 
     pick_top=True, random_noise=5.0):
     """Loads multiple protein chains from parsed CIF assembly into tensors.
     Outputs will contain chains roughly in the order that they appear in
-    `item['PARTNERS']` (decreasing number of contacts to query ligand), except
+    `partners` (decreasing number of contacts to query ligand), except
     that chains with different letters but the same sequence (homo-oligomers)
     are placed contiguously in the residue dimension. All homo-oligomer chain
     swaps are enumerated and stored in the leading dimension ("permutation
@@ -2183,14 +2183,13 @@ def featurize_asmb_prot(item, params, chains, asmb_xfs, modres, chid2hash,
 
     Parameters
     ----------
-    item : dict
-        A single data example, derived from one row of the dataset DataFrame.
-        Should contain a key `PARTNERS` whose value is a list of tuples
-        `(partner, transform_index, num_contacts, partner_type)`. This function
-        will use the subset of these tuples that represent protein chains.
-        These have `partner_type = 'polypeptide(L)'` and `partner` contains
-        the chain letter. `transform_index` is an integer index of the coordinate
-        transform for each partner chain.
+    pdb_id : string
+        PDB accession of example. Used to load the pre-parsed CIF data.
+    partners : list of 4-tuples (partner, transform_index, num_contacts, partner_type)
+        Protein chains to featurize. All elements should have `partner_type =
+        'polypeptide(L)'`. `partner` contains the chain letter.
+        `transform_index` is an integer index of the coordinate transform for
+        each partner chain.
     params : dict
         Parameters for the data loader
     chains : dict
@@ -2224,10 +2223,8 @@ def featurize_asmb_prot(item, params, chains, asmb_xfs, modres, chid2hash,
     Ls_prot : list
         Length of each protein chain
     """
-    pdb_id = item['CHAINID'].split('_')[0]
-
     # assign number to each unique sequence, irrespective of chain letter
-    chnum2chlet, chlet2chnum = map_identical_prot_chains(item['PARTNERS'], chains, modres)
+    chnum2chlet, chlet2chnum = map_identical_prot_chains(partners, chains, modres)
 
     # protein true coords
     xyz_prot, mask_prot, Ls_prot, ch_label_prot, seq_prot = [], [], [], [], []
@@ -2235,8 +2232,7 @@ def featurize_asmb_prot(item, params, chains, asmb_xfs, modres, chid2hash,
     for chnum, chlet_set in chnum2chlet.items():
         ## protein coordinates
         # every location of this chain
-        partners = [p for p in item['PARTNERS']
-                    if (p[-1]=='polypeptide(L)') and (p[0] in chlet_set)]
+        partners = [p for p in partners if (p[-1]=='polypeptide(L)') and (p[0] in chlet_set)]
         N_mer = len(partners)
         xyz_chxf, mask_chxf, seq_chxf = [], [], []
         for p in partners:
@@ -2403,10 +2399,10 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, offset, 
     return xyz_lig, mask_lig, msa_lig, bond_feats_lig, akeys_lig, Ls_lig, frames_lig, \
            chirals_lig, resname_lig
 
-def featurize_asmb_ligands(item, params, chains, asmb_xfs, covale):
+def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
     """Loads multiple ligands chains from parsed CIF assembly into tensors.
     Outputs will contain ligands in the order that they appear in
-    `item['PARTNERS']` (decreasing number of contacts to query ligand). Leading
+    `partners` (decreasing number of contacts to query ligand). Leading
     dimension of output coordinates contains atom position permutations for
     each ligand.  Atom permutations between different ligands that are
     identical are not generated here, so loss must be calculated in a way that
@@ -2414,16 +2410,13 @@ def featurize_asmb_ligands(item, params, chains, asmb_xfs, covale):
 
     Parameters
     ----------
-    item : dict
-        A single data example, derived from one row of the dataset DataFrame.
-        Should contain a key `PARTNERS` whose value is a list of tuples
-        `(partner, transform_index, num_contacts, partner_type)`. This function
-        will use the subset of these tuples that represent ligands.
-        These have `partner_type = 'nonpoly'` and `partner` is
-        a list of tuples (chain_letter, res_num, res_name) corresponding to the
-        residues that make up this ligand. `transform_index` will be a list
-        of tuples (chain_letter, idx) indicating the index of the coordinate
-        transform for each chain in the ligand.
+    partners : list of 4-tuples (partner, transform_index, num_contacts, partner_type)
+        Ligands to featurize. All elements should have `partner_type =
+        'nonpoly'` and `partner` is a list of tuples (chain_letter, res_num,
+        res_name) corresponding to the residues that make up this ligand.
+        `transform_index` will be a list of tuples (chain_letter, idx)
+        indicating the index of the coordinate transform for each chain in the
+        ligand.
     params : dict
         Parameters for the data loader
     chains : dict
@@ -2459,21 +2452,14 @@ def featurize_asmb_ligands(item, params, chains, asmb_xfs, covale):
     lig_names : list
         Name of each ligand (residue name(s) joined by '_')
     """
-    # all ligands to be loaded
-    ligands = [item['LIGAND']]
-    lig_xfs = [item['LIGXF']]
-    for p in item['PARTNERS']:
-        if p[3] != 'nonpoly': continue
-        ligands.append(p[0])
-        lig_xfs.append(p[1]) # (chain id, transform index)
-
     # group ligands with identical chain & residue numbers
     # these may represent alternate locations of the same molecule
     # and need to be loaded into permutation dimension
+    ligands = []
     lig2xf = OrderedDict()
-    lig2xf[str(item['LIGAND'])] = [item['LIGXF']]
-    for p in item['PARTNERS']:
-        if p[3] != 'nonpoly': continue
+    for p in partners:
+        if p[-1] != 'nonpoly': continue
+        ligands.append(p[0])
         k = str(p[0]) # make multires ligand into string for using as dict key
         if k not in lig2xf:
             lig2xf[k] = []
@@ -2543,7 +2529,7 @@ def featurize_asmb_ligands(item, params, chains, asmb_xfs, covale):
 
 
 def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, task='sm_compl_asmb', 
-                             pick_top=True, random_noise=5.0):
+    pick_top=True, random_noise=5.0, num_prot_chains=None, num_lig_chains=None):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
     with query ligand.  Protein chains all come before ligand chains, and
@@ -2560,13 +2546,20 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, task='
     asmb_xfs = asmb[i_a]
 
     # load protein chains
+    prot_partners = [p for p in item['PARTNERS'] if p[-1]=='polypeptide(L)']
+    if num_prot_chains is not None:
+        prot_partners = prot_partners[:num_prot_chains]
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot = \
-        featurize_asmb_prot(item, params, chains, asmb_xfs, modres, chid2hash,
+        featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, chid2hash,
                             pick_top=pick_top, random_noise=random_noise)
 
     # load ligands
+    lig_partners = [(item['LIGAND'], item['LIGXF'], -1, 'nonpoly')] + \
+                   [p for p in item['PARTNERS'] if p[-1]=='nonpoly']
+    if num_lig_chains is not None:
+        lig_partners = lig_partners[:num_prot_chains]
     xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, lig_names = \
-        featurize_asmb_ligands(item, params, chains, asmb_xfs, covale)
+        featurize_asmb_ligands(lig_partners, params, chains, asmb_xfs, covale)
 
     # combine protein & ligand coordinates
     N_symm_prot = xyz_prot.shape[0]
