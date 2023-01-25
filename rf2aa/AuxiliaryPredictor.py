@@ -85,3 +85,49 @@ class PAENetwork(nn.Module):
 
         return logits.permute(0,3,1,2)
 
+
+class BinderNetwork(nn.Module):
+    """BinderNetwork This class is for predicting binder non/binder
+    from the input. It's basically just a logistic regression head
+    that learns to downsample from the pair and state features.
+    """
+    def __init__(self, d_pair: int = 128, d_state: int = 64):
+        super(BinderNetwork, self).__init__()
+        self.downsample_pair = torch.nn.Linear(d_pair, 1)
+        self.downsample_state = torch.nn.Linear(d_state, 1)
+        self.reset_parameter()
+
+    def reset_parameter(self):
+        nn.init.zeros_(self.downsample_pair.weight)
+        nn.init.zeros_(self.downsample_pair.bias)
+        nn.init.zeros_(self.downsample_state.weight)
+        nn.init.zeros_(self.downsample_state.bias)
+
+    def forward(self, pair_features, same_chain, state):
+        logits_pairwise = self.downsample_pair(pair_features)
+
+        # Note: same_chain is an L x L matrix that indicates which residues are
+        # part of the same chain. The following line computes only the features
+        # that are between the protein and the ligand. It's not clear whether
+        # we should do this, or use all of the pairwise features.
+        interchain_mask = same_chain == 0
+        if torch.sum(interchain_mask) == 0:
+            interchain_mask = same_chain == 1
+        logits_between_ligand_and_protein = logits_pairwise[interchain_mask]
+        logits_between_ligand_and_protein = torch.reshape(logits_between_ligand_and_protein, (pair_features.shape[0], -1))
+
+        # Note: it is still not clear to me which should come first:
+        # taking the mean over length, and downsampling via learned weights.
+        # My intuition is that taking the mean first destroys a lot of useful information
+        # and it would be more useful to apply the linear head to every position, but
+        # it's hard to say without trying both.
+        mean_logit_over_length = torch.mean(logits_between_ligand_and_protein, axis=-1)
+
+        downsampled_state = self.downsample_state(state)
+        mean_state_over_length = torch.mean(downsampled_state, dim=(1, 2))
+
+        # The result above should be size (batch_size, )
+        # and contain a single prediction per batch.
+        squashed_logits = torch.sigmoid(mean_logit_over_length + mean_state_over_length)
+
+        return squashed_logits

@@ -470,7 +470,32 @@ def clean_sdffile(filename):
     return molstring
 
 def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_automorphs=True):
+    """Parse small molecule ligand.
 
+    Parameters
+    ----------
+    filename : str
+    filetype : str
+    string : bool
+        If True, `filename` is a string containing the molecule data.
+    remove_H : bool
+        Whether to remove hydrogen atoms.
+    find_automorphs : bool
+        Whether to enumerate atom symmetry permutations.
+
+    Returns
+    -------
+    obmol : OBMol
+        openbabel molecule object representing the ligand
+    msa : torch.Tensor (N_atoms,) long
+        Integer-encoded "sequence" (atom types) of ligand
+    ins : torch.Tensor (N_atoms,) long
+        Insertion features (all zero) for RF input
+    atom_coords : torch.Tensor (N_symmetry, N_atoms, 3) float
+        Atom coordinates
+    mask : torch.Tensor (N_symmetry, N_atoms) bool
+        Boolean mask for whether atom exists
+    """
     obConversion = openbabel.OBConversion()
     obConversion.SetInFormat(filetype)
     obmol = openbabel.OBMol()
@@ -493,13 +518,14 @@ def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_autom
             else:
                 i += 1
 
-    atomtypes = [atomnum2atomtype.get(obmol.GetAtom(i).GetAtomicNum(), 'ATM') for i in range(1, obmol.NumAtoms()+1)]
+    atomtypes = [atomnum2atomtype.get(obmol.GetAtom(i).GetAtomicNum(), 'ATM') 
+                 for i in range(1, obmol.NumAtoms()+1)]
     msa = torch.tensor([aa2num[x] for x in atomtypes])
     ins = torch.zeros_like(msa)
 
     atom_coords = torch.tensor([[obmol.GetAtom(i).x(),obmol.GetAtom(i).y(), obmol.GetAtom(i).z()] 
                                 for i in range(1, obmol.NumAtoms()+1)]).unsqueeze(0) # (1, natoms, 3)
-    mask = torch.full(atom_coords.shape[:-1], True) # (1, natoms)
+    mask = torch.full(atom_coords.shape[:-1], True) # (1, natoms,)
 
     if find_automorphs:
         try:

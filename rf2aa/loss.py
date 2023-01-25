@@ -2,9 +2,11 @@ import torch
 from icecream import ic
 import numpy as np
 import scipy
+import pandas as pd
 import networkx as nx
 
 from rf2aa.util import (
+    is_protein,
     rigid_from_3_points,
     cb_lengths_CN,
     cb_angles_CACN,
@@ -19,6 +21,9 @@ from rf2aa.chemical import NFRAMES, NTOTAL
 
 from rf2aa.kinematics import get_dih, get_ang
 from rf2aa.scoring import HbHybType
+
+from typing import List, Dict
+from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 
 # Loss functions for the training
 # 1. BB rmsd loss
@@ -252,9 +257,8 @@ def compute_FAPE(Rs, Ts, xs, Rsnat, Tsnat, xsnat, Z=10.0, dclamp=10.0, eps=1e-4)
 
     return loss
 
-def compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask, pae_bin_step=0.5, eps=1e-4):
+def compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask, pae_bin_step=0.5, eps=1e-4, frame_atom_mask_2d=None):
     """Predicted Aligned Error: C-alpha (or sm. mol atom) distances in backbone frames from final layer"""
-
     frame_mask_bb = frame_mask[0,:,0] # valid backbone frames (L,)
     atom_mask_ca = atom_mask[0,:,1] # valid CA atoms (L,)
 
@@ -278,9 +282,21 @@ def compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask, p
 
     logit_pae_masked = logit_pae[:,:,frame_mask_bb][...,atom_mask_ca] # (1, nbins, N_valid_frames, N_valid_ca)
 
-    return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pae_masked, true_pae_label[None]) # assumes B=1
+    cross_entropy_loss =  torch.nn.CrossEntropyLoss(reduction='none')(logit_pae_masked, true_pae_label[None]) # assumes B=1
 
-def compute_pde_loss(X, Y, logit_pde, atom_mask, pde_bin_step=0.3):
+    if frame_atom_mask_2d is None:
+        return torch.mean(cross_entropy_loss)
+    else:
+        # The following tensor should be 1 x num_valid_frames x num_valid_ca
+        frame_atom_ca_only_mask = frame_atom_mask_2d[:, frame_mask_bb, :, :, :]
+        frame_atom_ca_only_mask = frame_atom_ca_only_mask[:, :, :, atom_mask_ca, :]
+        frame_atom_ca_only_mask = frame_atom_ca_only_mask[:, :, 0, :, 1]
+        # We unsqueeze once in the number of bins dimension to do appropriate broadcasting
+        frame_atom_ca_only_mask = frame_atom_ca_only_mask.unsqueeze(1)
+        return torch.mean(frame_atom_ca_only_mask * cross_entropy_loss)
+
+
+def compute_pde_loss(X, Y, logit_pde, atom_mask, pde_bin_step=0.3, frame_atom_mask_2d=None):
     """Predicted Distance Error: C-alpha (or sm. mol atom) pairwise distances"""
     atom_mask_ca = atom_mask[0,:,1] # valid CA atoms (L,)
 
@@ -292,7 +308,21 @@ def compute_pde_loss(X, Y, logit_pde, atom_mask, pde_bin_step=0.3):
     pde_bins = torch.linspace(pde_bin_step, pde_bin_step*(nbin-1), nbin-1, dtype=logit_pde.dtype, device=logit_pde.device)
     true_pde_label = torch.bucketize(dist_err, pde_bins, right=True).long()
     logit_pde_masked = logit_pde[:,:,atom_mask_ca][...,atom_mask_ca] # (1, nbins, N_valid_ca, N_valid_ca)
-    return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pde_masked, true_pde_label[None]) # assumes B=1
+
+    cross_entropy_loss = torch.nn.CrossEntropyLoss(reduction='none')(logit_pde_masked, true_pde_label[None]) # assumes B=1
+    if frame_atom_mask_2d is None:
+        return torch.mean(cross_entropy_loss)
+    else:
+        # NOTE: This is probably not correct. What should happen is that you pass in "same_chain"
+        # into this function, and then mask the PDE error with same chain. Instead, 
+        # I'm basically making the assumption that a (any frame -> CA) mask is 
+        # fairly close to a CA x CA mask. It's a subset of the true mask, so it 
+        # will only reduce what loss is computed over.
+        frame_atom_ca_only_mask = frame_atom_mask_2d[:, atom_mask_ca, :, :, :]
+        frame_atom_ca_only_mask = frame_atom_ca_only_mask[:, :, :, atom_mask_ca, :]
+        frame_atom_ca_only_mask = frame_atom_ca_only_mask[:, :, :, :, 1].any(dim=2)
+        frame_atom_ca_only_mask = frame_atom_ca_only_mask.unsqueeze(1)
+        return torch.mean(frame_atom_ca_only_mask * cross_entropy_loss)
 
 # from Ivan: FAPE generalized over atom sets & frames
 def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, frame_atom_mask_2d=None,
@@ -304,7 +334,7 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     # frames        1 x L x nframes x 3 x 2
     # frame_mask    1 x L x nframes 
     # frame_atom_mask     1 x L x natoms masks the frames over which fape is calculated
-    # frame_atom_mask_2d 1 x L x L x natoms 2d mask, 2nd dimension frames, 3rd/4th dimension atoms so fape can be taken over some atoms for some frames (only works for BB fape)
+    # frame_atom_mask_2d 1 x L x nframes x L x natoms 2d mask, 2nd dimension frames, 3rd/4th dimension atoms so fape can be taken over some atoms for some frames (only works for BB fape)
 
     if frame_atom_mask is None:
         frame_atom_mask = atom_mask
@@ -355,10 +385,10 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
 
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
 
-    pae_loss = compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask) \
+    pae_loss = compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask, frame_atom_mask_2d=frame_atom_mask_2d) \
                    if logit_pae is not None \
                    else torch.tensor(0).to(frames.device)
-    pde_loss = compute_pde_loss(X, Y, logit_pde, atom_mask) if logit_pde is not None \
+    pde_loss = compute_pde_loss(X, Y, logit_pde, atom_mask, frame_atom_mask_2d=frame_atom_mask_2d) if logit_pde is not None \
                    else torch.tensor(0).to(frames.device)
 
     return loss, pae_loss, pde_loss
@@ -495,7 +525,7 @@ def calc_BB_bond_geom(
     B, L = pred.shape[:2]
 
     bonded = (idx[:,1:] - idx[:,:-1])==1
-    is_prot = ~is_nucleic(seq)[:-1]
+    is_prot = is_protein(seq)[:-1]
 
     # bond length: C-N
     blen_CN_pred  = length(pred[:,:-1,2], pred[:,1:,0]).reshape(B,L-1) # (B, L-1)
@@ -757,6 +787,10 @@ def calc_lj(
     protein_atom_bonds_mask = bond_feats != 6 # protein-atom bond
     # mask out all atoms until Cbeta for residues bonded to an atom (this approximates to 4 bonds away)
     mask[:,:6, :, :6] *= protein_atom_bonds_mask[0,:, None, :, None].expand(-1, 6, -1, 6)
+
+    # mask out atom pairs from too-distant residues (C-alpha dist > 20A)
+    ca_dist = torch.cdist(xs[0,:,1], xs[0,:,1]) # assumes batch size 1
+    mask *= ca_dist[:,None,:,None]<20
 
     si,ai,sj,aj = mask.nonzero(as_tuple=True)
 
@@ -1088,43 +1122,54 @@ def calc_allatom_lddt(P, Q, idx, atm_mask, eps=1e-6):
     return lddt
 
 
-def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, negative=False, interface=False, bin_scaling=1, eps=1e-6):
+def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, negative=False, 
+    interface=False, bin_scaling=1, N_stripe=1, eps=1e-6):
     # P - N x L x natoms x 3
     # Q - L x natoms x 3
     # pred_lddt - 1 x nbucket x L
     # idx - 1 x L
     # 
-
     N, L, Natm = P.shape[:3]
 
-    # distance matrix
-    Pij = torch.square(P[:,:,None,:,None,:]-P[:,None,:,None,:,:]) # (N, L, L, 27, 27)
-    Pij = torch.sqrt( Pij.sum(dim=-1) + eps)
-    Qij = torch.square(Q[None,:,None,:,None,:]-Q[None,None,:,None,:,:]) # (1, L, L, 27, 27)
-    Qij = torch.sqrt( Qij.sum(dim=-1) + eps)
+    # striped evaluation of L x L x N_atoms x N_atoms distances to save GPU mem
+    L_stripe = int(np.ceil(L/N_stripe)) # how many residues in each stripe
+    lddt_s = []
+    pair_mask_accum = torch.zeros((N,L,Natm), device=P.device)
+    for i1 in np.arange(0, L, L_stripe):
+        i2 = min(i1+L_stripe, L)
 
-    # get valid pairs
-    pair_mask = torch.logical_and(Qij>0,Qij<15).float() # only consider atom pairs within 15A
-    # ignore missing atoms
-    pair_mask *= (atm_mask[:,:,None,:,None] * atm_mask[:,None,:,None,:]).float()
+        # distance matrix
+        Pij = torch.square(P[:,i1:i2,None,:,None,:]-P[:,None,:,None,:,:]) # (N, L_stripe, L, 27, 27)
+        Pij = torch.sqrt( Pij.sum(dim=-1) + eps)
+        Qij = torch.square(Q[None,i1:i2,None,:,None,:]-Q[None,None,:,None,:,:]) # (1, L_stripe, L, 27, 27)
+        Qij = torch.sqrt( Qij.sum(dim=-1) + eps)
 
-    # ignore atoms within same residue
-    pair_mask *= (idx[:,:,None,None,None] != idx[:,None,:,None,None]).float() # (1, L, L, 27, 27)
-    if negative:
-        # ignore atoms between different chains
-        pair_mask *= same_chain.bool()[:,:,:,None,None]
-    elif interface:
-        # ignore atoms between the same chain
-        pair_mask *= ~same_chain.bool()[:,:,:,None,None]
+        # get valid pairs
+        pair_mask = torch.logical_and(Qij>0,Qij<15).float() # only consider atom pairs within 15A
+        # ignore missing atoms
+        pair_mask *= (atm_mask[:,i1:i2,None,:,None] * atm_mask[:,None,:,None,:]).float()
 
-    pair_mask *= mask_2d.bool()[..., None, None]
-    
-    delta_PQ = torch.abs(Pij-Qij+eps) # (N, L, L, 14, 14)
+        # ignore atoms within same residue
+        pair_mask *= (idx[:,i1:i2,None,None,None] != idx[:,None,:,None,None]).float() # (1, L_stripe, L, 27, 27)
+        if negative:
+            # ignore atoms between different chains
+            pair_mask *= same_chain.bool()[:,i1:i2,:,None,None]
+        elif interface:
+            # ignore atoms between the same chain
+            pair_mask *= ~same_chain.bool()[:,i1:i2,:,None,None]
 
-    lddt = torch.zeros( (N,L,Natm), device=P.device ) # (N, L, 27)
-    for distbin in (0.5,1.0,2.0,4.0):
-        lddt += 0.25 * torch.sum( (delta_PQ<=distbin*bin_scaling)*pair_mask, dim=(2,4)
-            ) / ( torch.sum( pair_mask, dim=(2,4) ) + eps)
+        pair_mask *= mask_2d.bool()[:,i1:i2,:,None,None]
+
+        delta_PQ = torch.abs(Pij-Qij+eps) # (N, L_stripe, L, 14, 14)
+
+        lddt_ = torch.zeros( (N,i2-i1,Natm), device=P.device )
+        for distbin in (0.5,1.0,2.0,4.0):
+            lddt_ += 0.25 * torch.sum( (delta_PQ<=distbin*bin_scaling)*pair_mask, dim=(2,4)) \
+                     / ( torch.sum( pair_mask, dim=(2,4) ) + eps)
+        lddt_s.append(lddt_)
+        pair_mask_accum += pair_mask.sum(dim=(1,3))
+
+    lddt = torch.cat(lddt_s, dim=1) # (N, L, Natm)
 
     final_lddt_by_res = torch.clamp(
         (lddt[-1]*atm_mask[0]).sum(-1)
@@ -1146,7 +1191,38 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
     #lddt = (res_mask*lddt).sum() / (res_mask.sum() + 1e-8)
 
     # method 2: average per-atom
-    atm_mask = atm_mask * (pair_mask.sum(dim=(1,3)) != 0)
+    atm_mask = atm_mask * (pair_mask_accum != 0)
     lddt = (lddt * atm_mask).sum(dim=(1,2)) / (atm_mask.sum() + eps)
 
     return lddt_loss, lddt
+
+
+def compute_binder_nonbinder_metrics(
+    loss_df: pd.DataFrame,
+    binder_nonbinder_tasks: List[str] = ["sm_compl", "sm_compl_permuted_neg", "sm_compl_furthest_neg", "sm_compl_docked_neg", "dude_actives", "dude_inactives"]
+) -> Dict[str, float]:
+    """compute_binder_nonbinder_metrics 
+    Computes binary classification metrics for the binder/non-binder prediction task.
+
+    Args:
+        loss_df (pd.DataFrame): The dataframe of records from valid_pdb_cycle.
+        binder_nonbinder_tasks (List[str], optional): Which tasks to evaluate the prediction on. 
+        Defaults to ["sm_compl", "sm_compl_permuted_neg", "sm_compl_furthest_neg", "sm_compl_docked_neg"].
+
+    Returns:
+        Dict[str, float]: A dictionary of metrics
+    """
+    binder_nonbinder_df = loss_df[loss_df["task"].isin(binder_nonbinder_tasks)]
+    true_binder_labels = binder_nonbinder_df["is_binder_label"].to_numpy()
+    binding_probabilities = binder_nonbinder_df["binding_probability"].to_numpy()
+    binding_predictions = (binding_probabilities > 0.5).astype(int)
+
+    binding_auc = roc_auc_score(true_binder_labels, binding_probabilities)
+    binding_f1 = f1_score(true_binder_labels, binding_predictions)
+    binding_accuracy = accuracy_score(true_binder_labels, binding_predictions)
+    binding_metrics_dictionary = {
+        "binding_auc": binding_auc,
+        "binding_f1": binding_f1,
+        "binding_accuracy": binding_accuracy
+    }
+    return binding_metrics_dictionary

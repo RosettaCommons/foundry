@@ -55,7 +55,7 @@ def get_prot_sm_mask(atom_mask, seq):
     mask = mask_prot | mask_ca_sm # valid positions
     return mask
 
-def center_and_realign_missing(xyz, mask_t, seq=None, same_chain=None):
+def center_and_realign_missing(xyz, mask_t, seq=None, same_chain=None, should_center: bool = True):
     """
     Moves center of mass of xyz to origin, then moves positions with missing
     coordinates to nearest existing residue on same chain.
@@ -84,8 +84,9 @@ def center_and_realign_missing(xyz, mask_t, seq=None, same_chain=None):
         mask = get_prot_sm_mask(mask_t, seq)
 
     # center c.o.m of existing residues at the origin
-    center_CA = xyz[mask,1].mean(dim=0) # (3)
-    xyz = torch.where(mask.view(L,1,1), xyz - center_CA.view(1, 1, 3), xyz)
+    if should_center:
+        center_CA = xyz[mask,1].mean(dim=0) # (3)
+        xyz = torch.where(mask.view(L,1,1), xyz - center_CA.view(1, 1, 3), xyz)
 
     # move missing residues to the closest valid residues on same chain
     exist_in_xyz = torch.where(mask)[0] # (L_sub)

@@ -4,12 +4,9 @@ import pandas as pd
 import torch
 from collections import Counter
 
-sys.path.insert(0,'/home/jue/git/chemnet/arch.22-10-28/')
-sys.path.insert(0,'/home/jue/git/chemnet/arch.22-10-28/pdb/')
-import cifutils
-
-sys.path.insert(0,'/home/jue/git/rf2a-fd3/')
-sys.path.insert(0,'/home/jue/git/rf2a-fd3/rf2aa/')
+script_dir = os.path.dirname(os.path.abspath(__file__)) 
+sys.path.insert(0,script_dir+'/../')
+sys.path.insert(0,script_dir+'/../rf2aa/')
 import rf2aa.chemical as chemical
 from rf2aa.chemical import aa2num, aa2long, NTOTAL, NHEAVY
 
@@ -73,6 +70,8 @@ def get_ligands(chains, covale):
         List of lists of 3-tuples (chain id, res num, lig name), representing
         all the covalently bonded sets of ligand residues that make up each full
         small molecule ligand in this PDB entry.
+    lig_covale : list
+        Covalent bonds from protein to any residue in each ligand in `ligands`
     """
     # collect all ligand residues and potential inter-ligand bonds
     lig_res_s = list(set([x[:3] for ch in chains.values() if ch.type=='nonpoly'
@@ -92,6 +91,7 @@ def get_ligands(chains, covale):
 
     # make list of bonded ligands (lists of ligand residues)
     ligands = []
+    lig_covale = []
     while len(lig_res_s)>0:
         res = lig_res_s[0]
         lig = get_bonded_partners(res, bonds)
@@ -99,8 +99,10 @@ def get_ligands(chains, covale):
         lig = sorted(list(lig))
         lig_res_s = [res for res in lig_res_s if res not in lig]
         ligands.append(lig)
+        lig_covale.append([(bond.a, bond.b) for bond in prot_lig_bonds
+                           if any([bond.a[:3]==res or bond.b[:3]==res for res in lig])])
 
-    return ligands
+    return ligands, lig_covale
 
 def chain_to_xyz(ch, residue_set=None):
     """Featurizes a cifutils.Chain into a torch.Tensor of atom coordinates
@@ -194,7 +196,7 @@ def chain_to_xyz(ch, residue_set=None):
     return xyz, mask, seq, chid, resi, unrec_elements
 
 
-def get_ligand_xyz(asmb_chains, asmb_xforms, ligand, seed_ixf=None):
+def get_ligand_xyz(chains, asmb_xforms, ligand, seed_ixf=None):
     """Featurizes atom coordinates of a (potentially multi-residue) ligand.
     Used only for geometric comparisons such as neighbor detection. Does not
     process chemical features such as bond graphs that are needed for actual
@@ -212,9 +214,8 @@ def get_ligand_xyz(asmb_chains, asmb_xforms, ligand, seed_ixf=None):
 
     Parameters
     ----------
-    asmb_chains : list
-        List of cifutils.Chain objects representing the chains belonging to a
-        particular assembly.
+    chains : dict[str, cifutils.Chain]
+        Chains in this PDB entry
     asmb_xforms : list
         List of tuples (chain letter, transform matrix) representing coordinate
         transforms for all the chains in this assembly.
@@ -225,17 +226,23 @@ def get_ligand_xyz(asmb_chains, asmb_xforms, ligand, seed_ixf=None):
         Index in `asmb_xforms` of the coordinate transform to apply to the 1st
         ligand residue.
     """
+    assert(seed_ixf is None or asmb_xforms[seed_ixf][0] == ligand[0][0]), \
+        'ERROR: Seed transform index is not consistent with provided ligand'
+
     asmb_xform_chids = [x[0] for x in asmb_xforms]
-    ligand_chids = set([x[0] for x in ligand])
+
+    ligand_chids = []
+    for x in ligand:
+        if x[0] not in ligand_chids:
+            ligand_chids.append(x[0])
 
     lig_xyz = torch.tensor([]).float()
     lig_mask = torch.tensor([]).bool()
     lig_seq = torch.tensor([]).long()
     lig_chid, lig_resi, lig_i_ch_xf = [], [], []
 
-    for ch in asmb_chains:
-        if ch.id not in ligand_chids:
-            continue
+    for i_ch_lig in ligand_chids:
+        ch = chains[i_ch_lig]
 
         xyz, mask, seq, chid, resi, unrec_elements = chain_to_xyz(ch, residue_set=ligand)
         if not mask[:,1].any():
@@ -245,13 +252,12 @@ def get_ligand_xyz(asmb_chains, asmb_xforms, ligand, seed_ixf=None):
         #           'unrecognized elements', unrec_elements)
 
         if len(lig_xyz) == 0:
-            if seed_ixf is None:# use 1st xform for the 1st chain to be loaded
-                i_xf_chosen = asmb_xform_chids.index(ch.id)
-            else:
+            if seed_ixf is not None and i_ch_lig==ligand_chids[0]: 
+                # use provided seed transform for 1st ligand residue
                 i_xf_chosen = seed_ixf
-                if asmb_xforms[seed_ixf][0] != ligand[0][0]:
-                    print('ERROR: Seed transform index is not consistent with provided ligand')
-                    return
+            else:
+                # use 1st transform that exists for this ligand residue's chain
+                i_xf_chosen = asmb_xform_chids.index(ch.id)
         else: # use xform w/ the single closest contact (i.e. bond) to built-up ligand so far
             min_dist = []
             for i_xf, i_ch in enumerate(asmb_xform_chids):
@@ -335,7 +341,7 @@ def get_contacting_chains(asmb_chains, asmb_xforms, lig_xyz_xf, lig_i_ch_xf):
     # sort by more to fewer contacts, then lower to higher min distance
     return sorted(contacts, key=lambda x: (x[2], -x[3]), reverse=True)
 
-def get_contacting_ligands(ligands, asmb_chains, asmb_xforms, qlig, qlig_xyz, qlig_chxf):
+def get_contacting_ligands(ligands, chains, asmb_xforms, qlig, qlig_xyz, qlig_chxf):
     """Gets partner ligands in contact with query ligand.
 
     Contacts are defined as any heavy atom within 5A or all heavy atoms of
@@ -347,9 +353,8 @@ def get_contacting_ligands(ligands, asmb_chains, asmb_xforms, qlig, qlig_xyz, ql
         List of lists of 3-tuples (chain id, res num, lig name), representing
         all the covalently bonded sets of ligand residues that make up each full
         small molecule ligand to be assessed for contacts to query ligand.
-    asmb_chains : list
-        List of cifutils.Chain objects representing the chains belonging to a
-        particular assembly.
+    chains : dict[str, cifutils.Chain]
+        Chains in this PDB entry
     asmb_xforms : list
         List of tuples (chain letter, transform matrix) representing coordinate
         transforms for all the chains in this assembly.
@@ -384,9 +389,14 @@ def get_contacting_ligands(ligands, asmb_chains, asmb_xforms, qlig, qlig_xyz, ql
         # try to construct it using each transform
         asmb_xform_chids = [x[0] for x in asmb_xforms]
         seed_ixf_s = [i for i,chlet in enumerate(asmb_xform_chids) if chlet==lig[0][0]]
+
+        # edge case: `covale` implies multiresidue ligand but the residues aren't in same assembly
+        if not set([res[0] for res in lig]).issubset(asmb_xform_chids):
+            continue
+
         for seed_ixf in seed_ixf_s:
             lig_xyz, lig_mask, lig_seq, lig_chid, lig_resi, lig_chxf = \
-                get_ligand_xyz(asmb_chains, asmb_xforms, lig, seed_ixf)
+                get_ligand_xyz(chains, asmb_xforms, lig, seed_ixf)
 
             # don't include query ligand in its original location among partners
             if lig == qlig and lig_chxf == qlig_chxf:
@@ -405,6 +415,9 @@ def get_contacting_ligands(ligands, asmb_chains, asmb_xforms, qlig, qlig_xyz, ql
 
             num_contacts = (dist<5).sum()
             mindist_to_partner, _ = dist.min(dim=0) # (N_atoms_partner,)
+
+            # filter out partner ligand residues that weren't loaded (all atoms have 0 occupancy)
+            lig = [res for res in lig if res[0] in [x[0] for x in lig_chxf]]
 
             if (num_contacts > 0) or (mindist_to_partner<30).all():
                 contacts.append((lig, lig_chxf, int(num_contacts), float(dist.min()), 'nonpoly'))

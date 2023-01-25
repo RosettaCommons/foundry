@@ -929,8 +929,9 @@ class IterativeSimulator(nn.Module):
                 extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
 
             xyz, state, alpha = self.str_refiner(
-                    msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats, atom_frames, is_motif,
-                extra_l0, extra_l1, top_k=128, use_atom_frames=use_atom_frames)
+                msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats, atom_frames, 
+                is_motif, extra_l0, extra_l1, top_k=128, use_atom_frames=use_atom_frames
+            )
 
             xyz_s.append(xyz)
             alpha_s.append(alpha)
