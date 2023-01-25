@@ -1088,9 +1088,12 @@ def calc_allatom_lddt(P, Q, idx, atm_mask, eps=1e-6):
 
 
 def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, negative=False, interface=False, bin_scaling=1, eps=1e-6):
-    # P - N x L x 27 x 3
-    # Q - L x 27 x 3
+    # P - N x L x natoms x 3
+    # Q - L x natoms x 3
     # pred_lddt - 1 x nbucket x L
+    # idx - 1 x L
+    # 
+
     N, L, Natm = P.shape[:3]
 
     # distance matrix
@@ -1110,8 +1113,11 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
         # ignore atoms between different chains
         pair_mask *= same_chain.bool()[:,:,:,None,None]
     elif interface:
-            # ignore atoms between the same chain
-            pair_mask *= ~same_chain.bool()[:,:,:,None,None]
+        # ignore atoms between the same chain
+        pair_mask *= ~same_chain.bool()[:,:,:,None,None]
+
+    pair_mask *= mask_2d.bool()[..., None, None]
+    
     delta_PQ = torch.abs(Pij-Qij+eps) # (N, L, L, 14, 14)
 
     lddt = torch.zeros( (N,L,Natm), device=P.device ) # (N, L, 27)

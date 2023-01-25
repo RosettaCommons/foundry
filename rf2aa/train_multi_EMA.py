@@ -50,14 +50,13 @@ DEBUG=False
 import random
 random.seed(0)
 torch.manual_seed(5924)
-#np.random.seed(6636)
-np.random.seed(6524)
+np.random.seed(6636)
 
 USE_AMP = False
 torch.set_num_threads(4)
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 0,
+              'num_workers': 5,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -482,8 +481,9 @@ class Trainer():
             print('calc_crd_rmsd failed on ',item)
             rmsd = torch.tensor([0])
             loss_dict['rmsd'] = torch.tensor([0])
+        
         # create protein and not protein masks; not protein could include nucleic acids
-        prot_mask_BB = is_protein(label_aa_s[0,0])*mask_BB[0] # (L,)
+        prot_mask_BB = is_protein(label_aa_s[0,0]) #*mask_BB[0] # (L,)
         not_prot_mask_BB  = ~prot_mask_BB.bool()
         xs_mask_prot, xs_mask_lig = xs_mask.clone(), xs_mask.clone()
         xs_mask_prot[:,~prot_mask_BB] = False
@@ -555,32 +555,32 @@ class Trainer():
         if w_rigid >= 0.0:
             tot_loss += w_rigid*rigid_loss
         loss_dict['rigid_loss'] = ( rigid_loss.detach() )
-        L0 = same_chain[0,0,:].sum()
         chain_prot = same_chain.clone()
-        chain_prot[:,~prot_mask_BB][:, :, ~prot_mask_BB] = False
+        protein_mask_2d = torch.einsum('l,r-> lr', prot_mask_BB, prot_mask_BB)
+
         _, allatom_lddt_prot_intra = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain_prot, negative=True)
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, protein_mask_2d, chain_prot, negative=True)
         loss_dict['allatom_lddt_prot_intra'] = allatom_lddt_prot_intra[0].detach()
-        
+
         _, allatom_lddt_prot_inter = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain_prot, interface=True)
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, protein_mask_2d, chain_prot, interface=True)
         loss_dict['allatom_lddt_prot_inter'] = allatom_lddt_prot_inter[0].detach()
         
         chain_lig = same_chain.clone()
-        chain_lig[:,~not_prot_mask_BB][:, :, ~not_prot_mask_BB] = False
+        not_protein_mask_2d = torch.einsum('l,r-> lr', not_prot_mask_BB, not_prot_mask_BB)
         _, allatom_lddt_lig_intra = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain_lig, negative=True, bin_scaling=0.5)
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, not_protein_mask_2d, chain_lig, negative=True, bin_scaling=0.5)
         loss_dict['allatom_lddt_lig_intra'] = allatom_lddt_lig_intra[0].detach()
         
         _, allatom_lddt_lig_inter = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain_lig, interface=True, bin_scaling=0.5)
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, not_protein_mask_2d, chain_lig, interface=True, bin_scaling=0.5)
         loss_dict['allatom_lddt_lig_inter'] = allatom_lddt_lig_inter[0].detach()
 
         chain_prot_lig_inter = torch.zeros_like(same_chain, dtype=bool)
-        chain_prot_lig_inter[:,prot_mask_BB][:, :, prot_mask_BB] = True
-        chain_prot_lig_inter[:,not_prot_mask_BB][:, :, not_prot_mask_BB] = True
+        chain_prot_lig_inter += protein_mask_2d
+        chain_prot_lig_inter += not_protein_mask_2d
         _, allatom_lddt_inter = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, interface=True)
+            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain_prot_lig_inter, interface=True)
         loss_dict['allatom_lddt_prot_lig_inter'] = allatom_lddt_inter[0].detach()
         # hbond [use all atoms not just those in native]
         #hb_loss = calc_hb(
@@ -843,7 +843,7 @@ class Trainer():
         torch.cuda.set_device("cuda:%d"%gpu)
 
         # define dataset & data loader
-        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2L, chid2taxid = \
+        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid = \
             get_train_valid_set(self.loader_param)
 
         # define atomize_pdb train/valid sets, which use the same examples as pdb set
@@ -894,16 +894,16 @@ class Trainer():
             na_compl = loader_na_complex,
             fb = loader_fb,
             rna = loader_rna,
-            sm_compl = loader_sm_compl,
-            metal_compl = loader_sm_compl,
-            sm_compl_multi = loader_sm_compl,
+            sm_compl = loader_sm_compl_assembly,
+            metal_compl = loader_sm_compl_assembly,
+            sm_compl_multi = loader_sm_compl_assembly,
             sm_compl_covale = loader_sm_compl_covale,
             sm = loader_sm,
             atomize_pdb = loader_atomize_pdb,
             sm_compl_asmb = loader_sm_compl_assembly,
         )
 
-        train_set = DistilledDataset(train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2L, chid2taxid,
+        train_set = DistilledDataset(train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid,
                                      self.loader_param, native_NA_frac=0.25)
 
         train_sampler = DistributedWeightedSampler(
@@ -949,30 +949,38 @@ class Trainer():
                 loader_rna, valid_dict['rna'],
                 self.loader_param
             ),
-            sm_compl = DatasetSMComplex(
+            sm_compl = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl'][:self.dataset_param['n_valid_sm_compl']],
-                loader_sm_compl, valid_dict['sm_compl'],
+                loader_sm_compl_assembly, valid_dict['sm_compl'],
+                chid2hash, chid2taxid, # used for MSA generation of assemblies
                 self.loader_param,
+                task="sm_compl"
             ),
-            metal_compl = DatasetSMComplex(
+            metal_compl = DatasetSMComplexAssembly(
                 valid_ID_dict['metal_compl'][:self.dataset_param['n_valid_metal_compl']],
-                loader_sm_compl, valid_dict['metal_compl'],
-                self.loader_param, task='metal_compl'
+                loader_sm_compl_assembly, valid_dict['metal_compl'],
+                chid2hash, chid2taxid, # used for MSA generation of assemblies
+                self.loader_param,
+                task='metal_compl'
             ),
-            sm_compl_multi = DatasetSMComplex(
+            sm_compl_multi = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl_multi'][:self.dataset_param['n_valid_sm_compl_multi']],
-                loader_sm_compl, valid_dict['sm_compl_multi'],
-                self.loader_param, task='sm_compl_multi'
+                loader_sm_compl_assembly, valid_dict['sm_compl_multi'],
+                chid2hash, chid2taxid, # used for MSA generation of assemblies
+                self.loader_param, 
+                task='sm_compl_multi'
             ),
             sm_compl_covale = DatasetSMComplex(
                 valid_ID_dict['sm_compl_covale'][:self.dataset_param['n_valid_sm_compl_covale']],
                 loader_sm_compl_covale, valid_dict['sm_compl_covale'],
                 self.loader_param, task='sm_compl_covale'
             ),
-            sm_compl_strict = DatasetSMComplex(
+            sm_compl_strict = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
-                loader_sm_compl, valid_dict['sm_compl_strict'],
-                self.loader_param, task='sm_compl_strict'
+                loader_sm_compl_assembly, valid_dict['sm_compl_strict'],
+                chid2hash, chid2taxid, # used for MSA generation of assemblies
+                self.loader_param,
+                task='sm_compl_strict'
             ),
             sm = DatasetSM(
                 valid_ID_dict['sm'][:self.dataset_param['n_valid_sm']],
@@ -987,7 +995,7 @@ class Trainer():
             sm_compl_asmb = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl_asmb'][:self.dataset_param['n_valid_sm_compl_asmb']],
                 loader_sm_compl_assembly, valid_dict['sm_compl_asmb'],
-                chid2hash, chid2L, chid2taxid, # used for MSA generation of assemblies
+                chid2hash, chid2taxid, # used for MSA generation of assemblies
                 self.loader_param,
             )
         )
