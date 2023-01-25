@@ -10,10 +10,12 @@ from assertpy import assert_that
 import scipy.sparse
 import networkx as nx
 from itertools import combinations
+from collections import OrderedDict
 from openbabel import openbabel
 from scipy.spatial.transform import Rotation
 from icecream import ic
 
+import rf2aa.chemical as chemical
 from rf2aa.chemical import *
 from rf2aa.kinematics import get_atomize_protein_chirals
 from rf2aa.scoring import *
@@ -166,12 +168,15 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-4):
     return R, Ca
 
 # note: needs consistency with chemical.py
+def is_protein(seq):
+    return seq < NPROTAAS
+
 def is_nucleic(seq):
     return (seq>=NPROTAAS) * (seq <= NNAPROTAAS)
 
 def is_atom(seq):
     return seq > NNAPROTAAS
-    
+
 def idealize_reference_frame(seq, xyz_in):
     xyz = xyz_in.clone()
 
@@ -306,6 +311,7 @@ def xyz_to_frame_xyz(xyz, seq_unmasked, atom_frames):
     for i in range(atom_L):
         frames_reindex[:, i, :] = (i+atom_frames[..., i, :, 0])*natoms + atom_frames[..., i, :, 1]
     frames_reindex = frames_reindex.long()
+
     xyz_frame[atoms, :, :3] = atom_crds.reshape(atom_L*natoms, 3)[frames_reindex]
     return xyz_frame
 
@@ -372,7 +378,7 @@ def xyz_t_to_frame_xyz_sm_mask(xyz_t, is_sm, atom_frames):
 def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
     B,L,natoms = xyz_in.shape[:3]
     frames = frame_indices[seq]
-    atoms = seq > NNAPROTAAS
+    atoms = is_atom(seq)
     if torch.any(atoms):
         frames[:,atoms[0].nonzero().flatten(), 0] = atom_frames
 
@@ -444,6 +450,20 @@ def superimpose(pred, true, atom_mask):
 def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None,
              bond_feats=None, file_mode="w", atom_mask=None, atom_idx_offset=0, chain_Ls=None):
 
+    # correct mistake in atomic number assignment during encoding of atom types
+    atom_names_ = [
+        "F",  "Cl", "Br", "I",  "O",  "S",  "Se", "Te", "N",  "P",  "As", "Sb",
+        "C",  "Si", "Ge", "Sn", "Pb", "B",  "Al", "Zn", "Hg", "Cu", "Au", "Ni", 
+        "Pd", "Pt", "Co", "Rh", "Ir", "Pr", "Fe", "Ru", "Os", "Mn", "Re", "Cr", 
+        "Mo", "W",  "V",  "U",  "Tb", "Y",  "Be", "Mg", "Ca", "Li", "K",  "ATM"]
+    atom_num = [
+        9,    17,   35,   53,   8,    16,   34,   52,   7,    15,   33,   51,
+        6,    14,   32,   50,   82,   5,    13,   30,   80,   29,   79,   28,
+        46,   78,   27,   45,   77,   59,   26,   44,   76,   25,   75,   24,   
+        42,   74,   23,   92,   65,   39,   4,    12,   20,   3,    19,   0] 
+    atomnum2atomtype_ = dict(zip(atom_num,atom_names_))
+    wrongtype2correcttype = {v:atomnum2atomtype_[k] for k,v in chemical.atomnum2atomtype.items()}
+
     f = open(filename, file_mode)
     ctr = 1+atom_idx_offset
     scpu = seq.cpu().squeeze(0)
@@ -474,7 +494,7 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
             lig_name = "LG1"
             atom_idxs[i] = ctr
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
-                    "HETATM", ctr, num2aa[s], lig_name,
+                    "HETATM", ctr, wrongtype2correcttype[num2aa[s]], lig_name,
                     ch, torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
                     1.0, Bfacts[i] ) )
             ctr += 1
@@ -1265,7 +1285,7 @@ def get_ligand_atoms_bonds(ligand, chains, covale):
 def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
     """Given ligand atoms from a parsed CIF file and coordinate transforms
     specific to a bio-assembly of interest, returns tensors with transformed
-    coordinates and a mask for valid atoms. 
+    coordinates and a mask for valid atoms.
 
     Parameters
     ----------
@@ -1281,38 +1301,39 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
     Returns
     -------
     xyz : torch.Tensor (N_atoms, 3), float
-    mask : torch.Tensor (N_atoms,), bool
+    occ : torch.Tensor (N_atoms,), float
+        These values represent atom position occupancies and can be fractional.
     seq : torch.Tensor (N_atoms,), long
     chid : list (N_atoms,)
         Chain IDs for each ligand atom
     akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
         Atom keys with information about each atom, in the same order as the returned coordinates
-    """ 
+    """
     elnum_to_atom = dict(zip(chemical.atom_num, chemical.frame_priority2atom))
     atoms_no_H = {k:v for k,v in atoms.items() if v.element != 1} # exclude hydrogens
     L = len(atoms_no_H)
     if input_akeys is None:
         input_akeys = atoms_no_H.keys()
-    
+
     xyz = torch.zeros(L, 3)
-    mask = torch.zeros(L,).bool()
+    occ = torch.zeros(L,)
     seq = torch.full((L,), np.nan)
     chid = ['-']*L
     akeys = [None]*L
-    
+
     # create coords, atom mask, and seq tokens
     for i,k in enumerate(input_akeys):
         v = atoms_no_H[k]
         xyz[i, :] = torch.tensor(v.xyz)
-        mask[i] = v.occ
-        if v.element not in elnum_to_atom:
+        occ[i] = v.occ # can contain fractionally occupied atom positions
+        if v.element not in chemical.atomnum2atomtype:
             print('Element not in alphabet:',v.element)
             seq[i] = chemical.aa2num['ATM']
         else:
-            seq[i] = chemical.aa2num[elnum_to_atom[v.element]]
+            seq[i] = chemical.aa2num[chemical.atomnum2atomtype[v.element]]
         akeys[i] = k
         chid[i] = k[0]
-        
+
     # apply transforms
     chid = np.array(chid)
     for i_ch in np.unique(chid):
@@ -1321,8 +1342,8 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
         xf = torch.tensor(asmb_xfs[ch2xf[i_ch]][1]).float()
         u,r = xf[:3,:3], xf[:3,3]
         xyz[idx] = torch.einsum('ij,aj->ai', u, xyz[idx]) + r[None,None]
-     
-    return xyz, mask, seq, chid, akeys
+
+    return xyz, occ, seq, chid, akeys
 
 def remove_unresolved_substructures(akeys, lig_bonds, mask_sm):
     """
@@ -1492,6 +1513,99 @@ def Ls_from_same_chain_2d(same_chain):
     i_curr = 0
     while i_curr < len(same_chain):
         idx = torch.where(same_chain[i_curr])[0]
-        Ls.append(idx[-1]-idx[0]+1)
+        Ls.append(int(idx[-1]-idx[0]+1))
         i_curr = idx[-1]+1
     return Ls
+
+def get_prot_seqstring(ch, modres):
+    """Return string representing amino acid sequence of a parsed CIF chain."""
+    idx = [int(k[1]) for k in ch.atoms]
+    i_min, i_max = np.min(idx), np.max(idx)
+    L = i_max - i_min + 1
+    seq = [20]*L
+
+    for k,v in ch.atoms.items():
+        i_res = int(k[1])-i_min
+        if k[2] in to1letter: # standard AA
+            aa = to1letter[k[2]]
+        elif k[2] in modres and modres[k[2]] in to1letter: # nonstandard AA, map to standard
+            aa = to1letter[modres[k[2]]]
+        else: # unknown AA, still try to store BB atoms
+            aa = 'X'
+        seq[i_res] = aa
+    return ''.join(seq)
+
+def map_identical_prot_chains(partners, chains, modres):
+    """Identifies which chain letters represent unique protein sequences,
+    assigns a number to each unique sequence, and returns dicts mapping sequence
+    numbers to chain letters and vice versa.
+    
+    Parameters
+    ----------
+    partners : list of tuples (partner, transform_index, num_contacts, partner_type)
+        Information about neighboring chains to the query ligand in an
+        assembly. This function will use the subset of these tuples that
+        represent protein chains, where `partner_type = 'polypeptide(L)'`
+        and `partner` contains the chain letter. `transform_index` is an
+        integer index of the coordinate transform for each partner chain.
+    chains : dict
+        Dictionary mapping chain letters to cifutils.Chain objects representing
+        the chains in a PDB entry.
+    modres : dict
+        Maps modified residue names to their canonical equivalents. Any
+        modified residue will be converted to its standard equivalent and
+        coordinates for atoms with matching names will be saved.
+
+    Returns
+    -------
+    chnum2chlet : dict
+        Dictionary mapping integers to lists of chain letters which represent
+        identical chains
+    chlet2chnum : dict
+        Dictionary mapping chain letters to integers, the inverse of
+        `chlet2chnum`
+    """
+    chlet2seq = OrderedDict()
+    for p in partners:
+        if p[-1] != 'polypeptide(L)': continue
+        if p[0] not in chlet2seq:
+            chlet2seq[p[0]] = get_prot_seqstring(chains[p[0]], modres)
+
+    seq2chlet = OrderedDict()
+    for chlet, seq in chlet2seq.items():
+        if seq not in seq2chlet:
+            seq2chlet[seq] = set()
+        seq2chlet[seq].add(chlet)
+
+    chnum2chlet = OrderedDict([(i,v) for i,(k,v) in enumerate(seq2chlet.items())])
+    chlet2chnum = OrderedDict([(chlet,chnum) for chnum,chlet_s in chnum2chlet.items() for chlet in chlet_s])
+
+    return chnum2chlet, chlet2chnum
+
+def cartprodcat(X_s):
+    """Concatenate list of tensors on dimension 1 while taking their cartesian product
+    over dimension 0."""
+    X = X_s[0]
+    for X_ in X_s[1:]:
+        N, L = X.shape[:2]
+        N_, L_ = X_.shape[:2]
+        X_out = torch.full((N, N_, L+L_,)+X.shape[2:], np.nan)
+        for i in range(N):
+            for j in range(N_):
+                X_out[i,j] = torch.concat([X[i], X_[j]], dim=0)
+        dims = (N*N_,L+L_,)+X.shape[2:]
+        X = X_out.view(*dims)
+    return X
+
+def idx_from_Ls(Ls):
+    """Generate residue indexes from a list of chain lengths, 
+    with a chain gap offset between indexes for each chain."""
+    idx = []
+    offset = 0
+    for L in Ls:
+        idx.append(torch.arange(L)+offset)
+        offset = offset+L+CHAIN_GAP
+    return torch.cat(idx, dim=0)
+
+
+

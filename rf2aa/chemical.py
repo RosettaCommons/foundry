@@ -39,6 +39,23 @@ def seq2chars(seq):
     out = ''.join([aa_321[num2aa[a]] for a in seq])
     return out
 
+frame_priority2atom = [
+    "F",  "Cl", "Br", "I",  "O",  "S",  "Se", "Te", "N",  "P",  "As", "Sb", 
+    "C",  "Si", "Sn", "Pb", "B",  "Al", "Zn", "Hg", "Cu", "Au", "Ni", "Pd", 
+    "Pt", "Co", "Rh", "Ir", "Pr", "Fe", "Ru", "Os", "Mn", "Re", "Cr", "Mo", 
+    "W",  "V",  "U",  "Tb", "Y",  "Be", "Mg", "Ca", "Li", "K",  "ATM"]
+
+# these atomic numbers are incorrect, but keeping for fold&dock3 and correcting it 
+# in util.writepdb() during output.
+atom_num= [
+    9,    17,   35,   53,   8,    16,   34,   52,   7,    15,   33,   51, 
+    6,    14,   32,   50,   82,   5,    13,   30,   80,   29,   79,   28, 
+    46,   78,   27,   45,   77,   26,   44,   76,   25,   75,   24,   42, 
+    23,   74,   92,   65,   39,   4,    12,   20,   3,    19,   0] # in same order as frame priority
+
+atom2frame_priority = {x:i for i,x in enumerate(frame_priority2atom)}
+atomnum2atomtype = dict(zip(atom_num, frame_priority2atom))
+
 NAATOKENS = 20+2+10+1+47 # 20 AAs, UNK, MASK, 8 NAs,HIS_D, 47 atoms
 UNKINDEX = 20  # residue unknown
 MASKINDEX = 21  # protein mask
@@ -62,6 +79,16 @@ NTOTALDOFS = NTOTALTORS+NPROTANGS
 num2btype = [0,1,2,3,4,5,6,7] # UNK, SINGLE, DOUBLE, TRIPLE, AROMATIC, PEPTIDE, PROTEIN-LIGAND (PEPTIDE), PROTEIN-LIGAND (OTHER)
 
 NBTYPES = len(num2btype)
+
+to1letter = {
+    "ALA":'A', "ARG":'R', "ASN":'N', "ASP":'D', "CYS":'C',
+    "GLN":'Q', "GLU":'E', "GLY":'G', "HIS":'H', "ILE":'I',
+    "LEU":'L', "LYS":'K', "MET":'M', "PHE":'F', "PRO":'P',
+    "SER":'S', "THR":'T', "TRP":'W', "TYR":'Y', "VAL":'V',
+    "DA":'a', "DC":'c', "DG":'g', "DT":'t',
+    "A":'b', "C":'d', "G":'h', "U":'u',
+}
+
 # full sc atom representation
 aa2long=[
     (" N  "," CA "," C  "," O  "," CB ",  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None,  None," H  "," HA ","1HB ","2HB ","3HB ",  None,  None,  None,  None,  None,  None,  None,  None), #0  ala
@@ -1191,13 +1218,5 @@ ideal_coords = [
         [" H3'",12, ( 0.3215, -0.4857, -0.7888)],
     ],
 ]
-
-frame_priority2atom = ["F", "Cl", "Br", "I", "O", "S", "Se", "Te", "N", "P", "As", "Sb", "C", "Si", "Sn", "Pb", "B", "Al",
-                         "Zn", "Hg", "Cu", "Au", "Ni", "Pd", "Pt", "Co", "Rh", "Ir", "Pr", "Fe", "Ru", "Os", "Mn", "Re", "Cr", "Mo", "W", "V", "U", "Tb", "Y", "Be", "Mg", "Ca", "Li", "K", "ATM"]
-atom2frame_priority = {x:i for i,x in enumerate(frame_priority2atom)}
-
-atom_num= [9, 17, 35, 53, 8, 16, 34, 52, 7, 15, 33, 51, 6, 14, 32, 50, 82, 5, 13,30, 80, 29, 79, 28, 46,78,27,45, 77,26,
-                        44,76,25,75,24, 42, 23, 74,92, 65, 39, 4, 12, 20, 3, 19, 0] # in same order as frame priority
-atomnum2atomtype = dict(zip(atom_num, frame_priority2atom))
 
 atomized_protein_frames = torch.load(script_dir+"atomized_protein_frames.pt")

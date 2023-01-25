@@ -4,15 +4,22 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils import data
-import parsers
+
+script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(script_dir)
+
+import rf2aa.parsers as parsers
 from rf2aa.RoseTTAFoldModel  import RoseTTAFoldModule
-import util
-from collections import namedtuple
+import rf2aa.util as util
+from rf2aa.util import *
+from rf2aa.loss import *
+from collections import namedtuple, OrderedDict
 from rf2aa.ffindex import *
 from rf2aa.data_loader import MSAFeaturize, MSABlockDeletion, merge_a3m_homo, merge_a3m_hetero
 from rf2aa.kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, get_chirals
 from rf2aa.util_module import ComputeAllAtomCoords
 from rf2aa.chemical import NTOTAL, NTOTALDOFS, NAATOKENS, INIT_CRDS
+from rf2aa.parsers import read_templates
 from rf2aa.memory import mem_report
 from scipy.interpolate import Akima1DInterpolator
 
@@ -109,7 +116,7 @@ def lddt_unbin(pred_lddt):
 
 
 def get_msa(a3mfilename):                                                                       
-    msa,ins = parsers.parse_a3m(a3mfilename, unzip='.gz' in a3mfilename)
+    msa,ins, _ = parsers.parse_a3m(a3mfilename, unzip='.gz' in a3mfilename)
     return {'msa':torch.tensor(msa), 'ins':torch.tensor(ins)}
 
 
@@ -930,7 +937,7 @@ if __name__ == "__main__":
     pred = Predictor(args)
 
     if args.out is None:
-        if args.fasta is not None: in_name = args.fasta
+        if args.msa is not None: in_name = args.msa
         elif args.pdb is not None: in_name = args.pdb
         args.out = '.'.join(os.path.basename(in_name).split('.')[:-1])+'_pred'
 

@@ -103,6 +103,126 @@ def resolve_equiv_natives(xs, natstack, maskstack):
     delta = torch.sum( torch.abs(dnat-dx), dim=(-2,-1))
     return natstack[:,torch.argmin(delta),...], maskstack[:,torch.argmin(delta),...]
 
+def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_sm):
+    """Resolves multiple chain and atom permutations of a protein-ligand
+    assembly to a single set of true coordinates with the lowest C-alpha
+    distance error to predicted coordinates. Protein chains are assigned to the
+    chain permutation with the lowest distance error. Ligand chains are
+    assigned using a greedy search to minimize the distance error within that
+    ligand chain and between it and the already-assigned protein chains.
+
+    Parameters
+    ----------
+    xyz_pred : tensor (B, L, N_atoms, 3)
+        Predicted coordinates for all chains, where the total number of
+        residues is L = sum(Ls_prot)+sum(Ls_sm)
+    xyz_true : tensor (B, N_perm, L, N_atoms, 3)
+        True coordinates, with chain and atom permutations in dimension 1. For
+        protein chains, all chain permutations are enumerated. For ligand
+        chains, only atom permutations within each chain are enumerated. Ligand
+        chain swaps will be handled by a greedy search below.
+    mask : tensor (B, N_perm, L, N_atoms)
+        Boolean mask for whether atoms exist in `xyz_true`. Some ligand chains
+        have fewer sets of atom permutations than `N_perm`. This is indicated
+        by all False values in the relevant entries in `mask`.
+    ch_label : tensor (B, L)
+        Integer labels for each unique chain, assigned to each residue. Used to
+        determine which ligand chains are equivalent and can be considered for
+        alternate ligand chain assignments.
+    Ls_prot : list
+        Lengths of protein chains
+    Ls_sm : list
+        Lengths of ligand chains. All ligand chains come after all protein chains
+
+    Returns
+    -------
+    xyz_out : tensor (B, L, N_atoms, 3)
+        Best true coordinates for the prediction.
+    mask_out : tensor (B, L, N_atoms)
+        Corresponding atom mask for best true coordinates.
+    """
+    if (len(xyz_true.shape)==4):
+        return xyz_true, mask
+    if (xyz_true.shape[1]==1):
+        return xyz_true[:,0,...], mask[:,0,...]
+
+    # choose true protein chain permutation with lowest distance error to prediction
+    dx_pred = torch.norm(xyz_pred[:,None,:sum(Ls_prot),None,1,:]-xyz_pred[:,None,None,:sum(Ls_prot),1,:], dim=-1)
+    dx_true = torch.norm(xyz_true[:,:,:sum(Ls_prot),None,1,:]-xyz_true[:,:,None,:sum(Ls_prot),1,:], dim=-1)
+    ddx = torch.sum( torch.abs(dx_true-dx_pred), dim=(-2,-1))
+
+    i_perm_min = ddx.argmin()
+    xyz_out = xyz_true[:,i_perm_min,:sum(Ls_prot)]
+    mask_out = mask[:,i_perm_min,:sum(Ls_prot)]
+
+    # make list of tensors representing possible placements of each ligand chain
+    xtrue_smch = []
+    xpred_smch = []
+    mask_smch = []
+    chain_labels = []
+    i_res = sum(Ls_prot)
+    for L in Ls_sm:
+        x = xyz_true[:,:,i_res:i_res+L] # (B, N_perm_i, L_i, N_atoms, 3)
+        xp = xyz_pred[:,i_res:i_res+L] # (B, L_i, N_atoms, 3)
+        m = mask[:,:,i_res:i_res+L] # (B, N_perm_i, L_i, N_atoms)
+
+        # remove unoccupied permutation variants but keep dimension
+        B, N, L, A, Y = x.shape
+        valid_permutations = m.any(dim=-1).any(dim=-1)
+        x = x[valid_permutations].view(B,-1,L,A,Y)
+        m = m[valid_permutations].view(B,-1,L,A)
+
+        xtrue_smch.append(x)
+        xpred_smch.append(xp)
+        mask_smch.append(m)
+        chain_labels.append(ch_label[0,i_res]) # assumes batch = 1
+        i_res += L
+
+    # greedily assign ligand chains by lowest C-a distance error to protein chains
+    xpred_protca = xyz_pred[:,:sum(Ls_prot),1]
+    xtrue_protca = xyz_out[:,:,1]
+
+    while len(chain_labels)>0:
+        # find all possible placements of 1st unassigned chain,
+        # i.e. indices of all its possible coordinate tensors
+        query_chain = chain_labels[0]
+        idx = torch.where(torch.stack(chain_labels)==query_chain)[0]
+
+        # compute distance error (prot/lig & lig/lig) for all possible placements of this chain
+        i_perm_min_s = []
+        ddx_min_s = []
+        for i in idx:
+            xtrue_smca = xtrue_smch[i][:,:,:,1]
+            dx_true = torch.cat([
+                torch.cdist(xtrue_protca, xtrue_smca, compute_mode='donot_use_mm_for_euclid_dist'),
+                torch.cdist(xtrue_smca, xtrue_smca, compute_mode='donot_use_mm_for_euclid_dist')
+            ], dim=2) # (B, N_perm, L_prot+L_sm_ch, L_sm_ch)
+
+            xpred_smca = xpred_smch[i][:,:,:,1]
+            dx_pred = torch.cat([
+                torch.cdist(xpred_protca, xpred_smca, compute_mode='donot_use_mm_for_euclid_dist'),
+                torch.cdist(xpred_smca, xpred_smca, compute_mode='donot_use_mm_for_euclid_dist')
+            ], dim=1) # (B, L_prot+L_sm_ch, L_sm_ch)
+
+            ddx = torch.sum(torch.abs(dx_true-dx_pred), dim=(-2,-1)) # (B, N_perm)
+            i_perm_min_s.append(ddx.argmin())
+            ddx_min_s.append(ddx.min())
+
+        i_ch_min = torch.stack(ddx_min_s).argmin() # index of best chain placement
+        i_perm_min = i_perm_min_s[i_ch_min] # index of best atom permutation at best chain placement
+
+        # add best chain assignment to output tensors
+        xyz_out = torch.cat([xyz_out, xtrue_smch[i_ch_min][:,i_perm_min]], dim=1)
+        mask_out = torch.cat([mask_out, mask_smch[i_ch_min][:,i_perm_min]], dim=1)
+
+        # remove this chain from list of unassigned chains
+        xtrue_smch = xtrue_smch[:i_ch_min]+xtrue_smch[i_ch_min+1:]
+        xpred_smch = xpred_smch[:i_ch_min]+xpred_smch[i_ch_min+1:]
+        mask_smch = mask_smch[:i_ch_min]+mask_smch[i_ch_min+1:]
+        chain_labels = chain_labels[:i_ch_min]+chain_labels[i_ch_min+1:]
+
+    return xyz_out, mask_out
+
 
 #torsion angle predictor loss
 def torsionAngleLoss( alpha, alphanat, alphanat_alt, tors_mask, tors_planar, eps=1e-8 ):
@@ -174,15 +294,16 @@ def compute_pde_loss(X, Y, logit_pde, atom_mask, pde_bin_step=0.3):
     return torch.nn.CrossEntropyLoss(reduction='mean')(logit_pde_masked, true_pde_label[None]) # assumes B=1
 
 # from Ivan: FAPE generalized over atom sets & frames
-def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, 
+def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, frame_atom_mask_2d=None,
     logit_pae=None, logit_pde=None, Z=10.0, dclamp=10.0, gamma=0.99, eps=1e-4):
 
     # X (predicted) N x L x natoms x 3
     # Y (native)    1 x L x natoms x 3
-    # atom_mask     1 x L x natoms
+    # atom_mask     1 x L x natoms masks the atoms over which fape is calculated
     # frames        1 x L x nframes x 3 x 2
-    # frame_mask    1 x L x nframes
-    # frame_atom_mask     1 x L x natoms
+    # frame_mask    1 x L x nframes 
+    # frame_atom_mask     1 x L x natoms masks the frames over which fape is calculated
+    # frame_atom_mask_2d 1 x L x L x natoms 2d mask, 2nd dimension frames, 3rd/4th dimension atoms so fape can be taken over some atoms for some frames (only works for BB fape)
 
     if frame_atom_mask is None:
         frame_atom_mask = atom_mask
@@ -226,6 +347,10 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     )
     xij_t = torch.einsum('rji,rsj->rsi', uY[frame_mask], Y[atom_mask][None,...] - Y_y[frame_mask][:,None,...])
     diff = torch.sqrt( torch.sum( torch.square(xij-xij_t[None,...]), dim=-1 ) + eps )
+    
+    # multiply diff by frame_atom_mask_2d if frame_atom_mask_2d not None
+    if frame_atom_mask_2d is not None:
+        diff = diff*frame_atom_mask_2d[:,frame_mask[0]][:, :, atom_mask[0]]
 
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
 
@@ -871,7 +996,7 @@ def calc_hb_grads(
         threshold_distance,
         eps,
         normalize)
-    return torch.autograd.grad(Ehb, xs)
+    return torch.autograd.grad(Ehb, (xyz, alpha))
 
 @torch.enable_grad()
 def calc_chiral_grads(xyz, chirals):

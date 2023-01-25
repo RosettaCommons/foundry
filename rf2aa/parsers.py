@@ -5,21 +5,13 @@ import string
 import os,re
 from os.path import exists
 import random
-import util
+import rf2aa.util
 import gzip
 from rf2aa.ffindex import *
 import torch
-from rf2aa.chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP
+from rf2aa.chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP, to1letter
 from openbabel import openbabel
 
-to1letter = {
-    "ALA":'A', "ARG":'R', "ASN":'N', "ASP":'D', "CYS":'C',
-    "GLN":'Q', "GLU":'E', "GLY":'G', "HIS":'H', "ILE":'I',
-    "LEU":'L', "LYS":'K', "MET":'M', "PHE":'F', "PRO":'P',
-    "SER":'S', "THR":'T', "TRP":'W', "TYR":'Y', "VAL":'V',
-    "DA":'a', "DC":'c', "DG":'g', "DT":'t',
-    "A":'b', "C":'d', "G":'h', "U":'u',
-}
 
 def read_template_pdb(L, pdb_fn, target_chain=None):
     # get full sequence from given PDB
@@ -123,10 +115,10 @@ def parse_fasta_if_exists(seq, filename, maxseq=10000, rmsa_alphabet=False):
 # read A3M and convert letters into
 # integers in the 0..20 range,
 # also keep track of insertions
-def parse_a3m(filename, unzip=True, maxseq=10000):
+def parse_a3m(filename, unzip=True, maxseq=10000, paired=False):
     msa = []
     ins = []
-
+    taxIDs = []
     table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
 
     # read file line by line
@@ -136,9 +128,17 @@ def parse_a3m(filename, unzip=True, maxseq=10000):
         fstream = open(filename,"r")
 
     for line in fstream:
-
+        
         # skip labels
         if line[0] == '>':
+            if paired: # paired MSAs only have a TAXID in the fasta header
+                taxIDs.append(line[1:].strip())
+            else: # unpaired MSAs have all the metadata so use regex to pull out TAXID
+                match = re.search( r'TaxID=(\d+)', line)
+                if match:
+                    taxIDs.append(match.group(1))
+                else:
+                    taxIDs.append("") # query sequence
             continue
             
         # remove right whitespaces
@@ -197,7 +197,7 @@ def parse_a3m(filename, unzip=True, maxseq=10000):
 
     ins = np.array(ins, dtype=np.uint8)
 
-    return msa,ins
+    return msa,ins, np.array(taxIDs)
 
 
 # read and extract xyz coords of N,Ca,C atoms

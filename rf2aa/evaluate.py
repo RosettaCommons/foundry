@@ -7,8 +7,11 @@ import torch
 import torch.nn as nn
 from torch.utils import data
 from rf2aa.data_loader import (
-    get_train_valid_set, loader_pdb, loader_fb, loader_complex, loader_na_complex, loader_rna, loader_sm, loader_sm_compl, loader_atomize_pdb, loader_sm_compl_covale
-    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM, DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
+    get_train_valid_set, loader_pdb, loader_fb, loader_complex,
+    loader_na_complex, loader_rna, loader_sm, loader_sm_compl,
+    loader_atomize_pdb, loader_sm_compl_covale
+    Dataset, DatasetComplex, DatasetNAComplex, DatasetRNA, DatasetSM,
+    DatasetSMComplex, DistilledDataset, DistributedWeightedSampler
 )
 from rf2aa.RoseTTAFoldModel  import RoseTTAFoldModule
 from rf2aa.loss import *
@@ -68,7 +71,7 @@ class Evaluator(Trainer):
         torch.cuda.set_device("cuda:%d"%gpu)
 
         #define dataset & data loader
-        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo = \
+        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2L, chid2taxid = \
             get_train_valid_set(self.loader_param)
 
         train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
