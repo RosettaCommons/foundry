@@ -17,7 +17,8 @@ from rf2aa.kinematics import get_chirals
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
     cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, get_alt_query_ligand, \
-        remove_unresolved_substructures, map_identical_prot_chains, cartprodcat, idx_from_Ls, same_chain_2d_from_Ls
+    remove_unresolved_substructures, map_identical_prot_chains, cartprodcat, idx_from_Ls, \
+    same_chain_2d_from_Ls, get_prot_sm_mask
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -2505,9 +2506,7 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, task='
 
     # crop around query ligand (1st sm chain)
     if L_total > params["CROP"]:
-        res_mask = get_prot_sm_mask(mask[0], msa[0,0])
-        sel = crop_sm_compl_assembly(xyz[0], res_mask, Ls_prot, Ls_sm, params['CROP'])
-
+        sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
         msa = msa[:, sel]
         ins = ins[:, sel]
         xyz = xyz[:,sel]
@@ -2758,17 +2757,21 @@ def crop_sm_compl(prot_xyz, lig_xyz,Ls, params):
     lig_sel = torch.arange(lig_xyz.shape[0])+Ls[0]
     return torch.cat((sel, lig_sel))
 
-def crop_sm_compl_assembly(all_xyz, res_mask, Ls_prot, Ls_sm, n_crop):
+def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop):
     """Choose residues with the `n_crop` closest C-alphas to a random atom on
     query ligand. Operates on multi-chain assemblies. Nearby ligands are
     included if all of their (unmasked) atoms are in the crop. Otherwise none
-    of the atoms of that ligand are included in crop.
+    of the atoms of that ligand are included in crop. Nearby protein chains are
+    excluded if they are too short and have too few contacts to ligands or
+    other protein chains. 
     
     Parameters
     ----------
     all_xyz : torch.Tensor (L_total, N_atoms, 3)
         Coordinates of full assembly with all protein chains, followed by all ligand chains. 
         1st ligand chain is assumed to be query ligand.
+    all_mask : torch.Tensor (L_total, N_atoms)
+        Boolean mask for whether each atom in `all_xyz` is valid
     res_mask : torch.Tensor (L_total,) bool
         Boolean mask for which residues/ligand atoms exist.
     Ls_prot : list (N_prot_chains,)
@@ -2790,6 +2793,8 @@ def crop_sm_compl_assembly(all_xyz, res_mask, Ls_prot, Ls_sm, n_crop):
     dist = torch.cdist(ca_xyz.unsqueeze(0), query_atom.unsqueeze(0)).flatten()
     dist = torch.nan_to_num(dist, nan=999999)
 
+    res_mask = torch.cat([all_mask[:sum(Ls_prot),:3].all(dim=-1), all_mask[sum(Ls_prot):,1]])
+
     idx = torch.argsort(dist)
     idx = idx[torch.isin(idx, torch.where(res_mask)[0])] # exclude invalid residues from crop
     idx = idx[:n_crop]
@@ -2807,6 +2812,45 @@ def crop_sm_compl_assembly(all_xyz, res_mask, Ls_prot, Ls_sm, n_crop):
 
         if not np.isin(curr_lig_idx, sel).all():
             sel = np.setdiff1d(sel,curr_lig_idx)
+        offset += L
+
+    # remove protein chains that are short and don't contact other proteins or ligands
+    # distance between protein C-alphas
+    dist_prot_ca = torch.cdist(ca_xyz[:sum(Ls_prot)], ca_xyz[:sum(Ls_prot)]) # (L_prot, L_prot)
+
+    # distance between closest heavy atom on each residue and ligand atoms
+    dist_prot_lig = torch.cdist(all_xyz[:sum(Ls_prot)], ca_xyz[sum(Ls_prot):])
+    dist_prot_lig[~all_mask[:sum(Ls_prot)]] = 99999
+    dist_prot_lig, _ = dist_prot_lig.min(dim=1) # (L_prot, L_sm)
+
+    res_mask_prot = res_mask[:sum(Ls_prot)]
+    res_mask_lig = res_mask[sum(Ls_prot):]
+
+    offset = 0
+    for L in Ls_prot:
+        # protein contacts (C-alpha within 10A)
+        dist_nonself = torch.cat([dist_prot_ca[:offset, offset:offset+L],
+                                  dist_prot_ca[offset+L:, offset:offset+L]],dim=0) # (L_prot - L, L)
+        res_mask_nonself = torch.cat([res_mask_prot[:offset], res_mask_prot[offset+L:]]) # (L_prot - L,)
+        dist_nonself = dist_nonself[res_mask_nonself][:,res_mask_prot[offset:offset+L]]
+        num_prot_contacts = (dist_nonself<10).sum()
+
+        # protein-ligand contacts (heavy atom within 5A)
+        dist_ = dist_prot_lig[offset:offset+L]
+        dist_ = dist_[res_mask_prot[offset:offset+L]][:,res_mask_lig]
+        num_lig_contacts = (dist_<5).sum()
+
+        # number of residues in crop
+        curr_chain_idx = np.where(res_mask)[0]
+        curr_chain_idx = curr_chain_idx[(curr_chain_idx>offset) & (curr_chain_idx<offset+L)]
+        num_residues = np.isin(curr_chain_idx, sel).sum()
+
+        if (num_residues < 8) and (num_prot_contacts < 10) and (num_lig_contacts < 10):
+            curr_chain_idx = np.arange(L) + offset
+            sel = np.setdiff1d(sel, curr_chain_idx)
+            print(f'removed chain from crop: (num_residues={num_residues} '\
+                  f'num_prot_contacts={num_prot_contacts} num_lig_contacts={num_lig_contacts})')
+
         offset += L
 
     return torch.from_numpy(sel)
