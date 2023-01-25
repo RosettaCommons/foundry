@@ -2530,7 +2530,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
 
 
 def loader_sm_compl_assembly(item, params, chid2hash, chid2taxid, task='sm_compl_asmb', 
-    pick_top=True, random_noise=5.0, num_prot_chains=None, num_lig_chains=None):
+                             num_protein_chains=None, num_ligand_chains=None, pick_top=True, random_noise=5.0):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
     with query ligand.  Protein chains all come before ligand chains, and
@@ -2548,8 +2548,8 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2taxid, task='sm_compl
 
     # load protein chains
     prot_partners = [p for p in item['PARTNERS'] if p[-1]=='polypeptide(L)']
-    if num_prot_chains is not None:
-        prot_partners = prot_partners[:num_prot_chains]
+    if num_protein_chains is not None:
+        prot_partners = prot_partners[:num_protein_chains]
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot = \
         featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, chid2hash,
                             pick_top=pick_top, random_noise=random_noise)
@@ -2557,8 +2557,8 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2taxid, task='sm_compl
     # load ligands
     lig_partners = [(item['LIGAND'], item['LIGXF'], -1, 'nonpoly')] + \
                    [p for p in item['PARTNERS'] if p[-1]=='nonpoly']
-    if num_lig_chains is not None:
-        lig_partners = lig_partners[:num_prot_chains]
+    if num_ligand_chains is not None:
+        lig_partners = lig_partners[:num_ligand_chains]
     xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, lig_names = \
         featurize_asmb_ligands(lig_partners, params, chains, asmb_xfs, covale)
 
