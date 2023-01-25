@@ -18,13 +18,13 @@ from scipy.sparse.csgraph import shortest_path
 import networkx as nx
 
 from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
-from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX,
+from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX,\
     NTOTAL, NBTYPES, CHAIN_GAP, num2aa
 from rf2aa.kinematics import get_chirals
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
     cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
-    get_alt_query_ligand, remove_unresolved_substructures, map_identical_prot_chains, 
+    get_alt_query_ligand, remove_unresolved_substructures, map_identical_prot_chains, \
     cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, get_prot_sm_mask
 
 # faster for remote/tukwila nodes 
@@ -42,7 +42,8 @@ na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
-mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl"
+#mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl" # for phase 3 dataloaders -- switch over when ready
+mol_dir = "/projects/ml/RF2_allatom/isdf" # for legacy datasets
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -407,7 +408,7 @@ def merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot):
 
     return xyz_t_out, f1d_t_out, mask_t_out
 
-def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
+def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, legacy_datapkl=True):
     """Loads training/validation sets as pandas DataFrames and returns them in
     dictionaries keyed by their dataset names.
 
@@ -433,9 +434,11 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     valid_set_dict : dict
         keys are names of datasets, values are pandas DataFrames
     """
+    ignore = ['DATASETS', 'DATASET_PROB', 'DIFF_MASK_PROBS']
+    params = {k:v for k,v in params.items() if k not in ignore}
     # hack to load the right number of outputs for cached diffusion training data
     # remove this once new datasets are online
-    if os.path.exists(params['DATAPKL']) and params['DATAPKL']=='dataset_20221123.pkl':
+    if os.path.exists(params['DATAPKL']) and legacy_datapkl:
         with open(params["DATAPKL"], "rb") as f:
             print ('Loading',params["DATAPKL"],'...')
             (
@@ -455,8 +458,6 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
                 valid_sm_compl_strict, valid_sm, valid_pep,
                 homo, gen_params
             ) = pickle.load(f)
-            elapsed = time.time() - start
-            print (f'Loaded {params["DATAPKL"]} in {elapsed:.1f}s')
             diff = deepdiff.DeepDiff(params, gen_params, ignore_order=True)
             ic(diff)
             if diff and 'values_changed' in diff:
@@ -1697,19 +1698,21 @@ def loader_rna(item, params, random_noise=5.0):
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, ch_label, "rna",item
 
-def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_ligand_tmpl=False,
-    init_protein_xyz=False, init_ligand_xyz=False, task='sm_compl', random_noise=5.0, fixbb=False):
+def loader_sm_compl(item, params, pick_top=True,
+    init_protein_tmpl=False, init_ligand_tmpl=False,
+    init_protein_xyz=False, init_ligand_xyz=False, random_noise=5.0, fixbb=False):
     """Load protein/SM complex with mixed residue and atom tokens. Also,
     compute frames for atom FAPE loss calc"""
 
-    pdb_chain, pdb_hash = item['CHAINID'], item['HASH'] 
-    ligand = item['LIGAND'] # list of (lig_chain, lig_res_num, lig_name)
-    pdb_id, i_ch_prot = pdb_chain.split('_')
+    pdb_chain, pdb_hash, ligands = item
+    #with open(f'sm_compl_item_params_{pdb_chain}.pkl', 'wb') as f:
+    #    pickle.dump([item, params], f)
 
-    # Load MSA and templates
+    # Load protein information
+    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
     a3mA = get_msa(params['PDB_DIR'] + '/a3m/'+pdb_hash[:3] + '/'+ pdb_hash + '.a3m.gz', pdb_hash)
     tpltA = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
-
+   
     # get msa features
     msa_prot = a3mA['msa'].long()
     ins_prot = a3mA['ins'].long()
@@ -1717,59 +1720,44 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
     if len(msa_prot) > params['BLOCKCUT']:
         msa_prot, ins_prot = MSABlockDeletion(msa_prot, ins_prot)
     a3m_prot = {"msa": msa_prot, "ins": ins_prot}
-
-    # load pre-parsed cif assembly - requires cifutils.py in path for object definitions
-    chains, asmb, covale, modres = pickle.load(gzip.open(params['MOL_DIR']+f'/{pdb_id[1:3]}/{pdb_id}.pkl.gz'))
-
-    # coordinate transforms to recreate this bio-assembly
-    i_a = str(item['ASSEMBLY'])
-    asmb_xfs = asmb[i_a]
-
-    # 1st protein chain in list is the main binding partner
-    for p in item['PARTNERS']:
-        if p[0]==i_ch_prot:
-            i_xf_prot = p[1]
-            break
-
-    # load protein chain
-    ch = chains[i_ch_prot]
-    ch_xf = asmb_xfs[i_xf_prot]
-    xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot = cif_prot_to_xyz(ch, ch_xf, modres)
+    xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
     protein_L, nprotatoms, _ = xyz_prot.shape
 
     if len(ligands):
-        # load query ligand (the "focus ligand" for this training example)
-        lig_atoms, lig_bonds = get_ligand_atoms_bonds(ligand, chains, covale)
-        lig_ch2xf = dict(item['LIGXF'])
+        # Load small molecule
+        i_lig = np.random.randint(len(ligands))
+        ligname = ligands[i_lig].split('_')[1]
+        filename = params["MOL_DIR"]+'/'+ligname[0]+'/'+ligname+'/'+ligands[i_lig].replace('.mol2','.isdf')
+        mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(filename, filetype="sdf")
+        for alt_lig in ligands[:i_lig]+ligands[i_lig+1:]:
+            ligname = alt_lig.split('_')[1]
+            filename = params["MOL_DIR"]+'/'+ligname[0]+'/'+ligname+'/'+alt_lig.replace('.mol2','.isdf')
+            mol2, msa_sm2, ins_sm2, xyz_sm2, mask_sm2 = parse_mol(filename, filetype='sdf')
+            if (msa_sm2.shape == msa_sm.shape) and all(msa_sm2==msa_sm):
+                xyz_sm = torch.concat([xyz_sm, xyz_sm2],dim=0) # (N_symm1 + N_symm2, Natoms, 3)
+                mask_sm = torch.concat([mask_sm, mask_sm2],dim=0)
+            else:
+                print(f'WARNING [loader_sm_compl]: Ligands at different bindings sites don\'t have same '\
+                      f'atom order: {item[0]}: {ligands[i_lig]} vs {alt_lig}. Skipping latter ligand.')
 
-        xyz_sm, occ_sm, msa_sm, chid_sm, lig_akeys = cif_ligand_to_xyz(lig_atoms, asmb_xfs, lig_ch2xf)
-        mask_sm = (occ_sm > 1) # fractionally occupied atom positions considered valid
-        mol, bond_feats_sm = cif_ligand_to_obmol(xyz_sm, lig_akeys, lig_atoms, lig_bonds)
-        xyz_sm, mask_sm = get_automorphs(mol, xyz_sm, mask_sm)
-
-        # add alternate instances (binding sites, conformations) of the query ligand to symmetry dimension
-        if len(ligand) == 1: # only do this for single-residue ligands (TODO: implement multi-res case)
-            xyz_alt_s, mask_alt_s = get_alt_query_ligand(chains, ligand[0][2], item['PARTNERS'], 
-                                                         lig_akeys, asmb_xfs)
-            xyz_sm = torch.cat([xyz_sm]+xyz_alt_s, dim=0)
-            mask_sm = torch.cat([mask_sm]+mask_alt_s, dim=0)
-
-        # clamp number of symmetry variants to save GPU memory
         USENSYM = params['MAXNSYMM']
         if fixbb:
-            USENSYM = 1 # no symmetry variants during design training
+            USENSYM = 1
+        # clamp number of symmetry variants to save GPU memory
         if xyz_sm.shape[0] > USENSYM: 
             xyz_sm = xyz_sm[:USENSYM]
-            mask_sm = mask_sm[:USENSYM]
+            mask_sm = mask_sm[:USENSYM]      
 
+        if xyz_sm.shape[0] ==0:
+            print(f'ERROR [loader_sm_compl]: {item[0]} had no xyz coords')
+            return (torch.tensor([-1]),)*21
+
+        a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
         G = get_nxgraph(mol)
         frames = get_atom_frames(msa_sm, G)
         chirals = get_chirals(mol, xyz_sm[0])
         if chirals.shape[0] == 0:
             chirals = torch.zeros((0,4))
-
-        if len(list(nx.connected_components(G))) > 1:
-            print('WARNING: More than one connected component in ligand graph', item)
     else:
         xyz_sm = torch.zeros((1,0,1))
         mask_sm = torch.zeros((1,0))
@@ -1785,8 +1773,6 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
     mask[:, protein_L:, 1] = mask_sm
 
     Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
-    ins_sm = torch.zeros_like(msa_sm)
-    a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
 
     a3m_to_check = [('protein', a3m_prot)]
     if len(ligands):
@@ -1852,6 +1838,9 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
         if not fixbb:
             xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0,
                 npick=ntempl, pick_top=pick_top, same_chain=chain_idx, random_noise=random_noise)
+            if msa.shape[1] != xyz_t.shape[1]:
+                print(f'WARNING [loader_sm_compl]: MSA and template lengths do not match: {item}. Skipping.')
+                return (torch.tensor([-1]),)*21
         if fixbb:
             xyz_t = torch.clone(xyz[0])[None]
             mask_t = torch.clone(mask)
@@ -1860,6 +1849,7 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
             f1d_t = torch.nn.functional.one_hot(seq_mask_shifted, num_classes=NAATOKENS-1)
             conf = torch.ones_like(seq[:1])[...,None]
             f1d_t = torch.cat((f1d_t, conf), dim=-1)
+
 
     if init_protein_xyz or init_ligand_xyz:
         # initialize coords to ground truth, move to origin, rotate randomly
@@ -1896,40 +1886,36 @@ def loader_sm_compl(item, params, pick_top=True, init_protein_tmpl=False, init_l
         if len(ligands):
             sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls, params)
         else:
-            sel = get_crop(len(idx), mask[0], msa_seed_orig.device, params['CROP'], unclamp=False)
+            sel = get_crop(len(idx), mask[0], msa_seed_orig.device, params["CROP"], unclamp=False)
         seq = seq[:,sel]
         msa_seed_orig = msa_seed_orig[:,:,sel]
         msa_seed = msa_seed[:,:,sel]
         msa_extra = msa_extra[:,:,sel]
         mask_msa = mask_msa[:,:,sel]
-        xyz = xyz[:,sel]
+        xyz = xyz[:,sel] 
         mask = mask[:,sel]
         xyz_t = xyz_t[:,sel]
         f1d_t = f1d_t[:,sel]
         mask_t = mask_t[:,sel]
         xyz_prev = xyz_prev[sel]
-        mask_prev = mask_prev[sel]
+        mask_prev = mask_prev[sel] 
         idx = idx[sel]
         chain_idx = chain_idx[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
-
     # need to reindex the chiral atom positions - assumes they are the second chain
-    L1 = chain_idx[0,:].sum()
     if chirals.shape[0]>0:
-        chirals[:, :-1] = chirals[:, :-1] + L1
+        L1 = chain_idx[0,:].sum()
+        chirals[:, :-1] = chirals[:, :-1] +L1
     if fixbb:
         # Remove symmetry from ground-truth since we are currently not predicting ligands
         xyz = xyz[0]
         mask = mask[0]
 
-    ch_label = torch.zeros(seq[0].shape)
-    ch_label[L1:] = 1
-
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, chirals, ch_label, task, item
+           chain_idx, False, False, frames, bond_feats, chirals, "sm_compl", item
 
 
 def loader_sm_compl_covale(item, params, pick_top=True, 
@@ -2884,10 +2870,14 @@ def crop_sm_compl(prot_xyz, lig_xyz,Ls, params):
     i_face_xyz = lig_xyz[np.random.randint(len(lig_xyz))]
     dist = torch.cdist(prot_xyz[:,1].unsqueeze(0), i_face_xyz.unsqueeze(0)).flatten()
     dist = torch.nan_to_num(dist, nan=999999)
+    n_ligand_atoms = len(lig_xyz)
+    # select the whole ligand
+    lig_sel = torch.arange(n_ligand_atoms)+Ls[0]
+    if n_ligand_atoms >= params["CROP"]:
+        warnings.warn(f'# of ligand atoms ({n_ligand_atoms}) >= ({params["CROP"]}), using entire ligand')
+        return lig_sel
     _, idx = torch.topk(dist, params["CROP"]-len(lig_xyz), largest=False)
     sel, _ = torch.sort(idx)
-    # select the whole ligand
-    lig_sel = torch.arange(lig_xyz.shape[0])+Ls[0]
     return torch.cat((sel, lig_sel))
 
 def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop):
