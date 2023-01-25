@@ -84,7 +84,8 @@ default_dataloader_params = {
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230118.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230118.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20221123.pkl"%sm_compl_dir, # works with diffusion training
+        #"DATAPKL"          : "%s/dataset_20230118.pkl"%sm_compl_dir, # newer data, not online yet for diffusion
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -432,6 +433,61 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000):
     valid_set_dict : dict
         keys are names of datasets, values are pandas DataFrames
     """
+    # hack to load the right number of outputs for cached diffusion training data
+    # remove this once new datasets are online
+    if os.path.exists(params['DATAPKL']) and params['DATAPKL']=='dataset_20221123.pkl':
+        with open(params["DATAPKL"], "rb") as f:
+            print ('Loading',params["DATAPKL"],'...')
+            (
+                pdb_IDs, pdb_weights, train_pdb,
+                fb_IDs, fb_weights, fb,
+                compl_IDs, compl_weights, train_compl,
+                neg_IDs, neg_weights, train_neg,
+                na_compl_IDs, na_compl_weights, train_na_compl,
+                na_neg_IDs, na_neg_weights, train_na_neg,
+                rna_IDs, rna_weights, train_rna,
+                sm_compl_IDs, sm_compl_weights, train_sm_compl,
+                sm_IDs, sm_weights, train_sm,
+                valid_pdb, valid_homo,
+                valid_compl, valid_neg,
+                valid_na_compl, valid_na_neg,
+                valid_rna, valid_sm_compl, valid_sm_compl_ligclus,
+                valid_sm_compl_strict, valid_sm, valid_pep,
+                homo, gen_params
+            ) = pickle.load(f)
+            elapsed = time.time() - start
+            print (f'Loaded {params["DATAPKL"]} in {elapsed:.1f}s')
+            diff = deepdiff.DeepDiff(params, gen_params, ignore_order=True)
+            ic(diff)
+            if diff and 'values_changed' in diff:
+                changed = set(diff['values_changed'])
+                ic(changed)
+                for ig in ignore:
+                    changed.discard(f"root['{ig}']")
+                if changed:
+                    ic(changed)
+                    print(f'cache miss: dataset generation parameters passed to train multi differ from those in the dataset pkl:')
+                    print(diff)
+                    if not no_match_okay:
+                        raise Exception(diff)
+
+        return (
+            (pdb_IDs, torch.tensor(pdb_weights).float(), train_pdb), \
+            (fb_IDs, torch.tensor(fb_weights).float(), fb), \
+            (compl_IDs, torch.tensor(compl_weights).float(), train_compl), \
+            (neg_IDs, torch.tensor(neg_weights).float(), train_neg),\
+            (na_compl_IDs, torch.tensor(na_compl_weights).float(), train_na_compl),\
+            (na_neg_IDs, torch.tensor(na_neg_weights).float(), train_na_neg),\
+            (rna_IDs, torch.tensor(rna_weights).float(), train_rna),\
+            (sm_compl_IDs, torch.tensor(sm_compl_weights).float(), train_sm_compl), \
+            (sm_IDs, torch.tensor(sm_weights).float(), train_sm), \
+            valid_pdb, valid_homo,
+            valid_compl, valid_neg,
+            valid_na_compl, valid_na_neg,
+            valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, valid_pep,
+            homo
+        )
+
     # try to load cached datasets 
     if os.path.exists(params['DATAPKL']):
         with open(params["DATAPKL"], "rb") as f:
