@@ -954,21 +954,24 @@ class Trainer():
                 loader_sm_compl_assembly, valid_dict['sm_compl'],
                 chid2hash, chid2taxid, # used for MSA generation of assemblies
                 self.loader_param,
-                task="sm_compl"
+                task='sm_compl',
+                num_protein_chains=1,
             ),
             metal_compl = DatasetSMComplexAssembly(
                 valid_ID_dict['metal_compl'][:self.dataset_param['n_valid_metal_compl']],
                 loader_sm_compl_assembly, valid_dict['metal_compl'],
                 chid2hash, chid2taxid, # used for MSA generation of assemblies
                 self.loader_param,
-                task='metal_compl'
+                task='metal_compl',
+                num_protein_chains=1,
             ),
             sm_compl_multi = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl_multi'][:self.dataset_param['n_valid_sm_compl_multi']],
                 loader_sm_compl_assembly, valid_dict['sm_compl_multi'],
                 chid2hash, chid2taxid, # used for MSA generation of assemblies
-                self.loader_param, 
-                task='sm_compl_multi'
+                self.loader_param,
+                task='sm_compl_multi',
+                num_protein_chains=1,
             ),
             sm_compl_covale = DatasetSMComplex(
                 valid_ID_dict['sm_compl_covale'][:self.dataset_param['n_valid_sm_compl_covale']],
@@ -997,6 +1000,7 @@ class Trainer():
                 loader_sm_compl_assembly, valid_dict['sm_compl_asmb'],
                 chid2hash, chid2taxid, # used for MSA generation of assemblies
                 self.loader_param,
+                task="sm_compl_assmb",
             )
         )
 
