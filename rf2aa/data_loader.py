@@ -85,8 +85,7 @@ default_dataloader_params = {
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230118.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20221123.pkl"%sm_compl_dir, # works with diffusion training
-        #"DATAPKL"          : "%s/dataset_20230118.pkl"%sm_compl_dir, # newer data, not online yet for diffusion
+        "DATAPKL"          : "%s/dataset_20230124.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -494,9 +493,9 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         with open(params["DATAPKL"], "rb") as f:
             print ('Loading',params["DATAPKL"],'...')
             train_ID_dict, valid_ID_dict, weights_dict, \
-                train_dict, valid_dict, homo, chid2hash, chid2L, chid2taxid = pickle.load(f)
+                train_dict, valid_dict, homo, chid2hash, chid2taxid = pickle.load(f)
             print ('...done')
-        return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2L, chid2taxid
+        return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid
 
     t0 = time.time()
     print(f'cached train/valid datasets {params["DATAPKL"]} not found. '\
@@ -543,7 +542,6 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     val_hash = set(valid_dict['pdb'].HASH.values)
     chid2hash = dict(zip(pdb.CHAINID, pdb.HASH))
     chid2taxid = dict(zip(pdb.CHAINID, pdb.TAXID))
-    chid2L = dict(zip(pdb.CHAINID, pdb.LEN_EXIST))
     train_ID_dict['pdb'], weights_dict['pdb'] = _get_IDs_weights(train_dict['pdb'])
     valid_ID_dict['pdb'] = valid_dict['pdb'].CLUSTER.drop_duplicates().values    
 
@@ -739,10 +737,10 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     with open(params["DATAPKL"], "wb") as f:
         print ('Writing',params["DATAPKL"],'...')
         pickle.dump((train_ID_dict, valid_ID_dict, weights_dict, 
-                     train_dict, valid_dict, homo, chid2hash, chid2L, chid2taxid), f)
+                     train_dict, valid_dict, homo, chid2hash, chid2taxid), f)
         print ('...done')
 
-    return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2L, chid2taxid
+    return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid
 
 # slice long chains
 def get_crop(l, mask, device, crop_size, unclamp=False):
@@ -2531,7 +2529,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
            ch_label_sm, resnames
 
 
-def loader_sm_compl_assembly(item, params, chid2hash, chid2L, chid2taxid, task='sm_compl_asmb', 
+def loader_sm_compl_assembly(item, params, chid2hash, chid2taxid, task='sm_compl_asmb', 
     pick_top=True, random_noise=5.0, num_prot_chains=None, num_lig_chains=None):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
@@ -3195,7 +3193,8 @@ class DatasetSMComplex(data.Dataset):
         return out
 
 class DatasetSMComplexAssembly(data.Dataset):
-    def __init__(self, IDs, loader, data_df, chid2hash, chid2taxid, params, task, seed=None):
+    def __init__(self, IDs, loader, data_df, chid2hash, chid2taxid, params, task, num_protein_chains=None, 
+    seed=None):
         self.IDs = IDs
         self.data_df = data_df
         self.loader = loader
@@ -3203,6 +3202,7 @@ class DatasetSMComplexAssembly(data.Dataset):
         self.chid2taxid = chid2taxid
         self.params = params
         self.task = task
+        self.num_protein_chains = num_protein_chains
         self.rng = np.random.RandomState(seed)
 
     def __len__(self):
@@ -3218,6 +3218,7 @@ class DatasetSMComplexAssembly(data.Dataset):
                 self.chid2hash,
                 self.chid2taxid,
                 task=self.task,
+                num_protein_chains=self.num_protein_chains,
             )
         except Exception as e:
             print('error in DatasetSMComplexAssembly',item)
