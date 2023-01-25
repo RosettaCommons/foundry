@@ -1575,6 +1575,7 @@ def map_identical_prot_chains(partners, chains, modres):
         modified residue will be converted to its standard equivalent and
         coordinates for atoms with matching names will be saved.
 
+<<<<<<< HEAD
     Returns
     -------
     chnum2chlet : dict
@@ -1584,6 +1585,12 @@ def map_identical_prot_chains(partners, chains, modres):
         Dictionary mapping chain letters to integers, the inverse of
         `chlet2chnum`
     """
+=======
+def map_identical_prot_chains(partners, chains, modres):
+    """Identifies which chain letters represent unique protein sequences, 
+    assigns a number to each unique sequence, and returns dicts mapping sequence 
+    numbers to chain letters and vice versa."""
+>>>>>>> 3ccd05d (assembly loader for trainer)
     chlet2seq = OrderedDict()
     for p in partners:
         if p[-1] != 'polypeptide(L)': continue
