@@ -853,7 +853,7 @@ class Trainer():
         train_dict['atomize_pdb'] = train_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
 
-        # define sm_compl_assemb train/valid sets which use the same examples as sm_compl
+        # define sm_compl_asmb train/valid sets which use the same examples as sm_compl
         train_ID_dict['sm_compl_asmb'] = train_ID_dict['sm_compl']
         valid_ID_dict['sm_compl_asmb'] = valid_ID_dict['sm_compl']
         weights_dict['sm_compl_asmb'] = weights_dict['sm_compl']
