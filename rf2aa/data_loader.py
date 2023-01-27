@@ -2176,7 +2176,7 @@ def find_residues_to_atomize(partners, covale):
         List of cifutils.Bond objects representing inter-chain bonds in this PDB entry.
     """
     if not covale:
-        return partners
+        return partners, []
     
     residues_to_atomize = []
     for bond in covale:
