@@ -23,9 +23,9 @@ from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX,\
 from rf2aa.kinematics import get_chirals
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
-    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
-    get_alt_query_ligand, remove_unresolved_substructures, map_identical_prot_chains, \
-    cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, get_prot_sm_mask
+    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, get_alt_query_ligand, \
+    remove_unresolved_substructures, map_identical_prot_chains, cartprodcat, idx_from_Ls, \
+    same_chain_2d_from_Ls, get_prot_sm_mask, reindex_protein_feats_after_atomize
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -1718,7 +1718,24 @@ def loader_sm_compl(item, params, pick_top=True,
     if len(msa_prot) > params['BLOCKCUT']:
         msa_prot, ins_prot = MSABlockDeletion(msa_prot, ins_prot)
     a3m_prot = {"msa": msa_prot, "ins": ins_prot}
-    xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
+
+    # load pre-parsed cif assembly - requires cifutils.py in path for object definitions
+    chains, asmb, covale, modres = pickle.load(gzip.open(params['MOL_DIR']+f'/{pdb_id[1:3]}/{pdb_id}.pkl.gz'))
+
+    # coordinate transforms to recreate this bio-assembly
+    i_a = str(item['ASSEMBLY'])
+    asmb_xfs = asmb[i_a]
+
+    # 1st protein chain in list is the main binding partner
+    for p in item['PARTNERS']:
+        if p[0]==i_ch_prot:
+            i_xf_prot = p[1]
+            break
+
+    # load protein chain
+    ch = chains[i_ch_prot]
+    ch_xf = asmb_xfs[i_xf_prot]
+    xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot, _ = cif_prot_to_xyz(ch, ch_xf, modres)
     protein_L, nprotatoms, _ = xyz_prot.shape
 
     if len(ligands):
@@ -1967,7 +1984,7 @@ def loader_sm_compl_covale(item, params, pick_top=True,
     # load protein chain
     ch = chains[i_ch_prot]
     ch_xf = asmb_xfs[prot_ch2xf[i_ch_prot]]
-    xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot = cif_prot_to_xyz(ch, ch_xf, modres)
+    xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot, _ = cif_prot_to_xyz(ch, ch_xf, modres)
     protein_L, nprotatoms, _ = xyz_prot.shape
 
     # prepare atomized residue and small molecule (first 20 elements of num2aa are amino acids)
@@ -2165,7 +2182,8 @@ def loader_sm_compl_covale(item, params, pick_top=True,
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals_sm, ch_label, task, item
 
-def find_residues_to_atomize(partners, covale):
+
+def find_residues_to_atomize_covale(partners, covale):
     """
     updates partner lists to have atomized residues when residues are making covalent bonds with small molecules
     also returns list of atomized residues so the other features, MSA, templates etc can be removed
@@ -2214,7 +2232,7 @@ def find_residues_to_atomize(partners, covale):
             prot_partner = partners[prot_idx]
             lig_partner[0].append(res_name[:3])
             lig_partner[1].append(prot_partner[:2])
-            residues_to_atomize.append([res_name[:3], prot_partner[1]]) # residue key, transform
+            residues_to_atomize.append([list((res_name[:3],)), list((prot_partner[:2],))]) # residue key, transform
 
     return partners, residues_to_atomize
 
@@ -2286,12 +2304,14 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, chid
         # every location of this chain
         partners = [p for p in partners if (p[-1]=='polypeptide(L)') and (p[0] in chlet_set)]
         N_mer = len(partners)
-        xyz_chxf, mask_chxf, seq_chxf = [], [], []
+        xyz_chxf, mask_chxf, seq_chxf, mod_residues_to_atomize = [], [], [], []
         for p in partners:
-            xyz_, mask_, seq_, _, _ = cif_prot_to_xyz(chains[p[0]], asmb_xfs[p[1]], modres)
+            xyz_, mask_, seq_, _, _, residues_to_atomize = cif_prot_to_xyz(chains[p[0]], asmb_xfs[p[1]], modres)
+            residues_to_atomize = [tuple([list((residue,)), list(((residue[0], p[1],),))]) for residue in residues_to_atomize]
             xyz_chxf.append(xyz_) # (L, N_atoms, 3)
             mask_chxf.append(mask_)
             seq_chxf.append(seq_)
+            mod_residues_to_atomize.extend(residues_to_atomize)
             Ls_prot.append(xyz_.shape[0])
 
         # concatenate all locations, repeat for every permutation of locations
@@ -2341,7 +2361,7 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, chid
     seq_prot = torch.cat(seq_prot, dim=0)
 
     return xyz_prot, mask_prot.bool(), seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
-           mask_t_prot, Ls_prot
+           mask_t_prot, Ls_prot, mod_residues_to_atomize
 
 def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, offset, params):
     """Loads a single ligand in a specific assembly from a parsed CIF file into
@@ -2596,7 +2616,7 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2taxid, task='sm_compl
 
     all_partners = [(item['LIGAND'], item['LIGXF'], -1, 'nonpoly')] + item["PARTNERS"]
     # update partners to atomize residues that are covalently linked to proteins
-    all_partners, residues_to_atomize = find_residues_to_atomize(all_partners, covale) 
+    all_partners, residues_to_atomize = find_residues_to_atomize_covale(all_partners, covale) 
 
     # get list of coordinate transforms to recreate this bio-assembly
     i_a = str(item['ASSEMBLY'])
@@ -2606,9 +2626,12 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2taxid, task='sm_compl
     prot_partners = [p for p in all_partners if p[-1]=='polypeptide(L)']
     if num_protein_chains is not None:
         prot_partners = prot_partners[:num_protein_chains]
-    xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot = \
+    xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot, mod_residues_to_atomize = \
         featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, chid2hash,
                             pick_top=pick_top, random_noise=random_noise)
+    # update the partners and residues_to_atomize list with chemically modified residues that should be atomized
+    all_partners.extend([residue+(-1, "nonpoly",) for residue in mod_residues_to_atomize])
+    residues_to_atomize.extend(mod_residues_to_atomize)
 
     # load ligands
     lig_partners = [p for p in all_partners if p[-1]=='nonpoly']
@@ -2665,52 +2688,26 @@ def loader_sm_compl_assembly(item, params, chid2hash, chid2taxid, task='sm_compl
     assert msa.shape[1] == xyz.shape[1], "msa shape and xyz shape don't match"
     
     if residues_to_atomize:
-        Ls = Ls_prot + Ls_sm
-        chain_bins = [sum(Ls[:i]) for i in range(len(Ls))]
-        akeys_sm = list(itertools.chain.from_iterable(akeys_sm)) # list of list of tuples get flattened to a list of tuples
-        residue_chain_nums = []
-        residue_indices = []
-        for residue in residues_to_atomize:
-            # residue object is a list with a tuple and a integer
-            # the tuple is the residue identifier (chid, res_number, res_name)
-            atomize_N = residue[0] + ("N",)
-            atomize_C = residue[0] + ("C",)
-            N_index = akeys_sm.index(atomize_N) + sum(Ls_prot)
-            C_index = akeys_sm.index(atomize_C) + sum(Ls_prot)
-            
-            #### Need to identify what chain you're in to get correct res idx
-            residue_chid_xf = (residue[0][0], residue[1])
-            residue_chain_num = [p[:2] for p in prot_partners].index(residue_chid_xf)
-            residue_index = (int(residue[0][1]) - 1) + sum(Ls_prot[:residue_chain_num])  # residues are 1 indexed in the cif files 
-            residue_chain_nums.append(residue_chain_num)
-            residue_indices.append(residue_index)
-            if residue_index != 0 and residue_index not in Ls_prot: # if first residue in chain, no extra bond feats to previous residue
-                bond_feats[residue_index-1, N_index] = 6
-                bond_feats[N_index, residue_index-1] = 6
-            if residue_index not in [L-1 for L in Ls_prot]: # if residue is last in chain, no extra bonds feats to following residue
-                bond_feats[residue_index+1, C_index] = 6
-                bond_feats[C_index,residue_index+1] = 6
-            # Handle same chain indexing 
-            lig_chain_num = np.digitize([N_index], chain_bins)[0] -1 # np.digitize is 1 indexed
-            same_chain[chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1], chain_bins[residue_chain_num]: chain_bins[residue_chain_num+1]] = 1
-            same_chain[chain_bins[residue_chain_num]: chain_bins[residue_chain_num+1], chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1]] = 1
-        for chain_num, residue_index in zip(residue_chain_nums, residue_indices):
-            msa = torch.cat((msa[:, :residue_index], msa[:, residue_index+1:]), dim=1)
-            ins = torch.cat((ins[:, :residue_index], ins[:, residue_index+1:]), dim=1)
-
-            xyz = torch.cat((xyz[:, :residue_index], xyz[:, residue_index+1:]), dim=1)
-            mask = torch.cat((mask[:, :residue_index],mask[:, residue_index+1:]), dim=1)
-            bond_feats = torch.cat((bond_feats[ :residue_index], bond_feats[residue_index+1:]), dim=0)
-            bond_feats = torch.cat((bond_feats[ :, :residue_index], bond_feats[:, residue_index+1:]), dim=1)
-            idx = torch.cat((idx[:residue_index], idx[residue_index+1:]), dim=0)
-            xyz_t = torch.cat((xyz_t[:, :residue_index], xyz_t[:, residue_index+1:]), dim=1)
-            f1d_t = torch.cat((f1d_t[:, :residue_index], f1d_t[:, residue_index+1:]), dim=1)
-            mask_t = torch.cat((mask_t[:, :residue_index], mask_t[:, residue_index+1:]), dim=1)
-            same_chain = torch.cat((same_chain[ :residue_index], same_chain[residue_index+1:]), dim=0)
-            same_chain = torch.cat((same_chain[ :, :residue_index], same_chain[:, residue_index+1:]), dim=1)
-            ch_label = torch.cat((ch_label[ :residue_index], ch_label[residue_index+1:]), dim=0)
-            Ls_prot[chain_num] -= 1
-
+        msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls_prot, Ls_sm \
+            = reindex_protein_feats_after_atomize(
+                residues_to_atomize,
+                prot_partners,
+                msa, 
+                ins,
+                xyz,
+                mask,
+                bond_feats,
+                idx,
+                xyz_t,
+                f1d_t,
+                mask_t,
+                same_chain,
+                ch_label,
+                Ls_prot,
+                Ls_sm,
+                akeys_sm
+            )
+        
     xyz_prev = xyz_t[0].clone()
     mask_prev = mask_t[0].clone()
 
