@@ -480,8 +480,8 @@ class Trainer():
         except Exception as e:
             print('calc_crd_rmsd failed on ',item)
             rmsd = torch.tensor([0])
-            loss_dict['rmsd'] = torch.tensor([0])
-        
+            loss_dict['rmsd'] = torch.tensor(0, device=pred.device)
+
         # create protein and not protein masks; not protein could include nucleic acids
         prot_mask_BB = is_protein(label_aa_s[0,0]) #*mask_BB[0] # (L,)
         not_prot_mask_BB  = ~prot_mask_BB.bool()
@@ -897,7 +897,7 @@ class Trainer():
             sm_compl = loader_sm_compl_assembly,
             metal_compl = loader_sm_compl_assembly,
             sm_compl_multi = loader_sm_compl_assembly,
-            sm_compl_covale = loader_sm_compl_covale,
+            sm_compl_covale = loader_sm_compl_assembly,
             sm = loader_sm,
             atomize_pdb = loader_atomize_pdb,
             sm_compl_asmb = loader_sm_compl_assembly,
@@ -975,8 +975,10 @@ class Trainer():
             ),
             sm_compl_covale = DatasetSMComplex(
                 valid_ID_dict['sm_compl_covale'][:self.dataset_param['n_valid_sm_compl_covale']],
-                loader_sm_compl_covale, valid_dict['sm_compl_covale'],
-                self.loader_param, task='sm_compl_covale'
+                loader_sm_compl_assembly, valid_dict['sm_compl_covale'],
+                chid2hash, chid2taxid, # used for MSA generation of assemblies
+                self.loader_param,
+                task='sm_compl_covale'
             ),
             sm_compl_strict = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
