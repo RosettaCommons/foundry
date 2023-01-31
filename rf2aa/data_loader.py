@@ -1304,19 +1304,15 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5,
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
 
-    if pdb_chain in homo['CHAIN_A'].values: # Target is homo-oligomer
-        p_homo = np.random.rand()
-        if p_homo < p_homo_cut: # model as homo-oligomer with p_homo_cut prob
-            pdbid = pdb_chain.split('_')[0]
-            interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
-            feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top, fixbb=fixbb)
-            return feats + (torch.zeros((msa.shape[1],)), "homo",item,)
-        else:
-            return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb) \
-                   + (torch.zeros((msa.shape[1],)), "monomer",item,)
-    else:
-        return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb) \
-               + (torch.zeros((msa.shape[1],)), "monomer",item,)
+    # when target is homo-oligomer, model as homo-oligomer with probability p_homo_cut
+    if pdb_chain in homo['CHAIN_A'].values and np.random.rand() < p_homo_cut: 
+        pdbid = pdb_chain.split('_')[0]
+        interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
+        feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top)
+        return feats + (torch.zeros((msa.shape[1],)), "homo",item,)
+
+    feats = featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top)
+    return feats + (torch.zeros((msa.shape[1],)), "monomer",item,)
 
     
 def loader_fb(item, params, unclamp=False, fixbb=False):
@@ -2268,8 +2264,8 @@ def find_residues_to_atomize_covale(partners, covale):
     return partners, residues_to_atomize
 
 
-def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, chid2hash=None, 
-    pick_top=True, random_noise=5.0):
+def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, 
+    chid2hash=None, pick_top=True, random_noise=5.0):
     """Loads multiple protein chains from parsed CIF assembly into tensors.
     Outputs will contain chains roughly in the order that they appear in
     `partners` (decreasing number of contacts to query ligand), except that
@@ -2325,25 +2321,28 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, chid
         1D template features
     mask_t_prot : tensor (N_templates, L_total, N_atoms)
         Boolean mask for whether template atoms exist
-    Ls_prot : list
+    Ls_prot : list (N_chains,)
         Length of each protein chain
+    ch_letters : list (N_chains,)
+        Chain letter for each chain
     mod_residues_to_atomize : list
         List of tuples `((chain_letter, residue_num, residue_name),
         (chain_letter, xform_index))` representing chemically modified residues
         that should be atomized.
     """
-    # assign number to each unique sequence, irrespective of chain letter
-    chnum2chlet, chlet2chnum = map_identical_prot_chains(partners, chains, modres)
+    # assign number to each unique protein sequence, irrespective of chain letter
+    chnum2chlet = map_identical_prot_chains(partners, chains, modres)
+
     # protein true coords
-    xyz_prot, mask_prot, Ls_prot, ch_label_prot, seq_prot = [], [], [], [], []
+    xyz_prot, mask_prot, ch_label_prot, seq_prot = [], [], [], []
     xyz_t_prot, f1d_t_prot, mask_t_prot = [], [], []
+    ch_letters, Ls_prot = [], []
     for chnum, chlet_set in chnum2chlet.items():
-        ## protein coordinates
         # every location of this chain
-        partners = [p for p in partners if (p[-1]=='polypeptide(L)') and (p[0] in chlet_set)]
-        N_mer = len(partners)
+        partners_ch = [p for p in partners if (p[-1]=='polypeptide(L)') and (p[0] in chlet_set)]
+        N_mer = len(partners_ch)
         xyz_chxf, mask_chxf, seq_chxf, mod_residues_to_atomize = [], [], [], []
-        for p in partners:
+        for p in partners_ch:
             xyz_, mask_, seq_, _, _, residues_to_atomize = cif_prot_to_xyz(chains[p[0]], asmb_xfs[p[1]], modres)
             residues_to_atomize = [(residue, (residue[0], p[1])) for residue in residues_to_atomize]
             xyz_chxf.append(xyz_) # (L, N_atoms, 3)
@@ -2351,6 +2350,7 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, chid
             seq_chxf.append(seq_)
             mod_residues_to_atomize.extend(residues_to_atomize)
             Ls_prot.append(xyz_.shape[0])
+            ch_letters.append(p[0])
 
         # concatenate all locations, repeat for every permutation of locations
         xyz_ch, mask_ch, seq_ch = [], [], []
@@ -2398,7 +2398,7 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, chid
     seq_prot = torch.cat(seq_prot, dim=0)
 
     return xyz_prot, mask_prot.bool(), seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
-           mask_t_prot, Ls_prot, mod_residues_to_atomize
+           mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize
 
 def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, offset, params):
     """Loads a single ligand in a specific assembly from a parsed CIF file into
@@ -2683,7 +2683,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
         prot_partners = prot_partners[:num_protein_chains]
 
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
-    mask_t_prot, Ls_prot, mod_residues_to_atomize = \
+    mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize = \
         featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, chid2hash,
                             pick_top=pick_top, random_noise=random_noise)
 
@@ -2735,16 +2735,12 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
 
     # load msa
     if chid2hash is not None: 
-        prot_chains = [
-            chlet for (chlet, xform, num_contacts, min_dist, partner_type) in prot_partners 
-            if partner_type =="polypeptide(L)"
-        ]
         protein_chain_info = [{
-            "chid": f"{pdb_id}_{chid}", 
-            "hash": chid2hash[f"{pdb_id}_{chid}"], 
+            "chid": f"{pdb_id}_{chlet}", 
+            "hash": chid2hash[f"{pdb_id}_{chlet}"], 
             "len": Ls_prot[i],
-            "query_taxid": chid2taxid[f"{pdb_id}_{chid}"]
-        } for i, chid in enumerate(prot_chains)]
+            "query_taxid": chid2taxid[f"{pdb_id}_{chlet}"]
+        } for i, chlet in enumerate(ch_letters)]
         a3m_prot = get_assembly_msa(protein_chain_info, params)
         a3m_sm = dict(msa=msa_sm, ins=torch.zeros_like(msa_sm))
         a3m = merge_a3m_hetero(a3m_prot, a3m_sm, [sum(Ls_prot), sum(Ls_sm)])
