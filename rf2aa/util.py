@@ -1695,4 +1695,13 @@ def idx_from_Ls(Ls):
     return torch.cat(idx, dim=0)
 
 
+def bond_feats_from_Ls(Ls):
+    """Generate protein (or DNA/RNA) bond features from a list of chain
+    lengths"""
+    bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
+    offset = 0
+    for L_ in Ls:
+        bond_feats[offset:offset+L_, offset:offset+L_] = get_protein_bond_feats(L_)
+        offset += L_
+    return bond_feats
 

@@ -27,9 +27,10 @@ from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX,\
 from rf2aa.kinematics import get_chirals
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
-    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, get_alt_query_ligand, \
-    remove_unresolved_substructures, map_identical_prot_chains, cartprodcat, idx_from_Ls, \
-    same_chain_2d_from_Ls, get_prot_sm_mask, reindex_protein_feats_after_atomize
+    cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
+    get_alt_query_ligand, remove_unresolved_substructures, map_identical_prot_chains, \
+    cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, get_prot_sm_mask, bond_feats_from_Ls, \
+    reindex_protein_feats_after_atomize
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -1598,13 +1599,7 @@ def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_to
     # other features
     idx = idx_from_Ls(Ls)
     same_chain = same_chain_2d_from_Ls(Ls)
-
-    bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
-    offset = 0
-    for L_ in Ls:
-        bond_feats[offset:offset+L_, offset:offset+L_] = get_protein_bond_feats(L_)
-        offset += L_
-
+    bond_feats = bond_feats_from_Ls(Ls)
     ch_label = torch.cat([torch.full((L_,), i) for i,L_ in enumerate(Ls)]).long()
 
     # Do cropping
@@ -1681,14 +1676,12 @@ def loader_rna(item, params, random_noise=5.0):
         xyz[:,:,:23] = pdbA['xyz']
         mask[:,:,:23] = pdbA['mask']
 
+    # other features
     idx = torch.arange(L)
     if (len(pdb_ids)==2):
         idx[Ls[0]:] += CHAIN_GAP
-
     same_chain = same_chain_2d_from_Ls(Ls)
-    bond_feats = torch.zeros((L, L)).long()
-    bond_feats[:Ls[0],:Ls[0]] = get_protein_bond_feats(Ls[0]) # assumes 2 chains
-    bond_feats[Ls[0]:,Ls[0]:] = get_protein_bond_feats(Ls[1]) # assumes 2 chains
+    bond_feats = bond_feats_from_Ls(Ls)
 
     # Do cropping
     if sum(Ls) > params['CROP']:
