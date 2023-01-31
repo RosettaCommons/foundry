@@ -1214,59 +1214,68 @@ def reindex_protein_feats_after_atomize(
     akeys_sm
 ):
     """
-    After residues have been atomized, the protein features need to be reupdated to remove the features of the
-    atomized portion 
+    Removes residues that have been atomized from protein features.
     """
     Ls = Ls_prot + Ls_sm
     chain_bins = [sum(Ls[:i]) for i in range(len(Ls)+1)]
     akeys_sm = list(itertools.chain.from_iterable(akeys_sm)) # list of list of tuples get flattened to a list of tuples
+
+    # get tensor indices of atomized residues
     residue_chain_nums = []
     residue_indices = []
     for residue in residues_to_atomize:
-        # residue object is a list of lists of tuples
-        # the first tuple is the residue identifier (chid, res_number, res_name)
-        # the second tuple is the (chid, xform), this was done to maintain consistency with the ligand dataset
+        # residue object is a list of tuples:
+        #   ((chain_letter, res_number, res_name), (chain_letter, xform_index))
 
         #### Need to identify what chain you're in to get correct res idx
-        residue_chid_xf = residue[1][0]
+        residue_chid_xf = residue[1]
         residue_chain_num = [p[:2] for p in prot_partners].index(residue_chid_xf)
-        residue_index = (int(residue[0][0][1]) - 1) + sum(Ls_prot[:residue_chain_num])  # residues are 1 indexed in the cif files 
-        
-        if torch.sum(mask[0, residue_index, :3]) <3: continue #skip residues where all backbone atoms are masked
+        residue_index = (int(residue[0][1]) - 1) + sum(Ls_prot[:residue_chain_num])  # residues are 1 indexed in the cif files
+
+        # skip residues with all backbone atoms masked
+        if torch.sum(mask[0, residue_index, :3]) <3: continue
 
         residue_chain_nums.append(residue_chain_num)
         residue_indices.append(residue_index)
-        atomize_N = residue[0][0] + ("N",)
-        atomize_C = residue[0][0] + ("C",)
+        atomize_N = residue[0] + ("N",)
+        atomize_C = residue[0] + ("C",)
 
         N_index = akeys_sm.index(atomize_N) + sum(Ls_prot)
         C_index = akeys_sm.index(atomize_C) + sum(Ls_prot)
-        if residue_index != 0 and residue_index not in Ls_prot: # if first residue in chain, no extra bond feats to previous residue
+
+        # if first residue in chain, no extra bond feats to previous residue
+        if residue_index != 0 and residue_index not in Ls_prot:
             bond_feats[residue_index-1, N_index] = 6
             bond_feats[N_index, residue_index-1] = 6
-        if residue_index not in [L-1 for L in Ls_prot]: # if residue is last in chain, no extra bonds feats to following residue
+
+        # if residue is last in chain, no extra bonds feats to following residue
+        if residue_index not in [L-1 for L in Ls_prot]:
             bond_feats[residue_index+1, C_index] = 6
             bond_feats[C_index,residue_index+1] = 6
-        # Handle same chain indexing 
-        lig_chain_num = np.digitize([N_index], chain_bins)[0] -1 # np.digitize is 1 indexed
-        same_chain[chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1], chain_bins[residue_chain_num]: chain_bins[residue_chain_num+1]] = 1
-        same_chain[chain_bins[residue_chain_num]: chain_bins[residue_chain_num+1], chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1]] = 1
-    for chain_num, residue_index in zip(residue_chain_nums, residue_indices):
-        msa = torch.cat((msa[:, :residue_index], msa[:, residue_index+1:]), dim=1)
-        ins = torch.cat((ins[:, :residue_index], ins[:, residue_index+1:]), dim=1)
 
-        xyz = torch.cat((xyz[:, :residue_index], xyz[:, residue_index+1:]), dim=1)
-        mask = torch.cat((mask[:, :residue_index],mask[:, residue_index+1:]), dim=1)
-        bond_feats = torch.cat((bond_feats[ :residue_index], bond_feats[residue_index+1:]), dim=0)
-        bond_feats = torch.cat((bond_feats[ :, :residue_index], bond_feats[:, residue_index+1:]), dim=1)
-        idx = torch.cat((idx[:residue_index], idx[residue_index+1:]), dim=0)
-        xyz_t = torch.cat((xyz_t[:, :residue_index], xyz_t[:, residue_index+1:]), dim=1)
-        f1d_t = torch.cat((f1d_t[:, :residue_index], f1d_t[:, residue_index+1:]), dim=1)
-        mask_t = torch.cat((mask_t[:, :residue_index], mask_t[:, residue_index+1:]), dim=1)
-        same_chain = torch.cat((same_chain[ :residue_index], same_chain[residue_index+1:]), dim=0)
-        same_chain = torch.cat((same_chain[ :, :residue_index], same_chain[:, residue_index+1:]), dim=1)
-        ch_label = torch.cat((ch_label[ :residue_index], ch_label[residue_index+1:]), dim=0)
-        Ls_prot[chain_num] -= 1
+        lig_chain_num = np.digitize([N_index], chain_bins)[0] -1 # np.digitize is 1 indexed
+        same_chain[chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1], \
+                   chain_bins[residue_chain_num]: chain_bins[residue_chain_num+1]] = 1
+        same_chain[chain_bins[residue_chain_num]: chain_bins[residue_chain_num+1], \
+                   chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1]] = 1
+
+    # remove atomized residues from feature tensors
+    i_res = torch.tensor([i for i in range(sum(Ls)) if i not in residue_indices])
+    msa = msa[:,i_res]
+    ins = ins[:,i_res]
+    xyz = xyz[:,i_res]
+    mask = mask[:,i_res]
+    bond_feats = bond_feats[i_res][:,i_res]
+    idx = idx[i_res]
+    xyz_t = xyz_t[:,i_res]
+    f1d_t = f1d_t[:,i_res]
+    mask_t = mask_t[:,i_res]
+    same_chain = same_chain[i_res][:,i_res]
+    ch_label = ch_label[i_res]
+
+    for i_ch in residue_chain_nums:
+        Ls_prot[i_ch] -= 1
+
     return msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls_prot, Ls_sm
 
 

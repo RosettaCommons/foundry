@@ -39,10 +39,10 @@ ob.obErrorLog.SetOutputLevel(0)
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
-#torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
-# os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 ## To reproduce errors
 global DEBUG
@@ -56,7 +56,7 @@ USE_AMP = False
 torch.set_num_threads(4)
 
 LOAD_PARAM = {'shuffle': False,
-              'num_workers': 5,
+              'num_workers': 0,
               'pin_memory': True}
 
 def add_weight_decay(model, l2_coeff):
@@ -839,7 +839,7 @@ class Trainer():
 
         #print ("running ddp on rank %d, world_size %d"%(rank, world_size))
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
+        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
         # define dataset & data loader
@@ -852,13 +852,6 @@ class Trainer():
         weights_dict['atomize_pdb'] = weights_dict['pdb']
         train_dict['atomize_pdb'] = train_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
-
-        # define sm_compl_asmb train/valid sets which use the same examples as sm_compl
-        train_ID_dict['sm_compl_asmb'] = train_ID_dict['sm_compl']
-        valid_ID_dict['sm_compl_asmb'] = valid_ID_dict['sm_compl']
-        weights_dict['sm_compl_asmb'] = weights_dict['sm_compl']
-        train_dict['sm_compl_asmb'] = train_dict['sm_compl']
-        valid_dict['sm_compl_asmb'] = valid_dict['sm_compl']
 
         # set number of validation examples being used
         for k in valid_dict:
@@ -980,6 +973,13 @@ class Trainer():
                 self.loader_param,
                 task='sm_compl_covale'
             ),
+            sm_compl_asmb = DatasetSMComplex(
+                valid_ID_dict['sm_compl_asmb'][:self.dataset_param['n_valid_sm_compl_asmb']],
+                loader_sm_compl_assembly, valid_dict['sm_compl_asmb'],
+                chid2hash, chid2taxid, # used for MSA generation of assemblies
+                self.loader_param,
+                task='sm_compl_asmb'
+            ),
             sm_compl_strict = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
                 loader_sm_compl_assembly, valid_dict['sm_compl_strict'],
@@ -997,13 +997,6 @@ class Trainer():
                 loader_atomize_pdb, valid_dict['atomize_pdb'],
                 self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
             ),
-            sm_compl_asmb = DatasetSMComplexAssembly(
-                valid_ID_dict['sm_compl_asmb'][:self.dataset_param['n_valid_sm_compl_asmb']],
-                loader_sm_compl_assembly, valid_dict['sm_compl_asmb'],
-                chid2hash, chid2taxid, # used for MSA generation of assemblies
-                self.loader_param,
-                task="sm_compl_assmb",
-            )
         )
 
         # valid_neg_set = DatasetComplex(
@@ -1229,7 +1222,11 @@ class Trainer():
             mask_recycle = same_chain.float()*mask_recycle.float()
 
             # processing template features
-            xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
+            try:
+                xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
+            except Exception as e:
+                print(unbatch_item(item))
+                raise e
             t2d = xyz_to_t2d(xyz_t_frames, mask_t_2d)
 
             # get torsion angles from templates

@@ -72,11 +72,11 @@ default_dataloader_params = {
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%sm_compl_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/sm_compl_20230127.csv"%sm_compl_dir, 
-        "MET_LIST"         : "%s/metal_compl_20230127.csv"%sm_compl_dir, 
-        "SM_MULTI_LIST"    : "%s/sm_compl_multi_20230127.csv"%sm_compl_dir, 
-        "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20230127.csv"%sm_compl_dir,
-        "SM_ASMB_LIST"     : "%s/sm_compl_asmb_20230127.csv"%sm_compl_dir,
+        "SM_LIST"          : "%s/sm_compl_20230130.csv"%sm_compl_dir, 
+        "MET_LIST"         : "%s/metal_compl_20230130.csv"%sm_compl_dir, 
+        "SM_MULTI_LIST"    : "%s/sm_compl_multi_20230130.csv"%sm_compl_dir, 
+        "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20230130.csv"%sm_compl_dir,
+        "SM_ASMB_LIST"     : "%s/sm_compl_asmb_20230130.csv"%sm_compl_dir,
         "PDB_LIST"         : "%s/list_v02_w_taxid.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
@@ -84,9 +84,9 @@ default_dataloader_params = {
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
-        "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230127.csv"%sm_compl_dir, 
+        "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230130.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230127.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230130.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -683,6 +683,17 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     train_dict['sm_compl_multi'], valid_dict['sm_compl_multi'], train_ID_dict['sm_compl_multi'], \
         valid_ID_dict['sm_compl_multi'], weights_dict['sm_compl_multi'] = _prep_sm_compl_data(df)
 
+    # protein / covalent ligand complexes
+    df = _load_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
+    df = _apply_date_res_cutoffs(df)
+    df = df[~df['CHAINID'].isin([
+        '1adl_A', '1bs3_A', '1bs3_B', '1btx_A', '1bxw_A', '1etu_A', '1gjm_A',
+        '1h3v_B', '1jkj_B', '1l0i_A', '1q1k_A', '1qga_A', '1qga_B', '1nte_A',
+        '1x83_B', '2b4b_B', '3dpm_A', '3dpm_B', '4ztt_F', '5kxd_A', '6mhb_F'
+    ])]
+    train_dict['sm_compl_covale'], valid_dict['sm_compl_covale'], train_ID_dict['sm_compl_covale'], \
+        valid_ID_dict['sm_compl_covale'], weights_dict['sm_compl_covale'] = _prep_sm_compl_data(df)
+
     # protein / ligand assemblies (more than 2 chains)
     df = _load_df(params['SM_ASMB_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
     df = _apply_date_res_cutoffs(df)
@@ -710,17 +721,6 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     ])]
     train_dict['sm_compl_asmb'], valid_dict['sm_compl_asmb'], train_ID_dict['sm_compl_asmb'], \
         valid_ID_dict['sm_compl_asmb'], weights_dict['sm_compl_asmb'] = _prep_sm_compl_data(df)
-
-    # protein / covalent ligand complexes
-    df = _load_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
-    df = _apply_date_res_cutoffs(df)
-    df = df[~df['CHAINID'].isin([
-        '1adl_A', '1bs3_A', '1bs3_B', '1btx_A', '1bxw_A', '1etu_A', '1gjm_A',
-        '1h3v_B', '1jkj_B', '1l0i_A', '1q1k_A', '1qga_A', '1qga_B', '1nte_A',
-        '1x83_B', '2b4b_B', '3dpm_A', '3dpm_B', '4ztt_F', '5kxd_A', '6mhb_F'
-    ])]
-    train_dict['sm_compl_covale'], valid_dict['sm_compl_covale'], train_ID_dict['sm_compl_covale'], \
-        valid_ID_dict['sm_compl_covale'], weights_dict['sm_compl_covale'] = _prep_sm_compl_data(df)
 
     # strict protein / ligand validation set
     val_df = _load_df(params['VAL_SM_STRICT'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
@@ -2215,8 +2215,10 @@ def loader_sm_compl_covale(item, params, pick_top=True,
 
 def find_residues_to_atomize_covale(partners, covale):
     """
-    updates partner lists to have atomized residues when residues are making covalent bonds with small molecules
-    also returns list of atomized residues so the other features, MSA, templates etc can be removed
+    Updates partner lists to have atomized residues when residues are making
+    covalent bonds with small molecules.  Also returns list of atomized
+    residues so the other features, MSA, templates etc can be removed.
+
     Parameters
     ----------
     partners : list of 4-tuples (partner, transform_index, num_contacts, partner_type)
@@ -2230,7 +2232,7 @@ def find_residues_to_atomize_covale(partners, covale):
     for bond in covale:
         lig_present = []
         prot_present = []
-        res_name = None
+        res_key = None
 
         # check if the protein and ligand with the covalent linkage is present in the curated item
         for partner in partners:
@@ -2243,10 +2245,10 @@ def find_residues_to_atomize_covale(partners, covale):
             
             if  partner[-1]=="polypeptide(L)":
                 if bond.a[0] == partner[0]:
-                    res_name = bond.a
+                    res_key = bond.a
                     prot_present.append(True)
                 elif bond.b[0] == partner[0]:
-                    res_name = bond.b
+                    res_key = bond.b
                     prot_present.append(True)
                 else: 
                     prot_present.append(False)
@@ -2260,9 +2262,9 @@ def find_residues_to_atomize_covale(partners, covale):
             
             lig_partner = partners[lig_idx]
             prot_partner = partners[prot_idx]
-            lig_partner[0].append(res_name[:3])
+            lig_partner[0].append(res_key[:3])
             lig_partner[1].append(prot_partner[:2])
-            residues_to_atomize.append([list((res_name[:3],)), list((prot_partner[:2],))]) # residue key, transform
+            residues_to_atomize.append((res_key[:3], (prot_partner[:2]))) # residue key, transform
 
     return partners, residues_to_atomize
 
@@ -2326,6 +2328,10 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, chid
         Boolean mask for whether template atoms exist
     Ls_prot : list
         Length of each protein chain
+    mod_residues_to_atomize : list
+        List of tuples `((chain_letter, residue_num, residue_name),
+        (chain_letter, xform_index))` representing chemically modified residues
+        that should be atomized.
     """
     # assign number to each unique sequence, irrespective of chain letter
     chnum2chlet, chlet2chnum = map_identical_prot_chains(partners, chains, modres)
@@ -2340,7 +2346,7 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, chid
         xyz_chxf, mask_chxf, seq_chxf, mod_residues_to_atomize = [], [], [], []
         for p in partners:
             xyz_, mask_, seq_, _, _, residues_to_atomize = cif_prot_to_xyz(chains[p[0]], asmb_xfs[p[1]], modres)
-            residues_to_atomize = [tuple([list((residue,)), list(((residue[0], p[1],),))]) for residue in residues_to_atomize]
+            residues_to_atomize = [(residue, (residue[0], p[1])) for residue in residues_to_atomize]
             xyz_chxf.append(xyz_) # (L, N_atoms, 3)
             mask_chxf.append(mask_)
             seq_chxf.append(seq_)
@@ -2639,14 +2645,32 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     represent multiple chains, which are ordered from most to least contacts
     with query ligand.  Protein chains all come before ligand chains, and
     protein chains with identical sequences are grouped contiguously.
+
+    `all_partners` is a list of 5-tuples representing ligands and protein
+    chains near the query ligand that should be featurized as part of the
+    assembly. The 5-tuple has the form
+
+        (partner, xforms, num_contacts, min_dist, partner_type)
+
+    `num_contacts` is the number of heavy atoms within 5A of the query ligand.
+    `min_dist` is the minimum distance in angstroms between a heavy atom and
+    the ligand. If `partner_type` is "polypeptide", then `partner` is the chain
+    letter and `xforms` is an integer index of a coordinate transform in
+    `asmb_xfs`.  If `partner_type` is "nonpoly", then `partner` is a list of
+    tuples `(chain_letter, res_num, res_name)` representing a ligand and
+    `xforms` is a list of tuples `(chain_letter, xform_index)` representing
+    transforms.  
     """
-    pdb_chain = item['CHAINID']
+    pdb_chain = item['CHAINID'] 
     pdb_id = pdb_chain.split('_')[0]
 
     # load pre-parsed cif assembly - requires cifutils.py in path for object definitions
-    chains, asmb, covale, modres = pickle.load(gzip.open(params['MOL_DIR']+f'/{pdb_id[1:3]}/{pdb_id}.pkl.gz'))
+    chains, asmb, covale, modres = \
+        pickle.load(gzip.open(params['MOL_DIR']+f'/{pdb_id[1:3]}/{pdb_id}.pkl.gz'))
 
+    # list of proteins and ligands to featurize
     all_partners = [(item['LIGAND'], item['LIGXF'], -1, 'nonpoly')] + item["PARTNERS"]
+
     # update partners to atomize residues that are covalently linked to proteins
     all_partners, residues_to_atomize = find_residues_to_atomize_covale(all_partners, covale) 
 
@@ -2658,12 +2682,15 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     prot_partners = [p for p in all_partners if p[-1]=='polypeptide(L)']
     if num_protein_chains is not None:
         prot_partners = prot_partners[:num_protein_chains]
+
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
     mask_t_prot, Ls_prot, mod_residues_to_atomize = \
         featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, chid2hash,
                             pick_top=pick_top, random_noise=random_noise)
-    # update the partners and residues_to_atomize list with chemically modified residues that should be atomized
-    all_partners.extend([residue+(-1, "nonpoly",) for residue in mod_residues_to_atomize])
+
+    # update partners and residues_to_atomize with modified residues to be atomized
+    all_partners.extend([([res_tuple], [ch_xf], -1, "nonpoly",) # multi-res ligand format
+                         for (res_tuple, ch_xf) in mod_residues_to_atomize])
     residues_to_atomize.extend(mod_residues_to_atomize)
 
     # load ligands
@@ -2709,12 +2736,16 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
 
     # load msa
     if chid2hash is not None: 
-        prot_chains = [chinfo[0] for chinfo in prot_partners if chinfo[3] =="polypeptide(L)"]
+        prot_chains = [
+            chlet for (chlet, xform, num_contacts, min_dist, partner_type) in prot_partners 
+            if partner_type =="polypeptide(L)"
+        ]
         protein_chain_info = [{
-                "chid": f"{pdb_id}_{chid}", 
-                "hash": chid2hash[f"{pdb_id}_{chid}"], 
-                "len": Ls_prot[i],
-                "query_taxid": chid2taxid[f"{pdb_id}_{chid}"]} for i, chid in enumerate(prot_chains)]
+            "chid": f"{pdb_id}_{chid}", 
+            "hash": chid2hash[f"{pdb_id}_{chid}"], 
+            "len": Ls_prot[i],
+            "query_taxid": chid2taxid[f"{pdb_id}_{chid}"]
+        } for i, chid in enumerate(prot_chains)]
         a3m_prot = get_assembly_msa(protein_chain_info, params)
         a3m_sm = dict(msa=msa_sm, ins=torch.zeros_like(msa_sm))
         a3m = merge_a3m_hetero(a3m_prot, a3m_sm, [sum(Ls_prot), sum(Ls_sm)])
@@ -3164,14 +3195,17 @@ def unbatch_item(item):
     Only used for SM compl datasets where item is a dictionary
     """
     def flatten_value(v):
-        if (type(v) is list and len(v)==1) or \
-           (type(v) is torch.Tensor and len(v.shape)>0 and v.shape[0]==1):
+        if type(v) is list and len(v)==1:
             v = v[0]
+        elif type(v) is torch.Tensor and len(v.shape)>0 and v.shape[0]==1:
+            v = v[0].item()
+        elif type(v) is torch.Tensor and len(v.shape)==0:
+            v = v.item()
         if (type(v) is list and len(v)>1):
             for i,x in enumerate(v):
                 v[i] = flatten_value(x)
         return v
-    
+
     new_item = dict()
     for k in item:
         new_item[k] = flatten_value(item[k])
@@ -3483,15 +3517,22 @@ class DistilledDataset(data.Dataset):
                 ID = self.ID_dict['sm_compl_multi'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_multi'], ID)
                 out = self.loader_dict['sm_compl_multi'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task=task, num_protein_chains=1)
+                self.chid2taxid, task='sm_compl_multi', num_protein_chains=1)
             offset += len(self.index_dict['sm_compl_multi'])
 
             if index >= offset and index < offset + len(self.index_dict['sm_compl_covale']):
                 ID = self.ID_dict['sm_compl_covale'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_covale'], ID)
                 out = self.loader_dict['sm_compl_covale'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task=task)
+                self.chid2taxid, task='sm_compl_covale')
             offset += len(self.index_dict['sm_compl_covale'])
+
+            if index >= offset and index < offset + len(self.index_dict['sm_compl_asmb']):
+                ID = self.ID_dict['sm_compl_asmb'][index-offset]
+                item = sample_item_sm_compl(self.dataset_dict['sm_compl_asmb'], ID)
+                out = self.loader_dict['sm_compl_asmb'](item, self.params, self.chid2hash, 
+                self.chid2taxid)
+            offset += len(self.index_dict['sm_compl_asmb'])
 
             if index >= offset and index < offset + len(self.index_dict['sm']):
                 ID = self.ID_dict['sm'][index-offset]
@@ -3508,18 +3549,10 @@ class DistilledDataset(data.Dataset):
                     self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'], 
                     unclamp=(p_unclamp > self.unclamp_cut))
             offset += len(self.index_dict['atomize_pdb'])
-            if index >= offset and index < offset + len(self.index_dict['sm_compl_asmb']):
-                ID = self.ID_dict['sm_compl_asmb'][index-offset]
-                item = sample_item_sm_compl(self.dataset_dict['sm_compl_asmb'], ID)
-                out = self.loader_dict['sm_compl_asmb'](item, self.params, self.chid2hash, 
-                self.chid2taxid)
-            offset += len(self.index_dict['sm_compl_asmb'])
-
         except Exception as e:
             # print(int(item['CLUSTER']), item['CHAINID'], task)
             print('error loading',item)
             raise e
-            return (torch.tensor(-1),)*22
 
         return out
 
@@ -3539,9 +3572,9 @@ class DistributedWeightedSampler(data.Sampler):
             metal_compl=0,
             sm_compl_multi=0,
             sm_compl_covale=0,
+            sm_compl_asmb=0,
             sm=0,
             atomize_pdb=0,
-            sm_compl_asmb=0,
         ),
         num_replicas=None,
         rank=None,
@@ -3604,7 +3637,8 @@ class DistributedWeightedSampler(data.Sampler):
 
         # per each gpu
         indices = indices[self.rank:self.total_size:self.num_replicas]
-        assert len(indices) == self.num_samples
+        print('rank',self.rank,': expecting',self.num_samples,'examples, drew',len(indices),'examples')
+        #assert len(indices) == self.num_samples
 
         return iter(indices.tolist())
 
