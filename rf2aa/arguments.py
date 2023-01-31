@@ -6,11 +6,11 @@ DATASET_PARAMS = [
     'fraction_pdb','fraction_fb', 'fraction_compl', 'fraction_na_compl',
     'fraction_rna', 'fraction_sm_compl', 'fraction_sm_compl_multi', 
     'fraction_metal_compl', 'fraction_sm_compl_covale', 'fraction_sm',
-    'fraction_atomize_pdb', 'fraction_sm_compl_assemb', 'n_train', 'n_valid_pdb', 'n_valid_atomize_pdb',
+    'fraction_atomize_pdb', 'fraction_sm_compl_asmb', 'n_train', 'n_valid_pdb', 'n_valid_atomize_pdb',
     'n_valid_homo', 'n_valid_compl', 'n_valid_neg', 'n_valid_na_compl',
     'n_valid_na_neg', 'n_valid_rna', 'n_valid_sm_compl',
     'n_valid_sm_compl_multi', 'n_valid_metal_compl', 'n_valid_sm_compl_covale',
-    'n_valid_sm_compl_strict', 'n_valid_sm', 'n_valid_sm_compl_assemb',
+    'n_valid_sm_compl_strict', 'n_valid_sm', 'n_valid_sm_compl_asmb',
 ]
 TRUNK_PARAMS = [
     'n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_block',
@@ -121,7 +121,7 @@ def get_args():
             help="how often to sample small molecule crystals during training")
     dataset_group.add_argument('-fraction_atomize_pdb', type=float, default=0.09,
             help="how often to sample atomized pdb monomers during training")
-    dataset_group.add_argument('-fraction_sm_compl_assemb', type=float, default=0.00,
+    dataset_group.add_argument('-fraction_sm_compl_asmb', type=float, default=0.00,
             help="how often to sample atomized pdb monomers during training")
 
     dataset_group.add_argument('-n_train', type=int, default=12288)
