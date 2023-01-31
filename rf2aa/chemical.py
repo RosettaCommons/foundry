@@ -25,6 +25,7 @@ num2aa=[
 ]
 
 aa2num= {x:i for i,x in enumerate(num2aa)}
+aa2num['MEN'] = 20
 
 # Mapping 3 letter AA to 1 letter AA (e.g. ALA to A)
 one_letter = ["A", "R", "N", "D", "C", \

@@ -446,9 +446,14 @@ def superimpose(pred, true, atom_mask):
     
     return rP+ct
 
+def writepdb(filename, *args, file_mode='w', **kwargs, ):
+    f = open(filename, file_mode)
+    writepdb_file(f, *args, **kwargs)
 
-def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None,
-             bond_feats=None, file_mode="w", atom_mask=None, atom_idx_offset=0, chain_Ls=None):
+def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None, 
+             bond_feats=None, file_mode="w",atom_mask=None, atom_idx_offset=0, chain_Ls=None):
+    #ic(atoms.shape, seq.shape, bond_feats.shape)
+    #ic(chain_Ls)
 
     # correct mistake in atomic number assignment during encoding of atom types
     atom_names_ = [
@@ -464,7 +469,6 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
     atomnum2atomtype_ = dict(zip(atom_num,atom_names_))
     wrongtype2correcttype = {v:atomnum2atomtype_[k] for k,v in chemical.atomnum2atomtype.items()}
 
-    f = open(filename, file_mode)
     ctr = 1+atom_idx_offset
     scpu = seq.cpu().squeeze(0)
     atomscpu = atoms.cpu().squeeze(0)
@@ -493,10 +497,10 @@ def writepdb(filename, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfact
         if s >= len(aa2long):
             lig_name = "LG1"
             atom_idxs[i] = ctr
-            f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
+            f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f           %s\n"%(
                     "HETATM", ctr, wrongtype2correcttype[num2aa[s]], lig_name,
                     ch, torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
-                    1.0, Bfacts[i] ) )
+                    1.0, Bfacts[i],  num2aa[s]) )
             ctr += 1
             continue
 
