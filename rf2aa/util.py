@@ -1738,3 +1738,13 @@ def kabsch(xyz1, xyz2, eps=1e-6):
 
     return rmsd, U
 
+
+def bond_feats_from_Ls(Ls):
+    """Generate protein (or DNA/RNA) bond features from a list of chain
+    lengths"""
+    bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
+    offset = 0
+    for L_ in Ls:
+        bond_feats[offset:offset+L_, offset:offset+L_] = get_protein_bond_feats(L_)
+        offset += L_
+    return bond_feats
