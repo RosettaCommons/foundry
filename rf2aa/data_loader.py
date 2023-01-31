@@ -1599,17 +1599,17 @@ def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_to
         mask[0,Ls[0]:,:23] = pdbB['mask']
     xyz = torch.nan_to_num(xyz)
 
-    idx = torch.arange(sum(Ls))
-    idx[Ls[0]:] += CHAIN_GAP
-    if (len(pdb_ids)==3):
-        idx[Ls[1]:] += CHAIN_GAP
+    # other features
+    idx = idx_from_Ls(Ls)
+    same_chain = same_chain_2d_from_Ls(Ls)
 
-    chain_idx = torch.zeros((sum(Ls), sum(Ls))).long()
-    chain_idx[:Ls[0], :Ls[0]] = 1
-    chain_idx[Ls[0]:, Ls[0]:] = 1  # fd - "negatives" still predict DNA double helix
     bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
-    bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
-    bond_feats[Ls[0]:, Ls[0]:] = get_protein_bond_feats(sum(Ls[1:]))
+    offset = 0
+    for L_ in Ls:
+        bond_feats[offset:offset+L_, offset:offset+L_] = get_protein_bond_feats(L_)
+        offset += L_
+
+    ch_label = torch.cat([torch.full((L_,), i) for i,L_ in enumerate(Ls)]).long()
 
     # Do cropping
     if sum(Ls) > params['CROP']:
@@ -1628,20 +1628,20 @@ def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_to
         mask_t = mask_t[:,sel]
         #
         idx = idx[sel]
-        chain_idx = chain_idx[sel][:,sel]
+        same_chain = same_chain[sel][:,sel]
         bond_feats = bond_feats[sel][:,sel]
+        ch_label = ch_label[sel]
 
     xyz_prev = xyz_t[0].clone()
     mask_prev = mask_t[0].clone()
     chirals = torch.Tensor()
-    L1 = chain_idx[0,:].sum()
-    ch_label = torch.zeros(seq[0].shape)
-    ch_label[L1:] = 1
+
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals, ch_label, "na_compl", item
+           same_chain, False, negative, torch.zeros(seq.shape), bond_feats, chirals, ch_label, "na_compl", item
+
 
 def loader_rna(item, params, random_noise=5.0):
     # read PDBs
@@ -1689,8 +1689,10 @@ def loader_rna(item, params, random_noise=5.0):
     if (len(pdb_ids)==2):
         idx[Ls[0]:] += CHAIN_GAP
 
-    chain_idx = torch.ones(L,L).long()
-    bond_feats = get_protein_bond_feats(L)
+    same_chain = same_chain_2d_from_Ls(Ls)
+    bond_feats = torch.zeros((L, L)).long()
+    bond_feats[:Ls[0],:Ls[0]] = get_protein_bond_feats(Ls[0]) # assumes 2 chains
+    bond_feats[Ls[0]:,Ls[0]:] = get_protein_bond_feats(Ls[1]) # assumes 2 chains
 
     # Do cropping
     if sum(Ls) > params['CROP']:
@@ -1715,12 +1717,14 @@ def loader_rna(item, params, random_noise=5.0):
     xyz_prev = xyz_t[0].clone()
     mask_prev = mask_t[0].clone()   
     chirals = torch.Tensor()
-    ch_label = torch.zeros(seq[0].shape)
+    ch_label = torch.zeros((L,)).long()
+    ch_label[Ls[0]:] = 1
+
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, ch_label, "rna",item
+           same_chain, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, ch_label, "rna",item
 
 def loader_sm_compl(item, params, pick_top=True,
     init_protein_tmpl=False, init_ligand_tmpl=False,
