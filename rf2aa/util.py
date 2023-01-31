@@ -1666,9 +1666,6 @@ def map_identical_prot_chains(partners, chains, modres):
     chnum2chlet : dict
         Dictionary mapping integers to lists of chain letters which represent
         identical chains
-    chlet2chnum : dict
-        Dictionary mapping chain letters to integers, the inverse of
-        `chlet2chnum`
     """
     chlet2seq = OrderedDict()
     for p in partners:
@@ -1683,9 +1680,9 @@ def map_identical_prot_chains(partners, chains, modres):
         seq2chlet[seq].add(chlet)
 
     chnum2chlet = OrderedDict([(i,v) for i,(k,v) in enumerate(seq2chlet.items())])
-    chlet2chnum = OrderedDict([(chlet,chnum) for chnum,chlet_s in chnum2chlet.items() for chlet in chlet_s])
+    #chlet2chnum = OrderedDict([(chlet,chnum) for chnum,chlet_s in chnum2chlet.items() for chlet in chlet_s])
 
-    return chnum2chlet, chlet2chnum
+    return chnum2chlet 
 
 def cartprodcat(X_s):
     """Concatenate list of tensors on dimension 1 while taking their cartesian product
