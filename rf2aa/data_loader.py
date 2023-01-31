@@ -1315,13 +1315,13 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5)
             pdbid = pdb_chain.split('_')[0]
             interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
             feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top)
-            return feats + ("homo",item,)
+            return feats + (torch.zeros((msa.shape[1],)), "homo",item,)
         else:
             return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top) \
-                   + ("monomer",item,)
+                   + (torch.zeros((msa.shape[0],)), "monomer",item,)
     else:
         return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top) \
-               + ("monomer",item,)
+               + (torch.zeros((msa.shape[0],)), "monomer",item,)
 
     
 def loader_fb(item, params, unclamp=False):
