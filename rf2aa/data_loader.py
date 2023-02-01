@@ -4,7 +4,7 @@ import time
 import deepdiff
 from icecream import ic
 from torch.utils import data
-import os, csv, random, pickle, gzip, itertools, time, ast, sys
+import os, csv, random, pickle, gzip, itertools, time, ast, copy, sys
 from dateutil import parser
 from collections import OrderedDict
 from itertools import permutations
@@ -77,11 +77,11 @@ default_dataloader_params = {
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%sm_compl_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
-        "SM_LIST"          : "%s/sm_compl_20230130.csv"%sm_compl_dir, 
-        "MET_LIST"         : "%s/metal_compl_20230130.csv"%sm_compl_dir, 
-        "SM_MULTI_LIST"    : "%s/sm_compl_multi_20230130.csv"%sm_compl_dir, 
-        "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20230130.csv"%sm_compl_dir,
-        "SM_ASMB_LIST"     : "%s/sm_compl_asmb_20230130.csv"%sm_compl_dir,
+        "SM_LIST"          : "%s/sm_compl_20230201.csv"%sm_compl_dir, 
+        "MET_LIST"         : "%s/metal_compl_20230201.csv"%sm_compl_dir, 
+        "SM_MULTI_LIST"    : "%s/sm_compl_multi_20230201.csv"%sm_compl_dir, 
+        "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20230201.csv"%sm_compl_dir,
+        "SM_ASMB_LIST"     : "%s/sm_compl_asmb_20230201.csv"%sm_compl_dir,
         "PDB_LIST"         : "%s/list_v02_w_taxid.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
@@ -89,9 +89,12 @@ default_dataloader_params = {
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
-        "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230130.csv"%sm_compl_dir, 
+        "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230201.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230130.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230201.pkl"%sm_compl_dir, # cache for faster loading 
+        # swap the 2 lines below when phase 3 diffusion loader is ready
+        #"DATAPKL_DIFFUSION": "%s/dataset_diffusion_20230201.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL_DIFFUSION": "%s/dataset_20221123.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -414,7 +417,7 @@ def merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot):
 
     return xyz_t_out, f1d_t_out, mask_t_out
 
-def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, legacy_datapkl=True):
+def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, diffusion_training=True):
     """Loads training/validation sets as pandas DataFrames and returns them in
     dictionaries keyed by their dataset names.
 
@@ -425,6 +428,12 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     NEG_CLUSID_OFFSET : int
         Offset to add to cluster IDs of negative (compl, NA compl) examples to
         make them distinct from positive examples
+    no_match_okay : bool
+        If True, will not check that data pickle was loaded using the same
+        parameters as current training run.
+    diffusion_training : bool
+        Modifies loaded datasets for diffusion training (as opposed to
+        structure prediction). 
 
     Returns
     ------
@@ -440,13 +449,15 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_set_dict : dict
         keys are names of datasets, values are pandas DataFrames
     """
+    datapkl_key = 'DATAPKL_DIFFUSION' if diffusion_training else 'DATAPKL'
     ignore = ['DATASETS', 'DATASET_PROB', 'DIFF_MASK_PROBS']
     params = {k:v for k,v in params.items() if k not in ignore}
-    # hack to load the right number of outputs for cached diffusion training data
-    # remove this once new datasets are online
-    if os.path.exists(params['DATAPKL']) and legacy_datapkl:
-        with open(params["DATAPKL"], "rb") as f:
-            print ('Loading',params["DATAPKL"],'...')
+
+    # Temporary hack: load older data pickle for diffusion training
+    # Once phase 3 diffusion data loading is complete, remove this block
+    if os.path.exists(params[datapkl_key]) and diffusion_training:
+        with open(params[datapkl_key], "rb") as f:
+            print ('Loading',params[datapkl_key],'...')
             (
                 pdb_IDs, pdb_weights, train_pdb,
                 fb_IDs, fb_weights, fb,
@@ -496,16 +507,16 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         )
 
     # try to load cached datasets 
-    if os.path.exists(params['DATAPKL']):
-        with open(params["DATAPKL"], "rb") as f:
-            print ('Loading',params["DATAPKL"],'...')
+    if os.path.exists(params[datapkl_key]):
+        with open(params[datapkl_key], "rb") as f:
+            print ('Loading',params[datapkl_key],'...')
             train_ID_dict, valid_ID_dict, weights_dict, \
                 train_dict, valid_dict, homo, chid2hash, chid2taxid = pickle.load(f)
             print ('...done')
         return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid
 
     t0 = time.time()
-    print(f'cached train/valid datasets {params["DATAPKL"]} not found. '\
+    print(f'cached train/valid datasets {params[datapkl_key]} not found. '\
           f're-parsing train/valid metadata...')
     
     # helper functions
@@ -642,6 +653,10 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     # protein-small molecule complexes
     def _prep_sm_compl_data(df):
         """repeated operations for protein / small molecule datasets"""
+        # don't use partially unresolved ligands for diffusion training
+        if diffusion_training:
+            df = df[df['LIGATOMS']==df['LIGATOMS_RESOLVED']]
+
         train_df = df[~df.CLUSTER.isin(val_pdb_ids)]
         valid_df = df[df.CLUSTER.isin(val_pdb_ids)]
 
@@ -658,7 +673,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         return train_df, valid_df, train_IDs, valid_IDs, torch.tensor(weights)
 
     # protein / small molecule complexes
-    df = _load_df(params['SM_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
+    df = _load_df(params['SM_LIST'], eval_cols=['COVALENT','LIGAND','LIGXF','PARTNERS'])
     df = _apply_date_res_cutoffs(df)
     df = df[
         ~((df['CHAINID']=='1q9x_K') & (df['LIGAND'].apply(lambda x: x[0][0]=='S'))) &
@@ -677,13 +692,13 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         valid_ID_dict['sm_compl'], weights_dict['sm_compl'] = _prep_sm_compl_data(df)
 
     # protein / metal ion complexes
-    df = _load_df(params['MET_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
+    df = _load_df(params['MET_LIST'], eval_cols=['COVALENT','LIGAND','LIGXF','PARTNERS'])
     df = _apply_date_res_cutoffs(df)
     train_dict['metal_compl'], valid_dict['metal_compl'], train_ID_dict['metal_compl'], \
         valid_ID_dict['metal_compl'], weights_dict['metal_compl'] = _prep_sm_compl_data(df)
     
     # protein / multi-residue ligand complexes
-    df = _load_df(params['SM_MULTI_LIST'], eval_cols=['LIGAND','LIGXF','PARTNERS'])
+    df = _load_df(params['SM_MULTI_LIST'], eval_cols=['COVALENT','LIGAND','LIGXF','PARTNERS'])
     df = _apply_date_res_cutoffs(df)
     df = df[df['LIGATOMS']<=params['CROP']//2]
     train_dict['sm_compl_multi'], valid_dict['sm_compl_multi'], train_ID_dict['sm_compl_multi'], \
@@ -770,8 +785,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     print(f'Done loading datasets in {time.time()-t0} seconds')
 
     # cache datasets for faster loading next time
-    with open(params["DATAPKL"], "wb") as f:
-        print ('Writing',params["DATAPKL"],'...')
+    with open(params[datapkl_key], "wb") as f:
+        print ('Writing',params[datapkl_key],'...')
         pickle.dump((train_ID_dict, valid_ID_dict, weights_dict, 
                      train_dict, valid_dict, homo, chid2hash, chid2taxid), f)
         print ('...done')
@@ -2202,7 +2217,7 @@ def loader_sm_compl_covale(item, params, pick_top=True,
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals_sm, ch_label, task, item
 
-def find_residues_to_atomize_covale(partners, covale):
+def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
     """
     Updates partner lists to have atomized residues when residues are making
     covalent bonds with small molecules.  Also returns list of atomized
@@ -2210,52 +2225,51 @@ def find_residues_to_atomize_covale(partners, covale):
 
     Parameters
     ----------
-    partners : list of 4-tuples (partner, transform_index, num_contacts, partner_type)
+    lig_partners : list of 5-tuples
+        Ligands in this assembly. Format is as described in `loader_sm_compl_assembly`.
+    prot_partners : list of 5-tuples
+        Protein chains in this assembly. Format is as described in `loader_sm_compl_assembly`.
     covale : list
         List of cifutils.Bond objects representing inter-chain bonds in this PDB entry.
+
+    Returns
+    -------
+    lig_partners : list of 5-tuples
+        New list of ligands in this assembly, with additional "ligands" corresponding to
+        residues to atomize.
     """
-    if not covale:
-        return partners, []
-    
+    if len(covale)==0:
+        return lig_partners, []
+
     residues_to_atomize = []
     for bond in covale:
-        lig_present = []
-        prot_present = []
         res_key = None
+        i_prot = None
+        i_lig = None
 
-        # check if the protein and ligand with the covalent linkage is present in the curated item
-        for partner in partners:
-            #placeholder variable for residue information of the residue that will be atomized
-            if partner[-1]=='nonpoly':
-                lig_present.append(any([bond.a[:3] == p or bond.b[:3] == p for p in partner[0]])) # matching chain IDs, residue num and residue name
-            else:
-                #track absolute index of lig and protein in partners list 
-                lig_present.append(False)
-            
-            if  partner[-1]=="polypeptide(L)":
-                if bond.a[0] == partner[0]:
-                    res_key = bond.a
-                    prot_present.append(True)
-                elif bond.b[0] == partner[0]:
-                    res_key = bond.b
-                    prot_present.append(True)
-                else: 
-                    prot_present.append(False)
-            else:
-                #track absolute index of lig and protein in partners list 
-                prot_present.append(False)
+        for i, (ch_letter, i_xf, n_contacts, min_dist, ptype) in enumerate(prot_partners):
+            if bond.a[0] == ch_letter:
+                i_prot = i
+                res_key = bond.a
+                break
+            elif bond.b[0] == ch_letter:
+                i_prot = i
+                res_key = bond.b
+                break
 
-        if any(lig_present) and any(prot_present):
-            lig_idx = lig_present.index(True)
-            prot_idx = prot_present.index(True)
-            
-            lig_partner = partners[lig_idx]
-            prot_partner = partners[prot_idx]
+        for i, (ligand, ch_xfs, n_contacts, min_dist, ptype) in enumerate(lig_partners):
+            if any([bond.a[:3] == lig_res or bond.b[:3] for lig_res in ligand]):
+                i_lig = i
+                break
+
+        if i_prot is not None and i_lig is not None:
+            lig_partner = lig_partners[i_lig]
+            prot_partner = prot_partners[i_prot]
             lig_partner[0].append(res_key[:3])
             lig_partner[1].append(prot_partner[:2])
-            residues_to_atomize.append((res_key[:3], (prot_partner[:2]))) # residue key, transform
+            residues_to_atomize.append((res_key[:3], prot_partner[:2]))
 
-    return partners, residues_to_atomize
+    return lig_partners, residues_to_atomize
 
 
 def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, 
@@ -2644,15 +2658,15 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     assembly. The 5-tuple has the form
 
         (partner, xforms, num_contacts, min_dist, partner_type)
-
+        
+    If `partner_type` is "polypeptide", then `partner` is the chain letter and
+    `xforms` is an integer index of a coordinate transform in `asmb_xfs`. If
+    `partner_type` is "nonpoly", then `partner` is a list of tuples
+    `(chain_letter, res_num, res_name)` representing a ligand and `xforms` is a
+    list of tuples `(chain_letter, xform_index)` representing transforms.
     `num_contacts` is the number of heavy atoms within 5A of the query ligand.
     `min_dist` is the minimum distance in angstroms between a heavy atom and
-    the ligand. If `partner_type` is "polypeptide", then `partner` is the chain
-    letter and `xforms` is an integer index of a coordinate transform in
-    `asmb_xfs`.  If `partner_type` is "nonpoly", then `partner` is a list of
-    tuples `(chain_letter, res_num, res_name)` representing a ligand and
-    `xforms` is a list of tuples `(chain_letter, xform_index)` representing
-    transforms.  
+    the ligand.  
     """
     pdb_chain = item['CHAINID'] 
     pdb_id = pdb_chain.split('_')[0]
@@ -2662,36 +2676,38 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
         pickle.load(gzip.open(params['MOL_DIR']+f'/{pdb_id[1:3]}/{pdb_id}.pkl.gz'))
 
     # list of proteins and ligands to featurize
-    all_partners = [(item['LIGAND'], item['LIGXF'], -1, 'nonpoly')] + item["PARTNERS"]
+    prot_partners = [p for p in item['PARTNERS'] if p[-1]=='polypeptide(L)']
+    prot_partners = prot_partners[:params['MAXPROTCHAINS']]
+    if num_protein_chains is not None:
+        prot_partners = prot_partners[:min(num_protein_chains, params['MAXPROTCHAINS'])]
 
-    # update partners to atomize residues that are covalently linked to proteins
-    all_partners, residues_to_atomize = find_residues_to_atomize_covale(all_partners, covale) 
+    lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + \
+                   [p for p in item['PARTNERS'] if p[-1]=='nonpoly']
+    lig_partners = lig_partners[:params['MAXLIGCHAINS']]
+    if num_ligand_chains is not None:
+        lig_partners = lig_partners[:min(num_ligand_chains, params['MAXLIGCHAINS'])]
+
+    all_partners = prot_partners + lig_partners
+
+    # update ligand partners to atomize residues that are covalently linked to proteins
+    lig_partners, residues_to_atomize = find_residues_to_atomize_covale(lig_partners, prot_partners, covale) 
 
     # get list of coordinate transforms to recreate this bio-assembly
     i_a = str(item['ASSEMBLY'])
     asmb_xfs = asmb[i_a]
 
     # load protein chains
-    prot_partners = [p for p in all_partners if p[-1]=='polypeptide(L)']
-    prot_partners = prot_partners[:params['MAXPROTCHAINS']]
-    if num_protein_chains is not None:
-        prot_partners = prot_partners[:min(num_protein_chains, params['MAXPROTCHAINS'])]
-
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
     mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize = \
         featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, chid2hash,
                             pick_top=pick_top, random_noise=random_noise)
 
-    # update partners and residues_to_atomize with modified residues to be atomized
-    all_partners.extend([([res_tuple], [ch_xf], -1, "nonpoly",) # multi-res ligand format
+    # update ligand partners and residues_to_atomize with modified residues to be atomized
+    lig_partners.extend([([res_tuple], [ch_xf], -1, "nonpoly",) # multi-res ligand format
                          for (res_tuple, ch_xf) in mod_residues_to_atomize])
     residues_to_atomize.extend(mod_residues_to_atomize)
 
     # load ligands
-    lig_partners = [p for p in all_partners if p[-1]=='nonpoly']
-    lig_partners = lig_partners[:params['MAXLIGCHAINS']]
-    if num_ligand_chains is not None:
-        lig_partners = lig_partners[:min(num_ligand_chains, params['MAXLIGCHAINS'])]
     xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names = \
         featurize_asmb_ligands(lig_partners, params, chains, asmb_xfs, covale)
 
@@ -3217,7 +3233,8 @@ def sample_item(df, ID, rng=None):
     """Sample a training example from a sequence cluster `ID` from the dataset
     represented by DataFrame `df`"""
     clus_df = df[df['CLUSTER']==ID]
-    return clus_df.sample(1, random_state=rng).to_dict(orient='records')[0]
+    item = clus_df.sample(1, random_state=rng).to_dict(orient='records')[0]
+    return copy.deepcopy(item) # prevents dataframe from being modified by downstream changes
 
 def sample_item_sm_compl(df, ID, dedup_ligand=True):
     """Sample a protein-ligand training example from sequence cluster `ID` from
@@ -3237,7 +3254,7 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
 
     item = tmp_df.sample(1).to_dict(orient='records')[0] # choose 1 random row
 
-    return item
+    return copy.deepcopy(item) # prevents dataframe from being modified by downstream changes
 
 
 class Dataset(data.Dataset):
