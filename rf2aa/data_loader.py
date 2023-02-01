@@ -451,56 +451,56 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
 
     # Temporary hack: load older data pickle for diffusion training
     # Once phase 3 diffusion data loading is complete, remove this block
-    if os.path.exists(params['DATAPKL']) and diffusion_training:
-        with open(params['DATAPKL'], "rb") as f:
-            print ('Loading',params['DATAPKL'],'...')
-            (
-                pdb_IDs, pdb_weights, train_pdb,
-                fb_IDs, fb_weights, fb,
-                compl_IDs, compl_weights, train_compl,
-                neg_IDs, neg_weights, train_neg,
-                na_compl_IDs, na_compl_weights, train_na_compl,
-                na_neg_IDs, na_neg_weights, train_na_neg,
-                rna_IDs, rna_weights, train_rna,
-                sm_compl_IDs, sm_compl_weights, train_sm_compl,
-                sm_IDs, sm_weights, train_sm,
-                valid_pdb, valid_homo,
-                valid_compl, valid_neg,
-                valid_na_compl, valid_na_neg,
-                valid_rna, valid_sm_compl, valid_sm_compl_ligclus,
-                valid_sm_compl_strict, valid_sm, valid_pep,
-                homo, gen_params
-            ) = pickle.load(f)
-            diff = deepdiff.DeepDiff(params, gen_params, ignore_order=True)
-            ic(diff)
-            if diff and 'values_changed' in diff:
-                changed = set(diff['values_changed'])
-                ic(changed)
-                for ig in ignore:
-                    changed.discard(f"root['{ig}']")
-                if changed:
-                    ic(changed)
-                    print(f'cache miss: dataset generation parameters passed to train multi differ from those in the dataset pkl:')
-                    print(diff)
-                    if not no_match_okay:
-                        raise Exception(diff)
+    # if os.path.exists(params['DATAPKL']) and diffusion_training:
+    #     with open(params['DATAPKL'], "rb") as f:
+    #         print ('Loading',params['DATAPKL'],'...')
+    #         (
+    #             pdb_IDs, pdb_weights, train_pdb,
+    #             fb_IDs, fb_weights, fb,
+    #             compl_IDs, compl_weights, train_compl,
+    #             neg_IDs, neg_weights, train_neg,
+    #             na_compl_IDs, na_compl_weights, train_na_compl,
+    #             na_neg_IDs, na_neg_weights, train_na_neg,
+    #             rna_IDs, rna_weights, train_rna,
+    #             sm_compl_IDs, sm_compl_weights, train_sm_compl,
+    #             sm_IDs, sm_weights, train_sm,
+    #             valid_pdb, valid_homo,
+    #             valid_compl, valid_neg,
+    #             valid_na_compl, valid_na_neg,
+    #             valid_rna, valid_sm_compl, valid_sm_compl_ligclus,
+    #             valid_sm_compl_strict, valid_sm, valid_pep,
+    #             homo, gen_params
+    #         ) = pickle.load(f)
+    #         diff = deepdiff.DeepDiff(params, gen_params, ignore_order=True)
+    #         ic(diff)
+    #         if diff and 'values_changed' in diff:
+    #             changed = set(diff['values_changed'])
+    #             ic(changed)
+    #             for ig in ignore:
+    #                 changed.discard(f"root['{ig}']")
+    #             if changed:
+    #                 ic(changed)
+    #                 print(f'cache miss: dataset generation parameters passed to train multi differ from those in the dataset pkl:')
+    #                 print(diff)
+    #                 if not no_match_okay:
+    #                     raise Exception(diff)
 
-        return (
-            (pdb_IDs, torch.tensor(pdb_weights).float(), train_pdb), \
-            (fb_IDs, torch.tensor(fb_weights).float(), fb), \
-            (compl_IDs, torch.tensor(compl_weights).float(), train_compl), \
-            (neg_IDs, torch.tensor(neg_weights).float(), train_neg),\
-            (na_compl_IDs, torch.tensor(na_compl_weights).float(), train_na_compl),\
-            (na_neg_IDs, torch.tensor(na_neg_weights).float(), train_na_neg),\
-            (rna_IDs, torch.tensor(rna_weights).float(), train_rna),\
-            (sm_compl_IDs, torch.tensor(sm_compl_weights).float(), train_sm_compl), \
-            (sm_IDs, torch.tensor(sm_weights).float(), train_sm), \
-            valid_pdb, valid_homo,
-            valid_compl, valid_neg,
-            valid_na_compl, valid_na_neg,
-            valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, valid_pep,
-            homo
-        )
+    #     return (
+    #         (pdb_IDs, torch.tensor(pdb_weights).float(), train_pdb), \
+    #         (fb_IDs, torch.tensor(fb_weights).float(), fb), \
+    #         (compl_IDs, torch.tensor(compl_weights).float(), train_compl), \
+    #         (neg_IDs, torch.tensor(neg_weights).float(), train_neg),\
+    #         (na_compl_IDs, torch.tensor(na_compl_weights).float(), train_na_compl),\
+    #         (na_neg_IDs, torch.tensor(na_neg_weights).float(), train_na_neg),\
+    #         (rna_IDs, torch.tensor(rna_weights).float(), train_rna),\
+    #         (sm_compl_IDs, torch.tensor(sm_compl_weights).float(), train_sm_compl), \
+    #         (sm_IDs, torch.tensor(sm_weights).float(), train_sm), \
+    #         valid_pdb, valid_homo,
+    #         valid_compl, valid_neg,
+    #         valid_na_compl, valid_na_neg,
+    #         valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, valid_pep,
+    #         homo
+    #     )
 
     # try to load cached datasets 
     if os.path.exists(params['DATAPKL']):
@@ -512,8 +512,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid
 
     t0 = time.time()
-    print(f'cached train/valid datasets {params['DATAPKL']} not found. '\
-          f're-parsing train/valid metadata...')
+    print(f"cached train/valid datasets {params['DATAPKL']} not found. "\
+          f"re-parsing train/valid metadata...")
     
     # helper functions
     def _load_df(filename, pad_hash=True, eval_cols=[]):
@@ -1197,12 +1197,12 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
     chirals = torch.Tensor()
     #print ("loader_single", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
-
+    ch_label = torch.zeros(seq[0].shape)
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals
+           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label
 
 # Generate input features for homo-oligomers
 def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0, fixbb=False):
@@ -1279,11 +1279,12 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         xyz_prev = xyz_prev[crop_idx]
         mask_prev = mask_prev[crop_idx]
     chirals = torch.Tensor()
+    ch_label = torch.zeros(seq[0].shape)
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, chirals
+           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label
 
 
 def get_pdb(pdbfilename, plddtfilename, item, lddtcut, sccut):
@@ -1317,15 +1318,19 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5,
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
 
-    # when target is homo-oligomer, model as homo-oligomer with probability p_homo_cut
-    if pdb_chain in homo['CHAIN_A'].values and np.random.rand() < p_homo_cut: 
-        pdbid = pdb_chain.split('_')[0]
-        interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
-        feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top)
-        return feats + (torch.zeros((msa.shape[1],)), "homo",item,)
-
-    feats = featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top)
-    return feats + (torch.zeros((msa.shape[1],)), "monomer",item,)
+    if pdb_chain in homo['CHAIN_A'].values: # Target is homo-oligomer
+        p_homo = np.random.rand()
+        if p_homo < p_homo_cut: # model as homo-oligomer with p_homo_cut prob
+            pdbid = pdb_chain.split('_')[0]
+            interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
+            feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top, fixbb=fixbb)
+            return feats + ("homo",item,)
+        else:
+            return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb) \
+                   + ("monomer",item,)
+    else:
+        return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb) \
+               + ("monomer",item,)
 
     
 def loader_fb(item, params, unclamp=False, fixbb=False):
