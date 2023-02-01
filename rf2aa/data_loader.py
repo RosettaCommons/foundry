@@ -414,7 +414,7 @@ def merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot):
 
     return xyz_t_out, f1d_t_out, mask_t_out
 
-def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, diffusion_training=True):
+def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, diffusion_training=False):
     """Loads training/validation sets as pandas DataFrames and returns them in
     dictionaries keyed by their dataset names.
 
@@ -2255,7 +2255,7 @@ def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
                 break
 
         for i, (ligand, ch_xfs, n_contacts, min_dist, ptype) in enumerate(lig_partners):
-            if any([bond.a[:3] == lig_res or bond.b[:3] for lig_res in ligand]):
+            if any([bond.a[:3] == lig_res or bond.b[:3] == lig_res for lig_res in ligand]):
                 i_lig = i
                 break
 
