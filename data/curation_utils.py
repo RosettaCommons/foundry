@@ -8,8 +8,8 @@ sys.path.insert(0,'/home/jue/git/chemnet/arch.22-10-28/')
 sys.path.insert(0,'/home/jue/git/chemnet/arch.22-10-28/pdb/')
 import cifutils
 
-sys.path.insert(0,'../')
-sys.path.insert(0,'../rf2aa')
+sys.path.insert(0,'/home/jue/git/rf2a-fd3/')
+sys.path.insert(0,'/home/jue/git/rf2a-fd3/rf2aa/')
 import rf2aa.chemical as chemical
 from rf2aa.chemical import aa2num, aa2long, NTOTAL, NHEAVY
 
