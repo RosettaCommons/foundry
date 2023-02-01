@@ -14,8 +14,8 @@ from se3_transformer.model import SE3Transformer
 from se3_transformer.model.fiber import Fiber
 se3_transformer_path = inspect.getfile(SE3Transformer)
 se3_fiber_path = inspect.getfile(Fiber)
-ic(se3_transformer_path, se3_fiber_path)
-assert 'RF2-allatom' in se3_transformer_path
+#ic(se3_transformer_path, se3_fiber_path)
+assert 'rf2aa' in se3_transformer_path
 
 class SE3TransformerWrapper(nn.Module):
     """SE(3) equivariant GCN with attention"""
