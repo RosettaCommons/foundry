@@ -92,9 +92,6 @@ default_dataloader_params = {
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230201.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
         "DATAPKL"          : "%s/dataset_20230201.pkl"%sm_compl_dir, # cache for faster loading 
-        # swap the 2 lines below when phase 3 diffusion loader is ready
-        #"DATAPKL_DIFFUSION": "%s/dataset_diffusion_20230201.pkl"%sm_compl_dir, # cache for faster loading 
-        "DATAPKL_DIFFUSION": "%s/dataset_20221123.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -449,15 +446,14 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_set_dict : dict
         keys are names of datasets, values are pandas DataFrames
     """
-    datapkl_key = 'DATAPKL_DIFFUSION' if diffusion_training else 'DATAPKL'
     ignore = ['DATASETS', 'DATASET_PROB', 'DIFF_MASK_PROBS']
     params = {k:v for k,v in params.items() if k not in ignore}
 
     # Temporary hack: load older data pickle for diffusion training
     # Once phase 3 diffusion data loading is complete, remove this block
-    if os.path.exists(params[datapkl_key]) and diffusion_training:
-        with open(params[datapkl_key], "rb") as f:
-            print ('Loading',params[datapkl_key],'...')
+    if os.path.exists(params['DATAPKL']) and diffusion_training:
+        with open(params['DATAPKL'], "rb") as f:
+            print ('Loading',params['DATAPKL'],'...')
             (
                 pdb_IDs, pdb_weights, train_pdb,
                 fb_IDs, fb_weights, fb,
@@ -507,16 +503,16 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         )
 
     # try to load cached datasets 
-    if os.path.exists(params[datapkl_key]):
-        with open(params[datapkl_key], "rb") as f:
-            print ('Loading',params[datapkl_key],'...')
+    if os.path.exists(params['DATAPKL']):
+        with open(params['DATAPKL'], "rb") as f:
+            print ('Loading',params['DATAPKL'],'...')
             train_ID_dict, valid_ID_dict, weights_dict, \
                 train_dict, valid_dict, homo, chid2hash, chid2taxid = pickle.load(f)
             print ('...done')
         return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid
 
     t0 = time.time()
-    print(f'cached train/valid datasets {params[datapkl_key]} not found. '\
+    print(f'cached train/valid datasets {params['DATAPKL']} not found. '\
           f're-parsing train/valid metadata...')
     
     # helper functions
@@ -785,8 +781,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     print(f'Done loading datasets in {time.time()-t0} seconds')
 
     # cache datasets for faster loading next time
-    with open(params[datapkl_key], "wb") as f:
-        print ('Writing',params[datapkl_key],'...')
+    with open(params['DATAPKL'], "wb") as f:
+        print ('Writing',params['DATAPKL'],'...')
         pickle.dump((train_ID_dict, valid_ID_dict, weights_dict, 
                      train_dict, valid_dict, homo, chid2hash, chid2taxid), f)
         print ('...done')
