@@ -4,10 +4,14 @@ import time
 import deepdiff
 from icecream import ic
 from torch.utils import data
-import os, csv, random, pickle, gzip, itertools, time, ast
+import os, csv, random, pickle, gzip, itertools, time, ast, sys
 from dateutil import parser
 from collections import OrderedDict
 from itertools import permutations
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(script_dir)
+sys.path.append(script_dir+'/../')
 
 import numpy as np
 import pandas as pd
@@ -42,8 +46,8 @@ na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
-#mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl" # for phase 3 dataloaders -- switch over when ready
-mol_dir = "/projects/ml/RF2_allatom/isdf" # for legacy datasets
+mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl" # for phase 3 dataloaders -- switch over when ready
+# mol_dir = "/projects/ml/RF2_allatom/isdf" # for legacy datasets
 
 if not os.path.exists(base_dir):
     # training on AWS
@@ -1157,16 +1161,7 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
 
     # get template features
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
-    if not fixbb:
-        xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, msa.shape[1], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
-    if fixbb:
-        xyz_t = torch.clone(xyz)[None]
-        mask = torch.full((len(idx), N_TOTAL), False)
-        mask[:,:14] = pdb['mask']
-        t1d = torch.nn_functional.one_hot(seq, num_classes=NAATOKENS-1)
-        #L = seq.shape[-1]
-        conf = torch.ones_like(seq[:1])[...,None]
-        f1d_t = torch.cat((t1d, conf), dim=-1)
+    xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, msa.shape[1], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
 
     # Residue cropping
     crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
@@ -1197,11 +1192,11 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
            chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals
 
 # Generate input features for homo-oligomers
-def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0):
+def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0, fixbb=False):
     L = msa_orig.shape[1]
     
     msa, ins = merge_a3m_homo(msa_orig, ins_orig, 2) # make unpaired alignments, for training, we always use two chains
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, nmer=2, L_s=[L,L])
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, nmer=2, L_s=[L,L], fixbb=fixbb)
 
     # get template features
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
@@ -1296,7 +1291,7 @@ def get_msa(a3mfilename, item, unzip=True):
     return {'msa':torch.tensor(msa), 'ins':torch.tensor(ins), 'taxIDs':taxIDs, 'label':item}
 
 # Load PDB examples
-def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5):
+def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, fixbb=False):
     # load MSA, PDB, template info
     pdb_chain, pdb_hash = item['CHAINID'], item['HASH']
     pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
@@ -1314,17 +1309,17 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5)
         if p_homo < p_homo_cut: # model as homo-oligomer with p_homo_cut prob
             pdbid = pdb_chain.split('_')[0]
             interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
-            feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top)
+            feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top, fixbb=fixbb)
             return feats + (torch.zeros((msa.shape[1],)), "homo",item,)
         else:
-            return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top) \
-                   + (torch.zeros((msa.shape[0],)), "monomer",item,)
+            return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb) \
+                   + (torch.zeros((msa.shape[1],)), "monomer",item,)
     else:
-        return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top) \
-               + (torch.zeros((msa.shape[0],)), "monomer",item,)
+        return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb) \
+               + (torch.zeros((msa.shape[1],)), "monomer",item,)
 
     
-def loader_fb(item, params, unclamp=False):
+def loader_fb(item, params, unclamp=False, fixbb=False):
     
     # loads sequence/structure/plddt information
     pdb_chain, hashstr = item['CHAINID'], item['HASH']
@@ -1339,7 +1334,7 @@ def loader_fb(item, params, unclamp=False):
     l_orig = msa.shape[1]
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb)
     
     # get template features -- None
     tplt_blank = {"ids":[]}
@@ -1379,7 +1374,7 @@ def loader_fb(item, params, unclamp=False):
            xyz_prev.float(), mask_prev, \
            chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label, "fb", item
 
-def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0):
+def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0, fixbb=False):
 
     pdb_pair, pMSA_hash, L_s, taxID = item['CHAINID'], item['HASH'], item['LEN'], item['TAXONOMY']
     msaA_id, msaB_id = pMSA_hash.split('_')
@@ -1407,7 +1402,7 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
         ins = a3m['ins'].long()
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=L_s)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=L_s, fixbb=fixbb)
 
     # read template info
     tpltA_fn = params['PDB_DIR'] + '/torch/hhr/' + msaA_id[:3] + '/' + msaA_id + '.pt'
@@ -2640,7 +2635,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
 
 
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task='sm_compl_asmb', 
-    num_protein_chains=None, num_ligand_chains=None, pick_top=True, random_noise=5.0):
+    num_protein_chains=None, num_ligand_chains=None, pick_top=True, fixbb=False, random_noise=5.0):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
     with query ligand.  Protein chains all come before ligand chains, and
@@ -2819,7 +2814,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
         chirals[:, :-1] = chirals[:, :-1] + L1
 
     # create MSA features from cropped msa and insertions
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb)
     
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
@@ -3174,20 +3169,29 @@ def adaptor_fix_bb(out):
     """
     assert len(out) == 22, f"found {len(out)} elements in RF2-allatom output"
     (seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev,
-        mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, dataset_name, item) = out
-    xyz_t = torch.clone(true_crds[0])[None]
-    mask_t = torch.clone(atom_mask)
+        mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, ch_label, dataset_name, item) = out
+    #remove permutation symmetry dimension if present
+    if len(true_crds.shape) == 4 and len(atom_mask.shape) == 3:
+        true_crds = true_crds[0]
+        atom_mask = atom_mask[0]
+    
+    #update template features
+    xyz_t = torch.clone(true_crds)[None]
+    mask_t = torch.clone(atom_mask)[None]
     seq_mask_shifted = torch.clone(seq)
     seq_mask_shifted[seq_mask_shifted>=MASKINDEX] -= 1
     f1d_t = torch.nn.functional.one_hot(seq_mask_shifted, num_classes=NAATOKENS-1)
     conf = torch.ones_like(seq[:1])[...,None]
     f1d_t = torch.cat((f1d_t, conf), dim=-1)
-    
-    true_crds = true_crds[0]
-    atom_mask = atom_mask[0]
+    t1d = f1d_t.float()
 
+    # our dataloaders return torch.zeros(L...) for atom frames and chirals when there are none, this updates it to use common shape 
+    if torch.sum(atom_frames) == 0:
+        atom_frames = torch.zeros((0,3,2))
+    if torch.sum(chirals) == 0:
+        chirals = torch.zeros((0,5))
     return seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, \
-        mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, dataset_name, item
+        mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, ch_label, dataset_name, item
 
 def unbatch_item(item):
     """

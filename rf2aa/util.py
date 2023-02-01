@@ -45,13 +45,13 @@ def get_prot_sm_mask(atom_mask, seq):
     sm_mask = is_atom(seq).to(atom_mask.device) # (L)
     # Asserting that atom_mask is full for masked regions of proteins [should be]
     has_backbone = atom_mask[...,:3].all(dim=-1)
-    has_backbone_prot = has_backbone[...,~sm_mask]
-    n_protein_with_backbone = has_backbone.sum()
-    n_protein = (~sm_mask).sum()
+    # has_backbone_prot = has_backbone[...,~sm_mask]
+    # n_protein_with_backbone = has_backbone.sum()
+    # n_protein = (~sm_mask).sum()
     #assert_that((n_protein/n_protein_with_backbone).item()).is_greater_than(0.8)
-
     mask_prot = has_backbone & ~sm_mask # valid protein/NA residues (L)
     mask_ca_sm = atom_mask[...,1] & sm_mask # valid sm mol positions (L)
+
     mask = mask_prot | mask_ca_sm # valid positions
     return mask
 
