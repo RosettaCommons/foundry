@@ -692,7 +692,6 @@ class Trainer():
 
     def load_model(self, model, model_name, rank, suffix='last', resume_train=False, 
                    optimizer=None, scheduler=None, scaler=None):
-        ic(DEBUG)
         if DEBUG:
             return -1, 99999999.9
         chk_fn = self.model_dir+"/%s_%s.pt"%(model_name, suffix)
@@ -844,7 +843,7 @@ class Trainer():
 
         # define dataset & data loader
         train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid = \
-            get_train_valid_set(self.loader_param)
+            get_train_valid_set(self.loader_param, legacy_datapkl=False)
 
         # define atomize_pdb train/valid sets, which use the same examples as pdb set
         train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
@@ -864,7 +863,6 @@ class Trainer():
         if self.dataset_param["n_valid_na_compl"] is None: self.dataset_param["n_valid_na_compl"] = len(valid_na_compl.keys())
         if self.dataset_param["n_valid_rna"] is None: self.dataset_param["n_valid_rna"] = len(valid_rna.keys())
         if self.dataset_param["n_valid_sm_compl"] is None: self.dataset_param["n_valid_sm_compl"] = len(valid_sm_compl.keys())
-        if self.dataset_param["n_valid_sm_compl_ligclus"] is None: self.dataset_param["n_valid_sm_compl_ligclus"] = len(valid_sm_compl_ligclus.keys())
         if self.dataset_param["n_valid_sm_compl_strict"] is None: self.dataset_param["n_valid_sm_compl_strict"] = len(valid_sm_compl_strict.keys())
         if self.dataset_param["n_valid_sm"] is None: self.dataset_param["n_valid_sm"] = len(valid_sm.keys())
 

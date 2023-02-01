@@ -121,7 +121,8 @@ default_dataloader_params = {
         "NRES_ATOMIZE_MIN" : 1,
         "NRES_ATOMIZE_MAX" : 5,
         "ATOMIZE_FLANK"    : 0,
-        "CLUSTER_LIGANDS"  : False
+        "MAXPROTCHAINS"    : 6,
+        "MAXLIGCHAINS"     : 10
     }
 
 def set_data_loader_params(args):
@@ -2672,8 +2673,9 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
 
     # load protein chains
     prot_partners = [p for p in all_partners if p[-1]=='polypeptide(L)']
+    prot_partners = prot_partners[:params['MAXPROTCHAINS']]
     if num_protein_chains is not None:
-        prot_partners = prot_partners[:num_protein_chains]
+        prot_partners = prot_partners[:min(num_protein_chains, params['MAXPROTCHAINS'])]
 
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
     mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize = \
@@ -2687,8 +2689,9 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
 
     # load ligands
     lig_partners = [p for p in all_partners if p[-1]=='nonpoly']
+    lig_partners = lig_partners[:params['MAXLIGCHAINS']]
     if num_ligand_chains is not None:
-        lig_partners = lig_partners[:num_ligand_chains]
+        lig_partners = lig_partners[:min(num_ligand_chains, params['MAXLIGCHAINS'])]
     xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names = \
         featurize_asmb_ligands(lig_partners, params, chains, asmb_xfs, covale)
 
