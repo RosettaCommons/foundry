@@ -1318,19 +1318,15 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5,
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
 
-    if pdb_chain in homo['CHAIN_A'].values: # Target is homo-oligomer
-        p_homo = np.random.rand()
-        if p_homo < p_homo_cut: # model as homo-oligomer with p_homo_cut prob
-            pdbid = pdb_chain.split('_')[0]
-            interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
-            feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top, fixbb=fixbb)
-            return feats + ("homo",item,)
-        else:
-            return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb) \
-                   + ("monomer",item,)
-    else:
-        return featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb) \
-               + ("monomer",item,)
+    # when target is homo-oligomer, model as homo-oligomer with probability p_homo_cut
+    if pdb_chain in homo['CHAIN_A'].values and np.random.rand() < p_homo_cut: 
+        pdbid = pdb_chain.split('_')[0]
+        interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
+        feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top)
+        return feats + ("homo",item,)
+
+    feats = featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top)
+    return feats + ("monomer",item,)
 
     
 def loader_fb(item, params, unclamp=False, fixbb=False):
