@@ -2822,6 +2822,8 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     pdb_chain, pdb_hash = item['CHAINID'], item['HASH']
     pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
     a3m = get_msa(params['PDB_DIR'] + '/a3m/' + pdb_hash[:3] + '/' + pdb_hash + '.a3m.gz', pdb_hash)
+    tplt = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
+
     # get msa features
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
