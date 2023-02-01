@@ -103,7 +103,7 @@ default_dataloader_params = {
         "MINSEQ"           : 1,
         "MAXSEQ"           : 1024,
         "MAXLAT"           : 128, 
-        "CROP"             : 384,
+        "CROP"             : 256,
         "DATCUT"           : "2020-Apr-30",
         "RESCUT"           : 4.5,
         "BLOCKCUT"         : 5,
@@ -2244,6 +2244,7 @@ def find_residues_to_atomize_covale(lig_partners, prot_partners, covale, p_atomi
         i_prot = None
         i_lig = None
 
+        # find protein partner that is bonded to ligand
         for i, (ch_letter, i_xf, n_contacts, min_dist, ptype) in enumerate(prot_partners):
             if bond.a[0] == ch_letter:
                 i_prot = i
@@ -2254,18 +2255,22 @@ def find_residues_to_atomize_covale(lig_partners, prot_partners, covale, p_atomi
                 res_key = bond.b
                 break
 
+        # find ligand partner that is bonded to protein
         for i, (ligand, ch_xfs, n_contacts, min_dist, ptype) in enumerate(lig_partners):
             if any([bond.a[:3] == lig_res or bond.b[:3] == lig_res for lig_res in ligand]):
                 i_lig = i
                 break
 
         if i_prot is not None and i_lig is not None:
-            if np.random.rand() < p_atomize_covale:
-                lig_partner = lig_partners[i_lig]
-                prot_partner = prot_partners[i_prot]
-                lig_partner[0].append(res_key[:3])
-                lig_partner[1].append(prot_partner[:2])
-                residues_to_atomize.append((res_key[:3], prot_partner[:2]))
+            lig_partner = lig_partners[i_lig]
+            prot_partner = prot_partners[i_prot]
+
+            # append to ligand partner the protein residue that it's bonded to
+            lig_partner[0].append(res_key[:3])
+            lig_partner[1].append(prot_partner[:2])
+
+            # record this residue to remove from residue representations
+            residues_to_atomize.append((res_key[:3], prot_partner[:2]))
 
     return lig_partners, residues_to_atomize
 
