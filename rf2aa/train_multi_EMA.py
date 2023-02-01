@@ -843,7 +843,7 @@ class Trainer():
 
         # define dataset & data loader
         train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid = \
-            get_train_valid_set(self.loader_param, legacy_datapkl=False)
+            get_train_valid_set(self.loader_param)
 
         # define atomize_pdb train/valid sets, which use the same examples as pdb set
         train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
