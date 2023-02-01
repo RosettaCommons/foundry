@@ -3125,8 +3125,8 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop):
         if (num_residues < 8) and (num_lig_contacts < 10):
             curr_chain_idx = np.arange(L) + offset
             sel = np.setdiff1d(sel, curr_chain_idx)
-            print(f'removed chain from crop: (num_residues={num_residues} '\
-                  f'num_lig_contacts={num_lig_contacts})')
+            #print(f'removed chain from crop: (num_residues={num_residues} '\
+            #      f'num_lig_contacts={num_lig_contacts})')
 
         offset += L
 
