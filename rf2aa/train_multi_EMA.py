@@ -470,17 +470,12 @@ class Trainer():
         loss_dict['allatom_fape'] = l_fape[0].detach()
 
         # rmsd loss (for logging only)
-        try:
-            rmsd = calc_crd_rmsd(
-                pred_allatom[:,mask_BB[0],:,:3],
-                nat_symm[None,mask_BB[0],:,:3],
-                xs_mask[:,mask_BB[0]]
-                )
-            loss_dict["rmsd"] = rmsd[0].detach()
-        except Exception as e:
-            print('calc_crd_rmsd failed on ',item)
-            rmsd = torch.tensor([0])
-            loss_dict['rmsd'] = torch.tensor(0, device=pred.device)
+        rmsd = calc_crd_rmsd(
+            pred_allatom[:,mask_BB[0],:,:3],
+            nat_symm[None,mask_BB[0],:,:3],
+            xs_mask[:,mask_BB[0]]
+            )
+        loss_dict["rmsd"] = rmsd[0].detach()
 
         # create protein and not protein masks; not protein could include nucleic acids
         prot_mask_BB = is_protein(label_aa_s[0,0]) #*mask_BB[0] # (L,)
@@ -1220,11 +1215,7 @@ class Trainer():
             mask_recycle = same_chain.float()*mask_recycle.float()
 
             # processing template features
-            try:
-                xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
-            except Exception as e:
-                print(unbatch_item(item))
-                raise e
+            xyz_t_frames = xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
             t2d = xyz_to_t2d(xyz_t_frames, mask_t_2d)
 
             # get torsion angles from templates
@@ -1305,7 +1296,7 @@ class Trainer():
                                 use_checkpoint=True
                             )
 
-                            if task[0]=='sm_compl_asmb':
+                            if 'sm_compl' in task[0] or 'metal_compl' in task[0]:
                                 sm_mask = is_atom(seq[0,0])
                                 Ls_prot = Ls_from_same_chain_2d(same_chain[:,~sm_mask][:,:,~sm_mask])
                                 Ls_sm = Ls_from_same_chain_2d(same_chain[:,sm_mask][:,:,sm_mask])
@@ -1362,7 +1353,7 @@ class Trainer():
                             use_checkpoint=True
                         )
 
-                        if task[0]=='sm_compl_asmb':
+                        if 'sm_compl' in task[0] or 'metal_compl' in task[0]:
                             sm_mask = is_atom(seq[0,0])
                             Ls_prot = Ls_from_same_chain_2d(same_chain[:,~sm_mask][:,:,~sm_mask])
                             Ls_sm = Ls_from_same_chain_2d(same_chain[:,sm_mask][:,:,sm_mask])
@@ -1640,7 +1631,7 @@ class Trainer():
                     use_checkpoint=False
                 )
 
-                if task[0]=='sm_compl_asmb':
+                if 'sm_compl' in task[0] or 'metal_compl' in task[0]:
                     sm_mask = is_atom(seq[0,0])
                     Ls_prot = Ls_from_same_chain_2d(same_chain[:,~sm_mask][:,:,~sm_mask])
                     Ls_sm = Ls_from_same_chain_2d(same_chain[:,sm_mask][:,:,sm_mask])

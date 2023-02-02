@@ -2489,9 +2489,9 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, offset, 
 
         if ((occ_<1) & (occ_>0)).any(): 
             # partial occupancy, add to permutation dimension
-            if not ((occ_<1) & (occ_>0)).all():
-                print('WARNING: Partial occupancy for a subset of atoms in ligand', ligand)
-                print('         Adding to permutation dimension as alternate coordinates.')
+            #if not ((occ_<1) & (occ_>0)).all():
+            #    print('WARNING: Partial occupancy for a subset of atoms in ligand', ligand)
+            #    print('         Adding to permutation dimension as alternate coordinates.')
 
             if len(xyz_lig) == 0:
                 xyz_lig = [xyz_]
@@ -3059,7 +3059,7 @@ def crop_sm_compl(prot_xyz, lig_xyz,Ls, params):
     sel, _ = torch.sort(idx)
     return torch.cat((sel, lig_sel))
 
-def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop):
+def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partial_ligands=True):
     """Choose residues with the `n_crop` closest C-alphas to a random atom on
     query ligand. Operates on multi-chain assemblies. Nearby ligands are
     included if all of their (unmasked) atoms are in the crop. Otherwise none
@@ -3082,6 +3082,8 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop):
         Lengths of ligand chains
     n_crop : int
         Number of nearest residues or ligand atoms to include in crop
+    use_partial_ligands : bool 
+        Whether to keep ligands in crop if they have some atoms masked. (Default: True)
     
     Returns
     -------
@@ -3105,15 +3107,24 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop):
     query_lig_idx = np.arange(Ls_sm[0]) + sum(Ls_prot)
     sel = np.unique(np.concatenate([idx.numpy(), query_lig_idx]))
 
-    # remove any ligands who don't have all of their atoms in the topk
+    # partially masked or partially cropped ligands
     offset = sum(Ls_prot)
     for L in Ls_sm:
-        # only look for unmasked atoms to be in crop
         curr_lig_idx = np.arange(L) + offset
-        curr_lig_idx = np.where(res_mask[curr_lig_idx])[0]+offset 
+        curr_lig_idx_valid = np.where(res_mask[curr_lig_idx])[0]+offset
 
-        if not np.isin(curr_lig_idx, sel).all():
+        # ligand has masked atoms and we don't want this
+        if (not use_partial_ligands) and (len(curr_lig_idx)!=len(curr_lig_idx_valid)):
             sel = np.setdiff1d(sel,curr_lig_idx)
+            continue
+
+        if np.isin(curr_lig_idx_valid, sel).all():
+            # all non-masked atoms are in crop; add back masked atoms to avoid messing up frames
+            sel = np.unique(np.concatenate([sel, curr_lig_idx]))
+        else:
+            # some non-masked ligand atoms missing, remove entire ligand from crop
+            sel = np.setdiff1d(sel,curr_lig_idx)
+
         offset += L
 
     # remove protein chains that are short and don't contact other proteins or ligands
