@@ -2280,8 +2280,8 @@ def find_residues_to_atomize_covale(lig_partners, prot_partners, covale, p_atomi
     return lig_partners, residues_to_atomize
 
 
-def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, p_atomize_modres,
-    chid2hash=None, pick_top=True, random_noise=5.0):
+def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, 
+    p_atomize_modres, chid2hash=None, pick_top=True, random_noise=5.0):
     """Loads multiple protein chains from parsed CIF assembly into tensors.
     Outputs will contain chains roughly in the order that they appear in
     `partners` (decreasing number of contacts to query ligand), except that
@@ -2658,7 +2658,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
 
 
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task='sm_compl_asmb', 
-    num_protein_chains=None, num_ligand_chains=None, p_atomize_modres=1, p_atomize_covale=1, pick_top=True, fixbb=False, random_noise=5.0):
+    num_protein_chains=None, num_ligand_chains=None, p_atomize_modres=1, pick_top=True, random_noise=5.0):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
     with query ligand.  Protein chains all come before ligand chains, and
@@ -2709,7 +2709,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     # load protein chains
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
     mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize = \
-        featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, p_atomize_modres, chid2hash=chid2hash, 
+        featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, p_atomize_modres, chid2hash,
                             pick_top=pick_top, random_noise=random_noise)
 
     # update ligand partners and residues_to_atomize with modified residues to be atomized
