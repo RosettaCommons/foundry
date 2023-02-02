@@ -208,8 +208,9 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
             i_perm_min_s.append(ddx.argmin())
             ddx_min_s.append(ddx.min())
 
-        i_ch_min = torch.stack(ddx_min_s).argmin() # index of best chain placement
-        i_perm_min = i_perm_min_s[i_ch_min] # index of best atom permutation at best chain placement
+        i_min = torch.stack(ddx_min_s).argmin() # index of best chain placement (in current subset)
+        i_ch_min = idx[i_min] # index of best chain placement (in full list)
+        i_perm_min = i_perm_min_s[i_min] # index of best atom permutation at best chain placement
 
         # add best chain assignment to output tensors
         xyz_out = torch.cat([xyz_out, xtrue_smch[i_ch_min][:,i_perm_min]], dim=1)

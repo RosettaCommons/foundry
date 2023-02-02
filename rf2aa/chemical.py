@@ -3,6 +3,30 @@ import torch
 import numpy as np
 script_dir = os.path.dirname(os.path.realpath(__file__))+'/'
 
+NAATOKENS = 20+2+10+1+47 # 20 AAs, UNK, MASK, 8 NAs,HIS_D, 47 atoms
+UNKINDEX = 20  # residue unknown
+MASKINDEX = 21  # protein mask
+
+NHEAVYPROT = 14
+NHEAVY = 23
+NTOTAL = 36
+NNAPROTAAS = 32
+NPROTAAS = 22 # include UNK/MAS
+
+CHAIN_GAP = 200
+
+# internal coords
+NPROTTORS = 7
+NPROTANGS = 3
+NNATORS = 10
+NTOTALTORS = NPROTTORS+NNATORS
+NTOTALDOFS = NTOTALTORS+NPROTANGS
+
+#bond types
+num2btype = [0,1,2,3,4,5,6,7] # UNK, SINGLE, DOUBLE, TRIPLE, AROMATIC, 
+                              # PEPTIDE/NA BACKBONE, PROTEIN-LIGAND (PEPTIDE), OTHER
+NBTYPES = len(num2btype)
+
 num2aa=[
     'ALA','ARG','ASN','ASP','CYS',
     'GLN','GLU','GLY','HIS','ILE',
@@ -57,30 +81,6 @@ atom_num= [
 atom2frame_priority = {x:i for i,x in enumerate(frame_priority2atom)}
 atomnum2atomtype = dict(zip(atom_num, frame_priority2atom))
 
-NAATOKENS = 20+2+10+1+47 # 20 AAs, UNK, MASK, 8 NAs,HIS_D, 47 atoms
-UNKINDEX = 20  # residue unknown
-MASKINDEX = 21  # protein mask
-
-NHEAVYPROT = 14
-NHEAVY = 23
-NTOTAL = 36
-NNAPROTAAS = 32
-NPROTAAS = 22 # include UNK/MAS
-
-CHAIN_GAP = 200
-
-# internal coords
-NPROTTORS = 7
-NPROTANGS = 3
-NNATORS = 10
-NTOTALTORS = NPROTTORS+NNATORS
-NTOTALDOFS = NTOTALTORS+NPROTANGS
-
-#bond types
-num2btype = [0,1,2,3,4,5,6,7] # UNK, SINGLE, DOUBLE, TRIPLE, AROMATIC, PEPTIDE, PROTEIN-LIGAND (PEPTIDE), PROTEIN-LIGAND (OTHER)
-
-NBTYPES = len(num2btype)
-
 to1letter = {
     "ALA":'A', "ARG":'R', "ASN":'N', "ASP":'D', "CYS":'C',
     "GLN":'Q', "GLU":'E', "GLY":'G', "HIS":'H', "ILE":'I',
@@ -89,6 +89,12 @@ to1letter = {
     "DA":'a', "DC":'c', "DG":'g', "DT":'t',
     "A":'b', "C":'d', "G":'h', "U":'u',
 }
+
+# this is taken from a query string for a link named "metals in PDB" on BioLiP website 
+# hopefully they put a lot of thought into it
+METAL_RES_NAMES = ['LA','NI','3CO','K','CR','ZN','CD','PD','TB','YT3','OS','EU','NA','RB','W','YB','HO3',
+          'CE','MN','TL','LI','MN3','AU3','AU','EU3','AL','3NI','FE2','PT','FE','CA','AG','CU1',
+          'LU','HG','CO','SR','MG','PB','CS','GA','BA','SM','SB','CU','MO','CU2']
 
 # full sc atom representation
 aa2long=[
