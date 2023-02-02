@@ -2908,8 +2908,8 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     for i_end in range(i_start+1, i_start + n_res_atomize):
         if i_end not in can_atomize_idx:
             n_res_atomize = int(i_end-i_start)
-            print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive '\
-                  f'fully-resolved residues to atomize. {item} i_start={i_start}')
+            #print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive '\
+            #      f'fully-resolved residues to atomize. {item} i_start={i_start}')
             break
 
     msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
