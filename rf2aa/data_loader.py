@@ -3410,7 +3410,7 @@ class DatasetSMComplex(data.Dataset):
 
 class DatasetSMComplexAssembly(data.Dataset):
     def __init__(self, IDs, loader, data_df, chid2hash, chid2taxid, params, task, num_protein_chains=None, 
-    seed=None):
+    p_atomize_modres=1, seed=None):
         self.IDs = IDs
         self.data_df = data_df
         self.loader = loader
@@ -3419,6 +3419,7 @@ class DatasetSMComplexAssembly(data.Dataset):
         self.params = params
         self.task = task
         self.num_protein_chains = num_protein_chains
+        self.p_atomize_modres = p_atomize_modres
         self.rng = np.random.RandomState(seed)
 
     def __len__(self):
@@ -3435,6 +3436,7 @@ class DatasetSMComplexAssembly(data.Dataset):
                 self.chid2taxid,
                 task=self.task,
                 num_protein_chains=self.num_protein_chains,
+                p_atomize_modres=self.p_atomize_modres,
             )
         except Exception as e:
             print('error in DatasetSMComplexAssembly',item)
@@ -3460,7 +3462,7 @@ class DatasetSM(data.Dataset):
 
 class DistilledDataset(data.Dataset):
     def __init__(self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid, params, 
-                 native_NA_frac=0.25, unclamp_cut=0.9):
+                 native_NA_frac=0.25, unclamp_cut=0.9, p_atomize_modres=1):
 
         self.ID_dict = ID_dict
         self.dataset_dict = dataset_dict
@@ -3470,6 +3472,7 @@ class DistilledDataset(data.Dataset):
         self.chid2taxid = chid2taxid
         self.params = params
         self.unclamp_cut = unclamp_cut
+        self.p_atomize_modres = p_atomize_modres
         self.native_NA_frac = native_NA_frac
         self.index_dict = OrderedDict([
             (k, np.arange(len(self.ID_dict[k]))) for k in self.dataset_dict.keys()
@@ -3543,35 +3546,35 @@ class DistilledDataset(data.Dataset):
                 ID = self.ID_dict['sm_compl'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl'], ID)
                 out = self.loader_dict['sm_compl'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl', num_protein_chains=1)
+                self.chid2taxid, task='sm_compl', num_protein_chains=1, p_atomize_modres=self.p_atomize_modres)
             offset += len(self.index_dict['sm_compl'])
 
             if index >= offset and index < offset + len(self.index_dict['metal_compl']):
                 ID = self.ID_dict['metal_compl'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['metal_compl'], ID)
                 out = self.loader_dict['metal_compl'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='metal_compl', num_protein_chains=1)
+                self.chid2taxid, task='metal_compl', num_protein_chains=1, p_atomize_modres=self.p_atomize_modres)
             offset += len(self.index_dict['metal_compl'])
 
             if index >= offset and index < offset + len(self.index_dict['sm_compl_multi']):
                 ID = self.ID_dict['sm_compl_multi'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_multi'], ID)
                 out = self.loader_dict['sm_compl_multi'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl_multi', num_protein_chains=1)
+                self.chid2taxid, task='sm_compl_multi', num_protein_chains=1, p_atomize_modres=self.p_atomize_modres)
             offset += len(self.index_dict['sm_compl_multi'])
 
             if index >= offset and index < offset + len(self.index_dict['sm_compl_covale']):
                 ID = self.ID_dict['sm_compl_covale'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_covale'], ID)
                 out = self.loader_dict['sm_compl_covale'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl_covale')
+                self.chid2taxid, task='sm_compl_covale', p_atomize_modres=self.p_atomize_modres)
             offset += len(self.index_dict['sm_compl_covale'])
 
             if index >= offset and index < offset + len(self.index_dict['sm_compl_asmb']):
                 ID = self.ID_dict['sm_compl_asmb'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_asmb'], ID)
                 out = self.loader_dict['sm_compl_asmb'](item, self.params, self.chid2hash, 
-                self.chid2taxid)
+                self.chid2taxid, p_atomize_modres=self.p_atomize_modres)
             offset += len(self.index_dict['sm_compl_asmb'])
 
             if index >= offset and index < offset + len(self.index_dict['sm']):
