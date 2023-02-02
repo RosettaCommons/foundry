@@ -1322,10 +1322,10 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5,
     if pdb_chain in homo['CHAIN_A'].values and np.random.rand() < p_homo_cut: 
         pdbid = pdb_chain.split('_')[0]
         interfaces = homo[homo['CHAIN_A']==pdb_chain].to_dict(orient='records') # list of dicts
-        feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top)
+        feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top, fixbb=fixbb)
         return feats + ("homo",item,)
 
-    feats = featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top)
+    feats = featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb)
     return feats + ("monomer",item,)
 
     
@@ -2214,7 +2214,7 @@ def loader_sm_compl_covale(item, params, pick_top=True,
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals_sm, ch_label, task, item
 
-def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
+def find_residues_to_atomize_covale(lig_partners, prot_partners, covale, p_atomize_covale=1):
     """
     Updates partner lists to have atomized residues when residues are making
     covalent bonds with small molecules.  Also returns list of atomized
@@ -2260,16 +2260,17 @@ def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
                 break
 
         if i_prot is not None and i_lig is not None:
-            lig_partner = lig_partners[i_lig]
-            prot_partner = prot_partners[i_prot]
-            lig_partner[0].append(res_key[:3])
-            lig_partner[1].append(prot_partner[:2])
-            residues_to_atomize.append((res_key[:3], prot_partner[:2]))
+            if np.random.rand() < p_atomize_covale:
+                lig_partner = lig_partners[i_lig]
+                prot_partner = prot_partners[i_prot]
+                lig_partner[0].append(res_key[:3])
+                lig_partner[1].append(prot_partner[:2])
+                residues_to_atomize.append((res_key[:3], prot_partner[:2]))
 
     return lig_partners, residues_to_atomize
 
 
-def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, 
+def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, p_atomize_modres,
     chid2hash=None, pick_top=True, random_noise=5.0):
     """Loads multiple protein chains from parsed CIF assembly into tensors.
     Outputs will contain chains roughly in the order that they appear in
@@ -2303,6 +2304,9 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres,
         Maps modified residue names to their canonical equivalents. Any
         modified residue will be converted to its standard equivalent and
         coordinates for atoms with matching names will be saved.
+    p_atomize_modres : float
+        The probability with which we should treat modified residues as atom representation
+        Otherwise, they are converted to their cognate residue provided in the cif file
     chid2hash : dict
         Maps chainid to msa hash which is used to get templates for the 
         Maps chain ids (<pdbid>_<chain_letter>) to hash strings used to name homology
@@ -2348,7 +2352,7 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres,
         N_mer = len(partners_ch)
         xyz_chxf, mask_chxf, seq_chxf, mod_residues_to_atomize = [], [], [], []
         for p in partners_ch:
-            xyz_, mask_, seq_, _, _, residues_to_atomize = cif_prot_to_xyz(chains[p[0]], asmb_xfs[p[1]], modres)
+            xyz_, mask_, seq_, _, _, residues_to_atomize = cif_prot_to_xyz(chains[p[0]], asmb_xfs[p[1]], modres, p_atomize_modres)
             residues_to_atomize = [(residue, (residue[0], p[1])) for residue in residues_to_atomize]
             xyz_chxf.append(xyz_) # (L, N_atoms, 3)
             mask_chxf.append(mask_)
@@ -2644,7 +2648,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
 
 
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task='sm_compl_asmb', 
-    num_protein_chains=None, num_ligand_chains=None, pick_top=True, fixbb=False, random_noise=5.0):
+    num_protein_chains=None, num_ligand_chains=None, p_atomize_modres=1, p_atomize_covale=1, pick_top=True, fixbb=False, random_noise=5.0):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
     with query ligand.  Protein chains all come before ligand chains, and
@@ -2683,11 +2687,10 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     lig_partners = lig_partners[:params['MAXLIGCHAINS']]
     if num_ligand_chains is not None:
         lig_partners = lig_partners[:min(num_ligand_chains, params['MAXLIGCHAINS'])]
-
-    all_partners = prot_partners + lig_partners
+    # all_partners = prot_partners + lig_partners
 
     # update ligand partners to atomize residues that are covalently linked to proteins
-    lig_partners, residues_to_atomize = find_residues_to_atomize_covale(lig_partners, prot_partners, covale) 
+    lig_partners, residues_to_atomize = find_residues_to_atomize_covale(lig_partners, prot_partners, covale, p_atomize_covale) 
 
     # get list of coordinate transforms to recreate this bio-assembly
     i_a = str(item['ASSEMBLY'])
@@ -2696,7 +2699,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     # load protein chains
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
     mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize = \
-        featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, chid2hash,
+        featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, p_atomize_modres, chid2hash=chid2hash, 
                             pick_top=pick_top, random_noise=random_noise)
 
     # update ligand partners and residues_to_atomize with modified residues to be atomized

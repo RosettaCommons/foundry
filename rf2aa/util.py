@@ -1279,7 +1279,7 @@ def reindex_protein_feats_after_atomize(
     return msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls_prot, Ls_sm
 
 
-def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
+def cif_prot_to_xyz(ch, ch_xf, modres=dict(), p_atomize_modres=1):
     """Given a protein chain and coordinate transform parsed from CIF file,
     return tensors with coordinates and masks
 
@@ -1293,6 +1293,9 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
         Maps modified residue names to their canonical equivalents. Any
         modified residue will be converted to its standard equivalent and
         coordinates for atoms with matching names will be saved.
+    p_atomize_modres : float
+        The probability with which we should treat modified residues as atom representation
+        Otherwise, they are converted to their cognate residue provided in the cif file
 
     Returns
     -------
@@ -1332,7 +1335,8 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
         elif k[2] in modres and modres[k[2]] in aa2num: # nonstandard AA, map to standard
             #print('nonstandard AA',k,modres[k[2]])
             aa = aa2num[modres[k[2]]]
-            residues_to_atomize.update((k[:3],))
+            if np.random.rand() < p_atomize_modres:
+                residues_to_atomize.update((k[:3],))
         else: # unknown AA, still try to store BB atoms
             #print('unknown AA',k)
             aa = 20
