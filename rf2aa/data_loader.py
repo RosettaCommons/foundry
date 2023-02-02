@@ -123,7 +123,8 @@ default_dataloader_params = {
         "NRES_ATOMIZE_MAX" : 5,
         "ATOMIZE_FLANK"    : 0,
         "MAXPROTCHAINS"    : 6,
-        "MAXLIGCHAINS"     : 10
+        "MAXLIGCHAINS"     : 10,
+        "PROBMETAL"        : 0.5,
     }
 
 def set_data_loader_params(args):
