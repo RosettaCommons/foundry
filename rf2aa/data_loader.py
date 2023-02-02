@@ -1073,7 +1073,8 @@ def get_assembly_msa(protein_chain_info, params):
             msa, ins, taxID = parse_a3m(msa_vals["path"], paired=msa_vals["paired"])
             msa = msa[:, msa_vals["seq_range"][0]:msa_vals["seq_range"][1]]
             ins = ins[:, msa_vals["seq_range"][0]:msa_vals["seq_range"][1]]
-            a3m_list.append({"msa":msa, "ins":ins, "taxID":taxID, "hash":msa_vals["hash"]})
+            a3m_list.append({"msa":torch.tensor(msa), "ins":torch.tensor(ins),
+                             "taxID":taxID, "hash":msa_vals["hash"]})
             L_s.append(msa_vals["seq_range"][1]-msa_vals["seq_range"][0])
         msaA, insA = merge_msas(a3m_list, L_s)
         a3m = {"msa": torch.tensor(msaA), "ins": torch.tensor(insA)}
@@ -2297,7 +2298,7 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, p_at
     ----------
     pdb_id : string
         PDB accession of example. Used to load the pre-parsed CIF data.
-    partners : list of 4-tuples (partner, transform_index, num_contacts, partner_type)
+    partners : list of 5-tuples (partner, transform_index, num_contacts, min_dist, partner_type)
         Protein chains to featurize. All elements should have `partner_type =
         'polypeptide(L)'`. `partner` contains the chain letter.
         `transform_index` is an integer index of the coordinate transform for
@@ -2537,7 +2538,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
 
     Parameters
     ----------
-    partners : list of 4-tuples (partner, transform_index, num_contacts, partner_type)
+    partners : list of 5-tuples (partner, transform_index, num_contacts, min_dist, partner_type)
         Ligands to featurize. All elements should have `partner_type =
         'nonpoly'` and `partner` is a list of tuples (chain_letter, res_num,
         res_name) corresponding to the residues that make up this ligand.
