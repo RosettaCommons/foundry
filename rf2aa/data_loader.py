@@ -82,7 +82,7 @@ default_dataloader_params = {
         "SM_MULTI_LIST"    : "%s/sm_compl_multi_20230201.csv"%sm_compl_dir, 
         "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20230201.csv"%sm_compl_dir,
         "SM_ASMB_LIST"     : "%s/sm_compl_asmb_20230201.csv"%sm_compl_dir,
-        "PDB_LIST"         : "%s/list_v02_w_taxid.csv"%base_dir, # on digs
+        "PDB_LIST"         : "%s/list_v00_w_taxid_20230201.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
         "VAL_PDB"          : "%s/valid_remapped"%sm_compl_dir,
