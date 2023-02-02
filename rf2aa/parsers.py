@@ -138,7 +138,7 @@ def parse_a3m(filename, unzip=True, maxseq=10000, paired=False):
                 if match:
                     taxIDs.append(match.group(1))
                 else:
-                    taxIDs.append("") # query sequence
+                    taxIDs.append("query") # query sequence
             continue
             
         # remove right whitespaces
