@@ -23,7 +23,7 @@ import networkx as nx
 
 from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX,\
-    NTOTAL, NBTYPES, CHAIN_GAP, num2aa
+    NTOTAL, NBTYPES, CHAIN_GAP, num2aa, METAL_RES_NAMES
 from rf2aa.kinematics import get_chirals
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
@@ -124,7 +124,7 @@ default_dataloader_params = {
         "ATOMIZE_FLANK"    : 0,
         "MAXPROTCHAINS"    : 6,
         "MAXLIGCHAINS"     : 10,
-        "PROBMETAL"        : 0.5,
+        "P_METAL"        : 0.5,
     }
 
 def set_data_loader_params(args):
@@ -1073,11 +1073,11 @@ def get_assembly_msa(protein_chain_info, params):
             msa, ins, taxID = parse_a3m(msa_vals["path"], paired=msa_vals["paired"])
             msa = msa[:, msa_vals["seq_range"][0]:msa_vals["seq_range"][1]]
             ins = ins[:, msa_vals["seq_range"][0]:msa_vals["seq_range"][1]]
-            a3m_list.append({"msa":torch.tensor(msa), "ins":torch.tensor(ins),
+            a3m_list.append({"msa":torch.tensor(msa).long(), "ins":torch.tensor(ins).long(), 
                              "taxID":taxID, "hash":msa_vals["hash"]})
             L_s.append(msa_vals["seq_range"][1]-msa_vals["seq_range"][0])
         msaA, insA = merge_msas(a3m_list, L_s)
-        a3m = {"msa": torch.tensor(msaA), "ins": torch.tensor(insA)}
+        a3m = {"msa": msaA, "ins": insA}
     return a3m
 
 # merge msa & insertion statistics of two proteins having different taxID
@@ -1146,17 +1146,16 @@ def merge_msas(a3m_list, L_s):
             final_pairsB = []
             msaB, insB = a3mB["msa"], a3mB["ins"]
             for pair in pair_taxIDs:
-                pair_a3mA = np.where(np.array(taxIDs)==pair)
-                pair_a3mB = np.where(a3mB["taxID"]==pair)
-                msaApair = np.argsort(np.sum(msaA[pair_a3mA, :] == msaA[0, :],axis=-1))
-                msaBpair = np.argsort(np.sum(msaB[pair_a3mB, :] == msaB[0, :],axis=-1))
-                      
-                final_pairsA.append(pair_a3mA[0][msaApair[0]][0])
-                final_pairsB.append(pair_a3mB[0][msaBpair[0]][0])
-            paired_msaB = np.full((msaA.shape[0], L_s[i]), 20) #num_sequences protein A, L protein B
-            paired_msaB[np.array(final_pairsA).ravel().astype(np.uint8)] = msaB[np.array(final_pairsB).ravel().astype(np.uint8)]
-            msaA = np.append(msaA, paired_msaB, axis=1)
-            insA = np.zeros_like(msaA) #paired MSAs in our dataset dont have insertions so setting to all 0s
+                pair_a3mA = np.where(np.array(taxIDs)==pair)[0]
+                pair_a3mB = np.where(a3mB["taxID"]==pair)[0]
+                msaApair = torch.argsort(torch.sum(msaA[pair_a3mA, :] == msaA[0, :],axis=-1))
+                msaBpair = torch.argsort(torch.sum(msaB[pair_a3mB, :] == msaB[0, :],axis=-1))
+                final_pairsA.append(pair_a3mA[msaApair])
+                final_pairsB.append(pair_a3mB[msaBpair])
+            paired_msaB = torch.full((msaA.shape[0], L_s[i]), 20).long() # (N_seq_A, L_B)
+            paired_msaB[final_pairsA] = msaB[final_pairsB]
+            msaA = torch.cat([msaA, paired_msaB], dim=1)
+            insA = torch.zeros_like(msaA) # paired MSAs in our dataset dont have insertions 
         seen.update(a3mB["hash"])
         
     return msaA, insA
@@ -2219,7 +2218,7 @@ def loader_sm_compl_covale(item, params, pick_top=True,
            xyz_prev.float(), mask_prev, \
            chain_idx, False, False, frames, bond_feats, chirals_sm, ch_label, task, item
 
-def find_residues_to_atomize_covale(lig_partners, prot_partners, covale, p_atomize_covale=1):
+def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
     """
     Updates partner lists to have atomized residues when residues are making
     covalent bonds with small molecules.  Also returns list of atomized
@@ -2656,7 +2655,6 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
     return xyz_sm, mask_sm, msa_sm[None], bond_feats_sm, frames, chirals, Ls_sm, \
            ch_label_sm, akeys_sm, resnames
 
-
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task='sm_compl_asmb', 
     num_protein_chains=None, num_ligand_chains=None, p_atomize_modres=1, pick_top=True, fixbb=False, random_noise=5.0):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
@@ -2692,15 +2690,19 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     if num_protein_chains is not None:
         prot_partners = prot_partners[:min(num_protein_chains, params['MAXPROTCHAINS'])]
 
-    lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + \
-                   [p for p in item['PARTNERS'] if p[-1]=='nonpoly']
+    # randomly subsample metals, add query ligand
+    lig_partners = [p for p in item['PARTNERS'] 
+                    if p[-1]=='nonpoly' 
+                    and (p[0][0][2] not in METAL_RES_NAMES or np.random.rand() < params['P_METAL'])]
+    lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + lig_partners
+                   
     lig_partners = lig_partners[:params['MAXLIGCHAINS']]
     if num_ligand_chains is not None:
         lig_partners = lig_partners[:min(num_ligand_chains, params['MAXLIGCHAINS'])]
     # all_partners = prot_partners + lig_partners
 
     # update ligand partners to atomize residues that are covalently linked to proteins
-    lig_partners, residues_to_atomize = find_residues_to_atomize_covale(lig_partners, prot_partners, covale, p_atomize_covale) 
+    lig_partners, residues_to_atomize = find_residues_to_atomize_covale(lig_partners, prot_partners, covale) 
 
     # get list of coordinate transforms to recreate this bio-assembly
     i_a = str(item['ASSEMBLY'])
@@ -2709,12 +2711,9 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     # load protein chains
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
     mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize = \
-<<<<<<< HEAD
         featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, p_atomize_modres, chid2hash,
-=======
-        featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, p_atomize_modres, chid2hash=chid2hash, 
->>>>>>> cf6ac19 (save conflict)
                             pick_top=pick_top, random_noise=random_noise)
+
 
     # update ligand partners and residues_to_atomize with modified residues to be atomized
     lig_partners.extend([([res_tuple], [ch_xf], -1, "nonpoly",) # multi-res ligand format

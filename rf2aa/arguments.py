@@ -87,15 +87,14 @@ def get_args():
             help="maximum sequence identity cutoff for template selection [150.0]")
     data_group.add_argument('-maxcycle', type=int, default=4,
             help="maximum number of recycle [4]")
-    data_group.add_argument('-cluster_ligands', action='store_true', default=False,
-            help="cluster protein/sm. mol examples by ligand similarity (downsamples "\
-                 "examples with common ligands like ATP, heme, etc [False]")
     data_group.add_argument('-nres_atomize_min', type=int, default=3,
             help="minimum number of residues to atomize [3]")
     data_group.add_argument('-nres_atomize_max', type=int, default=5,
             help="maximum number of residues to atomize [5]")
     data_group.add_argument('-atomize_flank', type=int, default=0,
             help="flanking residues to remove when atomizing [0]")
+    data_group.add_argument('-p_metal', type=float, default=1,
+            help="probability of a given metal ion being included [1.0]")
     
     # dataset parameters
     dataset_group = parser.add_argument_group("data loading parameters")
