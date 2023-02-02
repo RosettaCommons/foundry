@@ -82,7 +82,8 @@ default_dataloader_params = {
         "SM_MULTI_LIST"    : "%s/sm_compl_multi_20230201.csv"%sm_compl_dir, 
         "SM_COVALE_LIST"   : "%s/sm_compl_covalent_20230201.csv"%sm_compl_dir,
         "SM_ASMB_LIST"     : "%s/sm_compl_asmb_20230201.csv"%sm_compl_dir,
-        "PDB_LIST"         : "%s/list_v00_w_taxid_20230201.csv"%base_dir, # on digs
+        "PDB_LIST"         : "%s/list_v02_w_taxid.csv"%base_dir, # on digs
+        "PDB_METADATA"     : "%s/list_v00_w_taxid_20230201.csv"%base_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
         "VAL_PDB"          : "%s/valid_remapped"%sm_compl_dir,
@@ -554,10 +555,12 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     train_dict['pdb'] = pdb[(~pdb.CLUSTER.isin(val_pdb_ids)) & (~pdb.CLUSTER.isin(test_sm_ids))]
     valid_dict['pdb'] = pdb[pdb.CLUSTER.isin(val_pdb_ids) & (~pdb.CLUSTER.isin(test_sm_ids))]
     val_hash = set(valid_dict['pdb'].HASH.values)
-    chid2hash = dict(zip(pdb.CHAINID, pdb.HASH))
-    chid2taxid = dict(zip(pdb.CHAINID, pdb.TAXID))
     train_ID_dict['pdb'], weights_dict['pdb'] = _get_IDs_weights(train_dict['pdb'])
     valid_ID_dict['pdb'] = valid_dict['pdb'].CLUSTER.drop_duplicates().values    
+
+    pdb_metadata = _load_df(params['PDB_METADATA'])
+    chid2hash = dict(zip(pdb_metadata.CHAINID, pdb_metadata.HASH))
+    chid2taxid = dict(zip(pdb_metadata.CHAINID, pdb_metadata.TAXID))
 
     # homo-oligomers
     homo = pd.read_csv(params['HOMO_LIST'])
