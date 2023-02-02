@@ -124,7 +124,8 @@ default_dataloader_params = {
         "ATOMIZE_FLANK"    : 0,
         "MAXPROTCHAINS"    : 6,
         "MAXLIGCHAINS"     : 10,
-        "P_METAL"        : 0.5,
+        "P_METAL"          : 0.75,
+        "P_ATOMIZE_MODRES" : 0.75,
     }
 
 def set_data_loader_params(args):
@@ -2279,7 +2280,7 @@ def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
     return lig_partners, residues_to_atomize
 
 
-def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, p_atomize_modres,
+def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres,
     chid2hash=None, pick_top=True, random_noise=5.0):
     """Loads multiple protein chains from parsed CIF assembly into tensors.
     Outputs will contain chains roughly in the order that they appear in
@@ -2313,9 +2314,6 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, p_at
         Maps modified residue names to their canonical equivalents. Any
         modified residue will be converted to its standard equivalent and
         coordinates for atoms with matching names will be saved.
-    p_atomize_modres : float
-        The probability with which we should treat modified residues as atom representation
-        Otherwise, they are converted to their cognate residue provided in the cif file
     chid2hash : dict
         Maps chainid to msa hash which is used to get templates for the 
         Maps chain ids (<pdbid>_<chain_letter>) to hash strings used to name homology
@@ -2361,7 +2359,7 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres, p_at
         N_mer = len(partners_ch)
         xyz_chxf, mask_chxf, seq_chxf, mod_residues_to_atomize = [], [], [], []
         for p in partners_ch:
-            xyz_, mask_, seq_, _, _, residues_to_atomize = cif_prot_to_xyz(chains[p[0]], asmb_xfs[p[1]], modres, p_atomize_modres)
+            xyz_, mask_, seq_, _, _, residues_to_atomize = cif_prot_to_xyz(chains[p[0]], asmb_xfs[p[1]], modres)
             residues_to_atomize = [(residue, (residue[0], p[1])) for residue in residues_to_atomize]
             xyz_chxf.append(xyz_) # (L, N_atoms, 3)
             mask_chxf.append(mask_)
@@ -2656,7 +2654,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
            ch_label_sm, akeys_sm, resnames
 
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task='sm_compl_asmb', 
-    num_protein_chains=None, num_ligand_chains=None, p_atomize_modres=1, pick_top=True, fixbb=False, random_noise=5.0):
+    num_protein_chains=None, num_ligand_chains=None, pick_top=True, fixbb=False, random_noise=5.0):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
     with query ligand.  Protein chains all come before ligand chains, and
@@ -2711,14 +2709,24 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     # load protein chains
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
     mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize = \
-        featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres, p_atomize_modres, chid2hash,
-                            pick_top=pick_top, random_noise=random_noise)
+        featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres,
+                            chid2hash, pick_top=pick_top, random_noise=random_noise)
 
+    # subsample non-standard residues to atomize
+    mod_residues_to_atomize = [res for res in mod_residues_to_atomize 
+                               if np.random.rand() < params['P_ATOMIZE_MODRES']]
 
     # update ligand partners and residues_to_atomize with modified residues to be atomized
     lig_partners.extend([([res_tuple], [ch_xf], -1, "nonpoly",) # multi-res ligand format
                          for (res_tuple, ch_xf) in mod_residues_to_atomize])
     residues_to_atomize.extend(mod_residues_to_atomize)
+
+    # keep 1st template and random sample of others for params['MAXTPLT'] total
+    if xyz_t_prot.shape[0] > params['MAXTPLT']:
+        sel = np.concatenate([[0], np.random.permutation(xyz_t_prot.shape[0]-1)[:params['MAXTPLT']-1]+1])
+        xyz_t_prot = xyz_t_prot[sel]
+        mask_t_prot = mask_t_prot[sel]
+        f1d_t_prot = f1d_t_prot[sel]
 
     # load ligands
     xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names = \
@@ -3412,7 +3420,7 @@ class DatasetSMComplex(data.Dataset):
 
 class DatasetSMComplexAssembly(data.Dataset):
     def __init__(self, IDs, loader, data_df, chid2hash, chid2taxid, params, task, num_protein_chains=None, 
-    p_atomize_modres=1, seed=None):
+    seed=None):
         self.IDs = IDs
         self.data_df = data_df
         self.loader = loader
@@ -3421,7 +3429,6 @@ class DatasetSMComplexAssembly(data.Dataset):
         self.params = params
         self.task = task
         self.num_protein_chains = num_protein_chains
-        self.p_atomize_modres = p_atomize_modres
         self.rng = np.random.RandomState(seed)
 
     def __len__(self):
@@ -3438,7 +3445,6 @@ class DatasetSMComplexAssembly(data.Dataset):
                 self.chid2taxid,
                 task=self.task,
                 num_protein_chains=self.num_protein_chains,
-                p_atomize_modres=self.p_atomize_modres,
             )
         except Exception as e:
             print('error in DatasetSMComplexAssembly',item)
@@ -3464,7 +3470,7 @@ class DatasetSM(data.Dataset):
 
 class DistilledDataset(data.Dataset):
     def __init__(self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid, params, 
-                 native_NA_frac=0.25, unclamp_cut=0.9, p_atomize_modres=1):
+                 native_NA_frac=0.25, unclamp_cut=0.9):
 
         self.ID_dict = ID_dict
         self.dataset_dict = dataset_dict
@@ -3474,7 +3480,6 @@ class DistilledDataset(data.Dataset):
         self.chid2taxid = chid2taxid
         self.params = params
         self.unclamp_cut = unclamp_cut
-        self.p_atomize_modres = p_atomize_modres
         self.native_NA_frac = native_NA_frac
         self.index_dict = OrderedDict([
             (k, np.arange(len(self.ID_dict[k]))) for k in self.dataset_dict.keys()
@@ -3548,35 +3553,35 @@ class DistilledDataset(data.Dataset):
                 ID = self.ID_dict['sm_compl'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl'], ID)
                 out = self.loader_dict['sm_compl'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl', num_protein_chains=1, p_atomize_modres=self.p_atomize_modres)
+                self.chid2taxid, task='sm_compl', num_protein_chains=1)
             offset += len(self.index_dict['sm_compl'])
 
             if index >= offset and index < offset + len(self.index_dict['metal_compl']):
                 ID = self.ID_dict['metal_compl'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['metal_compl'], ID)
                 out = self.loader_dict['metal_compl'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='metal_compl', num_protein_chains=1, p_atomize_modres=self.p_atomize_modres)
+                self.chid2taxid, task='metal_compl', num_protein_chains=1)
             offset += len(self.index_dict['metal_compl'])
 
             if index >= offset and index < offset + len(self.index_dict['sm_compl_multi']):
                 ID = self.ID_dict['sm_compl_multi'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_multi'], ID)
                 out = self.loader_dict['sm_compl_multi'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl_multi', num_protein_chains=1, p_atomize_modres=self.p_atomize_modres)
+                self.chid2taxid, task=task, num_protein_chains=1)
             offset += len(self.index_dict['sm_compl_multi'])
 
             if index >= offset and index < offset + len(self.index_dict['sm_compl_covale']):
                 ID = self.ID_dict['sm_compl_covale'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_covale'], ID)
                 out = self.loader_dict['sm_compl_covale'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl_covale', p_atomize_modres=self.p_atomize_modres)
+                self.chid2taxid, task=task)
             offset += len(self.index_dict['sm_compl_covale'])
 
             if index >= offset and index < offset + len(self.index_dict['sm_compl_asmb']):
                 ID = self.ID_dict['sm_compl_asmb'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_asmb'], ID)
                 out = self.loader_dict['sm_compl_asmb'](item, self.params, self.chid2hash, 
-                self.chid2taxid, p_atomize_modres=self.p_atomize_modres)
+                self.chid2taxid)
             offset += len(self.index_dict['sm_compl_asmb'])
 
             if index >= offset and index < offset + len(self.index_dict['sm']):

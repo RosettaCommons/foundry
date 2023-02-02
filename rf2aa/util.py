@@ -1279,7 +1279,7 @@ def reindex_protein_feats_after_atomize(
     return msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls_prot, Ls_sm
 
 
-def cif_prot_to_xyz(ch, ch_xf, modres=dict(), p_atomize_modres=1):
+def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
     """Given a protein chain and coordinate transform parsed from CIF file,
     return tensors with coordinates and masks
 
@@ -1293,9 +1293,6 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict(), p_atomize_modres=1):
         Maps modified residue names to their canonical equivalents. Any
         modified residue will be converted to its standard equivalent and
         coordinates for atoms with matching names will be saved.
-    p_atomize_modres : float
-        The probability with which we should treat modified residues as atom representation
-        Otherwise, they are converted to their cognate residue provided in the cif file
 
     Returns
     -------
@@ -1328,25 +1325,24 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict(), p_atomize_modres=1):
 
     unrec_elements = set()
     residues_to_atomize = set()
-    for k,v in ch.atoms.items():
-        i_res = int(k[1])-i_min
-        if k[2] in aa2num: # standard AA
-            aa = aa2num[k[2]]
-        elif k[2] in modres and modres[k[2]] in aa2num: # nonstandard AA, map to standard
+    for (ch_letter, res_num, res_name, atom_name), atom_val in ch.atoms.items():
+        i_res = int(res_num)-i_min
+        if res_name in aa2num: # standard AA
+            aa = aa2num[res_name]
+        elif res_name in modres and modres[res_name] in aa2num: # nonstandard AA, map to standard
             #print('nonstandard AA',k,modres[k[2]])
-            aa = aa2num[modres[k[2]]]
-            if np.random.rand() < p_atomize_modres:
-                residues_to_atomize.update((k[:3],))
+            aa = aa2num[modres[res_name]]
+            residues_to_atomize.add((ch_letter, res_num, res_name))
         else: # unknown AA, still try to store BB atoms
             #print('unknown AA',k)
             aa = 20
-        if k[3] in aa2long_[aa]: # atom name exists in RF nomenclature
-            i_atom = aa2long_[aa].index(k[3]) # atom index
-            xyz[i_res, i_atom, :] = torch.tensor(v.xyz)
-            mask[i_res, i_atom] = v.occ
+        if atom_name in aa2long_[aa]: # atom name exists in RF nomenclature
+            i_atom = aa2long_[aa].index(atom_name) # atom index
+            xyz[i_res, i_atom, :] = torch.tensor(atom_val.xyz)
+            mask[i_res, i_atom] = atom_val.occ
         seq[i_res] = aa
-        chid[i_res] = k[0]
-        resi[i_res] = k[1]
+        chid[i_res] = ch_letter
+        resi[i_res] = res_num
 
     xf = torch.tensor(ch_xf[1]).float()
     u,r = xf[:3,:3], xf[:3,3]

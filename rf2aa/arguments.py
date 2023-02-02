@@ -95,6 +95,9 @@ def get_args():
             help="flanking residues to remove when atomizing [0]")
     data_group.add_argument('-p_metal', type=float, default=1,
             help="probability of a given metal ion being included [1.0]")
+    data_group.add_argument('-p_atomize_modres', type=float, default=1,
+            help="probability of a given non-standard residue being atomized, rather "\
+                 "than being converted to a standard equivalent [1.0]")
     
     # dataset parameters
     dataset_group = parser.add_argument_group("data loading parameters")
