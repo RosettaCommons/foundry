@@ -3198,7 +3198,7 @@ def crop_chirals(chirals, atom_sel):
             cropped_chirals.append(updated_chiral_center)
     if not cropped_chirals: # all the chiral centers were in ligands that were removed
         return torch.Tensor()
-    return torch.stack(cropped_chirals)
+    return torch.stack(cropped_chirals).float()
 
 def adaptor_fix_bb(out):
     """
@@ -3270,7 +3270,6 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
     # uniformly sample from unique PDB chains
     chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
     tmp_df = tmp_df[tmp_df.CHAINID==chid]
-
     if dedup_ligand:
         # uniform sample from unique ligands
         lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
