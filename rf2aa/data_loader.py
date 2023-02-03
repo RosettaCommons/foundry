@@ -154,7 +154,22 @@ def cluster_sum(data, assignment, N_seq, N_res):
     csum = torch.zeros(N_seq, N_res, data.shape[-1], device=data.device).scatter_add(0, assignment.view(-1,1,1).expand(-1,N_res,data.shape[-1]), data.float())
     return csum
 
-def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=False, fixbb=False):
+def get_term_feats(Ls):
+    """Creates N/C-terminus binary features"""
+    term_info = torch.zeros((sum(Ls),2)).float()
+    if len(Ls) < 1:
+        term_info[0,0] = 1.0 # flag for N-term
+        term_info[-1,1] = 1.0 # flag for C-term
+    else:
+        start = 0
+        for L_chain in Ls:
+            term_info[start, 0] = 1.0 # flag for N-term
+            term_info[start+L_chain-1,1] = 1.0 # flag for C-term
+            start += L_chain
+    return term_info
+
+
+def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], term_info=None, tocpu=False, fixbb=False):
     '''
     Input: full MSA information (after Block deletion if necessary) & full insertion information
     Output: seed MSA features & extra sequences
@@ -175,16 +190,10 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], tocpu=
         ins = ins[:1]
     N, L = msa.shape
     
-    term_info = torch.zeros((L,2), device=msa.device).float()
-    if len(L_s) < 1:
-        term_info[0,0] = 1.0 # flag for N-term
-        term_info[-1,1] = 1.0 # flag for C-term
-    else:
-        start = 0
-        for L_chain in L_s:
-            term_info[start, 0] = 1.0 # flag for N-term
-            term_info[start+L_chain-1,1] = 1.0 # flag for C-term
-            start += L_chain
+    if term_info is None:
+        term_info = get_term_feats(L_s)
+    term_info = term_info.to(msa.device)
+
     #binding_site = torch.zeros((L,1), device=msa.device).float()
     binding_site = torch.zeros((L,0), device=msa.device).float() # keeping this off for now (Jue 12/19)
         
@@ -1148,7 +1157,7 @@ def merge_msas(a3m_list, L_s):
         pair_taxIDs = set(taxIDs).intersection(set(a3mB["taxID"]))
         if a3mB["hash"] in seen or len(pair_taxIDs) < 5: #homomer/not enough pairs 
             a3mA = {"msa": msaA, "ins": insA}
-            L_s_to_merge = [sum(L_s[:i])+1, L_s[i]]
+            L_s_to_merge = [sum(L_s[:i]), L_s[i]]
             a3mA = merge_a3m_hetero(a3mA, a3mB, L_s_to_merge)
             msaA, insA = a3mA["msa"], a3mA["ins"]
             taxIDs.extend(a3mB["taxID"])
@@ -1159,8 +1168,8 @@ def merge_msas(a3m_list, L_s):
             for pair in pair_taxIDs:
                 pair_a3mA = np.where(np.array(taxIDs)==pair)[0]
                 pair_a3mB = np.where(a3mB["taxID"]==pair)[0]
-                msaApair = torch.argsort(torch.sum(msaA[pair_a3mA, :] == msaA[0, :],axis=-1))
-                msaBpair = torch.argsort(torch.sum(msaB[pair_a3mB, :] == msaB[0, :],axis=-1))
+                msaApair = torch.argmin(torch.sum(msaA[pair_a3mA, :] == msaA[0, :],axis=-1))
+                msaBpair = torch.argmin(torch.sum(msaB[pair_a3mB, :] == msaB[0, :],axis=-1))
                 final_pairsA.append(pair_a3mA[msaApair])
                 final_pairsB.append(pair_a3mB[msaBpair])
             paired_msaB = torch.full((msaA.shape[0], L_s[i]), 20).long() # (N_seq_A, L_B)
@@ -2307,7 +2316,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
         msa = torch.cat([seq_prot[None], msa_sm],dim=1)
         ins = torch.zeros_like(msa)
     assert msa.shape[1] == xyz.shape[1], "msa shape and xyz shape don't match"
-    
+
     if residues_to_atomize:
         msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, \
         Ls_prot, Ls_sm \
@@ -2342,6 +2351,10 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     is_prot = torch.zeros(L_total) 
     is_prot[:sum(Ls_prot)] = 1
 
+    # N/C-terminus features for MSA features (need to generate before cropping)
+    term_info = get_term_feats(Ls_prot+Ls_sm)
+    term_info[sum(Ls_prot):, :] = 0 # ligand chains don't get termini features
+
     # crop around query ligand (1st sm chain)
     if L_total > params["CROP"]:
         sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
@@ -2359,6 +2372,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
         bond_feats = bond_feats[sel][:,sel]
         ch_label = ch_label[sel]
         is_prot = is_prot[sel]
+        term_info = term_info[sel]
 
         # crop small molecule features, assumes all sm chains are after all protein chains
         atom_sel = sel[sel>=sum(Ls_prot)] - sum(Ls_prot) # 0 index all the selected atoms
@@ -2371,7 +2385,8 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
         chirals[:, :-1] = chirals[:, :-1] + L1
 
     # create MSA features from cropped msa and insertions
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, 
+                                                                     term_info=term_info, fixbb=fixbb)
     
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
