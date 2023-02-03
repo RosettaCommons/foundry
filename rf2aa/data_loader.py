@@ -2352,7 +2352,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     # N/C-terminus features for MSA features (need to generate before cropping)
     term_info = get_term_feats(Ls_prot+Ls_sm)
     term_info[sum(Ls_prot):, :] = 0 # ligand chains don't get termini features
-
+    
     # crop around query ligand (1st sm chain)
     if L_total > params["CROP"]:
         sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
@@ -2381,7 +2381,6 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     if chirals.shape[0]>0:
         L1 = is_prot.sum()
         chirals[:, :-1] = chirals[:, :-1] + L1
-
     # create MSA features from cropped msa and insertions
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, 
                                                                      term_info=term_info, fixbb=fixbb)
