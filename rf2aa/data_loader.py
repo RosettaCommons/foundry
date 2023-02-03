@@ -157,15 +157,11 @@ def cluster_sum(data, assignment, N_seq, N_res):
 def get_term_feats(Ls):
     """Creates N/C-terminus binary features"""
     term_info = torch.zeros((sum(Ls),2)).float()
-    if len(Ls) < 1:
-        term_info[0,0] = 1.0 # flag for N-term
-        term_info[-1,1] = 1.0 # flag for C-term
-    else:
-        start = 0
-        for L_chain in Ls:
-            term_info[start, 0] = 1.0 # flag for N-term
-            term_info[start+L_chain-1,1] = 1.0 # flag for C-term
-            start += L_chain
+    start = 0
+    for L_chain in Ls:
+        term_info[start, 0] = 1.0 # flag for N-term
+        term_info[start+L_chain-1,1] = 1.0 # flag for C-term
+        start += L_chain
     return term_info
 
 
@@ -191,6 +187,8 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[], term_i
     N, L = msa.shape
     
     if term_info is None:
+        if len(L_s)==0:
+            L_s = [L]
         term_info = get_term_feats(L_s)
     term_info = term_info.to(msa.device)
 
