@@ -92,7 +92,7 @@ default_dataloader_params = {
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230201.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230201.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230202.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -562,7 +562,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
 
     pdb_metadata = _load_df(params['PDB_METADATA'])
     chid2hash = dict(zip(pdb_metadata.CHAINID, pdb_metadata.HASH))
-    chid2taxid = dict(zip(pdb_metadata.CHAINID, pdb_metadata.TAXID))
+    tmp = pdb_metadata.dropna(subset=['TAXID'])
+    chid2taxid = dict(zip(tmp.CHAINID, tmp.TAXID))
 
     # homo-oligomers
     homo = pd.read_csv(params['HOMO_LIST'])
@@ -1055,8 +1056,8 @@ def get_assembly_msa(protein_chain_info, params):
     a3m = None
     if len(msa_hashes) == 0:
         raise NotImplementedError(f"No MSAs were found for these protein chains {str(protein_chain_info)}")
-    elif len(set(msa_hashes)) == 1 or all([not x['paired'] for x in msas_to_load]):
-        # monomer/homomer case (all same msas) or all unpaired msas
+
+    elif len(set(msa_hashes)) == 1: # monomer/homomer case (all same msas)
         msa_vals = msas_to_load[0]
         num_copies = len(msa_hashes)
         a3m = get_msa(msa_vals["path"], msa_vals["hash"])
@@ -1067,6 +1068,14 @@ def get_assembly_msa(protein_chain_info, params):
         if num_copies >1:
             msa, ins = merge_a3m_homo(msa, ins, num_copies)
             a3m = {"msa": msa, "ins": ins}
+
+    elif all([not x['paired'] for x in msas_to_load]): # all unpaired, tile diagonally
+        a3m = dict(msa=torch.tensor([[]]), ins=torch.tensor([[]]))
+        for msa_vals in msas_to_load:
+            a3m_ = get_msa(msa_vals["path"], msa_vals["hash"])
+            L_s = [a3m['msa'].shape[1], a3m_['msa'].shape[1]]
+            a3m = merge_a3m_hetero(a3m, a3m_, L_s)
+
     else: # heteromer case (at least two different MSAs will handle things like AB, AAB, ABC...)
         a3m_list = []
         L_s = []
@@ -2287,7 +2296,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
             "chid": f"{pdb_id}_{chlet}", 
             "hash": chid2hash[f"{pdb_id}_{chlet}"], 
             "len": Ls_prot[i],
-            "query_taxid": chid2taxid[f"{pdb_id}_{chlet}"]
+            "query_taxid": chid2taxid.get(f"{pdb_id}_{chlet}")
         } for i, chlet in enumerate(ch_letters)]
         a3m_prot = get_assembly_msa(protein_chain_info, params)
         a3m_sm = dict(msa=msa_sm, ins=torch.zeros_like(msa_sm))
