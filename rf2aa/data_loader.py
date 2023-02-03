@@ -2743,38 +2743,6 @@ def crop_chirals(chirals, atom_sel):
         return torch.Tensor()
     return torch.stack(cropped_chirals).float()
 
-def adaptor_fix_bb(out):
-    """
-    adapts the outputs of RF2-allatom phase 3 dataloaders into fixed bb outputs
-    takes in a tuple with 22 items representing the RF2-allatom data outputs and returns a tuple of 22 items updated for the 
-    fixedbb tasks
-    """
-    assert len(out) == 22, f"found {len(out)} elements in RF2-allatom output"
-    (seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev,
-        mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, ch_label, dataset_name, item) = out
-    #remove permutation symmetry dimension if present
-    if len(true_crds.shape) == 4 and len(atom_mask.shape) == 3:
-        true_crds = true_crds[0]
-        atom_mask = atom_mask[0]
-    
-    #update template features
-    xyz_t = torch.clone(true_crds)[None]
-    mask_t = torch.clone(atom_mask)[None]
-    seq_mask_shifted = torch.clone(seq)
-    seq_mask_shifted[seq_mask_shifted>=MASKINDEX] -= 1
-    f1d_t = torch.nn.functional.one_hot(seq_mask_shifted, num_classes=NAATOKENS-1)
-    conf = torch.ones_like(seq[:1])[...,None]
-    f1d_t = torch.cat((f1d_t, conf), dim=-1)
-    t1d = f1d_t.float()
-
-    # our dataloaders return torch.zeros(L...) for atom frames and chirals when there are none, this updates it to use common shape 
-    if torch.sum(atom_frames) == 0:
-        atom_frames = torch.zeros((0,3,2))
-    if torch.sum(chirals) == 0:
-        chirals = torch.zeros((0,5))
-    return seq, msa, msa_masked, msa_full, mask_msa, true_crds, atom_mask, idx_pdb, xyz_t, t1d, mask_t, xyz_prev, \
-        mask_prev, same_chain, unclamp, negative, atom_frames, bond_feats, chirals, ch_label, dataset_name, item
-
 def unbatch_item(item):
     """
     Flattens batched dictionaries returned from dataloaders to remove unecessary nested lists
