@@ -1417,7 +1417,7 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
         xyz[i, :] = torch.tensor(v.xyz)
         occ[i] = v.occ # can contain fractionally occupied atom positions
         if v.element not in chemical.atomnum2atomtype:
-            print('Element not in alphabet:',v.element)
+            #print('Element not in alphabet:',v.element)
             seq[i] = chemical.aa2num['ATM']
         else:
             seq[i] = chemical.aa2num[chemical.atomnum2atomtype[v.element]]
