@@ -160,8 +160,6 @@ class RoseTTAFoldModule(nn.Module):
             assert_that(alpha_t.device).is_equal_to(device)
             assert_that(mask_t.device).is_equal_to(device)
             assert_that(same_chain.device).is_equal_to(device)
-        # Sanity check for now, feel free to remove.
-        assert self.freeze_track_motif
 
         if self.verbose_checks:
             ic(is_motif.shape)

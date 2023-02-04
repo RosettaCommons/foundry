@@ -208,8 +208,9 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
             i_perm_min_s.append(ddx.argmin())
             ddx_min_s.append(ddx.min())
 
-        i_ch_min = torch.stack(ddx_min_s).argmin() # index of best chain placement
-        i_perm_min = i_perm_min_s[i_ch_min] # index of best atom permutation at best chain placement
+        i_min = torch.stack(ddx_min_s).argmin() # index of best chain placement (in current subset)
+        i_ch_min = idx[i_min] # index of best chain placement (in full list)
+        i_perm_min = i_perm_min_s[i_min] # index of best atom permutation at best chain placement
 
         # add best chain assignment to output tensors
         xyz_out = torch.cat([xyz_out, xtrue_smch[i_ch_min][:,i_perm_min]], dim=1)
@@ -1088,9 +1089,12 @@ def calc_allatom_lddt(P, Q, idx, atm_mask, eps=1e-6):
 
 
 def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, negative=False, interface=False, bin_scaling=1, eps=1e-6):
-    # P - N x L x 27 x 3
-    # Q - L x 27 x 3
+    # P - N x L x natoms x 3
+    # Q - L x natoms x 3
     # pred_lddt - 1 x nbucket x L
+    # idx - 1 x L
+    # 
+
     N, L, Natm = P.shape[:3]
 
     # distance matrix
@@ -1110,8 +1114,11 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
         # ignore atoms between different chains
         pair_mask *= same_chain.bool()[:,:,:,None,None]
     elif interface:
-            # ignore atoms between the same chain
-            pair_mask *= ~same_chain.bool()[:,:,:,None,None]
+        # ignore atoms between the same chain
+        pair_mask *= ~same_chain.bool()[:,:,:,None,None]
+
+    pair_mask *= mask_2d.bool()[..., None, None]
+    
     delta_PQ = torch.abs(Pij-Qij+eps) # (N, L, L, 14, 14)
 
     lddt = torch.zeros( (N,L,Natm), device=P.device ) # (N, L, 27)

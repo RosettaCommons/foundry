@@ -6,11 +6,11 @@ DATASET_PARAMS = [
     'fraction_pdb','fraction_fb', 'fraction_compl', 'fraction_na_compl',
     'fraction_rna', 'fraction_sm_compl', 'fraction_sm_compl_multi', 
     'fraction_metal_compl', 'fraction_sm_compl_covale', 'fraction_sm',
-    'fraction_atomize_pdb', 'fraction_sm_compl_assemb', 'n_train', 'n_valid_pdb', 'n_valid_atomize_pdb',
+    'fraction_atomize_pdb', 'fraction_sm_compl_asmb', 'n_train', 'n_valid_pdb', 'n_valid_atomize_pdb',
     'n_valid_homo', 'n_valid_compl', 'n_valid_neg', 'n_valid_na_compl',
     'n_valid_na_neg', 'n_valid_rna', 'n_valid_sm_compl',
     'n_valid_sm_compl_multi', 'n_valid_metal_compl', 'n_valid_sm_compl_covale',
-    'n_valid_sm_compl_strict', 'n_valid_sm', 'n_valid_sm_compl_assemb',
+    'n_valid_sm_compl_strict', 'n_valid_sm', 'n_valid_sm_compl_asmb',
 ]
 TRUNK_PARAMS = [
     'n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_block',
@@ -87,15 +87,17 @@ def get_args():
             help="maximum sequence identity cutoff for template selection [150.0]")
     data_group.add_argument('-maxcycle', type=int, default=4,
             help="maximum number of recycle [4]")
-    data_group.add_argument('-cluster_ligands', action='store_true', default=False,
-            help="cluster protein/sm. mol examples by ligand similarity (downsamples "\
-                 "examples with common ligands like ATP, heme, etc [False]")
     data_group.add_argument('-nres_atomize_min', type=int, default=3,
             help="minimum number of residues to atomize [3]")
     data_group.add_argument('-nres_atomize_max', type=int, default=5,
             help="maximum number of residues to atomize [5]")
     data_group.add_argument('-atomize_flank', type=int, default=0,
             help="flanking residues to remove when atomizing [0]")
+    data_group.add_argument('-p_metal', type=float, default=1,
+            help="probability of a given metal ion being included [1.0]")
+    data_group.add_argument('-p_atomize_modres', type=float, default=1,
+            help="probability of a given non-standard residue being atomized, rather "\
+                 "than being converted to a standard equivalent [1.0]")
     
     # dataset parameters
     dataset_group = parser.add_argument_group("data loading parameters")
@@ -121,7 +123,7 @@ def get_args():
             help="how often to sample small molecule crystals during training")
     dataset_group.add_argument('-fraction_atomize_pdb', type=float, default=0.09,
             help="how often to sample atomized pdb monomers during training")
-    dataset_group.add_argument('-fraction_sm_compl_assemb', type=float, default=0.00,
+    dataset_group.add_argument('-fraction_sm_compl_asmb', type=float, default=0.00,
             help="how often to sample atomized pdb monomers during training")
 
     dataset_group.add_argument('-n_train', type=int, default=12288)

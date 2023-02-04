@@ -9,6 +9,7 @@ from assertpy import assert_that
 
 import scipy.sparse
 import networkx as nx
+import itertools
 from itertools import combinations
 from collections import OrderedDict
 from openbabel import openbabel
@@ -44,13 +45,13 @@ def get_prot_sm_mask(atom_mask, seq):
     sm_mask = is_atom(seq).to(atom_mask.device) # (L)
     # Asserting that atom_mask is full for masked regions of proteins [should be]
     has_backbone = atom_mask[...,:3].all(dim=-1)
-    has_backbone_prot = has_backbone[...,~sm_mask]
-    n_protein_with_backbone = has_backbone.sum()
-    n_protein = (~sm_mask).sum()
+    # has_backbone_prot = has_backbone[...,~sm_mask]
+    # n_protein_with_backbone = has_backbone.sum()
+    # n_protein = (~sm_mask).sum()
     #assert_that((n_protein/n_protein_with_backbone).item()).is_greater_than(0.8)
-
     mask_prot = has_backbone & ~sm_mask # valid protein/NA residues (L)
     mask_ca_sm = atom_mask[...,1] & sm_mask # valid sm mol positions (L)
+
     mask = mask_prot | mask_ca_sm # valid positions
     return mask
 
@@ -1194,6 +1195,90 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_mask, bond_feats)
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
 
+def reindex_protein_feats_after_atomize(
+    residues_to_atomize,
+    prot_partners,
+    msa, 
+    ins,
+    xyz,
+    mask,
+    bond_feats,
+    idx,
+    xyz_t,
+    f1d_t,
+    mask_t,
+    same_chain,
+    ch_label,
+    Ls_prot,
+    Ls_sm, 
+    akeys_sm
+):
+    """
+    Removes residues that have been atomized from protein features.
+    """
+    Ls = Ls_prot + Ls_sm
+    chain_bins = [sum(Ls[:i]) for i in range(len(Ls)+1)]
+    akeys_sm = list(itertools.chain.from_iterable(akeys_sm)) # list of list of tuples get flattened to a list of tuples
+
+    # get tensor indices of atomized residues
+    residue_chain_nums = []
+    residue_indices = []
+    for residue in residues_to_atomize:
+        # residue object is a list of tuples:
+        #   ((chain_letter, res_number, res_name), (chain_letter, xform_index))
+
+        #### Need to identify what chain you're in to get correct res idx
+        residue_chid_xf = residue[1]
+        residue_chain_num = [p[:2] for p in prot_partners].index(residue_chid_xf)
+        residue_index = (int(residue[0][1]) - 1) + sum(Ls_prot[:residue_chain_num])  # residues are 1 indexed in the cif files
+
+        # skip residues with all backbone atoms masked
+        if torch.sum(mask[0, residue_index, :3]) <3: continue
+
+        residue_chain_nums.append(residue_chain_num)
+        residue_indices.append(residue_index)
+        atomize_N = residue[0] + ("N",)
+        atomize_C = residue[0] + ("C",)
+
+        N_index = akeys_sm.index(atomize_N) + sum(Ls_prot)
+        C_index = akeys_sm.index(atomize_C) + sum(Ls_prot)
+
+        # if first residue in chain, no extra bond feats to previous residue
+        if residue_index != 0 and residue_index not in Ls_prot:
+            bond_feats[residue_index-1, N_index] = 6
+            bond_feats[N_index, residue_index-1] = 6
+
+        # if residue is last in chain, no extra bonds feats to following residue
+        if residue_index not in [L-1 for L in Ls_prot]:
+            bond_feats[residue_index+1, C_index] = 6
+            bond_feats[C_index,residue_index+1] = 6
+
+        lig_chain_num = np.digitize([N_index], chain_bins)[0] -1 # np.digitize is 1 indexed
+        same_chain[chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1], \
+                   chain_bins[residue_chain_num]: chain_bins[residue_chain_num+1]] = 1
+        same_chain[chain_bins[residue_chain_num]: chain_bins[residue_chain_num+1], \
+                   chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1]] = 1
+
+    # remove atomized residues from feature tensors
+    i_res = torch.tensor([i for i in range(sum(Ls)) if i not in residue_indices])
+    msa = msa[:,i_res]
+    ins = ins[:,i_res]
+    xyz = xyz[:,i_res]
+    mask = mask[:,i_res]
+    bond_feats = bond_feats[i_res][:,i_res]
+    idx = idx[i_res]
+    xyz_t = xyz_t[:,i_res]
+    f1d_t = f1d_t[:,i_res]
+    mask_t = mask_t[:,i_res]
+    same_chain = same_chain[i_res][:,i_res]
+    ch_label = ch_label[i_res]
+
+    for i_ch in residue_chain_nums:
+        Ls_prot[i_ch] -= 1
+
+    return msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls_prot, Ls_sm
+
+
 def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
     """Given a protein chain and coordinate transform parsed from CIF file,
     return tensors with coordinates and masks
@@ -1239,30 +1324,31 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
     resi = ['-']*L
 
     unrec_elements = set()
-
-    for k,v in ch.atoms.items():
-        i_res = int(k[1])-i_min
-        if k[2] in aa2num: # standard AA
-            aa = aa2num[k[2]]
-        elif k[2] in modres and modres[k[2]] in aa2num: # nonstandard AA, map to standard
+    residues_to_atomize = set()
+    for (ch_letter, res_num, res_name, atom_name), atom_val in ch.atoms.items():
+        i_res = int(res_num)-i_min
+        if res_name in aa2num: # standard AA
+            aa = aa2num[res_name]
+        elif res_name in modres and modres[res_name] in aa2num: # nonstandard AA, map to standard
             #print('nonstandard AA',k,modres[k[2]])
-            aa = aa2num[modres[k[2]]]
+            aa = aa2num[modres[res_name]]
+            residues_to_atomize.add((ch_letter, res_num, res_name))
         else: # unknown AA, still try to store BB atoms
             #print('unknown AA',k)
             aa = 20
-        if k[3] in aa2long_[aa]: # atom name exists in RF nomenclature
-            i_atom = aa2long_[aa].index(k[3]) # atom index
-            xyz[i_res, i_atom, :] = torch.tensor(v.xyz)
-            mask[i_res, i_atom] = v.occ
+        if atom_name in aa2long_[aa]: # atom name exists in RF nomenclature
+            i_atom = aa2long_[aa].index(atom_name) # atom index
+            xyz[i_res, i_atom, :] = torch.tensor(atom_val.xyz)
+            mask[i_res, i_atom] = atom_val.occ
         seq[i_res] = aa
-        chid[i_res] = k[0]
-        resi[i_res] = k[1]
+        chid[i_res] = ch_letter
+        resi[i_res] = res_num
 
     xf = torch.tensor(ch_xf[1]).float()
     u,r = xf[:3,:3], xf[:3,3]
     xyz_xf = torch.einsum('ij,raj->rai', u, xyz) + r[None,None]
 
-    return xyz_xf, mask, seq, chid, resi
+    return xyz_xf, mask, seq, chid, resi, residues_to_atomize
 
 
 def get_ligand_atoms_bonds(ligand, chains, covale):
@@ -1331,7 +1417,7 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
         xyz[i, :] = torch.tensor(v.xyz)
         occ[i] = v.occ # can contain fractionally occupied atom positions
         if v.element not in chemical.atomnum2atomtype:
-            print('Element not in alphabet:',v.element)
+            #print('Element not in alphabet:',v.element)
             seq[i] = chemical.aa2num['ATM']
         else:
             seq[i] = chemical.aa2num[chemical.atomnum2atomtype[v.element]]
@@ -1565,9 +1651,6 @@ def map_identical_prot_chains(partners, chains, modres):
     chnum2chlet : dict
         Dictionary mapping integers to lists of chain letters which represent
         identical chains
-    chlet2chnum : dict
-        Dictionary mapping chain letters to integers, the inverse of
-        `chlet2chnum`
     """
     chlet2seq = OrderedDict()
     for p in partners:
@@ -1582,9 +1665,9 @@ def map_identical_prot_chains(partners, chains, modres):
         seq2chlet[seq].add(chlet)
 
     chnum2chlet = OrderedDict([(i,v) for i,(k,v) in enumerate(seq2chlet.items())])
-    chlet2chnum = OrderedDict([(chlet,chnum) for chnum,chlet_s in chnum2chlet.items() for chlet in chlet_s])
+    #chlet2chnum = OrderedDict([(chlet,chnum) for chnum,chlet_s in chnum2chlet.items() for chlet in chlet_s])
 
-    return chnum2chlet, chlet2chnum
+    return chnum2chlet 
 
 def cartprodcat(X_s):
     """Concatenate list of tensors on dimension 1 while taking their cartesian product
@@ -1612,4 +1695,13 @@ def idx_from_Ls(Ls):
     return torch.cat(idx, dim=0)
 
 
+def bond_feats_from_Ls(Ls):
+    """Generate protein (or DNA/RNA) bond features from a list of chain
+    lengths"""
+    bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
+    offset = 0
+    for L_ in Ls:
+        bond_feats[offset:offset+L_, offset:offset+L_] = get_protein_bond_feats(L_)
+        offset += L_
+    return bond_feats
 
