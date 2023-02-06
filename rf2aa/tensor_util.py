@@ -62,6 +62,10 @@ def shapes(dc):
 def pprint_obj(obj):
     pprint.pprint(obj.__dict__, indent=4)
 
+def assert_squeeze(t):
+    assert t.shape[0] == 1, f'{t.shape}[0] != 1'
+    return t[0]
+
 class TensorMatchOperator(BaseOperator):
     
     def _equal_msg(self, got, want):
