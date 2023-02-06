@@ -257,7 +257,7 @@ def get_chirals(obmol, xyz):
         dih = get_dih(*xyz[chirals[:,:4].long()].split(split_size=1,dim=1))[:,0]
         chirals[dih<0.0,-1] = -angle
     else:
-        chirals = torch.Tensor()
+        chirals = torch.zeros((0,5))
 
     return chirals
 
@@ -289,5 +289,5 @@ def get_atomize_protein_chirals(residues_atomize, lig_xyz, residue_atomize_mask,
         dih = get_dih(*lig_xyz[chirals[:,:4].long()].split(split_size=1,dim=1))[:,0]
         chirals[dih<0.0,-1] = -angle
     else:
-        chirals = torch.Tensor()
+        chirals = torch.zeros((0,5))
     return chirals
