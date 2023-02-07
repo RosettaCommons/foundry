@@ -36,6 +36,7 @@ one_letter = ["A", "R", "N", "D", "C", \
 n_non_protein = len(num2aa) - len(one_letter)
 
 aa_321 = {a:b for a,b in zip(num2aa,one_letter+['a']*n_non_protein)}
+aa_123 = {v:k for k,v in aa_321.items()}
 def seq2chars(seq):
     out = ''.join([aa_321[num2aa[a]] for a in seq])
     return out
