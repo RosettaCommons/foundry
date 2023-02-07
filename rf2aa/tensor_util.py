@@ -53,7 +53,8 @@ def to_ordered_dict(dc):
 def to_device(dc, device):
     d = to_ordered_dict(dc)
     for k, v in d.items():
-        setattr(dc, k, v.to(device))
+        if v is not None:
+            setattr(dc, k, v.to(device))
 
 def shapes(dc):
     d = to_ordered_dict(dc)
