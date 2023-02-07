@@ -80,7 +80,7 @@ class TensorMatchOperator(BaseOperator):
         unequal_idx = torch.nonzero(~is_eq)
         unequal_got = got[~is_eq]
         unequal_want = want[~is_eq]
-        uneq_idx_got_want = list(zip(unequal_idx.tolist(), unequal_want, unequal_got))[:3]
+        uneq_idx_got_want = list(zip(unequal_idx.tolist(), unequal_got, unequal_want))[:3]
         print(f'uneq_idx_got_want: {uneq_idx_got_want}')
 
         uneq_msg = '    '.join(f'idx:{idx}, got:{got}, want:{want}' for idx, got, want in uneq_idx_got_want)
