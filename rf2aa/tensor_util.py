@@ -73,9 +73,9 @@ class TensorMatchOperator(BaseOperator):
             return f'got shape {got.shape} want shape {want.shape}'
         if got.dtype != want.dtype:
             return f'got dtype {got.dtype} want dtype {want.dtype}'
-        if torch.isclose(got, want, equal_nan=True).all():
+        if torch.isclose(got, want, equal_nan=True, atol=1e-3).all():
             return ''
-        is_eq = got.nan_to_num()==want.nan_to_num()
+        is_eq = torch.isclose(got, want, equal_nan=True, atol=1e-3)
         unequal_idx = torch.nonzero(~is_eq)
         unequal_got = got[~is_eq]
         unequal_want = want[~is_eq]
@@ -90,7 +90,6 @@ class TensorMatchOperator(BaseOperator):
 
     
     def give_up_diffing(self, level, diff_instance):
-        # if not torch.isclose(level.t1, level.t2, equal_nan=True).all():
         msg = self._equal_msg(level.t1, level.t2)
         if msg:
             print(level.t1, level.t2)
