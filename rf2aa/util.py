@@ -502,8 +502,14 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
 
         if s >= len(aa2long):
             atom_idxs[i_res] = ctr
-            atom_type = atomtype_map[num2aa[s]]
-            atom_name = atom_names[i_res_lig] if atom_names else atom_type
+
+            # hack to make sure H's are output properly (they are not in RFAA alphabet)
+            if atom_names is not None:
+                atom_type = ''.join([c for c in atom_names[i_res_lig] if c.isalpha()])
+                atom_name = atom_names[i_res_lig]
+            else:
+                atom_type = atomtype_map[num2aa[s]]
+                atom_name = atom_type
 
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f           %s\n"%(
                     "HETATM", ctr, atom_name, lig_name,
@@ -1621,4 +1627,31 @@ def idx_from_Ls(Ls):
     return torch.cat(idx, dim=0)
 
 
+def kabsch(xyz1, xyz2, eps=1e-6):
+    """Superimposes `xyz2` coordinates onto `xyz1`, returns RMSD and rotation matrix."""
+    # center to CA centroid
+    xyz1 = xyz1 - xyz1.mean(0)
+    xyz2 = xyz2 - xyz2.mean(0)
+
+    # Computation of the covariance matrix
+    C = xyz2.T @ xyz1
+
+    # Compute optimal rotation matrix using SVD
+    V, S, W = torch.linalg.svd(C)
+
+    # get sign to ensure right-handedness
+    d = torch.ones([3,3])
+    d[:,-1] = torch.sign(torch.linalg.det(V)*torch.linalg.det(W))
+
+    # Rotation matrix U
+    U = (d*V) @ W
+
+    # Rotate xyz2
+    xyz2_ = xyz2 @ U
+
+    L = xyz2_.shape[0]
+
+    rmsd = torch.sqrt(torch.sum((xyz2_-xyz1)*(xyz2_-xyz1), axis=(0,1)) / L + eps)
+
+    return rmsd, U
 
