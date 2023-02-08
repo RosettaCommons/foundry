@@ -1748,3 +1748,32 @@ def bond_feats_from_Ls(Ls):
         bond_feats[offset:offset+L_, offset:offset+L_] = get_protein_bond_feats(L_)
         offset += L_
     return bond_feats
+
+def kabsch(xyz1, xyz2, eps=1e-6):
+    """Superimposes `xyz2` coordinates onto `xyz1`, returns RMSD and rotation matrix."""
+    # center to CA centroid
+    xyz1 = xyz1 - xyz1.mean(0)
+    xyz2 = xyz2 - xyz2.mean(0)
+
+    # Computation of the covariance matrix
+    C = xyz2.T @ xyz1
+
+    # Compute optimal rotation matrix using SVD
+    V, S, W = torch.linalg.svd(C)
+
+    # get sign to ensure right-handedness
+    d = torch.ones([3,3])
+    d[:,-1] = torch.sign(torch.linalg.det(V)*torch.linalg.det(W))
+
+    # Rotation matrix U
+    U = (d*V) @ W
+
+    # Rotate xyz2
+    xyz2_ = xyz2 @ U
+
+    L = xyz2_.shape[0]
+
+    rmsd = torch.sqrt(torch.sum((xyz2_-xyz1)*(xyz2_-xyz1), axis=(0,1)) / L + eps)
+
+    return rmsd, U
+
