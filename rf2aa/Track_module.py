@@ -345,7 +345,7 @@ class PairStr2Pair(nn.Module):
             symmsub = None
 
         if symmsub is not None:
-            pair = symmetrize_pair(pair, symmsub, self.sym_method, self.main_block)
+            pair = apply_pair_symmetry(pair, symmsub, self.sym_method, self.main_block)
 
         return pair
 
