@@ -109,11 +109,23 @@ class Bond_emb(nn.Module):
         return self.emb(bond_feats.float())
 
 class TemplatePairStack(nn.Module):
-    def __init__(self, n_block=2, d_templ=64, n_head=4, d_hidden=32, d_t1d=22, d_state=32, p_drop=0.25):
+    def __init__(self, n_block=2, d_templ=64, n_head=4, d_hidden=32, d_t1d=22, d_state=32, p_drop=0.25,
+                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method=None):
+
         super(TemplatePairStack, self).__init__()
         self.n_block = n_block
         self.proj_t1d = nn.Linear(d_t1d, d_state)
-        proc_s = [PairStr2Pair(d_pair=d_templ, n_head=n_head, d_hidden=d_hidden, d_state=d_state, p_drop=p_drop) for i in range(n_block)]
+
+        proc_s = [PairStr2Pair(d_pair=d_templ, 
+                               n_head=n_head, 
+                               d_hidden=d_hidden, 
+                               d_state=d_state, 
+                               p_drop=p_drop,
+                               symmetrize_repeats=symmetrize_repeats,
+                               repeat_length=repeat_length,
+                               symmsub_k=symmsub_k,
+                               sym_method=sym_method) for i in range(n_block)]
+
         self.block = nn.ModuleList(proc_s)
         self.norm = nn.LayerNorm(d_templ)
         self.reset_parameter()
@@ -137,6 +149,59 @@ class TemplatePairStack(nn.Module):
         return self.norm(templ).reshape(B, T, L, L, -1)
 
 
+def copy_main_2d(pair, Leff, idx):
+    """
+    Copies the "main unit" of a block in generic 2D representation of shape (...,L,L,h)
+    along the main diagonal
+    """
+    start = idx*Leff
+    end   = (idx+1)*Leff
+
+    # grab the main block 
+    main  = torch.clone( pair[..., start:end, start:end, :] )
+
+    # copy it around the main diag 
+    L = pair.shape[-2]
+    assert L%Leff == 0
+    N = L//Leff
+
+    for i_block in range(N):
+        start = i_block*Leff
+        stop  = (i_block+1)*Leff
+
+        pair[...,start:stop, start:stop, :] = main
+
+    return pair 
+
+
+def copy_main_1d(single, Leff, idx):
+    """
+    Copies the "main unit" of a block in generic 1D representation of shape (...,L,h)
+    to all other (non-main) blocks 
+    
+    Parameters:
+        single (torch.tensor, required): Shape [...,L,h] "1D" tensor
+    """
+    main_start = idx*Leff
+    main_end   = (idx+1)*Leff
+
+    # grab main block 
+    main = torch.clone(single[..., main_start:main_end, :])
+
+    # copy it around
+    L = single.shape[-2]
+    assert L%Leff == 0
+    N = L//Leff
+
+    for i_block in range(N):
+        start = i_block*Leff
+        end   = (i_block+1)*Leff
+
+        single[..., start:end, :] = main
+
+    return single
+
+
 class Templ_emb(nn.Module):
     # Get template embedding
     # Features are
@@ -149,12 +214,23 @@ class Templ_emb(nn.Module):
     #   
     def __init__(self, d_t1d=(NAATOKENS-1)+1, d_t2d=67+1, d_tor=3*NTOTALDOFS, d_pair=128, d_state=32, 
                  n_block=2, d_templ=64,
-                 n_head=4, d_hidden=16, p_drop=0.25):
+                 n_head=4, d_hidden=16, p_drop=0.25,
+                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='mean', 
+                 main_block=None, copy_main_block=None):
+        
+        self.main_block = main_block
+        self.symmetrize_repeats = symmetrize_repeats
+        self.copy_main_block = copy_main_block
+        self.repeat_length = repeat_length
+
         super(Templ_emb, self).__init__()
         # process 2D features
         self.emb = nn.Linear(d_t1d*2+d_t2d, d_templ)
+
         self.templ_stack = TemplatePairStack(n_block=n_block, d_templ=d_templ, n_head=n_head,
-                                             d_hidden=d_hidden, d_t1d=d_t1d, d_state=d_state, p_drop=p_drop)
+                                             d_hidden=d_hidden, d_t1d=d_t1d, d_state=d_state, p_drop=p_drop,
+                                             symmetrize_repeats=symmetrize_repeats, repeat_length=repeat_length,
+                                             symmsub_k=symmsub_k, sym_method=sym_method)
         
         self.attn = Attention(d_pair, d_templ, n_head, d_hidden, d_pair, p_drop=p_drop)
         
@@ -213,10 +289,23 @@ class Templ_emb(nn.Module):
         # process each template pair feature
         templ = self.templ_stack(templ, rbf_feat, t1d, use_checkpoint=use_checkpoint) # (B, T, L,L, d_templ)
 
+        # DJ - repeat protein symmetrization (2D)
+        if self.copy_main_block:
+            assert not (self.main_block is None)
+            assert self.symmetrize_repeats
+            # copy the main repeat unit internally down the pair representation diagonal 
+            templ = copy_main_2d(templ, self.repeat_length, self.main_block)
+
         # Prepare 1D template torsion angle features
         t1d = torch.cat((t1d, alpha_t), dim=-1) # (B, T, L, 30+3*17)
         # process each template features
         t1d = self.proj_t1d(F.relu_(self.emb_t1d(t1d)))
+
+        # DJ - repeat protein symmetrization (1D)
+        if self.copy_main_block:
+            # already made assertions above 
+            # copy main unit down single rep 
+            t1d = copy_main_1d(t1d, self.repeat_length, self.main_block)
         
         # mixing query state features to template state features
         state = state.reshape(B*L, 1, -1)

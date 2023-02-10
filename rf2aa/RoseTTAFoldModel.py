@@ -20,17 +20,42 @@ def get_shape(t):
 
 class RoseTTAFoldModule(nn.Module):
     def __init__(
-        self, n_extra_block=4, n_main_block=8, n_ref_block=4, n_finetune_block=0,\
-        d_msa=256, d_msa_full=64, d_pair=128, d_templ=64,
-        n_head_msa=8, n_head_pair=4, n_head_templ=4,
-        d_hidden=32, d_hidden_templ=64, p_drop=0.15,
+        self, 
+        symmetrize_repeats,       # whether to symmetrize repeats in the pair track 
+        repeat_length,            # if symmetrizing repeats, what length are they? 
+        symmsub_k,                # if symmetrizing repeats, which diagonals?
+        sym_method,               # if symmetrizing repeats, which block symmetrization method? 
+        main_block,               # if copying template blocks along main diag, which block is main block? (the one w/ motif)
+        copy_main_block_template, # whether or not to copy main block template along main diag
+        n_extra_block=4, 
+        n_main_block=8, 
+        n_ref_block=4, 
+        n_finetune_block=0,
+        d_msa=256, 
+        d_msa_full=64, 
+        d_pair=128, 
+        d_templ=64,
+        n_head_msa=8, 
+        n_head_pair=4, 
+        n_head_templ=4,
+        d_hidden=32, 
+        d_hidden_templ=64, 
+        p_drop=0.15,
         SE3_param={}, SE3_ref_param={},
-        atom_type_index=None, aamask=None, ljlk_parameters=None, lj_correction_parameters=None, 
-        cb_len=None, cb_ang=None, cb_tor=None,
-        num_bonds=None, lj_lin=0.6, use_extra_l1=True, use_atom_frames=True,
+        atom_type_index=None, 
+        aamask=None, 
+        ljlk_parameters=None, 
+        lj_correction_parameters=None, 
+        cb_len=None, 
+        cb_ang=None, 
+        cb_tor=None,
+        num_bonds=None, 
+        lj_lin=0.6, 
+        use_extra_l1=True, 
+        use_atom_frames=True,
         # New for diffusion
         freeze_track_motif=False,
-        assert_single_sequence_input=False,
+        assert_single_sequence_input=False
     ):
         super(RoseTTAFoldModule, self).__init__()
         self.freeze_track_motif=freeze_track_motif
@@ -41,8 +66,19 @@ class RoseTTAFoldModule(nn.Module):
         self.latent_emb = MSA_emb(d_msa=d_msa, d_pair=d_pair,  d_state=d_state, p_drop=p_drop)
         self.full_emb = Extra_emb(d_msa=d_msa_full, d_init=NAATOKENS-1+4, p_drop=p_drop)
         self.bond_emb = Bond_emb(d_pair=d_pair, d_init=NBTYPES)
-        self.templ_emb = Templ_emb(d_pair=d_pair, d_templ=d_templ, d_state=d_state, n_head=n_head_templ,
-                                   d_hidden=d_hidden_templ, p_drop=0.25)
+
+        self.templ_emb = Templ_emb(d_pair=d_pair, 
+                                   d_templ=d_templ, 
+                                   d_state=d_state, 
+                                   n_head=n_head_templ,
+                                   d_hidden=d_hidden_templ, 
+                                   p_drop=0.25,
+                                   symmetrize_repeats=symmetrize_repeats, # repeat protein stuff 
+                                   repeat_length=repeat_length, 
+                                   symmsub_k=symmsub_k,
+                                   sym_method=sym_method, 
+                                   main_block=main_block, 
+                                   copy_main_block=copy_main_block_template)
 
         # Update inputs with outputs from previous round
         self.recycle = Recycling(d_msa=d_msa, d_pair=d_pair, d_state=d_state)
@@ -71,6 +107,11 @@ class RoseTTAFoldModule(nn.Module):
             cb_tor=cb_tor,
             lj_lin=lj_lin,
             use_extra_l1=use_extra_l1,
+            symmetrize_repeats=symmetrize_repeats,
+            repeat_length=repeat_length,
+            symmsub_k=symmsub_k,
+            sym_method=sym_method,
+            main_block=main_block
         )
 
         ##
