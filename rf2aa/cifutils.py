@@ -1,14 +1,15 @@
 import collections
 
-# ============================================================
 Atom = collections.namedtuple('Atom', [
     'name',
     'xyz', # Cartesian coordinates of the atom
     'occ', # occupancy
+    'bfac', # B-factor
     'leaving', # boolean flag to indicate whether the atom leaves the molecule upon bond formation
     'leaving_group', # list of atoms which leave the molecule if a bond with this atom is formed
     'parent', # neighboring heavy atom this atom is bonded to
     'element', # atomic number (1..118)
+    'metal', # is this atom a metal? (bool)
     'charge', # atomic charge (int)
     'hyb', # hybridization state (int)
     'nhyd', # number of hydrogens
@@ -22,7 +23,8 @@ Bond = collections.namedtuple('Bond', [
     'aromatic', # is the bond aromatic? (bool)
     'in_ring', # is the bond in a ring? (bool)
     'order', # bond order (int)
-    'intra' # is the bond intra-residue? (bool)
+    'intra', # is the bond intra-residue? (bool)
+    'length' # reference bond length from openbabel (float)
 ])
 
 Residue = collections.namedtuple('Residue', [
@@ -42,5 +44,7 @@ Chain = collections.namedtuple('Chain', [
     'atoms',
     'bonds',
     'chirals',
+    'planars',
     'automorphisms'
 ])
+

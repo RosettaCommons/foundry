@@ -1612,7 +1612,7 @@ def get_prot_seqstring(ch, modres):
     idx = [int(k[1]) for k in ch.atoms]
     i_min, i_max = np.min(idx), np.max(idx)
     L = i_max - i_min + 1
-    seq = [20]*L
+    seq = ["-"]*L
 
     for k,v in ch.atoms.items():
         i_res = int(k[1])-i_min

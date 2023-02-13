@@ -126,6 +126,7 @@ default_dataloader_params = {
         "MAXLIGCHAINS"     : 10,
         "P_METAL"          : 0.75,
         "P_ATOMIZE_MODRES" : 0.75,
+        "MAXMONOMERLENGTH" : None,
     }
 
 def set_data_loader_params(args):
@@ -561,6 +562,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     # pdb monomers
     pdb = _load_df(params['PDB_LIST'])
     pdb = _apply_date_res_cutoffs(pdb)
+    if params['MAXMONOMERLENGTH'] is not None:
+        pdb = pdb[pdb["LEN_EXIST"] < params['MAXMONOMERLENGTH']]
     train_dict['pdb'] = pdb[(~pdb.CLUSTER.isin(val_pdb_ids)) & (~pdb.CLUSTER.isin(test_sm_ids))]
     valid_dict['pdb'] = pdb[pdb.CLUSTER.isin(val_pdb_ids) & (~pdb.CLUSTER.isin(test_sm_ids))]
     val_hash = set(valid_dict['pdb'].HASH.values)
@@ -813,7 +816,6 @@ def get_crop(l, mask, device, crop_size, unclamp=False):
 
     mask = ~(mask[:,:3].sum(dim=-1) < 3.0)
     exists = mask.nonzero()[0]
-
     if unclamp: # bias it toward N-term.. (follow what AF did.. but don't know why)
         x = np.random.randint(len(exists)) + 1
         res_idx = exists[torch.randperm(x)[0]].item()
