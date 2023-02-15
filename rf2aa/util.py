@@ -1059,6 +1059,7 @@ def get_atom_frames(msa, G):
         if not frames_with_n:
             frames_with_n = [frame for frame in frames if n in frame]
         # if the atom isn't in a 3 atom frame, it should be ignored in loss calc, set all the atoms to n
+        if not frames_with_n:
             selected_frames.append([(0,1),(0,1),(0, 1)])
             continue
         frame_priorities = []

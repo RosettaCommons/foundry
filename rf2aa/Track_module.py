@@ -118,9 +118,174 @@ class MSAPairStr2MSA(nn.Module):
 
         return msa
 
+
+def find_symmsub(Ltot, Lasu, k):
+    """
+    Creates a symmsub matrix 
+    
+    Parameters:
+        Ltot (int, required): Total length of all residues 
+        
+        Lasu (int, required): Length of asymmetric units
+        
+        k (int, required): Number of off diagonals to include in symmetrization
+    
+    
+    """
+    assert Ltot % Lasu == 0 
+    nchunk = Ltot // Lasu 
+
+    N = 2*k + 1 # total number of diagonals being accessed 
+    symmsub = torch.ones((nchunk, nchunk))*-1
+    C = 0 # a marker for blocks of the same category 
+
+    for i in range(N):                                # i      = 0, 1,2, 3,4, 5,6...
+        offset = int(((i+1) // 2) * (math.pow(-1,i))) # offset = 0,-1,1,-2,2,-3,3...
+
+        row = torch.arange(nchunk)
+        col = torch.roll(row, offset)
+
+        if offset < 0:
+            row = row[:-abs(offset)]
+            col = col[:-abs(offset)]
+        elif offset > 0:
+            row = row[abs(offset):]
+            col = col[abs(offset):]
+        else:# i=0
+            pass 
+
+        symmsub[row, col] = i
+
+    return symmsub.long()
+
+
+def copy_block_activations(pair, symmsub, main_block):
+    """
+    copies pair activations around in blocks according to 
+    matrix S
+    """
+    raise NotImplementedError
+
+    return False 
+
+
+def max_block_activations(pair, symmsub):
+    """
+    copies pair activations around in blocks according to 
+    matrix S
+    """
+    B,L = pair.shape[:2]
+
+    Osub = symmsub.shape[0]
+
+    # average pairs/blocks together 
+    Leff = L//Osub
+
+    # applies block averaging to the pair representation based on symmsub
+    # pairsymm = torch.zeros([Osub,Leff,Leff,pair.shape[-1]], device=pair.device, dtype=pair.dtype)
+    # Nsymm    = torch.zeros([Osub], device=pair.device, dtype=torch.int)
+
+    stacks = {}
+
+    # find all of the activation blocks
+    for i in range(Osub):
+        for j in range(Osub):
+            sij = symmsub[i,j]
+            if (sij>=0):
+                if not stacks.get(int(sij), False):
+                    stacks[int(sij)] = []
+                stacks[int(sij)].append( pair[0, i*Leff:(i+1)*Leff, j*Leff:(j+1)*Leff] )
+
+    # make tensors and find max activation in each tensor 
+    # ic(list(stacks.keys()))
+    for key,val in stacks.items():
+        A = torch.stack(stacks[key]) # stacked block activations 
+        B,max_idx = torch.max(A, dim=0)      # find the max 
+        stacks[key] = B              # replace with the max 
+
+    for i in range(Osub):
+            for j in range(Osub):
+                sij = symmsub[i,j]
+                if (sij>=0):
+                    pair[0, i*Leff:(i+1)*Leff, j*Leff:(j+1)*Leff] = stacks[int(sij)] #pairsymm[sij]/Nsymm[sij]
+    return pair 
+
+
+def mean_block_activations(pair, symmsub):
+    """
+    Applies block average symmetrization 
+    """
+    B,L = pair.shape[:2]
+
+    Osub = symmsub.shape[0]
+
+    # average pairs/blocks together 
+    Leff = L//Osub
+
+    # applies block averaging to the pair representation based on symmsub
+    pairsymm = torch.zeros([Osub,Leff,Leff,pair.shape[-1]], device=pair.device, dtype=pair.dtype)
+    Nsymm = torch.zeros([Osub], device=pair.device, dtype=torch.int)
+
+    for i in range(Osub):
+        for j in range(Osub):
+            sij = symmsub[i,j]
+            if (sij>=0):
+                pairsymm[sij] += pair[0, i*Leff:(i+1)*Leff, j*Leff:(j+1)*Leff]
+                Nsymm[sij]    += 1
+
+    for i in range(Osub):
+        for j in range(Osub):
+            sij = symmsub[i,j]
+            if (sij>=0):
+                pair[0, i*Leff:(i+1)*Leff, j*Leff:(j+1)*Leff] = pairsymm[sij]/Nsymm[sij]
+
+    return pair
+
+
+def apply_pair_symmetry(pair, symmsub, method='mean', main_block=None):
+    """
+    Applies pair symmetrizing operation
+    """
+    assert method in ['mean','max','copy']
+
+    if method == 'mean': 
+        pair = mean_block_activations(pair, symmsub) 
+
+    elif method == 'copy':
+        assert not (main_block is None), "cant have None main block here" 
+        pair = copy_block_activations(pair, symmsub, main_block=main_block)
+
+    elif method == 'max':
+        pair = max_block_activations(pair, symmsub)
+
+
+
+    return pair
+
+
 class PairStr2Pair(nn.Module):
-    def __init__(self, d_pair=128, n_head=4, d_hidden=32, d_hidden_state=16, d_rbf=64, d_state=32, p_drop=0.15):
+    def __init__(self, d_pair=128, n_head=4, d_hidden=32, d_hidden_state=16, d_rbf=64, d_state=32, p_drop=0.15,
+                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='max',main_block=None):
+        """
+        
+        Parameters:
+            symmetrize_repeats (bool, optional): whether to symmetrize the repeats. 
+
+            repeat_length (int, optional): length of the repeat unit in repeat protein 
+
+            symmsub_k (int, optional): number of diagonals to use for symmetrization
+
+            sym_method (str, optional): method to use for symmetrization.
+
+            main_block (int, optional): main block to use for symmetrization (the one with the motif)
+        """
         super(PairStr2Pair, self).__init__()
+
+        self.symmetrize_repeats = symmetrize_repeats
+        self.repeat_length = repeat_length
+        self.symmsub_k = symmsub_k
+        self.sym_method = sym_method
+        self.main_block = main_block
 
         self.norm_state = nn.LayerNorm(d_state)
         self.proj_left = nn.Linear(d_state, d_hidden_state)
@@ -172,6 +337,16 @@ class PairStr2Pair(nn.Module):
         pair = pair + self.drop_row(self.row_attn(pair, rbf_feat))
         pair = pair + self.drop_col(self.col_attn(pair, rbf_feat))
         pair = pair + self.ff(pair)
+
+        # symmetry/repeat proteins 
+        if self.symmetrize_repeats:
+            symmsub = find_symmsub(L, self.repeat_length, self.symmsub_k)
+        else:
+            symmsub = None
+
+        if symmsub is not None:
+            pair = apply_pair_symmetry(pair, symmsub, self.sym_method, self.main_block)
+
         return pair
 
 class MSA2Pair(nn.Module):
@@ -528,23 +703,32 @@ class IterBlock(nn.Module):
                  d_hidden=32, d_hidden_msa=None, 
                  minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.15,
                  SE3_param={'l0_in_features':32, 'l0_out_features':16, 'num_edge_features':32},
-                 nextra_l0=0, nextra_l1=0):
+                 nextra_l0=0, nextra_l1=0,
+                 symmetrize_repeats=None, repeat_length=None,symmsub_k=None, sym_method=None, main_block=None # repeat proteins
+                 ):
+
         super(IterBlock, self).__init__()
         if d_hidden_msa == None:
             d_hidden_msa = d_hidden
 
         self.pos = PositionalEncoding2D(d_rbf, minpos=minpos, maxpos=maxpos, 
                                         maxpos_atom=maxpos_atom, p_drop=p_drop)
+
         self.msa2msa = MSAPairStr2MSA(d_msa=d_msa, d_pair=d_pair, d_rbf=d_rbf,
                                       n_head=n_head_msa,
                                       d_state=SE3_param['l0_out_features'],
                                       use_global_attn=use_global_attn,
                                       d_hidden=d_hidden_msa, p_drop=p_drop)
+
         self.msa2pair = MSA2Pair(d_msa=d_msa, d_pair=d_pair,
                                  d_hidden=d_hidden//2, p_drop=p_drop)   
+
         self.pair2pair = PairStr2Pair(d_pair=d_pair, n_head=n_head_pair, d_rbf=d_rbf,
                                       d_state=SE3_param['l0_out_features'],
-                                      d_hidden=d_hidden, p_drop=p_drop)
+                                      d_hidden=d_hidden, p_drop=p_drop,
+                                      symmetrize_repeats=symmetrize_repeats, repeat_length=repeat_length,
+                                      symmsub_k=symmsub_k, sym_method=sym_method, main_block=main_block)
+
         self.str2str = Str2Str(d_msa=d_msa, d_pair=d_pair, d_rbf=d_rbf,
                                d_state=SE3_param['l0_out_features'],
                                SE3_param=SE3_param,
@@ -580,7 +764,12 @@ class IterativeSimulator(nn.Module):
          atom_type_index=None, aamask=None, 
          ljlk_parameters=None, lj_correction_parameters=None,
          cb_len=None, cb_ang=None, cb_tor=None,
-         num_bonds=None, lj_lin=0.6, use_extra_l1=True
+         num_bonds=None, lj_lin=0.6, use_extra_l1=True,
+         symmetrize_repeats=None,
+         repeat_length=None,
+         symmsub_k=None,
+         sym_method=None,
+         main_block=None
     ):
         super(IterativeSimulator, self).__init__()
         self.n_extra_block = n_extra_block
@@ -609,7 +798,12 @@ class IterativeSimulator(nn.Module):
                                                         p_drop=p_drop,
                                                         use_global_attn=True,
                                                         SE3_param=SE3_param,
-                                                        nextra_l1=3 if self.use_extra_l1 else 0)
+                                                        nextra_l1=3 if self.use_extra_l1 else 0,
+                                                        symmetrize_repeats=symmetrize_repeats,
+                                                        repeat_length=repeat_length,
+                                                        symmsub_k=symmsub_k,
+                                                        sym_method=sym_method,
+                                                        main_block=main_block)
                                                         for i in range(n_extra_block)])
 
         # Update with seed sequences
@@ -621,7 +815,12 @@ class IterativeSimulator(nn.Module):
                                                        p_drop=p_drop,
                                                        use_global_attn=False,
                                                        SE3_param=SE3_param,
-                                                       nextra_l1=3 if self.use_extra_l1 else 0)
+                                                       nextra_l1=3 if self.use_extra_l1 else 0,
+                                                       symmetrize_repeats=symmetrize_repeats,
+                                                       repeat_length=repeat_length,
+                                                       symmsub_k=symmsub_k,
+                                                       sym_method=sym_method,
+                                                       main_block=main_block)
                                                        for i in range(n_main_block)])
 
         # Final SE(3) refinement

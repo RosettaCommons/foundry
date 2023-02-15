@@ -10,13 +10,14 @@ DATASET_PARAMS = [
     'n_valid_homo', 'n_valid_compl', 'n_valid_neg', 'n_valid_na_compl',
     'n_valid_na_neg', 'n_valid_rna', 'n_valid_sm_compl',
     'n_valid_sm_compl_multi', 'n_valid_metal_compl', 'n_valid_sm_compl_covale',
-    'n_valid_sm_compl_strict', 'n_valid_sm', 'n_valid_sm_compl_asmb',
+    'n_valid_sm_compl_strict', 'n_valid_sm', 'n_valid_sm_compl_asmb'
 ]
 TRUNK_PARAMS = [
     'n_extra_block', 'n_main_block', 'n_ref_block', 'n_finetune_block',
     'd_msa', 'd_msa_full', 'd_pair', 'd_templ', 'n_head_msa', 'n_head_pair',
     'n_head_templ', 'd_hidden', 'd_hidden_templ', 'p_drop',
-    'use_extra_l1', 'use_atom_frames'
+    'use_extra_l1', 'use_atom_frames', 'symmetrize_repeats', 'repeat_length',
+    'symmsub_k', 'sym_method', 'main_block', 'copy_main_block_template'
 ]
 SE3_PARAMS = [
     'num_layers', 'num_channels', 'num_degrees', 'n_heads', 'div',
@@ -179,6 +180,17 @@ def get_args():
             help="Turn off chirality and LJ grad inputs to SE3 layers (for backwards compatibility).")
     trunk_group.add_argument("-no_atom_frames", dest='use_atom_frames', default='True', action='store_false',
             help="Turn off l1 features from atom frames in SE3 layers (for backwards compatibility).")
+    trunk_group.add_argument('-symmetrize_repeats', default=False, action='store_true', 
+            help="DIFFUSION INFERENCE ONLY: Whether to perform block symmetrization in the pair representation [False]")
+    trunk_group.add_argument('-repeat_length', type=float, default=float('nan'), 
+            help="DIFFUSION INFERENCE ONLY: Number of repeats in the sequence [nan]")
+    trunk_group.add_argument('-symmsub_k', type=float, default=float('nan'), 
+            help="DIFFUSION INFERENCE ONLY: Number of diagonals to perform block symmetrization on[nan]")
+    trunk_group.add_argument('-sym_method', type=float, default=float('nan'), 
+            help="DIFFUSION INFERENCE ONLY: Method for block symmetrization [nan]")
+    trunk_group.add_argument('-main_block', type=str, default=float('nan') )
+    trunk_group.add_argument('-copy_main_block_template', default=False, action='store_true',
+            help="DIFFUSION INFERENCE ONLY: Whether to copy main block from pair representation into  [False]")
 
     # Structure module properties
     str_group = parser.add_argument_group("structure module parameters")
