@@ -562,8 +562,10 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     # pdb monomers
     pdb = _load_df(params['PDB_LIST'])
     pdb = _apply_date_res_cutoffs(pdb)
+    ic(params['MAXMONOMERLENGTH'])
     if params['MAXMONOMERLENGTH'] is not None:
         pdb = pdb[pdb["LEN_EXIST"] < params['MAXMONOMERLENGTH']]
+        pdb = pdb[pdb["LEN_EXIST"]>60]
     train_dict['pdb'] = pdb[(~pdb.CLUSTER.isin(val_pdb_ids)) & (~pdb.CLUSTER.isin(test_sm_ids))]
     valid_dict['pdb'] = pdb[pdb.CLUSTER.isin(val_pdb_ids) & (~pdb.CLUSTER.isin(test_sm_ids))]
     val_hash = set(valid_dict['pdb'].HASH.values)
