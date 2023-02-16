@@ -452,11 +452,12 @@ def writepdb(filename, *args, file_mode='w', **kwargs, ):
     writepdb_file(f, *args, **kwargs)
 
 def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None, 
-             bond_feats=None, file_mode="w",atom_mask=None, atom_idx_offset=0, chain_Ls=None):
+             bond_feats=None, file_mode="w",atom_mask=None, atom_idx_offset=0, chain_Ls=None,
+             remap_atomtype=True, lig_name='LG1', atom_names=None):
     #ic(atoms.shape, seq.shape, bond_feats.shape)
     #ic(chain_Ls)
 
-    # correct mistake in atomic number assignment during encoding of atom types
+    # if needed, correct mistake in atomic number assignment in RF2-allatom (fold&dock 3 & earlier)
     atom_names_ = [
         "F",  "Cl", "Br", "I",  "O",  "S",  "Se", "Te", "N",  "P",  "As", "Sb",
         "C",  "Si", "Ge", "Sn", "Pb", "B",  "Al", "Zn", "Hg", "Cu", "Au", "Ni", 
@@ -468,8 +469,11 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
         46,   78,   27,   45,   77,   59,   26,   44,   76,   25,   75,   24,   
         42,   74,   23,   92,   65,   39,   4,    12,   20,   3,    19,   0] 
     atomnum2atomtype_ = dict(zip(atom_num,atom_names_))
-    wrongtype2correcttype = {v:atomnum2atomtype_[k] for k,v in chemical.atomnum2atomtype.items()}
-
+    if remap_atomtype:
+        atomtype_map = {v:atomnum2atomtype_[k] for k,v in chemical.atomnum2atomtype.items()}
+    else:
+        atomtype_map = {v:v for k,v in chemical.atomnum2atomtype.items()} # no change
+        
     ctr = 1+atom_idx_offset
     scpu = seq.cpu().squeeze(0)
     atomscpu = atoms.cpu().squeeze(0)
@@ -485,35 +489,46 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
     else:
         chain_letters = [chain]*len(scpu)
         
-    Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
-    atom_idxs = {}
     if modelnum is not None:
         f.write(f"MODEL        {modelnum}\n")
-    for i,s,ch in zip(range(len(scpu)), scpu, chain_letters):
+
+    Bfacts = torch.clamp( bfacts.cpu(), 0, 1)
+    atom_idxs = {}
+    i_res_lig = 0
+    for i_res,s,ch in zip(range(len(scpu)), scpu, chain_letters):
         natoms = atomscpu.shape[-2]
-        if (natoms!=NHEAVY and natoms!=NTOTAL and natoms!=3):
-            print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
-            assert(False)
+        #if (natoms!=NHEAVY and natoms!=NTOTAL and natoms!=3):
+        #    print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
+        #    assert(False)
 
         if s >= len(aa2long):
-            lig_name = "LG1"
-            atom_idxs[i] = ctr
+            atom_idxs[i_res] = ctr
+
+            # hack to make sure H's are output properly (they are not in RFAA alphabet)
+            if atom_names is not None:
+                atom_type = ''.join([c for c in atom_names[i_res_lig] if c.isalpha()])
+                atom_name = atom_names[i_res_lig]
+            else:
+                atom_type = atomtype_map[num2aa[s]]
+                atom_name = atom_type
+
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f           %s\n"%(
-                    "HETATM", ctr, wrongtype2correcttype[num2aa[s]], lig_name,
-                    ch, torch.max(idx_pdb)+10, atomscpu[i,1,0], atomscpu[i,1,1], atomscpu[i,1,2],
-                    1.0, Bfacts[i],  num2aa[s]) )
+                    "HETATM", ctr, atom_name, lig_name,
+                    ch, idx_pdb.max()+10, atomscpu[i_res,1,0], atomscpu[i_res,1,1], atomscpu[i_res,1,2],
+                    1.0, Bfacts[i_res],  atom_type) )
+            i_res_lig += 1
             ctr += 1
             continue
 
         atms = aa2long[s]
 
-        for j,atm_j in enumerate(atms):
-            if atom_mask is not None and not atom_mask[i,j]: continue # skip missing atoms
-            if (j<natoms and atm_j is not None and not torch.isnan(atomscpu[i,j,:]).any()):
+        for i_atm,atm in enumerate(atms):
+            if atom_mask is not None and not atom_mask[i_res,i_atm]: continue # skip missing atoms
+            if (i_atm<natoms and atm is not None and not torch.isnan(atomscpu[i_res,i_atm,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
-                    "ATOM", ctr, atm_j, num2aa[s],
-                    ch, idx_pdb[i], atomscpu[i,j,0], atomscpu[i,j,1], atomscpu[i,j,2],
-                    1.0, Bfacts[i] ) )
+                    "ATOM", ctr, atm, num2aa[s],
+                    ch, idx_pdb[i_res], atomscpu[i_res,i_atm,0], atomscpu[i_res,i_atm,1], atomscpu[i_res,i_atm,2],
+                    1.0, Bfacts[i_res] ) )
                 ctr += 1
     if bond_feats != None:
         atom_bonds = (bond_feats > 0) * (bond_feats <5)
@@ -1705,4 +1720,32 @@ def bond_feats_from_Ls(Ls):
         bond_feats[offset:offset+L_, offset:offset+L_] = get_protein_bond_feats(L_)
         offset += L_
     return bond_feats
+
+def kabsch(xyz1, xyz2, eps=1e-6):
+    """Superimposes `xyz2` coordinates onto `xyz1`, returns RMSD and rotation matrix."""
+    # center to CA centroid
+    xyz1 = xyz1 - xyz1.mean(0)
+    xyz2 = xyz2 - xyz2.mean(0)
+
+    # Computation of the covariance matrix
+    C = xyz2.T @ xyz1
+
+    # Compute optimal rotation matrix using SVD
+    V, S, W = torch.linalg.svd(C)
+
+    # get sign to ensure right-handedness
+    d = torch.ones([3,3])
+    d[:,-1] = torch.sign(torch.linalg.det(V)*torch.linalg.det(W))
+
+    # Rotation matrix U
+    U = (d*V) @ W
+
+    # Rotate xyz2
+    xyz2_ = xyz2 @ U
+
+    L = xyz2_.shape[0]
+
+    rmsd = torch.sqrt(torch.sum((xyz2_-xyz1)*(xyz2_-xyz1), axis=(0,1)) / L + eps)
+
+    return rmsd, U
 
