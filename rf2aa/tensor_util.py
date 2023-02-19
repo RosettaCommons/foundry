@@ -132,9 +132,8 @@ class TensorMatchOperator(BaseOperator):
         unequal_got = got[~is_eq]
         unequal_want = want[~is_eq]
         uneq_idx_got_want = list(zip(unequal_idx.tolist(), unequal_got, unequal_want))[:3]
-        print(f'uneq_idx_got_want: {uneq_idx_got_want}')
-
         uneq_msg = '    '.join(f'idx:{idx}, got:{got}, want:{want}' for idx, got, want in uneq_idx_got_want)
+        uneq_msg += f'    fraction unequal:{unequal_got.numel()}/{got.numel()}'
         msg = f'tensors with shape {got.shape}: first unequal indices: {uneq_msg}'
         if torch.numel(got) < 10:
             msg = f'got {got}, want: {want}'
@@ -144,7 +143,7 @@ class TensorMatchOperator(BaseOperator):
     def give_up_diffing(self, level, diff_instance):
         msg = self._equal_msg(level.t1, level.t2)
         if msg:
-            print(level.t1, level.t2)
+            print(f'got:\n{level.t1}\n\nwant:\n{level.t2}')
             msg = self._equal_msg(level.t1, level.t2)
             if msg:
                 diff_instance.custom_report_result('tensors unequal', level, {
