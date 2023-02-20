@@ -1721,6 +1721,21 @@ def bond_feats_from_Ls(Ls):
         offset += L_
     return bond_feats
 
+def same_chain_from_bond_feats(bond_feats):
+    """Return binary matrix indicating if pairs of residues are on same chain,
+    given their bond features.
+    """
+    assert(len(bond_feats.shape)==2) # assume no batch dimension
+    L = bond_feats.shape[0]
+    same_chain = torch.zeros((L,L))
+    G = nx.from_numpy_matrix(bond_feats.detach().cpu().numpy())
+    for idx in nx.connected_components(G):
+        idx = list(idx)
+        for i in idx:
+            same_chain[i,idx] = 1
+    return same_chain
+
+
 def kabsch(xyz1, xyz2, eps=1e-6):
     """Superimposes `xyz2` coordinates onto `xyz1`, returns RMSD and rotation matrix."""
     # center to CA centroid
