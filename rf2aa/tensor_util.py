@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import json
 from deepdiff import DeepDiff
 import pprint
@@ -151,9 +152,17 @@ class TensorMatchOperator(BaseOperator):
                     })
         return True
 
+class NumpyMatchOperator(TensorMatchOperator):
+    def give_up_diffing(self, level, diff_instance):
+        level.t1 = torch.Tensor(level.t1)
+        level.t2 = torch.Tensor(level.t2)
+        return super(NumpyMatchOperator, self).give_up_diffing(level, diff_instance)
+
+
 def cmp(got, want, **kwargs):
     
     dd = DeepDiff(got, want, custom_operators=[
+        NumpyMatchOperator(types=[np.ndarray], **kwargs),
         TensorMatchOperator(types=[torch.Tensor], **kwargs)])
     if dd:
         return dd
