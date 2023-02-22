@@ -328,9 +328,11 @@ class RoseTTAFoldModule(nn.Module):
 
         #
         # Do recycling
-        if msa_prev == None:
-            msa_prev = torch.zeros_like(msa_latent[:, 0])
+        if msa_prev is None:
+            msa_prev = torch.zeros_like(msa_latent[:,0])
+        if pair_prev is None:
             pair_prev = torch.zeros_like(pair)
+        if state_prev is None:
             state_prev = torch.zeros_like(state)
 
         msa_recycle, pair_recycle, state_recycle = self.recycle(msa_prev, pair_prev, xyz, state_prev, sctors, mask_recycle)

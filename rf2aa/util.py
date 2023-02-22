@@ -1123,9 +1123,11 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     lig_xyz = torch.zeros((len(ra), 3))
     lig_xyz = nat_symm[:, r, a]
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
-    frames = get_atomized_protein_frames(residues_atomize, ra)
+    # frames = get_atomized_protein_frames(residues_atomize, ra)
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
-
+    #HACK: use networkx graph to make the atom frames, correct implementation will include frames with "residue atoms"
+    G = nx.from_numpy_matrix(bond_feats.numpy())
+    frames = get_atom_frames(lig_seq, G)
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_mask, bond_feats)
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
 
