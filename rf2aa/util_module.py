@@ -6,8 +6,7 @@ from opt_einsum import contract as einsum
 import copy
 import dgl
 import networkx as nx
-from rf2aa.util import base_indices, RTs_by_torsion, xyzs_in_base_frame, \
-    rigid_from_3_points, is_nucleic, is_atom
+from rf2aa.util import *
 
 def init_lecun_normal(module, scale=1.0):
     def truncated_normal(uniform, mu=0.0, sigma=1.0, a=-2, b=2):
@@ -170,7 +169,8 @@ def get_res_atom_dist(idx, bond_feats, sm_mask, minpos_res=-32, maxpos_res=32, m
 
     # small molecule atom bond graph
     sm_bond_feats = torch.zeros_like(bond_feats) + sm_mask_2d*bond_feats
-    G = nx.from_numpy_matrix(sm_bond_feats.detach().cpu().numpy())
+    #G = nx.from_numpy_matrix(sm_bond_feats.detach().cpu().numpy())
+    G = nx.from_numpy_array(sm_bond_feats.detach().cpu().numpy())
     paths = dict(nx.all_pairs_shortest_path_length(G,cutoff=maxpos_atom))
     paths = [(i,j,vij) for i,vi in paths.items() for j,vij in vi.items()]
     i,j,v = torch.tensor(paths).T
@@ -455,15 +455,18 @@ def make_rot_axis(angs, u, eps=1e-6):
 #    nu2/nu1/nu0: 13-15
 #    chi_1(na): 16
 #
-class ComputeAllAtomCoords(nn.Module):
+class XYZConverter(nn.Module):
     def __init__(self):
-        super(ComputeAllAtomCoords, self).__init__()
-
-        self.base_indices = nn.Parameter(base_indices, requires_grad=False)
-        self.RTs_in_base_frame = nn.Parameter(RTs_by_torsion, requires_grad=False)
-        self.xyzs_in_base_frame = nn.Parameter(xyzs_in_base_frame, requires_grad=False)
-
-    def forward(self, seq, xyz, alphas):
+        super(XYZConverter, self).__init__()
+        
+        self.register_buffer("torsion_indices", torsion_indices)
+        self.register_buffer("torsion_can_flip", torsion_can_flip)
+        self.register_buffer("ref_angles", reference_angles)
+        self.register_buffer("base_indices", base_indices)
+        self.register_buffer("RTs_in_base_frame", RTs_by_torsion)
+        self.register_buffer("xyzs_in_base_frame", xyzs_in_base_frame)
+    
+    def compute_all_atom(self, seq, xyz, alphas):
         B,L = xyz.shape[:2]
 
         is_NA = is_nucleic(seq)
@@ -587,3 +590,88 @@ class ComputeAllAtomCoords(nn.Module):
         )
 
         return RTframes, xyzs[...,:3]
+
+
+    def get_tor_mask(self, seq, mask_in=None): 
+        B,L = seq.shape[:2]
+        dna_mask = is_nucleic(seq)
+        prot_mask = ~dna_mask
+
+        tors_mask = self.torsion_indices[seq,:,-1] > 0
+
+        if mask_in != None:
+            N = mask_in.shape[2]
+            ts = self.torsion_indices[seq]
+            bs = torch.arange(B, device=seq.device)[:,None,None,None]
+            rs = torch.arange(L, device=seq.device)[None,:,None,None] - (ts<0)*1 # ts<-1 ==> prev res
+            ts = torch.abs(ts)
+            tors_mask *= mask_in[bs,rs,ts].all(dim=-1)
+
+        return tors_mask
+
+    def get_torsions(self, xyz_in, seq, mask_in=None):
+        B,L = xyz_in.shape[:2]
+
+        tors_mask = self.get_tor_mask(seq, mask_in)
+        # idealize given xyz coordinates before computing torsion angles
+        xyz = idealize_reference_frame(seq, xyz_in)
+
+        ts = self.torsion_indices[seq]
+        bs = torch.arange(B, device=xyz_in.device)[:,None,None,None]
+        xs = torch.arange(L, device=xyz_in.device)[None,:,None,None] - (ts<0)*1 # ts<-1 ==> prev res
+        ys = torch.abs(ts)
+        xyzs_bytor = xyz[bs,xs,ys,:]
+
+        torsions = torch.zeros( (B,L,NTOTALDOFS,2), device=xyz_in.device )
+        torsions[...,:7,:] = th_dih(
+            xyzs_bytor[...,:7,0,:],xyzs_bytor[...,:7,1,:],xyzs_bytor[...,:7,2,:],xyzs_bytor[...,:7,3,:]
+        )
+        torsions[:,:,2,:] = -1 * torsions[:,:,2,:] # shift psi by pi
+        torsions[...,10:,:] = th_dih(
+            xyzs_bytor[...,10:,0,:],xyzs_bytor[...,10:,1,:],xyzs_bytor[...,10:,2,:],xyzs_bytor[...,10:,3,:]
+        )
+
+        # angles (hardcoded)
+        # CB bend
+        NC = 0.5*( xyz[:,:,0,:3] + xyz[:,:,2,:3] )
+        CA = xyz[:,:,1,:3]
+        CB = xyz[:,:,4,:3]
+        t = th_ang_v(CB-CA,NC-CA)
+        t0 = self.ref_angles[seq][...,0,:]
+        torsions[:,:,7,:] = torch.stack( 
+            (torch.sum(t*t0,dim=-1),t[...,0]*t0[...,1]-t[...,1]*t0[...,0]),
+            dim=-1 )
+    
+        # CB twist
+        NCCA = NC-CA
+        NCp = xyz[:,:,2,:3] - xyz[:,:,0,:3]
+        NCpp = NCp - torch.sum(NCp*NCCA, dim=-1, keepdim=True)/ torch.sum(NCCA*NCCA, dim=-1, keepdim=True) * NCCA
+        t = th_ang_v(CB-CA,NCpp)
+        t0 = self.ref_angles[seq][...,1,:]
+        torsions[:,:,8,:] = torch.stack( 
+            (torch.sum(t*t0,dim=-1),t[...,0]*t0[...,1]-t[...,1]*t0[...,0]),
+            dim=-1 )
+
+        # CG bend
+        CG = xyz[:,:,5,:3]
+        t = th_ang_v(CG-CB,CA-CB)
+        t0 = self.ref_angles[seq][...,2,:]
+        torsions[:,:,9,:] = torch.stack( 
+            (torch.sum(t*t0,dim=-1),t[...,0]*t0[...,1]-t[...,1]*t0[...,0]),
+            dim=-1 )
+    
+        mask0 = (torch.isnan(torsions[...,0])).nonzero()
+        mask1 = (torch.isnan(torsions[...,1])).nonzero()
+        torsions[mask0[:,0],mask0[:,1],mask0[:,2],0] = 1.0
+        torsions[mask1[:,0],mask1[:,1],mask1[:,2],1] = 0.0
+
+        # alt chis
+        torsions_alt = torsions.clone()
+        torsions_alt[self.torsion_can_flip[seq,:]] *= -1
+
+        # torsions to restrain to 0 or 180 degree
+        # (this should be specified in chemical?)
+        tors_planar = torch.zeros((B, L, NTOTALDOFS), dtype=torch.bool, device=xyz_in.device)
+        tors_planar[:,:,5] = seq == aa2num['TYR'] # TYR chi 3 should be planar
+
+        return torsions, torsions_alt, tors_mask, tors_planar

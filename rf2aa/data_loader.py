@@ -11,10 +11,13 @@ from itertools import permutations
 from typing import Dict, Optional, Tuple
 from pathlib import Path
 from openbabel import pybel
+from os.path import exists
+from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mixed_fasta
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
 sys.path.append(script_dir+'/../')
+from symmetry import get_symmetry
 
 import numpy as np
 import pandas as pd
@@ -78,8 +81,8 @@ default_dataloader_params = {
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
         "NEGATIVE_LIST"    : "%s/list.negative.csv"%compl_dir,
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
-        "NA_COMPL_LIST"    : "%s/list.nucleic.NODIMERS.csv"%sm_compl_dir,
-        "NEG_NA_COMPL_LIST": "%s/list.na_negatives.csv"%na_dir,
+        "NA_COMPL_LIST"    : "%s/list.nucleic.v2.csv"%na_dir,
+        "NEG_NA_COMPL_LIST": "%s/list.na_negatives.v2.csv"%na_dir,
         "SM_LIST"          : "%s/sm_compl_all_20230220.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02_w_taxid.csv"%sm_compl_dir, # on digs
         "PDB_METADATA"     : "%s/list_v00_w_taxid_20230201.csv"%sm_compl_dir, # on digs
@@ -91,7 +94,7 @@ default_dataloader_params = {
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230211.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230220.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230227.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -146,7 +149,7 @@ def MSABlockDeletion(msa, ins, nb=5):
     to_delete = block_start[:,None] + np.arange(block_size)[None,:]
     to_delete = np.unique(np.clip(to_delete, 1, N-1))
     #
-    mask = np.ones(N, np.bool)
+    mask = np.ones(N, bool)
     mask[to_delete] = 0
 
     return msa[mask], ins[mask]
@@ -751,26 +754,27 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['compl'] = valid_dict['compl'].CLUSTER.drop_duplicates().values
 
     # negative complexes
-    #neg = pd.read_csv(params['NEGATIVE_LIST'])
-    #neg = _apply_date_res_cutoffs(neg)
-    #neg['CLUSTER'] = neg.CLUSTER + NEG_CLUSID_OFFSET
-    #neg['HASH_A'] = neg.HASH.apply(lambda x: x.split('_')[0])
-    #neg['HASH_B'] = neg.HASH.apply(lambda x: x.split('_')[1])
-    #neg['LEN'] = neg['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
-    #neg['LEN_EXIST'] = neg['LEN'].apply(lambda x: sum(x))
+    neg = pd.read_csv(params['NEGATIVE_LIST'])
+    neg = _apply_date_res_cutoffs(neg)
+    neg['CLUSTER'] = neg.CLUSTER + NEG_CLUSID_OFFSET
+    neg['HASH_A'] = neg.HASH.apply(lambda x: x.split('_')[0])
+    neg['HASH_B'] = neg.HASH.apply(lambda x: x.split('_')[1])
+    neg['LEN'] = neg['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
+    neg['LEN_EXIST'] = neg['LEN'].apply(lambda x: sum(x))
 
-    #valid_dict['neg'] = neg[neg.CLUSTER.isin(val_neg_ids)]
-    #train_dict['neg'] = neg[(~neg.CLUSTER.isin(val_neg_ids)) &
-    #                        (~neg.HASH_A.isin(val_hash)) &
-    #                        (~neg.HASH_B.isin(val_hash))]
-    #train_ID_dict['neg'], weights_dict['neg'] = _get_IDs_weights(train_dict['neg'])
-    #valid_ID_dict['neg'] = valid_dict['neg'].CLUSTER.drop_duplicates().values
+    valid_dict['neg_compl'] = neg[neg.CLUSTER.isin(val_neg_ids)]
+    train_dict['neg_compl'] = neg[(~neg.CLUSTER.isin(val_neg_ids)) &
+                            (~neg.HASH_A.isin(val_hash)) &
+                            (~neg.HASH_B.isin(val_hash))]
+    train_ID_dict['neg_compl'], weights_dict['neg_compl'] = _get_IDs_weights(train_dict['neg_compl'])
+    valid_ID_dict['neg_compl'] = valid_dict['neg_compl'].CLUSTER.drop_duplicates().values
 
     # nucleic acid complexes
     na = _load_df(params['NA_COMPL_LIST'])
     na = _apply_date_res_cutoffs(na)
-    na['LEN'] = na['LENA:B:C'].apply(lambda x: [int(y) for y in x.split(':')])
+    na['LEN'] = na['LENA:B:C:D'].apply(lambda x: [int(y) for y in x.split(':')])
     na['LEN_EXIST'] = na['LEN'].apply(lambda x: sum(x))
+    na['TOPAD?'] = na['TOPAD?'].apply(lambda x: bool(x))
 
     valid_dict['na_compl'] = na[na.CLUSTER.isin(val_compl_ids)]
     train_dict['na_compl'] = na[(~na.CLUSTER.isin(val_compl_ids))]
@@ -778,30 +782,33 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['na_compl'] = valid_dict['na_compl'].CLUSTER.drop_duplicates().values
 
     # negative nucleic acid complexes
-    #na_neg = _load_df(params['NEG_NA_COMPL_LIST'])
-    #na_neg = _apply_date_res_cutoffs(na)
-    #na_neg['CLUSTER'] = na_neg.CLUSTER + NEG_CLUSID_OFFSET
+    na_neg = _load_df(params['NEG_NA_COMPL_LIST'])
+    na_neg = _apply_date_res_cutoffs(na_neg)
+    na_neg['CLUSTER'] = na_neg.CLUSTER + NEG_CLUSID_OFFSET
 
-    #na_neg['LEN'] = na_neg['LENA:B:C'].apply(lambda x: [int(y) for y in x.split(':')])
-    #na_neg['LEN_EXIST'] = na_neg['LEN'].apply(lambda x: sum(x))
+    na_neg['LEN'] = na_neg['LENA:B:C:D'].apply(lambda x: [int(y) for y in x.split(':')])
+    na_neg['LEN_EXIST'] = na_neg['LEN'].apply(lambda x: sum(x))
 
-    #valid_dict['na_neg'] = na_neg[na_neg.CLUSTER.isin(val_neg_ids)]
-    #train_dict['na_neg'] = na_neg[(~na_neg.CLUSTER.isin(val_neg_ids))]
-    #train_ID_dict['na_neg'], weights_dict['na_neg'] = _get_IDs_weights(train_dict['na_neg'])
-    #valid_ID_dict['na_neg'] = valid_dict['na_neg'].CLUSTER.drop_duplicates().values
+    valid_dict['neg_na_compl'] = na_neg[na_neg.CLUSTER.isin(val_neg_ids)]
+    train_dict['neg_na_compl'] = na_neg[(~na_neg.CLUSTER.isin(val_neg_ids))]
+    train_ID_dict['neg_na_compl'], weights_dict['neg_na_compl'] = _get_IDs_weights(train_dict['neg_na_compl'])
+    valid_ID_dict['neg_na_compl'] = valid_dict['neg_na_compl'].CLUSTER.drop_duplicates().values
 
     # rna
+    #fd: cluster RNA like others
     rna = pd.read_csv(params['RNA_LIST'])
     rna = _apply_date_res_cutoffs(rna)
     rna['LEN'] = rna['LENA:B:C'].apply(lambda x: [int(y) for y in x.split(':')])
-    rna['CLUSTER'] = range(len(rna)) # for unweighted sampling
+    #rna['CLUSTER'] = range(len(rna)) # for unweighted sampling
+    rna['LEN_EXIST'] = rna['LEN'].apply(lambda x: sum(x))
 
     in_val = rna['CHAINID'].apply(lambda x: any([y in val_rna_pdb_ids for y in x.split(':')]))
     train_dict['rna'] = rna[~in_val]
     valid_dict['rna'] = rna[in_val]
-    train_ID_dict['rna'] = train_dict['rna'].CLUSTER.values # all unique
-    weights_dict['rna'] = torch.ones(len(train_ID_dict['rna']))
-    valid_ID_dict['rna'] = valid_dict['rna'].CLUSTER.values
+    #train_ID_dict['rna'] = train_dict['rna'].CLUSTER.values # all unique
+    #weights_dict['rna'] = torch.ones(len(train_ID_dict['rna']))
+    train_ID_dict['rna'], weights_dict['rna'] = _get_IDs_weights(train_dict['rna'])
+    valid_ID_dict['rna'] = valid_dict['rna'].CLUSTER.drop_duplicates().values #fd
 
     # protein-small molecule complexes
     def _prep_sm_compl_data(df):
@@ -851,45 +858,6 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
 
     # protein / ligand assemblies (more than 2 chains)
     df = df_sm[df_sm['SUBSET']=='asmb']
-    train_dict['sm_compl_asmb'], valid_dict['sm_compl_asmb'], train_ID_dict['sm_compl_asmb'], \
-        valid_ID_dict['sm_compl_asmb'], weights_dict['sm_compl_asmb'] = _prep_sm_compl_data(df)
-
-    # protein / covalent ligand complexes
-    df = _load_df(params['SM_COVALE_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
-    df = _apply_date_res_cutoffs(df)
-    df = df[~df['CHAINID'].isin([
-        '1adl_A', '1bs3_A', '1bs3_B', '1btx_A', '1bxw_A', '1etu_A', '1gjm_A',
-        '1h3v_B', '1jkj_B', '1l0i_A', '1q1k_A', '1qga_A', '1qga_B', '1nte_A',
-        '1x83_B', '2b4b_B', '3dpm_A', '3dpm_B', '4ztt_F', '5kxd_A', '6mhb_F'
-    ])]
-    train_dict['sm_compl_covale'], valid_dict['sm_compl_covale'], train_ID_dict['sm_compl_covale'], \
-        valid_ID_dict['sm_compl_covale'], weights_dict['sm_compl_covale'] = _prep_sm_compl_data(df)
-
-    # protein / ligand assemblies (more than 2 chains)
-    df = _load_df(params['SM_ASMB_LIST'], eval_cols=['COVALENT', 'LIGAND', 'LIGXF', 'PARTNERS'])
-    df = _apply_date_res_cutoffs(df)
-
-    # these filters are blindly copied from sm_compl and sm_compl_covale above based on
-    # experience in training phase 2. these may work now in the re-curated phase 3 datasets,
-    # try them at some point
-    df = df[
-        ~((df['CHAINID']=='1q9x_K') & (df['LIGAND'].apply(lambda x: x[0][0]=='S'))) &
-        ~((df['CHAINID']=='4s0n_A') & (df['LIGAND'].apply(lambda x: x[0][0]=='J'))) &
-        ~((df['CHAINID']=='3agv_A') & (df['LIGAND'].apply(lambda x: x[0][0]=='F'))) &
-        ~((df['CHAINID']=='5l6x_B') & (df['LIGAND'].apply(lambda x: x[0][0]=='O'))) &
-        ~((df['CHAINID']=='5l6x_A') & (df['LIGAND'].apply(lambda x: x[0][0]=='I'))) &
-        ~(df['CHAINID'].isin([
-            '1khz_B', '1g9q_A', '1g9q_B', # cuda indexing errors during forward pass
-            '4u9i_B', '4u9h_B', '4jhq_A', '4jhq_B', '5myq_A', '5myq_B', # error during loading
-            '5myq_C', '5myq_D', '6g7r_D', '6g7r_B', '6gal_D', '6fpi_B', # error during loading
-            '6fpi_D', '6fpw_B', '6fpw_D', # error during loading
-        ]))
-    ]
-    df = df[~df['CHAINID'].isin([
-        '1adl_A', '1bs3_A', '1bs3_B', '1btx_A', '1bxw_A', '1etu_A', '1gjm_A',
-        '1h3v_B', '1jkj_B', '1l0i_A', '1q1k_A', '1qga_A', '1qga_B', '1nte_A',
-        '1x83_B', '2b4b_B', '3dpm_A', '3dpm_B', '4ztt_F', '5kxd_A', '6mhb_F'
-    ])]
     train_dict['sm_compl_asmb'], valid_dict['sm_compl_asmb'], train_ID_dict['sm_compl_asmb'], \
         valid_ID_dict['sm_compl_asmb'], weights_dict['sm_compl_asmb'] = _prep_sm_compl_data(df)
 
@@ -1041,7 +1009,7 @@ def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein
     repatom[seq==29] = 12 # G - N1
     repatom[seq==30] = 15 # U - N3
 
-    if not incl_protein:
+    if not incl_protein: # either 1 or 2 NA chains
         if len(len_s)==2:
             # 2 RNA chains
             xyz_na1_rep = torch.gather(xyz[:len_s[0]], 1, repatom[:len_s[0],None,None].repeat(1,1,3)).squeeze(1)
@@ -1064,52 +1032,82 @@ def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein
                 i = np.random.randint(len_s[0])
             cond[i,i+1] = True
 
-    else:
-        if len(len_s)==3:
-            xyz_na1_rep = torch.gather(xyz[len_s[0]:(len_s[0]+len_s[1])], 1, repatom[len_s[0]:(len_s[0]+len_s[1]),None,None].repeat(1,1,3)).squeeze(1)
-            xyz_na2_rep = torch.gather(xyz[(len_s[0]+len_s[1]):], 1, repatom[(len_s[0]+len_s[1]):,None,None].repeat(1,1,3)).squeeze(1)
+    else: # either 1prot+1NA, 1prot+2NA or 2prot+2NA
+        # find NA:NA basepairs
+        if len(len_s)>=3:
+            if len(len_s)==3:
+                na1s, na2s = len_s[0], len_s[0]+len_s[1]
+            else:
+                na1s, na2s = len_s[0]+len_s[1], len_s[0]+len_s[1]+len_s[2]
+
+            xyz_na1_rep = torch.gather(xyz[na1s:na2s], 1, repatom[na1s:na2s,None,None].repeat(1,1,3)).squeeze(1)
+            xyz_na2_rep = torch.gather(xyz[na2s:], 1, repatom[na2s:,None,None].repeat(1,1,3)).squeeze(1)
             cond_bp = torch.cdist(xyz_na1_rep, xyz_na2_rep) < bp_cutoff
 
-            mask_na1_rep = torch.gather(mask[len_s[0]:(len_s[0]+len_s[1])], 1, repatom[len_s[0]:(len_s[0]+len_s[1]),None]).squeeze(1)
-            mask_na2_rep = torch.gather(mask[(len_s[0]+len_s[1]):], 1, repatom[(len_s[0]+len_s[1]):,None]).squeeze(1)
-            cond_bp = torch.logical_and(cond_bp, mask_na1_rep[:,None]*mask_na2_rep[None,:]) 
+            mask_na1_rep = torch.gather(mask[na1s:na2s], 1, repatom[na1s:na2s,None]).squeeze(1)
+            mask_na2_rep = torch.gather(mask[na2s:], 1, repatom[na2s:,None]).squeeze(1)
+            cond_bp = torch.logical_and(cond_bp, mask_na1_rep[:,None]*mask_na2_rep[None,:])
 
+        # find NA:prot contacts
         if (not negative):
             # get interface residues
             #   interface defined as chain 1 versus all other chains
-            xyz_na_rep = torch.gather(xyz[len_s[0]:], 1, repatom[len_s[0]:,None,None].repeat(1,1,3)).squeeze(1)
-            cond = torch.cdist(xyz[:len_s[0],1], xyz_na_rep) < cutoff
-            mask_na_rep = torch.gather(mask[len_s[0]:], 1, repatom[len_s[0]:,None]).squeeze(1)
+            if len(len_s)==4:
+                first_na = len_s[0]+len_s[1]
+            else:
+                first_na = len_s[0]
+
+            xyz_na_rep = torch.gather(xyz[first_na:], 1, repatom[first_na:,None,None].repeat(1,1,3)).squeeze(1)
+            cond = torch.cdist(xyz[:first_na,1], xyz_na_rep) < cutoff
+            mask_na_rep = torch.gather(mask[first_na:], 1, repatom[first_na:,None]).squeeze(1)
             cond = torch.logical_and(
                 cond, 
-                mask[:len_s[0],None,1] * mask_na_rep[None,:]
+                mask[:first_na,None,1] * mask_na_rep[None,:]
             )
 
+        # random NA:prot contact for negatives
         if (negative or torch.sum(cond)==0):
+            if len(len_s)==4:
+                nprot,nna = len_s[0]+len_s[1], sum(len_s[2:])
+            else:
+                nprot,nna = len_s[0], sum(len_s[1:])
+
             # pick a random pair of residues
-            cond = torch.zeros( (len_s[0], sum(len_s[1:])), dtype=torch.bool )
-            i,j = np.random.randint(len_s[0]), np.random.randint(sum(len_s[1:]))
+            cond = torch.zeros( (nprot, nna), dtype=torch.bool )
+            i,j = np.random.randint(nprot), np.random.randint(nna)
             while (not mask[i,1]):
-                i = np.random.randint(len_s[0])
-            while (not mask[len_s[0]+j,1]):
-                j = np.random.randint(sum(len_s[1:]))
+                i = np.random.randint(nprot)
+            while (not mask[nprot+j,1]):
+                j = np.random.randint(nna)
             cond[i,j] = True
 
     # a) build a graph of costs:
     #     cost (i,j in same chain) = abs(i-j)
     #     cost (i,j in different chains) = { 0 if i,j are an interface
     #                                    = { 999 if i,j are NOT an interface
-    if len(len_s)==3:
-        int_1_2 = np.full((len_s[0],len_s[1]),999)
-        int_1_3 = np.full((len_s[0],len_s[2]),999)
-        int_2_3 = np.full((len_s[1],len_s[2]),999)
-        int_1_2[cond[:,:len_s[1]]]=1
-        int_1_3[cond[:,len_s[1]:]]=1
+    if len(len_s)>=3:
+        if len(len_s)==4:
+            nprot,nna1,nna2 = len_s[0]+len_s[1], len_s[2], len_s[3]
+            diag_1 = np.full((nprot,nprot),999)
+            diag_1[:len_s[0],:len_s[0]] = np.abs(np.arange(len_s[0])[:,None]-np.arange(len_s[0])[None,:])
+            diag_1[len_s[0]:,len_s[0]:] = np.abs(np.arange(len_s[1])[:,None]-np.arange(len_s[1])[None,:])
+        else:
+            nprot,nna1,nna2 = len_s[0], len_s[1], len_s[2]
+            diag_1 = np.abs(np.arange(nprot)[:,None]-np.arange(nprot)[None,:])
+
+        diag_2 = np.abs(np.arange(len_s[-2])[:,None]-np.arange(len_s[-2])[None,:])
+        diag_3 = np.abs(np.arange(len_s[-1])[:,None]-np.arange(len_s[-1])[None,:])
+        int_1_2 = np.full((nprot,nna1),999)
+        int_1_3 = np.full((nprot,nna2),999)
+        int_2_3 = np.full((nna1,nna2),999)
+        int_1_2[cond[:,:nna1]]=1
+        int_1_3[cond[:,nna1:]]=1
         int_2_3[cond_bp] = 0
+
         inter = np.block([
-            [np.abs(np.arange(len_s[0])[:,None]-np.arange(len_s[0])[None,:]),int_1_2,int_1_3],
-            [int_1_2.T,np.abs(np.arange(len_s[1])[:,None]-np.arange(len_s[1])[None,:]),int_2_3],
-            [int_1_3.T,int_2_3.T,np.abs(np.arange(len_s[2])[:,None]-np.arange(len_s[2])[None,:])]
+            [diag_1   , int_1_2  , int_1_3],
+            [int_1_2.T, diag_2   , int_2_3],
+            [int_1_3.T, int_2_3.T, diag_3]
         ])
     elif len(len_s)==2:
         int_1_2 = np.full((len_s[0],len_s[1]),999)
@@ -1133,6 +1131,7 @@ def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein
     sel, _ = torch.sort(sel[idx])
 
     return sel
+
 
 def find_msa_hashes(protein_chain_info, params):
     """
@@ -1384,6 +1383,52 @@ def join_msas_by_taxid(a3mA, a3mB, idx_overlap=None):
     taxids_shared = a3mA['taxid'][np.isin(a3mA['taxid'],a3mB['taxid'])]
     i_pairedA, i_pairedB = [], []
 
+def join_msas_by_taxid(a3mA, a3mB, idx_overlap=None):
+    """Joins (or "pairs") 2 MSAs by matching sequences with the same
+    taxonomic ID. If more than 1 sequence exists in both MSAs with the same tax
+    ID, only the sequence with the highest sequence identity to the query (1st
+    sequence in MSA) will be paired.
+    
+    Sequences that aren't paired will be padded and added to the bottom of the
+    joined MSA.  If a subregion of the input MSAs overlap (represent the same
+    chain), the subregion residue indices can be given as `idx_overlap`, and
+    the overlap region of the unpaired sequences will be included in the joined
+    MSA.
+    
+    Parameters
+    ----------
+    a3mA : dict
+        First MSA to be joined, with keys `msa` (N_seq, L_seq), `ins` (N_seq,
+        L_seq), `taxid` (N_seq,), and optionally `is_paired` (N_seq,), a
+        boolean tensor indicating whether each sequence is fully paired. Can be
+        a multi-MSA (contain >2 sub-MSAs).
+    a3mB : dict
+        2nd MSA to be joined, with keys `msa`, `ins`, `taxid`, and optionally
+        `is_paired`. Can be a multi-MSA ONLY if not overlapping with 1st MSA.
+    idx_overlap : tuple or list (optional)
+        Start and end indices of overlap region in 1st MSA, followed by the
+        same in 2nd MSA.
+
+    Returns
+    -------
+    a3m : dict
+        Paired MSA, with keys `msa`, `ins`, `taxid` and `is_paired`.
+    """
+    # preprocess overlap region
+    L_A, L_B = a3mA['msa'].shape[1], a3mB['msa'].shape[1]
+    if idx_overlap is not None:
+        i1A, i2A, i1B, i2B = idx_overlap
+        i1B_new, i2B_new = (0, i1B) if i2B==L_B else (i2B, L_B) # MSA B residues that don't overlap MSA A
+        assert((i1B==0) or (i2B==a3mB['msa'].shape[1])), \
+            "When overlapping with 1st MSA, 2nd MSA must comprise at most 2 sub-MSAs "\
+            "(i.e. residue range should include 0 or a3mB['msa'].shape[1])"
+    else:
+        i1B_new, i2B_new = (0, L_B)
+        
+    # pair sequences
+    taxids_shared = a3mA['taxid'][np.isin(a3mA['taxid'],a3mB['taxid'])]
+    i_pairedA, i_pairedB = [], []
+    
     for taxid in taxids_shared:
         i_match = np.where(a3mA['taxid']==taxid)[0]
         i_match_best = torch.argmin(torch.sum(a3mA['msa'][i_match]==a3mA['msa'][0], axis=1))
@@ -1660,7 +1705,6 @@ def expand_multi_msa(a3m, hashes_in, hashes_out, Ls_in, Ls_out, params):
         # offset non-query sequences along sequence dimension based on repeat number of a given hash
         i1_seq_out = 1+(n_copy[i_out]-1)*(N_in-1)
         i2_seq_out = 1+n_copy[i_out]*(N_in-1)
-
         # copy over non-query sequences
         msa_out[i1_seq_out:i2_seq_out, i1_res_out:i2_res_out] = msa_in[1:, i1_res_in:i2_res_in]
         ins_out[i1_seq_out:i2_seq_out, i1_res_out:i2_res_out] = ins_in[1:, i1_res_in:i2_res_in]
@@ -1763,38 +1807,26 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label
+           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label, 'C1'
 
 # Generate input features for homo-oligomers
 def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0, fixbb=False):
     L = msa_orig.shape[1]
-    
+
+    # msa always over 2 subunits (higher-order symms expand this)
     msa, ins = merge_a3m_homo(msa_orig, ins_orig, 2) # make unpaired alignments, for training, we always use two chains
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, nmer=2, L_s=[L,L], fixbb=fixbb)
-
-    # get template features
-    ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
-    if ntempl < 1:
-        xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, 2*L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
-    else:
-        xyz_t_single, f1d_t_single, mask_t_single = TemplFeaturize(tplt, L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
-        # duplicate
-        xyz_t = torch.cat((xyz_t_single, random_rot_trans(xyz_t_single)), dim=1) # (ntempl, 2*L, natm, 3)
-        f1d_t = torch.cat((f1d_t_single, f1d_t_single), dim=1) # (ntempl, 2*L, 21)
-        mask_t = torch.cat((mask_t_single, mask_t_single), dim=1) # (ntempl, 2*L, natm)
-
-    # get initial coordinates
-    xyz_prev = xyz_t[0].clone()
-    mask_prev = mask_t[0].clone()
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=[L,L])
 
     # get ground-truth structures
     # load metadata
     PREFIX = "%s/torch/pdb/%s/%s"%(params['PDB_DIR'],pdbid[1:3],pdbid)
     meta = torch.load(PREFIX+".pt")
 
+    # get all possible pairs
     npairs = len(interfaces)
-    xyz = torch.full((npairs, 2*L, NTOTAL, 3), np.nan).float()
+    xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(npairs, 2*L, 1, 1)
     mask = torch.full((npairs, 2*L, NTOTAL), False)
+    #print ("featurize_homo",pdbid,interfaces)
     for i_int,interface in enumerate(interfaces):
         pdbB = torch.load(params['PDB_DIR']+'/torch/pdb/'+interface['CHAIN_B'][1:3]+'/'+interface['CHAIN_B']+'.pt')
         xformA = meta['asmb_xform%d'%interface['ASSM_A']][interface['OP_A']]
@@ -1805,47 +1837,119 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         mask[i_int,:,:14] = torch.cat((pdbA['mask'], pdbB['mask']), dim=0)
     xyz = torch.nan_to_num(xyz)
 
-    idx = torch.arange(L*2)
-    idx[L:] += CHAIN_GAP # to let network know about chain breaks
+    # detect any point symmetries
+    symmgp, symmsubs = get_symmetry(xyz,mask)
+    nsubs = len(symmsubs)+1
 
-    # indicator for which residues are in same chain
-    chain_idx = torch.zeros((2*L, 2*L)).long()
-    chain_idx[:L, :L] = 1
-    chain_idx[L:, L:] = 1
-    bond_feats = torch.zeros((2*L, 2*L)).long()
-    bond_feats[:L, :L] = get_protein_bond_feats(L)
-    bond_feats[L:, L:] = get_protein_bond_feats(L)
+    #print ('symmgp',symmgp)
+    # build full native complex (for loss calcs)
+    if (symmgp != 'C1'):
+        xyzfull = torch.zeros((1,nsubs*L,NTOTAL,3))
+        maskfull = torch.full((1,nsubs*L,NTOTAL), False)
+        xyzfull[0,:L] = xyz[0,:L]
+        maskfull[0,:L] = mask[0,:L]
+        for i in range(1,nsubs):
+            xyzfull[0,i*L:(i+1)*L] = xyz[symmsubs[i-1],L:]
+            maskfull[0,i*L:(i+1)*L] = mask[symmsubs[i-1],L:]
+        xyz = xyzfull
+        mask = maskfull
+
+    # get template features
+    ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
+    if ntempl < 1:
+        xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+    else:
+        xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+        # duplicate
+
+    if (symmgp != 'C1'):
+        # everything over ASU
+        idx = torch.arange(L)
+        chain_idx = torch.ones((L, L)).long()
+        nsub = len(symmsubs)+1
+        bond_feats = get_protein_bond_feats(L)
+    else:  # either asymmetric dimer or (usually) helical symmetry...
+        # everything over 2 copies
+        xyz_t = torch.cat([xyz_t, random_rot_trans(xyz_t)], dim=1)
+        f1d_t = torch.cat([f1d_t]*2, dim=1)
+        mask_t = torch.cat([mask_t]*2, dim=1)
+        idx = torch.arange(L*2)
+        idx[L:] += 100 # to let network know about chain breaks
+
+        chain_idx = torch.zeros((2*L, 2*L)).long()
+        chain_idx[:L, :L] = 1
+        chain_idx[L:, L:] = 1
+        bond_feats = torch.zeros((2*L, 2*L)).long()
+        bond_feats[:L, :L] = get_protein_bond_feats(L)
+        bond_feats[L:, L:] = get_protein_bond_feats(L)
+
+        nsub = 2
+
+    # get initial coordinates
+    xyz_prev = xyz_t[0].clone()
+    mask_prev = mask_t[0].clone()
+
+    # figure out crop
+    if (symmgp =='C1'):
+        cropsub = 2
+    elif (symmgp[0]=='C'):
+        cropsub = min(3, int(symmgp[1:]))
+    elif (symmgp[0]=='D'):
+        cropsub = min(5, 2*int(symmgp[1:]))
+    else:
+        cropsub = 6
 
     # Residue cropping
-    if 2*L > params['CROP']:
-        if np.random.rand() < 0.5: # 50% --> interface crop
-            spatial_crop_tgt = np.random.randint(0, npairs)
-            crop_idx = get_spatial_crop(xyz[spatial_crop_tgt], mask[spatial_crop_tgt], torch.arange(L*2), [L,L], params, interfaces[spatial_crop_tgt]['CHAIN_B'])
-        else: # 50% --> have same cropped regions across all copies
-            crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//2, unclamp=False) # cropped region for first copy
-            crop_idx = torch.cat((crop_idx, crop_idx+L)) # get same crops
-        seq = seq[:,crop_idx]
-        msa_seed_orig = msa_seed_orig[:,:,crop_idx]
-        msa_seed = msa_seed[:,:,crop_idx]
-        msa_extra = msa_extra[:,:,crop_idx]
-        mask_msa = mask_msa[:,:,crop_idx]
+    if cropsub*L > params['CROP']:
+        #if np.random.rand() < 0.5: # 50% --> interface crop
+        #    spatial_crop_tgt = np.random.randint(0, npairs)
+        #    crop_idx = get_spatial_crop(xyz[spatial_crop_tgt], mask[spatial_crop_tgt], torch.arange(L*2), [L,L], params, interfaces[spatial_crop_tgt][0])
+        #else: # 50% --> have same cropped regions across all copies
+        #    crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//2, unclamp=False) # cropped region for first copy
+        #    crop_idx = torch.cat((crop_idx, crop_idx+L)) # get same crops
+        #    #print ("check_crop", crop_idx, crop_idx.shape)
+
+        # fd: always use same cropped regions across all copies
+        crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//cropsub, unclamp=False) # cropped region for first copy
+        crop_idx_full = torch.cat([crop_idx,crop_idx+L])
+        if (symmgp == 'C1'):
+            crop_idx = crop_idx_full
+            crop_idx_complete = crop_idx_full
+        else:
+            crop_idx_complete = []
+            for i in range(nsub):
+                crop_idx_complete.append(crop_idx+i*L)
+            crop_idx_complete = torch.cat(crop_idx_complete)
+
+        # over 2 copies
+        seq = seq[:,crop_idx_full]
+        msa_seed_orig = msa_seed_orig[:,:,crop_idx_full]
+        msa_seed = msa_seed[:,:,crop_idx_full]
+        msa_extra = msa_extra[:,:,crop_idx_full]
+        mask_msa = mask_msa[:,:,crop_idx_full]
+
+        # over 1 copy (symmetric) or 2 copies (asymmetric)
         xyz_t = xyz_t[:,crop_idx]
         f1d_t = f1d_t[:,crop_idx]
         mask_t = mask_t[:,crop_idx]
-        xyz = xyz[:,crop_idx]
-        mask = mask[:,crop_idx]
         idx = idx[crop_idx]
         chain_idx = chain_idx[crop_idx][:,crop_idx]
         bond_feats = bond_feats[crop_idx][:,crop_idx]
         xyz_prev = xyz_prev[crop_idx]
         mask_prev = mask_prev[crop_idx]
+
+        # over >=2 copies
+        xyz = xyz[:,crop_idx_complete]
+        mask = mask[:,crop_idx_complete]
+
     chirals = torch.Tensor()
     ch_label = torch.zeros(seq[0].shape)
+
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label
+           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label, symmgp
 
 
 def get_pdb(pdbfilename, plddtfilename, item, lddtcut, sccut):
@@ -1861,8 +1965,8 @@ def get_pdb(pdbfilename, plddtfilename, item, lddtcut, sccut):
     
     return {'xyz':torch.tensor(xyz), 'mask':torch.tensor(mask), 'idx': torch.tensor(res_idx), 'label':item}
 
-def get_msa(a3mfilename, item, unzip=True):
-    msa,ins, taxIDs = parse_a3m(a3mfilename, unzip=unzip)
+def get_msa(a3mfilename, item, maxseq=5000):
+    msa,ins, taxIDs = parse_a3m(a3mfilename, maxseq=5000)
     return {'msa':torch.tensor(msa), 'ins':torch.tensor(ins), 'taxIDs':taxIDs, 'label':item}
 
 # Load PDB examples
@@ -1943,7 +2047,7 @@ def loader_fb(item, params, unclamp=False, fixbb=False):
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label, "fb", item
+           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, chirals, ch_label, 'C1', "fb", item
 
 def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0, fixbb=False):
 
@@ -1956,7 +2060,7 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
             pMSA_fn = params['COMPL_DIR'] + '/pMSA.negative/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m.gz'
         else:
             pMSA_fn = params['COMPL_DIR'] + '/pMSA/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m.gz'
-        a3m = get_msa(pMSA_fn, pMSA_hash, unzip=True)
+        a3m = get_msa(pMSA_fn, pMSA_hash)
     else:
         # read MSA for each subunit & merge them
         a3mA_fn = params['PDB_DIR'] + '/a3m/' + msaA_id[:3] + '/' + msaA_id + '.a3m.gz'
@@ -2062,83 +2166,223 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals, ch_label, "compl", item
+           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, chirals, ch_label, 'C1', "compl", item
 
-def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_top=True, random_noise=5.0):
+def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_top=True, random_noise=5.0):
     pdb_set = item['CHAINID']
     msa_id = item['HASH']
     Ls = item['LEN']
-
-    # read MSA for protein
-    a3mA = get_msa(params['PDB_DIR'] + '/a3m/' + msa_id[:3] + '/' + msa_id + '.a3m.gz', msa_id)
+    if negative:
+        padding = (item['DNA1'],item['DNA2'])
+    else:
+        padding = item['TOPAD?']
+    
 
     # read PDBs
     pdb_ids = pdb_set.split(':')
-    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt')
-    pdbB = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt')
-    pdbC = None
-    if (len(pdb_ids)==3):
-        pdbC = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt')
 
-    # msa for NA is sequence only
-    msaB,insB = parse_fasta_if_exists(
-        pdbB['seq'], params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.afa', 
-        maxseq=5000,
-        rmsa_alphabet=True
-    )
-    a3mB = {'msa':torch.from_numpy(msaB), 'ins':torch.from_numpy(insB)}
-    NMDLS=1
-    if (len(pdb_ids)==3):
-        msaC,insC = parse_fasta_if_exists(
-            pdbC['seq'], params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.afa', 
+    # protein + NA
+    NMDLS = 1
+    if (len(pdb_ids)==2):
+        pdbA = [ torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt') ]
+        pdbB = [ torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt') ]
+
+        msaB,insB = None,None
+
+        msaB,insB = parse_fasta_if_exists(
+            pdbB[0]['seq'], params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.afa', 
             maxseq=5000,
             rmsa_alphabet=True
         )
-        a3mC = {'msa':torch.from_numpy(msaC), 'ins':torch.from_numpy(insC)}
-        a3mB = merge_a3m_hetero(a3mB, a3mC, Ls[1:])
-        if (pdbB['seq']==pdbC['seq']):
-            NMDLS=2 # flip B and C
-    a3m = merge_a3m_hetero(a3mA, a3mB, [Ls[0],sum(Ls[1:])])
+        a3mB = {'msa':torch.from_numpy(msaB), 'ins':torch.from_numpy(insB)}
+    # protein + NA duplex
+    elif (len(pdb_ids)==3):
+        pdbA = [ torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt') ]
+        pdbB = [ 
+            torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt'),
+            torch.load(params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt')
+        ]
+        msaB1,insB1 = parse_fasta_if_exists(
+            pdbB[0]['seq'], params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.afa', 
+            maxseq=5000,
+            rmsa_alphabet=True
+        )
+        msaB2,insB2 = parse_fasta_if_exists(
+            pdbB[1]['seq'], params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.afa', 
+            maxseq=5000,
+            rmsa_alphabet=True
+        )
+        if (pdbB[0]['seq']==pdbB[1]['seq']):
+            NMDLS=2 # flip B0 and B1
 
-    # note: the block below is due to differences in the way RNA and DNA structures are processed
+        a3mB1 = {'msa':torch.from_numpy(msaB1), 'ins':torch.from_numpy(insB1)}
+        a3mB2 = {'msa':torch.from_numpy(msaB2), 'ins':torch.from_numpy(insB2)}
+        a3mB = merge_a3m_hetero(a3mB1, a3mB2, Ls[1:])
+
+    # homodimer + NA duplex
+    elif (len(pdb_ids)==4):
+        pdbA = [
+            torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt'),
+            torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt')
+        ]
+        pdbB = [ 
+            torch.load(params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt'),
+            torch.load(params['NA_DIR']+'/torch/'+pdb_ids[3][1:3]+'/'+pdb_ids[3]+'.pt')
+        ]
+
+        msaB1,insB1 = parse_fasta_if_exists(
+            pdbB[0]['seq'], params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.afa', 
+            maxseq=5000,
+            rmsa_alphabet=True
+        )
+        msaB2,insB2 = parse_fasta_if_exists(
+            pdbB[1]['seq'], params['NA_DIR']+'/torch/'+pdb_ids[3][1:3]+'/'+pdb_ids[3]+'.afa', 
+            maxseq=5000,
+            rmsa_alphabet=True
+        )
+        a3mB1 = {'msa':torch.from_numpy(msaB1), 'ins':torch.from_numpy(insB1)}
+        a3mB2 = {'msa':torch.from_numpy(msaB2), 'ins':torch.from_numpy(insB2)}
+        a3mB = merge_a3m_hetero(a3mB1, a3mB2, Ls[2:])
+
+        NMDLS=2 # flip A0 and A1
+        if (pdbB[0]['seq']==pdbB[1]['seq']):
+            NMDLS=4 # flip B0 and B1
+
+    else:
+        assert False
+
+    # apply padding
+    if (not negative and padding):
+        assert (len(pdbB)==2)
+        lpad = np.random.randint(6)
+        rpad = np.random.randint(6)
+        lseq1 = torch.randint(4,(1,lpad))
+        rseq1 = torch.randint(4,(1,rpad))
+        lseq2 = 3-torch.flip(rseq1,(1,))
+        rseq2 = 3-torch.flip(lseq1,(1,))
+
+        # pad seqs -- hacky, DNA indices 22-25
+        msaB1 = torch.cat((22+lseq1,a3mB1['msa'],22+rseq1), dim=1)
+        msaB2 = torch.cat((22+lseq2,a3mB2['msa'],22+rseq2), dim=1)
+        insB1 = torch.cat((torch.zeros_like(lseq1),a3mB1['ins'],torch.zeros_like(rseq1)), dim=1)
+        insB2 = torch.cat((torch.zeros_like(lseq2),a3mB2['ins'],torch.zeros_like(rseq2)), dim=1)
+        a3mB1 = {'msa':msaB1, 'ins':insB1}
+        a3mB2 = {'msa':msaB2, 'ins':insB2}
+
+        # update lengths
+        Ls = Ls.copy()
+        Ls[-2] = msaB1.shape[1]
+        Ls[-1] = msaB2.shape[1]
+
+        a3mB = merge_a3m_hetero(a3mB1, a3mB2, Ls[-2:])
+
+        # pad PDB
+        pdbB[0]['xyz'] = torch.nn.functional.pad(pdbB[0]['xyz'], (0,0,0,0,lpad,rpad), "constant", 0.0)
+        pdbB[0]['mask'] = torch.nn.functional.pad(pdbB[0]['mask'], (0,0,lpad,rpad), "constant", False)
+        pdbB[1]['xyz'] = torch.nn.functional.pad(pdbB[1]['xyz'], (0,0,0,0,rpad,lpad), "constant", 0.0)
+        pdbB[1]['mask'] = torch.nn.functional.pad(pdbB[1]['mask'], (0,0,rpad,lpad), "constant", False)
+
+    # rewrite seq if negative
+    if (negative):
+        alphabet = np.array(list("ARNDCQEGHILKMFPSTWYV-Xacgtxbdhuy"), dtype='|S1').view(np.uint8)
+        seqA = np.array( [list(padding[0])], dtype='|S1').view(np.uint8)
+        seqB = np.array( [list(padding[1])], dtype='|S1').view(np.uint8)
+        for i in range(alphabet.shape[0]):
+            seqA[seqA == alphabet[i]] = i
+            seqB[seqB == alphabet[i]] = i
+        seqA = torch.tensor(seqA)
+        seqB = torch.tensor(seqB)
+
+        # scramble seq
+        diff = (a3mB1['msa'] != seqA)
+        shift = torch.randint(1,4, (torch.sum(diff),), dtype=torch.uint8)
+        seqA[diff] = ((a3mB1['msa'][diff]-22)+shift)%4+22
+        seqB = torch.flip(25-seqA+22, dims=(-1,))
+
+        a3mB1 = {'msa':seqA, 'ins':torch.zeros(seqA.shape)}
+        a3mB2 = {'msa':seqB, 'ins':torch.zeros(seqB.shape)}
+        a3mB = merge_a3m_hetero(a3mB1, a3mB2, Ls[-2:])
+
+    ## look for shared MSA
+    a3m=None
+    NAchn = pdb_ids[1].split('_')[1]
+    sharedMSA = params['NA_DIR']+'/msas/'+pdb_ids[0][1:3]+'/'+pdb_ids[0][:4]+'/'+pdb_ids[0]+'_'+NAchn+'_paired.a3m'
+    if (len(pdb_ids)==2 and exists(sharedMSA)):
+        msa,ins = parse_mixed_fasta(sharedMSA)
+        if (msa.shape[1] != sum(Ls)):
+            print ("Error shared MSA",pdb_ids, msa.shape, Ls)
+        else:
+            a3m = {'msa':torch.from_numpy(msa),'ins':torch.from_numpy(ins)}
+
+    if (a3m is None):
+        # read MSA for protein
+        a3mA = get_msa(params['PDB_DIR'] + '/a3m/' + msa_id[:3] + '/' + msa_id + '.a3m.gz', msa_id, maxseq=5000)
+        if (len(pdbA)==2):
+            msa = a3mA['msa'].long()
+            ins = a3mA['ins'].long()
+            msa,ins = merge_a3m_homo(msa, ins, 2)
+            a3mA = {'msa':msa,'ins':ins}
+
+        if (len(pdb_ids)==4):
+            a3m = merge_a3m_hetero(a3mA, a3mB, [Ls[0]+Ls[1],sum(Ls[2:])])
+        else:
+            a3m = merge_a3m_hetero(a3mA, a3mB, [Ls[0],sum(Ls[1:])])
+
+    # the block below is due to differences in the way RNA and DNA structures are processed
     # to support NMR, RNA structs return multiple states
     # For protein/NA complexes get rid of the 'NMODEL' dimension (if present)
     # NOTE there are a very small number of protein/NA NMR models:
-    #       - ideally these should return the ensemble, but that requires reprocessing of PDBs
-    if (len(pdbB['xyz'].shape) > 3):
-         pdbB['xyz'] = pdbB['xyz'][0,...]
-         pdbB['mask'] = pdbB['mask'][0,...]
-    if (pdbC is not None and len(pdbC['xyz'].shape) > 3):
-         pdbC['xyz'] = pdbC['xyz'][0,...]
-         pdbC['mask'] = pdbC['mask'][0,...]
+    #       - ideally these should return the ensemble, but that requires reprocessing of proteins
+    for pdb in pdbB:
+        if (len(pdb['xyz'].shape) > 3):
+             pdb['xyz'] = pdb['xyz'][0,...]
+             pdb['mask'] = pdb['mask'][0,...]
 
     # read template info
     tpltA = torch.load(params['PDB_DIR'] + '/torch/hhr/' + msa_id[:3] + '/' + msa_id + '.pt')
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
-    xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=pick_top, random_noise=random_noise) 
-    xyz_t[:,Ls[0]:] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,sum(Ls[1:]),1,1) + torch.rand(1,sum(Ls[1:]),1,3)*random_noise - random_noise/2
+    if (len(pdb_ids)==4):
+        if ntempl < 1:
+            xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, 2*Ls[0], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+        else:
+            xyz_t_single, f1d_t_single, mask_t_single = TemplFeaturize(tpltA, Ls[0], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+            # duplicate
+            xyz_t = torch.cat((xyz_t_single, random_rot_trans(xyz_t_single)), dim=1) # (ntempl, 2*L, natm, 3)
+            f1d_t = torch.cat((f1d_t_single, f1d_t_single), dim=1) # (ntempl, 2*L, 21)
+            mask_t = torch.cat((mask_t_single, mask_t_single), dim=1) # (ntempl, 2*L, natm)
 
+        ntmpl = xyz_t.shape[0]
+        nNA = sum(Ls[2:])
+        xyz_t = torch.cat( 
+            (xyz_t, INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(ntmpl,nNA,1,1) + torch.rand(ntmpl,nNA,1,3)*random_noise), dim=1)
+        f1d_t = torch.cat(
+            (f1d_t, torch.nn.functional.one_hot(torch.full((ntmpl,nNA), 20).long(), num_classes=NAATOKENS).float()), dim=1) # add extra class for 0 confidence
+        mask_t = torch.cat( 
+            (mask_t, torch.full((ntmpl,nNA,NTOTAL), False)), dim=1)
+
+        NAstart = 2*Ls[0]
+    else:
+        xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=pick_top, random_noise=random_noise)
+        xyz_t[:,Ls[0]:] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,sum(Ls[1:]),1,1) + torch.rand(1,sum(Ls[1:]),1,3)*random_noise
+        NAstart = Ls[0]
+
+    # seed with native NA
     if (np.random.rand()<=native_NA_frac):
-        natNA_templ = pdbB['xyz']
-        maskNA_templ = pdbB['mask']
-
-        if pdbC is not None:
-            natNA_templ = torch.cat((pdbB['xyz'], pdbC['xyz']), dim=0)
-            maskNA_templ =  torch.cat((pdbB['mask'], pdbC['mask']), dim=0)
+        natNA_templ = torch.cat( [x['xyz'] for x in pdbB], dim=0)
+        maskNA_templ = torch.cat( [x['mask'] for x in pdbB], dim=0)
 
         # construct template from NA
-        xyz_t_B = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,sum(Ls),1,1) + torch.rand(1,sum(Ls),1,3)*random_noise - random_noise/2
-        #xyz_t_B[:,Ls[0]:,:23] = natNA_templ
+        xyz_t_B = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,sum(Ls),1,1) + torch.rand(1,sum(Ls),1,3)*random_noise
         mask_t_B = torch.full((1,sum(Ls),NTOTAL), False)
-        mask_t_B[:,Ls[0]:,:23] = maskNA_templ
+        mask_t_B[:,NAstart:,:23] = maskNA_templ
         xyz_t_B[mask_t_B] = natNA_templ[maskNA_templ]
 
-        seq_t_B = torch.cat( (torch.full((1, Ls[0]), 20).long(),  a3mB['msa'][0:1]), dim=1)
+        seq_t_B = torch.cat( (torch.full((1, NAstart), 20).long(),  a3mB['msa'][0:1]), dim=1)
         seq_t_B[seq_t_B>21] -= 1 # remove mask token
         f1d_t_B = torch.nn.functional.one_hot(seq_t_B, num_classes=NAATOKENS-1).float()
         conf_B = torch.cat( (
-            torch.zeros((1,Ls[0],1)),
-            torch.full((1,sum(Ls[1:]),1),1.0),
+            torch.zeros((1,NAstart,1)),
+            torch.full((1,sum(Ls)-NAstart,1),1.0),
         ),dim=1).float()
         f1d_t_B = torch.cat((f1d_t_B, conf_B), -1)
 
@@ -2153,21 +2397,36 @@ def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_to
         msa, ins = MSABlockDeletion(msa, ins)
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
 
-    xyz = torch.full((NMDLS, sum(Ls), NTOTAL, 3), np.nan).float()
+    # build native from components
+    xyz = torch.full((NMDLS, sum(Ls), NTOTAL, 3), np.nan)
     mask = torch.full((NMDLS, sum(Ls), NTOTAL), False)
-    if (len(pdb_ids)==3):
-        xyz[:,:Ls[0],:14] = pdbA['xyz'][None,...]
-        xyz[0,Ls[0]:,:23] = torch.cat((pdbB['xyz'], pdbC['xyz']), dim=0)
-        mask[:,:Ls[0],:14] = pdbA['mask'][None,...]
-        mask[0,Ls[0]:,:23] = torch.cat((pdbB['mask'], pdbC['mask']), dim=0)
+    if (len(pdb_ids)==2):
+        xyz[0,:NAstart,:14] = pdbA[0]['xyz']
+        xyz[0,NAstart:,:23] = pdbB[0]['xyz']
+        mask[0,:NAstart,:14] = pdbA[0]['mask']
+        mask[0,NAstart:,:23] = pdbB[0]['mask']
+    elif (len(pdb_ids)==3):
+        xyz[:,:NAstart,:14] = pdbA[0]['xyz'][None,...]
+        xyz[0,NAstart:,:23] = torch.cat((pdbB[0]['xyz'], pdbB[1]['xyz']), dim=0)
+        mask[:,:NAstart,:14] = pdbA[0]['mask'][None,...]
+        mask[0,NAstart:,:23] = torch.cat((pdbB[0]['mask'], pdbB[1]['mask']), dim=0)
         if (NMDLS==2): # B & C are identical
-            xyz[1,Ls[0]:,:23] = torch.cat((pdbC['xyz'], pdbB['xyz']), dim=0)
-            mask[1,Ls[0]:,:23] = torch.cat((pdbC['mask'], pdbB['mask']), dim=0)
+            xyz[1,NAstart:,:23] = torch.cat((pdbB[1]['xyz'], pdbB[0]['xyz']), dim=0)
+            mask[1,NAstart:,:23] = torch.cat((pdbB[1]['mask'], pdbB[0]['mask']), dim=0)
     else:
-        xyz[0,:Ls[0],:14] = pdbA['xyz']
-        xyz[0,Ls[0]:,:23] = pdbB['xyz']
-        mask[0,:Ls[0],:14] = pdbA['mask']
-        mask[0,Ls[0]:,:23] = pdbB['mask']
+        xyz[0,:NAstart,:14] = torch.cat( (pdbA[0]['xyz'], pdbA[1]['xyz']), dim=0)
+        xyz[1,:NAstart,:14] = torch.cat( (pdbA[1]['xyz'], pdbA[0]['xyz']), dim=0)
+        xyz[:2,NAstart:,:23] = torch.cat((pdbB[0]['xyz'], pdbB[1]['xyz']), dim=0)[None,...]
+        mask[0,:NAstart,:14] = torch.cat( (pdbA[0]['mask'], pdbA[1]['mask']), dim=0)
+        mask[1,:NAstart,:14] = torch.cat( (pdbA[1]['mask'], pdbA[0]['mask']), dim=0)
+        mask[:2,NAstart:,:23] = torch.cat( (pdbB[0]['mask'], pdbB[1]['mask']), dim=0)[None,...]
+        if (NMDLS==4): # B & C are identical
+            xyz[2,:NAstart,:14] = torch.cat( (pdbA[0]['xyz'], pdbA[1]['xyz']), dim=0)
+            xyz[3,:NAstart,:14] = torch.cat( (pdbA[1]['xyz'], pdbA[0]['xyz']), dim=0)
+            xyz[2:,NAstart:,:23] = torch.cat((pdbB[1]['xyz'], pdbB[0]['xyz']), dim=0)[None,...]
+            mask[2,:NAstart,:14] = torch.cat( (pdbA[0]['mask'], pdbA[1]['mask']), dim=0)
+            mask[3,:NAstart,:14] = torch.cat( (pdbA[1]['mask'], pdbA[0]['mask']), dim=0)
+            mask[2:,NAstart:,:23] = torch.cat( (pdbB[1]['mask'], pdbB[0]['mask']), dim=0)[None,...]
     xyz = torch.nan_to_num(xyz)
 
     # other features
@@ -2205,7 +2464,7 @@ def loader_na_complex(item, params, native_NA_frac=0.25, negative=False, pick_to
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           same_chain, False, negative, torch.zeros(seq.shape), bond_feats, chirals, ch_label, "na_compl", item
+           same_chain, False, negative, torch.zeros(seq.shape), bond_feats, chirals, ch_label, 'C1', "na_compl", item
 
 
 def loader_rna(item, params, random_noise=5.0):
@@ -2287,7 +2546,7 @@ def loader_rna(item, params, random_noise=5.0):
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           same_chain, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, ch_label, "rna",item
+           same_chain, False, False, torch.zeros(seq.shape), bond_feats.long(), chirals, ch_label, 'C1', "rna",item
 
 def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
     """
@@ -2352,7 +2611,7 @@ def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
             # record this residue to remove from residue representations
             residues_to_atomize.add((res_key[:3], prot_partner[:2]))
 
-    return lig_partners, residues_to_atomize
+    return lig_partners, list(residues_to_atomize)
 
 
 def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres,
@@ -2746,7 +3005,6 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
     return xyz_sm, mask_sm, msa_sm[None], bond_feats_sm, frames, chirals, Ls_sm, \
            ch_label_sm, akeys_sm, resnames
 
-
 def featurize_ligand_from_smiles(smiles_string: str):
     """featurize_ligand_from_smiles Featurizes a smiles string
     representing a ligand, in a way that can be input into RF2 All Atom.
@@ -2775,6 +3033,47 @@ def featurize_ligand_from_smiles(smiles_string: str):
     except Exception:
         chirals = torch.Tensor()
 
+    bond_feats_sm = get_bond_feats(mol.OBMol)
+
+    msa_sm = torch.full((1, small_molecule_length,), torch.nan)
+    for index, atom in enumerate(mol.atoms):
+        msa_sm[0, index] = aa2num[atomnum2atomtype[atom.atomicnum]]
+
+    mol_graph = get_nxgraph(mol.OBMol)
+    frames = get_atom_frames(msa_sm[0], mol_graph)
+    ch_label_sm = torch.zeros((small_molecule_length), dtype=int)
+    lig_names = [smiles_string]
+
+    # This assumes that your ligand is not a PTM/is not covalently
+    # bonded to the protein. If it is, you will have to re-write this to
+    # format the inputs to correctly indicate where to atomize the protein and
+    # reindex the residues
+    residues_to_atomize = None
+    akeys_sm = None
+    return xyz_sm, mask_sm, msa_sm, [bond_feats_sm], frames, chirals, [small_molecule_length], ch_label_sm, akeys_sm, lig_names, residues_to_atomize
+
+
+def featurize_ligand_from_smiles(smiles_string: str):
+    """featurize_ligand_from_smiles Featurizes a smiles string
+    representing a ligand, in a way that can be input into RF2 All Atom.
+
+    Args:
+        smiles_string (str): A Smiles String representing a small molecule.
+
+    Returns:
+        _type_: Same outputs as _load_sm_from_item, as if the ligand was loaded
+        from the RF database.
+    """
+    mol = pybel.readstring(string=smiles_string, format="smi")
+    mol.make3D()
+    mol.removeh()
+    small_molecule_length = len(mol.atoms)
+    
+    xyz_sm = torch.stack([torch.tensor(atom.coords) for atom in mol.atoms])
+    xyz_sm = xyz_sm.unsqueeze(0)
+    mask_sm = torch.full(size=(1, small_molecule_length), fill_value=True)
+
+    chirals = get_chirals(mol.OBMol, xyz_sm)
     bond_feats_sm = get_bond_feats(mol.OBMol)
 
     msa_sm = torch.full((1, small_molecule_length,), torch.nan)
@@ -2846,7 +3145,9 @@ def _load_sm_from_item(item, params, prot_partners, mod_residues_to_atomize, pre
         
     return xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize
 
-
+def loader_sm_compl_assembly_single(*args, **kwargs): 
+    kwargs['num_protein_chains'] = 1
+    return loader_sm_compl_assembly(*args, **kwargs)
 
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task='sm_compl_asmb', 
     num_protein_chains=None, num_ligand_chains=None, pick_top=True, random_noise=5.0, fixbb=False,
@@ -2885,6 +3186,20 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     if num_protein_chains is not None:
         prot_partners = prot_partners[:min(num_protein_chains, params['MAXPROTCHAINS'])]
 
+    # list of proteins and ligands to featurize
+    all_partners = [(item['LIGAND'], item['LIGXF'], -1, 'nonpoly')] + item["PARTNERS"]
+
+    lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + \
+                   [p for p in item['PARTNERS'] if p[-1]=='nonpoly']
+    lig_partners = lig_partners[:params['MAXLIGCHAINS']]
+    if num_ligand_chains is not None:
+        lig_partners = lig_partners[:min(num_ligand_chains, params['MAXLIGCHAINS'])]
+
+    all_partners = prot_partners + lig_partners
+
+    # update ligand partners to atomize residues that are covalently linked to proteins
+    lig_partners, residues_to_atomize = find_residues_to_atomize_covale(lig_partners, prot_partners, covale) 
+
     # get list of coordinate transforms to recreate this bio-assembly
     i_a = str(item['ASSEMBLY'])
     asmb_xfs = asmb[i_a]
@@ -2905,6 +3220,18 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     if ligand_smiles_str is not None:
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize = featurize_ligand_from_smiles(ligand_smiles_str)
     elif selected_negative_item is not None:
+        xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize = _load_sm_from_item(selected_negative_item, params, prot_partners, mod_residues_to_atomize, num_ligand_chains=num_ligand_chains, as_negative=True)
+    else:
+        xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize = _load_sm_from_item(item, params, prot_partners, mod_residues_to_atomize, preloaded_from_gzip=(chains, asmb, covale, modres), num_ligand_chains=num_ligand_chains, as_negative=False)
+
+    # keep 1st template and random sample of others for params['MAXTPLT'] total
+    if xyz_t_prot.shape[0] > params['MAXTPLT']:
+        sel = np.concatenate([[0], np.random.permutation(xyz_t_prot.shape[0]-1)[:params['MAXTPLT']-1]+1])
+        xyz_t_prot = xyz_t_prot[sel]
+        mask_t_prot = mask_t_prot[sel]
+        f1d_t_prot = f1d_t_prot[sel]
+
+    if selected_negative_item:
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize = _load_sm_from_item(selected_negative_item, params, prot_partners, mod_residues_to_atomize, num_ligand_chains=num_ligand_chains, as_negative=True)
     else:
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize = _load_sm_from_item(item, params, prot_partners, mod_residues_to_atomize, preloaded_from_gzip=(chains, asmb, covale, modres), num_ligand_chains=num_ligand_chains, as_negative=False)
@@ -3008,6 +3335,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
                                 seq_prot, select_farthest_residues=True)
         else:
             sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
+
         msa = msa[:, sel]
         ins = ins[:, sel]
         xyz = xyz[:,sel]
@@ -3044,8 +3372,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           same_chain, False, negative, frames, bond_feats, chirals, ch_label, task, item
-
+           same_chain, False, negative, frames, bond_feats, chirals, ch_label, 'C1', task, item
 
 def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False, 
     pick_top=True, p_homo_cut=0.5, random_noise=5.0):
@@ -3202,7 +3529,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats,chirals, ch_label, "atomize_pdb", item
+           chain_idx, False, False, frames, bond_feats,chirals, ch_label, 'C1', "atomize_pdb", item
 
 def loader_sm(item, params, pick_top=True):
     """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
@@ -3253,7 +3580,7 @@ def loader_sm(item, params, pick_top=True):
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, chirals, ch_label, "sm", item
+           chain_idx, False, False, frames, bond_feats, chirals, ch_label, 'C1', "sm", item
 
 
 def crop_sm_compl(prot_xyz, lig_xyz, Ls, crop_size, mask_prot, seq_prot, 
@@ -3320,6 +3647,7 @@ def crop_sm_compl(prot_xyz, lig_xyz, Ls, crop_size, mask_prot, seq_prot,
 
 
 def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partial_ligands=True):
+
     """Choose residues with the `n_crop` closest C-alphas to a random atom on
     query ligand. Operates on multi-chain assemblies. Nearby ligands are
     included if all of their (unmasked) atoms are in the crop. Otherwise none
@@ -3718,7 +4046,7 @@ class DatasetSM(data.Dataset):
 
 class DistilledDataset(data.Dataset):
     def __init__(self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid, params, 
-                 native_NA_frac=0.25, unclamp_cut=0.9):
+                 native_NA_frac=0.05, unclamp_cut=0.9):
 
         self.ID_dict = ID_dict
         self.dataset_dict = dataset_dict
@@ -3763,18 +4091,12 @@ class DistilledDataset(data.Dataset):
                 out = self.loader_dict['compl'](item, self.params, negative=False)
             offset += len(self.index_dict['compl'])
 
-            #if index >= offset and index < offset + len(self.neg_inds):
-            #   ID = self.neg_IDs[index-offset]
-            #   sel_idx = np.random.randint(0, len(self.neg_dict[ID]))
-            #   out = self.neg_loader(
-            #       self.neg_dict[ID][sel_idx][0],
-            #       self.neg_dict[ID][sel_idx][1],
-            #       self.neg_dict[ID][sel_idx][2],
-            #       self.neg_dict[ID][sel_idx][3],
-            #       self.params,
-            #       negative=True
-            #   )
-            #offset += len(self.neg_inds)
+            if index >= offset and index < offset + len(self.index_dict['neg_compl']):
+                task = 'neg_compl'
+                ID = self.ID_dict['neg_compl'][index-offset]
+                item = sample_item(self.dataset_dict['neg_compl'], ID)
+                out = self.loader_dict['neg_compl'](item, self.params, negative=True)
+            offset += len(self.index_dict['neg_compl'])
 
             if index >= offset and index < offset + len(self.index_dict['na_compl']):
                 task = 'na_compl'
@@ -3783,17 +4105,12 @@ class DistilledDataset(data.Dataset):
                 out = self.loader_dict['na_compl'](item, self.params, negative=False, native_NA_frac=self.native_NA_frac)
             offset += len(self.index_dict['na_compl'])
 
-            #if index >= offset and index < offset + len(self.na_neg_inds):
-            #   ID = self.na_neg_IDs[index-offset]
-            #   sel_idx = np.random.randint(0, len(self.na_neg_dict[ID]))
-            #   out = self.na_neg_loader(
-            #       self.na_neg_dict[ID][sel_idx][0],
-            #       self.na_neg_dict[ID][sel_idx][1],
-            #       self.params,
-            #       negative=True,
-            #       native_NA_frac=self.native_NA_frac
-            #   )
-            #offset += len(self.na_neg_inds)
+            if index >= offset and index < offset + len(self.index_dict['neg_na_compl']):
+                task = 'neg_na_compl'
+                ID = self.ID_dict['neg_na_compl'][index-offset]
+                item = sample_item(self.dataset_dict['neg_na_compl'], ID)
+                out = self.loader_dict['neg_na_compl'](item, self.params, negative=True, native_NA_frac=self.native_NA_frac)
+            offset += len(self.index_dict['neg_na_compl'])
 
             if index >= offset and index < offset + len(self.index_dict['rna']):
                 task = 'rna'
@@ -3843,7 +4160,6 @@ class DistilledDataset(data.Dataset):
             offset += len(self.index_dict['sm_compl_asmb'])
 
             if index >= offset and index < offset + len(self.index_dict['sm']):
-                task = 'sm'
                 ID = self.ID_dict['sm'][index-offset]
                 item = sample_item(self.dataset_dict['sm'], ID)
                 out = self.loader_dict['sm'](item, self.params)
@@ -3885,11 +4201,53 @@ class DistilledDataset(data.Dataset):
                 self.chid2taxid, task='sm_compl_docked_neg', num_protein_chains=1, num_ligand_chains=1, selected_negative_item=negative_item)
             offset += len(self.index_dict['sm_compl_docked_neg'])
 
+            if index >= offset and index < offset + len(self.index_dict['atomize_pdb']):
+               ID = self.ID_dict['atomize_pdb'][index-offset]
+               item = sample_item(self.dataset_dict['atomize_pdb'], ID)
+               n_res_atomize = np.random.randint(self.params['NRES_ATOMIZE_MIN'], 
+                                                 self.params['NRES_ATOMIZE_MAX']+1)
+               out = self.loader_dict['atomize_pdb'](item,
+                   self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'], 
+                   unclamp=(p_unclamp > self.unclamp_cut))
+            offset += len(self.index_dict['atomize_pdb'])
+
+            if index >= offset and index < offset + len(self.index_dict['sm_compl_furthest_neg']):
+                ID = self.ID_dict['sm_compl_furthest_neg'][index - offset]
+                item = sample_item_sm_compl(self.dataset_dict['sm_compl_furthest_neg'], ID)
+                out = self.loader_dict['sm_compl_furthest_neg'](item, self.params, self.chid2hash, 
+                self.chid2taxid, task='sm_compl_furthest_neg', num_protein_chains=1, num_ligand_chains=1, select_farthest_residues=True)
+                # Note the extra argument to loader_sm_compl_assembly when we load the furthest residues from the ligand
+            offset += len(self.index_dict['sm_compl_furthest_neg'])
+
+            if index >= offset and index < offset + len(self.index_dict['sm_compl_permuted_neg']):
+                ID = self.ID_dict['sm_compl_permuted_neg'][index - offset]
+                item = sample_item_sm_compl(self.dataset_dict['sm_compl_permuted_neg'], ID)
+
+                # In this case, we use the negative mapping we created earlier to pull out the
+                # row of the item we want to load the ligand from.
+                negative_item_choices = item["REMAP_INDICES"]
+                negative_item_df_index = np.random.choice(negative_item_choices)
+                negative_item = self.dataset_dict['sm_compl_permuted_neg'].loc[negative_item_df_index].to_dict()
+                
+                out = self.loader_dict['sm_compl_permuted_neg'](item, self.params, self.chid2hash, 
+                self.chid2taxid, task='sm_compl_permuted_neg', num_protein_chains=1, num_ligand_chains=1, selected_negative_item=negative_item)
+            offset += len(self.index_dict['sm_compl_permuted_neg'])
+
+            if index >= offset and index < offset + len(self.index_dict['sm_compl_docked_neg']):
+                ID = self.ID_dict['sm_compl_docked_neg'][index - offset]
+                item = sample_item_sm_compl(self.dataset_dict['sm_compl_docked_neg'], ID)
+
+                negative_item_choices = item["REMAP_INDICES"]
+                negative_item_df_index = np.random.choice(negative_item_choices)
+                negative_item = self.dataset_dict['sm_compl_docked_neg'].loc[negative_item_df_index].to_dict()
+                out = self.loader_dict['sm_compl_docked_neg'](item, self.params, self.chid2hash, 
+                self.chid2taxid, task='sm_compl_docked_neg', num_protein_chains=1, num_ligand_chains=1, selected_negative_item=negative_item)
+            offset += len(self.index_dict['sm_compl_docked_neg'])
+
             # NOTE: THE DATASETS HAVE TO BE IN ORDER OF INDEX DICT
             # SINCE THE NEGATIVES ARE LOADED BEFORE atomize_pdb,
             # THEY HAVE TO GO FIRST
             if index >= offset and index < offset + len(self.index_dict['atomize_pdb']):
-                task = 'atomize_pdb'
                 ID = self.ID_dict['atomize_pdb'][index-offset]
                 item = sample_item(self.dataset_dict['atomize_pdb'], ID)
                 n_res_atomize = np.random.randint(self.params['NRES_ATOMIZE_MIN'], self.params['NRES_ATOMIZE_MAX']+1)
@@ -3897,7 +4255,6 @@ class DistilledDataset(data.Dataset):
                     self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'], 
                     unclamp=(p_unclamp > self.unclamp_cut))
             offset += len(self.index_dict['atomize_pdb'])
-
         except Exception as e:
             print('error loading',item, '\n',repr(e), task)
             raise e
@@ -3914,7 +4271,9 @@ class DistributedWeightedSampler(data.Sampler):
             pdb=1.,
             fb=0,
             compl=0,
+            neg_compl=0,
             na_compl=0,
+            neg_na_compl=0,
             rna=0,
             sm_compl=0,
             metal_compl=0,
@@ -3981,6 +4340,7 @@ class DistributedWeightedSampler(data.Sampler):
         offset = 0
         sel_indices = torch.tensor((),dtype=int)
         for dataset_name in self.dataset.dataset_dict.keys():
+            
             if (self.num_per_epoch_dict[dataset_name]> 0):
                 sampled_idx = torch.multinomial(self.weights_dict[dataset_name], 
                                                 self.num_per_epoch_dict[dataset_name], 

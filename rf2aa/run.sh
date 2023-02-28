@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0,1
 
 python -u ./train_multi_EMA.py \
     -model_name BFF20h \
@@ -14,7 +14,7 @@ python -u ./train_multi_EMA.py \
     -accum 4 \
     -crop 256 \
     -w_bond 0.0 \
-    -w_dih 0.0 \
+    -w_bind 0.0 \
     -w_clash 0.0 \
     -w_hb 0.0 \
     -lj_lin 0.7 \

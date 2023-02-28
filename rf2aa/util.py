@@ -8,6 +8,7 @@ import warnings
 from assertpy import assert_that
 
 import scipy.sparse
+import scipy.sparse.csgraph
 import networkx as nx
 import itertools
 from itertools import combinations
@@ -201,99 +202,6 @@ def idealize_reference_frame(seq, xyz_in):
     xyz[nmask_bs,nmask_rs,2,:] = torch.einsum('...ij,j->...i', Rs[nmask_bs,nmask_rs], OP2ideal) + Ts[nmask_bs,nmask_rs]
 
     return xyz
-
-# works for both dna and protein
-# alphas in order:
-#    omega/phi/psi: 0-2
-#    chi_1-4(prot): 3-6
-#    cb/cg bend: 7-9
-#    eps(p)/zeta(p): 10-11
-#    alpha/beta/gamma/delta: 12-15
-#    nu2/nu1/nu0: 16-18
-#    chi_1(na): 19
-def get_tor_mask(seq, torsion_indices, mask_in=None):
-    B,L = seq.shape[:2]
-    dna_mask = is_nucleic(seq)
-
-    tors_mask = torsion_indices[seq,:,-1] > 0
-
-    if mask_in != None:
-        N = mask_in.shape[2]
-        ts = torsion_indices[seq]
-        bs = torch.arange(B, device=seq.device)[:,None,None,None]
-        rs = torch.arange(L, device=seq.device)[None,:,None,None] - (ts<0)*1 # ts<-1 ==> prev res
-        ts = torch.abs(ts)
-        tors_mask *= mask_in[bs,rs,ts].all(dim=-1)
-
-    return tors_mask
-
-
-def get_torsions(xyz_in, seq, torsion_indices, torsion_can_flip, ref_angles, mask_in=None):
-    B,L = xyz_in.shape[:2]
-
-    tors_mask = get_tor_mask(seq, torsion_indices, mask_in)
-    # idealize given xyz coordinates before computing torsion angles
-    xyz = idealize_reference_frame(seq, xyz_in)
-
-    ts = torsion_indices[seq]
-    bs = torch.arange(B, device=xyz_in.device)[:,None,None,None]
-    xs = torch.arange(L, device=xyz_in.device)[None,:,None,None] - (ts<0)*1 # ts<-1 ==> prev res
-    ys = torch.abs(ts)
-    xyzs_bytor = xyz[bs,xs,ys,:]
-
-    torsions = torch.zeros( (B,L,NTOTALDOFS,2), device=xyz_in.device )
-    torsions[...,:7,:] = th_dih(
-        xyzs_bytor[...,:7,0,:],xyzs_bytor[...,:7,1,:],xyzs_bytor[...,:7,2,:],xyzs_bytor[...,:7,3,:]
-    )
-    torsions[:,:,2,:] = -1 * torsions[:,:,2,:] # shift psi by pi
-    torsions[...,10:,:] = th_dih(
-        xyzs_bytor[...,10:,0,:],xyzs_bytor[...,10:,1,:],xyzs_bytor[...,10:,2,:],xyzs_bytor[...,10:,3,:]
-    )
-
-    # angles (hardcoded)
-    # CB bend
-    NC = 0.5*( xyz[:,:,0,:3] + xyz[:,:,2,:3] )
-    CA = xyz[:,:,1,:3]
-    CB = xyz[:,:,4,:3]
-    t = th_ang_v(CB-CA,NC-CA)
-    t0 = ref_angles[seq][...,0,:]
-    torsions[:,:,7,:] = torch.stack( 
-        (torch.sum(t*t0,dim=-1),t[...,0]*t0[...,1]-t[...,1]*t0[...,0]),
-        dim=-1 )
-    
-    # CB twist
-    NCCA = NC-CA
-    NCp = xyz[:,:,2,:3] - xyz[:,:,0,:3]
-    NCpp = NCp - torch.sum(NCp*NCCA, dim=-1, keepdim=True)/ torch.sum(NCCA*NCCA, dim=-1, keepdim=True) * NCCA
-    t = th_ang_v(CB-CA,NCpp)
-    t0 = ref_angles[seq][...,1,:]
-    torsions[:,:,8,:] = torch.stack( 
-        (torch.sum(t*t0,dim=-1),t[...,0]*t0[...,1]-t[...,1]*t0[...,0]),
-        dim=-1 )
-
-    # CG bend
-    CG = xyz[:,:,5,:3]
-    t = th_ang_v(CG-CB,CA-CB)
-    t0 = ref_angles[seq][...,2,:]
-    torsions[:,:,9,:] = torch.stack( 
-        (torch.sum(t*t0,dim=-1),t[...,0]*t0[...,1]-t[...,1]*t0[...,0]),
-        dim=-1 )
-    
-    mask0 = (torch.isnan(torsions[...,0])).nonzero()
-    mask1 = (torch.isnan(torsions[...,1])).nonzero()
-    torsions[mask0[:,0],mask0[:,1],mask0[:,2],0] = 1.0
-    torsions[mask1[:,0],mask1[:,1],mask1[:,2],1] = 0.0
-
-    # alt chis
-    torsions_alt = torsions.clone()
-    torsions_alt[torsion_can_flip[seq,:]] *= -1
-
-    # torsions to restrain to 0 or 180 degree
-    # (this should be specified in chemical?)
-    tors_planar = torch.zeros((B, L, NTOTALDOFS), dtype=torch.bool, device=xyz_in.device)
-    tors_planar[:,:,5] = seq == aa2num['TYR'] # TYR chi 3 should be planar
-
-    return torsions, torsions_alt, tors_mask, tors_planar
 
 def xyz_to_frame_xyz(xyz, seq_unmasked, atom_frames):
     """
@@ -1031,7 +939,8 @@ def find_all_rigid_groups(bond_feats):
     """
     rigid_atom_bonds = (bond_feats>1)*(bond_feats<5)
     rigid_atom_bonds_np = rigid_atom_bonds[0].cpu().numpy()
-    G = nx.from_numpy_matrix(rigid_atom_bonds_np)
+    #G = nx.from_numpy_matrix(rigid_atom_bonds_np)
+    G = nx.from_numpy_array(rigid_atom_bonds_np)
     connected_components = nx.connected_components(G)
     connected_components = [cc for cc in connected_components if len(cc)>2]
     connected_components = [torch.tensor(list(combinations(cc,2))) for cc in connected_components]
@@ -1168,6 +1077,14 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
             bond_feats[start_idx, end_idx] = aabtypes[res][j]
             bond_feats[end_idx, start_idx] = aabtypes[res][j]
     return bond_feats
+
+# given a bond graph, get the path lengths
+def get_path_lengths(bond_feats):
+    atom_bonds = (bond_feats > 0)*(bond_feats<5)
+    atom_bonds = atom_bonds + atom_bonds.permute((0,2,1))
+    dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds[0].long().detach().cpu().numpy(), directed=False)
+    dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0), device=mask.device) # protein portion is inf and you don't want to mask it out
+    return dist_matrix
 
 ### Generate atom features for proteins ###
 def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):

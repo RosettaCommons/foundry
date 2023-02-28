@@ -23,7 +23,6 @@ from rf2aa.kinematics import get_dih, get_ang
 from rf2aa.scoring import HbHybType
 
 from typing import List, Dict
-from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 
 # Loss functions for the training
 # 1. BB rmsd loss
@@ -228,6 +227,86 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
         chain_labels = chain_labels[:i_ch_min]+chain_labels[i_ch_min+1:]
 
     return xyz_out, mask_out
+
+
+def calc_rmsd(pred, true, mask):
+    # pred (N,B,Lasu,natom,3)
+    # true (B,Lasu,natom,3)
+    # mask (B,Lasu,natom)
+    def rmsd(V, W, eps=1e-6):
+        L = V.shape[1]
+        return torch.sqrt(torch.sum((V-W)*(V-W), dim=(1,2)) / L + eps)
+    def centroid(X):
+        return X.mean(dim=-2, keepdim=True)
+
+    N, B, L, Natm = pred.shape[:4]
+    resmask = mask[0,:,1]
+    pred = pred[:,:,resmask,1].squeeze(1)
+    true = true[:,resmask,1]
+    cP = centroid(pred)
+    cT = centroid(true)
+    pred = pred - cP
+    true = true - cT
+    C = torch.einsum('bji,njk->bik', pred, true)
+    V, S, W = torch.svd(C)
+    d = torch.ones([N,3,3], device=pred.device)
+    d[:,:,-1] = torch.sign(torch.det(V)*torch.det(W)).unsqueeze(1)
+    U = torch.matmul(d*V, W.permute(0,2,1)) # (IB, 3, 3)
+    rpred = torch.matmul(pred, U) # (IB, L*3, 3)
+    rms = rmsd(rpred, true).reshape(N)
+    return rms, U, cP, cT
+
+
+def resolve_symmetry_predictions(pred, true, mask, Lasu):
+    # pred (N,B,Lpred,natom,3)
+    # true (B,Ltrue,natom,3)
+    # mask (B,Ltrue,natom)
+    # symmR (S,3,3)
+    
+    N,B,Lpred = pred.shape[:3]
+    Ltrue = true.shape[1]
+    Opred = Lpred//Lasu
+    Otrue = Ltrue//Lasu
+    #if (Opred < Otrue):
+    #    print (Opred,Otrue,Lpred,Ltrue,Lasu)
+
+    # U[i] rotates layer i pred to native[0]
+    r, U, cP, cT = calc_rmsd(pred[:,:,:Lasu].detach(), true[:,:Lasu], mask[:,:Lasu]) # no grads through RMSd
+
+    # get com for each subunit in pred, align to true
+    pcoms = (
+        torch.sum(
+            pred[:,:,:,1].view(N,Opred,Lasu,3).detach()
+            *mask[0,:Lasu,1].view(1,1,Lasu,1)
+            , dim=-2)
+        / torch.sum(mask[0,:Lasu,1].view(1,1,Lasu,1), dim=-2)
+    )
+    pcoms = torch.einsum('lij,lsj->lsi',U,pcoms-cP)+cT
+
+    # get com for each subunit in true
+    ncoms = (
+        torch.sum(
+            true[0,:,1].view(-1,Lasu,3).detach()
+            *mask[0,:,1,None].view(-1,Lasu,1)
+            , dim=-2)
+        / torch.sum(mask[0,:,1].view(-1,Lasu,1), dim=-2)
+    )
+    ds = torch.linalg.norm(pcoms[:,None] - ncoms[None,:,None], dim=-1) # (N,Otrue,Opred)
+
+    # find correspondance P->T
+    mapping_T_to_P = torch.full((N,Otrue),-1, device=ds.device)
+    for i in range(Otrue):
+        minj, dj = torch.min(ds, dim=2)
+        di = torch.argmin(minj, dim=1)
+        dj = dj.gather(1,di[:,None]).squeeze(1)
+        mapping_T_to_P.scatter_(1,di[:,None],dj[:,None])
+        ds.scatter_(1,di[:,None,None].repeat(1,1,Opred),torch.full((N,1,Opred),9999.0, device=ds.device))
+        ds.scatter_(2,dj[:,None,None].repeat(1,Otrue,1),torch.full((N,Otrue,1),9999.0, device=ds.device))
+
+    # convert subunit indices to residue indices
+    mapping_T_to_P = torch.repeat_interleave(mapping_T_to_P,Lasu,dim=1)
+    mapping_T_to_P = mapping_T_to_P*Lasu + torch.arange(Lasu, device=ds.device).repeat(1,Otrue)
+    return mapping_T_to_P
 
 
 #torsion angle predictor loss
@@ -577,7 +656,8 @@ def calc_atom_bond_loss(pred, true, bond_feats, seq, beta=0.2, eps=1e-6):
 
     # enforce LAS constraints between atoms 2 bonds away and aromatic groups
     atom_bonds_np = atom_bonds[0].cpu().numpy()
-    G = nx.from_numpy_matrix(atom_bonds_np)
+    #G = nx.from_numpy_matrix(atom_bonds_np)
+    G = nx.from_numpy_array(atom_bonds_np)
     paths = find_all_paths_of_length_n(G,2)
     if paths:
         paths = torch.tensor(paths, device=pred.device)
@@ -778,6 +858,8 @@ def calc_lj(
     mask[idxes2r[:-1],:,idxes2r[1:],:] *= (
         num_bonds[seq[:-1],:,2:3] + num_bonds[seq[1:],0:1,:] + 1 >= 4 #inter-res
     )
+
+    ##fd this might lead to perf issues... can this be computed in the data loader?!?
     atom_bonds = (bond_feats > 0)*(bond_feats<5)
     dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds[0].long().detach().cpu().numpy(), directed=False)
     dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0), device=mask.device) # protein portion is inf and you don't want to mask it out
@@ -1212,6 +1294,8 @@ def compute_binder_nonbinder_metrics(
     Returns:
         Dict[str, float]: A dictionary of metrics
     """
+    from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
+
     binder_nonbinder_df = loss_df[loss_df["task"].isin(binder_nonbinder_tasks)]
     true_binder_labels = binder_nonbinder_df["is_binder_label"].to_numpy()
     binding_probabilities = binder_nonbinder_df["binding_probability"].to_numpy()

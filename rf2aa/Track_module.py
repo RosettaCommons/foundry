@@ -15,6 +15,7 @@ from rf2aa.loss import (
     calc_lj, calc_cart_bonded, calc_chiral_grads
 )
 from rf2aa.chemical import NTOTALDOFS
+from rf2aa.symmetry import get_symm_map
 
 
 # Components for three-track blocks
@@ -320,8 +321,44 @@ class PairStr2Pair(nn.Module):
         nn.init.zeros_(self.to_gate.weight)
         nn.init.ones_(self.to_gate.bias)
 
-    def forward(self, pair, rbf_feat, state):
-        B, L = pair.shape[:2]
+    # perform a striped p2p op
+    def subblock(self, OP, pair, rbf_feat, crop):
+        N,L = pair.shape[:2]
+
+        nbox = (L-1)//(crop//2)+1
+        idx = torch.triu_indices(nbox,nbox,1, device=pair.device)
+        ncrops = idx.shape[1]
+
+        pairnew = torch.zeros((N,L*L,pair.shape[-1]), device=pair.device, dtype=pair.dtype)
+        countnew = torch.zeros((N,L*L), device=pair.device, dtype=torch.int)
+
+        for i in range(ncrops):
+            # reindex sub-blocks
+            offsetC = torch.clamp( (1+idx[1,i:(i+1)])*(crop//2)-L, min=0 ) # account for going past L
+            offsetN = torch.zeros_like(offsetC)
+            mask = (offsetC>0)*((idx[0,i]+1)==idx[1,i])
+            offsetN[mask] = offsetC[mask]
+            pairIdx = torch.zeros((1,crop), dtype=torch.long, device=pair.device)
+            pairIdx[:,:(crop//2)] = torch.arange(crop//2, dtype=torch.long, device=pair.device)+idx[0,i:(i+1),None]*(crop//2) - offsetN[:,None]
+            pairIdx[:,(crop//2):] = torch.arange(crop//2, dtype=torch.long, device=pair.device)+idx[1,i:(i+1),None]*(crop//2) - offsetC[:,None]
+
+            # do reindexing
+            iL,iU = pairIdx[:,:,None], pairIdx[:,None,:]
+            paircrop = pair[:,iL,iU,:].reshape(-1,crop,crop,pair.shape[-1])
+            rbfcrop = rbf_feat[:,iL,iU,:].reshape(-1,crop,crop,rbf_feat.shape[-1])
+
+            # row attn
+            paircrop = OP(paircrop, rbfcrop).to(pair.dtype)
+
+            # unindex
+            iUL = (iL*L+iU).flatten()
+            pairnew.index_add_(1,iUL, paircrop.reshape(N,iUL.shape[0],pair.shape[-1]))
+            countnew.index_add_(1,iUL, torch.ones((N,iUL.shape[0]), device=pair.device, dtype=torch.int))
+
+        return pair + (pairnew/countnew[...,None]).reshape(N,L,L,-1)
+
+    def forward(self, pair, rbf_feat, state, crop=-1):
+        B,L = pair.shape[:2]
 
         rbf_feat = self.emb_rbf(rbf_feat)
 
@@ -332,13 +369,45 @@ class PairStr2Pair(nn.Module):
         gate = torch.sigmoid(self.to_gate(gate))
         rbf_feat = gate*rbf_feat
 
-        pair = pair + self.drop_row(self.tri_mul_out(pair))
-        pair = pair + self.drop_row(self.tri_mul_in(pair))
-        pair = pair + self.drop_row(self.row_attn(pair, rbf_feat))
-        pair = pair + self.drop_col(self.col_attn(pair, rbf_feat))
-        pair = pair + self.ff(pair)
 
-        # symmetry/repeat proteins 
+        crop = 2*(crop//2) # make sure even
+
+        if (crop>0 and crop<=L):
+            pair = self.subblock( 
+                lambda x,y:self.drop_row(self.tri_mul_out(x)),
+                pair, rbf_feat, crop
+            )
+
+            pair = self.subblock( 
+                lambda x,y:self.drop_row(self.tri_mul_in(x)), 
+                pair, rbf_feat, crop
+            )
+
+            pair = self.subblock( 
+                lambda x,y:self.drop_row(self.row_attn(x,y)), 
+                pair, rbf_feat, crop
+            )
+
+            pair = self.subblock( 
+                lambda x,y:self.drop_col(self.col_attn(x,y)), 
+                pair, rbf_feat, crop
+            )
+
+            # feed forward layer
+            RESSTRIDE = 16384//L
+            for i in range((L-1)//RESSTRIDE+1):
+                r_i,r_j = i*RESSTRIDE, min((i+1)*RESSTRIDE,L)
+                pair[:,r_i:r_j] = pair[:,r_i:r_j] + self.ff(pair[:,r_i:r_j])
+
+        else:
+            #_nc = lambda x:torch.sum(torch.isnan(x))
+            pair = pair + self.drop_row(self.tri_mul_out(pair)) 
+            pair = pair + self.drop_row(self.tri_mul_in(pair)) 
+            pair = pair + self.drop_row(self.row_attn(pair, rbf_feat)) 
+            pair = pair + self.drop_col(self.col_attn(pair, rbf_feat)) 
+            pair = pair + self.ff(pair)
+        
+        # symmetry/repeat proteins (Diffusion inference only)
         if self.symmetrize_repeats:
             symmsub = find_symmsub(L, self.repeat_length, self.symmsub_k)
         else:
@@ -346,7 +415,6 @@ class PairStr2Pair(nn.Module):
 
         if symmsub is not None:
             pair = apply_pair_symmetry(pair, symmsub, self.sym_method, self.main_block)
-
         return pair
 
 class MSA2Pair(nn.Module):
@@ -450,7 +518,7 @@ class Str2Str(nn.Module):
         edge = self.norm_edge(edge)
         
         # define graph
-        if top_k != 0:
+        if top_k > 0:
             G, edge_feats = make_topk_graph(xyz[:,:,1,:], edge, idx, top_k=top_k)
         else:
             G, edge_feats = make_full_graph(xyz[:,:,1,:], edge, idx)
@@ -696,6 +764,73 @@ class SCPred(nn.Module):
         si = self.linear_out(F.relu_(si))
         return si.view(B, L, NTOTALDOFS, 2)
 
+def update_symm_Rs(xyz, Lasu, symmsub, symmRs):
+    B = xyz.shape[0]
+
+    # symmetry correction 1: don't let COM (of entire complex) move
+    Tmean = xyz[:,:Lasu,1].reshape(-1,3).mean(dim=0)
+    Tmean = torch.einsum('sij,j->si', symmRs, Tmean).mean(dim=0)
+
+    xyz = torch.einsum('sij,braj->bsrai', symmRs[symmsub], xyz[:,:Lasu] - Tmean[None,None,None,:])
+    xyz = xyz.reshape(B,-1,3,3) # (B,L,3,3)
+    return xyz
+
+def update_symm_subs(xyz, pair, symmids, symmsub, symmRs, metasymm):
+    B,Ls = xyz.shape[0:2]
+    Osub = symmsub.shape[0]
+    L = Ls//Osub
+
+    com = xyz[:,:L,1].mean(dim=-2)
+    rcoms = torch.einsum('sij,bj->si', symmRs, com)
+    subsymms, nneighs = metasymm
+    symmsub_new = []
+    for i in range(len(subsymms)):
+        drcoms = torch.linalg.norm(rcoms[0,:] - rcoms[subsymms[i],:], dim=-1)
+        _,subs_i = torch.topk(drcoms,nneighs[i],largest=False)
+        subs_i,_ = torch.sort( subsymms[i][subs_i] )
+        symmsub_new.append(subs_i)
+
+    symmsub_new = torch.cat(symmsub_new)
+
+    s_old = symmids[symmsub[:,None],symmsub[None,:]]
+    s_new = symmids[symmsub_new[:,None],symmsub_new[None,:]]
+
+    # remap old->new
+    # a) find highest-magnitude patches
+    pairsub = dict()
+    pairmag = dict()
+    for i in range(Osub):
+        for j in range(Osub):
+            idx_old = s_old[i,j].item()
+            sub_ij = pair[:,i*L:(i+1)*L,j*L:(j+1)*L,:].clone()
+            mag_ij = torch.max(sub_ij.flatten()) #torch.norm(sub_ij.flatten())
+            if idx_old not in pairsub or mag_ij > pairmag[idx_old]:
+                pairmag[idx_old] = mag_ij
+                pairsub[idx_old] = (i,j) #sub_ij
+
+    # b) reindex
+    idx = torch.zeros((Osub*L,Osub*L),dtype=torch.long,device=pair.device)
+    idx = (
+        torch.arange(Osub*L,device=pair.device)[:,None]*Osub*L
+         + torch.arange(Osub*L,device=pair.device)[None,:]
+    )
+    for i in range(Osub):
+        for j in range(Osub):
+            idx_new = s_new[i,j].item()
+            if idx_new in pairsub:
+                inew,jnew = pairsub[idx_new]
+                idx[i*L:(i+1)*L,j*L:(j+1)*L] = (
+                    Osub*L*torch.arange(inew*L,(inew+1)*L)[:,None]
+                    + torch.arange(jnew*L,(jnew+1)*L)[None,:]
+                )
+    pair = pair.view(1,-1,pair.shape[-1])[:,idx.flatten(),:].view(1,Osub*L,Osub*L,pair.shape[-1])
+
+    if symmsub is not None and symmsub.shape[0]>1:
+        xyz = update_symm_Rs(xyz, L, symmsub_new, symmRs)
+
+    return xyz, pair, symmsub_new
+
+
 class IterBlock(nn.Module):
     def __init__(self, d_msa=256, d_pair=128, d_rbf=64,
                  n_head_msa=8, n_head_pair=4,
@@ -736,13 +871,19 @@ class IterBlock(nn.Module):
                                nextra_l0=nextra_l0,
                                nextra_l1=nextra_l1)
 
-    def forward(self, msa, pair, xyz, state, seq_unmasked, idx, bond_feats, same_chain, is_motif, use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True):
+    def forward(
+        self, msa, pair, xyz, state, seq_unmasked, idx,
+        symmids, symmsub, symmRs, symmmeta,
+        bond_feats, same_chain, is_motif, 
+        use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True,
+        crop=-1
+    ):
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, same_chain)
         if use_checkpoint:
             msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state)
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair)
-            pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state)
+            pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state, crop)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
                 msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames)
@@ -750,11 +891,19 @@ class IterBlock(nn.Module):
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
             pair = self.msa2pair(msa, pair)
-            pair = self.pair2pair(pair, rbf_feat, state)
+            pair = self.pair2pair(pair, rbf_feat, state, crop)
 
-            xyz, state, alpha = self.str2str(msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames, top_k=top_k)
+            xyz, state, alpha = self.str2str(
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), 
+                idx, rotation_mask, bond_feats, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames, top_k=top_k
+            )
 
-        return msa, pair, xyz, state, alpha
+        # update contacting subunits
+        # symmetrize pair features
+        if symmsub is not None and symmsub.shape[0]>1:
+            xyz, pair, symmsub = update_symm_subs(xyz, pair, symmids, symmsub, symmRs, symmmeta)
+
+        return msa, pair, xyz, state, alpha, symmsub
 
 class IterativeSimulator(nn.Module):
     def __init__(self, n_extra_block=4, n_main_block=12, n_ref_block=4, n_finetune_block=0,
@@ -861,13 +1010,26 @@ class IterativeSimulator(nn.Module):
             )
 
         # To get all-atom coordinates
-        self.compute_allatom_coords = ComputeAllAtomCoords()
+        self.xyzconverter = XYZConverter()
 
 
-    def forward(self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, bond_feats, same_chain, chirals, is_motif, atom_frames=None, use_checkpoint=False, use_atom_frames=True):
+    def forward(
+        self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, 
+        symmids, symmsub, symmRs, symmmeta, 
+        bond_feats, same_chain, chirals, is_motif, 
+        atom_frames=None, use_checkpoint=False, use_atom_frames=True,
+        p2p_crop=-1, topk_crop=0
+    ):
         # input:
         #   msa: initial MSA embeddings (N, L, d_msa)
         #   pair: initial residue pair embeddings (L, L, d_pair)
+
+        B,_,L = msa.shape[:3]
+        if symmsub is not None:
+            Lasu = L//symmsub.shape[0]
+        else:
+            Lasu = L
+
         rotation_mask = is_atom(seq_unmasked)
         xyz_s = list()
         alpha_s = list()
@@ -877,16 +1039,18 @@ class IterativeSimulator(nn.Module):
             if self.use_extra_l1:
                 dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
                 extra_l1 = dchiraldxyz[0].detach()
-            msa_full, pair, xyz, state, alpha = self.extra_block[i_m](msa_full, pair,
-                                                               xyz, state, seq_unmasked, idx, bond_feats,
+            msa_full, pair, xyz, state, alpha, symmsub = self.extra_block[i_m](msa_full, pair,
+                                                               xyz, state, seq_unmasked, idx, 
+                                                               symmids, symmsub, symmRs, symmmeta,
+                                                               bond_feats,
                                                                same_chain,
                                                                use_checkpoint=use_checkpoint, 
-                                                               top_k=0, rotation_mask=rotation_mask, 
+                                                               top_k=topk_crop, rotation_mask=rotation_mask, 
                                                                atom_frames=atom_frames,
                                                                extra_l0=extra_l0,
                                                                extra_l1=extra_l1,
                                                                is_motif=is_motif,
-                                                               use_atom_frames=use_atom_frames)
+                                                               use_atom_frames=use_atom_frames, crop=p2p_crop)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
         
@@ -896,20 +1060,22 @@ class IterativeSimulator(nn.Module):
             if self.use_extra_l1:
                 dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
                 extra_l1 = dchiraldxyz[0].detach()
-            msa, pair, xyz, state, alpha = self.main_block[i_m](msa, pair,
-                                                         xyz, state, seq_unmasked, idx, bond_feats,
+            msa, pair, xyz, state, alpha, symmsub = self.main_block[i_m](msa, pair,
+                                                         xyz, state, seq_unmasked, idx, 
+                                                         symmids, symmsub, symmRs, symmmeta,
+                                                         bond_feats,
                                                          same_chain,
                                                          use_checkpoint=use_checkpoint, 
-                                                         top_k=0, rotation_mask=rotation_mask,
+                                                         top_k=topk_crop, rotation_mask=rotation_mask,
                                                          atom_frames=atom_frames,
                                                          extra_l0=extra_l0,
                                                          extra_l1=extra_l1,
                                                          is_motif=is_motif,
-                                                         use_atom_frames=use_atom_frames)
+                                                         use_atom_frames=use_atom_frames, crop=p2p_crop)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
 
-        _, xyzallatom = self.compute_allatom_coords(seq_unmasked, xyz, alpha)  # think about detach here...
+        _, xyzallatom = self.xyzconverter.compute_all_atom(seq_unmasked, xyz, alpha)  # think about detach here...
         # now use unmasked seq (no cross-talk for msa prediction)
         for i_m in range(self.n_ref_block):
             extra_l0 = None
@@ -918,7 +1084,7 @@ class IterativeSimulator(nn.Module):
                 # dbonddxyz, = calc_BB_bond_geom_grads(seq_unmasked[0], xyz.detach(), idx)
                 dljdxyz, dljdalpha = calc_lj_grads(
                      seq_unmasked, xyz.detach(), alpha.detach(), 
-                     self.compute_allatom_coords, bond_feats,
+                     self.xyzconverter.compute_all_atom, bond_feats,
                      self.aamask, 
                      self.ljlk_parameters, 
                      self.lj_correction_parameters, 
@@ -929,35 +1095,24 @@ class IterativeSimulator(nn.Module):
                 extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
 
             xyz, state, alpha = self.str_refiner(
-                msa, pair, xyz.detach(), state, idx, rotation_mask, bond_feats, atom_frames, 
-                is_motif, extra_l0, extra_l1, top_k=128, use_atom_frames=use_atom_frames
+                msa, pair, xyz.detach(), state, idx,
+                rotation_mask, bond_feats, atom_frames, 
+                is_motif, extra_l0, extra_l1, top_k=64, use_atom_frames=use_atom_frames     #fd 128->64
             )
+
+            if symmsub is not None and symmsub.shape[0]>1:
+                xyz = update_symm_Rs(xyz, Lasu, symmsub, symmRs)
 
             xyz_s.append(xyz)
             alpha_s.append(alpha)
         
-        _, xyzallatom = self.compute_allatom_coords(seq_unmasked, xyz, alpha)  # think about detach here...
+        _, xyzallatom = self.xyzconverter.compute_all_atom(seq_unmasked, xyz, alpha)  # think about detach here...
         xyzallatom_s = list()
         xyzallatom_s.append(xyzallatom.clone())
         if (self.n_finetune_block>0):
             state = self.allatom_embed(state, seq_unmasked, self.atom_type_index)
 
             for i_m in range(self.n_finetune_block):
-                # dbonddxyz, = calc_cart_bonded_grads(
-                #     seq_unmasked,  xyzallatom.detach(), idx, 
-                #     self.cb_len, self.cb_ang, self.cb_tor
-                # )
-                # dljdxyz, = calc_ljallatom_grads(
-                #     seq_unmasked, 
-                #     xyzallatom.detach(), 
-                #     self.aamask, 
-                #     self.ljlk_parameters, 
-                #     self.lj_correction_parameters, 
-                #     self.num_bonds, 
-                #     lj_lin=self.lj_lin
-                # )
-
-                # extra_l1 = torch.stack((dbonddxyz.detach(), dljdxyz.detach()))
                 extra_l1 = None
 
                 xyzallatom, state = self.finetune_refiner(
@@ -969,20 +1124,6 @@ class IterativeSimulator(nn.Module):
                     extra_l1.float()
                 )
 
-                # cb_loss = calc_cart_bonded(
-                #     seq_unmasked,  xyzallatom.detach(), idx, 
-                #     self.cb_len, self.cb_ang, self.cb_tor
-                # )
-                # lj_loss = calc_lj(
-                #     seq_unmasked[0],
-                #     xyzallatom.detach(), 
-                #     self.aamask, 
-                #     self.ljlk_parameters, 
-                #     self.lj_correction_parameters, 
-                #     self.num_bonds, 
-                #     lj_lin=self.lj_lin
-                # )
-
                 xyzallatom_s.append(xyzallatom.clone())
 
             state = self.residue_embed(state)
@@ -991,4 +1132,4 @@ class IterativeSimulator(nn.Module):
         alpha_s = torch.stack(alpha_s, dim=0)
         xyzallatom_s = torch.cat(xyzallatom_s, dim=0)
 
-        return msa, pair, xyz, alpha_s, xyzallatom_s, state
+        return msa, pair, xyz, alpha_s, xyzallatom_s, state, symmsub

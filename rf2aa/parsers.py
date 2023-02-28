@@ -112,20 +112,93 @@ def parse_fasta_if_exists(seq, filename, maxseq=10000, rmsa_alphabet=False):
 
         return (seq, np.zeros_like(seq))
 
+
+#fd - parse protein/RNA coupled fastas
+def parse_mixed_fasta(filename,  maxseq=8000):
+    msa1,msa2 = [],[]
+
+    fstream = open(filename,"r")
+    table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
+
+    unpaired_r, unpaired_p = 0, 0
+
+    for line in fstream:
+        # skip labels
+        if line[0] == '>':
+            continue
+            
+        # remove right whitespaces
+        line = line.rstrip()
+
+        if len(line) == 0:
+            continue
+
+        # remove lowercase letters and append to MSA
+        msa_i = line.translate(table)
+        msa_i = msa_i.replace('B','D') # hacky...
+
+        msas_i = msa_i.split('/')
+
+        if (len(msas_i)==1):
+            msas_i = [msas_i[0][:len(msa1[0])], msas_i[0][len(msa1[0]):]]
+
+        if (len(msa1)==0 or (
+            len(msas_i[0])==len(msa1[0]) and len(msas_i[1])==len(msa2[0])
+        )):
+            # skip if we've already found half of our limit in unpaired protein seqs
+            if sum([1 for x in msas_i[1] if x != '-']) == 0:
+                unpaired_p += 1
+                if unpaired_p > maxseq // 2:
+                    continue
+
+            # skip if we've already found half of our limit in unpaired rna seqs
+            if sum([1 for x in msas_i[0] if x != '-']) == 0:
+                unpaired_r += 1
+                if unpaired_r > maxseq // 2:
+                    continue
+
+            msa1.append(msas_i[0])
+            msa2.append(msas_i[1])
+        else:
+            print ("Len error",filename, len(msas_i[0]),len(msa1[0]),len(msas_i[1]),len(msas_i[1]))
+
+        if (len(msa1) >= maxseq):
+            break
+
+    # convert letters into numbers
+    alphabet = np.array(list("ARNDCQEGHILKMFPSTWYV-Xacgtxbdhuy"), dtype='|S1').view(np.uint8)
+    msa1 = np.array([list(s) for s in msa1], dtype='|S1').view(np.uint8)
+    for i in range(alphabet.shape[0]):
+        msa1[msa1 == alphabet[i]] = i
+    msa1[msa1>=31] = 21  # anything unknown to 'X'
+
+    alphabet = np.array(list("00000000000000000000-000000ACGTN"), dtype='|S1').view(np.uint8)
+    msa2 = np.array([list(s) for s in msa2], dtype='|S1').view(np.uint8)
+    for i in range(alphabet.shape[0]):
+        msa2[msa2 == alphabet[i]] = i
+    msa2[msa2>=31] = 30  # anything unknown to 'N'
+
+    msa = np.concatenate((msa1,msa2),axis=-1)
+
+    ins = np.zeros(msa.shape, dtype=np.uint8)
+
+    return msa,ins
+
+
 # read A3M and convert letters into
 # integers in the 0..20 range,
 # also keep track of insertions
-def parse_a3m(filename, unzip=True, maxseq=10000, paired=False):
+def parse_a3m(filename, maxseq=8000, paired=False):
     msa = []
     ins = []
     taxIDs = []
     table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
 
     # read file line by line
-    if (unzip):
-        fstream = gzip.open(filename,"rt")
+    if filename.split('.')[-1] == 'gz':
+        fstream = gzip.open(filename, 'rt')
     else:
-        fstream = open(filename,"r")
+        fstream = open(filename, 'r')
 
     for line in fstream:
         
@@ -152,16 +225,6 @@ def parse_a3m(filename, unzip=True, maxseq=10000, paired=False):
 
         # sequence length
         L = len(msa[-1])
-
-        # remove insertion at the end
-        if (not unzip):
-            n_remove = 0
-            for c in reversed(line):
-                if c.islower():
-                    n_remove += 1
-                else:
-                    break
-            line = line[:-n_remove]
 
         # 0 - match or gap; 1 - insertion
         a = np.array([0 if c.isupper() or c=='-' else 1 for c in line])
@@ -343,7 +406,7 @@ def parse_templates(item, params):
         counter += 1
 
     xyz = np.vstack(xyz).astype(np.float32)
-    mask = np.vstack(mask).astype(np.bool)
+    mask = np.vstack(mask).astype(bool)
     qmap = np.vstack(qmap).astype(np.long)
     f0d = np.vstack(f0d).astype(np.float32)
     f1d = np.vstack(f1d).astype(np.float32)
@@ -412,7 +475,7 @@ def parse_templates_raw(ffdb, hhr_fn, atab_fn, max_templ=20):
         counter += 1
 
     xyz = np.vstack(xyz).astype(np.float32)
-    mask = np.vstack(mask).astype(np.bool)
+    mask = np.vstack(mask).astype(bool)
     qmap = np.vstack(qmap).astype(np.long)
     f1d = np.vstack(f1d).astype(np.float32)
     seq = np.hstack(seq).astype(np.long)
@@ -528,77 +591,6 @@ def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_autom
     mask = torch.full(atom_coords.shape[:-1], True) # (1, natoms,)
 
     if find_automorphs:
-        try:
-            automorphs = openbabel.vvpairUIntUInt()
-            openbabel.FindAutomorphisms(obmol,automorphs)
-            
-            automorphs = torch.tensor(automorphs)
-            n_symmetry = automorphs.shape[0]
-
-            atom_coords = atom_coords.repeat(n_symmetry,1,1)
-            mask = mask.repeat(n_symmetry,1)
-
-            atom_coords = torch.scatter(atom_coords, 1, automorphs[:,:,0:1].repeat(1,1,3),
-                                        torch.gather(atom_coords,1,automorphs[:,:,1:2].repeat(1,1,3)))
-            mask = torch.scatter(mask, 1, automorphs[:,:,0],
-                                 torch.gather(mask, 1, automorphs[:,:,1]))
-        except Exception as e:
-            print(f"ERROR: automorphs for {filename} yielded invalid tensor")
+        atom_coords, mask = rf2aa.util.get_automorphs(obmol, atom_coords[0], mask[0])
 
     return obmol, msa, ins, atom_coords, mask
-
-
-def load_ligand_from_pdb(fn, lig_name=None, remove_H=True):
-    """Loads a small molecule ligand from pdb file `fn` into feature tensors.
-    If no ligand is found, returns empty tensors with the same dimensions as
-    usual.
-
-    PDB format: https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html
-
-    Parameters
-    ----------
-    fn : str
-        Name of PDB file
-    lig_name : str
-        3-letter residue name of ligand to load. If None, assumes
-        there is only 1 ligand and loads it from all HETATM lines.
-    remove_H : bool
-        If True, does not load H atoms
-
-    Returns
-    -------
-    xyz_sm : torch.Tensor (N_symmetry, L_sm, 3)
-        Atom coordinates of ligand
-    mask_sm : torch.Tensor (N_symmetry, L_sm)
-        Boolean mask for whether atoms exist
-    msa_sm : torch.Tensor (L_sm,)
-        Integer-encoded (rf2aa.chemical) sequence (atom types) of ligand.
-    bond_feats_sm : torch.Tensor (L_sm, L_sm)
-        Bond features for ligand
-    idx_sm : torch.Tensor (L_sm,)
-        Residue number for ligand (all the same)
-    atom_names : list of str
-        Atom names of ligand (including whitespace) from columns 13-16 of
-        PDB HETATM lines.
-    """
-    with open(fn, 'r') as fh:
-        stream = [l for l in fh
-                  if (("HETATM" in l) and (lig_name is None or l[17:20].strip()==lig_name))\
-                     or "CONECT" in l]
-
-    if len(stream)==0:
-        sys.exit(f'ERROR (load_ligand_from_pdb): no HETATM records found in file {fn}.')
-
-    mol, msa_sm, ins_sm, xyz_sm, mask_sm = \
-        rf2aa.parsers.parse_mol("".join(stream), filetype="pdb", string=True, remove_H=remove_H,
-                                find_automorphs=False)
-    G = rf2aa.util.get_nxgraph(mol)
-    bond_feats_sm = rf2aa.util.get_bond_feats(mol)
-
-    atom_names = []
-    for line in stream:
-        if line.startswith('HETATM'):
-            atom_names.append(line[12:16])
-
-    return mol, xyz_sm, mask_sm, msa_sm, bond_feats_sm, atom_names
-

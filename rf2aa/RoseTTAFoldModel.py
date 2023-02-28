@@ -29,12 +29,12 @@ def get_shape(t):
 class RoseTTAFoldModule(nn.Module):
     def __init__(
         self, 
-        symmetrize_repeats,       # whether to symmetrize repeats in the pair track 
-        repeat_length,            # if symmetrizing repeats, what length are they? 
-        symmsub_k,                # if symmetrizing repeats, which diagonals?
-        sym_method,               # if symmetrizing repeats, which block symmetrization method? 
-        main_block,               # if copying template blocks along main diag, which block is main block? (the one w/ motif)
-        copy_main_block_template, # whether or not to copy main block template along main diag
+        symmetrize_repeats=None,       # whether to symmetrize repeats in the pair track 
+        repeat_length=None,            # if symmetrizing repeats, what length are they? 
+        symmsub_k=None,                # if symmetrizing repeats, which diagonals?
+        sym_method=None,               # if symmetrizing repeats, which block symmetrization method? 
+        main_block=None,               # if copying template blocks along main diag, which block is main block? (the one w/ motif)
+        copy_main_block_template=None, # whether or not to copy main block template along main diag
         n_extra_block=4, 
         n_main_block=8, 
         n_ref_block=4, 
@@ -141,9 +141,12 @@ class RoseTTAFoldModule(nn.Module):
         # binder predictions are made on top of the pair features, just like
         # PAE predictions are. It's not clear if this is the best place to insert
         # this prediction head.
-        self.binder_network = BinderNetwork(d_pair, d_state)
+        # self.binder_network = BinderNetwork(d_pair, d_state)
 
         self.use_extra_l1 = use_extra_l1
+
+        self.bind_pred = BinderNetwork() #fd - expose n_hidden as variable?
+
         self.use_atom_frames = use_atom_frames
         self.verbose_checks = False
 
@@ -157,23 +160,14 @@ class RoseTTAFoldModule(nn.Module):
         sctors,
         idx,
         bond_feats,
-        chirals,
-        atom_frames=None,
-        t1d=None,
-        t2d=None,
-        xyz_t=None,
-        alpha_t=None,
-        mask_t=None,
-        same_chain=None,
-        msa_prev=None,
-        pair_prev=None,
-        state_prev=None,
-        mask_recycle=None,
-        is_motif=None,
+        chirals, 
+        atom_frames=None, t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
+        msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None, is_motif=None,
         return_raw=False,
-        return_full=False,
         use_checkpoint=False,
-        return_infer=False,
+        return_infer=False, #fd ?
+        p2p_crop=-1, topk_crop=-1,   # striping
+        symmids=None, symmsub=None, symmRs=None, symmmeta=None,  # symmetry
     ):
         # ic(get_shape(msa_latent))
         # ic(get_shape(msa_full))
@@ -199,6 +193,7 @@ class RoseTTAFoldModule(nn.Module):
         # ic()
         B, N, L = msa_latent.shape[:3]
         A = atom_frames.shape[1]
+        dtype = msa_latent.dtype
 
         if self.assert_single_sequence_input:
             assert_shape(msa_latent, (1, 1, L, 164))
@@ -327,6 +322,10 @@ class RoseTTAFoldModule(nn.Module):
         )
         msa_full = self.full_emb(msa_full, seq, idx)
         pair = pair + self.bond_emb(bond_feats)
+
+        msa_latent, pair, state = msa_latent.to(dtype), pair.to(dtype), state.to(dtype)
+        msa_full = msa_full.to(dtype)
+
         #
         # Do recycling
         if msa_prev == None:
@@ -334,43 +333,30 @@ class RoseTTAFoldModule(nn.Module):
             pair_prev = torch.zeros_like(pair)
             state_prev = torch.zeros_like(state)
 
-        msa_recycle, pair_recycle, state_recycle = self.recycle(
-            msa_prev, pair_prev, xyz, state_prev, sctors, mask_recycle
-        )
-        msa_latent[:, 0] = msa_latent[:, 0] + msa_recycle.reshape(B, L, -1)
+        msa_recycle, pair_recycle, state_recycle = self.recycle(msa_prev, pair_prev, xyz, state_prev, sctors, mask_recycle)
+        msa_recycle, pair_recycle, state_recycle = msa_recycle.to(dtype), pair_recycle.to(dtype), state_recycle.to(dtype)
+
+        msa_latent[:,0] = msa_latent[:,0] + msa_recycle.reshape(B,L,-1)
         pair = pair + pair_recycle
         state = state + state_recycle
 
         # add template embedding
-        pair, state = self.templ_emb(
-            t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=use_checkpoint
-        )
+        pair, state = self.templ_emb(t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop)
 
         # Predict coordinates from given inputs
-        is_motif = (
-            is_motif if self.freeze_track_motif else torch.zeros_like(seq).bool()[0]
-        )
-        msa, pair, xyz, alpha_s, xyz_allatom, state = self.simulator(
-            seq_unmasked,
-            msa_latent,
-            msa_full,
-            pair,
-            xyz[:, :, :3],
-            state,
-            idx,
-            bond_feats,
-            same_chain,
-            chirals,
-            is_motif,
-            atom_frames,
-            use_checkpoint=use_checkpoint,
-            use_atom_frames=self.use_atom_frames,
+        is_motif = is_motif if self.freeze_track_motif else torch.zeros_like(seq).bool()[0]
+        msa, pair, xyz, alpha_s, xyz_allatom, state, symmsub = self.simulator(
+            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx,
+            symmids, symmsub, symmRs, symmmeta,
+            bond_feats, same_chain, chirals, is_motif, atom_frames, 
+            use_checkpoint=use_checkpoint, use_atom_frames=self.use_atom_frames, 
+            p2p_crop=p2p_crop, topk_crop=topk_crop
         )
 
         if return_raw:
             # get last structure
             xyz_last = xyz_allatom[-1].unsqueeze(0)
-            return msa[:, 0], pair, xyz_last, state, alpha_s[-1], None
+            return msa[:,0], pair, xyz_last, state, alpha_s[-1], None
 
         # predict masked amino acids
         logits_aa = self.aa_pred(msa)
@@ -380,10 +366,6 @@ class RoseTTAFoldModule(nn.Module):
 
         # Predict LDDT
         lddt = self.lddt_pred(state)
-
-        # Predict binder/non-binder. This is only used for small-molecule complexes,
-        # although it could be trained with protein-protein complexes as well.
-        binding_probabilities = self.binder_network(pair, same_chain, state)
 
         if self.verbose_checks:
             pseq_0 = logits_aa.permute(0, 2, 1)
@@ -402,29 +384,20 @@ class RoseTTAFoldModule(nn.Module):
         #     # return msa[:,0], pair, xyz_last, state, alpha_s[-1], logits_aa.permute(0,2,1), lddt
         #     return msa[:,0], pair, xyz_last, state, alpha_s[-1], logits_aa.permute(0,2,1), lddt
 
-        logits_pae = logits_pde = None
+        logits_pae = logits_pde = p_bind = None
         if not return_infer:
             # predict aligned error and distance error
             if self.use_extra_l1:
-                logits_pae = self.pae_pred(pair)
-                logits_pde = self.pde_pred(
-                    pair + pair.permute(0, 2, 1, 3)
-                )  # symmetrize pair features
+                logits_pae = self.pae_pred(pair)        
+                logits_pde = self.pde_pred(pair + pair.permute(0,2,1,3)) # symmetrize pair features
+
+                #fd  predict bind/no-bind
+                p_bind = self.bind_pred(logits_pae,same_chain)
             else:
                 logits_pae = None
                 logits_pde = None
 
         return (
-            logits,
-            logits_aa,
-            logits_pae,
-            logits_pde,
-            xyz,
-            alpha_s,
-            xyz_allatom,
-            lddt,
-            msa[:, 0],
-            pair,
-            state,
-            binding_probabilities,
+            logits, logits_aa, logits_pae, logits_pde, p_bind, 
+            xyz, alpha_s, xyz_allatom, lddt, msa[:,0], pair, state
         )

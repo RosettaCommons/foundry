@@ -134,7 +134,7 @@ class TemplatePairStack(nn.Module):
         self.proj_t1d = init_lecun_normal(self.proj_t1d)
         nn.init.zeros_(self.proj_t1d.bias)
 
-    def forward(self, templ, rbf_feat, t1d, use_checkpoint=False):
+    def forward(self, templ, rbf_feat, t1d, use_checkpoint=False, p2p_crop=-1):
         B, T, L = templ.shape[:3]
         templ = templ.reshape(B*T, L, L, -1)
         t1d = t1d.reshape(B*T, L, -1)
@@ -143,7 +143,7 @@ class TemplatePairStack(nn.Module):
         for i_block in range(self.n_block):
             if use_checkpoint:
                 templ = checkpoint.checkpoint(create_custom_forward(self.block[i_block]), templ, 
-                                                                    rbf_feat, state)
+                                                                    rbf_feat, state, p2p_crop)
             else:
                 templ = self.block[i_block](templ, rbf_feat, state)
         return self.norm(templ).reshape(B, T, L, L, -1)
@@ -272,7 +272,7 @@ class Templ_emb(nn.Module):
         rbf_feat = rbf(torch.cdist(xyz_t, xyz_t)) * mask_t[...,None] # (B*T, L, L, d_rbf)
         return rbf_feat
 
-    def forward(self, t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=False):
+    def forward(self, t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=False, p2p_crop=-1):
         # Input
         #   - t1d: 1D template info (B, T, L, 30)
         #   - t2d: 2D template info (B, T, L, L, 44)
@@ -287,7 +287,7 @@ class Templ_emb(nn.Module):
         rbf_feat = self._get_templ_rbf(xyz_t, mask_t)
 
         # process each template pair feature
-        templ = self.templ_stack(templ, rbf_feat, t1d, use_checkpoint=use_checkpoint) # (B, T, L,L, d_templ)
+        templ = self.templ_stack(templ, rbf_feat, t1d, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop) # (B, T, L,L, d_templ)
 
         # DJ - repeat protein symmetrization (2D)
         if self.copy_main_block:

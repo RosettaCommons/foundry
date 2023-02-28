@@ -8,7 +8,9 @@ DATASET_PARAMS = [
     "fraction_pdb",
     "fraction_fb",
     "fraction_compl",
+    "fraction_neg_compl",
     "fraction_na_compl",
+    "fraction_neg_na_compl",
     "fraction_rna",
     "fraction_sm_compl",
     "fraction_sm_compl_multi",
@@ -25,9 +27,9 @@ DATASET_PARAMS = [
     "fraction_sm_compl_docked_neg",
     "n_valid_homo",
     "n_valid_compl",
-    "n_valid_neg",
+    "n_valid_neg_compl",
     "n_valid_na_compl",
-    "n_valid_na_neg",
+    "n_valid_neg_na_compl",
     "n_valid_rna",
     "n_valid_sm_compl",
     "n_valid_sm_compl_multi",
@@ -255,115 +257,58 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
 
     # dataset parameters
     dataset_group = parser.add_argument_group("data loading parameters")
-    dataset_group.add_argument(
-        "-fraction_pdb",
-        type=float,
-        default=0.09,
-        help="how often to sample PDB monomers during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_fb",
-        type=float,
-        default=0.0,
-        help="how often to sample AF2 predictions from FB during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_compl",
-        type=float,
-        default=0.18,
-        help="how often to sample protein-protein complexes during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_na_compl",
-        type=float,
-        default=0.18,
-        help="how often to sample protein-nucleic acid complexes during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_rna",
-        type=float,
-        default=0.09,
-        help="how often to sample rna during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_sm_compl",
-        type=float,
-        default=0.1,
-        help="how often to sample protein small molecule complexes during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_metal_compl",
-        type=float,
-        default=0.09,
-        help="how often to sample protein/metal complexes during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_sm_compl_multi",
-        type=float,
-        default=0.09,
-        help="how often to sample protein/multiresidue small molecule complexes during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_sm_compl_covale",
-        type=float,
-        default=0.09,
-        help="how often to sample covalent protein/small molecule complexes during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_sm",
-        type=float,
-        default=0.09,
-        help="how often to sample small molecule crystals during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_atomize_pdb",
-        type=float,
-        default=0.09,
-        help="how often to sample atomized pdb monomers during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_sm_compl_asmb",
-        type=float,
-        default=0.00,
-        help="how often to sample atomized pdb monomers during training",
-    )
-    dataset_group.add_argument(
-        "-fraction_sm_compl_furthest_neg",
-        type=float,
-        default=0.0,
-        help="how often to sample protein small molecule complexes that are defined by the furthest residues",
-    )
-    dataset_group.add_argument(
-        "-fraction_sm_compl_permuted_neg",
-        type=float,
-        default=0.0,
-        help="how often to sample protein small molecule complexes with permuted ligands",
-    )
-    dataset_group.add_argument(
-        "-fraction_sm_compl_docked_neg",
-        type=float,
-        default=0.0,
-        help="how often to sample protein/small molecule complexes validated to be negatives by VINA",
-    )
+    dataset_group.add_argument('-fraction_pdb', type=float, default=0.09, 
+            help="how often to sample PDB monomers during training")
+    dataset_group.add_argument('-fraction_fb', type=float, default=0.09, 
+            help="how often to sample AF2 predictions from FB during training")
+    dataset_group.add_argument('-fraction_compl', type=float, default=0.09, 
+            help="how often to sample protein-protein complexes during training")
+    dataset_group.add_argument('-fraction_neg_compl', type=float, default=0.09, 
+            help="how often to sample negative protein-protein complexes during training")
+    dataset_group.add_argument('-fraction_na_compl', type=float, default=0.09,
+            help="how often to sample protein-nucleic acid complexes during training")
+    dataset_group.add_argument('-fraction_neg_na_compl', type=float, default=0.09,
+            help="how often to sample negative protein-nucleic acid complexes during training")
+    dataset_group.add_argument('-fraction_rna', type=float, default=0.09,
+            help="how often to sample rna during training")
+    dataset_group.add_argument('-fraction_sm_compl', type=float, default=0.1,
+            help="how often to sample protein small molecule complexes during training")
+    dataset_group.add_argument('-fraction_metal_compl', type=float, default=0.09,
+            help="how often to sample protein/metal complexes during training")    
+    dataset_group.add_argument('-fraction_sm_compl_multi', type=float, default=0.09,
+            help="how often to sample protein/multiresidue small molecule complexes during training")
+    dataset_group.add_argument('-fraction_sm_compl_covale', type=float, default=0.09,
+            help="how often to sample covalent protein/small molecule complexes during training")    
+    dataset_group.add_argument('-fraction_sm', type=float, default=0.00,
+            help="how often to sample small molecule crystals during training")
+    dataset_group.add_argument('-fraction_atomize_pdb', type=float, default=0.00,
+            help="how often to sample atomized pdb monomers during training")
+    dataset_group.add_argument('-fraction_sm_compl_asmb', type=float, default=0.00,
+            help="how often to sample atomized pdb monomers during training")
+    dataset_group.add_argument('-fraction_sm_compl_furthest_neg', type=float, default=0.0,
+            help="how often to sample protein small molecule complexes that are defined by the furthest residues")
+    dataset_group.add_argument('-fraction_sm_compl_permuted_neg', type=float, default=0.0,
+            help="how often to sample protein small molecule complexes with permuted ligands")
+    dataset_group.add_argument('-fraction_sm_compl_docked_neg', type=float, default=0.0,
+            help="how often to sample protein/small molecule complexes validated to be negatives by VINA")
+    
 
-    dataset_group.add_argument('-datapkl', type=str, default='/projects/ml/RF2_allatom/dataset_20221123.pkl',
-            help='Path to pickled dataset to load for training on. If path doesn\'t exist, will write new pickle with that name.')
-    dataset_group.add_argument("-n_train", type=int, default=12288)
-    dataset_group.add_argument("-n_valid_pdb", type=int)
-    dataset_group.add_argument("-n_valid_homo", type=int)
-    dataset_group.add_argument("-n_valid_compl", type=int)
-    dataset_group.add_argument("-n_valid_neg", type=int)
-    dataset_group.add_argument("-n_valid_na_compl", type=int)
-    dataset_group.add_argument("-n_valid_na_neg", type=int)
-    dataset_group.add_argument("-n_valid_rna", type=int)
-    dataset_group.add_argument("-n_valid_sm_compl", type=int)
-    dataset_group.add_argument("-n_valid_metal_compl", type=int)
-    dataset_group.add_argument("-n_valid_sm_compl_multi", type=int)
-    dataset_group.add_argument("-n_valid_sm_compl_covale", type=int)
-    dataset_group.add_argument("-n_valid_sm_compl_strict", type=int)
-    dataset_group.add_argument("-n_valid_sm", type=int)
-    dataset_group.add_argument("-n_valid_atomize_pdb", type=int)
-    dataset_group.add_argument("-n_valid_sm_compl_asmb", type=int)
+    dataset_group.add_argument('-n_train', type=int, default=12288)
+    dataset_group.add_argument('-n_valid_pdb', type=int)
+    dataset_group.add_argument('-n_valid_homo', type=int)
+    dataset_group.add_argument('-n_valid_compl', type=int)
+    dataset_group.add_argument('-n_valid_neg_compl', type=int)
+    dataset_group.add_argument('-n_valid_na_compl', type=int)
+    dataset_group.add_argument('-n_valid_neg_na_compl', type=int)
+    dataset_group.add_argument('-n_valid_rna', type=int)
+    dataset_group.add_argument('-n_valid_sm_compl', type=int)
+    dataset_group.add_argument('-n_valid_metal_compl', type=int)
+    dataset_group.add_argument('-n_valid_sm_compl_multi', type=int)
+    dataset_group.add_argument('-n_valid_sm_compl_covale', type=int)
+    dataset_group.add_argument('-n_valid_sm_compl_strict', type=int)
+    dataset_group.add_argument('-n_valid_sm', type=int)
+    dataset_group.add_argument('-n_valid_atomize_pdb', type=int)
+    dataset_group.add_argument('-n_valid_sm_compl_asmb', type=int)
     dataset_group.add_argument(
         "-n_valid_sm_compl_furthest_neg",
         type=int,
@@ -532,87 +477,38 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
 
     # Loss function parameters
     loss_group = parser.add_argument_group("loss parameters")
-    loss_group.add_argument(
-        "-w_dist",
-        type=float,
-        default=1.0,
-        help="Weight on distd in loss function [1.0]",
-    )
-    loss_group.add_argument(
-        "-w_str",
-        type=float,
-        default=10.0,
-        help="Weight on strd in loss function [10.0]",
-    )
-    loss_group.add_argument(
-        "-w_inter_fape",
-        type=float,
-        default=2.0,
-        help="Weight on inter-chain backbone fape in loss function [2.0]",
-    )
-    loss_group.add_argument(
-        "-w_lig_fape",
-        type=float,
-        default=10,
-        help="Weight on ligand fape in loss function [10.0]",
-    )
-    loss_group.add_argument(
-        "-w_lddt", type=float, default=0.1, help="Weight on predicted lddt loss [0.1]"
-    )
-    loss_group.add_argument(
-        "-w_aa",
-        type=float,
-        default=3.0,
-        help="Weight on MSA masked token prediction loss [3.0]",
-    )
-    loss_group.add_argument(
-        "-w_bond", type=float, default=0.0, help="Weight on predicted bond loss [0.0]"
-    )
-    loss_group.add_argument(
-        "-w_dih", type=float, default=0.0, help="Weight on pseudodihedral loss [0.0]"
-    )
-    loss_group.add_argument(
-        "-w_clash", type=float, default=0.0, help="Weight on clash loss [0.0]"
-    )
-    loss_group.add_argument(
-        "-w_atom_bond", type=float, default=0.0, help="Weight on atom bond loss [0.0]"
-    )
-    loss_group.add_argument(
-        "-w_skip_bond",
-        type=float,
-        default=0.0,
-        help="Weight on skip bond distance loss [0.0]",
-    )
-    loss_group.add_argument(
-        "-w_rigid",
-        type=float,
-        default=0.0,
-        help="Weight on rigid body distance loss [0.0]",
-    )
-    loss_group.add_argument(
-        "-w_hb", type=float, default=0.0, help="Weight on hydrogen bond loss [0.0]"
-    )
-    loss_group.add_argument(
-        "-w_pae", type=float, default=0.05, help="Weight on pae loss [0.05]"
-    )
-    loss_group.add_argument(
-        "-w_pde", type=float, default=0.05, help="Weight on pde loss [0.05]"
-    )
-    loss_group.add_argument(
-        "-lj_lin", type=float, default=0.75, help="linear inflection for lj [0.75]"
-    )
-    loss_group.add_argument(
-        "-w_bind",
-        type=float,
-        default=0.5,
-        help="Weight on BCE binder/non-binder prediction loss. Probably should be low, around 0.5 seems right but consider going lower.",
-    )
-    loss_group.add_argument(
-        "-binder_loss_label_smoothing",
-        type=float,
-        default=0.05,
-        help="A floating point value between 0.0 and 0.5. Labels for negative examples will be 0.0 + smoothing and for positive 1.0 - smoothing.",
-    )
+    loss_group.add_argument('-w_dist', type=float, default=1.0,
+            help="Weight on distd in loss function [1.0]")
+    loss_group.add_argument('-w_str', type=float, default=10.0,
+            help="Weight on strd in loss function [10.0]")
+    loss_group.add_argument('-w_inter_fape', type=float, default=2.0,
+            help="Weight on inter-chain backbone fape in loss function [2.0]")
+    loss_group.add_argument('-w_lig_fape', type=float, default=10,
+            help="Weight on ligand fape in loss function [10.0]")
+    loss_group.add_argument('-w_lddt', type=float, default=0.1,
+            help="Weight on predicted lddt loss [0.1]")
+    loss_group.add_argument('-w_aa', type=float, default=3.0,
+            help="Weight on MSA masked token prediction loss [3.0]")
+    loss_group.add_argument('-w_bond', type=float, default=0.0,
+            help="Weight on predicted bond loss [0.0]")
+    loss_group.add_argument('-w_bind', type=float, default=0.0,
+            help="Weight on bind/no-bind predictions [0.0]")
+    loss_group.add_argument('-w_clash', type=float, default=0.0,
+            help="Weight on clash loss [0.0]")
+    loss_group.add_argument('-w_atom_bond', type=float, default=0.0,
+            help="Weight on atom bond loss [0.0]")
+    loss_group.add_argument('-w_skip_bond', type=float, default=0.0,
+            help="Weight on skip bond distance loss [0.0]") 
+    loss_group.add_argument('-w_rigid', type=float, default=0.0,
+            help="Weight on rigid body distance loss [0.0]")      
+    loss_group.add_argument('-w_hb', type=float, default=0.0,
+            help="Weight on hydrogen bond loss [0.0]")
+    loss_group.add_argument('-w_pae', type=float, default=0.05,
+            help="Weight on pae loss [0.05]")      
+    loss_group.add_argument('-w_pde', type=float, default=0.05,
+            help="Weight on pde loss [0.05]")      
+    loss_group.add_argument('-lj_lin', type=float, default=0.75,
+            help="linear inflection for lj [0.75]")
 
     # parse arguments
     args = parser.parse_args(args=input_args)
@@ -653,26 +549,9 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
     trunk_param["SE3_ref_param"] = SE3_ref_param
 
     loss_param = {}
-    for param in [
-        "w_dist",
-        "w_str",
-        "w_inter_fape",
-        "w_lig_fape",
-        "w_aa",
-        "w_lddt",
-        "w_bond",
-        "w_dih",
-        "w_clash",
-        "w_hb",
-        "lj_lin",
-        "w_atom_bond",
-        "w_skip_bond",
-        "w_rigid",
-        "w_pae",
-        "w_pde",
-        "w_bind",
-        "binder_loss_label_smoothing",
-    ]:
+    for param in ['w_dist', 'w_str', 'w_inter_fape', 'w_lig_fape', 'w_aa', 'w_lddt', 'w_bond', 
+                  'w_bind', 'w_clash', 'w_hb', 'lj_lin', 'w_atom_bond', 'w_skip_bond', 'w_rigid', 'w_pae',
+                  'w_pde']:
         loss_param[param] = getattr(args, param)
 
     return args, dataset_param, trunk_param, loader_param, loss_param
