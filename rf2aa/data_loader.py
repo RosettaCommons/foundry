@@ -2611,7 +2611,7 @@ def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
             # record this residue to remove from residue representations
             residues_to_atomize.add((res_key[:3], prot_partner[:2]))
 
-    return lig_partners, list(residues_to_atomize)
+    return lig_partners, residues_to_atomize
 
 
 def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres,

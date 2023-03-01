@@ -991,13 +991,6 @@ class Trainer():
                 self.loader_param,
                 task='sm_compl_asmb'
             ),
-            sm_compl_asmb = DatasetSMComplexAssembly(
-                valid_ID_dict['sm_compl_asmb'][:self.dataset_param['n_valid_sm_compl_asmb']],
-                loader_sm_compl_assembly, valid_dict['sm_compl_asmb'],
-                chid2hash, chid2taxid, # used for MSA generation of assemblies
-                self.loader_param,
-                task='sm_compl_asmb'
-            ),
             sm_compl_strict = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
                 loader_sm_compl_assembly, valid_dict['sm_compl_strict'],
