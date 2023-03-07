@@ -5,6 +5,8 @@ from opt_einsum import contract as einsum
 import torch.utils.checkpoint as checkpoint
 from icecream import ic
 
+from contextlib import ExitStack, nullcontext
+
 from rf2aa.util_module import *
 from rf2aa.Attention_module import *
 from rf2aa.SE3_network import SE3TransformerWrapper
@@ -982,32 +984,32 @@ class IterativeSimulator(nn.Module):
                                        nextra_l1=6  if self.use_extra_l1 else 0
                                        )
 
-        # Fine-tuning all-atom SE(3) refinement
-        if n_finetune_block > 0:
-            d_state=16
-            self.allatom_embed = AllatomEmbed(
-                d_state_in = SE3_param['l0_out_features'],
-                d_state_out = d_state,
-                p_mask = 0.15
-            )
-            self.finetune_refiner = Allatom2Allatom( 
-                SE3_param = {
-                    'num_layers':1,
-                    'num_channels':16,
-                    'num_degrees':2,
-                    'l0_in_features':d_state,
-                    'l0_out_features':d_state,
-                    'l1_in_features':2,
-                    'l1_out_features':1,
-                    'num_edge_features':4,
-                    'n_heads':4,
-                    'div':2,
-                }
-            )
-            self.residue_embed = ResidueEmbed(
-                d_state_in = d_state,
-                d_state_out = SE3_param['l0_out_features']
-            )
+        # # Fine-tuning all-atom SE(3) refinement
+        # if n_finetune_block > 0:
+        #     d_state=16
+        #     self.allatom_embed = AllatomEmbed(
+        #         d_state_in = SE3_param['l0_out_features'],
+        #         d_state_out = d_state,
+        #         p_mask = 0.15
+        #     )
+        #     self.finetune_refiner = Allatom2Allatom( 
+        #         SE3_param = {
+        #             'num_layers':1,
+        #             'num_channels':16,
+        #             'num_degrees':2,
+        #             'l0_in_features':d_state,
+        #             'l0_out_features':d_state,
+        #             'l1_in_features':2,
+        #             'l1_out_features':1,
+        #             'num_edge_features':4,
+        #             'n_heads':4,
+        #             'div':2,
+        #         }
+        #     )
+        #     self.residue_embed = ResidueEmbed(
+        #         d_state_in = d_state,
+        #         d_state_out = SE3_param['l0_out_features']
+        #     )
 
         # To get all-atom coordinates
         self.xyzconverter = XYZConverter()
@@ -1016,7 +1018,7 @@ class IterativeSimulator(nn.Module):
     def forward(
         self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, 
         symmids, symmsub, symmRs, symmmeta, 
-        bond_feats, same_chain, chirals, is_motif, 
+        bond_feats, dist_matrix, same_chain, chirals, is_motif, 
         atom_frames=None, use_checkpoint=False, use_atom_frames=True,
         p2p_crop=-1, topk_crop=0
     ):
@@ -1076,57 +1078,66 @@ class IterativeSimulator(nn.Module):
             alpha_s.append(alpha)
 
         _, xyzallatom = self.xyzconverter.compute_all_atom(seq_unmasked, xyz, alpha)  # think about detach here...
-        # now use unmasked seq (no cross-talk for msa prediction)
+
+        # memory savings: only backprop 1st and another random step
+        backprop = np.random.randint(1,self.n_ref_block)
         for i_m in range(self.n_ref_block):
-            extra_l0 = None
-            extra_l1 = None
-            if self.use_extra_l1:
-                # dbonddxyz, = calc_BB_bond_geom_grads(seq_unmasked[0], xyz.detach(), idx)
-                dljdxyz, dljdalpha = calc_lj_grads(
-                     seq_unmasked, xyz.detach(), alpha.detach(), 
-                     self.xyzconverter.compute_all_atom, bond_feats,
-                     self.aamask, 
-                     self.ljlk_parameters, 
-                     self.lj_correction_parameters, 
-                     self.num_bonds, 
-                     lj_lin=self.lj_lin)
-                dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
-                extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
-                extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
+            with ExitStack() as stack:
+                if i_m != 0 and i_m != backprop:
+                    stack.enter_context(torch.no_grad())
 
-            xyz, state, alpha = self.str_refiner(
-                msa, pair, xyz.detach(), state, idx,
-                rotation_mask, bond_feats, atom_frames, 
-                is_motif, extra_l0, extra_l1, top_k=64, use_atom_frames=use_atom_frames     #fd 128->64
-            )
+                extra_l0 = None
+                extra_l1 = None
 
-            if symmsub is not None and symmsub.shape[0]>1:
-                xyz = update_symm_Rs(xyz, Lasu, symmsub, symmRs)
+                if self.use_extra_l1:
+                    # dbonddxyz, = calc_BB_bond_geom_grads(seq_unmasked[0], xyz.detach(), idx)
+                    dljdxyz, dljdalpha = calc_lj_grads(
+                         seq_unmasked, xyz.detach(), alpha.detach(), 
+                         self.xyzconverter.compute_all_atom, 
+                         bond_feats, dist_matrix, 
+                         self.aamask, 
+                         self.ljlk_parameters, 
+                         self.lj_correction_parameters, 
+                         self.num_bonds, 
+                         lj_lin=self.lj_lin)
+                    dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
+                    extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
+                    extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
 
-            xyz_s.append(xyz)
-            alpha_s.append(alpha)
+                xyz, state, alpha = self.str_refiner(
+                    msa, pair, xyz.detach(), state, idx,
+                    rotation_mask, bond_feats, atom_frames, 
+                    is_motif, extra_l0, extra_l1, top_k=64, use_atom_frames=use_atom_frames     #fd 128->64
+                )
+
+
+                if symmsub is not None and symmsub.shape[0]>1:
+                    xyz = update_symm_Rs(xyz, Lasu, symmsub, symmRs)
+
+                xyz_s.append(xyz)
+                alpha_s.append(alpha)
         
         _, xyzallatom = self.xyzconverter.compute_all_atom(seq_unmasked, xyz, alpha)  # think about detach here...
         xyzallatom_s = list()
         xyzallatom_s.append(xyzallatom.clone())
-        if (self.n_finetune_block>0):
-            state = self.allatom_embed(state, seq_unmasked, self.atom_type_index)
-
-            for i_m in range(self.n_finetune_block):
-                extra_l1 = None
-
-                xyzallatom, state = self.finetune_refiner(
-                    seq_unmasked, 
-                    xyzallatom.detach().float(),
-                    self.aamask,
-                    self.num_bonds,
-                    state,
-                    extra_l1.float()
-                )
-
-                xyzallatom_s.append(xyzallatom.clone())
-
-            state = self.residue_embed(state)
+        # if (self.n_finetune_block>0):
+        #     state = self.allatom_embed(state, seq_unmasked, self.atom_type_index)
+        # 
+        #     for i_m in range(self.n_finetune_block):
+        #         extra_l1 = None
+        # 
+        #         xyzallatom, state = self.finetune_refiner(
+        #             seq_unmasked, 
+        #             xyzallatom.detach().float(),
+        #             self.aamask,
+        #             self.num_bonds,
+        #             state,
+        #             extra_l1.float()
+        #         )
+        # 
+        #         xyzallatom_s.append(xyzallatom.clone())
+        # 
+        #     state = self.residue_embed(state)
 
         xyz = torch.stack(xyz_s, dim=0)
         alpha_s = torch.stack(alpha_s, dim=0)

@@ -196,7 +196,7 @@ class Trainer():
                   logit_aa_s, label_aa_s, mask_aa_s, logit_pae, logit_pde, p_bind,
                   pred, pred_tors, pred_allatom, true,
                   mask_crds, mask_BB, mask_2d, same_chain,
-                  pred_lddt, idx, bond_feats, atom_frames=None, unclamp=False, 
+                  pred_lddt, idx, bond_feats, dist_matrix, atom_frames=None, unclamp=False, 
                   negative=False, interface=False,
                   verbose=False, ctr=0,
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lig_fape=1.0, w_lddt=1.0, 
@@ -585,7 +585,7 @@ class Trainer():
         # clash [use all atoms not just those in native]
         clash_loss = calc_lj(
             seq[0], pred_allatom, 
-            self.aamask, bond_feats, self.ljlk_parameters, self.lj_correction_parameters, self.num_bonds,
+            self.aamask, bond_feats, dist_matrix, self.ljlk_parameters, self.lj_correction_parameters, self.num_bonds,
             lj_lin=lj_lin
         )
         if w_clash > 0.0:
@@ -968,6 +968,14 @@ class Trainer():
                 task='metal_compl',
                 num_protein_chains=1,
             ),
+            sm_compl = DatasetSMComplexAssembly(
+                valid_ID_dict['sm_compl'][:self.dataset_param['n_valid_sm_compl']],
+                loader_sm_compl_assembly, valid_dict['sm_compl'],
+                chid2hash, chid2taxid, # used for MSA generation of assemblies
+                self.loader_param,
+                task='sm_compl',
+                num_protein_chains=1,
+            ),
             sm_compl_multi = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl_multi'][:self.dataset_param['n_valid_sm_compl_multi']],
                 loader_sm_compl_assembly, valid_dict['sm_compl_multi'],
@@ -1008,41 +1016,6 @@ class Trainer():
                 valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
                 loader_atomize_pdb, valid_dict['atomize_pdb'],
                 self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
-            ),
-            sm_compl_furthest_neg = DatasetSMComplexAssembly(
-                valid_ID_dict['sm_compl_furthest_neg'][:self.dataset_param['n_valid_sm_compl_furthest_neg']],
-                loader_sm_compl_assembly, valid_dict['sm_compl_furthest_neg'],
-                chid2hash, chid2taxid,
-                self.loader_param, select_farthest_residues=True,
-                task="sm_compl_furthest_neg", num_protein_chains=1, num_ligand_chains=1,
-            ),
-            sm_compl_permuted_neg = DatasetSMComplexAssembly(
-                valid_ID_dict['sm_compl_permuted_neg'][:self.dataset_param['n_valid_sm_compl_permuted_neg']],
-                loader_sm_compl_assembly, valid_dict['sm_compl_permuted_neg'],
-                chid2hash, chid2taxid,
-                self.loader_param, select_negative_ligand=True,
-                task="sm_compl_permuted_neg", num_protein_chains=1, num_ligand_chains=1,
-            ),
-            sm_compl_docked_neg = DatasetSMComplexAssembly(
-                valid_ID_dict['sm_compl_docked_neg'][:self.dataset_param['n_valid_sm_compl_docked_neg']],
-                loader_sm_compl_assembly, valid_dict['sm_compl_docked_neg'],
-                chid2hash, chid2taxid,
-                self.loader_param, select_negative_ligand=True,
-                task="sm_compl_docked_neg", num_protein_chains=1, num_ligand_chains=1,
-            ),
-            dude_actives = DatasetSMComplexAssembly(
-                valid_ID_dict['dude_actives'][:self.dataset_param['n_valid_dude_actives']],
-                loader_sm_compl_assembly, valid_dict['dude_actives'],
-                chid2hash, chid2taxid,
-                self.loader_param, load_from_smiles_string=True,
-                task="dude_actives", num_protein_chains=1, num_ligand_chains=1,
-            ),
-            dude_inactives = DatasetSMComplexAssembly(
-                valid_ID_dict['dude_inactives'][:self.dataset_param['n_valid_dude_inactives']],
-                loader_sm_compl_assembly, valid_dict['dude_inactives'],
-                chid2hash, chid2taxid,
-                self.loader_param, load_from_smiles_string=True,
-                task="dude_inactives", num_protein_chains=1, num_ligand_chains=1,
             )
         )
 
@@ -1162,7 +1135,7 @@ class Trainer():
                     self.loader_param, load_from_smiles_string=True,
                     task="dude_inactives", num_protein_chains=1, num_ligand_chains=1,
                 ),
-            ),
+            )
         )
         valid_ppi_headers = dict(
             compl = 'Complex',
@@ -1226,7 +1199,7 @@ class Trainer():
         #    if ("finetune_refiner" not in n and "residue_embed" not in n and "allatom_embed" not in n):
         #        p.requires_grad_(False)
 
-        ddp_model = DDP(model, device_ids=[gpu], find_unused_parameters=False)
+        ddp_model = DDP(model, device_ids=[gpu], find_unused_parameters=False, broadcast_buffers=False)
         if rank == 0:
             print ("# of parameters:", count_parameters(ddp_model))
 
@@ -1236,7 +1209,7 @@ class Trainer():
         #scheduler = get_stepwise_decay_schedule_with_warmup(optimizer, 1000, 5000, 0.95)
         scheduler = get_stepwise_decay_schedule_with_warmup(optimizer, 0, 5000, 0.95)
         scaler = torch.cuda.amp.GradScaler(enabled=USE_AMP)
-       
+
         # load model
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, self.model_name, gpu, suffix="last", 
                                                         resume_train=True, optimizer=optimizer, 
@@ -1326,7 +1299,7 @@ class Trainer():
         (
             seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
             xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, 
-            atom_frames, bond_feats, chirals, ch_label, symmgp, task, item
+            atom_frames, bond_feats, dist_matrix, chirals, ch_label, symmgp, task, item
         ) = inputs
 
         # transfer inputs to device
@@ -1351,6 +1324,7 @@ class Trainer():
         mask_msa = mask_msa.to(gpu, non_blocking=True)
         atom_frames = atom_frames.to(gpu, non_blocking=True)
         bond_feats = bond_feats.to(gpu, non_blocking=True)
+        dist_matrix = dist_matrix.to(gpu, non_blocking=True)
         chirals = chirals.to(gpu, non_blocking=True)
 
         assert (len(symmgp)==1)
@@ -1395,12 +1369,15 @@ class Trainer():
             idx_pdb = torch.arange(Osub*Lasu, device=gpu)[None,:]
             same_chain = torch.zeros((1,Osub*Lasu,Osub*Lasu), device=gpu).long()
             bond_feats_new = torch.zeros((1,Osub*Lasu,Osub*Lasu), device=gpu).long()
+            dist_matrix_new = torch.zeros((1,Osub*Lasu,Osub*Lasu), device=gpu).long()
             for o_i in range(Osub):
                 same_chain[:,o_i*Lasu:(o_i+1)*Lasu,o_i*Lasu:(o_i+1)*Lasu] = 1
                 idx_pdb[:,o_i*Lasu:(o_i+1)*Lasu] += 100*o_i
                 bond_feats_new[:,o_i*Lasu:(o_i+1)*Lasu,o_i*Lasu:(o_i+1)*Lasu] = bond_feats
+                dist_matrix_new[:,o_i*Lasu:(o_i+1)*Lasu,o_i*Lasu:(o_i+1)*Lasu] = dist_matrix
 
             bond_feats = bond_feats_new
+            dist_matrix = dist_matrix_new
 
         else:
             Lasu = L
@@ -1437,6 +1414,8 @@ class Trainer():
         network_input['mask_t'] = mask_t_2d
         network_input['same_chain'] = same_chain
         network_input['bond_feats'] = bond_feats
+        network_input['dist_matrix'] = dist_matrix
+
         network_input['chirals'] = chirals
         network_input['atom_frames'] = atom_frames
 
@@ -1470,7 +1449,7 @@ class Trainer():
 
     def _get_loss_and_misc(
         self, output_i, true_crds, atom_mask, same_chain,
-        seq, msa, mask_msa, idx_pdb, bond_feats, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, ctrid=0
+        seq, msa, mask_msa, idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, ctrid=0
     ):
         logit_s, logit_aa_s, logit_pae, logit_pde, p_bind, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = output_i
 
@@ -1514,6 +1493,8 @@ class Trainer():
             bond_feats=torch.gather(bond_feats,1,mapT2P[-1][None,:,None].repeat(1,1,bond_feats.shape[-1]))
             bond_feats=torch.gather(bond_feats,2,mapT2P[-1][None,None,:].repeat(1,bond_feats.shape[1],1))
 
+            dist_matrix=torch.gather(dist_matrix,1,mapT2P[-1][None,:,None].repeat(1,1,dist_matrix.shape[-1]))
+            dist_matrix=torch.gather(dist_matrix,2,mapT2P[-1][None,None,:].repeat(1,dist_matrix.shape[1],1))
 
             pred_lddts = torch.gather(pred_lddts,2,mapT2P[-1][None,None,:].repeat(1,pred_lddts.shape[-2],1))
             idx_pdb = torch.gather(idx_pdb,1,mapT2P[-1][None,:])
@@ -1521,8 +1502,9 @@ class Trainer():
             sm_mask = is_atom(seq[0,0])
             Ls_prot = Ls_from_same_chain_2d(same_chain[:,~sm_mask][:,:,~sm_mask])
             Ls_sm = Ls_from_same_chain_2d(same_chain[:,sm_mask][:,:,sm_mask])
+
             true_crds, atom_mask = resolve_equiv_natives_asmb(
-                pred_crds[-1], true_crds, atom_mask, ch_label, Ls_prot, Ls_sm)
+                pred_allatom, true_crds, atom_mask, ch_label, Ls_prot, Ls_sm)
         else:
             true_crds, atom_mask = resolve_equiv_natives(pred_crds[-1], true_crds, atom_mask)
 
@@ -1541,7 +1523,7 @@ class Trainer():
             logit_aa_s, msa, mask_msa, logit_pae, logit_pde, p_bind,
             pred_crds, alphas, pred_allatom, true_crds, 
             atom_mask, res_mask, mask_2d, same_chain,
-            pred_lddts, idx_pdb, bond_feats, atom_frames=atom_frames,
+            pred_lddts, idx_pdb, bond_feats, dist_matrix, atom_frames=atom_frames,
             unclamp=unclamp, negative=negative,
             ctr=ctrid, item=item, task=task, **self.loss_param
         )
@@ -1578,7 +1560,7 @@ class Trainer():
                 true_crds, mask_crds, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label
             ) = self._prepare_input(inputs, gpu)
             xyz_prev_orig = xyz_prev.clone()
-
+            
             counter += 1
 
             N_cycle = np.random.randint(1, self.maxcycle+1) # number of recycling
@@ -1597,7 +1579,7 @@ class Trainer():
                         return_raw=False
                         use_checkpoint=True
                     input_i = self._get_model_input(network_input, output_i, i_cycle, return_raw=return_raw, use_checkpoint=use_checkpoint)
-
+                    
                     output_i = ddp_model(**input_i)
                     
                     if i_cycle < N_cycle - 1:
@@ -1606,7 +1588,7 @@ class Trainer():
                         output_i,
                         true_crds, mask_crds, network_input['same_chain'],
                         network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
-                        network_input['idx'], network_input['bond_feats'], network_input['atom_frames'],
+                        network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
                         unclamp, negative, task, item, symmRs, Lasu, ch_label,
                         len(train_loader)*rank+counter
                     )
@@ -1642,7 +1624,6 @@ class Trainer():
                 name = item_['label']
             else:
                 name = item_['CHAINID']
-
             if save_pdbs:
                 seq_unmasked = msa[:, 0, 0, :]
                 writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb', 
@@ -1779,7 +1760,7 @@ class Trainer():
                     output_i,
                     true_crds, mask_crds, network_input['same_chain'],
                     network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
-                    network_input['idx'], network_input['bond_feats'], network_input['atom_frames'],
+                    network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
                     unclamp, negative, task, item, symmRs, Lasu, ch_label,
                     len(valid_loader)*rank+counter
                 )
@@ -1888,6 +1869,8 @@ class Trainer():
         return valid_tot, valid_loss, valid_acc, loss_df
 
     def valid_ppi_cycle(self, ddp_model, valid_pos_loader, valid_neg_loader, rank, gpu, world_size, epoch, rng, header='Protein', verbose=False, print_header=False):
+        if len(valid_pos_loader) == 0 or len(valid_neg_loader) == 0:
+            return None, None, None, None, None
         valid_tot = 0.0
         valid_loss = None
         valid_acc = None
@@ -1929,7 +1912,7 @@ class Trainer():
                             output_i,
                             true_crds, mask_crds, network_input['same_chain'],
                             network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
-                            network_input['idx'], network_input['bond_feats'], network_input['atom_frames'],
+                            network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
                             unclamp, negative, task, item, symmRs, Lasu, ch_label,
                             len(valid_pos_loader)*rank+counter
                         )
@@ -2026,7 +2009,7 @@ class Trainer():
                             output_i,
                             true_crds, mask_crds, network_input['same_chain'],
                             network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
-                            network_input['idx'], network_input['bond_feats'], network_input['atom_frames'],
+                            network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
                             unclamp, negative, task, item, symmRs, Lasu, ch_label,
                             len(valid_pos_loader)*rank+counter
                         )

@@ -1,5 +1,6 @@
-import sys, os, json, pickle
+import sys, os, json, pickle, glob
 import time
+from collections import OrderedDict
 import numpy as np
 import torch
 import torch.nn as nn
@@ -23,6 +24,53 @@ from rf2aa.parsers import read_templates
 from rf2aa.memory import mem_report
 from scipy.interpolate import Akima1DInterpolator
 
+def get_args():
+    DB = "/projects/ml/TrRosetta/pdb100_2022Apr19/pdb100_2022Apr19"
+    import argparse
+    parser = argparse.ArgumentParser(description="RoseTTAFold: Protein structure prediction with 3-track attentions on 1D, 2D, and 3D features")
+    parser.add_argument("-checkpoint", 
+        #default="/home/jue/git/rf2a-fd3/folddock3_20221125/models/rf2a_fd3_20221125_199.pt",
+        default='/home/jue/git/rf2a-fd3-ph3/folddock3_20221125/models/rf2a_fd3_20221125_469.pt',
+        help="Path to model weights")
+
+    parser.add_argument("-msa", help='Input sequence/MSA to predict structure from, in fasta/a3m format')
+    parser.add_argument("-pdb", help='PDB of sequence to predict structure from')
+    parser.add_argument("-hhr", help='Input hhr file.')
+    parser.add_argument("-atab", help='Input atab file.')
+    parser.add_argument("-pt", help='PyTorch cached version of PDB')
+    parser.add_argument("-mol2", help='mol2 of small molecule to predict structure from')
+    parser.add_argument("-smiles", help='smiles string of small molecule to predict structure from')
+    parser.add_argument("-db", default=DB, required=False, help="HHsearch database [%s]"%DB)
+
+    parser.add_argument("-list", help='list of PDB inputs')
+    parser.add_argument("-folder", help='folder with PDB inputs')
+
+    parser.add_argument("-outcsv", default='rfaa_scores.csv', help='output CSV for losses')
+    parser.add_argument("-out", help='prefix of output files')
+
+    parser.add_argument("-dump_extra_pdbs", action='store_true', default=False, help='output initial and final prediction in addition to best prediction')
+    parser.add_argument("-dump_traj", action='store_true', default=False, help='output trajectory pdb')
+    parser.add_argument("-dump_aux", action='store_true', default=False, help='output distograms/anglegrams and confidence estimates')
+    parser.add_argument("-init_protein_tmpl", action='store_true', default=False, help='initialize protein template structure to ground truth')
+    parser.add_argument("-init_ligand_tmpl", action='store_true', default=False, help='initialize ligand template structure to ground truth')
+    parser.add_argument("-init_protein_xyz", action='store_true', default=False, help='initialize protein coordinates to ground truth')
+    parser.add_argument("-init_ligand_xyz", action='store_true', default=False, help='initialize ligand coordinates to ground truth')
+    parser.add_argument("-num_interp", type=int, default=5, help='number of interpolation frames for trajectory output')
+    parser.add_argument("-parse_hetatm", action="store_true", default=False, help="parse ligand information from input pdb")
+    parser.add_argument("-n_pred", type=int, default=1, help='number of repeat predictions')
+    parser.add_argument("-n_cycle", type=int, default=10, help='number of recycles')
+    parser.add_argument("-trunc_N", type=int, default=0, help='residues to truncate at N-term on MSA to match PDB')
+    parser.add_argument("-trunc_C", type=int, default=0, help='residues to truncate at C-term on MSA to match PDB')
+    parser.add_argument("-no_extra_l1", dest='use_extra_l1', default='True', action='store_false',
+            help="Turn off chirality and LJ grad inputs to SE3 layers (for backwards compatibility).")
+    parser.add_argument("-no_atom_frames", dest='use_atom_frames', default='True', action='store_false',
+            help="Turn off l1 features from atom frames in SE3 layers (for backwards compatibility).")
+
+    args = parser.parse_args()
+
+    return args
+
+
 MODEL_PARAM ={
         "n_extra_block"   : 4,
         "n_main_block"    : 32,
@@ -36,7 +84,13 @@ MODEL_PARAM ={
         "d_hidden"        : 32,
         "d_hidden_templ"  : 64,
         "p_drop"       : 0.0,
-        "lj_lin"       : 0.7
+        "lj_lin"       : 0.7,
+        'symmetrize_repeats': False,
+        'repeat_length': float('nan'),
+        'symmsub_k': float('nan'),
+        'sym_method': float('nan'),
+        'main_block': float('nan'),
+        'copy_main_block_template': False
         }
 
 SE3_param = {
@@ -65,44 +119,6 @@ SE3_ref_param = {
         }
 MODEL_PARAM['SE3_param'] = SE3_param
 MODEL_PARAM['SE3_ref_param'] = SE3_ref_param
-
-def get_args():
-    DB = "/projects/ml/TrRosetta/pdb100_2022Apr19/pdb100_2022Apr19"
-    import argparse
-    parser = argparse.ArgumentParser(description="RoseTTAFold: Protein structure prediction with 3-track attentions on 1D, 2D, and 3D features")
-    parser.add_argument("-checkpoint", 
-        default="/home/jue/git/rf2a-fd3/folddock3_20221125/models/rf2a_fd3_20221125_199.pt",
-        help="Path to model weights")
-    parser.add_argument("-msa", help='Input sequence/MSA to predict structure from, in fasta/a3m format')
-    parser.add_argument("-pdb", help='PDB of sequence to predict structure from')
-    parser.add_argument("-hhr", help='Input hhr file.')
-    parser.add_argument("-atab", help='Input atab file.')
-    parser.add_argument("-pt", help='PyTorch cached version of PDB')
-    parser.add_argument("-mol2", help='mol2 of small molecule to predict structure from')
-    parser.add_argument("-smiles", help='smiles string of small molecule to predict structure from')
-    parser.add_argument("-db", default=DB, required=False, help="HHsearch database [%s]"%DB)
-    parser.add_argument("-out", help='prefix of output files')
-    parser.add_argument("-dump_extra_pdbs", action='store_true', default=False, help='output initial and final prediction in addition to best prediction')
-    parser.add_argument("-dump_traj", action='store_true', default=False, help='output trajectory pdb')
-    parser.add_argument("-dump_aux", action='store_true', default=False, help='output distograms/anglegrams and confidence estimates')
-    parser.add_argument("-init_protein_tmpl", action='store_true', default=False, help='initialize protein template structure to ground truth')
-    parser.add_argument("-init_ligand_tmpl", action='store_true', default=False, help='initialize ligand template structure to ground truth')
-    parser.add_argument("-init_protein_xyz", action='store_true', default=False, help='initialize protein coordinates to ground truth')
-    parser.add_argument("-init_ligand_xyz", action='store_true', default=False, help='initialize ligand coordinates to ground truth')
-    parser.add_argument("-num_interp", type=int, default=5, help='number of interpolation frames for trajectory output')
-    parser.add_argument("-parse_hetatm", action="store_true", default=False, help="parse ligand information from input pdb")
-    parser.add_argument("-n_pred", type=int, default=1, help='number of repeat predictions')
-    parser.add_argument("-n_cycle", type=int, default=10, help='number of recycles')
-    parser.add_argument("-trunc_N", type=int, default=0, help='residues to truncate at N-term on MSA to match PDB')
-    parser.add_argument("-trunc_C", type=int, default=0, help='residues to truncate at C-term on MSA to match PDB')
-    parser.add_argument("-no_extra_l1", dest='use_extra_l1', default='True', action='store_false',
-            help="Turn off chirality and LJ grad inputs to SE3 layers (for backwards compatibility).")
-    parser.add_argument("-no_atom_frames", dest='use_atom_frames', default='True', action='store_false',
-            help="Turn off l1 features from atom frames in SE3 layers (for backwards compatibility).")
-
-    args = parser.parse_args()
-
-    return args
 
 
 # compute expected value from binned lddt
@@ -572,11 +588,13 @@ class Predictor():
 
     def predict(self, out_prefix, msa_fn=None, pdb_fn=None, pt_fn=None, 
         a3m_fn=None, hhr_fn=None, atab_fn=None, mol2_fn=None,
-        init_protein_tmpl=False, init_ligand_tmpl=False, init_protein_xyz=False, init_ligand_xyz=False,
-        parse_hetatm=False, n_cycle=10, n_templ=4, random_noise=5.0, trunc_N=0, trunc_C=0):
+        init_protein_tmpl=False, init_ligand_tmpl=False, init_protein_xyz=False,
+        init_ligand_xyz=False, n_cycle=10, n_templ=4, random_noise=5.0, trunc_N=0,
+        trunc_C=0):
 
+        has_ligand = False
         if pdb_fn is not None:
-            xyz_prot, mask_prot, idx_prot, seq_prot = parsers.parse_pdb(pdb_fn, seq=True, parse_hetatom=False)
+            xyz_prot, mask_prot, idx_prot, seq_prot = parsers.parse_pdb(pdb_fn, seq=True)
             xyz_prot[:,14:] = 0 # remove hydrogens
             mask_prot[:,14:] = False
             xyz_prot = torch.tensor(xyz_prot)
@@ -585,18 +603,22 @@ class Predictor():
             msa_prot = torch.tensor(seq_prot)[None].long()
             ins_prot = torch.zeros(msa_prot.shape).long()
             a3m_prot = {"msa": msa_prot, "ins": ins_prot}
-            #if parse_hetatm:
-            #    stream = [l for l in open(pdb_fn) if "HETATM" in l or "CONECT" in l]
-            #    mol, msa_sm, ins_sm, xyz_sm, mask_sm = parsers.parse_mol("".join(stream), filetype="pdb", string=True)
-            #    a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
-            #    G = util.get_nxgraph(mol)
-            #    atom_frames = util.get_atom_frames(msa_sm, G)
-            #    N_symmetry, sm_L, _ = xyz_sm.shape
-            #    Ls = [protein_L, sm_L]
-            #    a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
-            #    msa = a3m['msa'].long()
-            #    ins = a3m['ins'].long()
-            #    chirals = get_chirals(mol, xyz_sm[0]) 
+            idx_prot = torch.tensor(idx_prot)
+
+            stream = [l for l in open(pdb_fn) if "HETATM" in l or "CONECT" in l]
+            if len(stream)>0:
+                mol, msa_sm, ins_sm, xyz_sm, mask_sm = parsers.parse_mol("".join(stream), filetype="pdb", string=True)
+                a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
+                G = util.get_nxgraph(mol)
+                atom_frames = util.get_atom_frames(msa_sm, G)
+                N_symmetry, sm_L, _ = xyz_sm.shape
+                Ls = [protein_L, sm_L]
+                a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+                msa = a3m['msa'].long()
+                ins = a3m['ins'].long()
+                chirals = get_chirals(mol, xyz_sm[0]) 
+                has_ligand = True
+
         if pt_fn is not None:
             pdbA = torch.load(pt_fn)
             xyz_prot, mask_prot = pdbA["xyz"], pdbA["mask"]
@@ -627,7 +649,9 @@ class Predictor():
             msa = a3m['msa'].long()
             ins = a3m['ins'].long()
             chirals = get_chirals(mol, xyz_sm[0])
-        if mol2_fn is None and not parse_hetatm:
+            has_ligand = True
+
+        if not has_ligand:
             Ls = [msa_prot.shape[-1], 0]
             N_symmetry = 1
             msa = msa_prot
@@ -640,7 +664,7 @@ class Predictor():
         if pdb_fn is not None:
             xyz[:, :Ls[0], :nprotatoms, :] = xyz_prot.expand(N_symmetry, Ls[0], nprotatoms, 3)
             mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, Ls[0], nprotatoms)
-        if mol2_fn is not None:
+        if has_ligand:
             xyz[:, Ls[0]:, 1, :] = xyz_sm
             mask[:, protein_L:, 1] = mask_sm
         idx_sm = torch.arange(max(idx_prot),max(idx_prot)+Ls[1])+200
@@ -654,7 +678,7 @@ class Predictor():
         chain_idx[Ls[0]:, Ls[0]:] = 1
         bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
         bond_feats[:Ls[0], :Ls[0]] = util.get_protein_bond_feats(Ls[0])
-        if mol2_fn is not None or parse_hetatm:
+        if has_ligand:
             bond_feats[Ls[0]:, Ls[0]:] = util.get_bond_feats(mol)
 
         if init_protein_tmpl or init_ligand_tmpl:
@@ -810,7 +834,7 @@ class Predictor():
 
             for i_cycle in range(n_cycle):
                 logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alpha, pred_allatom, pred_lddt_binned, \
-                    msa_prev, pair_prev, state_prev = self.model(
+                    msa_prev, pair_prev, state_prev, _ = self.model(
                     msa_masked[:,i_cycle], 
                     msa_full[:,i_cycle],
                     seq[:,i_cycle], 
@@ -893,6 +917,10 @@ class Predictor():
             pred_lddt_binned, idx_pdb, bond_feats, atom_frames=atom_frames,
             unclamp=False, negative=False
         )
+        loss_dict = OrderedDict([(k,float(v)) for k,v in loss_dict.items()])
+        loss_dict['pae'] = float(best_pae.mean())
+        loss_dict['pde'] = float(best_pde.mean())
+        loss_dict['plddt'] = float(best_lddt[0].mean())
 
         if args.dump_aux:
             prob_s = [prob.permute(1,2,0).detach().cpu().numpy().astype(np.float16) for prob in prob_s]
@@ -902,9 +930,6 @@ class Predictor():
                     omega = prob_s[1].astype(np.float16),\
                     theta = prob_s[2].astype(np.float16),\
                     phi = prob_s[3].astype(np.float16),\
-                    lddt = best_lddt[0].detach().cpu().numpy().astype(np.float16),
-                    pae = best_pae,
-                    pde = best_pde,
                     loss = dict(loss_dict)
                 ), outf)
 
@@ -930,6 +955,8 @@ class Predictor():
                 util.writepdb(out_prefix+"_traj.pdb", Y[i], seq[0,-1], 
                     modelnum=i+1, bond_feats=bond_feats, file_mode="a")
 
+        return loss_dict
+
 
 if __name__ == "__main__":
     args = get_args()
@@ -941,20 +968,56 @@ if __name__ == "__main__":
         elif args.pdb is not None: in_name = args.pdb
         args.out = '.'.join(os.path.basename(in_name).split('.')[:-1])+'_pred'
 
-    for n in range(args.n_pred):
-        print(f'Making prediction {n}...')
-        pred.predict(args.out+f'_{n}', 
-                     msa_fn=args.msa,
-                     pdb_fn=args.pdb,
-                     pt_fn=args.pt,
-                     hhr_fn=args.hhr, 
-                     atab_fn=args.atab, 
-                     mol2_fn=args.mol2, 
-                     init_protein_tmpl=args.init_protein_tmpl,
-                     init_ligand_tmpl=args.init_ligand_tmpl,
-                     init_protein_xyz=args.init_protein_xyz,
-                     init_ligand_xyz=args.init_ligand_xyz,
-                     parse_hetatm=args.parse_hetatm,
-                     n_cycle=args.n_cycle,
-                     trunc_N=args.trunc_N,
-                     trunc_C=args.trunc_C)
+    # single prediction mode
+    if args.list is None and args.folder is None:
+        for n in range(args.n_pred):
+            print(f'Making prediction {n}...')
+            pred.predict(args.out+f'_{n}', 
+                         msa_fn=args.msa,
+                         pdb_fn=args.pdb,
+                         pt_fn=args.pt,
+                         hhr_fn=args.hhr, 
+                         atab_fn=args.atab, 
+                         mol2_fn=args.mol2, 
+                         init_protein_tmpl=args.init_protein_tmpl,
+                         init_ligand_tmpl=args.init_ligand_tmpl,
+                         init_protein_xyz=args.init_protein_xyz,
+                         init_ligand_xyz=args.init_ligand_xyz,
+                         parse_hetatm=args.parse_hetatm,
+                         n_cycle=args.n_cycle,
+                         trunc_N=args.trunc_N,
+                         trunc_C=args.trunc_C)
+
+    # scoring a list of inputs
+    else:
+        if args.list is not None:
+            with open(args.list) as f:
+                filenames = [line.strip() for line in f.readlines()]
+        elif args.folder is not None:
+            filenames = glob.glob(args.folder+'/*.pdb')
+
+        print(f'Scoring {len(filenames)} files')
+        outdir = os.path.dirname(args.out) + '/'
+        os.makedirs(outdir, exist_ok=True)
+
+        records = []
+        for fn in filenames:
+            name = os.path.basename(fn).replace('.pdb','')
+            print(f'Processing {fn}')
+            for n in range(args.n_pred):
+                print(f'Making prediction {n}...')
+                loss_dict = pred.predict(
+                    outdir+name+f'_pred_{n}', 
+                    pdb_fn=fn,
+                    n_cycle=args.n_cycle
+                )
+                loss_dict['name'] = name+f'_{n}'
+                print(f'rmsd_c1_c1: {loss_dict["rmsd_c1_c1"]:.3f}\t'\
+                      f'rmsd_c1_c2: {loss_dict["rmsd_c1_c2"]:.3f}\t'\
+                      f'rmsd_c2_c2: {loss_dict["rmsd_c2_c2"]:.3f}')
+                records.append(loss_dict)
+
+        df = pd.DataFrame.from_records(records)
+        print(f'Outputting scores to {args.outcsv}')
+        df.to_csv(args.outcsv)
+

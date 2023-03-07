@@ -107,124 +107,252 @@ def resolve_equiv_natives(xs, natstack, maskstack):
     delta = torch.sum( torch.abs(dnat-dx), dim=(-2,-1))
     return natstack[:,torch.argmin(delta),...], maskstack[:,torch.argmin(delta),...]
 
+
 def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_sm):
-    """Resolves multiple chain and atom permutations of a protein-ligand
-    assembly to a single set of true coordinates with the lowest C-alpha
-    distance error to predicted coordinates. Protein chains are assigned to the
-    chain permutation with the lowest distance error. Ligand chains are
-    assigned using a greedy search to minimize the distance error within that
-    ligand chain and between it and the already-assigned protein chains.
+    """Resolves multiple chain and atom permutations of a protein-ligand assembly to a
+    single set of true coordinates with the lowest C-alpha distance error to predicted
+    coordinates. Protein chains are assigned to the chain permutation with the lowest
+    distance error. Ligand chains are assigned using a greedy search to minimize the
+    distance error within that ligand chain and between it and the already-assigned
+    protein chains.
 
     Parameters
     ----------
-    xyz_pred : tensor (B, L, N_atoms, 3)
-        Predicted coordinates for all chains, where the total number of
-        residues is L = sum(Ls_prot)+sum(Ls_sm)
-    xyz_true : tensor (B, N_perm, L, N_atoms, 3)
-        True coordinates, with chain and atom permutations in dimension 1. For
-        protein chains, all chain permutations are enumerated. For ligand
-        chains, only atom permutations within each chain are enumerated. Ligand
-        chain swaps will be handled by a greedy search below.
-    mask : tensor (B, N_perm, L, N_atoms)
-        Boolean mask for whether atoms exist in `xyz_true`. Some ligand chains
-        have fewer sets of atom permutations than `N_perm`. This is indicated
-        by all False values in the relevant entries in `mask`.
-    ch_label : tensor (B, L)
-        Integer labels for each unique chain, assigned to each residue. Used to
-        determine which ligand chains are equivalent and can be considered for
-        alternate ligand chain assignments.
-    Ls_prot : list
-        Lengths of protein chains
-    Ls_sm : list
-        Lengths of ligand chains. All ligand chains come after all protein chains
+    xyz_pred: tensor (B, L, N_atoms, 3) with predicted coordinates for all chains, where
+        the total number of residues is L = sum(Ls_prot)+sum(Ls_sm)
+    xyz_true: tensor (B, N_perm, L, N_atoms, 3) with true coordinates, with chain and
+        atom permutations in dimension 1. For protein chains, all chain permutations are
+        enumerated. For ligand chains, only atom permutations within each chain are
+        enumerated. Ligand chain swaps will be handled by a greedy search below.
+    mask: tensor (B, N_perm, L, N_atoms) with boolean mask for whether atoms exist in
+        `xyz_true`. Some ligand chains have fewer sets of atom permutations than `N_perm`.
+        This is indicated by all False values in the relevant entries in `mask`.
+    ch_label: tensor (B, L) with integer labels for each unique chain, assigned to each
+        residue. Used to determine which ligand chains are equivalent and can be
+        considered for alternate ligand chain assignments.
+    Ls_prot: list of lengths of protein chains
+    Ls_sm: list lengths of ligand chains. All ligand chains come after all protein chains
 
     Returns
     -------
-    xyz_out : tensor (B, L, N_atoms, 3)
-        Best true coordinates for the prediction.
-    mask_out : tensor (B, L, N_atoms)
-        Corresponding atom mask for best true coordinates.
+    xyz_out: tensor (B, L, N_atoms, 3) with best true coordinates for the prediction.
+    mask_out: tensor (B, L, N_atoms) with corresponding atom mask for best true
+        coordinates.
     """
-    if (len(xyz_true.shape)==4):
+    if len(xyz_true.shape) == 4:
         return xyz_true, mask
-    if (xyz_true.shape[1]==1):
-        return xyz_true[:,0,...], mask[:,0,...]
 
-    # choose true protein chain permutation with lowest distance error to prediction
-    dx_pred = torch.norm(xyz_pred[:,None,:sum(Ls_prot),None,1,:]-xyz_pred[:,None,None,:sum(Ls_prot),1,:], dim=-1)
-    dx_true = torch.norm(xyz_true[:,:,:sum(Ls_prot),None,1,:]-xyz_true[:,:,None,:sum(Ls_prot),1,:], dim=-1)
-    ddx = torch.sum( torch.abs(dx_true-dx_pred), dim=(-2,-1))
+    # NOTE: I am pretty sure these next two lines are a mistake. 
+    # if xyz_true.shape[1] == 1:
+    #     return xyz_true[:, 0, ...], mask[:, 0, ...]
 
-    i_perm_min = ddx.argmin()
-    xyz_out = xyz_true[:,i_perm_min,:sum(Ls_prot)]
-    mask_out = mask[:,i_perm_min,:sum(Ls_prot)]
+    batch_size = xyz_pred.shape[0]
+    total_protein_length = sum(Ls_prot)
+    xyz_out = torch.full(
+        xyz_pred.shape, torch.nan, device=xyz_pred.device, dtype=xyz_pred.dtype
+    )
+    mask_out = torch.full(
+        xyz_pred.shape[:3], False, device=xyz_pred.device, dtype=torch.bool
+    )
 
-    # make list of tensors representing possible placements of each ligand chain
-    xtrue_smch = []
-    xpred_smch = []
-    mask_smch = []
-    chain_labels = []
-    i_res = sum(Ls_prot)
-    for L in Ls_sm:
-        x = xyz_true[:,:,i_res:i_res+L] # (B, N_perm_i, L_i, N_atoms, 3)
-        xp = xyz_pred[:,i_res:i_res+L] # (B, L_i, N_atoms, 3)
-        m = mask[:,:,i_res:i_res+L] # (B, N_perm_i, L_i, N_atoms)
+    # Step 1: choose true protein chain permutation
+    # with lowest distance error to prediction via CA-CA distances.
+    # This assumes that all possible protein pairs are enumerated 
+    # in all possible combinations. For example, if we have three 
+    # identical chains A1, A2 and A3 and another chain B,
+    # this assumes that the tensor enumerate chains like so:
+    # [A1, A2, A3, B]
+    # [A1, A3, A2, B]
+    # [A2, A1, A3, B]
+    # [A2, A3, A1, B]
+    # [A3, A1, A2, B]
+    # [A3, A2, A1, B]
+    pred_ca_ca_distances = torch.norm(
+        xyz_pred[:, None, :total_protein_length, None, 1, :]
+        - xyz_pred[:, None, None, :total_protein_length, 1, :],
+        dim=-1,
+    )
+    true_ca_ca_distances = torch.norm(
+        xyz_true[:, :, :total_protein_length, None, 1, :]
+        - xyz_true[:, :, None, :total_protein_length, 1, :],
+        dim=-1,
+    )
+    pred_true_ca_ca_dist_diff = torch.sum(
+        torch.abs(true_ca_ca_distances - pred_ca_ca_distances), dim=(-2, -1)
+    )
+    pred_true_ca_ca_dist_diff = torch.nan_to_num(
+        pred_true_ca_ca_dist_diff, nan=torch.inf
+    )
 
-        # remove unoccupied permutation variants but keep dimension
-        B, N, L, A, Y = x.shape
-        valid_permutations = m.any(dim=-1).any(dim=-1)
-        x = x[valid_permutations].view(B,-1,L,A,Y)
-        m = m[valid_permutations].view(B,-1,L,A)
+    best_protein_perm_index_per_batch = torch.argmin(pred_true_ca_ca_dist_diff, axis=-1)
 
-        xtrue_smch.append(x)
-        xpred_smch.append(xp)
-        mask_smch.append(m)
-        chain_labels.append(ch_label[0,i_res]) # assumes batch = 1
-        i_res += L
+    best_protein_coords = xyz_true[
+        torch.arange(batch_size),
+        best_protein_perm_index_per_batch,
+        :total_protein_length,
+    ]
+    matching_protein_mask = mask[
+        torch.arange(batch_size),
+        best_protein_perm_index_per_batch,
+        :total_protein_length,
+    ]
+    xyz_out[:, :total_protein_length] = best_protein_coords
+    mask_out[:, :total_protein_length] = matching_protein_mask
 
-    # greedily assign ligand chains by lowest C-a distance error to protein chains
-    xpred_protca = xyz_pred[:,:sum(Ls_prot),1]
-    xtrue_protca = xyz_out[:,:,1]
+    # Step 2: match ligands greedily to protein chains.
+    # Each of the following dictionaries takes in a ligand 
+    # "label", e.g. chain label from ch_label, and maps it to
+    # all of the possible coordinates that belong to that label.
+    # ligand_offsets refers to the length offset of each coordinate
+    # in the original xyz tensor, while symmetry offsets
+    # refers to the permutation index of the coordinate in the original tensor.
+    label_to_ligand_coordinates = {} # unrolled coordinates for each unique ligand label
+    label_to_ligand_offsets = {} # indexing for to get coords for this chosen sm in length dimension
+    label_to_symmetry_offsets = {} # indexing for to get coords for this chosen sm in symm dimension
+    label_to_position_index = {} # holds information on alternative automorphs for same ligand
 
-    while len(chain_labels)>0:
-        # find all possible placements of 1st unassigned chain,
-        # i.e. indices of all its possible coordinate tensors
-        query_chain = chain_labels[0]
-        idx = torch.where(torch.stack(chain_labels)==query_chain)[0]
+    running_offset = total_protein_length
+    # This first for loop groups ligand coordinates by 
+    # "chain" label, e.g. groups by identical ligands. It assumes
+    # that identical ligands are of the same length.
+    for position_index, ligand_length in enumerate(Ls_sm):
+        # Note: this functionality assumes a batch size of 1.
+        ligand_label = ch_label[0, running_offset].item()
+        ligand_offsets = [running_offset, running_offset + ligand_length]
+        ligand_coordinates = xyz_true[:, :, ligand_offsets[0] : ligand_offsets[1]]
+        ligand_mask = mask[:, :, ligand_offsets[0] : ligand_offsets[1]]
+        # any across coordinates (x, y, z) and length
+        ligand_mask_any_atoms = ligand_mask[:, :, :, 1].any(dim=-1) # B, NSymm
+        ligand_coordinates_valid = ligand_coordinates[ligand_mask_any_atoms][None] # assumes B=1
+        
+        #NOTE: assumes that the first N dimensions are real coordinates and the rest are buffer 
+        num_valid_ligand_perms = torch.sum(ligand_mask_any_atoms) 
+        symmetry_offsets = torch.arange(
+            num_valid_ligand_perms, device=ligand_coordinates_valid.device
+        ) 
+        ligand_offsets_tensor = (
+            torch.tensor(ligand_offsets, device=ligand_coordinates_valid.device).reshape(1, 2).repeat(num_valid_ligand_perms, 1)
+        )
+        position_index_tensor = torch.full(
+            (num_valid_ligand_perms,),
+            position_index,
+            device=ligand_coordinates_valid.device,
+        ) 
+        if ligand_label in label_to_ligand_coordinates:
+            label_to_ligand_coordinates[ligand_label].append(ligand_coordinates_valid)
+            label_to_ligand_offsets[ligand_label].append(ligand_offsets_tensor)
+            label_to_symmetry_offsets[ligand_label].append(symmetry_offsets)
+            label_to_position_index[ligand_label].append(position_index_tensor)
+        else:
+            label_to_ligand_coordinates[ligand_label] = [ligand_coordinates_valid]
+            label_to_ligand_offsets[ligand_label] = [ligand_offsets_tensor]
+            label_to_symmetry_offsets[ligand_label] = [symmetry_offsets]
+            label_to_position_index[ligand_label] = [position_index_tensor]
 
-        # compute distance error (prot/lig & lig/lig) for all possible placements of this chain
-        i_perm_min_s = []
-        ddx_min_s = []
-        for i in idx:
-            xtrue_smca = xtrue_smch[i][:,:,:,1]
-            dx_true = torch.cat([
-                torch.cdist(xtrue_protca, xtrue_smca, compute_mode='donot_use_mm_for_euclid_dist'),
-                torch.cdist(xtrue_smca, xtrue_smca, compute_mode='donot_use_mm_for_euclid_dist')
-            ], dim=2) # (B, N_perm, L_prot+L_sm_ch, L_sm_ch)
+        running_offset += ligand_length
 
-            xpred_smca = xpred_smch[i][:,:,:,1]
-            dx_pred = torch.cat([
-                torch.cdist(xpred_protca, xpred_smca, compute_mode='donot_use_mm_for_euclid_dist'),
-                torch.cdist(xpred_smca, xpred_smca, compute_mode='donot_use_mm_for_euclid_dist')
-            ], dim=1) # (B, L_prot+L_sm_ch, L_sm_ch)
+    # This second for loop just stacks the accumulated tensors from the last
+    # for loop into a single tensor
+    for ligand_label in torch.unique(ch_label[0, total_protein_length:]):
+        ligand_label = ligand_label.item()
+        label_to_ligand_coordinates[ligand_label] = torch.cat(
+            label_to_ligand_coordinates[ligand_label], dim=1
+        )
+        label_to_ligand_offsets[ligand_label] = torch.cat(
+            label_to_ligand_offsets[ligand_label], dim=0
+        )
+        label_to_symmetry_offsets[ligand_label] = torch.cat(
+            label_to_symmetry_offsets[ligand_label], dim=0
+        )
+        label_to_position_index[ligand_label] = torch.cat(
+            label_to_position_index[ligand_label], dim=0
+        )
 
-            ddx = torch.sum(torch.abs(dx_true-dx_pred), dim=(-2,-1)) # (B, N_perm)
-            i_perm_min_s.append(ddx.argmin())
-            ddx_min_s.append(ddx.min())
+    # This final for loop does the bulk of the computation:
+    # for each ligand, it computes the ca-prot-lig distance
+    # error between that ligands predicted coordinates
+    # and all possible positions of the ligand as gathered
+    # in the previous for loop. It picks the best possible position
+    # for that ligand, and then removes that ligand position and
+    # all of its associated isomorphs (but not other identical ligand positions)
+    # from the batch of possible positions.
+    xyz_true_prot_ca = xyz_out[:, :total_protein_length, 1]
+    xyz_pred_prot_ca = xyz_pred[:, :total_protein_length, 1]
+    running_offset = total_protein_length
+    for ligand_length in Ls_sm:
+        ligand_label = ch_label[0, running_offset].item()
+        xyz_pred_query_lig_ca = xyz_pred[
+            :, running_offset : running_offset + ligand_length, 1
+        ]
 
-        i_min = torch.stack(ddx_min_s).argmin() # index of best chain placement (in current subset)
-        i_ch_min = idx[i_min] # index of best chain placement (in full list)
-        i_perm_min = i_perm_min_s[i_min] # index of best atom permutation at best chain placement
+        xyz_pred_prot_and_select_lig_ca = torch.cat(
+            [xyz_pred_prot_ca, xyz_pred_query_lig_ca], dim=1
+        ) # (B, L_prot + L_query_lig, 3)
+        pred_prot_lig_ca_distance = torch.cdist(
+            xyz_pred_prot_and_select_lig_ca,
+            xyz_pred_query_lig_ca,
+            compute_mode="donot_use_mm_for_euclid_dist",
+        ) # (B, L_prot+ L_query_lig, L_query_lig)
 
-        # add best chain assignment to output tensors
-        xyz_out = torch.cat([xyz_out, xtrue_smch[i_ch_min][:,i_perm_min]], dim=1)
-        mask_out = torch.cat([mask_out, mask_smch[i_ch_min][:,i_perm_min]], dim=1)
+        xyz_true_lig_ca = label_to_ligand_coordinates[ligand_label][:, :, :, 1]
+        xyz_true_prot_and_select_lig_ca = torch.cat(
+            [
+                xyz_true_prot_ca[None].repeat((1, xyz_true_lig_ca.shape[1], 1, 1)),
+                xyz_true_lig_ca,
+            ],
+            dim=2,
+        ) # (B, Nsymm*Nrepeats, L_prot+ L_query_lig, 3)
+        all_true_prot_lig_ca_distance = torch.cdist(
+            xyz_true_prot_and_select_lig_ca,
+            xyz_true_lig_ca,
+            compute_mode="donot_use_mm_for_euclid_dist",
+        ) # (B, Nsymm*Nrepeats, L_prot+ L_query_lig, L_query_lig)
 
-        # remove this chain from list of unassigned chains
-        xtrue_smch = xtrue_smch[:i_ch_min]+xtrue_smch[i_ch_min+1:]
-        xpred_smch = xpred_smch[:i_ch_min]+xpred_smch[i_ch_min+1:]
-        mask_smch = mask_smch[:i_ch_min]+mask_smch[i_ch_min+1:]
-        chain_labels = chain_labels[:i_ch_min]+chain_labels[i_ch_min+1:]
+        pred_true_lig_prot_dist_diff = torch.sum(
+            torch.abs(pred_prot_lig_ca_distance - all_true_prot_lig_ca_distance),
+            dim=(-2, -1),
+        )
+        pred_true_lig_prot_dist_diff = torch.nan_to_num(
+            pred_true_lig_prot_dist_diff, nan=torch.inf
+        )
+
+        best_ligand_dist_index = torch.argmin(pred_true_lig_prot_dist_diff)
+        true_selected_lig_offsets = label_to_ligand_offsets[ligand_label][
+            best_ligand_dist_index
+        ]
+        true_selected_symmetry_offset = label_to_symmetry_offsets[ligand_label][
+            best_ligand_dist_index
+        ]
+
+        xyz_out[:, running_offset : running_offset + ligand_length] = xyz_true[
+            :,
+            true_selected_symmetry_offset,
+            true_selected_lig_offsets[0] : true_selected_lig_offsets[1],
+        ]
+        mask_out[:, running_offset : running_offset + ligand_length] = mask[
+            :,
+            true_selected_symmetry_offset,
+            true_selected_lig_offsets[0] : true_selected_lig_offsets[1],
+        ]
+
+        position_index_tensor = label_to_position_index[ligand_label]
+        chosen_position = position_index_tensor[best_ligand_dist_index]
+        remove_chosen_mask = position_index_tensor != chosen_position
+
+        label_to_ligand_coordinates[ligand_label] = label_to_ligand_coordinates[
+            ligand_label
+        ][:, remove_chosen_mask]
+        label_to_ligand_offsets[ligand_label] = label_to_ligand_offsets[ligand_label][
+            remove_chosen_mask
+        ]
+        label_to_symmetry_offsets[ligand_label] = label_to_symmetry_offsets[
+            ligand_label
+        ][remove_chosen_mask]
+        label_to_position_index[ligand_label] = label_to_position_index[ligand_label][
+            remove_chosen_mask
+        ]
+
+        running_offset += ligand_length
 
     return xyz_out, mask_out
 
@@ -505,22 +633,22 @@ def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None):
 
     # Computation of the covariance matrix
     C = torch.matmul(pred_allatom_origin.permute(0,2,1), true_allatom_origin)
-
+    
     # Compute optimal rotation matrix using SVD
     V, S, W = torch.svd(C)
-
+    
     # get sign to ensure right-handedness
     d = torch.ones([B,3,3], device=pred.device)
     d[:,:,-1] = torch.sign(torch.det(V)*torch.det(W)).unsqueeze(1)
-
+    
     # Rotation matrix U
     U = torch.matmul(d*V, W.permute(0,2,1)) # (IB, 3, 3)
-
+    
     pred_rms = pred[rmsd_mask][None] - centroid(pred_allatom)
     true_rms = true[rmsd_mask][None] - centroid(true_allatom)
     # Rotate pred
     rP = torch.matmul(pred_rms, U) # (IB, L*3, 3)
-
+    
     # get RMS
     rms = rmsd(rP, true_rms).reshape(B)
     return rms
@@ -815,19 +943,19 @@ def calc_clash(xs, mask):
     clash = torch.sum( torch.clamp(DISTCUT-dij[allmask],0.0) ) / torch.sum(mask)
     return clash
 
-# Rosetta-like version of LJ (fa_atr+fa_rep)
-#   lj_lin is switch from linear to 12-6.  Smaller values more sharply penalize clashes
-def calc_lj(
-    seq, xs, aamask, bond_feats, ljparams, ljcorr, num_bonds,  
-    lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
-    lj_maxrad=-1.0, eps=1e-8
-):
-    def ljV(dist, sigma, epsilon, lj_lin, lj_maxrad):
-        N = dist.shape[0]
+
+#fd more efficient LJ loss
+class LJLoss(torch.autograd.Function):
+    @staticmethod
+    def ljVdV(deltas, sigma, epsilon, lj_lin, eps):
+        # deltas - (N,natompair,3)
+        N = deltas.shape[0]
+
+        dist = torch.sqrt( torch.sum ( torch.square( deltas ), dim=-1 ) + eps )
         linpart = dist<lj_lin*sigma[None]
         deff = dist.clone()
         deff[linpart] = lj_lin*sigma.repeat(N,1)[linpart]
-        sd = sigma[None] / deff
+        sd = sigma / deff
         sd2 = sd*sd
         sd6 = sd2 * sd2 * sd2
         sd12 = sd6 * sd6
@@ -835,75 +963,153 @@ def calc_lj(
         ljE[linpart] += epsilon.repeat(N,1)[linpart] * (
             -12 * sd12[linpart]/deff[linpart] + 12 * sd6[linpart]/deff[linpart]
         ) * (dist[linpart]-deff[linpart])
-        if (lj_maxrad>0):
-            sdmax = sigma / lj_maxrad
-            sd2 = sd*sd
-            sd6 = sd2 * sd2 * sd2
-            sd12 = sd6 * sd6
-            ljE = ljE - epsilon * (sd12 - 2 * sd6)
-        return ljE
 
-    N, L = xs.shape[:2]
+        # works for linpart too
+        dljEdd_over_r = epsilon * (-12 * sd12/deff + 12 * sd6/deff) / (dist)
 
-    # mask keeps running total of what to compute
-    mask = aamask[seq][...,None,None]*aamask[seq][None,None,...]
-    idxes1r = torch.tril_indices(L,L,-1)
-    mask[idxes1r[0],:,idxes1r[1],:] = False
-    idxes2r = torch.arange(L)
-    idxes2a = torch.tril_indices(NTOTAL,NTOTAL,0)
-    mask[idxes2r[:,None],idxes2a[0:1],idxes2r[:,None],idxes2a[1:2]] = False
+        return ljE.sum(dim=-1), dljEdd_over_r
 
-    # "countpair" can be enforced by making this a weight
-    mask[idxes2r,:,idxes2r,:] *= num_bonds[seq,:,:] >= 4 #intra-res
-    mask[idxes2r[:-1],:,idxes2r[1:],:] *= (
-        num_bonds[seq[:-1],:,2:3] + num_bonds[seq[1:],0:1,:] + 1 >= 4 #inter-res
-    )
+    @staticmethod
+    def forward(
+        ctx, xs, seq, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds, 
+        lj_lin=0.75, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
+        eps=1e-8, training=True
+    ):
+        N, L, A = xs.shape[:3]
+        assert (N==1) # see comment below
 
-    ##fd this might lead to perf issues... can this be computed in the data loader?!?
-    atom_bonds = (bond_feats > 0)*(bond_feats<5)
-    dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds[0].long().detach().cpu().numpy(), directed=False)
-    dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0), device=mask.device) # protein portion is inf and you don't want to mask it out
-    mask[:,1,:,1] *= dist_matrix >=4
+        ds_res = torch.sqrt( torch.sum ( torch.square( 
+            xs.detach()[:,:,None,1,:]-xs.detach()[:,None,:,1,:]), dim=-1 ))
+        rs = torch.triu_indices(L,L,0, device=xs.device)
+        ri,rj = rs[0],rs[1]
 
-    # mask out bonds next to atomized regions of proteins 
-    protein_atom_bonds_mask = bond_feats != 6 # protein-atom bond
-    # mask out all atoms until Cbeta for residues bonded to an atom (this approximates to 4 bonds away)
-    mask[:,:6, :, :6] *= protein_atom_bonds_mask[0,:, None, :, None].expand(-1, 6, -1, 6)
+        # batch during inference for huge systems
+        BATCHSIZE = len(ri)
+        if (not training):
+            BATCHSIZE = 65536/N
 
-    # mask out atom pairs from too-distant residues (C-alpha dist > 20A)
-    ca_dist = torch.cdist(xs[0,:,1], xs[0,:,1]) # assumes batch size 1
-    mask *= ca_dist[:,None,:,None]<20
+        ljval = 0
+        dljEdx = torch.zeros_like(xs, dtype=torch.float)
 
-    si,ai,sj,aj = mask.nonzero(as_tuple=True)
+        for i_batch in range((len(ri)-1)//BATCHSIZE + 1):
+            idx = torch.arange(
+                i_batch*BATCHSIZE, 
+                min( (i_batch+1)*BATCHSIZE, len(ri)),
+                device=xs.device
+            )
+            rii,rjj = ri[idx],rj[idx] # residue pairs we consider
 
-    ds = torch.sqrt( torch.sum ( torch.square( xs[:,si,ai]-xs[:,sj,aj] ), dim=-1 ) + eps )
-    
-    # hbond correction
-    use_hb_dis = (
-        ljcorr[seq[si],ai,0]*ljcorr[seq[sj],aj,1] 
-        + ljcorr[seq[si],ai,1]*ljcorr[seq[sj],aj,0] )
-    use_ohdon_dis = ( # OH are both donors & acceptors
-        ljcorr[seq[si],ai,0]*ljcorr[seq[si],ai,1]*ljcorr[seq[sj],aj,0] 
-        +ljcorr[seq[si],ai,0]*ljcorr[seq[sj],aj,0]*ljcorr[seq[sj],aj,1] 
-    )
-    use_hb_hdis = (
-        ljcorr[seq[si],ai,2]*ljcorr[seq[sj],aj,1] 
-        +ljcorr[seq[si],ai,1]*ljcorr[seq[sj],aj,2] 
-    )
+            ridx,ai,aj = (
+                aamask[seq[rii]][:,:,None]*aamask[seq[rjj]][:,None,:]
+            ).nonzero(as_tuple=True)
 
-    # disulfide correction
-    potential_disulf = ljcorr[seq[si],ai,3]*ljcorr[seq[sj],aj,3] 
+            deltas = xs[:,rii,:,None,:]-xs[:,rjj,None,:,:] # N,BATCHSIZE,Natm,Natm,3
+            seqi,seqj = seq[rii[ridx]], seq[rjj[ridx]]
 
-    ljrs = ljparams[seq[si],ai,0] + ljparams[seq[sj],aj,0]
-    ljrs[use_hb_dis] = lj_hb_dis
-    ljrs[use_ohdon_dis] = lj_OHdon_dis
-    ljrs[use_hb_hdis] = lj_hbond_hdis
+            mask = torch.ones_like(ridx, dtype=torch.bool) # are atoms defined?
 
-    ljss = torch.sqrt( ljparams[seq[si],ai,1] * ljparams[seq[sj],aj,1] + eps )
-    ljss [potential_disulf] = 0.0
+            # mask out atom pairs from too-distant residues (C-alpha dist > 24A)
+            ca_dist = torch.linalg.norm(deltas[:,:,1,1],dim=-1)
+            mask *= (ca_dist[:,ridx]<24).any(dim=0)  # will work for batch>1 but very inefficient
 
-    ljval = ljV(ds,ljrs,ljss,lj_lin,lj_maxrad)
-    return (torch.sum( ljval, dim=-1 )/torch.sum(aamask[seq]))
+            intrares = (rii[ridx]==rjj[ridx])
+            mask[intrares*(ai<aj)] = False  # upper tri (atoms)
+
+            ## count-pair
+            # a) intra-protein
+            mask[intrares] *= num_bonds[seqi[intrares],ai[intrares],aj[intrares]]>=4
+            pepbondres = ri[ridx]+1==rj[ridx]
+            mask[pepbondres] *= (
+                num_bonds[seqi[pepbondres],ai[pepbondres],2]
+                + num_bonds[seqj[pepbondres],0,aj[pepbondres]]
+                + 1) >=4
+
+            # b) intra-ligand
+            atommask = (ai==1)*(aj==1)
+            resmask = (dist_matrix[0,rii,rjj] >= 4) # * will only work for batch=1
+            mask[atommask] *= resmask[ ridx[atommask] ]
+
+            # c) protein/ligand
+            ##fd NOTE1: changed 6->5 in masking (atom 5 is CG which should always be 4+ bonds away from connected atom)
+            ##fd NOTE2: this does NOT work correctly for nucleic acids
+            ##fd     for NAs atoms 0-4 are masked, but also 5,7,8 and 9 should be masked!
+            bbatommask = (ai<5)*(aj<5)
+            resmask = (bond_feats[0,rii,rjj] != 6) # * will only work for batch=1
+            mask[bbatommask] *= resmask[ ridx[bbatommask] ]
+
+            # apply mask.  only interactions to be scored remain
+            ai,aj,seqi,seqj,ridx = ai[mask],aj[mask],seqi[mask],seqj[mask],ridx[mask]
+            deltas = deltas[:,ridx,ai,aj]
+
+            # hbond correction
+            use_hb_dis = (
+                ljcorr[seqi,ai,0]*ljcorr[seqj,aj,1] 
+                + ljcorr[seqi,ai,1]*ljcorr[seqj,aj,0] ).nonzero()
+            use_ohdon_dis = ( # OH are both donors & acceptors
+                ljcorr[seqi,ai,0]*ljcorr[seqi,ai,1]*ljcorr[seqj,aj,0] 
+                +ljcorr[seqi,ai,0]*ljcorr[seqj,aj,0]*ljcorr[seqj,aj,1] 
+            ).nonzero()
+            use_hb_hdis = (
+                ljcorr[seqi,ai,2]*ljcorr[seqj,aj,1] 
+                +ljcorr[seqi,ai,1]*ljcorr[seqj,aj,2] 
+            ).nonzero()
+
+            # disulfide correction
+            potential_disulf = (ljcorr[seqi,ai,3]*ljcorr[seqj,aj,3] ).nonzero()
+
+            ljrs = ljparams[seqi,ai,0] + ljparams[seqj,aj,0]
+            ljrs[use_hb_dis] = lj_hb_dis
+            ljrs[use_ohdon_dis] = lj_OHdon_dis
+            ljrs[use_hb_hdis] = lj_hbond_hdis
+
+            ljss = torch.sqrt( ljparams[seqi,ai,1] * ljparams[seqj,aj,1] + eps )
+            ljss [potential_disulf] = 0.0
+
+            natoms = torch.sum(aamask[seq])
+            ljval_i,dljEdd_i = LJLoss.ljVdV(deltas,ljrs,ljss,lj_lin,eps)
+
+            ljval += ljval_i / natoms
+
+            # sum per-atom-pair grads into per-atom grads
+            # note this is stochastic op on GPU
+            idxI,idxJ = rii[ridx]*A + ai, rjj[ridx]*A + aj
+
+            dljEdx.view(N,-1,3).index_add_(1, idxI, dljEdd_i[...,None]*deltas, alpha=1.0/natoms)
+            dljEdx.view(N,-1,3).index_add_(1, idxJ, dljEdd_i[...,None]*deltas, alpha=-1.0/natoms)
+
+        ctx.save_for_backward(dljEdx)
+
+        return ljval
+
+
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        """
+        In the backward pass we receive a Tensor containing the gradient of the loss
+        with respect to the output, and we need to compute the gradient of the loss
+        with respect to the input.
+        """
+        dljEdx, = ctx.saved_tensors
+        return (
+            grad_output * dljEdx, 
+            None, None, None, None, None, None, None, None, None, None, None, None, None
+        )
+
+# Rosetta-like version of LJ (fa_atr+fa_rep)
+#   lj_lin is switch from linear to 12-6.  Smaller values more sharply penalize clashes
+def calc_lj(
+    seq, xs, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds,  
+    lj_lin=0.75, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
+    lj_maxrad=-1.0, eps=1e-8,
+    training=True
+):
+    lj = LJLoss.apply
+    ljval = lj(
+        xs, seq, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds, 
+        lj_lin, lj_hb_dis, lj_OHdon_dis, lj_hbond_hdis, eps, training)
+
+    return ljval
 
 
 def calc_hb(
@@ -1040,7 +1246,8 @@ def calc_cart_bonded_grads(seq, pred, idx, len_param, ang_param, tor_param, eps=
 @torch.enable_grad()
 def calc_ljallatom_grads(
     seq, xyzaa, 
-    aamask, bond_feats, ljparams, ljcorr, num_bonds, 
+    aamask, bond_feats, dist_matrix, 
+    ljparams, ljcorr, num_bonds, 
     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
     lj_maxrad=-1.0, eps=1e-8
 ):
@@ -1050,6 +1257,7 @@ def calc_ljallatom_grads(
         xyzaa[...,:3], 
         aamask,
         bond_feats,
+        dist_matrix,
         ljparams, 
         ljcorr, 
         num_bonds, 
@@ -1064,7 +1272,7 @@ def calc_ljallatom_grads(
 
 @torch.enable_grad()
 def calc_lj_grads(
-    seq, xyz, alpha, toaa, bond_feats, 
+    seq, xyz, alpha, toaa, bond_feats, dist_matrix, 
     aamask, ljparams, ljcorr, num_bonds, 
     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
     lj_maxrad=-1.0, eps=1e-8
@@ -1077,6 +1285,7 @@ def calc_lj_grads(
         xyzaa[...,:3], 
         aamask,
         bond_feats,
+        dist_matrix,
         ljparams, 
         ljcorr, 
         num_bonds,
@@ -1294,6 +1503,8 @@ def compute_binder_nonbinder_metrics(
     Returns:
         Dict[str, float]: A dictionary of metrics
     """
+
+    #fd  Not called from training workflow.  Not clear add'l package needed to compute these.
     from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 
     binder_nonbinder_df = loss_df[loss_df["task"].isin(binder_nonbinder_tasks)]

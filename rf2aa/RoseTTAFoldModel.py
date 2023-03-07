@@ -160,6 +160,7 @@ class RoseTTAFoldModule(nn.Module):
         sctors,
         idx,
         bond_feats,
+        dist_matrix,
         chirals, 
         atom_frames=None, t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
         msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None, is_motif=None,
@@ -204,6 +205,7 @@ class RoseTTAFoldModule(nn.Module):
             assert_shape(sctors, (1, L, 20, 2))
             assert_shape(idx, (1, L))
             assert_shape(bond_feats, (1, L, L))
+            assert_shape(dist_matrix, (1, L, L))
             # assert_shape(chirals,     (1, 0))
             # assert_shape(atom_frames, (1, 4, L)) # This is set to 4 for the recycle count, but that can't be right
             assert_shape(atom_frames, (1, A, 3, 2))  # What is 4?
@@ -221,6 +223,7 @@ class RoseTTAFoldModule(nn.Module):
             assert_that(sctors.device).is_equal_to(device)
             assert_that(idx.device).is_equal_to(device)
             assert_that(bond_feats.device).is_equal_to(device)
+            assert_that(dist_matrix.device).is_equal_to(device)
             assert_that(atom_frames.device).is_equal_to(device)
             assert_that(t1d.device).is_equal_to(device)
             assert_that(t2d.device).is_equal_to(device)
@@ -350,7 +353,7 @@ class RoseTTAFoldModule(nn.Module):
         msa, pair, xyz, alpha_s, xyz_allatom, state, symmsub = self.simulator(
             seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx,
             symmids, symmsub, symmRs, symmmeta,
-            bond_feats, same_chain, chirals, is_motif, atom_frames, 
+            bond_feats, dist_matrix, same_chain, chirals, is_motif, atom_frames, 
             use_checkpoint=use_checkpoint, use_atom_frames=self.use_atom_frames, 
             p2p_crop=p2p_crop, topk_crop=topk_crop
         )

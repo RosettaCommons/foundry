@@ -37,10 +37,11 @@ def mem_report():
             element_type = type(tensor).__name__
             size = tuple(tensor.size())
 
-            print('%s\t\t%s\t\t%.2f' % (
-                element_type,
-                size,
-                mem) )
+            if (mem > 256.0):
+                print('%s\t\t%s\t\t%.2f' % (
+                    element_type,
+                    size,
+                    mem) )
         print('-'*LEN)
         print('Total Tensors: %d \tUsed Memory Space: %.2f MBytes' % (total_numel, total_mem) )
         print('-'*LEN)
@@ -51,7 +52,7 @@ def mem_report():
     print('%s\t%s\t\t\t%s' %('Element type', 'Size', 'Used MEM(MBytes)') )
     tensors = [obj for obj in objects if torch.is_tensor(obj)]
     cuda_tensors = [t for t in tensors if t.is_cuda]
-    host_tensors = [t for t in tensors if not t.is_cuda]
+    #host_tensors = [t for t in tensors if not t.is_cuda]
     _mem_report(cuda_tensors, 'GPU')
-    _mem_report(host_tensors, 'CPU')
+    #_mem_report(host_tensors, 'CPU')
     print('='*LEN)

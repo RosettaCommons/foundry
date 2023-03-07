@@ -366,6 +366,13 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
     #ic(atoms.shape, seq.shape, bond_feats.shape)
     #ic(chain_Ls)
 
+    def _get_atom_type(atom_name):
+        atype = ''
+        if atom_name[0].isalpha():
+            atype += atom_name[0]
+        atype += atom_name[1]
+        return atype
+
     # if needed, correct mistake in atomic number assignment in RF2-allatom (fold&dock 3 & earlier)
     atom_names_ = [
         "F",  "Cl", "Br", "I",  "O",  "S",  "Se", "Te", "N",  "P",  "As", "Sb",
@@ -415,13 +422,13 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
 
             # hack to make sure H's are output properly (they are not in RFAA alphabet)
             if atom_names is not None:
-                atom_type = ''.join([c for c in atom_names[i_res_lig] if c.isalpha()])
+                atom_type = _get_atom_type(atom_names[i_res_lig])
                 atom_name = atom_names[i_res_lig]
             else:
                 atom_type = atomtype_map[num2aa[s]]
                 atom_name = atom_type
 
-            f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f           %s\n"%(
+            f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f          %+2s\n"%(
                     "HETATM", ctr, atom_name, lig_name,
                     ch, idx_pdb.max()+10, atomscpu[i_res,1,0], atomscpu[i_res,1,1], atomscpu[i_res,1,2],
                     1.0, Bfacts[i_res],  atom_type) )

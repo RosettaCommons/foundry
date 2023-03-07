@@ -459,13 +459,13 @@ class XYZConverter(nn.Module):
     def __init__(self):
         super(XYZConverter, self).__init__()
         
-        self.register_buffer("torsion_indices", torsion_indices)
-        self.register_buffer("torsion_can_flip", torsion_can_flip)
-        self.register_buffer("ref_angles", reference_angles)
-        self.register_buffer("base_indices", base_indices)
-        self.register_buffer("RTs_in_base_frame", RTs_by_torsion)
-        self.register_buffer("xyzs_in_base_frame", xyzs_in_base_frame)
-    
+        self.register_buffer("torsion_indices", torsion_indices, persistent=False)
+        self.register_buffer("torsion_can_flip", torsion_can_flip, persistent=False)
+        self.register_buffer("ref_angles", reference_angles, persistent=False)
+        self.register_buffer("base_indices", base_indices, persistent=False)
+        self.register_buffer("RTs_in_base_frame", RTs_by_torsion, persistent=False)
+        self.register_buffer("xyzs_in_base_frame", xyzs_in_base_frame, persistent=False)
+
     def compute_all_atom(self, seq, xyz, alphas):
         B,L = xyz.shape[:2]
 
