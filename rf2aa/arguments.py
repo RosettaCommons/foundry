@@ -511,12 +511,7 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
             help="Weight on pde loss [0.05]")      
     loss_group.add_argument('-lj_lin', type=float, default=0.75,
             help="linear inflection for lj [0.75]")
-    loss_group.add_argument(
-        "-binder_loss_label_smoothing",
-        type=float,
-        default=0.05,
-        help="A floating point value between 0.0 and 0.5. Labels for negative examples will be 0.0 + smoothing and for positive 1.0 - smoothing.",
-    )
+    
     # parse arguments
     args = parser.parse_args(args=input_args)
 
