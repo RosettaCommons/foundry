@@ -3021,53 +3021,6 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
     return xyz_sm, mask_sm, msa_sm[None], bond_feats_sm, frames, chirals, Ls_sm, \
            ch_label_sm, akeys_sm, resnames
 
-def featurize_ligand_from_smiles(smiles_string: str):
-    """featurize_ligand_from_smiles Featurizes a smiles string
-    representing a ligand, in a way that can be input into RF2 All Atom.
-
-    Args:
-        smiles_string (str): A Smiles String representing a small molecule.
-
-    Returns:
-        _type_: Same outputs as _load_sm_from_item, as if the ligand was loaded
-        from the RF database.
-    """
-    mol = pybel.readstring(string=smiles_string, format="smi")
-    mol.make3D()
-    mol.removeh()
-    small_molecule_length = len(mol.atoms)
-    
-    xyz_sm = torch.stack([torch.tensor(atom.coords) for atom in mol.atoms])
-    xyz_sm = xyz_sm.unsqueeze(0)
-    mask_sm = torch.full(size=(1, small_molecule_length), fill_value=True)
-
-    try:
-        # Try block added because sometimes
-        # the generation of structures via pybel
-        # is not wonderful.
-        chirals = get_chirals(mol.OBMol, xyz_sm)
-    except Exception:
-        chirals = torch.Tensor()
-
-    bond_feats_sm = get_bond_feats(mol.OBMol)
-
-    msa_sm = torch.full((1, small_molecule_length,), torch.nan)
-    for index, atom in enumerate(mol.atoms):
-        msa_sm[0, index] = aa2num[atomnum2atomtype[atom.atomicnum]]
-
-    mol_graph = get_nxgraph(mol.OBMol)
-    frames = get_atom_frames(msa_sm[0], mol_graph)
-    ch_label_sm = torch.zeros((small_molecule_length), dtype=int)
-    lig_names = [smiles_string]
-
-    # This assumes that your ligand is not a PTM/is not covalently
-    # bonded to the protein. If it is, you will have to re-write this to
-    # format the inputs to correctly indicate where to atomize the protein and
-    # reindex the residues
-    residues_to_atomize = None
-    akeys_sm = None
-    return xyz_sm, mask_sm, msa_sm, [bond_feats_sm], frames, chirals, [small_molecule_length], ch_label_sm, akeys_sm, lig_names, residues_to_atomize
-
 
 def featurize_ligand_from_smiles(smiles_string: str):
     """featurize_ligand_from_smiles Featurizes a smiles string
@@ -3089,7 +3042,7 @@ def featurize_ligand_from_smiles(smiles_string: str):
     xyz_sm = xyz_sm.unsqueeze(0)
     mask_sm = torch.full(size=(1, small_molecule_length), fill_value=True)
 
-    chirals = get_chirals(mol.OBMol, xyz_sm)
+    chirals = get_chirals(mol.OBMol, xyz_sm[0])
     bond_feats_sm = get_bond_feats(mol.OBMol)
 
     msa_sm = torch.full((1, small_molecule_length,), torch.nan)
@@ -3161,9 +3114,11 @@ def _load_sm_from_item(item, params, prot_partners, mod_residues_to_atomize, pre
         
     return xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize
 
+
 def loader_sm_compl_assembly_single(*args, **kwargs): 
     kwargs['num_protein_chains'] = 1
     return loader_sm_compl_assembly(*args, **kwargs)
+
 
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task='sm_compl_asmb', 
     num_protein_chains=None, num_ligand_chains=None, pick_top=True, random_noise=5.0, fixbb=False,
@@ -3202,20 +3157,6 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     if num_protein_chains is not None:
         prot_partners = prot_partners[:min(num_protein_chains, params['MAXPROTCHAINS'])]
 
-    # list of proteins and ligands to featurize
-    all_partners = [(item['LIGAND'], item['LIGXF'], -1, 'nonpoly')] + item["PARTNERS"]
-
-    lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + \
-                   [p for p in item['PARTNERS'] if p[-1]=='nonpoly']
-    lig_partners = lig_partners[:params['MAXLIGCHAINS']]
-    if num_ligand_chains is not None:
-        lig_partners = lig_partners[:min(num_ligand_chains, params['MAXLIGCHAINS'])]
-
-    all_partners = prot_partners + lig_partners
-
-    # update ligand partners to atomize residues that are covalently linked to proteins
-    lig_partners, residues_to_atomize = find_residues_to_atomize_covale(lig_partners, prot_partners, covale) 
-
     # get list of coordinate transforms to recreate this bio-assembly
     i_a = str(item['ASSEMBLY'])
     asmb_xfs = asmb[i_a]
@@ -3239,18 +3180,6 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize = _load_sm_from_item(selected_negative_item, params, prot_partners, mod_residues_to_atomize, num_ligand_chains=num_ligand_chains, as_negative=True)
     else:
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize = _load_sm_from_item(item, params, prot_partners, mod_residues_to_atomize, preloaded_from_gzip=(chains, asmb, covale, modres), num_ligand_chains=num_ligand_chains, as_negative=False)
-    
-    # keep 1st template and random sample of others for params['MAXTPLT'] total
-    #if xyz_t_prot.shape[0] > params['MAXTPLT']:
-    #   sel = np.concatenate([[0], np.random.permutation(xyz_t_prot.shape[0]-1)[:params['MAXTPLT']-1]+1])
-    #    xyz_t_prot = xyz_t_prot[sel]
-    #    mask_t_prot = mask_t_prot[sel]
-    #    f1d_t_prot = f1d_t_prot[sel]
-
-   # if selected_negative_item:
-   #     xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize = _load_sm_from_item(selected_negative_item, params, prot_partners, mod_residues_to_atomize, num_ligand_chains=num_ligand_chains, as_negative=True)
-   # else:
-   #     xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, residues_to_atomize = _load_sm_from_item(item, params, prot_partners, mod_residues_to_atomize, preloaded_from_gzip=(chains, asmb, covale, modres), num_ligand_chains=num_ligand_chains, as_negative=False)
 
     # combine protein & ligand coordinates
     N_symm_prot = xyz_prot.shape[0]
@@ -3344,11 +3273,11 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     
     # crop around query ligand (1st sm chain)
     if L_total > params["CROP"]:
-        if select_farthest_residues:
+        if select_farthest_residues or selected_negative_item is not None or ligand_smiles_str is not None:
             assert(len(Ls_prot)==1 and len(Ls_sm)==1), \
                 'crop_sm_compl() should only be called on examples with 1 protein and 1 ligand chain'
             sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls_prot + Ls_sm, params['CROP'], mask_prot, 
-                                seq_prot, select_farthest_residues=True)
+                                seq_prot, select_farthest_residues=select_farthest_residues)
         else:
             sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
 

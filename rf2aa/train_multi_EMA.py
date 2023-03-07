@@ -156,13 +156,6 @@ class Trainer():
         self.skip_valid = kwargs.get("skip_valid", 1)
         self.start_epoch = kwargs.get("start_epoch", 0)
 
-        self.dataloader_kwargs = dataloader_kwargs
-        self.write_every_n_steps_train = kwargs.get("write_every_n_steps_train", 64)
-        self.write_every_n_steps_valid = kwargs.get("write_every_n_steps_valid", 64)
-        self.debug_mode = kwargs.get("debug_mode", False)
-        self.skip_valid = kwargs.get("skip_valid", 1)
-        self.start_epoch = kwargs.get("start_epoch", 0)
-
         # for all-atom str loss
         #self.ti_dev = torsion_indices
         #self.ti_flip = torsion_can_flip
@@ -1016,7 +1009,7 @@ class Trainer():
                 valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
                 loader_atomize_pdb, valid_dict['atomize_pdb'],
                 self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
-            )
+            ),
         )
 
         valid_headers = dict(
@@ -1076,7 +1069,7 @@ class Trainer():
                     chid2hash, chid2taxid, # used for MSA generation of assemblies
                     self.loader_param,
                     task='sm_compl',
-                    num_protein_chains=1,
+                    num_protein_chains=1, num_ligand_chains=1,
                 ),
                 DatasetSMComplexAssembly(
                     valid_ID_dict['sm_compl_furthest_neg'][:self.dataset_param['n_valid_sm_compl_furthest_neg']],
@@ -1093,7 +1086,7 @@ class Trainer():
                     chid2hash, chid2taxid, # used for MSA generation of assemblies
                     self.loader_param,
                     task='sm_compl',
-                    num_protein_chains=1,
+                    num_protein_chains=1, num_ligand_chains=1,
                 ),
                 DatasetSMComplexAssembly(
                     valid_ID_dict['sm_compl_permuted_neg'][:self.dataset_param['n_valid_sm_compl_permuted_neg']],
@@ -1110,7 +1103,7 @@ class Trainer():
                     chid2hash, chid2taxid, # used for MSA generation of assemblies
                     self.loader_param,
                     task='sm_compl',
-                    num_protein_chains=1,
+                    num_protein_chains=1, num_ligand_chains=1,
                 ),
                 DatasetSMComplexAssembly(
                     valid_ID_dict['sm_compl_docked_neg'][:self.dataset_param['n_valid_sm_compl_docked_neg']],
@@ -1214,6 +1207,7 @@ class Trainer():
         loaded_epoch, best_valid_loss = self.load_model(ddp_model, self.model_name, gpu, suffix="last", 
                                                         resume_train=True, optimizer=optimizer, 
                                                         scheduler=scheduler, scaler=scaler)
+        valid_tot = None
         if loaded_epoch >= self.n_epoch:
             DDP_cleanup()
             return
@@ -1258,7 +1252,7 @@ class Trainer():
             if self.eval: break
 
             if rank == 0: # save model
-                if valid_tot < best_valid_loss:
+                if valid_tot is not None and valid_tot < best_valid_loss:
                     best_valid_loss = valid_tot
                     torch.save({'epoch': epoch,
                                 #'model_state_dict': ddp_model.state_dict(),
@@ -1724,9 +1718,14 @@ class Trainer():
         if self.eval:
             records = []
 
+        if rank == 0 and self.debug_mode:
+            valid_iter = tqdm(valid_loader, desc=header)
+        else:
+            valid_iter = valid_loader
+            
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for inputs in valid_loader:
+            for inputs in valid_iter:
                 (
                     task, item, network_input, xyz_prev, alpha_prev, mask_recycle, 
                     true_crds, mask_crds, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label
@@ -1870,7 +1869,11 @@ class Trainer():
 
     def valid_ppi_cycle(self, ddp_model, valid_pos_loader, valid_neg_loader, rank, gpu, world_size, epoch, rng, header='Protein', verbose=False, print_header=False):
         if len(valid_pos_loader) == 0 or len(valid_neg_loader) == 0:
+            # Note: you need both your positive and negative
+            # validation sets to have examples, otherwise this
+            # function does not make sense!
             return None, None, None, None, None
+        
         valid_tot = 0.0
         valid_loss = None
         valid_acc = None
@@ -1878,10 +1881,15 @@ class Trainer():
         counter = 0
         
         start_time = time.time()
-        
+
+        if rank == 0 and self.debug_mode:
+            valid_pos_iter = tqdm(valid_pos_loader, desc=f"{header} (positives)")
+        else:
+            valid_pos_iter = valid_pos_loader
+
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for inputs in valid_pos_loader:
+            for inputs in valid_pos_iter:
                 (
                     task, item, network_input, xyz_prev, alpha_prev, mask_recycle, 
                     true_crds, mask_crds, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label
@@ -1975,11 +1983,16 @@ class Trainer():
         valid_acc = None
         counter = 0
 
+        if rank == 0 and self.debug_mode:
+            valid_neg_iter = tqdm(valid_neg_loader, desc=f"{header} (negatives)")
+        else:
+            valid_neg_iter = valid_neg_loader
+        
         start_time = time.time()
 
         with torch.no_grad(): # no need to calculate gradient
             ddp_model.eval() # change it to eval mode
-            for inputs in valid_neg_loader: 
+            for inputs in valid_neg_iter: 
                 (
                     task, item, network_input, xyz_prev, alpha_prev, mask_recycle, 
                     true_crds, mask_crds, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label

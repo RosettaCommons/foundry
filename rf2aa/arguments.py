@@ -493,6 +493,8 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
             help="Weight on predicted bond loss [0.0]")
     loss_group.add_argument('-w_bind', type=float, default=0.0,
             help="Weight on bind/no-bind predictions [0.0]")
+    loss_group.add_argument("-binder_loss_label_smoothing", type=float, default=0.0,
+            help="Label smoothing for binder loss. Must be in range [0.0, 0.5)")
     loss_group.add_argument('-w_clash', type=float, default=0.0,
             help="Weight on clash loss [0.0]")
     loss_group.add_argument('-w_atom_bond', type=float, default=0.0,
@@ -555,7 +557,7 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
 
     loss_param = {}
     for param in ['w_dist', 'w_str', 'w_inter_fape', 'w_lig_fape', 'w_aa', 'w_lddt', 'w_bond', 
-                  'w_bind', 'w_clash', 'w_hb', 'lj_lin', 'w_atom_bond', 'w_skip_bond', 'w_rigid', 'w_pae',
+                  'w_bind', 'binder_loss_label_smoothing', 'w_clash', 'w_hb', 'lj_lin', 'w_atom_bond', 'w_skip_bond', 'w_rigid', 'w_pae',
                   'w_pde']:
         loss_param[param] = getattr(args, param)
 
