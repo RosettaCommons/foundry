@@ -225,6 +225,11 @@ class Trainer():
                 bb_frame_good = frame_mask[:,:,0]
                 loss_mask_2d = bb_frame_good & bb_frame_good[...,None]
                 mask_2d_ = mask_2d & loss_mask_2d
+
+            if negative.item():
+                # Don't compute inter-chain distogram losses
+                # for negative examples.
+                mask_2d_ = mask_2d_ * same_chain
             loss = (mask_2d_*loss).sum() / (mask_2d_.sum() + eps)
             tot_loss += w_dist*loss
             loss_dict[f'c6d_{i}'] = loss.detach()
@@ -243,7 +248,7 @@ class Trainer():
         if (torch.sum(same_chain==0) > 0):
             bce = torch.nn.BCELoss()
             target = torch.tensor(
-                [abs(float(not negative) - binder_loss_label_smoothing)], 
+                [abs(float(not negative) - binder_loss_label_smoothing)],
                 device=p_bind.device
             )
             loss = bce(p_bind,target)
@@ -266,12 +271,12 @@ class Trainer():
         
         # create 2d masks for intrachain and interchain fape calculations
         nframes = frame_mask.shape[-1]
-        frame_atom_mask_2d = torch.einsum('bfn,bra->bfnra',frame_mask_BB,mask_crds[:, :, :3]) # B, L, nframes, L, natoms
+        # frame_atom_mask_2d = torch.einsum('bfn,bra->bfnra',frame_mask_BB,mask_crds[:, :, :3]) # B, L, nframes, L, natoms
         frame_atom_mask_2d_allatom = torch.einsum('bfn,bra->bfnra', frame_mask_BB, mask_crds) # B, L, nframes, L, natoms
         frame_atom_mask_2d = frame_atom_mask_2d_allatom[:, :, :, :, :3]
 
         frame_atom_mask_2d_intra_allatom = frame_atom_mask_2d_allatom * same_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 36)
-        frame_atom_mask_2d_intra = frame_atom_mask_2d*same_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3) # B, L, nframes, L, natoms
+        frame_atom_mask_2d_intra = frame_atom_mask_2d_intra_allatom[:, :, :, :, :3]
         different_chain = ~same_chain.bool()
         frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3) # B, L, nframes, L, natoms
             
@@ -295,6 +300,8 @@ class Trainer():
             )
 
             #fd pae/pde loss not computed correctly, zero for negatives
+            # Pascal: I think the above is no longer true. PAE/PDE should
+            # be computed correctly for intra chain
             pae_loss *= 0.0
             pde_loss *= 0.0
 
@@ -332,10 +339,10 @@ class Trainer():
 
         # small-molecule ligands
         sm_res_mask = is_atom(label_aa_s[0,0])*res_mask[0] # (L,)
-        frame_atom_mask_2d = torch.einsum('bfn,bra->bfnra',frame_mask_BB,mask_crds[:, :, :3]) # B, L, nframes, L, natoms
-        frame_atom_mask_2d_intra = frame_atom_mask_2d*same_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3) # B, L, nframes, L, natoms
-        different_chain = ~same_chain.bool()
-        frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3) # B, L, nframes, L, natoms
+        # frame_atom_mask_2d = torch.einsum('bfn,bra->bfnra',frame_mask_BB,mask_crds[:, :, :3]) # B, L, nframes, L, natoms
+        # frame_atom_mask_2d_intra = frame_atom_mask_2d*same_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3) # B, L, nframes, L, natoms
+        # different_chain = ~same_chain.bool()
+        # frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3) # B, L, nframes, L, natoms
 
         #fd
         frame_allatom_mask_2d = torch.einsum('bfn,bra->bfnra',frame_mask_BB,mask_crds) # B, L, nframes, L, natoms
