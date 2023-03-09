@@ -39,9 +39,10 @@ class PositionalEncoding2D(nn.Module):
         self.emb_atom = nn.Embedding(self.nbin_atom, d_pair)
         self.emb_chain = nn.Embedding(2, d_pair)
 
-    def forward(self, seq, idx, bond_feats, same_chain=None):
+    def forward(self, seq, idx, bond_feats, dist_matrix, same_chain=None):
         sm_mask = is_atom(seq[0])
-        res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, sm_mask,
+
+        res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask,
             minpos_res=self.minpos, maxpos_res=self.maxpos, maxpos_atom=self.maxpos_atom)
 
         bins = torch.arange(self.minpos, self.maxpos+1, device=seq.device)
@@ -260,8 +261,6 @@ def apply_pair_symmetry(pair, symmsub, method='mean', main_block=None):
 
     elif method == 'max':
         pair = max_block_activations(pair, symmsub)
-
-
 
     return pair
 
@@ -499,7 +498,7 @@ class Str2Str(nn.Module):
         nn.init.zeros_(self.embed_edge.bias)
     
     @torch.cuda.amp.autocast(enabled=False)
-    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, atom_frames, is_motif, extra_l0=None, extra_l1=None, use_atom_frames=True, top_k=128, eps=1e-5):
+    def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0=None, extra_l1=None, use_atom_frames=True, top_k=128, eps=1e-5):
         # process msa & pair features
         B, N, L = msa.shape[:3]
         seq = self.norm_msa(msa[:,0])
@@ -511,7 +510,7 @@ class Str2Str(nn.Module):
         node = node + self.ff_node(node)
         node = self.norm_node(node)
 
-        neighbor = get_seqsep_protein_sm(idx, bond_feats, rotation_mask)
+        neighbor = get_seqsep_protein_sm(idx, bond_feats, dist_matrix, rotation_mask)
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas))
         edge = torch.cat((pair, rbf_feat, neighbor), dim=-1)
@@ -876,19 +875,19 @@ class IterBlock(nn.Module):
     def forward(
         self, msa, pair, xyz, state, seq_unmasked, idx,
         symmids, symmsub, symmRs, symmmeta,
-        bond_feats, same_chain, is_motif, 
+        bond_feats, same_chain, is_motif, dist_matrix,
         use_checkpoint=False, top_k=128, rotation_mask=None, atom_frames=None, extra_l0=None, extra_l1=None, use_atom_frames=True,
         crop=-1
     ):
         cas = xyz[:,:,1].contiguous()
-        rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, same_chain)
+        rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, dist_matrix, same_chain)
         if use_checkpoint:
             msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state)
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair)
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state, crop)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames)
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames)
 
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
@@ -897,7 +896,7 @@ class IterBlock(nn.Module):
 
             xyz, state, alpha = self.str2str(
                 msa.float(), pair.float(), xyz.detach().float(), state.float(), 
-                idx, rotation_mask, bond_feats, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames, top_k=top_k
+                idx, rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames, top_k=top_k
             )
 
         # update contacting subunits
@@ -1052,10 +1051,11 @@ class IterativeSimulator(nn.Module):
                                                                extra_l0=extra_l0,
                                                                extra_l1=extra_l1,
                                                                is_motif=is_motif,
+                                                               dist_matrix=dist_matrix,
                                                                use_atom_frames=use_atom_frames, crop=p2p_crop)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
-        
+
         for i_m in range(self.n_main_block):
             extra_l0 = None
             extra_l1 = None
@@ -1073,6 +1073,7 @@ class IterativeSimulator(nn.Module):
                                                          extra_l0=extra_l0,
                                                          extra_l1=extra_l1,
                                                          is_motif=is_motif,
+                                                         dist_matrix=dist_matrix,
                                                          use_atom_frames=use_atom_frames, crop=p2p_crop)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
@@ -1106,7 +1107,7 @@ class IterativeSimulator(nn.Module):
 
                 xyz, state, alpha = self.str_refiner(
                     msa, pair, xyz.detach(), state, idx,
-                    rotation_mask, bond_feats, atom_frames, 
+                    rotation_mask, bond_feats,  dist_matrix, atom_frames, 
                     is_motif, extra_l0, extra_l1, top_k=64, use_atom_frames=use_atom_frames     #fd 128->64
                 )
 

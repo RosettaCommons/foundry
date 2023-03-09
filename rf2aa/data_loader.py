@@ -1766,8 +1766,8 @@ def choose_multimsa_clusters(msa_seq_is_paired, params):
 def get_bond_distances(bond_feats):
     atom_bonds = (bond_feats > 0)*(bond_feats<5)
     dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds.long().numpy(), directed=False)
-    dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0)) # protein portion is inf and you don't want to mask it out
-    return dist_matrix
+    # dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0)) # protein portion is inf and you don't want to mask it out
+    return torch.from_numpy(dist_matrix).float()
 
 # Generate input features for single-chain
 def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=True, random_noise=5.0, fixbb=False):

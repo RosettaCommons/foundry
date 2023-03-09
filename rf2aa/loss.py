@@ -1026,6 +1026,7 @@ class LJLoss(torch.autograd.Function):
 
             # b) intra-ligand
             atommask = (ai==1)*(aj==1)
+            dist_matrix = torch.nan_to_num(dist_matrix, posinf=4.0) #NOTE: need to run nan_to_num to remove infinities
             resmask = (dist_matrix[0,rii,rjj] >= 4) # * will only work for batch=1
             mask[atommask] *= resmask[ ridx[atommask] ]
 

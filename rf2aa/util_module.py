@@ -108,13 +108,14 @@ def get_seqsep(idx):
     neigh = sign * neigh
     return neigh.unsqueeze(-1)
 
-def get_seqsep_protein_sm(idx, bond_feats, sm_mask):
+def get_seqsep_protein_sm(idx, bond_feats, dist_matrix, sm_mask):
     '''
     Sequence separation features for protein-SM complex
 
     Input:
         - idx: residue indices of given sequence (B,L)
         - bond_feats: bond features (B, L, L)
+        - dist_matrix: precomputed bond distances (B, L, L) NOTE: need to run nan_to_num to remove infinities
         - sm_mask: boolean feature True if a position represents atom, False if residue (B, L)
 
     Output:
@@ -124,7 +125,7 @@ def get_seqsep_protein_sm(idx, bond_feats, sm_mask):
             0 elsewhere
     '''
     sm_mask = sm_mask[0] # assume batch = 1
-    res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, sm_mask)
+    res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask)
 
     sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
     prot_mask_2d = (~sm_mask[None,:]) * (~sm_mask[:,None])
@@ -137,7 +138,7 @@ def get_seqsep_protein_sm(idx, bond_feats, sm_mask):
 
     return seqsep.unsqueeze(-1)
 
-def get_res_atom_dist(idx, bond_feats, sm_mask, minpos_res=-32, maxpos_res=32, maxpos_atom=8):
+def get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask, minpos_res=-32, maxpos_res=32, maxpos_atom=8):
     '''
     Calculates residue and atom bond distances of protein/SM complex. Used for positional
     embedding and structure module. 2nd version (2022-9-19); handles atomized proteins.
@@ -145,6 +146,7 @@ def get_res_atom_dist(idx, bond_feats, sm_mask, minpos_res=-32, maxpos_res=32, m
     Input:
         - idx: residue index (B, L)
         - bond_feats: bond features (B, L, L)
+        - dist_matrix: precomputed bond distances (B, L, L) NOTE: need to run nan_to_num to remove infinities
         - sm_mask: boolean feature (L). True if a position represents atom, False otherwise
         - minpos_res: minimum value of residue distances
         - maxpos_res: maximum value of residue distances
@@ -168,18 +170,9 @@ def get_res_atom_dist(idx, bond_feats, sm_mask, minpos_res=-32, maxpos_res=32, m
     res_dist_sm = torch.full((L,L), maxpos_res+1).to(gpu) # (L, L) with "unknown" res. dist. token
 
     # small molecule atom bond graph
-    sm_bond_feats = torch.zeros_like(bond_feats) + sm_mask_2d*bond_feats
-    #G = nx.from_numpy_matrix(sm_bond_feats.detach().cpu().numpy())
-    G = nx.from_numpy_array(sm_bond_feats.detach().cpu().numpy())
-    paths = dict(nx.all_pairs_shortest_path_length(G,cutoff=maxpos_atom))
-    paths = [(i,j,vij) for i,vi in paths.items() for j,vij in vi.items()]
-    i,j,v = torch.tensor(paths).T
-
-    # small molecule atom bond distances
-    atom_dist_sm = torch.full((L,L), maxpos_atom).to(gpu) - maxpos_atom*torch.eye(L).to(gpu).long()
-    atom_dist_sm[i,j] = v.to(gpu)
+    atom_dist_sm = torch.nan_to_num(dist_matrix, posinf=maxpos_atom)[0] # this comes through the datalaoder so it is batched
     atom_dist_prot = torch.full((L,L), maxpos_atom+1).to(gpu)
-
+       
     # s.m.-protein bonds
     sm_idx = torch.where(sm_mask)[0]
     prot_idx = torch.where(~sm_mask)[0]

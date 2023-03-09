@@ -1327,7 +1327,6 @@ class Trainer():
         bond_feats = bond_feats.to(gpu, non_blocking=True)
         dist_matrix = dist_matrix.to(gpu, non_blocking=True)
         chirals = chirals.to(gpu, non_blocking=True)
-
         assert (len(symmgp)==1)
         symmgp = symmgp[0]
 

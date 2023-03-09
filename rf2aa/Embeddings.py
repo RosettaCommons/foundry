@@ -35,7 +35,7 @@ class MSA_emb(nn.Module):
 
         nn.init.zeros_(self.emb.bias)
 
-    def forward(self, msa, seq, idx, bond_feats, same_chain):
+    def forward(self, msa, seq, idx, bond_feats, dist_matrix, same_chain):
         # Inputs:
         #   - msa: Input MSA (B, N, L, d_init)
         #   - seq: Input Sequence (B, L)
@@ -57,7 +57,7 @@ class MSA_emb(nn.Module):
         left = self.emb_left(seq)[:,None] # (B, 1, L, d_pair)
         right = self.emb_right(seq)[:,:,None] # (B, L, 1, d_pair)
         pair = left + right # (B, L, L, d_pair)
-        pair = pair + self.pos(seq, idx, bond_feats, same_chain) # add relative position
+        pair = pair + self.pos(seq, idx, bond_feats, dist_matrix, same_chain) # add relative position
 
         # state embedding
         state = self.emb_state(seq)
