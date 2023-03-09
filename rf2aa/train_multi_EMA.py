@@ -1361,7 +1361,6 @@ class Trainer():
             xyz_t = xyz_t[:,:,:Lasu].repeat(1,1,Osub,1,1)
             mask_t = mask_t[:,:,:Lasu].repeat(1,1,Osub,1)
             t1d = t1d[:,:,:Lasu].repeat(1,1,Osub,1)
-            t1d = t1d[:,:,:Lasu].repeat(1,1,Osub,1)
 
             # symmetrize atom_frames
             atom_frames = torch.cat([atom_frames[:,:,:Lasu],*[atom_frames[:,:,Lasu:]]*(Osub-1)], dim=2)
