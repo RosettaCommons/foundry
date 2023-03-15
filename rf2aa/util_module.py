@@ -130,13 +130,14 @@ def get_seqsep_protein_sm(idx, bond_feats, dist_matrix, sm_mask):
     sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
     prot_mask_2d = (~sm_mask[None,:]) * (~sm_mask[:,None])
     inter_mask_2d = (~sm_mask[None,:]) * (sm_mask[:,None]) + (sm_mask[None,:]) * (~sm_mask[:,None])
-
+    
     res_dist[(res_dist > 1) | (res_dist < -1)] = 0.0
     atom_dist[(atom_dist > 1)] = 0.0
     
     seqsep = sm_mask_2d*atom_dist + prot_mask_2d*res_dist + inter_mask_2d*(bond_feats==6)
 
     return seqsep.unsqueeze(-1)
+
 
 def get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask, minpos_res=-32, maxpos_res=32, maxpos_atom=8):
     '''
@@ -158,7 +159,7 @@ def get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask, minpos_res=-32, max
     '''
     bond_feats = bond_feats[0] # assume batch = 1
     L = bond_feats.shape[0]
-    gpu = bond_feats.device
+    device = bond_feats.device
 
     sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
     prot_mask_2d = (~sm_mask[None,:]) * (~sm_mask[:,None])
@@ -166,42 +167,34 @@ def get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask, minpos_res=-32, max
 
     # protein residue distances
     res_dist_prot = torch.clamp(idx[0,None,:] - idx[0,:,None],
-                               min=minpos_res, max=maxpos_res).to(gpu) # (L, L) intra-protein
-    res_dist_sm = torch.full((L,L), maxpos_res+1).to(gpu) # (L, L) with "unknown" res. dist. token
+                               min=minpos_res, max=maxpos_res) # (L, L) intra-protein
+    res_dist_sm = torch.full((L,L), maxpos_res+1, device=device) # (L, L) with "unknown" res. dist. token
 
     # small molecule atom bond graph
-    atom_dist_sm = torch.nan_to_num(dist_matrix, posinf=maxpos_atom)[0] # this comes through the datalaoder so it is batched
-    atom_dist_prot = torch.full((L,L), maxpos_atom+1).to(gpu)
-       
-    # s.m.-protein bonds
-    sm_idx = torch.where(sm_mask)[0]
-    prot_idx = torch.where(~sm_mask)[0]
+    atom_dist_sm = torch.nan_to_num(dist_matrix, posinf=maxpos_atom)[0].long() # this comes through the dataloader so it is batched
+    atom_dist_prot = torch.full((L,L), maxpos_atom+1, device=device)
+
+    #fd new impl
     i_s, j_s = torch.where(bond_feats==6)
-    i_prot = [j for i,j in zip(i_s,j_s) if i in sm_idx] # protein residues bonded to s.m. atoms
-    i_sm = [i for i in i_s if i in sm_idx] # s.m. atoms bonded to protein residues
+    i_sm = i_s[sm_mask[i_s]]
+    i_prot = j_s[sm_mask[i_s]]
+    res_dist_inter = torch.full((L,L), maxpos_res, device=device)
+    atom_dist_inter = torch.full((L,L), maxpos_atom, device=device)
+    if i_prot.shape[0] > 0:
+        closest_prot_res = i_prot[torch.argmin(atom_dist_sm[sm_mask,:][:,i_sm], dim=-1)]
+        res_dist_inter[sm_mask,:] = res_dist_prot[closest_prot_res,:]
+        res_dist_inter[:,sm_mask] = res_dist_prot[:,closest_prot_res]
 
-    # inter-protein-s.m. residue & atom distances
-    # atoms inherit residue distances from their nearest bonded residue
-    res_dist_inter = torch.full((L,L), maxpos_res).to(gpu)
-    if len(i_prot) > 0: # prot & s.m. are connected
-        for i in sm_idx:
-            i_closest_res = i_prot[torch.argmin(atom_dist_sm[i,i_sm])]
-            res_dist_inter[i,:] = res_dist_prot[i_closest_res,:]
-            res_dist_inter[:,i] = res_dist_prot[:,i_closest_res]
-
-    # residues inherit atom distances from their nearest bonded atom (+ 1 to count "boundary" res-atom bond)
-    atom_dist_inter = torch.full((L, L), maxpos_atom).to(gpu)
-    if len(i_prot) > 0: # prot & s.m. are connected
-        for i in prot_idx:
-            i_closest_atom = i_sm[torch.argmin(torch.abs(res_dist_prot[i,i_prot]))]
-            atom_dist_inter[i,:] = atom_dist_sm[i_closest_atom,:] + 1
-            atom_dist_inter[:,i] = atom_dist_sm[:,i_closest_atom] + 1
-        atom_dist_inter = torch.minimum(atom_dist_inter, torch.tensor(maxpos_atom))
+        closest_atom = i_sm[torch.argmin(torch.abs(res_dist_prot[~sm_mask,:][:,i_prot]), dim=-1)]
+        atom_dist_inter[~sm_mask,:] = atom_dist_sm[closest_atom,:] + 1
+        atom_dist_inter[:,~sm_mask] = atom_dist_sm[:,closest_atom] + 1
 
     res_dist = res_dist_prot * prot_mask_2d + res_dist_inter * inter_mask_2d + res_dist_sm * sm_mask_2d
     atom_dist = atom_dist_prot * prot_mask_2d + atom_dist_inter * inter_mask_2d + atom_dist_sm * sm_mask_2d
 
-    return res_dist[None].to(gpu), atom_dist[None].to(gpu) # add batch dim.
+    return res_dist[None], atom_dist[None] # add batch dim.
+
+
 
 def get_relpos(idx, bond_feats, sm_mask, inter_pos=32, maxpath=32):
     '''

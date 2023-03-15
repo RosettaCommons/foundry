@@ -3346,7 +3346,8 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     xyz_t_prot, f1d_t_prot, mask_t_prot = TemplFeaturize(tplt, len(pdb['xyz']), params, offset=0, 
         npick=ntempl, pick_top=pick_top, random_noise=random_noise)
 
-    crop_idx = get_crop(len(idx), mask, msa.device, params['CROP'], unclamp=unclamp)
+    crop_len = params['CROP'] - n_res_atomize*10
+    crop_idx = get_crop(len(idx), mask, msa.device, crop_len, unclamp=unclamp)
     msa_prot = msa[:, crop_idx]
     ins_prot = ins[:, crop_idx]
     xyz_prot = xyz[crop_idx]
