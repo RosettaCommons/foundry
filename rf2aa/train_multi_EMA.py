@@ -311,6 +311,7 @@ class Trainer():
                 logit_pae = logit_pae[:,:,res_mask[0]][:,:,:,res_mask[0]]
             if logit_pde is not None:
                 logit_pde = logit_pde[:,:,res_mask[0]][:,:,:,res_mask[0]]
+            
             tot_str, pae_loss, pde_loss = compute_general_FAPE(
                 pred[:,res_mask,:,:3],
                 true[:,res_mask[0],:3],

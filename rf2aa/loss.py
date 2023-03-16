@@ -147,6 +147,7 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
     #     return xyz_true[:, 0, ...], mask[:, 0, ...]
 
     batch_size = xyz_pred.shape[0]
+    assert batch_size == 1, "this function does not work if B!=1"
     total_protein_length = sum(Ls_prot)
     xyz_out = torch.full(
         xyz_pred.shape, torch.nan, device=xyz_pred.device, dtype=xyz_pred.dtype
@@ -167,14 +168,19 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
     # [A2, A3, A1, B]
     # [A3, A1, A2, B]
     # [A3, A2, A1, B]
+    
     pred_ca_ca_distances = torch.norm(
         xyz_pred[:, None, :total_protein_length, None, 1, :]
         - xyz_pred[:, None, None, :total_protein_length, 1, :],
         dim=-1,
     )
+    
+    valid_protein_permutations = torch.any(torch.any(mask[:,:, :total_protein_length],dim=2), dim=2) # only take distances over valid protein permutations
+    xyz_true_valid_prot = xyz_true[:, valid_protein_permutations[0]] ## rk assumes B==1
+    mask_valid_prot = mask[:, valid_protein_permutations[0]] ## rk assumes B==1
     true_ca_ca_distances = torch.norm(
-        xyz_true[:, :, :total_protein_length, None, 1, :]
-        - xyz_true[:, :, None, :total_protein_length, 1, :],
+        xyz_true_valid_prot[:, :, :total_protein_length, None, 1, :]
+        - xyz_true_valid_prot[:, :, None, :total_protein_length, 1, :],
         dim=-1,
     )
     pred_true_ca_ca_dist_diff = torch.sum(
@@ -183,15 +189,15 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
     pred_true_ca_ca_dist_diff = torch.nan_to_num(
         pred_true_ca_ca_dist_diff, nan=torch.inf
     )
+    
+    best_protein_perm_index_per_batch = torch.argmin(pred_true_ca_ca_dist_diff, axis=-1) # indices over indices of xyz_true_valid_prot
 
-    best_protein_perm_index_per_batch = torch.argmin(pred_true_ca_ca_dist_diff, axis=-1)
-
-    best_protein_coords = xyz_true[
+    best_protein_coords = xyz_true_valid_prot[
         torch.arange(batch_size),
         best_protein_perm_index_per_batch,
         :total_protein_length,
     ]
-    matching_protein_mask = mask[
+    matching_protein_mask = mask_valid_prot[
         torch.arange(batch_size),
         best_protein_perm_index_per_batch,
         :total_protein_length,
