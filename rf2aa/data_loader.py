@@ -3729,6 +3729,8 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
             curr_chain_idx = np.arange(L_sm) + offset
             sel = np.setdiff1d(sel, curr_chain_idx)
         offset += L_sm
+    if len(sel) == 0: # we accidentally removed all the chains..
+        sel = prot_sel
     return torch.from_numpy(sel).long()
 
 def crop_chirals(chirals, atom_sel):
