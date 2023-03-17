@@ -12,7 +12,7 @@ from typing import Dict, Optional, Tuple
 from pathlib import Path
 from openbabel import pybel
 from os.path import exists
-from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mixed_fasta
+#from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mixed_fasta
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
@@ -27,7 +27,7 @@ import scipy
 from scipy.sparse.csgraph import shortest_path
 import networkx as nx
 
-from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
+from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol, parse_mixed_fasta
 from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, UNKINDEX, \
     NTOTAL, NBTYPES, CHAIN_GAP, num2aa, METAL_RES_NAMES, aa2num, atomnum2atomtype
 from rf2aa.kinematics import get_chirals
