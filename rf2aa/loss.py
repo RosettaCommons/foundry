@@ -574,7 +574,10 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     frame_mask *= torch.all(
         torch.gather(frame_atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
         axis=-1)
-
+    
+    if torch.sum(frame_mask) == 0:
+        return torch.tensor([0], device=X.device), torch.tensor([0], device=X.device), torch.tensor([0], device=X.device)
+        
     X_x = torch.gather(X_prime, 1, frames_reindex[...,0:1].repeat(N,1,1,3))
     X_y = torch.gather(X_prime, 1, frames_reindex[...,1:2].repeat(N,1,1,3))
     X_z = torch.gather(X_prime, 1, frames_reindex[...,2:3].repeat(N,1,1,3))
