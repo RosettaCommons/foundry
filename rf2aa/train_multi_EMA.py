@@ -266,6 +266,7 @@ class Trainer():
         # Structural loss (layer-wise backbone FAPE)
         dclamp = 300.0 if unclamp else 30.0 # protein & NA FAPE distance cutoffs
         dclamp_sm, Z_sm = 4, 4  # sm mol FAPE distance cutoffs
+        dclamp_prot = 10
         # residue mask for FAPE calculation only masks unresolved protein backbone atoms
         # whereas other losses also maks unresolved ligand atoms (mask_BB)
         # frames with unresolved ligand atoms are masked in compute_general_FAPE
@@ -314,18 +315,30 @@ class Trainer():
             if logit_pde is not None:
                 logit_pde = logit_pde[:,:,res_mask[0]][:,:,:,res_mask[0]]
             
+            # change clamp for intra protein to 10, leave rest at 30
+            dclamp_2d = torch.full_like(frame_atom_mask_2d_allatom, dclamp, dtype=torch.float32)
+            if not unclamp:
+                is_prot = is_protein(seq) # (1,L)
+                same_chain_clamp_mask = same_chain[:, :, None, :, None].repeat(1,1,nframes,1, natoms)
+                # zero out rows and columns with small molecules
+                same_chain_clamp_mask[:, ~is_prot[0]] = 0
+                same_chain_clamp_mask[:,:, :,  ~is_prot[0]] = 0 
+                dclamp_2d *= ~same_chain_clamp_mask.bool()
+                dclamp_2d += same_chain_clamp_mask*dclamp_prot
+
             tot_str, pae_loss, pde_loss = compute_general_FAPE(
                 pred[:,res_mask,:,:3],
                 true[:,res_mask[0],:3],
                 mask_crds[:,res_mask[0],:3],
                 frames_BB[:,res_mask[0]],
                 frame_mask_BB[:,res_mask[0]],
-                dclamp=dclamp, 
+                dclamp=None,
+                dclamp_2d=dclamp_2d[:, res_mask[0]][:, :, :, res_mask[0],:3], 
                 logit_pae=logit_pae,
                 logit_pde=logit_pde,
             )
         num_layers = pred.shape[0]
-        gamma = 0.99
+        gamma = 1.0 # equal weighting of fape across all layers
         w_bb_fape = torch.pow(torch.full((num_layers,), gamma, device=pred.device), torch.arange(num_layers, device=pred.device))
         w_bb_fape = torch.flip(w_bb_fape, (0,))
         w_bb_fape = w_bb_fape / w_bb_fape.sum()

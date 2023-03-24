@@ -538,8 +538,8 @@ def compute_pde_loss(X, Y, logit_pde, atom_mask, pde_bin_step=0.3, frame_atom_ma
         return torch.mean(frame_atom_ca_only_mask * cross_entropy_loss)
 
 # from Ivan: FAPE generalized over atom sets & frames
-def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, frame_atom_mask_2d=None,
-    logit_pae=None, logit_pde=None, Z=10.0, dclamp=10.0, gamma=0.99, eps=1e-4):
+def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, frame_atom_mask_2d=None, 
+    logit_pae=None, logit_pde=None, Z=10.0, dclamp=10.0, dclamp_2d=None, gamma=0.99, eps=1e-4):
 
     # X (predicted) N x L x natoms x 3
     # Y (native)    1 x L x natoms x 3
@@ -560,9 +560,9 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
 
     frames_reindex, frame_mask = mask_unresolved_frames(frames, frame_mask, frame_atom_mask)
     
-    if torch.sum(frame_mask) == 0:
+    if torch.all(frame_mask == 0):
         return torch.tensor([0], device=X.device), torch.tensor([0], device=X.device), torch.tensor([0], device=X.device)
-        
+
     X_x = torch.gather(X_prime, 1, frames_reindex[...,0:1].repeat(N,1,1,3))
     X_y = torch.gather(X_prime, 1, frames_reindex[...,1:2].repeat(N,1,1,3))
     X_z = torch.gather(X_prime, 1, frames_reindex[...,2:3].repeat(N,1,1,3))
@@ -583,6 +583,12 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     # multiply diff by frame_atom_mask_2d if frame_atom_mask_2d not None
     if frame_atom_mask_2d is not None:
         diff = diff*frame_atom_mask_2d[:,frame_mask[0]][:, :, atom_mask[0]]
+
+    assert dclamp is not None or dclamp_2d is not None, "need to provide either dclamp or dclamp_2d to compute_general_FAPE"
+    assert not (dclamp is not None and dclamp_2d is not None), "you provided both dclamp and dclamp_2d, please only provide one"
+
+    if dclamp_2d is not None:
+        dclamp = dclamp_2d[:,frame_mask[0]][:, :, atom_mask[0]]
 
     loss = (1.0/Z) * (torch.clamp(diff, max=dclamp)).mean(dim=(1,2))
 
