@@ -221,8 +221,10 @@ class Trainer():
             loss = self.loss_fn(logit_s[i], label_s[...,i]) # (B, L, L)
             if i==0: # apply distogram loss to all residue pairs with valid BB atoms
                 mask_2d_ = mask_2d
-            else: # apply anglegram loss only when both residues have valid BB frames (i.e. not metal ions)
-                bb_frame_good = frame_mask[:,:,0]
+            else: 
+                # apply anglegram loss only when both residues have valid BB frames (i.e. not metal ions, and not examples with unresolved atoms in frames)
+                _, bb_frame_good = mask_unresolved_frames(frames_BB, frame_mask_BB, mask_crds) # (1, L, nframes)
+                bb_frame_good = bb_frame_good[...,0] # (1,L)
                 loss_mask_2d = bb_frame_good & bb_frame_good[...,None]
                 mask_2d_ = mask_2d & loss_mask_2d
 

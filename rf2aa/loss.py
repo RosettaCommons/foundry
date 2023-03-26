@@ -558,22 +558,7 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     X_prime = X.reshape(N, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
     Y_prime = Y.reshape(1, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
 
-    # reindex frames for flat X
-    frames_reindex = torch.zeros(frames.shape[:-1], device=frames.device)
-    for i in range(L):
-        frames_reindex[:, i, :, :] = (i+frames[..., i, :, :, 0])*natoms + frames[..., i, :, :, 1]
-    frames_reindex = frames_reindex.long()
-
-    masked_atom_frames = torch.any(frames_reindex>L*natoms, dim=-1) # find frames with atoms that aren't resolved
-    masked_atom_frames *= torch.any(frames_reindex<0, dim=-1)
-    frame_mask *= ~masked_atom_frames 
-    # There are currently indices for frames that aren't in the coordinates bc they arent resolved, reset these indices to 0 to avoid 
-    # indexing errors
-    frames_reindex[masked_atom_frames, :] = 0 
-
-    frame_mask *= torch.all(
-        torch.gather(frame_atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
-        axis=-1)
+    frames_reindex, frame_mask = mask_unresolved_frames(frames, frame_mask, frame_atom_mask)
     
     if torch.sum(frame_mask) == 0:
         return torch.tensor([0], device=X.device), torch.tensor([0], device=X.device), torch.tensor([0], device=X.device)
@@ -608,6 +593,40 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
                    else torch.tensor(0).to(frames.device)
 
     return loss, pae_loss, pde_loss
+
+def mask_unresolved_frames(frames, frame_mask, atom_mask):
+    """
+    reindex frames tensor from relative indices to absolute indices and masks out frames with atoms that are unresolved
+    in the structure
+    Input:
+        - frames: relative indices for frames (B, L, nframes, 3)
+        - frame_mask: mask for which frames are valid to compute FAPE/losses (B, L, nframes)
+        - atom_mask: mask for seen coordinates (B, L, natoms)
+    Output: 
+        - frames_reindex: absolute indices for frames 
+        - frame_mask_update: updated frame mask with frames with unresolved atoms removed
+    """
+    B, L, natoms = atom_mask.shape
+
+    frame_mask_update = frame_mask.clone()
+    # reindex frames for flat X
+    frames_reindex = torch.zeros(frames.shape[:-1], device=frames.device)
+    for i in range(L):
+        frames_reindex[:, i, :, :] = (i+frames[..., i, :, :, 0])*natoms + frames[..., i, :, :, 1]
+    frames_reindex = frames_reindex.long()
+
+    masked_atom_frames = torch.any(frames_reindex>L*natoms, dim=-1) # find frames with atoms that aren't resolved
+    masked_atom_frames *= torch.any(frames_reindex<0, dim=-1)
+    frame_mask_update *= ~masked_atom_frames 
+    # There are currently indices for frames that aren't in the coordinates bc they arent resolved, reset these indices to 0 to avoid 
+    # indexing errors
+    frames_reindex[masked_atom_frames, :] = 0 
+
+    frame_mask_update *= torch.all(
+        torch.gather(atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
+        axis=-1)
+
+    return frames_reindex, frame_mask_update
 
 def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None):
     '''
