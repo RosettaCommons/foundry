@@ -561,7 +561,8 @@ class Trainer():
         if torch.any(prot_mask_BB) and torch.any(not_prot_mask_BB):
             rmsd_prot_lig = calc_crd_rmsd(
                 pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
-                atom_mask=xs_mask_prot[:,mask_BB[0]], rmsd_mask=xs_mask_lig[:,mask_BB[0]]
+                atom_mask=xs_mask_prot[:,mask_BB[0]], rmsd_mask=xs_mask_lig[:,mask_BB[0]],
+                alignment_radius=10.0
             )
         else:
             rmsd_prot_lig = torch.tensor([0], device=pred.device)

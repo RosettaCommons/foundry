@@ -628,13 +628,15 @@ def mask_unresolved_frames(frames, frame_mask, atom_mask):
 
     return frames_reindex, frame_mask_update
 
-def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None):
+def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None, alignment_radius=None):
     '''
     Calculate coordinate RMSD
     Input:
         - pred: predicted coordinates (B, L, natoms, 3)
         - true: true coordinates (B, L, natoms, 3)
-        - atom_mask: mask for seen coordinates (B, L, natoms)
+        - atom_mask: mask for coordinates used for alignment (B, L, natoms)
+        - rmsd_mask: mask for coordinates used for rmsd calculation
+        - alignment_radius: radius around the rmsd mask that will be used for alignment (float)
     Output: RMSD after superposition
     '''
     def rmsd(V, W, eps=1e-6):
@@ -642,14 +644,19 @@ def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None):
         return torch.sqrt(torch.sum((V-W)*(V-W), dim=(1,2)) / L + eps)
     def centroid(X):
         return X.mean(dim=-2, keepdim=True)
-    if rmsd_mask == None:
+    
+    if rmsd_mask is None:
         rmsd_mask = atom_mask.clone()
+    if alignment_radius is None:
+        alignment_radius = torch.inf
+    dist = torch.cdist(true[atom_mask][None], true[rmsd_mask][None])
+    in_radius = (dist<alignment_radius).any(dim=-1)[0] # shape: (num seen atoms in atom_mask)
 
     B, L, natoms = pred.shape[:3]
 
     # center to centroid
-    pred_allatom = pred[atom_mask][None]
-    true_allatom = true[atom_mask][None]
+    pred_allatom = pred[atom_mask][in_radius][None]
+    true_allatom = true[atom_mask][in_radius][None]
 
     pred_allatom_origin = pred_allatom - centroid(pred_allatom)
     true_allatom_origin = true_allatom - centroid(true_allatom)
