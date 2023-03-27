@@ -446,7 +446,7 @@ class XYZConverter(nn.Module):
         super(XYZConverter, self).__init__()
         
         self.register_buffer("torsion_indices", torsion_indices, persistent=False)
-        self.register_buffer("torsion_can_flip", torsion_can_flip, persistent=False)
+        self.register_buffer("torsion_can_flip", torsion_can_flip.to(torch.int32), persistent=False)
         self.register_buffer("ref_angles", reference_angles, persistent=False)
         self.register_buffer("base_indices", base_indices, persistent=False)
         self.register_buffer("RTs_in_base_frame", RTs_by_torsion, persistent=False)
@@ -653,7 +653,7 @@ class XYZConverter(nn.Module):
 
         # alt chis
         torsions_alt = torsions.clone()
-        torsions_alt[self.torsion_can_flip[seq,:]] *= -1
+        torsions_alt[self.torsion_can_flip[seq,:].to(torch.bool)] *= -1
 
         # torsions to restrain to 0 or 180 degree
         # (this should be specified in chemical?)

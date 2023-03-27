@@ -918,6 +918,20 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, \
         homo, chid2hash, chid2taxid
 
+
+# slice long chains without retaining continuity of the chain
+def get_discontiguous_crop(l, mask, device, crop_size, unclamp=False):
+    mask = ~(mask[:,:3].sum(dim=-1) < 3.0)
+    exists = mask.nonzero()[:, 0]
+    if len(exists) <= crop_size:
+        return exists
+    
+    n_backbone = len(exists)
+    lower_bound = 0
+    upper_bound = n_backbone - crop_size + 1
+    start = np.random.randint(lower_bound, upper_bound)
+    return exists[start:start+crop_size]
+
 # slice long chains
 def get_crop(l, mask, device, crop_size, unclamp=False):
     sel = torch.arange(l,device=device)
@@ -1790,7 +1804,10 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, msa.shape[1], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
 
     # Residue cropping
-    crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
+    crop_function = get_crop
+    if params.get('DISCONTIGUOUS_CROP', False):
+        crop_function = get_discontiguous_crop
+    crop_idx = crop_function(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
     seq = seq[:,crop_idx]
     msa_seed_orig = msa_seed_orig[:,:,crop_idx]
     msa_seed = msa_seed[:,:,crop_idx]
