@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, gzip, json
 import torch
 import numpy as np
 script_dir = os.path.dirname(os.path.realpath(__file__))+'/'
@@ -1227,3 +1227,16 @@ ideal_coords = [
 ]
 
 atomized_protein_frames = torch.load(script_dir+"atomized_protein_frames.pt")
+
+def load_pdb_ideal_sdf_strings():
+    """
+    returns a dictionary of that maps all the 3letter ligand codes in the pdb to relevant information:
+        string of the sdf file with idealized coordinates for that molecule
+        atom names for the atoms in order
+        leaving groups if there are covalent modifications to the ligand
+        pdbx_align 
+    """
+    with gzip.open('ligands.json.gz','rt') as file:
+        mols = json.load(file)
+    return mols
+    
