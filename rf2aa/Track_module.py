@@ -57,7 +57,9 @@ class PositionalEncoding2D(nn.Module):
 
         if same_chain is not None:
             emb_c = self.emb_chain(same_chain.long()) # this is used for MSA_emb but not in IterBlock
-            out += emb_c
+            #HACK: we found the same_chain embedding hurts multimer prediction, but we have to use all parameters
+            #TODO: remove this for fd4
+            out += emb_c*0 
 
         return out
 
