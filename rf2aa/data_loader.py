@@ -3327,8 +3327,10 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     dist_matrix = get_bond_distances(bond_feats)
 
     # create MSA features from cropped msa and insertions
+    if len(msa) > params['BLOCKCUT']:
+        msa, ins = MSABlockDeletion(msa.long(), ins.long())
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = \
-        MSAFeaturize(msa.long(), ins.long(), params, term_info=term_info, fixbb=fixbb, seed_msa_clus=seed_msa_clus)
+        MSAFeaturize(msa, ins, params, term_info=term_info, fixbb=fixbb, seed_msa_clus=seed_msa_clus)
 
     negative = (selected_negative_item is not None) or select_farthest_residues
     
