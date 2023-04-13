@@ -4191,16 +4191,6 @@ class DistilledDataset(data.Dataset):
                 self.chid2taxid, task='sm_compl_docked_neg', num_protein_chains=1, num_ligand_chains=1, selected_negative_item=negative_item)
             offset += len(self.index_dict['sm_compl_docked_neg'])
 
-            if index >= offset and index < offset + len(self.index_dict['atomize_pdb']):
-               ID = self.ID_dict['atomize_pdb'][index-offset]
-               item = sample_item(self.dataset_dict['atomize_pdb'], ID)
-               n_res_atomize = np.random.randint(self.params['NRES_ATOMIZE_MIN'], 
-                                                 self.params['NRES_ATOMIZE_MAX']+1)
-               out = self.loader_dict['atomize_pdb'](item,
-                   self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'], 
-                   unclamp=(p_unclamp > self.unclamp_cut))
-            offset += len(self.index_dict['atomize_pdb'])
-
             if index >= offset and index < offset + len(self.index_dict['sm_compl_furthest_neg']):
                 ID = self.ID_dict['sm_compl_furthest_neg'][index - offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_furthest_neg'], ID)
@@ -4238,6 +4228,7 @@ class DistilledDataset(data.Dataset):
             # SINCE THE NEGATIVES ARE LOADED BEFORE atomize_pdb,
             # THEY HAVE TO GO FIRST
             if index >= offset and index < offset + len(self.index_dict['atomize_pdb']):
+                task= "atomize_pdb"
                 ID = self.ID_dict['atomize_pdb'][index-offset]
                 item = sample_item(self.dataset_dict['atomize_pdb'], ID)
                 n_res_atomize = np.random.randint(self.params['NRES_ATOMIZE_MIN'], self.params['NRES_ATOMIZE_MAX']+1)
@@ -4329,6 +4320,7 @@ class DistributedWeightedSampler(data.Sampler):
         # order of datasets in this loop should match order in DistilledDataset.__getitem__()
         offset = 0
         sel_indices = torch.tensor((),dtype=int)
+        print(self.dataset.dataset_dict.keys())
         for dataset_name in self.dataset.dataset_dict.keys():
             
             if (self.num_per_epoch_dict[dataset_name]> 0):

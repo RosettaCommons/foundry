@@ -1081,8 +1081,8 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
                 continue
             start_idx = ra2ind[(i-1, 2)]
             end_idx = ra2ind[(i, 0)]
-            bond_feats[start_idx, end_idx] = aabtypes[res][j]
-            bond_feats[end_idx, start_idx] = aabtypes[res][j]
+            bond_feats[start_idx, end_idx] = SINGLE_BOND
+            bond_feats[end_idx, start_idx] = SINGLE_BOND
     return bond_feats
 
 # given a bond graph, get the path lengths
@@ -1098,7 +1098,8 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     """ given an index i_start, make the following flank residues into "atom" nodes """
     residues_atomize = msa[0, i_start:i_start+n_res_atomize]
     residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
-    residue_atomize_mask = mask[i_start:i_start+n_res_atomize].float()
+    residue_atomize_mask = mask[i_start:i_start+n_res_atomize].float() # mask of resolved atoms in the sidechain
+    residue_atomize_allatom_mask = allatom_mask[residues_atomize][:, :14] # the indices that have heavy atoms in that sidechain
     xyz_atomize = xyz[i_start:i_start+n_res_atomize]
 
     # handle symmetries
@@ -1121,7 +1122,8 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
         nat_symm[:,swaps] = swapped_coords
     else:
         nat_symm = xyz_atomize.unsqueeze(0)
-    ra = residue_atomize_mask.nonzero()
+    # every heavy atom that is in the sidechain is modelled but losses only applied to resolved atoms
+    ra = residue_atomize_allatom_mask.nonzero()
     lig_seq = torch.tensor([aa2num[residues_atom_types[r][a]] if residues_atom_types[r][a] in aa2num else aa2num["ATM"] for r,a in ra])
     ins = torch.zeros_like(lig_seq)
 
@@ -1130,12 +1132,11 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     lig_xyz = torch.zeros((len(ra), 3))
     lig_xyz = nat_symm[:, r, a]
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
-    # frames = get_atomized_protein_frames(residues_atomize, ra)
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
     #HACK: use networkx graph to make the atom frames, correct implementation will include frames with "residue atoms"
     G = nx.from_numpy_matrix(bond_feats.numpy())
     frames = get_atom_frames(lig_seq, G)
-    chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_mask, bond_feats)
+    chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_allatom_mask, bond_feats)
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
 
 def reindex_protein_feats_after_atomize(
