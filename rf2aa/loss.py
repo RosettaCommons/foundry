@@ -825,8 +825,7 @@ def calc_atom_bond_loss(pred, true, bond_feats, seq, beta=0.2, eps=1e-6):
 
     # enforce LAS constraints between atoms 2 bonds away and aromatic groups
     atom_bonds_np = atom_bonds[0].cpu().numpy()
-    #G = nx.from_numpy_matrix(atom_bonds_np)
-    G = nx.from_numpy_array(atom_bonds_np)
+    G = nx.from_numpy_matrix(atom_bonds_np)
     paths = find_all_paths_of_length_n(G,2)
     if paths:
         paths = torch.tensor(paths, device=pred.device)

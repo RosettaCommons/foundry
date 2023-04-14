@@ -946,8 +946,7 @@ def find_all_rigid_groups(bond_feats):
     """
     rigid_atom_bonds = (bond_feats>1)*(bond_feats<5)
     rigid_atom_bonds_np = rigid_atom_bonds[0].cpu().numpy()
-    #G = nx.from_numpy_matrix(rigid_atom_bonds_np)
-    G = nx.from_numpy_array(rigid_atom_bonds_np)
+    G = nx.from_numpy_matrix(rigid_atom_bonds_np)
     connected_components = nx.connected_components(G)
     connected_components = [cc for cc in connected_components if len(cc)>2]
     connected_components = [torch.tensor(list(combinations(cc,2))) for cc in connected_components]
@@ -1135,6 +1134,7 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
     #HACK: use networkx graph to make the atom frames, correct implementation will include frames with "residue atoms"
     G = nx.from_numpy_matrix(bond_feats.numpy())
+        
     frames = get_atom_frames(lig_seq, G)
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_allatom_mask, bond_feats)
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals

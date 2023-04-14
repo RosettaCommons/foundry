@@ -3,3 +3,12 @@ lig_test
 dataset.pkl
 run_digs.sh
 *.pdb
+.vscode
+slurm_logs/
+*/output/
+*/notebooks/
+*/models/
+__pycache__/
+*/run_scripts/
+*/tests/
+unit_tests/

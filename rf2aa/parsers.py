@@ -532,7 +532,7 @@ def clean_sdffile(filename):
 
     return molstring
 
-def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_automorphs=True):
+def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_automorphs=True, generate_conformer: bool = False):
     """Parse small molecule ligand.
 
     Parameters
@@ -570,6 +570,17 @@ def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_autom
         obConversion.ReadString(obmol,molstring)
     else:
         obConversion.ReadFile(obmol,filename)
+
+    if generate_conformer:
+        builder = openbabel.OBBuilder()
+        builder.Build(obmol)
+        ff = openbabel.OBForceField.FindForceField("mmff94")
+        did_setup = ff.Setup(obmol)
+        if did_setup:
+            ff.FastRotorSearch()
+            ff.GetCoordinates(obmol)
+        else:
+            raise ValueError(f"Failed to generate 3D coordinates for molecule {filename}.")
 
     if remove_H:
         obmol.DeleteHydrogens()

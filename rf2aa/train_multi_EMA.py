@@ -34,6 +34,7 @@ from rf2aa.loss import *
 from rf2aa.util import *
 from rf2aa.util_module import XYZConverter
 from rf2aa.scheduler import get_linear_schedule_with_warmup, get_stepwise_decay_schedule_with_warmup
+from rf2aa.chemical import load_pdb_ideal_sdf_strings
 
 # disable openbabel warnings
 from openbabel import openbabel as ob
@@ -897,6 +898,9 @@ class Trainer():
         dist.init_process_group(backend="nccl", world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
 
+        # Get ligand dictionary. This is used for loading negative examples.
+        ligand_dictionary = load_pdb_ideal_sdf_strings(return_only_sdf_strings=True)
+
         # define dataset & data loader
         train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid = \
             get_train_valid_set(self.loader_param)
@@ -947,7 +951,7 @@ class Trainer():
         )
 
         train_set = DistilledDataset(train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid,
-                                     self.loader_param, native_NA_frac=0.25)
+                                     self.loader_param, native_NA_frac=0.25, ligand_dictionary=ligand_dictionary)
 
         train_sampler = DistributedWeightedSampler(
             train_set, 
@@ -1099,8 +1103,9 @@ class Trainer():
                     valid_ID_dict['sm_compl_furthest_neg'][:self.dataset_param['n_valid_sm_compl_furthest_neg']],
                     loader_sm_compl_assembly, valid_dict['sm_compl_furthest_neg'],
                     chid2hash, chid2taxid,
-                    self.loader_param, select_farthest_residues=True,
-                    task="sm_compl_furthest_neg", num_protein_chains=1, num_ligand_chains=1,
+                    self.loader_param,
+                    task="sm_compl_furthest_neg", num_protein_chains=1, num_ligand_chains=1, 
+                    select_farthest_residues=True, is_negative=True,
                 ),
             ),
             sm_compl_permuted = (
@@ -1116,8 +1121,14 @@ class Trainer():
                     valid_ID_dict['sm_compl_permuted_neg'][:self.dataset_param['n_valid_sm_compl_permuted_neg']],
                     loader_sm_compl_assembly, valid_dict['sm_compl_permuted_neg'],
                     chid2hash, chid2taxid,
-                    self.loader_param, select_negative_ligand=True,
-                    task="sm_compl_permuted_neg", num_protein_chains=1, num_ligand_chains=1,
+                    self.loader_param,
+                    task="sm_compl_permuted_neg",
+                    num_protein_chains=1,
+                    num_ligand_chains=1,
+                    load_ligand_from_column="NONBINDING_LIGANDS",
+                    ligand_column_string_format="sdf",
+                    is_negative=True,
+                    ligand_dictionary=ligand_dictionary,
                 ),
             ),
             sm_compl_docked = (
@@ -1133,8 +1144,12 @@ class Trainer():
                     valid_ID_dict['sm_compl_docked_neg'][:self.dataset_param['n_valid_sm_compl_docked_neg']],
                     loader_sm_compl_assembly, valid_dict['sm_compl_docked_neg'],
                     chid2hash, chid2taxid,
-                    self.loader_param, select_negative_ligand=True,
+                    self.loader_param,
                     task="sm_compl_docked_neg", num_protein_chains=1, num_ligand_chains=1,
+                    load_ligand_from_column="NONBINDING_LIGANDS",
+                    ligand_column_string_format="sdf",
+                    is_negative=True,
+                    ligand_dictionary=ligand_dictionary,
                 ),
             ),
             dude = (
@@ -1142,15 +1157,21 @@ class Trainer():
                     valid_ID_dict['dude_actives'][:self.dataset_param['n_valid_dude_actives']],
                     loader_sm_compl_assembly, valid_dict['dude_actives'],
                     chid2hash, chid2taxid,
-                    self.loader_param, load_from_smiles_string=True,
+                    self.loader_param,
                     task="dude_actives", num_protein_chains=1, num_ligand_chains=1,
+                    load_ligand_from_column="LIG_SMILES",
+                    ligand_column_string_format="smiles",
+                    is_negative=False,
                 ),
                 DatasetSMComplexAssembly(
                     valid_ID_dict['dude_inactives'][:self.dataset_param['n_valid_dude_inactives']],
                     loader_sm_compl_assembly, valid_dict['dude_inactives'],
                     chid2hash, chid2taxid,
-                    self.loader_param, load_from_smiles_string=True,
+                    self.loader_param,
                     task="dude_inactives", num_protein_chains=1, num_ligand_chains=1,
+                    load_ligand_from_column="LIG_SMILES",
+                    ligand_column_string_format="smiles",
+                    is_negative=True,
                 ),
             )
         )
