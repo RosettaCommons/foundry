@@ -216,12 +216,13 @@ class Templ_emb(nn.Module):
                  n_block=2, d_templ=64,
                  n_head=4, d_hidden=16, p_drop=0.25,
                  symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='mean', 
-                 main_block=None, copy_main_block=None):
+                 main_block=None, copy_main_block=None, additional_dt1d=0):
         
         self.main_block = main_block
         self.symmetrize_repeats = symmetrize_repeats
         self.copy_main_block = copy_main_block
         self.repeat_length = repeat_length
+        d_t1d += additional_dt1d
 
         super(Templ_emb, self).__init__()
         # process 2D features

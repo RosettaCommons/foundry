@@ -49,6 +49,7 @@ class RoseTTAFoldModule(nn.Module):
         d_hidden=32, 
         d_hidden_templ=64, 
         p_drop=0.15,
+        additional_dt1d=0,
         SE3_param={}, SE3_ref_param={},
         atom_type_index=None, 
         aamask=None, 
@@ -90,7 +91,8 @@ class RoseTTAFoldModule(nn.Module):
                                    symmsub_k=symmsub_k,
                                    sym_method=sym_method, 
                                    main_block=main_block, 
-                                   copy_main_block=copy_main_block_template)
+                                   copy_main_block=copy_main_block_template,
+                                   additional_dt1d=additional_dt1d)
 
         # Update inputs with outputs from previous round
         self.recycle = Recycling(d_msa=d_msa, d_pair=d_pair, d_state=d_state)
