@@ -12,7 +12,7 @@ import scipy.sparse.csgraph
 import networkx as nx
 import itertools
 from itertools import combinations
-from collections import OrderedDict
+from collections import OrderedDict, Counter
 from openbabel import openbabel
 from scipy.spatial.transform import Rotation
 from icecream import ic
@@ -1612,6 +1612,43 @@ def map_identical_prot_chains(partners, chains, modres):
     #chlet2chnum = OrderedDict([(chlet,chnum) for chnum,chlet_s in chnum2chlet.items() for chlet in chlet_s])
 
     return chnum2chlet 
+
+def reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item):
+    """
+    for cases with protein symmetry, after cropping the precomputed protein symmetries are no longer valid
+    this updates the mask so that the invalid protein symmetries arent considered in resolve_equiv_natives
+    """
+    # if a homomer subunit is cropped you need to reorder the symmetry axis because the
+    # small molecule will not longer be in the global frames in the projections of the single chain
+    # across different symmetry axes
+    # depending on how many subunits are cropped, you will have to mask out the invalid chain swaps
+
+    protein_sel = sel[sel<sum(Ls_prot)]
+    chain_break_idxs = [sum(Ls_prot[:i]) for i in range(len(Ls_prot))]
+    chosen_prot_chains = torch.tensor(list(set(np.digitize(protein_sel, chain_break_idxs)))) -1 # 1 indexed
+
+    # this code assumes that all permutations of each set of identical chains are computed and then they are
+    # concatenated by catprodcat (See: featurize_asmb_prot)
+    assert torch.all(torch.diff(ch_label) >=0), \
+        f"all identical chains are not next to each other so symmetry resolution will not work. here is the order of chain labels\
+                {ch_label[chain_break_idxs]}"
+    ch_label_per_chain = ch_label[chain_break_idxs] # makes ch_label chainwise instead of residue wise
+    all_perms = []
+    ch_number = 0
+    for num_repeats in Counter(ch_label_per_chain.numpy()).values():
+        perms_per_chain = torch.tensor(list(itertools.permutations(range(ch_number, ch_number + num_repeats)))) # torch doesnt have a permutations fx
+        all_perms.append(perms_per_chain)
+        ch_number += num_repeats
+    perms = cartprodcat(all_perms)
+    perms = perms[:, chosen_prot_chains]
+    is_valid_perm = torch.all( torch.isin(perms, chosen_prot_chains), dim=1)
+    is_valid_perm = torch.nn.functional.pad(is_valid_perm, (0, mask.shape[0]-is_valid_perm.shape[0])) # pad in case there are more ligand symmetry dimensions
+    if len(chosen_prot_chains) == 0:
+        raise Exception(f"no protein was chosen in the crop for this item: {item}")
+    else:
+        # mask all invalid protein permutations
+        mask[~is_valid_perm, :len(protein_sel)] = False 
+    return mask
 
 def cartprodcat(X_s):
     """Concatenate list of tensors on dimension 1 while taking their cartesian product

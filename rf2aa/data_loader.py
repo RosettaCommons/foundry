@@ -6,7 +6,7 @@ from icecream import ic
 from torch.utils import data
 import os, csv, random, pickle, gzip, itertools, time, ast, copy, sys
 from dateutil import parser
-from collections import OrderedDict
+from collections import OrderedDict, Counter
 from itertools import permutations
 from typing import Dict, Optional, Tuple
 from pathlib import Path
@@ -17,7 +17,6 @@ from os.path import exists
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
 sys.path.append(script_dir+'/../')
-from symmetry import get_symmetry
 
 import numpy as np
 import pandas as pd
@@ -31,12 +30,14 @@ from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol
 from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, UNKINDEX, \
     NTOTAL, NBTYPES, CHAIN_GAP, num2aa, METAL_RES_NAMES, aa2num, atomnum2atomtype
 from rf2aa.kinematics import get_chirals
+from rf2aa.symmetry import get_symmetry
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
     cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
     get_alt_query_ligand, remove_unresolved_substructures, map_identical_prot_chains, \
     cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, get_prot_sm_mask, bond_feats_from_Ls, \
-    reindex_protein_feats_after_atomize
+    reindex_protein_feats_after_atomize, reassign_symmetry_after_cropping
+
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -2900,7 +2901,7 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
             frames_lig.append(frames_)
             chirals_lig.append(chirals_)
             resname_lig.append('_'.join([res[2] for res in ligand]))
-
+    
     return xyz_lig, mask_lig, msa_lig, bond_feats_lig, akeys_lig, Ls_lig, frames_lig, \
            chirals_lig, resname_lig
 
@@ -3136,7 +3137,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     prot_partners = prot_partners[:params['MAXPROTCHAINS']]
     if num_protein_chains is not None:
         prot_partners = prot_partners[:min(num_protein_chains, params['MAXPROTCHAINS'])]
-
+    
     # get list of coordinate transforms to recreate this bio-assembly
     i_a = str(item['ASSEMBLY'])
     asmb_xfs = asmb[i_a]
@@ -3264,6 +3265,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
                                 seq_prot, select_farthest_residues=select_farthest_residues)
         else:
             sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
+            mask = reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item)
 
         msa = msa[:, sel]
         ins = ins[:, sel]
@@ -3284,8 +3286,8 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
         # crop small molecule features, assumes all sm chains are after all protein chains
         atom_sel = sel[sel>=sum(Ls_prot)] - sum(Ls_prot) # 0 index all the selected atoms
         frames = frames[atom_sel]
-        chirals = crop_chirals(chirals, atom_sel)
-
+        chirals = crop_chirals(chirals, atom_sel)    
+    
     # reindex chiral atom positions - assumes all sm chains are after all protein chains
     if chirals.shape[0]>0:
         L1 = is_prot.sum()
@@ -3294,8 +3296,8 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     dist_matrix = get_bond_distances(bond_feats)
 
     # create MSA features from cropped msa and insertions
-    if len(msa) > params['BLOCKCUT']:
-        msa, ins = MSABlockDeletion(msa.long(), ins.long())
+    # if len(msa) > params['BLOCKCUT']:
+    #     msa, ins = MSABlockDeletion(msa.long(), ins.long())
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = \
         MSAFeaturize(msa.long(), ins.long(), params, term_info=term_info, fixbb=fixbb, seed_msa_clus=seed_msa_clus)
     
@@ -3624,7 +3626,6 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
     # closest `n_crop` residues to query atom
     dist = torch.cdist(ca_xyz.unsqueeze(0), query_atom.unsqueeze(0),compute_mode="donot_use_mm_for_euclid_dist").flatten()
     dist = torch.nan_to_num(dist, nan=999999)
-
     res_mask = torch.cat([all_mask[:L_prot,:3].all(dim=-1), all_mask[L_prot:,1]])
 
     idx = torch.argsort(dist)
@@ -3634,7 +3635,6 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
     # always include every query ligand atom, regardless of if they're in topk
     query_lig_idx = np.arange(Ls_sm[0]) + L_prot
     sel = np.unique(np.concatenate([idx.numpy(), query_lig_idx]))
-
     # partially masked or partially cropped ligands
     offset = L_prot
     for L_sm in Ls_sm:
@@ -3654,43 +3654,37 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
             sel = np.setdiff1d(sel,curr_lig_idx)
 
         offset += L_sm
+    
     # remove protein chains that are short and don't contact other proteins or ligands
     # distance between protein C-alphas
-
     prot_sel = sel[sel<L_prot]
     lig_sel = sel[sel>=L_prot]
 
-    dist_prot_ca = torch.cdist(ca_xyz[prot_sel], ca_xyz[prot_sel]) # (L_prot, L_prot)
+    # dist_prot_ca = torch.cdist(ca_xyz[prot_sel], ca_xyz[prot_sel]) # (L_prot, L_prot)
     # distance between closest heavy atom on each residue and ligand atoms
-    dist_prot_lig = torch.cdist(all_xyz[prot_sel], ca_xyz[lig_sel])
-    dist_prot_lig[~all_mask[prot_sel]] = 99999
-    dist_prot_lig, _ = dist_prot_lig.min(dim=1) # (L_sel_prot, L_sel_sm)
-
-    res_mask_prot = res_mask[prot_sel]
-    res_mask_lig = res_mask[lig_sel]
+    dist_all = torch.cdist(all_xyz[sel], ca_xyz[sel])
+    dist_all[~all_mask[sel]] = 99999
+    dist_all, _ = dist_all.min(dim=1) # (L_sel_prot, L_sel_sm)
 
     offset = 0
     for L in Ls_prot:
-        # protein contacts (C-alpha within 10A)
-
-        #dist_nonself = torch.cat([dist_prot_ca[:offset, offset:offset+L],
-        #                          dist_prot_ca[offset+L:, offset:offset+L]],dim=0) # (L_prot - L, L)
-        #res_mask_nonself = torch.cat([res_mask_prot[:offset], res_mask_prot[offset+L:]]) # (L_prot - L,)
-        #dist_nonself = dist_nonself[res_mask_nonself][:,res_mask_prot[offset:offset+L]]
-        #num_prot_contacts = (dist_nonself<10).sum()
 
         # protein-ligand contacts (heavy atom within 4A)
         prot_chain_sel = np.logical_and(prot_sel >= offset, prot_sel < offset+L)
-        dist_ = dist_prot_lig[prot_chain_sel]
-        dist_ = dist_[res_mask_prot[prot_chain_sel]][:,res_mask_lig]
-        num_lig_contacts = (dist_<4).sum()
+        
+        # assumes proteins come before ligands 
+        is_prot_chain_sel = torch.zeros(dist_all.shape[0], dtype=bool)
+        is_prot_chain_sel[:prot_chain_sel.shape[0]] = torch.tensor(prot_chain_sel)
+
+        dist_ = dist_all[is_prot_chain_sel][:, ~is_prot_chain_sel]
+        num_contacts = (dist_<4).sum()
         # number of residues in crop
         curr_chain_idx = np.where(res_mask)[0]
         curr_chain_idx = curr_chain_idx[(curr_chain_idx>=offset) & (curr_chain_idx<offset+L)]
         num_residues = np.isin(curr_chain_idx, sel).sum()
-        
-        #if (num_residues < 8) and (num_prot_contacts < 10) and (num_lig_contacts < 10):
-        if (num_residues < 8) and (num_lig_contacts < 10):
+
+        # if (num_residues < 8) or (num_prot_contacts < 10) or (num_lig_contacts < 10):
+        if (num_residues < 8) or (num_contacts < 10):
             sel = np.setdiff1d(sel, curr_chain_idx)
             #print(f'removed chain from crop: (num_residues={num_residues} '\
             #      f'num_lig_contacts={num_lig_contacts})')
@@ -3699,6 +3693,15 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
 
     # this is probably excessive but check again to make sure all the small molecules have contacts to proteins
     # and remove those that do not
+    # need to hold on to the old prot_sel for the failure case
+    prot_sel_new = sel[sel<L_prot]
+    lig_sel = sel[sel>=L_prot]
+
+    # distance between closest heavy atom on each residue and ligand atoms
+    dist_prot_lig = torch.cdist(all_xyz[prot_sel_new], ca_xyz[lig_sel])
+    dist_prot_lig[~all_mask[prot_sel_new]] = 99999
+    dist_prot_lig, _ = dist_prot_lig.min(dim=1) # (L_sel_prot, L_sel_sm)
+
     offset = L_prot
     for L_sm in Ls_sm:
         lig_chain_sel = np.logical_and(lig_sel >= offset, lig_sel < offset+L_sm)
@@ -3708,7 +3711,6 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
         dist_ = dist_prot_lig[:][:, lig_chain_sel]
         # dist_ = dist_[res_mask_prot][:,res_mask_lig[lig_chain_sel]]
         num_lig_contacts = (dist_<4).sum()
-        
         if num_lig_contacts < 4:
             curr_chain_idx = np.arange(L_sm) + offset
             sel = np.setdiff1d(sel, curr_chain_idx)
@@ -3777,7 +3779,7 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
     # uniformly sample from unique PDB chains
     chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
     tmp_df = tmp_df[tmp_df.CHAINID==chid]
-    
+
     if dedup_ligand and "LIGAND" in tmp_df:
         # uniform sample from unique ligands
         lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
@@ -3785,7 +3787,6 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
         tmp_df = tmp_df[tmp_df['LIGAND'].apply(lambda x: x[0][2]==chosen_lig)]
 
     item = tmp_df.sample(1).to_dict(orient='records')[0] # choose 1 random row
-
     return copy.deepcopy(item) # prevents dataframe from being modified by downstream changes
 
 

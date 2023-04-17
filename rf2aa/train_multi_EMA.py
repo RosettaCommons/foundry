@@ -1629,7 +1629,6 @@ class Trainer():
                         unclamp, negative, task, item, symmRs, Lasu, ch_label,
                         len(train_loader)*rank+counter
                     )
-
             loss = loss / self.ACCUM_STEP
             scaler.scale(loss).backward()
             if counter%self.ACCUM_STEP == 0:  
