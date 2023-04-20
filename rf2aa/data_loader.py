@@ -4161,66 +4161,6 @@ class DistilledDataset(data.Dataset):
                 # Note the extra argument to loader_sm_compl_assembly when we load the furthest residues from the ligand
             offset += len(self.index_dict['sm_compl_furthest_neg'])
 
-            if index >= offset and index < offset + len(self.index_dict['sm_compl_permuted_neg']):
-                task = 'sm_compl_permuted_neg'
-                ID = self.ID_dict['sm_compl_permuted_neg'][index - offset]
-                item = sample_item_sm_compl(self.dataset_dict['sm_compl_permuted_neg'], ID)
-
-                # In this case, we use the negative mapping we created earlier to pull out the
-                # row of the item we want to load the ligand from.
-                negative_item_choices = item["REMAP_INDICES"]
-                negative_item_df_index = np.random.choice(negative_item_choices)
-                negative_item = self.dataset_dict['sm_compl_permuted_neg'].loc[negative_item_df_index].to_dict()
-                
-                out = self.loader_dict['sm_compl_permuted_neg'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl_permuted_neg', num_protein_chains=1, num_ligand_chains=1, selected_negative_item=negative_item)
-            offset += len(self.index_dict['sm_compl_permuted_neg'])
-
-            if index >= offset and index < offset + len(self.index_dict['sm_compl_docked_neg']):
-                task = 'sm_compl_docked_neg'
-                ID = self.ID_dict['sm_compl_docked_neg'][index - offset]
-                item = sample_item_sm_compl(self.dataset_dict['sm_compl_docked_neg'], ID)
-
-                negative_item_choices = item["REMAP_INDICES"]
-                negative_item_df_index = np.random.choice(negative_item_choices)
-                negative_item = self.dataset_dict['sm_compl_docked_neg'].loc[negative_item_df_index].to_dict()
-                out = self.loader_dict['sm_compl_docked_neg'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl_docked_neg', num_protein_chains=1, num_ligand_chains=1, selected_negative_item=negative_item)
-            offset += len(self.index_dict['sm_compl_docked_neg'])
-
-            if index >= offset and index < offset + len(self.index_dict['sm_compl_furthest_neg']):
-                ID = self.ID_dict['sm_compl_furthest_neg'][index - offset]
-                item = sample_item_sm_compl(self.dataset_dict['sm_compl_furthest_neg'], ID)
-                out = self.loader_dict['sm_compl_furthest_neg'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl_furthest_neg', num_protein_chains=1, num_ligand_chains=1, select_farthest_residues=True)
-                # Note the extra argument to loader_sm_compl_assembly when we load the furthest residues from the ligand
-            offset += len(self.index_dict['sm_compl_furthest_neg'])
-
-            if index >= offset and index < offset + len(self.index_dict['sm_compl_permuted_neg']):
-                ID = self.ID_dict['sm_compl_permuted_neg'][index - offset]
-                item = sample_item_sm_compl(self.dataset_dict['sm_compl_permuted_neg'], ID)
-
-                # In this case, we use the negative mapping we created earlier to pull out the
-                # row of the item we want to load the ligand from.
-                negative_item_choices = item["REMAP_INDICES"]
-                negative_item_df_index = np.random.choice(negative_item_choices)
-                negative_item = self.dataset_dict['sm_compl_permuted_neg'].loc[negative_item_df_index].to_dict()
-                
-                out = self.loader_dict['sm_compl_permuted_neg'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl_permuted_neg', num_protein_chains=1, num_ligand_chains=1, selected_negative_item=negative_item)
-            offset += len(self.index_dict['sm_compl_permuted_neg'])
-
-            if index >= offset and index < offset + len(self.index_dict['sm_compl_docked_neg']):
-                ID = self.ID_dict['sm_compl_docked_neg'][index - offset]
-                item = sample_item_sm_compl(self.dataset_dict['sm_compl_docked_neg'], ID)
-
-                negative_item_choices = item["REMAP_INDICES"]
-                negative_item_df_index = np.random.choice(negative_item_choices)
-                negative_item = self.dataset_dict['sm_compl_docked_neg'].loc[negative_item_df_index].to_dict()
-                out = self.loader_dict['sm_compl_docked_neg'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl_docked_neg', num_protein_chains=1, num_ligand_chains=1, selected_negative_item=negative_item)
-            offset += len(self.index_dict['sm_compl_docked_neg'])
-
             # NOTE: THE DATASETS HAVE TO BE IN ORDER OF INDEX DICT
             # SINCE THE NEGATIVES ARE LOADED BEFORE atomize_pdb,
             # THEY HAVE TO GO FIRST
@@ -4336,7 +4276,7 @@ class DistributedWeightedSampler(data.Sampler):
 
         #print('rank',self.rank,': expecting',self.num_samples,'examples, drew',len(indices),'examples')
         assert len(indices) == self.num_samples # more stringent, switch with line above during debugging
-
+        
         return iter(indices.tolist())
 
     def __len__(self):
