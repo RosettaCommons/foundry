@@ -1627,15 +1627,19 @@ def reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item):
     chain_break_idxs = [sum(Ls_prot[:i]) for i in range(len(Ls_prot))]
     chosen_prot_chains = torch.tensor(list(set(np.digitize(protein_sel, chain_break_idxs)))) -1 # 1 indexed
 
-    # this code assumes that all permutations of each set of identical chains are computed and then they are
+    # this code assumes that all permutations of each set of identical protein chains are computed and then they are
     # concatenated by catprodcat (See: featurize_asmb_prot)
-    assert torch.all(torch.diff(ch_label) >=0), \
+    # this is not necessarily true for ligands because there could be multiple copies of the same ligand that are stored separately
+    # so we will check that the protein chain chain labels are ascending
+    ch_label_per_prot_chain = ch_label[chain_break_idxs] # makes ch_label chainwise instead of residue wise
+
+    assert torch.all(torch.diff(ch_label_per_prot_chain) >=0), \
         f"all identical chains are not next to each other so symmetry resolution will not work. here is the order of chain labels\
-                {ch_label[chain_break_idxs]}"
-    ch_label_per_chain = ch_label[chain_break_idxs] # makes ch_label chainwise instead of residue wise
+                {ch_label_per_prot_chain}"
+    
     all_perms = []
     ch_number = 0
-    for num_repeats in Counter(ch_label_per_chain.numpy()).values():
+    for num_repeats in Counter(ch_label_per_prot_chain.numpy()).values():
         perms_per_chain = torch.tensor(list(itertools.permutations(range(ch_number, ch_number + num_repeats)))) # torch doesnt have a permutations fx
         all_perms.append(perms_per_chain)
         ch_number += num_repeats
