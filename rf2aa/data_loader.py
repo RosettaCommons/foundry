@@ -84,7 +84,7 @@ default_dataloader_params = {
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.v2.csv"%na_dir,
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.v2.csv"%na_dir,
-        "SM_LIST"          : "%s/sm_compl_all_20230327.csv"%sm_compl_dir, 
+        "SM_LIST"          : "%s/sm_compl_all_20230418.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02_w_taxid.csv"%sm_compl_dir, # on digs
         "PDB_METADATA"     : "%s/list_v00_w_taxid_20230201.csv"%sm_compl_dir, # on digs
         "FB_LIST"          : "%s/list_b1-3.csv"%fb_dir,
@@ -93,9 +93,9 @@ default_dataloader_params = {
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
-        "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230211.csv"%sm_compl_dir, 
+        "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230404.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230422.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
