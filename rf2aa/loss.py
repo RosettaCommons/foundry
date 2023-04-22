@@ -775,22 +775,22 @@ def calc_BB_bond_geom(
     bonded = (idx[:,1:] - idx[:,:-1])==1
     is_prot = is_protein(seq)[:-1]
 
-    # bond length: C-N
+    # bond length: N-CA, CA-C, C-N
     blen_CN_pred  = length(pred[:,:-1,2], pred[:,1:,0]).reshape(B,L-1) # (B, L-1)
-    CN_loss = torch.clamp( torch.abs(blen_CN_pred - ideal_NC) - sig_len, min=0.0 )
-    CN_loss = (bonded*is_prot*CN_loss).sum() / ((bonded*is_prot).sum() + eps)
-    blen_loss = CN_loss   #fd squared loss
+    CN_loss = bonded*is_prot*torch.clamp( torch.square(blen_CN_pred - ideal_NC) - sig_len**2, min=0.0 )
+    n_viol = (CN_loss > 0.0).sum()
+    blen_loss = CN_loss.sum() / (n_viol + eps)
 
     # bond angle: CA-C-N, C-N-CA
-    bang_CACN_pred = cosangle(pred[:,:-1,2], pred[:,1:,0], pred[:,1:,1]).reshape(B,L-1)
+    bang_CACN_pred = cosangle(pred[:,:-1,1], pred[:,:-1,2], pred[:,1:,0]).reshape(B,L-1)
     bang_CNCA_pred = cosangle(pred[:,:-1,2], pred[:,1:,0], pred[:,1:,1]).reshape(B,L-1)
-    CACN_loss = torch.clamp( torch.abs(bang_CACN_pred - ideal_CACN) - sig_ang,  min=0.0 )
-    CACN_loss = (bonded*is_prot*CACN_loss).sum() / ((bonded*is_prot).sum() + eps)
-    CNCA_loss = torch.clamp( torch.abs(bang_CNCA_pred - ideal_CNCA) - sig_ang,  min=0.0 )
-    CNCA_loss = (bonded*is_prot*CNCA_loss).sum() / ((bonded*is_prot).sum() + eps)
+    CACN_loss = bonded*is_prot*torch.clamp( torch.square(bang_CACN_pred - ideal_CACN) - sig_ang**2,  min=0.0 )
+    CNCA_loss = bonded*is_prot*torch.clamp( torch.square(bang_CNCA_pred - ideal_CNCA) - sig_ang**2,  min=0.0 )
     bang_loss = CACN_loss + CNCA_loss
+    n_viol = (bang_loss > 0.0).sum()
+    bang_loss = bang_loss.sum() / (n_viol+eps)
 
-    return blen_loss+bang_loss
+    return blen_loss + bang_loss
 
 def calc_atom_bond_loss(pred, true, bond_feats, seq, beta=0.2, eps=1e-6):
     """

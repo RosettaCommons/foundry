@@ -1998,7 +1998,7 @@ def get_msa(a3mfilename, item, maxseq=5000):
     return {'msa':torch.tensor(msa), 'ins':torch.tensor(ins), 'taxIDs':taxIDs, 'label':item}
 
 # Load PDB examples
-def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, fixbb=False):
+def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, p_short_crop=0.0, fixbb=False):
     # load MSA, PDB, template info
     pdb_chain, pdb_hash = item['CHAINID'], item['HASH']
     pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
@@ -2018,12 +2018,18 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5,
         feats = featurize_homo(msa, ins, tplt, pdb, pdbid, interfaces, params, pick_top=pick_top, fixbb=fixbb)
         return feats + ("homo",item,)
 
+    # only short crop monomers
+    short_crop = np.random.rand() < p_short_crop
+    if (short_crop):
+        crop_orig = params["CROP"]
+        params["CROP"] = np.random.randint(8,16)
     feats = featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb)
+    if (short_crop):
+        params["CROP"] = crop_orig
     return feats + ("monomer",item,)
 
     
-def loader_fb(item, params, unclamp=False, fixbb=False):
-    
+def loader_fb(item, params, unclamp=False, p_short_crop=0.0, fixbb=False):
     # loads sequence/structure/plddt information
     pdb_chain, hashstr = item['CHAINID'], item['HASH']
     a3m = get_msa(os.path.join(params["FB_DIR"], "a3m", hashstr[:2], hashstr[2:], pdb_chain+".a3m.gz"), pdb_chain)
@@ -2050,7 +2056,13 @@ def loader_fb(item, params, unclamp=False, fixbb=False):
     mask[:,:27] = pdb['mask'][:,:27]
 
     # Residue cropping
-    crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
+    # only short crop monomers
+    short_crop = np.random.rand() < p_short_crop
+    if (short_crop):
+        crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, np.random.randint(8,16), unclamp=unclamp)
+    else:
+        crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
+
     seq = seq[:,crop_idx]
     msa_seed_orig = msa_seed_orig[:,:,crop_idx]
     msa_seed = msa_seed[:,:,crop_idx]
@@ -3791,7 +3803,7 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
 
 
 class Dataset(data.Dataset):
-    def __init__(self, IDs, loader, data_df, params, homo, unclamp_cut=0.9, pick_top=True, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None):
+    def __init__(self, IDs, loader, data_df, params, homo, unclamp_cut=0.9, pick_top=True, p_short_crop=-1.0, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None):
         self.IDs = IDs
         self.data_df = data_df
         self.loader = loader
@@ -3800,6 +3812,7 @@ class Dataset(data.Dataset):
         self.pick_top = pick_top
         self.unclamp_cut = unclamp_cut
         self.p_homo_cut = p_homo_cut
+        self.p_short_crop = p_short_crop
         self.n_res_atomize = n_res_atomize
         self.flank = flank
         self.rng = np.random.RandomState(seed)
@@ -3814,6 +3827,9 @@ class Dataset(data.Dataset):
         if self.n_res_atomize > 0:
             kwargs['n_res_atomize'] = self.n_res_atomize
             kwargs['flank'] = self.flank
+        else:
+            kwargs['p_short_crop'] = self.p_short_crop
+
         out = self.loader(item, self.params, self.homo,
                           unclamp = (self.rng.rand() > self.unclamp_cut),
                           pick_top = self.pick_top, 
@@ -3992,12 +4008,13 @@ class DatasetSM(data.Dataset):
 
 class DistilledDataset(data.Dataset):
     def __init__(self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid, params, 
-                 native_NA_frac=0.05, unclamp_cut=0.9, ligand_dictionary: Optional[Dict] = None):
+                 native_NA_frac=0.05, p_short_crop=0.0, unclamp_cut=0.9, ligand_dictionary: Optional[Dict] = None):
 
         self.ID_dict = ID_dict
         self.dataset_dict = dataset_dict
         self.loader_dict = loader_dict
         self.homo = homo
+        self.p_short_crop = p_short_crop
         self.chid2hash = chid2hash
         self.chid2taxid = chid2taxid
         self.params = params
@@ -4027,14 +4044,16 @@ class DistilledDataset(data.Dataset):
                 task = 'pdb'
                 ID = self.ID_dict['pdb'][index-offset]
                 item = sample_item(self.dataset_dict['pdb'], ID)
-                out = self.loader_dict['pdb'](item, self.params, self.homo, unclamp=(p_unclamp > self.unclamp_cut))
+                out = self.loader_dict['pdb'](
+                    item, self.params, self.homo, p_short_crop=self.p_short_crop, unclamp=(p_unclamp > self.unclamp_cut))
             offset += len(self.index_dict['pdb'])
 
             if index >= offset and index < offset + len(self.index_dict['fb']):
                 task = 'fb'
                 ID = self.ID_dict['fb'][index-offset]
                 item = sample_item(self.dataset_dict['fb'], ID)
-                out = self.loader_dict['fb'](item, self.params, unclamp=(p_unclamp > self.unclamp_cut))
+                out = self.loader_dict['fb'](
+                    item, self.params, p_short_crop=self.p_short_crop, unclamp=(p_unclamp > self.unclamp_cut))
             offset += len(self.index_dict['fb'])
 
             if index >= offset and index < offset + len(self.index_dict['compl']):

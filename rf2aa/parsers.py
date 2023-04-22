@@ -9,9 +9,24 @@ import rf2aa.util
 import gzip
 from rf2aa.ffindex import *
 import torch
-from rf2aa.chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP, to1letter
+from rf2aa.chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP, to1letter, INIT_CRDS
 from openbabel import openbabel
 
+def get_dislf(seq, xyz, mask):
+    L = seq.shape[0]
+    resolved_cys_mask = ((seq==aa2num['CYS']) * mask[:,5]).nonzero().squeeze(-1)  # cys[5]=='sg'
+    sgs = xyz[resolved_cys_mask,5]
+    ii,jj = torch.triu_indices(sgs.shape[0],sgs.shape[0],1)
+    d_sg_sg = torch.linalg.norm(sgs[ii,:]-sgs[jj,:], dim=-1)
+    is_dslf = (d_sg_sg>1.9)*(d_sg_sg<2.1)
+
+    dslf = []
+    for i in is_dslf.nonzero():
+        dslf.append( (
+            resolved_cys_mask[ii[i]].item(),
+            resolved_cys_mask[jj[i]].item(),
+        ) )
+    return dslf
 
 def read_template_pdb(L, pdb_fn, target_chain=None):
     # get full sequence from given PDB
@@ -59,6 +74,79 @@ def read_template_pdb(L, pdb_fn, target_chain=None):
 
     #return seq_full[None], ins[None], L_s, xyz[None], t1d[None]
     return xyz[None], t1d[None]
+
+def read_multichain_pdb(pdb_fn, tmpl_chain=None, tmpl_conf=0.1):
+    print ('read_multichain_pdb',tmpl_chain)
+
+    # get full sequence from PDB
+    seq_full = list()
+    L_s = list()
+    prev_chain=''
+    offset = 0
+    with open(pdb_fn) as fp:
+        for line in fp:
+            if line[:4] != "ATOM":
+                continue
+            if line[12:16].strip() != "CA":
+                continue
+            if line[21] != prev_chain:
+                if len(seq_full) > 0:
+                    L_s.append(len(seq_full)-offset)
+                    offset = len(seq_full)
+            prev_chain = line[21]
+            aa = line[17:20]
+            seq_full.append(aa2num[aa] if aa in aa2num.keys() else 20)
+    L_s.append(len(seq_full) - offset)
+
+    seq_full = torch.tensor(seq_full).long()
+    L = len(seq_full)
+    msa = torch.stack((seq_full,seq_full,seq_full), dim=0)
+    msa[1,:L_s[0]] = 20
+    msa[2,L_s[0]:] = 20
+    ins = torch.zeros_like(msa)
+
+    xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*5.0
+    xyz_t = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*5.0
+
+    mask = torch.full((1, L, NTOTAL), False)
+    mask_t = torch.full((1, L, NTOTAL), False)
+    seq = torch.full((1, L,), 20).long()
+    conf = torch.zeros(1, L,1).float()
+
+    with open(pdb_fn) as fp:
+        for line in fp:
+            if line[:4] != "ATOM":
+                continue
+                outbatch = 0
+
+            resNo, atom, aa = int(line[22:26]), line[12:16], line[17:20]
+            aa_idx = aa2num[aa] if aa in aa2num.keys() else 20
+
+            idx = resNo - 1
+
+            for i_atm, tgtatm in enumerate(aa2long[aa_idx]):
+                if tgtatm == atom:
+                    xyz_i = torch.tensor([float(line[30:38]), float(line[38:46]), float(line[46:54])])
+                    xyz[0, idx, i_atm, :] = xyz_i
+                    mask[0, idx, i_atm] = True
+                    if line[21] == tmpl_chain:
+                        xyz_t[0, idx, i_atm, :] = xyz_i
+                        mask_t[0, idx, i_atm] = True
+                    break
+            seq[0, idx] = aa_idx
+
+    if (mask_t.any()):
+        xyz_t[0] = rf2aa.util.center_and_realign_missing(xyz[0], mask[0])
+
+    dslf = get_dislf(seq[0], xyz[0], mask[0])
+
+    # assign confidence 'CONF' to all residues with backbone in template
+    conf = torch.where(mask_t[...,:3].all(dim=-1)[...,None], torch.full((1,L,1),tmpl_conf), torch.zeros(L,1)).float()
+
+    seq_1hot = torch.nn.functional.one_hot(seq, num_classes=NAATOKENS-1).float()
+    t1d = torch.cat((seq_1hot, conf), -1)
+
+    return msa, ins, L_s, xyz_t, mask_t, t1d, dslf
 
 def parse_fasta(filename,  maxseq=10000, rmsa_alphabet=False):
     msa = []

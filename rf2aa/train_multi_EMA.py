@@ -44,7 +44,7 @@ ob.obErrorLog.SetOutputLevel(0)
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
-torch.autograd.set_detect_anomaly(True)
+#torch.autograd.set_detect_anomaly(True)
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
 
@@ -932,6 +932,7 @@ class Trainer():
 
         loader_dict = dict(
             pdb = loader_pdb,
+            peptide = loader_pdb,
             compl = loader_complex,
             neg_compl = loader_complex,
             na_compl = loader_na_complex,
@@ -950,8 +951,9 @@ class Trainer():
             sm_compl_docked_neg = loader_sm_compl_assembly,
         )
 
-        train_set = DistilledDataset(train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid,
-                                     self.loader_param, native_NA_frac=0.25, ligand_dictionary=ligand_dictionary)
+        train_set = DistilledDataset(
+            train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid,
+            self.loader_param, native_NA_frac=0.25, p_short_crop=self.dataset_param['p_short_crop'], ligand_dictionary=ligand_dictionary)
 
         train_sampler = DistributedWeightedSampler(
             train_set, 
@@ -969,12 +971,17 @@ class Trainer():
             pdb = Dataset(
                 valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
                 loader_pdb, valid_dict['pdb'], 
-                self.loader_param, homo, p_homo_cut=-1.0
+                self.loader_param, homo, p_homo_cut=-1.0, p_short_crop=-1.0
+            ),
+            peptide = Dataset(
+                valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
+                loader_pdb, valid_dict['pdb'], 
+                self.loader_param, homo, p_homo_cut=-1.0, p_short_crop=1.0
             ),
             homo = Dataset(
                 valid_ID_dict['homo'][:self.dataset_param['n_valid_homo']],
                 loader_pdb, valid_dict['homo'],
-                self.loader_param, homo, p_homo_cut=2.0
+                self.loader_param, homo, p_homo_cut=2.0, p_short_crop=-1.0
             ),
             rna = DatasetRNA(
                 valid_ID_dict['rna'][:self.dataset_param['n_valid_rna']],
@@ -1013,13 +1020,6 @@ class Trainer():
                 task='sm_compl_covale',
                 num_protein_chains=1,
             ),
-            sm_compl_asmb = DatasetSMComplexAssembly(
-                valid_ID_dict['sm_compl_asmb'][:self.dataset_param['n_valid_sm_compl_asmb']],
-                loader_sm_compl_assembly, valid_dict['sm_compl_asmb'],
-                chid2hash, chid2taxid, # used for MSA generation of assemblies
-                self.loader_param,
-                task='sm_compl_asmb'
-            ),
             sm_compl_strict = DatasetSMComplexAssembly(
                 valid_ID_dict['sm_compl_strict'][:self.dataset_param['n_valid_sm_compl_strict']],
                 loader_sm_compl_assembly, valid_dict['sm_compl_strict'],
@@ -1027,6 +1027,13 @@ class Trainer():
                 self.loader_param,
                 task='sm_compl_strict',
                 num_protein_chains=1,
+            ),
+            sm_compl_asmb = DatasetSMComplexAssembly(
+               valid_ID_dict['sm_compl_asmb'][:self.dataset_param['n_valid_sm_compl_asmb']],
+               loader_sm_compl_assembly, valid_dict['sm_compl_asmb'],
+               chid2hash, chid2taxid, # used for MSA generation of assemblies
+               self.loader_param,
+               task='sm_compl_asmb'
             ),
             sm = DatasetSM(
                 valid_ID_dict['sm'][:self.dataset_param['n_valid_sm']],
@@ -1036,12 +1043,13 @@ class Trainer():
             atomize_pdb = Dataset(
                 valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
                 loader_atomize_pdb, valid_dict['atomize_pdb'],
-                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0
+                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0, p_short_crop=-1.0
             ),
         )
 
         valid_headers = dict(
             pdb = 'Monomer',
+            peptide = 'Peptide',
             homo = 'Homo',
             rna = 'RNA',
             sm_compl = 'SM_Compl',
@@ -1796,17 +1804,27 @@ class Trainer():
 
                         if i_cycle < N_cycle - 1:
                             continue
+                try:
+                    loss, loss_dict, acc_s, _, true_crds, pred_allatom, res_mask = self._get_loss_and_misc(
+                        output_i,
+                        true_crds, mask_crds, network_input['same_chain'],
+                        network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
+                        network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
+                        unclamp, negative, task, item, symmRs, Lasu, ch_label,
+                        len(valid_loader)*rank+counter
+                    )
+                except Exception as e:
+                    print(item)
+                    print(e)
+                    loss = None
+                    loss_dict = None
+                    save_pdbs= False
 
-                loss, loss_dict, acc_s, _, true_crds, pred_allatom, res_mask = self._get_loss_and_misc(
-                    output_i,
-                    true_crds, mask_crds, network_input['same_chain'],
-                    network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
-                    network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
-                    unclamp, negative, task, item, symmRs, Lasu, ch_label,
-                    len(valid_loader)*rank+counter
-                )
-                
-                valid_tot += loss.detach()
+                if torch.isnan(loss):
+                    print('nan loss', item)
+                    save_pdbs=False
+                else:
+                    valid_tot += loss.detach()
                 if valid_loss is None:
                     valid_loss = torch.zeros_like(torch.stack(list(loss_dict.values())))
                     valid_acc = torch.zeros_like(acc_s.detach())

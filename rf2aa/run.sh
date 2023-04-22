@@ -2,8 +2,9 @@
 
 export CUDA_VISIBLE_DEVICES=0,1
 
-python -u ./train_multi_EMA.py \
-    -model_name BFF20h \
+python train_multi_EMA.py \
+    -dataloader_num_workers 5 \
+    -model_name rf2a_fd3_20221125 \
     -p_drop 0.0 \
     -maxcycle 4 \
     -n_extra_block 4 \
@@ -11,20 +12,56 @@ python -u ./train_multi_EMA.py \
     -n_ref_block 4 \
     -n_finetune_block 0 \
     -ref_num_layers 2 \
-    -accum 4 \
-    -crop 256 \
-    -w_bond 0.0 \
-    -w_bind 0.0 \
-    -w_clash 0.0 \
+    -d_pair 192 \
+    -n_head_pair 6 \
+    -accum 2 \
+    -crop 375 \
+    -w_bond 0.02 \
+    -w_atom_bond 0.02 \
+    -w_skip_bond 0.02 \
+    -w_rigid 0.02 \
+    -w_clash 0.02 \
     -w_hb 0.0 \
-    -lj_lin 0.7 \
+    -lj_lin 0.75 \
     -w_dist 1.0 \
     -w_str 10.0 \
     -w_lddt 0.1 \
     -w_aa 3.0 \
+    -w_lig_fape 10.0 \
+    -w_inter_fape 10.0 \
+    -w_bind 0.5 \
+    -binder_loss_label_smoothing 0.05 \
     -subsmp UNI \
-    -num_epochs 400 \
+    -num_epochs 800 \
+    -skip_valid 4 \
     -slice CONT \
-    -lr 0.001 \
-    -port 12345 \
-    -eval
+    -lr 0.0002 \
+    -out_dir output/ \
+    -model_dir models/ \
+    -n_train 6144 \
+    -fraction_pdb 0.12 \
+    -fraction_fb 0.36 \
+    -fraction_compl 0.055 \
+    -fraction_neg_compl 0.02 \
+    -fraction_na_compl 0.055 \
+    -fraction_neg_na_compl 0.02 \
+    -fraction_rna 0.05 \
+    -fraction_sm_compl 0.085 \
+    -fraction_metal_compl 0.055 \
+    -fraction_sm_compl_multi 0.055 \
+    -fraction_sm_compl_covale 0.055 \
+    -fraction_sm_compl_asmb 0.0 \
+    -fraction_sm 0.03 \
+    -fraction_atomize_pdb 0.04 \
+    -fraction_sm_compl_furthest_neg 0.0 \
+    -fraction_sm_compl_permuted_neg 0.0 \
+    -fraction_sm_compl_docked_neg 0.0 \
+    -n_valid_sm 128 \
+    -n_valid_sm_compl_furthest_neg 0 \
+    -n_valid_sm_compl_permuted_neg 0 \
+    -n_valid_sm_compl_docked_neg 0 \
+    -n_valid_dude_actives 0 \
+    -n_valid_dude_inactives 0 \
+    -p_metal 0.75 \
+    -p_atomize_modres 0.75 \
+    -p_short_crop 0.25 \

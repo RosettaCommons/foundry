@@ -43,6 +43,7 @@ DATASET_PARAMS = [
     "n_valid_sm_compl_docked_neg",
     "n_valid_dude_actives",
     "n_valid_dude_inactives",
+    "p_short_crop",
 ]
 TRUNK_PARAMS = [
     "n_extra_block",
@@ -333,6 +334,12 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
         "-n_valid_dude_inactives",
         type=int,
         help="Number to validate from the DUD-e set, non binders.",
+    )
+    dataset_group.add_argument(
+        "-p_short_crop",
+        type=float,
+        default=0.0,
+        help="The probability (0-1) of sampling a crop size between 8 and 16 residues",
     )
 
     # Trunk module properties

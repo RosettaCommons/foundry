@@ -1050,6 +1050,15 @@ def get_protein_bond_feats(protein_L):
     bond_feats[residues+1, residues] = 5
     return bond_feats
 
+def get_protein_bond_feats_from_idx(protein_L, idx_protein):
+    """ creates protein residue connectivity graphs """
+    bond_feats = torch.zeros((protein_L, protein_L))
+    residues = torch.arange(protein_L-1)
+    mask = idx_protein[:,None] == idx_protein[None,:]+1
+    bond_feats[mask] = 5
+    bond_feats[mask.T] = 5
+    return bond_feats
+
 def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
     """ 
     generate atom bond features for atomized residues 
@@ -1513,20 +1522,23 @@ def get_alt_query_ligand(chains, ligand_name, partners, lig_akeys, asmb_xfs):
 
 def get_automorphs(mol, xyz_sm, mask_sm):
     """Enumerate atom symmetry permutations."""
+    try:
+        automorphs = openbabel.vvpairUIntUInt()
+        openbabel.FindAutomorphisms(mol, automorphs)
 
-    automorphs = openbabel.vvpairUIntUInt()
-    openbabel.FindAutomorphisms(mol, automorphs)
+        automorphs = torch.tensor(automorphs)
+        n_symmetry = automorphs.shape[0]
 
-    automorphs = torch.tensor(automorphs)
-    n_symmetry = automorphs.shape[0]
+        xyz_sm = xyz_sm[None].repeat(n_symmetry,1,1)
+        mask_sm = mask_sm[None].repeat(n_symmetry,1)
 
-    xyz_sm = xyz_sm[None].repeat(n_symmetry,1,1)
-    mask_sm = mask_sm[None].repeat(n_symmetry,1)
-
-    xyz_sm = torch.scatter(xyz_sm, 1, automorphs[:,:,0:1].repeat(1,1,3),
-                                torch.gather(xyz_sm,1,automorphs[:,:,1:2].repeat(1,1,3)))
-    mask_sm = torch.scatter(mask_sm, 1, automorphs[:,:,0],
-                        torch.gather(mask_sm, 1, automorphs[:,:,1]))
+        xyz_sm = torch.scatter(xyz_sm, 1, automorphs[:,:,0:1].repeat(1,1,3),
+                                    torch.gather(xyz_sm,1,automorphs[:,:,1:2].repeat(1,1,3)))
+        mask_sm = torch.scatter(mask_sm, 1, automorphs[:,:,0],
+                            torch.gather(mask_sm, 1, automorphs[:,:,1]))
+    except Exception as e:
+        xyz_sm = xyz_sm[None]
+        mask_sm = mask_sm[None]
 
     return xyz_sm, mask_sm
 

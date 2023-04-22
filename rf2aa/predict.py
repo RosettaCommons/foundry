@@ -18,23 +18,29 @@ from collections import namedtuple, OrderedDict
 from rf2aa.ffindex import *
 from rf2aa.data_loader import MSAFeaturize, MSABlockDeletion, merge_a3m_homo, merge_a3m_hetero
 from rf2aa.kinematics import xyz_to_c6d, c6d_to_bins, xyz_to_t2d, get_chirals
-from rf2aa.util_module import ComputeAllAtomCoords
+from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import NTOTAL, NTOTALDOFS, NAATOKENS, INIT_CRDS
 from rf2aa.parsers import read_templates
 from rf2aa.memory import mem_report
 from scipy.interpolate import Akima1DInterpolator
+
+def get_bond_distances(bond_feats):
+    atom_bonds = (bond_feats > 0)*(bond_feats<5)
+    dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds.long().numpy(), directed=False)
+    # dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0)) # protein portion is inf and you don't want to mask it out
+    return torch.from_numpy(dist_matrix).float()
 
 def get_args():
     DB = "/projects/ml/TrRosetta/pdb100_2022Apr19/pdb100_2022Apr19"
     import argparse
     parser = argparse.ArgumentParser(description="RoseTTAFold: Protein structure prediction with 3-track attentions on 1D, 2D, and 3D features")
     parser.add_argument("-checkpoint", 
-        #default="/home/jue/git/rf2a-fd3/folddock3_20221125/models/rf2a_fd3_20221125_199.pt",
-        default='/home/jue/git/rf2a-fd3-ph3/folddock3_20221125/models/rf2a_fd3_20221125_469.pt',
+        default='./models/rf2a_fd3_20221125_last.pt',
         help="Path to model weights")
 
     parser.add_argument("-msa", help='Input sequence/MSA to predict structure from, in fasta/a3m format')
     parser.add_argument("-pdb", help='PDB of sequence to predict structure from')
+    parser.add_argument("-tmpl_chain", help='ChainID of PDB to use as template')
     parser.add_argument("-hhr", help='Input hhr file.')
     parser.add_argument("-atab", help='Input atab file.')
     parser.add_argument("-pt", help='PyTorch cached version of PDB')
@@ -56,7 +62,6 @@ def get_args():
     parser.add_argument("-init_protein_xyz", action='store_true', default=False, help='initialize protein coordinates to ground truth')
     parser.add_argument("-init_ligand_xyz", action='store_true', default=False, help='initialize ligand coordinates to ground truth')
     parser.add_argument("-num_interp", type=int, default=5, help='number of interpolation frames for trajectory output')
-    parser.add_argument("-parse_hetatm", action="store_true", default=False, help="parse ligand information from input pdb")
     parser.add_argument("-n_pred", type=int, default=1, help='number of repeat predictions')
     parser.add_argument("-n_cycle", type=int, default=10, help='number of recycles')
     parser.add_argument("-trunc_N", type=int, default=0, help='residues to truncate at N-term on MSA to match PDB')
@@ -65,6 +70,9 @@ def get_args():
             help="Turn off chirality and LJ grad inputs to SE3 layers (for backwards compatibility).")
     parser.add_argument("-no_atom_frames", dest='use_atom_frames', default='True', action='store_false',
             help="Turn off l1 features from atom frames in SE3 layers (for backwards compatibility).")
+
+    parser.add_argument("-atomize_residues", default=None, required=False, help="Residues to atomize")
+    parser.add_argument("-disulfidize_residues", default=None, required=False, help="Residues to atomize")
 
     args = parser.parse_args()
 
@@ -123,17 +131,102 @@ MODEL_PARAM['SE3_ref_param'] = SE3_ref_param
 
 # compute expected value from binned lddt
 def lddt_unbin(pred_lddt):
+    # calculate lddt prediction loss
     nbin = pred_lddt.shape[1]
     bin_step = 1.0 / nbin
     lddt_bins = torch.linspace(bin_step, 1.0, nbin, dtype=pred_lddt.dtype, device=pred_lddt.device)
-    
+
     pred_lddt = nn.Softmax(dim=1)(pred_lddt)
     return torch.sum(lddt_bins[None,:,None]*pred_lddt, dim=1)
 
 
 def get_msa(a3mfilename):                                                                       
-    msa,ins, _ = parsers.parse_a3m(a3mfilename, unzip='.gz' in a3mfilename)
+    msa,ins, _ = parsers.parse_a3m(a3mfilename)
     return {'msa':torch.tensor(msa), 'ins':torch.tensor(ins)}
+
+
+def get_bond_feats(resids, seq, ra, dslf=None):
+    ra2ind = {}
+    for i, two_d in enumerate(ra):
+        ra2ind[tuple(two_d.numpy())] = i
+    N = len(ra2ind.keys())
+    bond_feats = torch.zeros((N, N))
+    prot_atom_conns = []
+    for i, res in enumerate(seq[resids]):
+        for j, bond in enumerate(aabonds[res]):
+            start_idx = aa2long[res].index(bond[0])
+            end_idx = aa2long[res].index(bond[1])
+            if (i, start_idx) not in ra2ind or (i, end_idx) not in ra2ind:
+                #skip bonds with atoms that aren't observed in the structure
+                continue
+            start_idx = ra2ind[(i, start_idx)]
+            end_idx = ra2ind[(i, end_idx)]
+
+            # maps the 2d index of the start and end indices to btype
+            bond_feats[start_idx, end_idx] = aabtypes[res][j]
+            bond_feats[end_idx, start_idx] = aabtypes[res][j]
+
+        #1 peptide bonds
+        if resids[i]+1 in resids:
+            start_idx = ra2ind[(i, 2)]
+            end_idx = ra2ind[(resids.index(resids[i]+1), 0)]
+            bond_feats[start_idx, end_idx] = aabtypes[res][j]
+            bond_feats[end_idx, start_idx] = aabtypes[res][j]
+        else:
+            if resids[i]<seq.shape[0]-1: #TO DO: check if chain break
+                prot_atom_conns.append( (resids[i]+1,ra2ind[(i, 2)]) )
+
+        if resids[i]-1 not in resids:
+            if resids[i]>0:
+                prot_atom_conns.append( (resids[i]-1,ra2ind[(i, 0)]) )
+
+    #2 disulfides
+    #if dslf is not None:
+    #    for i,j in dslf:
+    #        start_idx = ra2ind[(resids.index(i), 5)]
+    #        end_idx = ra2ind[(resids.index(j), 5)]
+    #        bond_feats[start_idx, end_idx] = 1
+    #        bond_feats[end_idx, start_idx] = 1
+
+    return bond_feats, prot_atom_conns
+
+def atomize_protein(resids, seq, dslf=None):
+    residues_atomize = seq[resids]
+    residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
+    residue_atomize_mask = util.allatom_mask[residues_atomize][:,:14]
+
+    ra = residue_atomize_mask.nonzero()
+    lig_seq = torch.tensor([aa2num[residues_atom_types[r][a]] if residues_atom_types[r][a] in aa2num else aa2num["ATM"] for r,a in ra])
+    ins = torch.zeros_like(lig_seq)
+
+    bond_feats, prot_atom_conns = get_bond_feats(resids, seq, ra, dslf)
+
+    #HACK: use networkx graph to make the atom frames, correct implementation will include frames with "residue atoms"
+    G = nx.from_numpy_matrix(bond_feats.numpy())
+    frames = get_atom_frames(lig_seq, G)
+
+    angle = np.arcsin(1/3**0.5) # perfect tetrahedral geometry
+    chiral_atoms = aachirals[residues_atomize]
+
+    r,a = ra.T
+    chiral_atoms = chiral_atoms[r,a].nonzero().squeeze(1) #num_chiral_centers
+    num_chiral_centers = chiral_atoms.shape[0]
+    chiral_bonds = bond_feats[chiral_atoms] # find bonds to each chiral atom
+    chiral_bonds_idx = chiral_bonds.nonzero().reshape(num_chiral_centers, 3, 2)
+    
+    chirals = torch.zeros((num_chiral_centers, 5))
+    chirals[:,0] = chiral_atoms.long()
+    chirals[:, 1:-1] = chiral_bonds_idx[...,-1].long()
+    chirals[:, -1] = angle
+
+    #if n>0:
+    #    chirals = chirals.repeat(3,1).float()
+    #    chirals[n:2*n,1:-1] = torch.roll(chirals[n:2*n,1:-1],1,1)
+    #    chirals[2*n: ,1:-1] = torch.roll(chirals[2*n: ,1:-1],2,1)
+    #    dih = get_dih(*lig_xyz[chirals[:,:4].long()].split(split_size=1,dim=1))[:,0]
+    #    chirals[dih<0.0,-1] = -angle
+
+    return lig_seq, ins, frames, bond_feats, chirals, prot_atom_conns
 
 
 class Predictor():
@@ -164,7 +257,7 @@ class Predictor():
         checkpoint = torch.load(args.checkpoint, map_location=self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
 
-        self.compute_allatom_coords = ComputeAllAtomCoords().to(self.device)
+        self.xyz_converter = XYZConverter().to(self.device)
 
         # loss & final activation function
         self.loss_fn = nn.CrossEntropyLoss(reduction='none')
@@ -188,422 +281,50 @@ class Predictor():
         self.cb_ang = cb_angle_t.to(self.device),
         self.cb_tor = cb_torsion_t.to(self.device),
 
-    def calc_loss(self, logit_s, label_s,
-                  logit_aa_s, label_aa_s, mask_aa_s, logit_pae, logit_pde,
-                  pred, pred_tors, pred_allatom, true,
-                  mask_crds, mask_BB, mask_2d, same_chain,
-                  pred_lddt, idx, bond_feats, atom_frames=None, unclamp=False,
-                  negative=False, interface=False,
-                  verbose=False, ctr=0,
-                  w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lig_fape=1.0, w_lddt=1.0,
-                  w_bond=1.0, w_clash=0.0, w_atom_bond=0.0, w_skip_bond=0.0, w_rigid=0.0, w_hb=0.0, w_dih=0.0,
-                  w_pae=0.0, w_pde=0.0, lj_lin=0.85, eps=1e-6, item=None, task=None, out_dir='./'
-    ):
-        gpu = pred.device
-
-        # track losses for printing to local log and uploading to WandB
-        loss_dict = OrderedDict()
-
-        B, L = true.shape[:2]
-        seq = label_aa_s[:,0].clone()
-
-        assert (B==1) # fd - code assumes a batch size of 1
-
-        tot_loss = 0.0
-        # set up frames
-        frames, frame_mask = get_frames(
-            pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
-        # update frames and frames_mask to only include BB frames (have to update both for compatibility with compute_general_FAPE)
-        frames_BB = frames.clone()
-        frames_BB[..., 1:, :, :] = 0
-        frame_mask_BB = frame_mask.clone()
-        frame_mask_BB[...,1:] =False
-
-        # c6d loss
-        for i in range(4):
-            loss = self.loss_fn(logit_s[i], label_s[...,i]) # (B, L, L)
-            if i==0: # apply distogram loss to all residue pairs with valid BB atoms
-                mask_2d_ = mask_2d
-            else: # apply anglegram loss only when both residues have valid BB frames (i.e. not metal ions)
-                bb_frame_good = frame_mask[:,:,0]
-                loss_mask_2d = bb_frame_good & bb_frame_good[...,None]
-                mask_2d_ = mask_2d & loss_mask_2d
-            loss = (mask_2d_*loss).sum() / (mask_2d_.sum() + eps)
-            tot_loss += w_dist*loss
-            loss_dict[f'c6d_{i}'] = loss.detach()
-
-        # masked token prediction loss
-        loss = self.loss_fn(logit_aa_s, label_aa_s.reshape(B, -1))
-        loss = loss * mask_aa_s.reshape(B, -1)
-        loss = loss.sum() / (mask_aa_s.sum() + 1e-8)
-        tot_loss += w_aa*loss
-        loss_dict['aa_cce'] = loss.detach()
-
-        ### GENERAL LAYERS
-        # Structural loss (layer-wise backbone FAPE)
-        dclamp = 300.0 if unclamp else 30.0 # protein & NA FAPE distance cutoffs
-        dclamp_sm, Z_sm = 4, 4  # sm mol FAPE distance cutoffs
-        # residue mask for FAPE calculation only masks unresolved protein backbone atoms
-        # whereas other losses also maks unresolved ligand atoms (mask_BB)
-        # frames with unresolved ligand atoms are masked in compute_general_FAPE
-        res_mask = ~((mask_crds[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(seq)))
-
-        L1 = same_chain[0,0,:].sum()
-        res_mask_A = res_mask.clone()
-        res_mask_A[0, L1:] = False
-        if torch.sum(res_mask_A)>0 and torch.sum(frame_mask_BB[:,res_mask_A[0]])>0:
-            l_fape_A, _, _ = compute_general_FAPE(
-                pred[:,res_mask_A,:,:3],
-                true[:,res_mask_A[0],:3],
-                mask_crds[:,res_mask_A[0], :3],
-                frames_BB[:,res_mask_A[0]],
-                frame_mask_BB[:,res_mask_A[0]],
-                dclamp=dclamp
-            )
-        else:
-            l_fape_A = torch.tensor([0]).to(gpu)
-        loss_dict['bb_fape_c1'] = l_fape_A[-1].detach()
-
-        res_mask_B = res_mask.clone()
-        res_mask_B[0,:L1] = False
-        if torch.sum(res_mask_B)>0 and torch.sum(frame_mask_BB[:,res_mask_B[0]])>0:
-            l_fape_B, _, _ = compute_general_FAPE(
-                pred[:, res_mask_B,:,:3],
-                true[:,res_mask_B[0],:3,:3],
-                mask_crds[:,res_mask_B[0], :3],
-                frames_BB[:,res_mask_B[0]],
-                frame_mask_BB[:,res_mask_B[0]],
-                dclamp=dclamp
-            )
-        else:
-            l_fape_B = torch.tensor([0]).to(gpu)
-
-        loss_dict['bb_fape_c2'] = l_fape_B[-1].detach()
-
-        if negative: # inter-chain fapes should be ignored for negative cases
-            fracA = float(L1)/len(same_chain[0,0])
-            tot_str = fracA*l_fape_A + (1.0-fracA)*l_fape_B
-            pae_loss = torch.tensor(0).to(gpu)
-            pae_loss = torch.tensor(0).to(gpu)
-        else:
-            if logit_pae is not None:
-                logit_pae = logit_pae[:,:,res_mask[0]][:,:,:,res_mask[0]]
-            if logit_pde is not None:
-                logit_pde = logit_pde[:,:,res_mask[0]][:,:,:,res_mask[0]]
-            tot_str, pae_loss, pde_loss = compute_general_FAPE(
-                pred[:,res_mask,:,:3],
-                true[:,res_mask[0],:3],
-                mask_crds[:,res_mask[0],:3],
-                frames_BB[:,res_mask[0]],
-                frame_mask_BB[:,res_mask[0]],
-                dclamp=dclamp,
-                logit_pae=logit_pae,
-                logit_pde=logit_pde
-            )
-        num_layers = pred.shape[0]
-        gamma = 0.99
-        w_bb_fape = torch.pow(torch.full((num_layers,), gamma, device=pred.device), torch.arange(num_layers, device=pred.device))
-        w_bb_fape = torch.flip(w_bb_fape, (0,))
-        w_bb_fape = w_bb_fape / w_bb_fape.sum()
-        bb_l_fape = (w_bb_fape*tot_str).sum()
-
-        tot_loss += 0.5*w_str*bb_l_fape
-        for i in range(len(tot_str)):
-            loss_dict[f'bb_fape_layer{i}'] = tot_str[i].detach()
-        loss_dict['bb_fape_full'] = bb_l_fape.detach()
-
-        tot_loss += w_pae*pae_loss + w_pde*pde_loss
-        loss_dict['pae_loss'] = pae_loss.detach()
-        loss_dict['pde_loss'] = pde_loss.detach()
-
-        # small-molecule ligands
-        sm_res_mask = is_atom(label_aa_s[0,0])*res_mask[0] # (L,)
-        if bool(torch.any(sm_res_mask)) and torch.any(frame_mask_BB[0,sm_res_mask]):
-            # ligand fape (layer-averaged fape on atom coordinates with atom frames)
-            l_fape_sm, _, _ = compute_general_FAPE(
-                pred[:, sm_res_mask[None],:,:3],
-                true[:,sm_res_mask,:3,:3],
-                atom_mask = mask_crds[:,sm_res_mask, :3],
-                frames = frames_BB[:,sm_res_mask],
-                frame_mask = frame_mask_BB[:,sm_res_mask],
-                dclamp=dclamp_sm,
-                Z=Z_sm
-            )
-            lig_fape = (w_bb_fape*l_fape_sm).sum()
-            tot_loss += 0.5*w_lig_fape*lig_fape
-        else:
-            lig_fape = torch.tensor(0).to(gpu)
-        loss_dict['bb_fape_lig'] = lig_fape.detach()
-
-        if not bool(torch.all(sm_res_mask)) and bool(torch.any(sm_res_mask)):    # not all atoms but some atoms
-            # calculate interchain fape
-            # fape of protein coordinates wrt ligand frames
-            mask_crds_protein = mask_crds.clone()
-            mask_crds_protein[:, sm_res_mask] = False
-            frame_mask_BB_sm = frame_mask_BB.clone()
-            frame_mask_BB_sm[:,~sm_res_mask] = False
-            if torch.any(mask_crds_protein[:,res_mask[0], :3]) and torch.any(frame_mask_BB_sm[:,res_mask[0]]):
-                l_fape_protein_sm, _, _ = compute_general_FAPE(
-                    pred[:, res_mask,:,:3],
-                    true[:, res_mask[0],:3,:3],
-                    atom_mask = mask_crds_protein[:,res_mask[0], :3],
-                    frames = frames_BB[:,res_mask[0]],
-                    frame_mask = frame_mask_BB_sm[:,res_mask[0]],
-                    frame_atom_mask = mask_crds[:,res_mask[0],:3],
-                    dclamp=dclamp
-                )
-            else:
-                l_fape_protein_sm = torch.tensor(0).to(gpu)
-
-            # fape of ligand coordinates wrt protein frames
-            mask_crds_sm = mask_crds.clone()
-            mask_crds_sm[:, ~sm_res_mask] = False
-            frame_mask_BB_protein = frame_mask_BB.clone()
-            frame_mask_BB_protein[:,sm_res_mask] = False
-            if torch.any(mask_crds_sm[:,res_mask[0], :3]) and torch.any(frame_mask_BB_protein[:,res_mask[0]]):
-                l_fape_sm_protein, _, _ = compute_general_FAPE(
-                    pred[:, res_mask,:,:3],
-                    true[:, res_mask[0],:3,:3],
-                    atom_mask = mask_crds_sm[:,res_mask[0], :3],
-                    frames = frames_BB[:,res_mask[0]],
-                    frame_mask = frame_mask_BB_protein[:,res_mask[0]],
-                    frame_atom_mask = mask_crds[:,res_mask[0],:3],
-                    dclamp=dclamp
-                )
-            else:
-                l_fape_sm_protein = torch.tensor(0).to(gpu)
-
-            frac_sm = torch.sum(frame_mask_BB_sm[:,res_mask[0]])/ torch.sum(frame_mask_BB[:,res_mask[0]])
-            inter_fape = frac_sm*l_fape_protein_sm + (1.0-frac_sm)*l_fape_sm_protein
-            bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
-            tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
-        else:
-            bb_l_fape_inter = torch.tensor(0).to(gpu)
-
-        loss_dict['bb_fape_inter'] = bb_l_fape_inter.detach()
-
-        # AllAtom loss
-        # get ground-truth torsion angles
-        true_tors, true_tors_alt, tors_mask, tors_planar = get_torsions(
-            true, seq, self.ti_dev, self.ti_flip, self.ang_ref, mask_in=mask_crds)
-        tors_mask *= mask_BB[...,None]
-
-        # get alternative coordinates for ground-truth
-        true_alt = torch.zeros_like(true)
-        true_alt.scatter_(2, self.l2a[seq,:,None].repeat(1,1,1,3), true)
-        natRs_all, _n0 = self.compute_allatom_coords(seq, true[...,:3,:], true_tors)
-        natRs_all_alt, _n1 = self.compute_allatom_coords(seq, true_alt[...,:3,:], true_tors_alt)
-        predTs = pred[-1,...]
-        predRs_all, pred_all = self.compute_allatom_coords(seq, predTs, pred_tors[-1])
-
-        #  - resolve symmetry
-        xs_mask = self.aamask[seq] # (B, L, 27)
-        xs_mask[0,:,14:]=False # (ignore hydrogens except lj loss)
-        xs_mask *= mask_crds # mask missing atoms & residues as well
-        natRs_all_symm, nat_symm = resolve_symmetry(pred_allatom[-1], natRs_all[0], true[0], natRs_all_alt[0], true_alt[0], xs_mask[0])
-
-        # torsion angle loss
-        l_tors = torsionAngleLoss(
-            pred_tors,
-            true_tors,
-            true_tors_alt,
-            tors_mask,
-            tors_planar,
-            eps = 1e-10)
-        tot_loss += w_str*l_tors
-        loss_dict['torsion'] = l_tors.detach()
-
-        ### FINETUNING LAYERS
-        # lddts (CA)
-        ca_lddt = calc_lddt(pred[:,:,:,1].detach(), true[:,:,1], mask_BB, mask_2d, same_chain, negative=negative, interface=interface)
-        loss_dict['ca_lddt'] = ca_lddt[-1].detach()
-
-        # lddts (allatom) + lddt loss
-        lddt_loss, allatom_lddt = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, negative=negative, interface=interface)
-        tot_loss += w_lddt*lddt_loss
-        loss_dict['lddt_loss'] = lddt_loss.detach()
-        loss_dict['allatom_lddt'] = allatom_lddt[0].detach()
-
-        # FAPE losses
-        # allatom fape and torsion angle loss
-        # frames, frame_mask = get_frames(
-        #     pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
-        if negative: # inter-chain fapes should be ignored for negative cases
-            # L1 = same_chain[0,0,:].sum()
-            # res_mask_A = mask_BB.clone()
-            # res_mask_A[0, L1:] = False
-            l_fape_A, _, _ = compute_general_FAPE(
-                pred_allatom[:,res_mask_A[0],:,:3],
-                nat_symm[None,res_mask_A[0],:,:3],
-                xs_mask[:,res_mask_A[0]],
-                frames[:,res_mask_A[0]],
-                frame_mask[:,res_mask_A[0]]
-            )
-            # res_mask_B = mask_BB.clone()
-            # res_mask_B[0,:L1] = False
-            l_fape_B, _, _ = compute_general_FAPE(
-                pred_allatom[:,res_mask_B[0],:,:3],
-                nat_symm[None,res_mask_B[0],:,:3],
-                xs_mask[:,res_mask_B[0]],
-                frames[:,res_mask_B[0]],
-                frame_mask[:,res_mask_B[0]]
-            )
-            fracA = float(L1)/len(same_chain[0,0])
-            l_fape = fracA*l_fape_A + (1.0-fracA)*l_fape_B
-
-        else:
-            l_fape, _, _ = compute_general_FAPE(
-                pred_allatom[:,res_mask[0],:,:3],
-                nat_symm[None,res_mask[0],:,:3],
-                xs_mask[:,res_mask[0]],
-                frames[:,res_mask[0]],
-                frame_mask[:,res_mask[0]]
-            )
-
-        tot_loss += w_str*l_fape[0]
-        loss_dict['allatom_fape'] = l_fape[0].detach()
-
-        # rmsd loss (for logging only)
-        try:
-            rmsd = calc_crd_rmsd(
-                pred_allatom[:,mask_BB[0],:,:3],
-                nat_symm[None,mask_BB[0],:,:3],
-                xs_mask[:,mask_BB[0]]
-                )
-            loss_dict["rmsd"] = rmsd[0].detach()
-        except Exception as e:
-            print('calc_crd_rmsd failed on ',item)
-            rmsd = torch.tensor([0])
-            loss_dict['rmsd'] = torch.tensor([0])
-
-        if torch.any(res_mask_B):
-            xs_mask_c1, xs_mask_c2 = xs_mask.clone(), xs_mask.clone()
-            xs_mask_c1[:,~res_mask_A[0]] = False
-            xs_mask_c2[:,~res_mask_B[0]] = False
-            rmsd_c1_c1 = calc_crd_rmsd(
-                pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
-                atom_mask=xs_mask_c1[:,mask_BB[0]], rmsd_mask=xs_mask_c1[:,mask_BB[0]]
-            )
-            rmsd_c1_c2 = calc_crd_rmsd(
-                pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
-                atom_mask=xs_mask_c1[:,mask_BB[0]], rmsd_mask=xs_mask_c2[:,mask_BB[0]]
-            )
-            rmsd_c2_c2 = calc_crd_rmsd(
-                pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
-                atom_mask=xs_mask_c2[:,mask_BB[0]], rmsd_mask=xs_mask_c2[:,mask_BB[0]]
-            )
-            loss_dict["rmsd_c1_c1"]= rmsd_c1_c1[0].detach()
-            loss_dict["rmsd_c1_c2"]= rmsd_c1_c2[0].detach()
-            loss_dict["rmsd_c2_c2"]= rmsd_c2_c2[0].detach()
-        else:
-            loss_dict["rmsd_c1_c1"]= loss_dict['rmsd']
-            loss_dict["rmsd_c1_c2"]= torch.tensor(0, device=pred.device)
-            loss_dict["rmsd_c2_c2"]= torch.tensor(0, device=pred.device)
-
-        # cart bonded (bond geometry)
-        bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)
-        if w_bond > 0.0:
-            tot_loss += w_bond*bond_loss
-        loss_dict['bond_geom'] = bond_loss.detach()
-
-        if (pred_allatom.shape[0] > 1):
-            bond_loss = calc_cart_bonded(seq, pred_allatom[1:], idx, self.cb_len, self.cb_ang, self.cb_tor)
-            if w_bond > 0.0:
-                tot_loss += w_bond*bond_loss.mean()
-            loss_dict['clash_loss'] = ( bond_loss.detach() )
-        else:
-            bond_loss = torch.tensor(0).to(gpu)
-        loss_dict['bond_loss'] = bond_loss.detach()
-
-        # clash [use all atoms not just those in native]
-        #clash_loss = calc_lj(
-        #    seq[0], pred_allatom,
-        #    self.aamask, bond_feats, self.ljlk_parameters, self.lj_correction_parameters, self.num_bonds,
-        #    lj_lin=lj_lin
-        #)
-        #if w_clash > 0.0:
-        #    tot_loss += w_clash*clash_loss.mean()
-        #loss_dict['clash_loss'] = clash_loss[0].detach()
-        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(
-            pred=pred_allatom[:,mask_BB[0]],
-            true=nat_symm[None,mask_BB[0]],
-            bond_feats=bond_feats[:,mask_BB[0]][:,:,mask_BB[0]],
-            seq=seq[:,mask_BB[0]]
-        )
-        if w_atom_bond >= 0.0:
-            tot_loss += w_atom_bond*atom_bond_loss
-        loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
-
-        if w_skip_bond >= 0.0:
-            tot_loss += w_skip_bond*skip_bond_loss
-        loss_dict['skip_bond_loss'] = ( skip_bond_loss.detach() )
-
-        if w_rigid >= 0.0:
-            tot_loss += w_rigid*rigid_loss
-        loss_dict['rigid_loss'] = ( rigid_loss.detach() )
-        L0 = same_chain[0,0,:].sum()
-        chain1 = torch.zeros_like(same_chain, dtype=bool)
-        chain1[:,:L0,:L0] = True
-        _, allatom_lddt_c1 = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain1, negative=True)
-        loss_dict['allatom_lddt_c1'] = allatom_lddt_c1[0].detach()
-
-        chain2 = torch.zeros_like(same_chain, dtype=bool)
-        chain2[:,L0:,L0:] = True
-        _, allatom_lddt_c2 = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, chain2, negative=True, bin_scaling=0.5)
-        loss_dict['allatom_lddt_c2'] = allatom_lddt_c2[0].detach()
-
-        _, allatom_lddt_inter = calc_allatom_lddt_loss(
-            pred_allatom.detach(), nat_symm, pred_lddt, idx, mask_crds, mask_2d, same_chain, interface=True)
-        loss_dict['allatom_lddt_inter'] = allatom_lddt_inter[0].detach()
-        # hbond [use all atoms not just those in native]
-        #hb_loss = calc_hb(
-        #    seq[0], pred_all[0,...,:3],
-        #    self.aamask, self.hbtypes, self.hbbaseatoms, self.hbpolys,
-        #    normalize=(not verbose)
-        #)
-        #if w_hb > 0.0:
-        #    tot_loss += w_hb*hb_loss
-        #oss_dict['clash_loss'] = (torch.stack((hb_loss, clash_loss, bond_loss)).detach())
-
-        loss_dict['total_loss'] = tot_loss.detach()
-
-        #if (verbose):
-            #print (
-            #    ctr,
-            #    tot_str.cpu().detach().numpy(),
-            #    allatom_lddt.cpu().detach().numpy(),
-            #    allatom_lddt_c2.cpu().detach().numpy(),
-            #    l_fape.cpu().detach().numpy(),
-            #    l_fape_B.cpu().detach().numpy(),
-            #    mask_BB[0].sum()
-            #)
-            #writepdb(out_dir+"p_"+self.model_name+"_"+str(ctr)+".pdb", pred_all[-1,mask_BB[0]][:,:23], seq[mask_BB][:])
-            #writepdb(out_dir+"n_"+str(ctr)+".pdb", true[mask_BB][:,:23], seq[mask_BB][:])
-            #writepdb(out_dir+"nre_"+str(ctr)+".pdb", _n0[mask_BB], seq[mask_BB][:])
-
-        return tot_loss, loss_dict
-
-    def predict(self, out_prefix, msa_fn=None, pdb_fn=None, pt_fn=None, 
+    def predict(self, out_prefix, msa_fn=None, pdb_fn=None, tmpl_chain=None, pt_fn=None, 
         a3m_fn=None, hhr_fn=None, atab_fn=None, mol2_fn=None,
         init_protein_tmpl=False, init_ligand_tmpl=False, init_protein_xyz=False,
-        init_ligand_xyz=False, n_cycle=10, n_templ=4, random_noise=5.0, trunc_N=0,
-        trunc_C=0):
+        init_ligand_xyz=False, atomize_res=None, disulfidize_res=None,
+        n_cycle=10, n_templ=4, random_noise=5.0, trunc_N=0,
+        trunc_C=0, templ_conf=0.5):
+
+        if atomize_res is not None:
+            atomize_res = [int(x) for x in atomize_res.split(',')]
+        else:
+            atomize_res = []
+
+        xyz = None
+        mask_prot = None
+
+        if disulfidize_res is not None:
+            alldslf = []
+            for dslf in disulfidize_res.split(','):
+                x,y = dslf.split(':')
+                x,y = int(x),int(y)
+                alldslf.append( (x,y) )
+            disulfidize_res = alldslf
+        else:
+            disulfidize_res = []
 
         has_ligand = False
         if pdb_fn is not None:
-            xyz_prot, mask_prot, idx_prot, seq_prot = parsers.parse_pdb(pdb_fn, seq=True)
-            xyz_prot[:,14:] = 0 # remove hydrogens
-            mask_prot[:,14:] = False
-            xyz_prot = torch.tensor(xyz_prot)
-            mask_prot = torch.tensor(mask_prot)
-            protein_L, nprotatoms, _ = xyz_prot.shape
-            msa_prot = torch.tensor(seq_prot)[None].long()
-            ins_prot = torch.zeros(msa_prot.shape).long()
+            msa_prot, ins_prot, Ls_prot, xyz, mask_prot, _, dslf = parsers.read_multichain_pdb(
+                pdb_fn, tmpl_chain=tmpl_chain
+            )
+
+            #if (len(dslf)>0):
+            #    if (len(disulfidize_res) == 0):
+            #        disulfidize_res = dslf # if provided, use that instead
+
+            xyz[:,:,14:] = 0 # remove hydrogens
+            mask_prot[:,:,14:] = False
             a3m_prot = {"msa": msa_prot, "ins": ins_prot}
-            idx_prot = torch.tensor(idx_prot)
+
+            idx_prot = torch.arange(sum(Ls_prot))
+            ctr = 0
+            for l in Ls_prot:
+                ctr += l
+                idx_prot[ctr:] += 100
 
             stream = [l for l in open(pdb_fn) if "HETATM" in l or "CONECT" in l]
             if len(stream)>0:
@@ -631,6 +352,7 @@ class Predictor():
             a3m = get_msa(msa_fn)
             msa_prot = a3m['msa'].clone().long()
             qlen = msa_prot.shape[1]
+            Ls_prot = [qlen]
             msa_prot = msa_prot[:,trunc_N:qlen-trunc_C]
             ins_prot = a3m['ins'].clone().long()[:,trunc_N:qlen-trunc_C]
             protein_L = msa_prot.shape[-1]
@@ -659,16 +381,70 @@ class Predictor():
             chirals = torch.Tensor()
             atom_frames = torch.zeros(msa[:,0].shape)
 
-        xyz = torch.full((N_symmetry, sum(Ls), NTOTAL, 3), np.nan).float()
-        mask = torch.full(xyz.shape[:-1], False).bool()
-        if pdb_fn is not None:
-            xyz[:, :Ls[0], :nprotatoms, :] = xyz_prot.expand(N_symmetry, Ls[0], nprotatoms, 3)
-            mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, Ls[0], nprotatoms)
-        if has_ligand:
-            xyz[:, Ls[0]:, 1, :] = xyz_sm
-            mask[:, protein_L:, 1] = mask_sm
-        idx_sm = torch.arange(max(idx_prot),max(idx_prot)+Ls[1])+200
+        if len(atomize_res) >0 or len(disulfidize_res) >0:
+            for x,y in disulfidize_res:
+                if x not in atomize_res:
+                    atomize_res.append(x)
+                if y not in atomize_res:
+                    atomize_res.append(y)
+
+            atomize_res.sort()
+            print ('atomizing:',atomize_res)
+            print ('disulfidizing:',disulfidize_res)
+            lig_seq, lig_ins, atom_frames, bond_feats_sm, chirals, prot_atom_conns = atomize_protein(
+                atomize_res, msa_prot[0], dslf=disulfidize_res
+            )
+
+            # combine msa
+            LprotOrig = msa_prot.shape[-1]
+            Lprot = LprotOrig - len(atomize_res)
+            Ls = [LprotOrig, lig_seq.shape[0]]
+            a3m_prot = {"msa": msa_prot, "ins": ins_prot}
+            a3m_sm = {"msa": lig_seq.unsqueeze(0), "ins": lig_ins.unsqueeze(0)}
+            a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+            msa = a3m['msa'].long()
+            ins = a3m['ins'].long()
+
+            # combine bond features
+            bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
+            bond_feats[:Ls[0], :Ls[0]] = util.get_protein_bond_feats_from_idx(LprotOrig,idx_prot)
+            bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
+            for res,atm in prot_atom_conns:
+                bond_feats[res, Ls[0]+atm] = 6
+                bond_feats[Ls[0]+atm, res] = 6
+
+            # remove atomized residues
+            mask=torch.ones(msa.shape[-1],dtype=torch.bool)
+            mask[atomize_res]=False
+            msa = msa[:,mask]
+            ins = ins[:,mask]
+            bond_feats = bond_feats[mask][:,mask]
+
+            print (bond_feats)
+
+            idx_prot = idx_prot[mask[:LprotOrig]]
+            if xyz is not None:
+                xyz = xyz[:,mask[:LprotOrig]]
+                mask_prot = mask_prot[:,mask[:LprotOrig]]
+
+            Ls = [Lprot, lig_seq.shape[0]]
+
+            # shift chirals
+            chirals[:, :-1] = chirals[:, :-1] + Lprot
+            has_ligand = True
+            print ('Ls',Ls)
+        else:
+            bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
+            bond_feats[:Ls[0], :Ls[0]] = util.get_protein_bond_feats(Ls[0])
+            if has_ligand:
+                bond_feats[Ls[0]:, Ls[0]:] = util.get_bond_feats(mol)
+
+        maxindex = 0
+        if len(idx_prot)>0:
+            maxindex = max(idx_prot)
+        idx_sm = torch.arange(maxindex,maxindex+Ls[1])+200
         idx_pdb = torch.concat([idx_prot.clone(), idx_sm])
+
         
         seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, 
             p_mask=0.0, params={'MAXLAT': 128, 'MAXSEQ': 1024, 'MAXCYCLE': n_cycle}, tocpu=True)
@@ -676,10 +452,8 @@ class Predictor():
         chain_idx = torch.zeros((sum(Ls), sum(Ls))).long()
         chain_idx[:Ls[0], :Ls[0]] = 1
         chain_idx[Ls[0]:, Ls[0]:] = 1
-        bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
-        bond_feats[:Ls[0], :Ls[0]] = util.get_protein_bond_feats(Ls[0])
-        if has_ligand:
-            bond_feats[Ls[0]:, Ls[0]:] = util.get_bond_feats(mol)
+
+        dist_matrix = get_bond_distances(bond_feats)
 
         if init_protein_tmpl or init_ligand_tmpl:
             # make blank features for 2 templates
@@ -696,15 +470,15 @@ class Predictor():
                 xyz_t[0, :Ls[0], :14] = xyz[0, :Ls[0], :14]
                 f1d_t[0, :Ls[0]] = torch.cat((
                     torch.nn.functional.one_hot(msa[0, :Ls[0] ], num_classes=NAATOKENS-1).float(),
-                    torch.ones((Ls[0], 1)).float()
+                    templ_conf*torch.ones((Ls[0], 1)).float()
                 ), -1) # (1, L_protein, NAATOKENS)
-                mask_t[0, :Ls[0], :nprotatoms] = mask_prot
+                mask_t[0, :Ls[0], :14] = mask_prot[:,:,:14]
 
             if init_ligand_tmpl: # input true s.m. xyz as template 1
                 xyz_t[1, Ls[0]:, :14] = xyz[0, Ls[0]:, :14]
                 f1d_t[1, Ls[0]:] = torch.cat((
                     torch.nn.functional.one_hot(msa[0, Ls[0]: ]-1, num_classes=NAATOKENS-1).float(),
-                    torch.ones((Ls[1], 1)).float()
+                    templ_conf*torch.ones((Ls[1], 1)).float()
                 ), -1) # (1, L_sm, NAATOKENS)
                 mask_t[1, Ls[0]:, 1] = mask_sm[0] # all symmetry variants have same mask
         elif hhr_fn is not None:
@@ -746,11 +520,11 @@ class Predictor():
             if init_protein_xyz:
                 xyz1 = xyz[0, :Ls[0]]
                 xyz_prev[:Ls[0]] = xyz1 - com
-                mask_prev[:Ls[0]] = mask[0,:Ls[0]]
+                mask_prev[:Ls[0]] = mask_prot[0]
             if init_ligand_xyz:
                 xyz2 = xyz[0, Ls[0]:]
                 xyz_prev[Ls[0]:] = xyz2 - com
-                mask_prev[Ls[0]:] = mask[0,Ls[0]:]
+                mask_prev[Ls[0]:] = mask_sm[0]
 
             # initialize missing positions in ground truth structures
             init = INIT_CRDS.reshape(1,NTOTAL,3).repeat(sum(Ls),1,1)
@@ -763,15 +537,12 @@ class Predictor():
             mask_prev = mask_t[0].clone()
             xyz_prev = torch.where(mask_prev[:,:,None], xyz_t[0].clone(), init).contiguous()
 
-        xyz = torch.nan_to_num(xyz)
         xyz_t = torch.nan_to_num(xyz_t)
 
         seq = seq[None].to(self.device, non_blocking=True)
         msa = msa_seed_orig[None].to(self.device, non_blocking=True)
         msa_masked = msa_seed[None].to(self.device, non_blocking=True)
         msa_full = msa_extra[None].to(self.device, non_blocking=True)
-        true_crds = xyz[None].to(self.device, non_blocking=True) # (B, L, 27, 3)
-        atom_mask = mask[None].to(self.device, non_blocking=True) # (B, L, 27)
         idx_pdb = idx_pdb[None].to(self.device, non_blocking=True) # (B, L)
         xyz_t = xyz_t[None].to(self.device, non_blocking=True)
         mask_t = mask_t[None].to(self.device, non_blocking=True)
@@ -781,6 +552,7 @@ class Predictor():
         same_chain = chain_idx[None].to(self.device, non_blocking=True)
         atom_frames = atom_frames[None].to(self.device, non_blocking=True)
         bond_feats = bond_feats[None].to(self.device, non_blocking=True)
+        dist_matrix = dist_matrix[None].to(self.device, non_blocking=True)
         chirals = chirals[None].to(self.device, non_blocking=True)
         xyz_prev_orig = xyz_prev.clone()
 
@@ -801,12 +573,9 @@ class Predictor():
 
         seq_tmp = t1d[...,:-1].argmax(dim=-1).reshape(-1,sum(Ls))
 
-        alpha, _, alpha_mask, _ = util.get_torsions(
+        alpha, _, alpha_mask, _ = self.xyz_converter.get_torsions(
             xyz_t.reshape(-1,sum(Ls),NTOTAL,3),
-            seq_tmp,
-            util.torsion_indices.to(self.device),
-            util.torsion_can_flip.to(self.device),
-            util.reference_angles.to(self.device)
+            seq_tmp
         )
         alpha_mask = torch.logical_and(alpha_mask, ~torch.isnan(alpha[...,0]))
         alpha[torch.isnan(alpha)] = 0.0
@@ -833,8 +602,8 @@ class Predictor():
             best_pde = None
 
             for i_cycle in range(n_cycle):
-                logit_s, logit_aa_s, logit_pae, logit_pde, pred_crds, alpha, pred_allatom, pred_lddt_binned, \
-                    msa_prev, pair_prev, state_prev, _ = self.model(
+                logit_s, logit_aa_s, logit_pae, logit_pde, p_bind, pred_crds, alpha, pred_allatom, pred_lddt_binned, \
+                msa_prev, pair_prev, state_prev = self.model(
                     msa_masked[:,i_cycle], 
                     msa_full[:,i_cycle],
                     seq[:,i_cycle], 
@@ -843,6 +612,7 @@ class Predictor():
                     alpha_prev,
                     idx_pdb,
                     bond_feats=bond_feats,
+                    dist_matrix=dist_matrix,
                     chirals=chirals,
                     atom_frames=atom_frames,
                     t1d=t1d, 
@@ -898,26 +668,7 @@ class Predictor():
             util.writepdb(out_prefix+"_init.pdb", xyz_prev_orig[0], seq[0, -1], bond_feats=bond_feats)
 
         # output losses, model confidence
-        xyz = xyz[None].to(self.device)
-        mask = mask[None].to(self.device)
-        mask_msa = mask_msa[None].to(self.device)
-
-        true_crds_, atom_mask_ = resolve_equiv_natives(pred_crds[-1], xyz, mask)
-        res_mask = get_prot_sm_mask(atom_mask_, msa[0,i_cycle,0])
-        mask_2d = res_mask[:,None,:] * res_mask[:,:,None]
-
-        true_crds_frame = xyz_to_frame_xyz(true_crds_, msa[:, i_cycle, 0],atom_frames)
-        c6d = xyz_to_c6d(true_crds_frame)
-        c6d = c6d_to_bins(c6d, same_chain, negative=False).to(self.device)
-        loss, loss_dict = self.calc_loss(
-            logit_s, c6d,
-            logit_aa_s, msa[:, i_cycle], mask_msa[:,i_cycle], logit_pae, logit_pde,
-            pred_crds, alpha, pred_allatom, true_crds_,
-            atom_mask_, res_mask, mask_2d, same_chain,
-            pred_lddt_binned, idx_pdb, bond_feats, atom_frames=atom_frames,
-            unclamp=False, negative=False
-        )
-        loss_dict = OrderedDict([(k,float(v)) for k,v in loss_dict.items()])
+        loss_dict = {}
         loss_dict['pae'] = float(best_pae.mean())
         loss_dict['pde'] = float(best_pde.mean())
         loss_dict['plddt'] = float(best_lddt[0].mean())
@@ -975,6 +726,7 @@ if __name__ == "__main__":
             pred.predict(args.out+f'_{n}', 
                          msa_fn=args.msa,
                          pdb_fn=args.pdb,
+                         tmpl_chain=args.tmpl_chain,
                          pt_fn=args.pt,
                          hhr_fn=args.hhr, 
                          atab_fn=args.atab, 
@@ -983,7 +735,8 @@ if __name__ == "__main__":
                          init_ligand_tmpl=args.init_ligand_tmpl,
                          init_protein_xyz=args.init_protein_xyz,
                          init_ligand_xyz=args.init_ligand_xyz,
-                         parse_hetatm=args.parse_hetatm,
+                         atomize_res=args.atomize_residues,
+                         disulfidize_res=args.disulfidize_residues,
                          n_cycle=args.n_cycle,
                          trunc_N=args.trunc_N,
                          trunc_C=args.trunc_C)
