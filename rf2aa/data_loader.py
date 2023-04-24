@@ -108,7 +108,7 @@ default_dataloader_params = {
         "MAXSEQ"           : 1024,
         "MAXLAT"           : 128, 
         "CROP"             : 256,
-        "DATCUT"           : "2020-Apr-30",
+        "DATCUT"           : "2021-Aug-1",
         "RESCUT"           : 4.5,
         "BLOCKCUT"         : 5,
         "PLDDTCUT"         : 70.0,

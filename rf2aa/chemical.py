@@ -1241,7 +1241,7 @@ ideal_coords = [
 
 atomized_protein_frames = torch.load(script_dir+"atomized_protein_frames.pt")
 
-def load_pdb_ideal_sdf_strings(base_path: Optional[str] = None, return_only_sdf_strings: bool = False):
+def load_pdb_ideal_sdf_strings(base_path: Optional[str] = script_dir, return_only_sdf_strings: bool = False):
     """
     returns a dictionary of that maps all the 3letter ligand codes in the pdb to relevant information:
         string of the sdf file with idealized coordinates for that molecule
