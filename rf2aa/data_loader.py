@@ -36,8 +36,8 @@ from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein
     cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
     get_alt_query_ligand, remove_unresolved_substructures, map_identical_prot_chains, \
     cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, get_prot_sm_mask, bond_feats_from_Ls, \
-    reindex_protein_feats_after_atomize, reassign_symmetry_after_cropping
-
+    reindex_protein_feats_after_atomize, get_residue_contacts, atomize_discontiguous_residues, pop_protein_feats, \
+        is_atom, get_atom_template_indices, reassign_symmetry_after_cropping
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -131,6 +131,10 @@ default_dataloader_params = {
         "P_METAL"          : 0.75,
         "P_ATOMIZE_MODRES" : 0.75,
         "MAXMONOMERLENGTH" : None,
+        "ATOMIZE_TRIPLE_CONTACT": True,
+        "P_ATOMIZE_TEMPLATE": 1.0,
+        "NUM_SEQS_SUBSAMPLE": 50,
+        "BLACK_HOLE_INIT"   : False,
     }
 
 def set_data_loader_params(args):
@@ -154,6 +158,21 @@ def MSABlockDeletion(msa, ins, nb=5):
     mask[to_delete] = 0
 
     return msa[mask], ins[mask]
+
+def subsample_MSA(msa, ins, num_seqs_to_sample):
+    """
+    subsample MSA. this is distinct from block deletion which attempts to cut off a full clade 
+    because this is intended to make the MSA very shallow to force the model to condition on information 
+    in xyz_prev
+    Args:
+        msa (torch.Tensor): msa pulled from a3m file
+        ins (torch.Tensor): insertions from a3m file
+        num_seqs_to_sample (int): number of sequences to select from MSA
+    """
+    num_seqs_in_msa = msa.shape[0] - 1 # don't include query sequence
+    samples = torch.randperm(num_seqs_in_msa)[:num_seqs_to_sample]
+    samples = torch.cat([torch.tensor([0]), samples]) # add query sequence back in 
+    return msa[samples], ins[samples]
 
 def cluster_sum(data, assignment, N_seq, N_res):
     csum = torch.zeros(N_seq, N_res, data.shape[-1], device=data.device).scatter_add(0, assignment.view(-1,1,1).expand(-1,N_res,data.shape[-1]), data.float())
@@ -447,6 +466,40 @@ def merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot):
 
     return xyz_t_out, f1d_t_out, mask_t_out
 
+def spoof_template(xyz, seq, mask, is_motif, random_noise=5):
+    """
+    generate template features from an arbitrary xyz, seq and mask
+    is_motif indicates which 
+    """
+    L = xyz.shape[0]
+    xyz_t = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*random_noise
+
+    t1d = torch.cat((
+        torch.nn.functional.one_hot(
+            torch.full((1, L), 20).long(),
+            num_classes=NAATOKENS-1).float(), # all gaps (no mask token)
+        torch.zeros((1, L, 1)).float()
+    ), -1) # (1, L_protein + L_sm, NAATOKENS)
+    mask_t = torch.full((1, L, NTOTAL), False)
+
+    xyz_t[0, is_motif, :14] = xyz[is_motif, :14]
+    xyz_t = torch.nan_to_num(xyz_t) # xyz has NaNs
+    t1d[0, is_motif] = torch.cat((
+        torch.nn.functional.one_hot(seq[is_motif], num_classes=NAATOKENS-1).float(),
+        torch.ones((len(is_motif), 1)).float()
+    ), -1) # (1, L_protein, NAATOKENS)
+    mask_t[0, is_motif, :14] = torch.tensor(mask[is_motif, :14])
+    
+    return xyz_t, t1d, mask_t
+
+def generate_xyz_prev(xyz_t, mask_t, params):
+    """
+    allows you to use different initializations for the coordinate track specified in params
+    """
+    L = xyz_t.shape[1]
+    if params["BLACK_HOLE_INIT"]:
+        xyz_t, _, mask_t = blank_template(1, L)
+    return xyz_t[0].clone(), mask_t[0].clone()
 
 def _compute_name_of_row(row: pd.Series) -> str:
     """
@@ -1259,9 +1312,9 @@ def get_assembly_msa(protein_chain_info, params):
 
 # merge msa & insertion statistics of two proteins having different taxID
 def merge_a3m_hetero(a3mA, a3mB, L_s):
-
     # merge msa
     query = torch.cat([a3mA['msa'][0], a3mB['msa'][0]]).unsqueeze(0) # (1, L)
+
     msa = [query]
     if a3mA['msa'].shape[0] > 1:
         extra_A = torch.nn.functional.pad(a3mA['msa'][1:], (0,sum(L_s[1:])), "constant", 20) # pad gaps
@@ -1821,8 +1874,8 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     idx = idx[crop_idx]
 
     # get initial coordinates
-    xyz_prev = xyz_t[0].clone()
-    mask_prev = mask_t[0].clone()
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+
     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
     dist_matrix = get_bond_distances(bond_feats)
@@ -1913,8 +1966,7 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         nsub = 2
 
     # get initial coordinates
-    xyz_prev = xyz_t[0].clone()
-    mask_prev = mask_t[0].clone()
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
     # figure out crop
     if (symmgp =='C1'):
@@ -2076,8 +2128,8 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, fixbb=False):
     idx = idx[crop_idx]
 
     # initial structure
-    xyz_prev = xyz_t[0].clone()
-    mask_prev = mask_t[0].clone()
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+
     chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
     dist_matrix = get_bond_distances(bond_feats)
@@ -2135,8 +2187,7 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
     mask_t = torch.cat((mask_t_A, mask_t_B), dim=1) # (T, L1+L2, natm, 3)
 
     # get initial coordinates
-    xyz_prev = xyz_t[0].clone()
-    mask_prev = mask_t[0].clone()
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
     # read PDB
     pdbA_id, pdbB_id = pdb_pair.split(':')
@@ -2499,8 +2550,8 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
         bond_feats = bond_feats[sel][:,sel]
         ch_label = ch_label[sel]
 
-    xyz_prev = xyz_t[0].clone()
-    mask_prev = mask_t[0].clone()
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+
     chirals = torch.Tensor()
     dist_matrix = get_bond_distances(bond_feats)
 
@@ -2580,8 +2631,8 @@ def loader_rna(item, params, random_noise=5.0):
         same_chain = same_chain[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
 
-    xyz_prev = xyz_t[0].clone()
-    mask_prev = mask_t[0].clone()   
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+ 
     chirals = torch.Tensor()
     ch_label = torch.zeros((L,)).long()
     ch_label[Ls[0]:] = 1
@@ -3252,8 +3303,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
                 akeys_sm
             )
         
-    xyz_prev = xyz_t[0].clone()
-    mask_prev = mask_t[0].clone()
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
     xyz_prev = torch.nan_to_num(xyz_prev)
     xyz = torch.nan_to_num(xyz)
@@ -3306,7 +3356,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
         chirals[:, :-1] = chirals[:, :-1] + L1
 
     dist_matrix = get_bond_distances(bond_feats)
-
+    
     # create MSA features from cropped msa and insertions
     # if len(msa) > params['BLOCKCUT']:
     #     msa, ins = MSABlockDeletion(msa.long(), ins.long())
@@ -3333,14 +3383,20 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
     
+    if params.get("NUM_SEQS_SUBSAMPLE", False):
+        if len(msa) > params["NUM_SEQS_SUBSAMPLE"]:
+            msa, ins = subsample_MSA(msa, ins, params["NUM_SEQS_SUBSAMPLE"])
+
     idx = torch.arange(len(pdb['xyz'])) 
     xyz = torch.full((len(idx),NTOTAL,3), np.nan).float()
     xyz[:,:14,:] = pdb['xyz']
     mask = torch.full((len(idx), NTOTAL), False)
     mask[:,:14] = pdb['mask']
-    
+    bond_feats = get_protein_bond_feats(len(idx))
+    same_chain = torch.ones(len(idx), len(idx))
     # handle template features
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
+    ntempl = 0 # RK done to make atomization task harder
     xyz_t_prot, f1d_t_prot, mask_t_prot = TemplFeaturize(tplt, len(pdb['xyz']), params, offset=0, 
         npick=ntempl, pick_top=pick_top, random_noise=random_noise)
 
@@ -3354,6 +3410,8 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     xyz_t_prot = xyz_t_prot[:, crop_idx]
     f1d_t_prot = f1d_t_prot[:, crop_idx]
     mask_t_prot = mask_t_prot[:, crop_idx]
+    bond_feats = bond_feats[crop_idx][:, crop_idx]
+    same_chain = same_chain[crop_idx][:, crop_idx]
     protein_L, nprotatoms, _ = xyz_prot.shape
 
     # choose region to atomize
@@ -3368,116 +3426,92 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     num_atoms_exist = mask_prot.sum(dim=-1) # how many atoms have coords in each residue?
     can_atomize_mask[(num_atoms_per_res != num_atoms_exist)] = 0
     can_atomize_idx = torch.where(can_atomize_mask)[0]
-
+    
     # not enough valid residues to atomize and have space for flanks, treat as monomer example
     if flank + 1 >= can_atomize_idx.shape[0]-(n_res_atomize+flank+1):
         return featurize_single_chain(msa, ins, tplt, pdb, params, random_noise=random_noise) \
             + ("atomize_pdb", item,)
+    
+    res_idxs_to_atomize = None
+    if params.get("ATOMIZE_TRIPLE_CONTACT", False):
+        res_idxs_to_atomize = get_residue_contacts(xyz_prot[can_atomize_idx], can_atomize_idx)
 
-    i_start = torch.randint(flank+1, can_atomize_idx.shape[0]-(n_res_atomize+flank+1),(1,))
-    i_start = can_atomize_idx[i_start] # index of the first residue to be atomized
+    if res_idxs_to_atomize is None: # this is triggered if triple contact fails or if the task is not triple contact
+        i_start = torch.randint(flank+1, can_atomize_idx.shape[0]-(n_res_atomize+flank+1),(1,))
+        i_start = can_atomize_idx[i_start] # index of the first residue to be atomized
 
-    for i_end in range(i_start+1, i_start + n_res_atomize):
-        if i_end not in can_atomize_idx:
-            n_res_atomize = int(i_end-i_start)
-            #print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive '\
-            #      f'fully-resolved residues to atomize. {item} i_start={i_start}')
-            break
+        for i_end in range(i_start+1, i_start + n_res_atomize):
+            if i_end not in can_atomize_idx:
+                n_res_atomize = int(i_end-i_start)
+                #print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive '\
+                #      f'fully-resolved residues to atomize. {item} i_start={i_start}')
+                break
+        res_idxs_to_atomize = torch.arange(start=int(i_start), end=int(i_start+n_res_atomize))
 
-    try:
-        msa_sm, ins_sm, xyz_sm, mask_sm, frames, bond_feats_sm, last_C, chirals = atomize_protein(i_start, msa_prot, xyz_prot, mask_prot, n_res_atomize=n_res_atomize)
-    except Exception as e:
-        print('n_res_atomize',n_res_atomize)
-        print('i_start',i_start)
-        raise e
-        
-    # generate blank template for atoms
-    tplt_sm = {"ids":[]}
-    xyz_t_sm, f1d_t_sm, mask_t_sm = TemplFeaturize(tplt_sm, xyz_sm.shape[1], params, offset=0, npick=0, pick_top=pick_top)
-    ntempl = xyz_t_prot.shape[0]
-    xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
-    f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
-    mask_t = torch.cat((mask_t_prot, mask_t_sm.repeat(ntempl,1,1)), dim=1)
+    seq_atomize_all, ins_atomize_all, xyz_atomize_all, mask_atomize_all, frames_atomize_all, chirals_atomize_all, \
+        bond_feats, same_chain = atomize_discontiguous_residues(res_idxs_to_atomize, msa_prot, xyz_prot, mask_prot, bond_feats, same_chain)
+
+    atom_template_motif_idxs = get_atom_template_indices(msa,res_idxs_to_atomize)
 
     # Generate ground truth structure: account for ligand symmetry
-    N_symmetry, sm_L, _ = xyz_sm.shape
+    N_symmetry, sm_L, _ = xyz_atomize_all.shape
     xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
     mask = torch.full(xyz.shape[:-1], False).bool()
     xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
-    xyz[:, protein_L:, 1, :] = xyz_sm
+    xyz[:, protein_L:, 1, :] = xyz_atomize_all
     mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, protein_L, nprotatoms)
-    mask[:, protein_L:, 1] = mask_sm
+    mask[:, protein_L:, 1] = mask_atomize_all
     
-    Ls = [xyz_prot.shape[0], xyz_sm.shape[1]]
+    # generate template for atoms
+    if torch.rand() < params["P_ATOMIZE_TEMPLATE"]:
+        xyz_t_sm, f1d_t_sm, mask_t_sm = spoof_template(xyz[0, protein_L:], seq_atomize_all, mask[0, protein_L:], atom_template_motif_idxs) 
+    else:
+        tplt_sm = {"ids":[]}
+        xyz_t_sm, f1d_t_sm, mask_t_sm = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0, pick_top=pick_top)
+    ntempl = xyz_t_prot.shape[0]    
+    xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
+    f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
+    mask_t = torch.cat((mask_t_prot, mask_t_sm.repeat(ntempl,1,1)), dim=1)
+    
+    Ls = [xyz_prot.shape[0], xyz_atomize_all.shape[1]]
     a3m_prot = {"msa": msa_prot, "ins": ins_prot}
-    a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
+    a3m_sm = {"msa": seq_atomize_all.unsqueeze(0), "ins": ins_atomize_all.unsqueeze(0)}
+
     a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
-
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
-
-    # handle bond features
-    bond_feats = torch.zeros((sum(Ls), sum(Ls))).long()
-    bond_feats[:Ls[0], :Ls[0]] = get_protein_bond_feats(Ls[0])
-    bond_feats[Ls[0]:, Ls[0]:] = bond_feats_sm
-    bond_feats[i_start-1, Ls[0]] = 6
-    bond_feats[Ls[0], i_start-1] = 6
-    if len(last_C.numpy())==1:
-        bond_feats[i_start+n_res_atomize+flank, Ls[0]+int(last_C.numpy())] = 6
-        bond_feats[Ls[0]+int(last_C.numpy()), i_start+n_res_atomize+flank] = 6
-    else:
-        print(f"ERROR: {item} has multiple values for last_C, {last_C.numpy()} with i_start= {i_start}")
 
     # handle res_idx
     last_res = idx[-1]
     idx_sm = torch.arange(Ls[1]) + last_res
     idx = torch.cat((idx, idx_sm))
 
-    # handle chain_idx
-    chain_idx = torch.ones((sum(Ls), sum(Ls))).long()
-    node_type = torch.zeros((sum(Ls), sum(Ls))).long() # holds 2D information on whether atom to atom interaction or residue to residue
-    node_type[:Ls[0], :Ls[0]] = 1
-    node_type[Ls[0]:, Ls[0]:] = 1 
-    
+    ch_label = torch.zeros(sum(Ls))
     # remove msa features for atomized portion
-    i1 = i_start - flank
-    i2 = i_start + n_res_atomize + flank
-    seq = torch.cat((seq[:, :i1], seq[:, i2:]), dim=1)
-    msa_seed_orig = torch.cat((msa_seed_orig[:, :, :i1], msa_seed_orig[:, :, i2:]), dim=2)
-    msa_seed = torch.cat((msa_seed[:, :, :i1], msa_seed[:, :, i2:]), dim=2)
-    msa_extra = torch.cat((msa_extra[:, :, :i1], msa_extra[:, :, i2:]), dim=2)
-    mask_msa = torch.cat((mask_msa[:, :, :i1], mask_msa[:, :, i2:]), dim=2)
-    xyz = torch.cat((xyz[:, :i1], xyz[:, i2:]), dim=1)
-    mask = torch.cat((mask[:, :i1], mask[:, i2:]), dim=1)
+    msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
+        pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
+    
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+    
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
-    idx = torch.cat((idx[:i1], idx[i2:]), dim=0)
-    xyz_t = torch.cat((xyz_t[:, :i1], xyz_t[:, i2:]), dim=1)
-    f1d_t = torch.cat((f1d_t[:, :i1], f1d_t[:, i2:]), dim=1)
-    mask_t = torch.cat((mask_t[:, :i1], mask_t[:, i2:]), dim=1)
-    chain_idx = torch.cat((chain_idx[ :i1], chain_idx[i2:]), dim=0)
-    chain_idx = torch.cat((chain_idx[ :, :i1], chain_idx[:, i2:]), dim=1)
-    node_type = torch.cat((node_type[ :i1], node_type[i2:]), dim=0)
-    node_type = torch.cat((node_type[ :, :i1], node_type[:, i2:]), dim=1)
-    bond_feats = torch.cat((bond_feats[ :i1], bond_feats[i2:]), dim=0)
-    bond_feats = torch.cat((bond_feats[ :, :i1], bond_feats[:, i2:]), dim=1)
-
-    xyz_prev = xyz_t[0].clone()
-    xyz_prev[Ls[0]:] = xyz_prev[i_start]
-    mask_prev = mask_t[0].clone()
+    # xyz_prev = xyz_t[0].clone()
+    # # xyz_prev[Ls[0]:] = xyz_prev[i_start] # no templates provided anymore this line won't work
+    # mask_prev = mask_t[0].clone()
     xyz = torch.nan_to_num(xyz)
 
     dist_matrix = get_bond_distances(bond_feats)
 
-    if chirals.shape[0]>0:
-        L1 = node_type[0,:].sum()
-        chirals[:, :-1] = chirals[:, :-1] +L1
-    ch_label = torch.zeros(seq[0].shape)
+    if chirals_atomize_all.shape[0]>0:
+        L1 = torch.sum(~is_atom(seq[0]))
+        chirals_atomize_all[:, :-1] = chirals_atomize_all[:, :-1] +L1
+    
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, dist_matrix, chirals, ch_label, 'C1', "atomize_pdb", item
+           same_chain, False, False, frames_atomize_all, bond_feats.long(), dist_matrix, chirals_atomize_all, \
+           ch_label, 'C1', "atomize_pdb", item
 
 def loader_sm(item, params, pick_top=True):
     """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
@@ -3520,8 +3554,7 @@ def loader_sm(item, params, pick_top=True):
     xyz_t, f1d_t, mask_t = TemplFeaturize({"ids":[]}, sm_L, params, offset=0,
         npick=0, pick_top=pick_top)
 
-    xyz_prev = xyz_t[0]
-    mask_prev = mask_t[0].clone()
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
     xyz = torch.nan_to_num(xyz)
     ch_label = torch.zeros(seq[0].shape)

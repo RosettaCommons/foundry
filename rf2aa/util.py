@@ -3,6 +3,7 @@ import warnings
 import assertpy
 
 import numpy as np
+import random
 import torch
 import warnings
 from assertpy import assert_that
@@ -1008,26 +1009,6 @@ def get_atom_frames(msa, G):
     assert msa.shape[0] == len(selected_frames)
     return torch.tensor(selected_frames).long()
 
-def get_atomized_protein_frames(msa, ra):
-    """ returns a unique frame for each atom in a n_res_atomize of residues """
-    r,a = ra.T
-    residue_frames = atomized_protein_frames[msa]
-    # handle out of bounds at the termini, terminal N and C inherit Calpha frame, offset dimension needs to be updated
-    offset = torch.zeros(3,2)
-    offset[:,0] = 1
-    residue_frames[r[0], 0] = residue_frames[r[0],1] + offset
-    residue_frames[r[-1], 2] = residue_frames[r[-1],1] - offset
-    # terminal O needs to have O-C-Calpha frame
-    residue_frames[r[-1],3,2] = torch.tensor([-2,1])
-    frames = residue_frames[r,a]
-
-    # make sure no masked atoms are in frames
-    atom_idx = torch.arange(frames.shape[0]).unsqueeze(1).repeat(1,3)
-    masked_atoms = ~torch.all((frames[...,0] + atom_idx) < frames.shape[0], dim=-1)
-    reframe_indices = masked_atoms.nonzero()
-    for i in reframe_indices:
-        frames[i] = frames[i-1]-offset
-    return frames.long() 
     
 ### Generate bond features for small molecules ###
 def get_bond_feats(mol):                                                                                 
@@ -1093,13 +1074,6 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
             bond_feats[end_idx, start_idx] = SINGLE_BOND
     return bond_feats
 
-# given a bond graph, get the path lengths
-def get_path_lengths(bond_feats):
-    atom_bonds = (bond_feats > 0)*(bond_feats<5)
-    atom_bonds = atom_bonds + atom_bonds.permute((0,2,1))
-    dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds[0].long().detach().cpu().numpy(), directed=False)
-    dist_matrix = torch.tensor(np.nan_to_num(dist_matrix, posinf=4.0), device=mask.device) # protein portion is inf and you don't want to mask it out
-    return dist_matrix
 
 ### Generate atom features for proteins ###
 def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
@@ -1147,6 +1121,111 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     frames = get_atom_frames(lig_seq, G)
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_allatom_mask, bond_feats)
     return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
+
+def atomize_discontiguous_residues(idxs, msa, xyz, mask, bond_feats, same_chain):
+    """
+    this atomizes multiple discontiguous residues at the same time, this is the default interface into atomizing residues 
+    (using the non assembly dataset)
+    """
+    protein_L = msa.shape[1]
+    seq_atomize_all = []
+    ins_atomize_all = []
+    xyz_atomize_all = []
+    mask_atomize_all = []
+    frames_atomize_all = []
+    chirals_atomize_all = []
+    prev_C_index = None
+    total_num_atoms = 0
+    for idx in idxs:
+        seq_atomize, ins_atomize, xyz_atomize, mask_atomize, frames_atomize, bond_feats_atomize, last_C, chirals_atomize = \
+            atomize_protein(idx, msa, xyz, mask, n_res_atomize=1)
+        
+        natoms = seq_atomize.shape[0]
+        L = bond_feats.shape[0]
+        # update the chirals to be after all the other atoms (still need to update to put it behind all the proteins)
+        chirals_atomize[:, :-1] += total_num_atoms
+
+        seq_atomize_all.append(seq_atomize)
+        ins_atomize_all.append(ins_atomize)
+        xyz_atomize_all.append(xyz_atomize)
+        mask_atomize_all.append(mask_atomize)
+        frames_atomize_all.append(frames_atomize)
+        chirals_atomize_all.append(chirals_atomize)
+
+        N_term = idx ==  0
+        C_term = idx == protein_L-1
+
+        # update bond_feats every iteration, update all other features at the end 
+        bond_feats_new = torch.zeros((L+natoms, L+natoms))
+        bond_feats_new[:L, :L] = bond_feats
+        bond_feats_new[L:, L:] = bond_feats_atomize
+        # add bond between protein and atomized N
+        if not N_term and idx-1 not in idxs:
+            bond_feats_new[idx-1, L] = 6 # protein (backbone)-atom bond 
+            bond_feats_new[L, idx-1] = 6 # protein (backbone)-atom bond 
+        # add bond between protein and C, assumes every residue is being atomized one at a time (eg n_res_atomize=1)
+        if not C_term and idx+1 not in idxs:
+            bond_feats_new[idx+1, L+int(last_C.numpy())] = 6 # protein (backbone)-atom bond 
+            bond_feats_new[L+int(last_C.numpy()), idx+1] = 6 # protein (backbone)-atom bond 
+        # handle drawing peptide bond between contiguous atomized residues
+        if idx-1 in idxs:
+            if prev_C_index is None:
+                raise ValueError("prev_C_index is None even though the previous residue has been atomized")
+            bond_feats_new[prev_C_index, L] = 1 # single bond
+            bond_feats_new[L, prev_C_index] = 1 # single bond
+
+        prev_C_index =  L+int(last_C.numpy()) #update prev_C to draw bond to upcoming residue
+        # update same_chain every iteration
+        same_chain_new = torch.zeros((L+natoms, L+natoms))
+        same_chain_new[:L, :L] = same_chain
+        residues_in_prot_chain = same_chain[idx].squeeze().nonzero()
+
+        same_chain_new[L:, residues_in_prot_chain] = 1
+        same_chain_new[residues_in_prot_chain, L:] = 1
+        same_chain_new[L:, L:] = 1
+
+        bond_feats = bond_feats_new
+        same_chain = same_chain_new
+        total_num_atoms += natoms
+    
+    seq_atomize_all = torch.cat(seq_atomize_all)
+    ins_atomize_all = torch.cat(ins_atomize_all)
+    xyz_atomize_all = cartprodcat(xyz_atomize_all)
+    mask_atomize_all = cartprodcat(mask_atomize_all)
+    
+    # frames were calculated per residue -- we want them over all residues in case there are contiguous residues
+    bond_feats_sm = bond_feats[protein_L:][:, protein_L:]
+    G = nx.from_numpy_matrix(bond_feats_sm.detach().cpu().numpy())
+    frames_atomize_all = get_atom_frames(seq_atomize_all, G)
+    
+    # frames_atomize_all = torch.cat(frames_atomize_all)
+    chirals_atomize_all = torch.cat(chirals_atomize_all)
+
+    return seq_atomize_all, ins_atomize_all, xyz_atomize_all, mask_atomize_all, frames_atomize_all, chirals_atomize_all, \
+        bond_feats, same_chain
+
+def get_atom_template_indices(msa,res_idxs_to_atomize):
+    """
+    chooses a random frame (with high probability of choosing later frames) from each atomized residue to provide as a 
+    template to resemble diffusion training returns indices that represent that frame in the atomized region of the rosettafold input
+    """
+    aa2long_ = [[x.strip() if x is not None else None for x in y] for y in aa2long]
+    residues_atomize = msa[0, res_idxs_to_atomize]
+    residue_atomize_allatom_mask = allatom_mask[residues_atomize][:, :14] # the indices that have heavy atoms in that sidechain
+    num_atoms_per_residue = torch.sum(residue_atomize_allatom_mask,dim=1)
+
+    frames_per_residue = [frames[i] for i in residues_atomize]
+    chosen_frame_per_residue = [random.choices(frames, weights=range(len(frames)), k=1)[0] for frames in frames_per_residue]
+
+    atom_indices_per_residue = [[aa2long_[res].index(atom.strip()) for atom in frame] for res, frame in zip(residues_atomize, chosen_frame_per_residue)]
+    atom_indices_per_residue = torch.tensor(atom_indices_per_residue)
+
+    index_offset_per_residue = torch.roll(torch.cumsum(num_atoms_per_residue, dim=0), shifts=1)
+    index_offset_per_residue[0] = 0
+
+    atom_indices_per_residue += index_offset_per_residue[:, None].repeat(1,3)
+
+    return atom_indices_per_residue.flatten()
 
 def reindex_protein_feats_after_atomize(
     residues_to_atomize,
@@ -1213,24 +1292,36 @@ def reindex_protein_feats_after_atomize(
                    chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1]] = 1
 
     # remove atomized residues from feature tensors
-    i_res = torch.tensor([i for i in range(sum(Ls)) if i not in residue_indices])
-    msa = msa[:,i_res]
-    ins = ins[:,i_res]
-    xyz = xyz[:,i_res]
-    mask = mask[:,i_res]
-    bond_feats = bond_feats[i_res][:,i_res]
-    idx = idx[i_res]
-    xyz_t = xyz_t[:,i_res]
-    f1d_t = f1d_t[:,i_res]
-    mask_t = mask_t[:,i_res]
-    same_chain = same_chain[i_res][:,i_res]
-    ch_label = ch_label[i_res]
+    msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
+        pop_protein_feats(residue_indices, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
 
     for i_ch in residue_chain_nums:
         Ls_prot[i_ch] -= 1
 
     return msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls_prot, Ls_sm
 
+
+def pop_protein_feats(residue_indices, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls):
+    """
+    remove protein features for an arbitrary set of residue indices
+    """
+    pop = torch.ones((sum(Ls)))
+    pop[residue_indices] = 0
+    pop = pop.bool()
+
+    msa = msa[:,pop]
+    ins = ins[:,pop]
+    xyz = xyz[:,pop]
+    mask = mask[:,pop]
+    bond_feats = bond_feats[pop][:,pop]
+    idx = idx[pop]
+    xyz_t = xyz_t[:,pop]
+    f1d_t = f1d_t[:,pop]
+    mask_t = mask_t[:,pop]
+    same_chain = same_chain[pop][:,pop]
+    ch_label = ch_label[pop]
+
+    return msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label
 
 def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
     """Given a protein chain and coordinate transform parsed from CIF file,
@@ -1744,4 +1835,50 @@ def kabsch(xyz1, xyz2, eps=1e-6):
     rmsd = torch.sqrt(torch.sum((xyz2_-xyz1)*(xyz2_-xyz1), axis=(0,1)) / L + eps)
 
     return rmsd, U
+
+
+def get_contacts(xyz1, xyz2, max_dist=5):
+    """
+    gets a random contact between two xyz tensors within a certain distance cutoff
+    """
+    contacts = torch.cdist(xyz1, xyz2)
+    is_close_euclidean = contacts < max_dist
+    return is_close_euclidean
+
+
+def get_triple_contact(is_close_euclidean_far_seq):
+    """
+    note: considered squaring the adjacency matrix for this computation but noticed it is slower than early stopping
+    """
+    contact_idxs = is_close_euclidean_far_seq.nonzero()
+    contact_idxs = contact_idxs[torch.randperm(len(contact_idxs))]
+    for i,j in contact_idxs:
+        if j < i:
+            continue
+        K = (is_close_euclidean_far_seq[i,:] * is_close_euclidean_far_seq[j,:]).nonzero()
+        if len(K):
+            K = K[torch.randperm(len(K))]
+            for k in K:
+                return torch.tensor([i,j,k])
+    return None
+
+
+def get_residue_contacts(xyz, idx, max_dist=5, seq_dist_greater_than=10):
+    """
+    find two residues close in geometric space but far in sequence space 
+    this mimics the theozyme task in diffusion so the structure prediction model can learn the task before 
+    transfer learning
+    """
+    Cb = generate_Cbeta(xyz[:, 0], xyz[:, 1], xyz[:, 2])
+    is_close_euclidean = get_contacts(Cb, Cb, max_dist=max_dist)
+    seqsep = torch.abs(idx[None, :] - idx[:, None])
+    is_far_seqsep = seqsep > seq_dist_greater_than
+
+    is_close_euclidean_far_seq = is_close_euclidean * is_far_seqsep
+
+    triplet =  get_triple_contact(is_close_euclidean_far_seq) # returns absolute index in tensors but want residue indices for other functions
+
+    if triplet is None:
+        return None
+    return idx[triplet]
 
