@@ -1605,7 +1605,7 @@ class Trainer():
                 true_crds, mask_crds, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label
             ) = self._prepare_input(inputs, gpu)
             xyz_prev_orig = xyz_prev.clone()
-            
+
             counter += 1
 
             N_cycle = np.random.randint(1, self.maxcycle+1) # number of recycling

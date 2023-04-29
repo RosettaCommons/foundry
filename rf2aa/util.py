@@ -1219,10 +1219,10 @@ def get_atom_template_indices(msa,res_idxs_to_atomize):
 
     atom_indices_per_residue = [[aa2long_[res].index(atom.strip()) for atom in frame] for res, frame in zip(residues_atomize, chosen_frame_per_residue)]
     atom_indices_per_residue = torch.tensor(atom_indices_per_residue)
-
+    
     index_offset_per_residue = torch.roll(torch.cumsum(num_atoms_per_residue, dim=0), shifts=1)
     index_offset_per_residue[0] = 0
-
+    
     atom_indices_per_residue += index_offset_per_residue[:, None].repeat(1,3)
 
     return atom_indices_per_residue.flatten()

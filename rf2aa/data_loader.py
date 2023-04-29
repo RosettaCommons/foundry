@@ -488,7 +488,7 @@ def spoof_template(xyz, seq, mask, is_motif, random_noise=5):
         torch.nn.functional.one_hot(seq[is_motif], num_classes=NAATOKENS-1).float(),
         torch.ones((len(is_motif), 1)).float()
     ), -1) # (1, L_protein, NAATOKENS)
-    mask_t[0, is_motif, :14] = torch.tensor(mask[is_motif, :14])
+    mask_t[0, is_motif, :14] = mask[is_motif, :14]
     
     return xyz_t, t1d, mask_t
 
@@ -3451,7 +3451,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     seq_atomize_all, ins_atomize_all, xyz_atomize_all, mask_atomize_all, frames_atomize_all, chirals_atomize_all, \
         bond_feats, same_chain = atomize_discontiguous_residues(res_idxs_to_atomize, msa_prot, xyz_prot, mask_prot, bond_feats, same_chain)
 
-    atom_template_motif_idxs = get_atom_template_indices(msa,res_idxs_to_atomize)
+    atom_template_motif_idxs = get_atom_template_indices(msa_prot,res_idxs_to_atomize)
 
     # Generate ground truth structure: account for ligand symmetry
     N_symmetry, sm_L, _ = xyz_atomize_all.shape
@@ -3463,7 +3463,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     mask[:, protein_L:, 1] = mask_atomize_all
     
     # generate template for atoms
-    if torch.rand() < params["P_ATOMIZE_TEMPLATE"]:
+    if torch.rand(1) < params["P_ATOMIZE_TEMPLATE"]:
         xyz_t_sm, f1d_t_sm, mask_t_sm = spoof_template(xyz[0, protein_L:], seq_atomize_all, mask[0, protein_L:], atom_template_motif_idxs) 
     else:
         tplt_sm = {"ids":[]}
