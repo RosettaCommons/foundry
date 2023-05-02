@@ -78,6 +78,8 @@ if not os.path.exists(base_dir):
 default_dataloader_params = {
         "COMPL_LIST"       : "%s/list.hetero.csv"%compl_dir,
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
+        #"DSLF_LIST"        : "%s/list.dslf.csv"%compl_dir,
+        "DSLF_LIST"        : "./list.dslf.csv",
         "NEGATIVE_LIST"    : "%s/list.negative.csv"%compl_dir,
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.v2.csv"%na_dir,
@@ -498,7 +500,6 @@ def spoof_template(xyz, seq, mask, is_motif=None, template_conf=1, random_noise=
         torch.full((len(is_motif), 1), template_conf).float()
     ), -1) # (1, L_protein, NAATOKENS)
     mask_t[0, is_motif, :14] = mask[is_motif, :14]
-    
     return xyz_t, t1d, mask_t
 
 def generate_sm_template_feats(tplt_ids, resnames, akeys, Ls_sm, chid2smpartners, params):
@@ -873,6 +874,14 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     chid2hash = dict(zip(pdb_metadata.CHAINID, pdb_metadata.HASH))
     tmp = pdb_metadata.dropna(subset=['TAXID'])
     chid2taxid = dict(zip(tmp.CHAINID, tmp.TAXID))
+
+    # short dslf loops
+    dslf = pd.read_csv(params['DSLF_LIST'])
+    #tmp_df = pdb[ pdb.CLUSTER.isin(val_pdb_ids) & (pdb.CHAINID.isin(dslf['CHAIN_A']))]
+    tmp_df = pdb[ pdb.CHAINID.isin(dslf['CHAIN_A'])]
+    valid_dict['dslf'] = dslf.merge(tmp_df[['CHAINID','HASH','CLUSTER']], 
+                                    left_on='CHAIN_A', right_on='CHAINID', how='right')
+    valid_ID_dict['dslf'] = valid_dict['dslf'].CLUSTER.drop_duplicates().values
 
     # homo-oligomers
     homo = pd.read_csv(params['HOMO_LIST'])
@@ -1942,12 +1951,11 @@ def get_bond_distances(bond_feats):
     return torch.from_numpy(dist_matrix).float()
 
 # Generate input features for single-chain
-def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=True, random_noise=5.0, fixbb=False):
+def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=True, random_noise=5.0, fixbb=False, p_short_crop=0.0, p_dslf_crop=0.0):
     msa_featurization_kwargs = {}
     if fixbb:
         ic('setting msa feat kwargs')
         msa_featurization_kwargs['p_mask'] = 0.0
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb, **msa_featurization_kwargs)
 
     # get ground-truth structures
     idx = torch.arange(len(pdb['xyz'])) 
@@ -1962,42 +1970,130 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tplt, msa.shape[1], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
     
     # Residue cropping
-    crop_function = get_crop
-    if params.get('DISCONTIGUOUS_CROP', False):
-        crop_function = get_discontiguous_crop
-    crop_idx = crop_function(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
-    seq = seq[:,crop_idx]
-    msa_seed_orig = msa_seed_orig[:,:,crop_idx]
-    msa_seed = msa_seed[:,:,crop_idx]
-    msa_extra = msa_extra[:,:,crop_idx]
-    mask_msa = mask_msa[:,:,crop_idx]
-    xyz_t = xyz_t[:,crop_idx]
-    f1d_t = f1d_t[:,crop_idx]
-    mask_t = mask_t[:,crop_idx]
-    xyz = xyz[crop_idx]
-    mask = mask[crop_idx]
-    idx = idx[crop_idx]
+    croplen = params['CROP']
+    disulf_crop = False
+    if (np.random.rand() < p_dslf_crop):
+        # random disulfide loop
+        disulfs = get_dislf(msa[0],xyz,mask)
+        if (len(disulfs)>1):
+            start,stop,clen = min ([(x,y,y-x) for x,y in disulfs], key=lambda x:x[2])
+            if (clen<=20):
+                crop_idx = torch.arange(start,stop+1,device=msa.device)
+                disulf_crop = True
+                #print ('featurize_single_chain crop',crop_idx)
 
-    same_chain = torch.ones((len(crop_idx), len(crop_idx))).long()
-    ntempl = xyz_t.shape[0]
-    xyz_t = torch.stack(
-        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
-    )
-    # get initial coordinates
-    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+    if (not disulf_crop):
+        if (np.random.rand() < p_short_crop):
+            croplen = np.random.randint(8,16)
 
+        crop_function = get_crop
+        if params.get('DISCONTIGUOUS_CROP', False):
+            crop_function = get_discontiguous_crop
+        crop_idx = crop_function(len(idx), mask, msa.device, croplen, unclamp=unclamp)
+
+    if (disulf_crop):
+        ###
+        # Atomize disulfide
+        msa_prot = msa[:, crop_idx]
+        ins_prot = ins[:, crop_idx]
+        xyz_prot = xyz[crop_idx]
+        mask_prot = mask[crop_idx]
+        idx = idx[crop_idx]
+        xyz_t_prot = xyz_t[:, crop_idx]
+        f1d_t_prot = f1d_t[:, crop_idx]
+        mask_t_prot = mask_t[:, crop_idx]
+        protein_L, nprotatoms, _ = xyz_prot.shape
+
+        bond_feats = get_protein_bond_feats(len(crop_idx)).long()
+        same_chain = torch.ones((len(crop_idx), len(crop_idx))).long()
+
+        res_idxs_to_atomize = torch.tensor([0,len(crop_idx)-1], device=msa.device)
+        dslfs = [(0,len(crop_idx)-1)]
+        seq_atomize_all, ins_atomize_all, xyz_atomize_all, mask_atomize_all, frames_atomize_all, chirals_atomize_all, \
+            bond_feats, same_chain = atomize_discontiguous_residues(res_idxs_to_atomize, msa_prot, xyz_prot, mask_prot, bond_feats, same_chain, dslfs=dslfs)
+        atom_template_motif_idxs = get_atom_template_indices(msa_prot,res_idxs_to_atomize)
+
+        # Generate ground truth structure: account for ligand symmetry
+        N_symmetry, sm_L, _ = xyz_atomize_all.shape
+        xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
+        mask = torch.full(xyz.shape[:-1], False).bool()
+        xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
+        xyz[:, protein_L:, 1, :] = xyz_atomize_all
+        mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, protein_L, nprotatoms)
+        mask[:, protein_L:, 1] = mask_atomize_all
+
+        # generate (empty) template for atoms
+        tplt_sm = {"ids":[]}
+        xyz_t_sm, f1d_t_sm, mask_t_sm = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0, pick_top=pick_top)
+        ntempl = xyz_t_prot.shape[0]    
+        xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
+        f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
+        mask_t = torch.cat((mask_t_prot, mask_t_sm.repeat(ntempl,1,1)), dim=1)
+
+        Ls = [xyz_prot.shape[0], xyz_atomize_all.shape[1]]
+        a3m_prot = {"msa": msa_prot, "ins": ins_prot}
+        a3m_sm = {"msa": seq_atomize_all.unsqueeze(0), "ins": ins_atomize_all.unsqueeze(0)}
+
+        a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+        msa = a3m['msa'].long()
+        ins = a3m['ins'].long()
+
+        # handle res_idx
+        last_res = idx[-1]
+        idx_sm = torch.arange(Ls[1]) + last_res
+        idx = torch.cat((idx, idx_sm))
+
+        ch_label = torch.zeros(sum(Ls))
+        # remove msa features for atomized portion
+        msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
+            pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
     
-    bond_feats = get_protein_bond_feats(len(crop_idx)).long()
-    dist_matrix = get_bond_distances(bond_feats)
+        seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb, **msa_featurization_kwargs)
 
-    chirals = torch.Tensor()
-    #print ("loader_single", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
-    ch_label = torch.zeros(seq[0].shape)
+        xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+
+        xyz = torch.nan_to_num(xyz)
+
+        dist_matrix = get_bond_distances(bond_feats)
+
+        if chirals_atomize_all.shape[0]>0:
+            L1 = torch.sum(~is_atom(seq[0]))
+            chirals_atomize_all[:, :-1] = chirals_atomize_all[:, :-1] +L1
+
+    else:
+        ###
+        # Normal
+        seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb, **msa_featurization_kwargs)
+
+        seq = seq[:,crop_idx]
+        same_chain = torch.ones((len(crop_idx), len(crop_idx))).long()
+        msa_seed_orig = msa_seed_orig[:,:,crop_idx]
+        msa_seed = msa_seed[:,:,crop_idx]
+        msa_extra = msa_extra[:,:,crop_idx]
+        mask_msa = mask_msa[:,:,crop_idx]
+        xyz_t = xyz_t[:,crop_idx]
+        f1d_t = f1d_t[:,crop_idx]
+        mask_t = mask_t[:,crop_idx]
+        xyz = xyz[crop_idx]
+        mask = mask[crop_idx]
+        idx = idx[crop_idx]
+
+        xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+
+        bond_feats = get_protein_bond_feats(len(crop_idx)).long()
+        dist_matrix = get_bond_distances(bond_feats)
+
+        ch_label = torch.zeros(seq[0].shape)
+
+        chirals_atomize_all = torch.Tensor()
+        frames_atomize_all = torch.zeros(seq.shape)
+
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           same_chain, unclamp, False, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1'
+           same_chain, unclamp, False, frames_atomize_all, bond_feats.long(), dist_matrix, chirals_atomize_all, \
+           ch_label, "C1"
 
 # Generate input features for homo-oligomers
 def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0, fixbb=False):
@@ -2164,7 +2260,7 @@ def get_msa(a3mfilename, item, maxseq=5000):
     return {'msa':torch.tensor(msa), 'ins':torch.tensor(ins), 'taxIDs':taxIDs, 'label':item}
 
 # Load PDB examples
-def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, p_short_crop=0.0, fixbb=False):
+def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5, p_short_crop=0.0, p_dslf_crop=0.0, fixbb=False):
     # load MSA, PDB, template info
     pdb_chain, pdb_hash = item['CHAINID'], item['HASH']
     pdb = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_chain[1:3]+'/'+pdb_chain+'.pt')
@@ -2185,82 +2281,161 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5,
         return feats + ("homo",item,)
 
     # only short crop monomers
-    short_crop = np.random.rand() < p_short_crop
-    if (short_crop):
-        crop_orig = params["CROP"]
-        params["CROP"] = np.random.randint(8,16)
-    feats = featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb)
-    if (short_crop):
-        params["CROP"] = crop_orig
+    feats = featurize_single_chain(
+        msa, ins, tplt, pdb, params, unclamp=unclamp, pick_top=pick_top, fixbb=fixbb, p_short_crop=p_short_crop, p_dslf_crop=p_dslf_crop
+    )
     return feats + ("monomer",item,)
 
     
-def loader_fb(item, params, unclamp=False, p_short_crop=0.0, fixbb=False):
+def loader_fb(item, params, unclamp=False, p_short_crop=0.0, p_dslf_crop=0.0, fixbb=False):
     # loads sequence/structure/plddt information
     pdb_chain, hashstr = item['CHAINID'], item['HASH']
     a3m = get_msa(os.path.join(params["FB_DIR"], "a3m", hashstr[:2], hashstr[2:], pdb_chain+".a3m.gz"), pdb_chain)
     pdb = get_pdb(os.path.join(params["FB_DIR"], "pdb", hashstr[:2], hashstr[2:], pdb_chain+".pdb"),
                   os.path.join(params["FB_DIR"], "pdb", hashstr[:2], hashstr[2:], pdb_chain+".plddt.npy"),
                   pdb_chain, params['PLDDTCUT'], params['SCCUT'])
-   
+
     # get msa features
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
-    l_orig = msa.shape[1]
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb)
-    
-    # get template features -- None
-    tplt_blank = {"ids":[]}
-    xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tplt_blank, l_orig, params, offset=0, npick=0)  
+    L = msa.shape[1]
 
+    # get ground-truth structures
     idx = pdb['idx']
     xyz = torch.full((len(idx),NTOTAL,3),np.nan).float()
     xyz[:,:27,:] = pdb['xyz'][:,:27]
     mask = torch.full((len(idx),NTOTAL), False)
     mask[:,:27] = pdb['mask'][:,:27]
 
+    # get template features -- None
+    tplt_blank = {"ids":[]}
+    xyz_t, f1d_t, mask_t = TemplFeaturize(tplt_blank, L, params, offset=0, npick=0)  
+
     # Residue cropping
-    # only short crop monomers
-    short_crop = np.random.rand() < p_short_crop
-    if (short_crop):
-        crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, np.random.randint(8,16), unclamp=unclamp)
-    else:
-        crop_idx = get_crop(len(idx), mask, msa_seed_orig.device, params['CROP'], unclamp=unclamp)
+    croplen = params['CROP']
+    disulf_crop = False
+    if (np.random.rand() < p_dslf_crop):
+        # random disulfide loop
+        disulfs = get_dislf(msa[0],xyz,mask)
+        if (len(disulfs)>1):
+            start,stop,clen = min ([(x,y,y-x) for x,y in disulfs], key=lambda x:x[2])
+            if (clen<=20):
+                crop_idx = torch.arange(start,stop+1,device=msa.device)
+                disulf_crop = True
+                #print ('loader_fb crop',crop_idx)
 
-    seq = seq[:,crop_idx]
-    msa_seed_orig = msa_seed_orig[:,:,crop_idx]
-    msa_seed = msa_seed[:,:,crop_idx]
-    msa_extra = msa_extra[:,:,crop_idx]
-    mask_msa = mask_msa[:,:,crop_idx]
-    xyz_t = xyz_t[:,crop_idx]
-    f1d_t = f1d_t[:,crop_idx]
-    mask_t = mask_t[:, crop_idx]
-    xyz = xyz[crop_idx]
-    mask = mask[crop_idx]
-    idx = idx[crop_idx]
+    if (not disulf_crop):
+        if (np.random.rand() < p_short_crop):
+            croplen = np.random.randint(8,16)
+        crop_idx = get_crop(len(idx), mask, msa.device, croplen, unclamp=unclamp)
 
-    same_chain = torch.ones((len(crop_idx), len(crop_idx))).long()
-    ntempl = xyz_t.shape[0]
-    xyz_t = torch.stack(
-        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
-    )
+    if (disulf_crop):
+        ###
+        # Atomize disulfide
+        msa_prot = msa[:, crop_idx]
+        ins_prot = ins[:, crop_idx]
+        xyz_prot = xyz[crop_idx]
+        mask_prot = mask[crop_idx]
+        idx = idx[crop_idx]
+        xyz_t_prot = xyz_t[:, crop_idx]
+        f1d_t_prot = f1d_t[:, crop_idx]
+        mask_t_prot = mask_t[:, crop_idx]
+        protein_L, nprotatoms, _ = xyz_prot.shape
 
-    # initial structure
-    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+        bond_feats = get_protein_bond_feats(len(crop_idx)).long()
+        same_chain = torch.ones((len(crop_idx), len(crop_idx))).long()
 
+        res_idxs_to_atomize = torch.tensor([0,len(crop_idx)-1], device=msa.device)
+        dslfs = [(0,len(crop_idx)-1)]
+        seq_atomize_all, ins_atomize_all, xyz_atomize_all, mask_atomize_all, frames_atomize_all, chirals_atomize_all, \
+            bond_feats, same_chain = atomize_discontiguous_residues(res_idxs_to_atomize, msa_prot, xyz_prot, mask_prot, bond_feats, same_chain, dslfs=dslfs)
+        atom_template_motif_idxs = get_atom_template_indices(msa,res_idxs_to_atomize)
+
+        # Generate ground truth structure: account for ligand symmetry
+        N_symmetry, sm_L, _ = xyz_atomize_all.shape
+        xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
+        mask = torch.full(xyz.shape[:-1], False).bool()
+        xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
+        xyz[:, protein_L:, 1, :] = xyz_atomize_all
+        mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, protein_L, nprotatoms)
+        mask[:, protein_L:, 1] = mask_atomize_all
+
+        # generate (empty) template for atoms
+        tplt_sm = {"ids":[]}
+        xyz_t_sm, f1d_t_sm, mask_t_sm = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0)
+        ntempl = xyz_t_prot.shape[0]
+        xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
+        f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
+        mask_t = torch.cat((mask_t_prot, mask_t_sm.repeat(ntempl,1,1)), dim=1)
+
+        Ls = [xyz_prot.shape[0], xyz_atomize_all.shape[1]]
+        a3m_prot = {"msa": msa_prot, "ins": ins_prot}
+        a3m_sm = {"msa": seq_atomize_all.unsqueeze(0), "ins": ins_atomize_all.unsqueeze(0)}
+
+        a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+        msa = a3m['msa'].long()
+        ins = a3m['ins'].long()
+
+        # handle res_idx
+        last_res = idx[-1]
+        idx_sm = torch.arange(Ls[1]) + last_res
+        idx = torch.cat((idx, idx_sm))
+
+        ch_label = torch.zeros(sum(Ls))
+        # remove msa features for atomized portion
+        msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
+            pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
     
-    bond_feats = get_protein_bond_feats(len(crop_idx)).long()
-    dist_matrix = get_bond_distances(bond_feats)
-    chirals = torch.Tensor()
-    ch_label = torch.zeros(seq[0].shape)
-    #print ("loader_fb", mask.shape, xyz_t.shape, f1d_t.shape, xyz_prev.shape)
+        seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+
+        xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+
+        xyz = torch.nan_to_num(xyz)
+
+        dist_matrix = get_bond_distances(bond_feats)
+
+        if chirals_atomize_all.shape[0]>0:
+            L1 = torch.sum(~is_atom(seq[0]))
+            chirals_atomize_all[:, :-1] = chirals_atomize_all[:, :-1] +L1
+
+    else:
+
+        ###
+        # Normal
+        seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+
+        seq = seq[:,crop_idx]
+        same_chain = torch.ones((len(crop_idx), len(crop_idx))).long()
+        msa_seed_orig = msa_seed_orig[:,:,crop_idx]
+        msa_seed = msa_seed[:,:,crop_idx]
+        msa_extra = msa_extra[:,:,crop_idx]
+        mask_msa = mask_msa[:,:,crop_idx]
+        xyz_t = xyz_t[:,crop_idx]
+        f1d_t = f1d_t[:,crop_idx]
+        mask_t = mask_t[:,crop_idx]
+        xyz = xyz[crop_idx]
+        mask = mask[crop_idx]
+        idx = idx[crop_idx]
+
+        xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+
+        bond_feats = get_protein_bond_feats(len(crop_idx)).long()
+        dist_matrix = get_bond_distances(bond_feats)
+
+        ch_label = torch.zeros(seq[0].shape)
+
+        chirals_atomize_all = torch.Tensor()
+        frames_atomize_all = torch.zeros(seq.shape)
+
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           same_chain, unclamp, False, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', "fb", item
+           same_chain, unclamp, False, frames_atomize_all, bond_feats.long(), dist_matrix, chirals_atomize_all, \
+           ch_label, "C1", "fb", item
+
 
 def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0, fixbb=False):
 
@@ -3614,7 +3789,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
     f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
     mask_t = torch.cat((mask_t_prot, mask_t_sm.repeat(ntempl,1,1)), dim=1)
-    
+
     Ls = [xyz_prot.shape[0], xyz_atomize_all.shape[1]]
     a3m_prot = {"msa": msa_prot, "ins": ins_prot}
     a3m_sm = {"msa": seq_atomize_all.unsqueeze(0), "ins": ins_atomize_all.unsqueeze(0)}
@@ -3988,7 +4163,10 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
 
 
 class Dataset(data.Dataset):
-    def __init__(self, IDs, loader, data_df, params, homo, unclamp_cut=0.9, pick_top=True, p_short_crop=-1.0, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None):
+    def __init__(
+        self, IDs, loader, data_df, params, homo, unclamp_cut=0.9, pick_top=True, 
+        p_short_crop=-1.0, p_dslf_crop=-1.0, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None
+    ):
         self.IDs = IDs
         self.data_df = data_df
         self.loader = loader
@@ -3998,6 +4176,7 @@ class Dataset(data.Dataset):
         self.unclamp_cut = unclamp_cut
         self.p_homo_cut = p_homo_cut
         self.p_short_crop = p_short_crop
+        self.p_dslf_crop = p_dslf_crop
         self.n_res_atomize = n_res_atomize
         self.flank = flank
         self.rng = np.random.RandomState(seed)
@@ -4007,6 +4186,7 @@ class Dataset(data.Dataset):
 
     def __getitem__(self, index):
         ID = self.IDs[index]
+        #print (index, ID, self.data_df)
         item = sample_item(self.data_df, ID, self.rng)
         kwargs = dict()
         if self.n_res_atomize > 0:
@@ -4014,6 +4194,7 @@ class Dataset(data.Dataset):
             kwargs['flank'] = self.flank
         else:
             kwargs['p_short_crop'] = self.p_short_crop
+            kwargs['p_dslf_crop'] = self.p_dslf_crop
 
         out = self.loader(item, self.params, self.homo,
                           unclamp = (self.rng.rand() > self.unclamp_cut),
@@ -4192,14 +4373,15 @@ class DatasetSM(data.Dataset):
         return out
 
 class DistilledDataset(data.Dataset):
-    def __init__(self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid, chid2smpartners, params, 
-                 native_NA_frac=0.05, p_short_crop=0.0, unclamp_cut=0.9, ligand_dictionary: Optional[Dict] = None):
+    def __init__(self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid, params, 
+                 native_NA_frac=0.05, p_short_crop=0.0, p_dslf_crop=0.0, unclamp_cut=0.9, ligand_dictionary: Optional[Dict] = None):
 
         self.ID_dict = ID_dict
         self.dataset_dict = dataset_dict
         self.loader_dict = loader_dict
         self.homo = homo
         self.p_short_crop = p_short_crop
+        self.p_dslf_crop = p_dslf_crop
         self.chid2hash = chid2hash
         self.chid2taxid = chid2taxid
         self.chid2smpartners = chid2smpartners
@@ -4231,7 +4413,7 @@ class DistilledDataset(data.Dataset):
                 ID = self.ID_dict['pdb'][index-offset]
                 item = sample_item(self.dataset_dict['pdb'], ID)
                 out = self.loader_dict['pdb'](
-                    item, self.params, self.homo, p_short_crop=self.p_short_crop, unclamp=(p_unclamp > self.unclamp_cut))
+                    item, self.params, self.homo, p_short_crop=self.p_short_crop, p_dslf_crop=self.p_dslf_crop, unclamp=(p_unclamp > self.unclamp_cut))
             offset += len(self.index_dict['pdb'])
 
             if index >= offset and index < offset + len(self.index_dict['fb']):
@@ -4239,7 +4421,7 @@ class DistilledDataset(data.Dataset):
                 ID = self.ID_dict['fb'][index-offset]
                 item = sample_item(self.dataset_dict['fb'], ID)
                 out = self.loader_dict['fb'](
-                    item, self.params, p_short_crop=self.p_short_crop, unclamp=(p_unclamp > self.unclamp_cut))
+                    item, self.params, p_short_crop=self.p_short_crop, p_dslf_crop=self.p_dslf_crop, unclamp=(p_unclamp > self.unclamp_cut))
             offset += len(self.index_dict['fb'])
 
             if index >= offset and index < offset + len(self.index_dict['compl']):

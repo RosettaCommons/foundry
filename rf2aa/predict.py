@@ -35,7 +35,7 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser(description="RoseTTAFold: Protein structure prediction with 3-track attentions on 1D, 2D, and 3D features")
     parser.add_argument("-checkpoint", 
-        default='./models/rf2a_fd3_20221125_last.pt',
+        default='./models/RF2_25a_last.pt',
         help="Path to model weights")
 
     parser.add_argument("-msa", help='Input sequence/MSA to predict structure from, in fasta/a3m format')
@@ -181,12 +181,12 @@ def get_bond_feats(resids, seq, ra, dslf=None):
                 prot_atom_conns.append( (resids[i]-1,ra2ind[(i, 0)]) )
 
     #2 disulfides
-    #if dslf is not None:
-    #    for i,j in dslf:
-    #        start_idx = ra2ind[(resids.index(i), 5)]
-    #        end_idx = ra2ind[(resids.index(j), 5)]
-    #        bond_feats[start_idx, end_idx] = 1
-    #        bond_feats[end_idx, start_idx] = 1
+    if dslf is not None:
+        for i,j in dslf:
+            start_idx = ra2ind[(resids.index(i), 5)]
+            end_idx = ra2ind[(resids.index(j), 5)]
+            bond_feats[start_idx, end_idx] = 1
+            bond_feats[end_idx, start_idx] = 1
 
     return bond_feats, prot_atom_conns
 

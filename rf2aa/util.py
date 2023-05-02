@@ -452,6 +452,7 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
         atom_bonds = atom_bonds.cpu()
         b, i, j = atom_bonds.nonzero(as_tuple=True)
         for start, end in zip(i,j):
+            #print (start,end,bond_feats)
             f.write(f"CONECT{atom_idxs[int(start.cpu().numpy())]:5d}{atom_idxs[int(end.cpu().numpy())]:5d}\n")
     if modelnum is not None:
         f.write("ENDMDL\n")
@@ -1110,7 +1111,6 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     ins = torch.zeros_like(lig_seq)
 
     r,a = ra.T
-    last_C = torch.all(ra==torch.tensor([r[-1],2]),dim=1).nonzero()
     lig_xyz = torch.zeros((len(ra), 3))
     lig_xyz = nat_symm[:, r, a]
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
@@ -1120,9 +1120,9 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
         
     frames = get_atom_frames(lig_seq, G)
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_allatom_mask, bond_feats)
-    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, last_C, chirals
+    return lig_seq, ins, lig_xyz, lig_mask, frames, bond_feats, ra, chirals
 
-def atomize_discontiguous_residues(idxs, msa, xyz, mask, bond_feats, same_chain):
+def atomize_discontiguous_residues(idxs, msa, xyz, mask, bond_feats, same_chain, dslfs=None):
     """
     this atomizes multiple discontiguous residues at the same time, this is the default interface into atomizing residues 
     (using the non assembly dataset)
@@ -1136,12 +1136,20 @@ def atomize_discontiguous_residues(idxs, msa, xyz, mask, bond_feats, same_chain)
     chirals_atomize_all = []
     prev_C_index = None
     total_num_atoms = 0
+    sgs = {}
     for idx in idxs:
-        seq_atomize, ins_atomize, xyz_atomize, mask_atomize, frames_atomize, bond_feats_atomize, last_C, chirals_atomize = \
+        seq_atomize, ins_atomize, xyz_atomize, mask_atomize, frames_atomize, bond_feats_atomize, resatom2idx, chirals_atomize = \
             atomize_protein(idx, msa, xyz, mask, n_res_atomize=1)
-        
+        r,_ = resatom2idx.T
+        #print ('atomize_discontiguous_residues', idx, resatom2idx)
+        last_C = torch.all(resatom2idx==torch.tensor([r[-1],2]),dim=1).nonzero()
+        sgs[idx.item()] = torch.all(resatom2idx==torch.tensor([r[-1],5]),dim=1).nonzero()
+
         natoms = seq_atomize.shape[0]
         L = bond_feats.shape[0]
+
+        sgs[idx.item()] = L+sgs[idx.item()]
+
         # update the chirals to be after all the other atoms (still need to update to put it behind all the proteins)
         chirals_atomize[:, :-1] += total_num_atoms
 
@@ -1187,7 +1195,15 @@ def atomize_discontiguous_residues(idxs, msa, xyz, mask, bond_feats, same_chain)
         bond_feats = bond_feats_new
         same_chain = same_chain_new
         total_num_atoms += natoms
-    
+
+    # disulfides
+    if dslfs is not None:
+        for i,j in dslfs:
+            start_idx = sgs[i].item()
+            end_idx = sgs[j].item()
+            bond_feats[start_idx, end_idx] = 1
+            bond_feats[end_idx, start_idx] = 1
+
     seq_atomize_all = torch.cat(seq_atomize_all)
     ins_atomize_all = torch.cat(ins_atomize_all)
     xyz_atomize_all = cartprodcat(xyz_atomize_all)

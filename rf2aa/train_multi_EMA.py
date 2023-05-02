@@ -952,8 +952,11 @@ class Trainer():
         )
 
         train_set = DistilledDataset(
-            train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid, chid2smpartners,
-            self.loader_param, native_NA_frac=0.25, p_short_crop=self.dataset_param['p_short_crop'], ligand_dictionary=ligand_dictionary)
+            train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid,
+            self.loader_param, native_NA_frac=0.25, 
+            p_short_crop=self.dataset_param['p_short_crop'], 
+            p_dslf_crop=self.dataset_param['p_dslf_crop'], 
+            ligand_dictionary=ligand_dictionary)
 
         train_sampler = DistributedWeightedSampler(
             train_set, 
@@ -968,20 +971,25 @@ class Trainer():
         train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=self.batch_size, **self.dataloader_kwargs)
 
         valid_sets = dict(
+            atomize_pdb = Dataset(
+                valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
+                loader_atomize_pdb, valid_dict['atomize_pdb'],
+                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0, p_short_crop=-1.0
+            ),
             pdb = Dataset(
                 valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
                 loader_pdb, valid_dict['pdb'], 
-                self.loader_param, homo, p_homo_cut=-1.0, p_short_crop=-1.0
+                self.loader_param, homo, p_homo_cut=-1.0, p_short_crop=-1.0, p_dslf_crop=-1.0
             ),
-            peptide = Dataset(
-                valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
-                loader_pdb, valid_dict['pdb'], 
-                self.loader_param, homo, p_homo_cut=-1.0, p_short_crop=1.0
+            dslf = Dataset(
+                valid_ID_dict['dslf'][:self.dataset_param['n_valid_dslf']],
+                loader_pdb, valid_dict['dslf'], 
+                self.loader_param, homo, p_homo_cut=-1.0, p_short_crop=-1.0, p_dslf_crop=1.0
             ),
             homo = Dataset(
                 valid_ID_dict['homo'][:self.dataset_param['n_valid_homo']],
                 loader_pdb, valid_dict['homo'],
-                self.loader_param, homo, p_homo_cut=2.0, p_short_crop=-1.0
+                self.loader_param, homo, p_homo_cut=1.0, p_short_crop=-1.0, p_dslf_crop=-1.0
             ),
             rna = DatasetRNA(
                 valid_ID_dict['rna'][:self.dataset_param['n_valid_rna']],
@@ -1040,16 +1048,11 @@ class Trainer():
                 loader_sm, valid_dict['sm'],
                 self.loader_param,
             ),
-            atomize_pdb = Dataset(
-                valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
-                loader_atomize_pdb, valid_dict['atomize_pdb'],
-                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0, p_short_crop=-1.0
-            ),
         )
 
         valid_headers = dict(
             pdb = 'Monomer',
-            peptide = 'Peptide',
+            dslf = 'Disulfide_loop',
             homo = 'Homo',
             rna = 'RNA',
             sm_compl = 'SM_Compl',
@@ -1857,18 +1860,19 @@ class Trainer():
                     name = item_['CHAINID']
                     
                 if save_pdbs:
+                    atom_mask = mask_crds[:,0]
                     seq_unmasked = msa[:, 0, 0, :]
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}.pdb',
                         torch.nan_to_num(true_crds[res_mask][:,:23]), seq_unmasked[res_mask],
-                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]],
+                        bond_feats=network_input['bond_feats'][:,res_mask[0]][:,:,res_mask[0]],
                         chain="A", atom_mask=atom_mask[res_mask])
 
                     pred_sup = superimpose(torch.nan_to_num(pred_allatom[:,res_mask[0],:23]),
-                                           torch.nan_to_num(true_crds_[:,res_mask[0],:23]),
+                                           torch.nan_to_num(true_crds[:,res_mask[0],:23]),
                                            atom_mask[:,res_mask[0],:23])
                     writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}.pdb',
                         pred_sup, seq_unmasked[res_mask],
-                        bond_feats=bond_feats[:,res_mask[0]][:,:,res_mask[0]], 
+                        bond_feats=network_input['bond_feats'][:,res_mask[0]][:,:,res_mask[0]], 
                         chain="B", file_mode='a', atom_mask=atom_mask[res_mask],
                         atom_idx_offset=int(atom_mask[res_mask].sum().item()))
 

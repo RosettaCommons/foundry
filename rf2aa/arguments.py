@@ -26,6 +26,7 @@ DATASET_PARAMS = [
     "fraction_sm_compl_permuted_neg",
     "fraction_sm_compl_docked_neg",
     "n_valid_homo",
+    "n_valid_dslf",
     "n_valid_compl",
     "n_valid_neg_compl",
     "n_valid_na_compl",
@@ -44,6 +45,7 @@ DATASET_PARAMS = [
     "n_valid_dude_actives",
     "n_valid_dude_inactives",
     "p_short_crop",
+    "p_dslf_crop",
 ]
 TRUNK_PARAMS = [
     "n_extra_block",
@@ -297,6 +299,7 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
     dataset_group.add_argument('-n_train', type=int, default=12288)
     dataset_group.add_argument('-n_valid_pdb', type=int)
     dataset_group.add_argument('-n_valid_homo', type=int)
+    dataset_group.add_argument('-n_valid_dslf', type=int)
     dataset_group.add_argument('-n_valid_compl', type=int)
     dataset_group.add_argument('-n_valid_neg_compl', type=int)
     dataset_group.add_argument('-n_valid_na_compl', type=int)
@@ -340,6 +343,12 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
         type=float,
         default=0.0,
         help="The probability (0-1) of sampling a crop size between 8 and 16 residues",
+    )
+    dataset_group.add_argument(
+        "-p_dslf_crop",
+        type=float,
+        default=0.0,
+        help="The probability (0-1) of cropping a disulfide-linked loop",
     )
 
     # Trunk module properties

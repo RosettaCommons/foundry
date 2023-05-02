@@ -18,7 +18,7 @@ def get_dislf(seq, xyz, mask):
     sgs = xyz[resolved_cys_mask,5]
     ii,jj = torch.triu_indices(sgs.shape[0],sgs.shape[0],1)
     d_sg_sg = torch.linalg.norm(sgs[ii,:]-sgs[jj,:], dim=-1)
-    is_dslf = (d_sg_sg>1.9)*(d_sg_sg<2.1)
+    is_dslf = (d_sg_sg>1.7)*(d_sg_sg<2.3)
 
     dslf = []
     for i in is_dslf.nonzero():
