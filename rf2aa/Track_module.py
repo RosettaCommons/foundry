@@ -1093,7 +1093,6 @@ class IterativeSimulator(nn.Module):
                 extra_l1 = None
 
                 if self.use_extra_l1:
-                    # dbonddxyz, = calc_BB_bond_geom_grads(seq_unmasked[0], xyz.detach(), idx)
                     dljdxyz, dljdalpha = calc_lj_grads(
                          seq_unmasked, xyz.detach(), alpha.detach(), 
                          self.xyzconverter.compute_all_atom, 

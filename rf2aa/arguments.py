@@ -46,6 +46,7 @@ DATASET_PARAMS = [
     "n_valid_dude_inactives",
     "p_short_crop",
     "p_dslf_crop",
+    "dslf_fb_upsample",
 ]
 TRUNK_PARAMS = [
     "n_extra_block",
@@ -350,6 +351,13 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
         default=0.0,
         help="The probability (0-1) of cropping a disulfide-linked loop",
     )
+    dataset_group.add_argument(
+        "-dslf_fb_upsample", 
+        type=float,
+        default=1.0,
+        help="Upsample disulfide-containing FB models by this factor"
+    )
+
 
     # Trunk module properties
     trunk_group = parser.add_argument_group("Trunk module parameters")

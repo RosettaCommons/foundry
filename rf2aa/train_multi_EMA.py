@@ -912,6 +912,12 @@ class Trainer():
         train_dict['atomize_pdb'] = train_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
 
+        # reweight fb examples containing disulfide loops
+        to_reweight_ex = train_dict['fb']['HAS_DSLF_LOOP']
+        to_reweight_cluster = train_dict['fb'][to_reweight_ex].CLUSTER.unique()
+        reweight_mask = np.in1d(train_ID_dict['fb'],to_reweight_cluster)
+        weights_dict['fb'][ reweight_mask ] *= self.dataset_param['dslf_fb_upsample']
+
         # set number of validation examples being used
         for k in valid_dict:
             if self.dataset_param['n_valid_'+k] is None: 

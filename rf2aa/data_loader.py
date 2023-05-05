@@ -49,7 +49,6 @@ csd_dir = "/databases/csd543"
 base_dir = "/projects/ml/TrRosetta/PDB-2021AUG02"  
 compl_dir = "/projects/ml/RoseTTAComplex"
 na_dir = "/projects/ml/nucleic"
-na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
 mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl" # for phase 3 dataloaders 
@@ -78,8 +77,6 @@ if not os.path.exists(base_dir):
 default_dataloader_params = {
         "COMPL_LIST"       : "%s/list.hetero.csv"%compl_dir,
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
-        #"DSLF_LIST"        : "%s/list.dslf.csv"%compl_dir,
-        "DSLF_LIST"        : "./list.dslf.csv",
         "NEGATIVE_LIST"    : "%s/list.negative.csv"%compl_dir,
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
         "NA_COMPL_LIST"    : "%s/list.nucleic.v2.csv"%na_dir,
@@ -95,7 +92,9 @@ default_dataloader_params = {
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230501.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230504.pkl"%sm_compl_dir, # cache for faster loading 
+        "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
+        "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -877,11 +876,12 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
 
     # short dslf loops
     dslf = pd.read_csv(params['DSLF_LIST'])
-    #tmp_df = pdb[ pdb.CLUSTER.isin(val_pdb_ids) & (pdb.CHAINID.isin(dslf['CHAIN_A']))]
-    tmp_df = pdb[ pdb.CHAINID.isin(dslf['CHAIN_A'])]
+    tmp_df = pdb[ pdb.CHAINID.isin(dslf.CHAIN_A)]
     valid_dict['dslf'] = dslf.merge(tmp_df[['CHAINID','HASH','CLUSTER']], 
                                     left_on='CHAIN_A', right_on='CHAINID', how='right')
     valid_ID_dict['dslf'] = valid_dict['dslf'].CLUSTER.drop_duplicates().values
+
+    dslf_fb = pd.read_csv(params['DSLF_FB_LIST'])
 
     # homo-oligomers
     homo = pd.read_csv(params['HOMO_LIST'])
@@ -897,6 +897,12 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     fb = fb.rename(columns={'#CHAINID':'CHAINID'})
     fb = fb[(fb.plDDT>80) & (fb.SEQUENCE.apply(len) > 200)]
     fb['LEN_EXIST'] = fb.SEQUENCE.apply(len)
+
+    # upweight clusters containing disulfide loop cases
+    dslf_loops = fb[fb.CHAINID.isin(dslf_fb.CHAIN_A)]
+    dslf_loops_clusters = dslf_loops.CLUSTER.unique()
+    to_upweight = fb.CLUSTER.isin(dslf_loops_clusters)
+    fb['HAS_DSLF_LOOP'] = to_upweight
     train_dict['fb'] = fb    
     train_ID_dict['fb'], weights_dict['fb'] = _get_IDs_weights(train_dict['fb'])
 
@@ -2563,15 +2569,18 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
 def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_top=True, random_noise=5.0):
     pdb_set = item['CHAINID']
     msa_id = item['HASH']
-    Ls = item['LEN']
+    #Ls = item['LEN']  #fd this is not reported correctly....
+
     if negative:
         padding = (item['DNA1'],item['DNA2'])
     else:
         padding = item['TOPAD?']
     
-
     # read PDBs
     pdb_ids = pdb_set.split(':')
+
+    # read protein MSA
+    a3mA = get_msa(params['PDB_DIR'] + '/a3m/' + msa_id[:3] + '/' + msa_id + '.a3m.gz', msa_id, maxseq=5000)
 
     # protein + NA
     NMDLS = 1
@@ -2587,6 +2596,8 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
             rmsa_alphabet=True
         )
         a3mB = {'msa':torch.from_numpy(msaB), 'ins':torch.from_numpy(insB)}
+
+        Ls = [a3mA['msa'].shape[1], a3mB['msa'].shape[1]]
     # protein + NA duplex
     elif (len(pdb_ids)==3):
         pdbA = [ torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt') ]
@@ -2609,6 +2620,7 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
 
         a3mB1 = {'msa':torch.from_numpy(msaB1), 'ins':torch.from_numpy(insB1)}
         a3mB2 = {'msa':torch.from_numpy(msaB2), 'ins':torch.from_numpy(insB2)}
+        Ls = [a3mA['msa'].shape[1], a3mB1['msa'].shape[1], a3mB2['msa'].shape[1]]
         a3mB = merge_a3m_hetero(a3mB1, a3mB2, Ls[1:])
 
     # homodimer + NA duplex
@@ -2634,7 +2646,9 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
         )
         a3mB1 = {'msa':torch.from_numpy(msaB1), 'ins':torch.from_numpy(insB1)}
         a3mB2 = {'msa':torch.from_numpy(msaB2), 'ins':torch.from_numpy(insB2)}
+        Ls = [a3mA['msa'].shape[1], a3mA['msa'].shape[1], a3mB1['msa'].shape[1], a3mB2['msa'].shape[1]]
         a3mB = merge_a3m_hetero(a3mB1, a3mB2, Ls[2:])
+
 
         NMDLS=2 # flip A0 and A1
         if (pdbB[0]['seq']==pdbB[1]['seq']):
@@ -2702,13 +2716,11 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     if (len(pdb_ids)==2 and exists(sharedMSA)):
         msa,ins = parse_mixed_fasta(sharedMSA)
         if (msa.shape[1] != sum(Ls)):
-            print ("Error shared MSA",pdb_ids, msa.shape, Ls)
+            print ("Error loading shared MSA",pdb_ids, msa.shape, Ls)
         else:
             a3m = {'msa':torch.from_numpy(msa),'ins':torch.from_numpy(ins)}
 
-    if (a3m is None):
-        # read MSA for protein
-        a3mA = get_msa(params['PDB_DIR'] + '/a3m/' + msa_id[:3] + '/' + msa_id + '.a3m.gz', msa_id, maxseq=5000)
+    if a3m is None:
         if (len(pdbA)==2):
             msa = a3mA['msa'].long()
             ins = a3mA['ins'].long()
@@ -2719,6 +2731,7 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
             a3m = merge_a3m_hetero(a3mA, a3mB, [Ls[0]+Ls[1],sum(Ls[2:])])
         else:
             a3m = merge_a3m_hetero(a3mA, a3mB, [Ls[0],sum(Ls[1:])])
+
 
     # the block below is due to differences in the way RNA and DNA structures are processed
     # to support NMR, RNA structs return multiple states
@@ -2867,7 +2880,7 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
 def loader_rna(item, params, random_noise=5.0):
     # read PDBs
     pdb_ids = item['CHAINID'].split(':')
-    Ls = item['LEN']
+    #Ls = item['LEN']  #fd  this is not reported correctly...
 
     pdbA = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt')
     pdbB = None
@@ -2880,7 +2893,10 @@ def loader_rna(item, params, random_noise=5.0):
     if (len(pdb_ids)==2):
         msaB,insB = parse_fasta_if_exists(pdbB['seq'], params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.afa', rmsa_alphabet=True)
         a3mB = {'msa':torch.from_numpy(msaB), 'ins':torch.from_numpy(insB)}
+        Ls = [a3m['msa'].shape[1],a3mB['msa'].shape[1]]
         a3m = merge_a3m_hetero(a3m, a3mB, Ls)
+    else:
+        Ls = [a3m['msa'].shape[1]]
 
     # get template features -- None
     L = sum(Ls)

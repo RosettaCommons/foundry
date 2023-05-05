@@ -35,7 +35,7 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser(description="RoseTTAFold: Protein structure prediction with 3-track attentions on 1D, 2D, and 3D features")
     parser.add_argument("-checkpoint", 
-        default='./models/RF2_25a_last.pt',
+        default='./models/RF2_25b_last.pt',
         help="Path to model weights")
 
     parser.add_argument("-msa", help='Input sequence/MSA to predict structure from, in fasta/a3m format')

@@ -754,6 +754,7 @@ def torsion(a,b,c,d, eps=1e-6):
 def calc_BB_bond_geom(
     seq, pred, idx, eps=1e-6, 
     ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, 
+    ideal_OP=1.607, ideal_OPO=-0.3106, ideal_OPC=-0.4970, 
     sig_len=0.02, sig_ang=0.05):
     '''
     Calculate backbone bond geometry (bond length and angle) and put loss on them
@@ -774,6 +775,7 @@ def calc_BB_bond_geom(
 
     bonded = (idx[:,1:] - idx[:,:-1])==1
     is_prot = is_protein(seq)[:-1]
+    is_NA = is_nucleic(seq)[:-1]
 
     # bond length: N-CA, CA-C, C-N
     blen_CN_pred  = length(pred[:,:-1,2], pred[:,1:,0]).reshape(B,L-1) # (B, L-1)
@@ -781,14 +783,31 @@ def calc_BB_bond_geom(
     n_viol = (CN_loss > 0.0).sum()
     blen_loss = CN_loss.sum() / (n_viol + eps)
 
+    # bond length: P-O
+    blen_OP_pred  = length(pred[:,:-1,8], pred[:,1:,1]).reshape(B,L-1) # (B, L-1)
+    OP_loss = bonded*is_prot*torch.clamp( torch.square(blen_OP_pred - ideal_OP) - sig_len**2, min=0.0 )
+    n_viol = (OP_loss > 0.0).sum()
+    blen_loss += OP_loss.sum() / (n_viol + eps)
+
     # bond angle: CA-C-N, C-N-CA
     bang_CACN_pred = cosangle(pred[:,:-1,1], pred[:,:-1,2], pred[:,1:,0]).reshape(B,L-1)
     bang_CNCA_pred = cosangle(pred[:,:-1,2], pred[:,1:,0], pred[:,1:,1]).reshape(B,L-1)
     CACN_loss = bonded*is_prot*torch.clamp( torch.square(bang_CACN_pred - ideal_CACN) - sig_ang**2,  min=0.0 )
     CNCA_loss = bonded*is_prot*torch.clamp( torch.square(bang_CNCA_pred - ideal_CNCA) - sig_ang**2,  min=0.0 )
-    bang_loss = CACN_loss + CNCA_loss
-    n_viol = (bang_loss > 0.0).sum()
-    bang_loss = bang_loss.sum() / (n_viol+eps)
+    bang_loss_prot = CACN_loss + CNCA_loss
+    n_viol = (bang_loss_prot > 0.0).sum()
+    bang_loss = bang_loss_prot.sum() / (n_viol+eps)
+
+    # bond angle: O1PO, O2PO, OPC
+    bang_O1PO_pred = cosangle(pred[:,:-1,8], pred[:,1:,1], pred[:,1:,0]).reshape(B,L-1)
+    bang_O2PO_pred = cosangle(pred[:,:-1,8], pred[:,1:,1], pred[:,1:,2]).reshape(B,L-1)
+    bang_OPC_pred  = cosangle(pred[:,:-1,7], pred[:,:-1,8], pred[:,1:,1]).reshape(B,L-1)
+    O1PO_loss = bonded*is_prot*torch.clamp( torch.square(bang_O1PO_pred - ideal_OPO) - sig_ang**2,  min=0.0 )
+    O2PO_loss = bonded*is_prot*torch.clamp( torch.square(bang_O2PO_pred - ideal_OPO) - sig_ang**2,  min=0.0 )
+    OPC_loss = bonded*is_prot*torch.clamp( torch.square(bang_OPC_pred - ideal_OPC) - sig_ang**2,  min=0.0 )
+    bang_loss_na = O1PO_loss + O2PO_loss + OPC_loss
+    n_viol = (bang_loss_na > 0.0).sum()
+    bang_loss += bang_loss_na.sum() / (n_viol+eps)
 
     return blen_loss + bang_loss
 
@@ -1273,7 +1292,12 @@ def calc_chiral_loss(pred, chirals):
     return l
 
 @torch.enable_grad()
-def calc_BB_bond_geom_grads(seq, pred, idx, eps=1e-6, ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, sig_len=0.02, sig_ang=0.05):
+def calc_BB_bond_geom_grads(
+    seq, idx, xyz, alpha, toaa, eps=1e-6,
+    ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, 
+    ideal_OP=1.607, ideal_POP=-0.3106, ideal_OPC=-0.4970, 
+    sig_len=0.02, sig_ang=0.05
+):
     pred.requires_grad_(True)
     Ebond = calc_BB_bond_geom(seq, pred, idx, eps, ideal_NC, ideal_CACN, ideal_CNCA, sig_len, sig_ang)
     return torch.autograd.grad(Ebond, pred)
