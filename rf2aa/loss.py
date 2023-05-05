@@ -785,7 +785,7 @@ def calc_BB_bond_geom(
 
     # bond length: P-O
     blen_OP_pred  = length(pred[:,:-1,8], pred[:,1:,1]).reshape(B,L-1) # (B, L-1)
-    OP_loss = bonded*is_prot*torch.clamp( torch.square(blen_OP_pred - ideal_OP) - sig_len**2, min=0.0 )
+    OP_loss = bonded*is_NA*torch.clamp( torch.square(blen_OP_pred - ideal_OP) - sig_len**2, min=0.0 )
     n_viol = (OP_loss > 0.0).sum()
     blen_loss += OP_loss.sum() / (n_viol + eps)
 
@@ -802,9 +802,9 @@ def calc_BB_bond_geom(
     bang_O1PO_pred = cosangle(pred[:,:-1,8], pred[:,1:,1], pred[:,1:,0]).reshape(B,L-1)
     bang_O2PO_pred = cosangle(pred[:,:-1,8], pred[:,1:,1], pred[:,1:,2]).reshape(B,L-1)
     bang_OPC_pred  = cosangle(pred[:,:-1,7], pred[:,:-1,8], pred[:,1:,1]).reshape(B,L-1)
-    O1PO_loss = bonded*is_prot*torch.clamp( torch.square(bang_O1PO_pred - ideal_OPO) - sig_ang**2,  min=0.0 )
-    O2PO_loss = bonded*is_prot*torch.clamp( torch.square(bang_O2PO_pred - ideal_OPO) - sig_ang**2,  min=0.0 )
-    OPC_loss = bonded*is_prot*torch.clamp( torch.square(bang_OPC_pred - ideal_OPC) - sig_ang**2,  min=0.0 )
+    O1PO_loss = bonded*is_NA*torch.clamp( torch.square(bang_O1PO_pred - ideal_OPO) - sig_ang**2,  min=0.0 )
+    O2PO_loss = bonded*is_NA*torch.clamp( torch.square(bang_O2PO_pred - ideal_OPO) - sig_ang**2,  min=0.0 )
+    OPC_loss = bonded*is_NA*torch.clamp( torch.square(bang_OPC_pred - ideal_OPC) - sig_ang**2,  min=0.0 )
     bang_loss_na = O1PO_loss + O2PO_loss + OPC_loss
     n_viol = (bang_loss_na > 0.0).sum()
     bang_loss += bang_loss_na.sum() / (n_viol+eps)
