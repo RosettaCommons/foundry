@@ -348,7 +348,7 @@ class RoseTTAFoldModule(nn.Module):
         state = state + state_recycle
 
         # add template embedding
-        pair, state = self.templ_emb(t1d, t2d, alpha_t, xyz_t, mask_t, same_chain, pair, state, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop)
+        pair, state = self.templ_emb(t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop)
 
         # Predict coordinates from given inputs
         is_motif = is_motif if self.freeze_track_motif else torch.zeros_like(seq).bool()[0]

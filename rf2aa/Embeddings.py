@@ -273,7 +273,7 @@ class Templ_emb(nn.Module):
         rbf_feat = rbf(torch.cdist(xyz_t, xyz_t)) * mask_t[...,None] # (B*T, L, L, d_rbf)
         return rbf_feat
 
-    def forward(self, t1d, t2d, alpha_t, xyz_t, mask_t, same_chain, pair, state, use_checkpoint=False, p2p_crop=-1):
+    def forward(self, t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=False, p2p_crop=-1):
         # Input
         #   - t1d: 1D template info (B, T, L, 30)
         #   - t2d: 2D template info (B, T, L, L, 44)

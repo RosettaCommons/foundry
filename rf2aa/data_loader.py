@@ -25,7 +25,7 @@ import scipy
 from scipy.sparse.csgraph import shortest_path
 import networkx as nx
 
-from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol, parse_mixed_fasta
+from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol, parse_mixed_fasta, get_dislf
 from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, UNKINDEX, \
     NTOTAL, NBTYPES, CHAIN_GAP, num2aa, METAL_RES_NAMES, aa2num, atomnum2atomtype, load_tanimoto_sim_matrix
 from rf2aa.kinematics import get_chirals
@@ -409,7 +409,6 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
     mask_t = torch.full((npick_global,qlen,NTOTAL),False) # True for valid atom, False for missing atom
     t1d = torch.full((npick_global, qlen), 20).long()
     t1d_val = torch.zeros((npick_global, qlen)).float()
-
     for i,nt in enumerate(sample):
         tplt_idx = tplt_valid_idx[nt]
         sel = torch.where(tplt['qmap'][0,:,1]==tplt_idx)[0]
@@ -1978,15 +1977,13 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     # Residue cropping
     croplen = params['CROP']
     disulf_crop = False
-    if (np.random.rand() < p_dslf_crop):
-        # random disulfide loop
-        disulfs = get_dislf(msa[0],xyz,mask)
-        if (len(disulfs)>1):
-            start,stop,clen = min ([(x,y,y-x) for x,y in disulfs], key=lambda x:x[2])
-            if (clen<=20):
-                crop_idx = torch.arange(start,stop+1,device=msa.device)
-                disulf_crop = True
-                #print ('featurize_single_chain crop',crop_idx)
+    disulfs = get_dislf(msa[0],xyz,mask)
+    if (len(disulfs)>1) and (np.random.rand() < p_dslf_crop):
+        start,stop,clen = min ([(x,y,y-x) for x,y in disulfs], key=lambda x:x[2])
+        if (clen<=20):
+            crop_idx = torch.arange(start,stop+1,device=msa.device)
+            disulf_crop = True
+            #print ('featurize_single_chain crop',crop_idx)
 
     if (not disulf_crop):
         if (np.random.rand() < p_short_crop):
@@ -2017,7 +2014,6 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
         dslfs = [(0,len(crop_idx)-1)]
         seq_atomize_all, ins_atomize_all, xyz_atomize_all, mask_atomize_all, frames_atomize_all, chirals_atomize_all, \
             bond_feats, same_chain = atomize_discontiguous_residues(res_idxs_to_atomize, msa_prot, xyz_prot, mask_prot, bond_feats, same_chain, dslfs=dslfs)
-        atom_template_motif_idxs = get_atom_template_indices(msa_prot,res_idxs_to_atomize)
 
         # Generate ground truth structure: account for ligand symmetry
         N_symmetry, sm_L, _ = xyz_atomize_all.shape
@@ -2053,7 +2049,10 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
         # remove msa features for atomized portion
         msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
             pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
-    
+        # N/C-terminus features for MSA features (need to generate before cropping)
+        term_info = get_term_feats(Ls)
+        term_info[protein_L:, :] = 0 # ligand chains don't get termini features
+        msa_featurization_kwargs["term_info"] = term_info
         seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb, **msa_featurization_kwargs)
 
         xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
@@ -2393,8 +2392,10 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, p_dslf_crop=0.0, fi
         # remove msa features for atomized portion
         msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
             pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
-    
-        seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+        # N/C-terminus features for MSA features (need to generate before cropping)
+        term_info = get_term_feats(Ls)
+        term_info[protein_L:, :] = 0 # ligand chains don't get termini features
+        seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, term_info=term_info)
 
         xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
@@ -3733,7 +3734,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     xyz_t_prot, f1d_t_prot, mask_t_prot, _ = TemplFeaturize(tplt, len(pdb['xyz']), params, offset=0, 
         npick=ntempl, pick_top=pick_top, random_noise=random_noise)
 
-    crop_len = params['CROP'] - n_res_atomize*10
+    crop_len = params['CROP'] - n_res_atomize*14
     crop_idx = get_crop(len(idx), mask, msa.device, crop_len, unclamp=unclamp)
     msa_prot = msa[:, crop_idx]
     ins_prot = ins[:, crop_idx]
@@ -3824,7 +3825,10 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
         pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
     
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
+    # N/C-terminus features for MSA features (need to generate before cropping)
+    term_info = get_term_feats(Ls)
+    term_info[xyz_prot.shape[0]:, :] = 0 # ligand chains don't get termini features
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, term_info=term_info)
     
     ntempl = xyz_t.shape[0]
     xyz_t = torch.stack(
@@ -3968,7 +3972,8 @@ def crop_sm_compl(prot_xyz, lig_xyz, Ls, crop_size, mask_prot, seq_prot,
     return torch.cat((sel, lig_sel))
 
 
-def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partial_ligands=True):
+# fd: change use_partial_ligands to False to prevent oversized crops
+def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partial_ligands=False):
 
     """Choose residues with the `n_crop` closest C-alphas to a random atom on
     query ligand. Operates on multi-chain assemblies. Nearby ligands are
@@ -3993,7 +3998,7 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
     n_crop : int
         Number of nearest residues or ligand atoms to include in crop
     use_partial_ligands : bool 
-        Whether to keep ligands in crop if they have some atoms masked. (Default: True)
+        Whether to keep ligands in crop if they have some atoms masked. (Default: False)
     
     Returns
     -------
@@ -4029,17 +4034,17 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
         # ligand has masked atoms and we don't want this
         if (not use_partial_ligands) and (len(curr_lig_idx)!=len(curr_lig_idx_valid)):
             sel = np.setdiff1d(sel,curr_lig_idx)
-            continue
-
-        if np.isin(curr_lig_idx_valid, sel).all():
-            # all non-masked atoms are in crop; add back masked atoms to avoid messing up frames
-            sel = np.unique(np.concatenate([sel, curr_lig_idx]))
+            #continue
         else:
-            # some non-masked ligand atoms missing, remove entire ligand from crop
-            sel = np.setdiff1d(sel,curr_lig_idx)
+            if np.isin(curr_lig_idx_valid, sel).all():
+                # all non-masked atoms are in crop; add back masked atoms to avoid messing up frames
+                sel = np.unique(np.concatenate([sel, curr_lig_idx]))
+            else:
+                # some non-masked ligand atoms missing, remove entire ligand from crop
+                sel = np.setdiff1d(sel,curr_lig_idx)
 
         offset += L_sm
-    
+
     # remove protein chains that are short and don't contact other proteins or ligands
     # distance between protein C-alphas
     prot_sel = sel[sel<L_prot]

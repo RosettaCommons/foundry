@@ -37,9 +37,10 @@ def mem_report():
             element_type = type(tensor).__name__
             size = tuple(tensor.size())
 
-            if (mem > 256.0):
-                print('%s\t\t%s\t\t%.2f' % (
+            if (mem > 128.0):
+                print('%s\t\t%s\t\t%s\t\t%.2f' % (
                     element_type,
+                    tensor.dtype,
                     size,
                     mem) )
         print('-'*LEN)

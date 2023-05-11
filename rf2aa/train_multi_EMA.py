@@ -15,7 +15,6 @@ import torch.nn as nn
 from torch.utils import data
 from functools import partial
 from tqdm import tqdm
-from symmetry import symm_subunit_matrix, find_symm_subs, get_symm_map
 
 script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(script_dir)
@@ -34,6 +33,8 @@ from rf2aa.loss import *
 from rf2aa.util import *
 from rf2aa.util_module import XYZConverter
 from rf2aa.scheduler import get_linear_schedule_with_warmup, get_stepwise_decay_schedule_with_warmup
+from rf2aa.symmetry import symm_subunit_matrix, find_symm_subs, get_symm_map
+
 from rf2aa.chemical import load_pdb_ideal_sdf_strings
 
 # disable openbabel warnings
@@ -206,17 +207,18 @@ class Trainer():
         seq = label_aa_s[:,0].clone()
 
         assert (B==1) # fd - code assumes a batch size of 1
-        
+
         tot_loss = 0.0
         # set up frames
         frames, frame_mask = get_frames(
             pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
+
         # update frames and frames_mask to only include BB frames (have to update both for compatibility with compute_general_FAPE)
         frames_BB = frames.clone()
         frames_BB[..., 1:, :, :] = 0
         frame_mask_BB = frame_mask.clone()
         frame_mask_BB[...,1:] =False
-       
+
         # c6d loss
         for i in range(4):
             loss = self.loss_fn(logit_s[i], label_s[...,i]) # (B, L, L)
@@ -272,18 +274,16 @@ class Trainer():
         # whereas other losses also maks unresolved ligand atoms (mask_BB)
         # frames with unresolved ligand atoms are masked in compute_general_FAPE
         res_mask = ~((mask_crds[:,:,:3].sum(dim=-1) < 3.0) * ~(is_atom(seq)))
-        
+
         # create 2d masks for intrachain and interchain fape calculations
         nframes = frame_mask.shape[-1]
-        # frame_atom_mask_2d = torch.einsum('bfn,bra->bfnra',frame_mask_BB,mask_crds[:, :, :3]) # B, L, nframes, L, natoms
-        frame_atom_mask_2d_allatom = torch.einsum('bfn,bra->bfnra', frame_mask_BB, mask_crds) # B, L, nframes, L, natoms
+        frame_atom_mask_2d_allatom = torch.einsum('bfn,bra->bfnra', frame_mask_BB, mask_crds).bool() # B, L, nframes, L, natoms
         frame_atom_mask_2d = frame_atom_mask_2d_allatom[:, :, :, :, :3]
-
-        frame_atom_mask_2d_intra_allatom = frame_atom_mask_2d_allatom * same_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 36)
+        frame_atom_mask_2d_intra_allatom = frame_atom_mask_2d_allatom * same_chain[:, :,None, :, None].bool().expand(-1,-1,nframes,-1, NTOTAL)
         frame_atom_mask_2d_intra = frame_atom_mask_2d_intra_allatom[:, :, :, :, :3]
         different_chain = ~same_chain.bool()
-        frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3) # B, L, nframes, L, natoms
-            
+        frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3)
+
         if negative: # inter-chain fapes should be ignored for negative cases
 
             if logit_pae is not None:
@@ -320,7 +320,7 @@ class Trainer():
             dclamp_2d = torch.full_like(frame_atom_mask_2d_allatom, dclamp, dtype=torch.float32)
             if not unclamp:
                 is_prot = is_protein(seq) # (1,L)
-                same_chain_clamp_mask = same_chain[:, :, None, :, None].repeat(1,1,nframes,1, natoms)
+                same_chain_clamp_mask = same_chain[:, :, None, :, None].bool().repeat(1,1,nframes,1, natoms)
                 # zero out rows and columns with small molecules
                 same_chain_clamp_mask[:, ~is_prot[0]] = 0
                 same_chain_clamp_mask[:,:, :,  ~is_prot[0]] = 0 
@@ -338,6 +338,12 @@ class Trainer():
                 logit_pae=logit_pae,
                 logit_pde=logit_pde,
             )
+
+            # free up big intermediate data tensors
+            del dclamp_2d
+            if not unclamp:
+                del same_chain_clamp_mask
+
         num_layers = pred.shape[0]
         gamma = 1.0 # equal weighting of fape across all layers
         w_bb_fape = torch.pow(torch.full((num_layers,), gamma, device=pred.device), torch.arange(num_layers, device=pred.device))
@@ -356,14 +362,6 @@ class Trainer():
 
         # small-molecule ligands
         sm_res_mask = is_atom(label_aa_s[0,0])*res_mask[0] # (L,)
-        # frame_atom_mask_2d = torch.einsum('bfn,bra->bfnra',frame_mask_BB,mask_crds[:, :, :3]) # B, L, nframes, L, natoms
-        # frame_atom_mask_2d_intra = frame_atom_mask_2d*same_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3) # B, L, nframes, L, natoms
-        # different_chain = ~same_chain.bool()
-        # frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3) # B, L, nframes, L, natoms
-
-        #fd
-        frame_allatom_mask_2d = torch.einsum('bfn,bra->bfnra',frame_mask_BB,mask_crds) # B, L, nframes, L, natoms
-        frame_allatom_mask_2d_intra = frame_allatom_mask_2d*same_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, NTOTAL) # B, L, nframes, L, natoms
 
         if not negative and bool(torch.any(~sm_res_mask)) and torch.any(frame_mask_BB[0,~sm_res_mask]):
             # protein fape (layer-averaged fape on protein coordinates with protein frames)
@@ -529,7 +527,7 @@ class Trainer():
                 xs_mask[:,res_mask[0]],
                 frames[:,res_mask[0]],
                 frame_mask[:,res_mask[0]],
-                frame_atom_mask_2d=frame_allatom_mask_2d_intra[:, res_mask[0]][:, :, :, res_mask[0]]
+                frame_atom_mask_2d=frame_atom_mask_2d_intra_allatom[:, res_mask[0]][:, :, :, res_mask[0]]
             )
 
         else:
@@ -606,6 +604,7 @@ class Trainer():
             self.aamask, bond_feats, dist_matrix, self.ljlk_parameters, self.lj_correction_parameters, self.num_bonds,
             lj_lin=lj_lin
         )
+
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
@@ -1373,11 +1372,12 @@ class Trainer():
         xyz_prev = xyz_prev.to(gpu, non_blocking=True)
         mask_prev = mask_prev.to(gpu, non_blocking=True)
 
-        seq = seq.to(gpu, non_blocking=True)
-        msa = msa.to(gpu, non_blocking=True)
-        msa_masked = msa_masked.to(gpu, non_blocking=True)
-        msa_full = msa_full.to(gpu, non_blocking=True)
-        mask_msa = mask_msa.to(gpu, non_blocking=True)
+        #seq = seq.to(gpu, non_blocking=True)
+        #msa = msa.to(gpu, non_blocking=True)
+        #msa_masked = msa_masked.to(gpu, non_blocking=True)
+        #msa_full = msa_full.to(gpu, non_blocking=True)
+        #mask_msa = mask_msa.to(gpu, non_blocking=True)
+
         atom_frames = atom_frames.to(gpu, non_blocking=True)
         bond_feats = bond_feats.to(gpu, non_blocking=True)
         dist_matrix = dist_matrix.to(gpu, non_blocking=True)
@@ -1495,11 +1495,11 @@ class Trainer():
         mask_recycle = same_chain.float()*mask_recycle.float()
         return task, item, network_input, xyz_prev, alpha_prev, mask_recycle, true_crds, mask_crds, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label
     
-    def _get_model_input(self, network_input, output_i, i_cycle, return_raw=False, use_checkpoint=False):
+    def _get_model_input(self, network_input, output_i, i_cycle, gpu, return_raw=False, use_checkpoint=False):
         input_i = {}
         for key in network_input:
             if key in ['msa_latent', 'msa_full', 'seq']:
-                input_i[key] = network_input[key][:,i_cycle]
+                input_i[key] = network_input[key][:,i_cycle].to(gpu, non_blocking=True)
             else:
                 input_i[key] = network_input[key]
         msa_prev, pair_prev, xyz_prev, state_prev, alpha, mask_recycle = output_i
@@ -1628,7 +1628,7 @@ class Trainer():
             xyz_prev_orig = xyz_prev.clone()
 
             counter += 1
-
+            
             N_cycle = np.random.randint(1, self.maxcycle+1) # number of recycling
 
             output_i = (None, None, xyz_prev, None, alpha_prev, mask_recycle)
@@ -1644,7 +1644,7 @@ class Trainer():
                         stack.enter_context(torch.cuda.amp.autocast(enabled=USE_AMP))
                         return_raw=False
                         use_checkpoint=True
-                    input_i = self._get_model_input(network_input, output_i, i_cycle, return_raw=return_raw, use_checkpoint=use_checkpoint)
+                    input_i = self._get_model_input(network_input, output_i, i_cycle, gpu, return_raw=return_raw, use_checkpoint=use_checkpoint)
                     
                     output_i = ddp_model(**input_i)
                     
@@ -1653,7 +1653,7 @@ class Trainer():
                     loss, loss_dict, acc_s, _, true_crds, pred_allatom, res_mask = self._get_loss_and_misc(
                         output_i,
                         true_crds, mask_crds, network_input['same_chain'],
-                        network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
+                        network_input['seq'], msa[:,i_cycle].to(gpu), mask_msa[:,i_cycle].to(gpu),
                         network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
                         unclamp, negative, task, item, symmRs, Lasu, ch_label,
                         len(train_loader)*rank+counter
@@ -1820,7 +1820,7 @@ class Trainer():
                         else:
                             return_raw=False
                         
-                        input_i = self._get_model_input(network_input, output_i, i_cycle, return_raw=return_raw)
+                        input_i = self._get_model_input(network_input, output_i, i_cycle, gpu, return_raw=return_raw)
                         output_i = ddp_model(**input_i)
 
                         if i_cycle < N_cycle - 1:
@@ -1829,7 +1829,7 @@ class Trainer():
                     loss, loss_dict, acc_s, _, true_crds, pred_allatom, res_mask = self._get_loss_and_misc(
                         output_i,
                         true_crds, mask_crds, network_input['same_chain'],
-                        network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
+                        network_input['seq'], msa[:,i_cycle].to(gpu), mask_msa[:,i_cycle].to(gpu),
                         network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
                         unclamp, negative, task, item, symmRs, Lasu, ch_label,
                         len(valid_loader)*rank+counter
@@ -1992,7 +1992,7 @@ class Trainer():
                         else:
                             return_raw=False
                         
-                        input_i = self._get_model_input(network_input, output_i, i_cycle, return_raw=return_raw)
+                        input_i = self._get_model_input(network_input, output_i, i_cycle, gpu, return_raw=return_raw)
                         output_i = ddp_model(**input_i)
 
                         if i_cycle < N_cycle-1:
@@ -2001,7 +2001,7 @@ class Trainer():
                         loss, loss_dict, acc_s, p_bind, _, _, _ = self._get_loss_and_misc(
                             output_i,
                             true_crds, mask_crds, network_input['same_chain'],
-                            network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
+                            network_input['seq'], msa[:,i_cycle].to(gpu), mask_msa[:,i_cycle].to(gpu),
                             network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
                             unclamp, negative, task, item, symmRs, Lasu, ch_label,
                             len(valid_pos_loader)*rank+counter
@@ -2094,7 +2094,7 @@ class Trainer():
                         else:
                             return_raw=False
 
-                        input_i = self._get_model_input(network_input, output_i, i_cycle, return_raw=return_raw)
+                        input_i = self._get_model_input(network_input, output_i, i_cycle, gpu, return_raw=return_raw)
                         output_i = ddp_model(**input_i)
 
                         if i_cycle < N_cycle - 1:
@@ -2103,7 +2103,7 @@ class Trainer():
                         loss, loss_dict, acc_s, p_bind, _, _, _ = self._get_loss_and_misc(
                             output_i,
                             true_crds, mask_crds, network_input['same_chain'],
-                            network_input['seq'], msa[:,i_cycle], mask_msa[:,i_cycle],
+                            network_input['seq'], msa[:,i_cycle].to(gpu), mask_msa[:,i_cycle].to(gpu),
                             network_input['idx'], network_input['bond_feats'], network_input['dist_matrix'], network_input['atom_frames'],
                             unclamp, negative, task, item, symmRs, Lasu, ch_label,
                             len(valid_pos_loader)*rank+counter

@@ -1043,9 +1043,7 @@ class LJLoss(torch.autograd.Function):
         ri,rj = rs[0],rs[1]
 
         # batch during inference for huge systems
-        BATCHSIZE = len(ri)
-        if (not training):
-            BATCHSIZE = 65536/N
+        BATCHSIZE = 65536//N
 
         ljval = 0
         dljEdx = torch.zeros_like(xs, dtype=torch.float)
