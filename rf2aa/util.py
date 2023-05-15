@@ -1443,9 +1443,9 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
     akeys : list of 4-tuples (chain_id, residue_num, residue_name, atom_name)
         Atom keys with information about each atom, in the same order as the returned coordinates
     """
-    elnum_to_atom = dict(zip(chemical.atom_num, chemical.frame_priority2atom))
     atoms_no_H = {k:v for k,v in atoms.items() if v.element != 1} # exclude hydrogens
     L = len(atoms_no_H)
+    
     if input_akeys is None:
         input_akeys = atoms_no_H.keys()
 
@@ -1633,6 +1633,20 @@ def get_automorphs(mol, xyz_sm, mask_sm):
 
     return xyz_sm, mask_sm
 
+def expand_xyz_sm_to_ntotal(xyz_sm, mask_sm, N_symmetry=None):
+    """
+    for small molecules, takes a 1d xyz tensor and converts to using N_total
+    """
+    N_symm_sm, L =  xyz_sm.shape[:2]
+    if N_symmetry is None:
+        N_symmetry = N_symm_sm
+    xyz = torch.full((N_symmetry, L, NTOTAL, 3), np.nan).float()
+    xyz[:N_symm_sm, :, 1, :] = xyz_sm
+
+    mask = torch.full((N_symmetry, L, NTOTAL), False).bool()
+    mask[:N_symm_sm, :, 1] = mask_sm
+    return xyz, mask
+
 def same_chain_2d_from_Ls(Ls):
     """Given list of chain lengths, returns binary matrix with 1 if two residues are on the same chain."""
     same_chain = torch.zeros((sum(Ls),sum(Ls))).long()
@@ -1747,7 +1761,7 @@ def reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item):
         all_perms.append(perms_per_chain)
         ch_number += num_repeats
     perms = cartprodcat(all_perms)
-    perms = perms[:, chosen_prot_chains]
+    perms = perms[:, chosen_prot_chains.long()]
     is_valid_perm = torch.all( torch.isin(perms, chosen_prot_chains), dim=1)
     is_valid_perm = torch.nn.functional.pad(is_valid_perm, (0, mask.shape[0]-is_valid_perm.shape[0])) # pad in case there are more ligand symmetry dimensions
     if len(chosen_prot_chains) == 0:

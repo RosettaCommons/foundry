@@ -12,7 +12,6 @@ from typing import Dict, Optional, Tuple
 from pathlib import Path
 from openbabel import pybel
 from os.path import exists
-#from parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mixed_fasta
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
@@ -28,16 +27,15 @@ import networkx as nx
 
 from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol, parse_mixed_fasta
 from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, UNKINDEX, \
-    NTOTAL, NBTYPES, CHAIN_GAP, num2aa, METAL_RES_NAMES, aa2num, atomnum2atomtype
+    NTOTAL, NBTYPES, CHAIN_GAP, num2aa, METAL_RES_NAMES, aa2num, atomnum2atomtype, load_tanimoto_sim_matrix
 from rf2aa.kinematics import get_chirals
 from rf2aa.symmetry import get_symmetry
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
-    atomize_protein, center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
+    center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
     cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
-    get_alt_query_ligand, remove_unresolved_substructures, map_identical_prot_chains, \
-    cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, get_prot_sm_mask, bond_feats_from_Ls, \
+    map_identical_prot_chains, cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, bond_feats_from_Ls, \
     reindex_protein_feats_after_atomize, get_residue_contacts, atomize_discontiguous_residues, pop_protein_feats, \
-        is_atom, get_atom_template_indices, reassign_symmetry_after_cropping
+        is_atom, get_atom_template_indices, reassign_symmetry_after_cropping, expand_xyz_sm_to_ntotal
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -54,7 +52,7 @@ na_dir = "/projects/ml/nucleic"
 na_dir = "/home/dimaio/TrRosetta/nucleic"
 fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
-mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl" # for phase 3 dataloaders -- switch over when ready
+mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl" # for phase 3 dataloaders 
 # mol_dir = "/projects/ml/RF2_allatom/isdf" # for legacy datasets
 
 if not os.path.exists(base_dir):
@@ -64,7 +62,7 @@ if not os.path.exists(base_dir):
     na_dir = "/data/databases/nucleic"
     fb_dir = "/data/databases/fb_af"
     sm_compl_dir = "/data/databases/RF2_allatom"
-    mol_dir = "/data/databases/RF2_allatom/isdf"
+    mol_dir = "/data/databases/RF2_allatom/pkl"
     csd_dir = "/data/databases/csd543"
 
 if not os.path.exists(base_dir):
@@ -74,7 +72,7 @@ if not os.path.exists(base_dir):
     na_dir = "/gscratch2/nucleic"
     fb_dir = "/gscratch2/fb_af1"
     sm_compl_dir = "/gscratch2/RF2_allatom"
-    mol_dir = "/gscratch2/RF2_allatom/rcsb/pkl_v2"
+    mol_dir = "/gscratch2/RF2_allatom/rcsb/pkl"
     csd_dir = "/gscratch2/RF2_allatom/csd543"
 
 default_dataloader_params = {
@@ -95,7 +93,7 @@ default_dataloader_params = {
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230422.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20230501.pkl"%sm_compl_dir, # cache for faster loading 
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -127,7 +125,7 @@ default_dataloader_params = {
         "ATOMIZE_FLANK"    : 0,
         "MAXPROTCHAINS"    : 6,
         "MAXLIGCHAINS"     : 10,
-        "MAXMASKEDLIGATOMS": 10,
+        "MAXMASKEDLIGATOMS": 30,
         "P_METAL"          : 0.75,
         "P_ATOMIZE_MODRES" : 0.75,
         "MAXMONOMERLENGTH" : None,
@@ -135,6 +133,7 @@ default_dataloader_params = {
         "P_ATOMIZE_TEMPLATE": 1.0,
         "NUM_SEQS_SUBSAMPLE": 50,
         "BLACK_HOLE_INIT"   : False,
+        "SHOW_SM_TEMPLATES" : True,
     }
 
 def set_data_loader_params(args):
@@ -373,7 +372,7 @@ def blank_template(n_tmpl, L, random_noise=5.0):
     conf = torch.zeros((n_tmpl, L, 1)).float()
     t1d = torch.cat((t1d, conf), -1)
     mask_t = torch.full((n_tmpl,L,NTOTAL), False)
-    return xyz, t1d, mask_t
+    return xyz, t1d, mask_t, np.full((n_tmpl), "")
 
 
 def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pick_top=True, same_chain=None, random_noise=5):
@@ -422,56 +421,66 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
         # 1-D features: alignment confidence 
         t1d[i,pos] = tplt['seq'][0,sel]
         t1d_val[i,pos] = tplt['f1d'][0,sel,2] # alignment confidence
-        xyz[i] = center_and_realign_missing(xyz[i], mask_t[i], same_chain=same_chain)
+        # xyz[i] = center_and_realign_missing(xyz[i], mask_t[i], same_chain=same_chain)
 
     t1d = torch.nn.functional.one_hot(t1d, num_classes=NAATOKENS-1).float() # (no mask token)
     t1d = torch.cat((t1d, t1d_val[...,None]), dim=-1)
 
-    return xyz, t1d, mask_t
+    tplt_ids = np.array(tplt["ids"])[sample].flatten() # np.array of chain ids (ordered)
+    return xyz, t1d, mask_t, tplt_ids
 
-def merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot):
+def merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, tplt_ids, Ls_prot):
     """Diagonally tiles template coordinates, 1d input features, and masks across
     template and residue dimensions. 1st template is concatenated directly on residue
-    dimension after a random rotation & translation."""
+    dimension after a random rotation & translation.
+    """
     N_tmpl_tot = sum([x.shape[0] for x in xyz_t_prot])
-    N_f1d_feat = f1d_t_prot[0].shape[2]
-    protein_Ls = [xyz_.shape[1] for xyz_ in xyz_t_prot]
 
-    xyz_t_out, f1d_t_out, mask_t_out = blank_template(N_tmpl_tot, sum(Ls_prot))
-
+    xyz_t_out, f1d_t_out, mask_t_out, _ = blank_template(N_tmpl_tot, sum(Ls_prot))
+    tplt_ids_out = np.full((N_tmpl_tot),"", dtype=object) # rk bad practice.. should fix
     i_tmpl = 0
     i_res = 0
-    for xyz_, f1d_, mask_ in zip(xyz_t_prot, f1d_t_prot, mask_t_prot):
+    for xyz_, f1d_, mask_, ids in zip(xyz_t_prot, f1d_t_prot, mask_t_prot, tplt_ids):
         N_tmpl, L_tmpl = xyz_.shape[:2]
         if i_tmpl == 0:
             i1, i2 = 1, N_tmpl
         else:
             i1, i2 = i_tmpl, i_tmpl+N_tmpl - 1
-
-        # 1st template is concatenated directly
+ 
+        # 1st template is concatenated directly, so that all atoms are set in xyz_prev
         xyz_t_out[0, i_res:i_res+L_tmpl] = random_rot_trans(xyz_[0:1])
         f1d_t_out[0, i_res:i_res+L_tmpl] = f1d_[0]
         mask_t_out[0, i_res:i_res+L_tmpl] = mask_[0]
 
+        if not tplt_ids_out[0]: # only add first template
+            tplt_ids_out[0] = ids[0]
         # remaining templates are diagonally tiled
         xyz_t_out[i1:i2, i_res:i_res+L_tmpl] = xyz_[1:]
         f1d_t_out[i1:i2, i_res:i_res+L_tmpl] = f1d_[1:]
         mask_t_out[i1:i2, i_res:i_res+L_tmpl] = mask_[1:]
-
+        tplt_ids_out[i1:i2] = ids[1:] 
         if i_tmpl == 0:
             i_tmpl += N_tmpl
         else:
             i_tmpl += N_tmpl-1
         i_res += L_tmpl
 
-    return xyz_t_out, f1d_t_out, mask_t_out
+    return xyz_t_out, f1d_t_out, mask_t_out, tplt_ids_out
 
-def spoof_template(xyz, seq, mask, is_motif, random_noise=5):
+def spoof_template(xyz, seq, mask, is_motif=None, template_conf=1, random_noise=5):
     """
     generate template features from an arbitrary xyz, seq and mask
-    is_motif indicates which 
+    is_motif indicates which residues from the input xyz should be templated
     """
+    if len(xyz.shape) == 4: # template ignores symmetry dimension
+        xyz = xyz[0]
+    if len(mask.shape) == 3:
+        mask = mask[0]
+
     L = xyz.shape[0]
+    if is_motif is None:
+        is_motif = torch.arange(L)
+
     xyz_t = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*random_noise
 
     t1d = torch.cat((
@@ -486,11 +495,156 @@ def spoof_template(xyz, seq, mask, is_motif, random_noise=5):
     xyz_t = torch.nan_to_num(xyz_t) # xyz has NaNs
     t1d[0, is_motif] = torch.cat((
         torch.nn.functional.one_hot(seq[is_motif], num_classes=NAATOKENS-1).float(),
-        torch.ones((len(is_motif), 1)).float()
+        torch.full((len(is_motif), 1), template_conf).float()
     ), -1) # (1, L_protein, NAATOKENS)
     mask_t[0, is_motif, :14] = mask[is_motif, :14]
     
     return xyz_t, t1d, mask_t
+
+def generate_sm_template_feats(tplt_ids, resnames, akeys, Ls_sm, chid2smpartners, params):
+    """
+    based on the templates chosen for the protein, give templates for the small molecule
+    there are 2 cases:
+        1. The ligand in the template is identical to the query ligand. in this case we provide 
+        the full coordinates of the template, with full template confidence
+        2. The ligand in the template is not identical. In this case, the closest tanimoto hit is taken.
+        the t1d features for seq are set to the ATM token and the template confidence is scaled to the 
+        tanimoto similarity of the morgan fingerprint
+    """
+    sim, names = load_tanimoto_sim_matrix(base_path=sm_compl_dir) # could load this earlier...
+    name2idx = dict(zip(names,range(len(names))))
+    
+    xyz_t_all_template = []
+    f1d_t_all_template = []
+    mask_t_all_template = []
+    for chid in tplt_ids:
+        # if chain does not have a small molecule, generate blank template
+        if chid not in chid2smpartners:
+            xyz_t, f1d_t, mask_t, _ = blank_template(1, sum(Ls_sm))
+            xyz_t_all_template.append(xyz_t)
+            f1d_t_all_template.append(f1d_t)
+            mask_t_all_template.append(mask_t)
+            continue
+        
+        chains, _, covale, _ = \
+            pickle.load(gzip.open(params['MOL_DIR']+f'/{chid[1:3]}/{chid.split("_")[0]}.pkl.gz'))
+        template_partners = chid2smpartners[chid]
+        # only include partners in the ligands category, this will exclude metals 
+        # TODO: add templating for metals
+        template_partner_names = [ligand[0][2] for ligand in template_partners if ligand[0][2] in names \
+            and ligand[0][2] is not None]
+        
+        if len(template_partner_names) == 0: # this is the case where all the template partners are metals or sugars
+            xyz_t, f1d_t, mask_t, _ = blank_template(1, sum(Ls_sm))
+            xyz_t_all_template.append(xyz_t)
+            f1d_t_all_template.append(f1d_t)
+            mask_t_all_template.append(mask_t)
+            continue
+        
+        template_partner_sim_idxs = [name2idx[name] for name in template_partner_names]
+        assert len(resnames) == len(Ls_sm), \
+            f"length of ligand residue names and small molecule length do not match, length resnames \
+                = {len(resnames)}, length Ls_sm = {len(Ls_sm)}"
+        xyz_t_all_lig = []
+        f1d_t_all_lig = []
+        mask_t_all_lig = []
+
+        for i, (lig_name, L) in enumerate(zip(resnames, Ls_sm)):            
+            # lookup pairwise tanimoto sim
+            # for each lig_partner, choose the closest tanimoto similar ligand in the template, 
+            # without replacement
+            
+            if lig_name in template_partner_names:
+                template_partner_idx = template_partner_names.index(lig_name)
+                max_tanimoto = 1
+                input_akeys = akeys[i]
+            elif lig_name in names:
+                lig_sim_all = sim[name2idx[lig_name]]
+                lig_sim_template = lig_sim_all[template_partner_sim_idxs]
+                template_partner_sorted_idxs = np.argsort(lig_sim_template)[::-1]
+                template_partner_idx = None
+                # really inelegant... done to sample without replacement and handle edge cases
+                for idx in template_partner_sorted_idxs:
+                    if template_partner_names[idx] is not None:
+                        template_partner_idx = idx
+                        max_tanimoto = lig_sim_template[idx]
+                        break
+                input_akeys = None
+                if template_partner_idx is None: # case where more ligands in query than template
+                    xyz_t, f1d_t, mask_t, _ = blank_template(1, L)
+                    xyz_t_all_lig.append(xyz_t)
+                    f1d_t_all_lig.append(f1d_t)
+                    mask_t_all_lig.append(mask_t)
+                    continue
+                
+            else: # query ligand not in the tanimoto db
+                xyz_t, f1d_t, mask_t, _ = blank_template(1, L)
+                xyz_t_all_lig.append(xyz_t)
+                f1d_t_all_lig.append(f1d_t)
+                mask_t_all_lig.append(mask_t)
+                input_akeys = None
+                continue
+            
+            # load that ligand from the cif file and create the xyz_t, t1d and mask_t
+            ligand = template_partners[template_partner_idx]
+            # remove that template partner for future iterations to sample without replacement
+            template_partner_names[template_partner_idx] = None
+            
+            lig_atoms, lig_bonds = get_ligand_atoms_bonds(ligand, chains, covale)
+            
+            # templates are from asymmetric unit so we do not want to apply a transfrom
+            # set up transforms to just be the identity matrix
+            asmb_xfs = [(ligand[0], torch.eye(4))]
+            ch2xf = {ligand[0]:0}
+            #HACK: need to reindex the akeys to be the chain id, res id of the template ligand
+            if input_akeys is not None:
+                input_akeys = [tuple(list(ligand[0][:2]) + list(key[2:])) for key in input_akeys]
+
+            try:
+                xyz_, occ_, msa_, chid_, akeys_ = cif_ligand_to_xyz(lig_atoms, asmb_xfs, ch2xf, input_akeys=input_akeys)
+            except Exception as e:
+                # this is expected to fail if the template ligand is on multiple chains
+                print(e)
+                print(f"This is the chain ID vector: {chid_}")
+                xyz_t, f1d_t, mask_t, _ = blank_template(1, L)
+                xyz_t_all_lig.append(xyz_t)
+                f1d_t_all_lig.append(f1d_t)
+                mask_t_all_lig.append(mask_t)
+                input_akeys = None
+                continue
+            
+            # if we did not supply input_akeys we do not want to use the order of the template
+            # we will collapse the coordinates to their unweighted com and set the sequence to be ATM
+            if input_akeys is None or len(akeys_) != len(input_akeys): # length of template is different from ground truth, need to remake tensors to match
+                ligand_com = torch.mean(xyz_, dim=0)
+                xyz_ = torch.zeros((L, 3))
+                xyz_[:] = ligand_com + torch.rand(3) # add a little noise to avoid learning templates are at the com
+
+                occ_ = torch.full((L,), True)
+                #HACK templates have NTOKENS-1 classes (no mask token) but the ATM token appears after the 
+                # mask token so need to decrement the token number by 1
+                msa_ = torch.full((L,), aa2num["ATM"] - 1 )
+            else:
+                assert input_akeys == akeys_, "if provided input akeys, output akeys must match"
+
+            # convert coordinates into L,36,3 and mask into L,36 to feed into spoof template
+            xyz_sm, mask_sm = expand_xyz_sm_to_ntotal(xyz_[None], occ_[None])
+
+            xyz_t, f1d_t, mask_t = spoof_template(xyz_sm, msa_.long(), mask_sm, template_conf=max_tanimoto)
+            xyz_t_all_lig.append(xyz_t)
+            f1d_t_all_lig.append(f1d_t)
+            mask_t_all_lig.append(mask_t)
+            
+        # cat in length dimension (1)
+        xyz_t_all_template.append(torch.cat(xyz_t_all_lig, dim=1))
+        f1d_t_all_template.append(torch.cat(f1d_t_all_lig, dim=1))
+        mask_t_all_template.append(torch.cat(mask_t_all_lig, dim=1))
+    
+    # cat in template dimension (0)
+    xyz_t_all_template = torch.cat(xyz_t_all_template, dim=0)
+    f1d_t_all_template = torch.cat(f1d_t_all_template, dim=0)
+    mask_t_all_template = torch.cat(mask_t_all_template, dim=0)
+    return xyz_t_all_template, f1d_t_all_template, mask_t_all_template
 
 def generate_xyz_prev(xyz_t, mask_t, params):
     """
@@ -656,67 +810,14 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     ignore = ['DATASETS', 'DATASET_PROB', 'DIFF_MASK_PROBS']
     params = {k:v for k,v in params.items() if k not in ignore}
 
-    # Temporary hack: load older data pickle for diffusion training
-    # Once phase 3 diffusion data loading is complete, remove this block
-    # if os.path.exists(params['DATAPKL']) and diffusion_training:
-    #     with open(params['DATAPKL'], "rb") as f:
-    #         print ('Loading',params['DATAPKL'],'...')
-    #         (
-    #             pdb_IDs, pdb_weights, train_pdb,
-    #             fb_IDs, fb_weights, fb,
-    #             compl_IDs, compl_weights, train_compl,
-    #             neg_IDs, neg_weights, train_neg,
-    #             na_compl_IDs, na_compl_weights, train_na_compl,
-    #             na_neg_IDs, na_neg_weights, train_na_neg,
-    #             rna_IDs, rna_weights, train_rna,
-    #             sm_compl_IDs, sm_compl_weights, train_sm_compl,
-    #             sm_IDs, sm_weights, train_sm,
-    #             valid_pdb, valid_homo,
-    #             valid_compl, valid_neg,
-    #             valid_na_compl, valid_na_neg,
-    #             valid_rna, valid_sm_compl, valid_sm_compl_ligclus,
-    #             valid_sm_compl_strict, valid_sm, valid_pep,
-    #             homo, gen_params
-    #         ) = pickle.load(f)
-    #         diff = deepdiff.DeepDiff(params, gen_params, ignore_order=True)
-    #         ic(diff)
-    #         if diff and 'values_changed' in diff:
-    #             changed = set(diff['values_changed'])
-    #             ic(changed)
-    #             for ig in ignore:
-    #                 changed.discard(f"root['{ig}']")
-    #             if changed:
-    #                 ic(changed)
-    #                 print(f'cache miss: dataset generation parameters passed to train multi differ from those in the dataset pkl:')
-    #                 print(diff)
-    #                 if not no_match_okay:
-    #                     raise Exception(diff)
-
-    #     return (
-    #         (pdb_IDs, torch.tensor(pdb_weights).float(), train_pdb), \
-    #         (fb_IDs, torch.tensor(fb_weights).float(), fb), \
-    #         (compl_IDs, torch.tensor(compl_weights).float(), train_compl), \
-    #         (neg_IDs, torch.tensor(neg_weights).float(), train_neg),\
-    #         (na_compl_IDs, torch.tensor(na_compl_weights).float(), train_na_compl),\
-    #         (na_neg_IDs, torch.tensor(na_neg_weights).float(), train_na_neg),\
-    #         (rna_IDs, torch.tensor(rna_weights).float(), train_rna),\
-    #         (sm_compl_IDs, torch.tensor(sm_compl_weights).float(), train_sm_compl), \
-    #         (sm_IDs, torch.tensor(sm_weights).float(), train_sm), \
-    #         valid_pdb, valid_homo,
-    #         valid_compl, valid_neg,
-    #         valid_na_compl, valid_na_neg,
-    #         valid_rna, valid_sm_compl, valid_sm_compl_ligclus, valid_sm_compl_strict, valid_sm, valid_pep,
-    #         homo
-    #     )
-
     # try to load cached datasets 
     if os.path.exists(params['DATAPKL']):
         with open(params['DATAPKL'], "rb") as f:
             if "SLURM_PROCID" in os.environ and int(os.environ["SLURM_PROCID"])==0:
                 print ('Loading',params['DATAPKL'],'...')
             train_ID_dict, valid_ID_dict, weights_dict, \
-                train_dict, valid_dict, homo, chid2hash, chid2taxid = pickle.load(f)
-        return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid
+                train_dict, valid_dict, homo, chid2hash, chid2taxid, chid2smpartners = pickle.load(f)
+        return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid, chid2smpartners
 
     t0 = time.time()
     print(f"cached train/valid datasets {params['DATAPKL']} not found. "\
@@ -921,6 +1022,10 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_dict['sm_compl_strict'] = val_df
     valid_ID_dict['sm_compl_strict'] = val_df.CLUSTER.drop_duplicates().values
 
+    # rk want to provide ligand context in templates 
+    # for each unique protein chain map to all the query ligand partners in the dataset
+    chid2smpartners = df_sm.groupby("CHAINID").agg(lambda x: [val for val in x])["LIGAND"].to_dict()
+
     # remove sm compl protein chains from pdb set
     df = train_dict['pdb']
     sm_compl_chains = np.concatenate([
@@ -965,11 +1070,11 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     with open(params['DATAPKL'], "wb") as f:
         print ('Writing',params['DATAPKL'],'...')
         pickle.dump((train_ID_dict, valid_ID_dict, weights_dict, 
-                     train_dict, valid_dict, homo, chid2hash, chid2taxid), f)
+                     train_dict, valid_dict, homo, chid2hash, chid2taxid, chid2smpartners), f)
         print ('...done')
 
     return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, \
-        homo, chid2hash, chid2taxid
+        homo, chid2hash, chid2taxid, chid2smpartners
 
 
 # slice long chains without retaining continuity of the chain
@@ -1854,8 +1959,8 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
 
     # get template features
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
-    xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, msa.shape[1], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
-
+    xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tplt, msa.shape[1], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+    
     # Residue cropping
     crop_function = get_crop
     if params.get('DISCONTIGUOUS_CROP', False):
@@ -1873,10 +1978,15 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
     mask = mask[crop_idx]
     idx = idx[crop_idx]
 
+    same_chain = torch.ones((len(crop_idx), len(crop_idx))).long()
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )
     # get initial coordinates
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
-    chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
+    
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
     dist_matrix = get_bond_distances(bond_feats)
 
@@ -1887,7 +1997,7 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1'
+           same_chain, unclamp, False, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1'
 
 # Generate input features for homo-oligomers
 def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0, fixbb=False):
@@ -1937,15 +2047,15 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
     # get template features
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
     if ntempl < 1:
-        xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+        xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tplt, L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
     else:
-        xyz_t, f1d_t, mask_t = TemplFeaturize(tplt, L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+        xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tplt, L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
         # duplicate
 
     if (symmgp != 'C1'):
         # everything over ASU
         idx = torch.arange(L)
-        chain_idx = torch.ones((L, L)).long()
+        same_chain = torch.ones((L, L)).long()
         nsub = len(symmsubs)+1
         bond_feats = get_protein_bond_feats(L)
     else:  # either asymmetric dimer or (usually) helical symmetry...
@@ -1956,15 +2066,19 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         idx = torch.arange(L*2)
         idx[L:] += 100 # to let network know about chain breaks
 
-        chain_idx = torch.zeros((2*L, 2*L)).long()
-        chain_idx[:L, :L] = 1
-        chain_idx[L:, L:] = 1
+        same_chain = torch.zeros((2*L, 2*L)).long()
+        same_chain[:L, :L] = 1
+        same_chain[L:, L:] = 1
         bond_feats = torch.zeros((2*L, 2*L)).long()
         bond_feats[:L, :L] = get_protein_bond_feats(L)
         bond_feats[L:, L:] = get_protein_bond_feats(L)
 
         nsub = 2
-
+    
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )
     # get initial coordinates
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
@@ -2012,7 +2126,7 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         f1d_t = f1d_t[:,crop_idx]
         mask_t = mask_t[:,crop_idx]
         idx = idx[crop_idx]
-        chain_idx = chain_idx[crop_idx][:,crop_idx]
+        same_chain = same_chain[crop_idx][:,crop_idx]
         bond_feats = bond_feats[crop_idx][:,crop_idx]
         xyz_prev = xyz_prev[crop_idx]
         mask_prev = mask_prev[crop_idx]
@@ -2029,7 +2143,7 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, symmgp
+           same_chain, False, False, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, symmgp
 
 
 def get_pdb(pdbfilename, plddtfilename, item, lddtcut, sccut):
@@ -2099,7 +2213,7 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, fixbb=False):
     
     # get template features -- None
     tplt_blank = {"ids":[]}
-    xyz_t, f1d_t, mask_t = TemplFeaturize(tplt_blank, l_orig, params, offset=0, npick=0)  
+    xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tplt_blank, l_orig, params, offset=0, npick=0)  
 
     idx = pdb['idx']
     xyz = torch.full((len(idx),NTOTAL,3),np.nan).float()
@@ -2127,10 +2241,16 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, fixbb=False):
     mask = mask[crop_idx]
     idx = idx[crop_idx]
 
+    same_chain = torch.ones((len(crop_idx), len(crop_idx))).long()
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )
+
     # initial structure
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
-    chain_idx = torch.ones((len(crop_idx), len(crop_idx))).long()
+    
     bond_feats = get_protein_bond_feats(len(crop_idx)).long()
     dist_matrix = get_bond_distances(bond_feats)
     chirals = torch.Tensor()
@@ -2140,7 +2260,7 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, fixbb=False):
            xyz.float(), mask, idx.long(),\
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, unclamp, False, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', "fb", item
+           same_chain, unclamp, False, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', "fb", item
 
 def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0, fixbb=False):
 
@@ -2180,14 +2300,11 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
 
     ntemplA = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
     ntemplB = np.random.randint(0, params['MAXTPLT']+1-ntemplA)
-    xyz_t_A, f1d_t_A, mask_t_A = TemplFeaturize(tpltA, L_s[0], params, offset=0, npick=ntemplA, npick_global=max(1,max(ntemplA, ntemplB)), pick_top=pick_top, random_noise=random_noise)
-    xyz_t_B, f1d_t_B, mask_t_B = TemplFeaturize(tpltB, L_s[1], params, offset=0, npick=ntemplB, npick_global=max(1,max(ntemplA, ntemplB)), pick_top=pick_top, random_noise=random_noise)
+    xyz_t_A, f1d_t_A, mask_t_A, _ = TemplFeaturize(tpltA, L_s[0], params, offset=0, npick=ntemplA, npick_global=max(1,max(ntemplA, ntemplB)), pick_top=pick_top, random_noise=random_noise)
+    xyz_t_B, f1d_t_B, mask_t_B, _ = TemplFeaturize(tpltB, L_s[1], params, offset=0, npick=ntemplB, npick_global=max(1,max(ntemplA, ntemplB)), pick_top=pick_top, random_noise=random_noise)
     xyz_t = torch.cat((xyz_t_A, random_rot_trans(xyz_t_B)), dim=1) # (T, L1+L2, natm, 3)
     f1d_t = torch.cat((f1d_t_A, f1d_t_B), dim=1) # (T, L1+L2, natm, 3)
     mask_t = torch.cat((mask_t_A, mask_t_B), dim=1) # (T, L1+L2, natm, 3)
-
-    # get initial coordinates
-    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
     # read PDB
     pdbA_id, pdbB_id = pdb_pair.split(':')
@@ -2220,13 +2337,19 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
     idx = torch.arange(sum(L_s))
     idx[L_s[0]:] += CHAIN_GAP
 
-    chain_idx = torch.zeros((sum(L_s), sum(L_s))).long()
-    chain_idx[:L_s[0], :L_s[0]] = 1
-    chain_idx[L_s[0]:, L_s[0]:] = 1
+    same_chain = torch.zeros((sum(L_s), sum(L_s))).long()
+    same_chain[:L_s[0], :L_s[0]] = 1
+    same_chain[L_s[0]:, L_s[0]:] = 1
     bond_feats = torch.zeros((sum(L_s), sum(L_s))).long()
     bond_feats[:L_s[0], :L_s[0]] = get_protein_bond_feats(L_s[0])
     bond_feats[L_s[0]:, L_s[0]:] = get_protein_bond_feats(sum(L_s[1:]))
 
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )    
+    # get initial coordinates
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
     # Do cropping
     if sum(L_s) > params['CROP']:
         if negative:
@@ -2248,7 +2371,7 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
         mask_prev = mask_prev[sel]
         #
         idx = idx[sel]
-        chain_idx = chain_idx[sel][:,sel]
+        same_chain = same_chain[sel][:,sel]
         bond_feats = bond_feats[sel][:,sel]
 
     dist_matrix = get_bond_distances(bond_feats)
@@ -2437,9 +2560,9 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
     if (len(pdb_ids)==4):
         if ntempl < 1:
-            xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, 2*Ls[0], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+            xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tpltA, 2*Ls[0], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
         else:
-            xyz_t_single, f1d_t_single, mask_t_single = TemplFeaturize(tpltA, Ls[0], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
+            xyz_t_single, f1d_t_single, mask_t_single, _ = TemplFeaturize(tpltA, Ls[0], params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
             # duplicate
             xyz_t = torch.cat((xyz_t_single, random_rot_trans(xyz_t_single)), dim=1) # (ntempl, 2*L, natm, 3)
             f1d_t = torch.cat((f1d_t_single, f1d_t_single), dim=1) # (ntempl, 2*L, 21)
@@ -2456,7 +2579,7 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
 
         NAstart = 2*Ls[0]
     else:
-        xyz_t, f1d_t, mask_t = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=pick_top, random_noise=random_noise)
+        xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=pick_top, random_noise=random_noise)
         xyz_t[:,Ls[0]:] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,sum(Ls[1:]),1,1) + torch.rand(1,sum(Ls[1:]),1,3)*random_noise
         NAstart = Ls[0]
 
@@ -2550,6 +2673,10 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
         bond_feats = bond_feats[sel][:,sel]
         ch_label = ch_label[sel]
 
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
     chirals = torch.Tensor()
@@ -2630,7 +2757,11 @@ def loader_rna(item, params, random_noise=5.0):
         idx = idx[sel]
         same_chain = same_chain[sel][:,sel]
         bond_feats = bond_feats[sel][:, sel]
-
+    
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
  
     chirals = torch.Tensor()
@@ -2781,7 +2912,7 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres,
 
     # protein true coords
     xyz_prot, mask_prot, ch_label_prot, seq_prot = [], [], [], []
-    xyz_t_prot, f1d_t_prot, mask_t_prot = [], [], []
+    xyz_t_prot, f1d_t_prot, mask_t_prot, tplt_ids = [], [], [], []
     ch_letters, Ls_prot = [], []
     for chnum, chlet_set in chnum2chlet.items():
         # every location of this chain
@@ -2823,28 +2954,30 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres,
         else:
             pdb_hash = chid2hash[pdb_id+'_'+list(chlet_set)[0]] # chlet_set all have same hash
             tplt = torch.load(params['PDB_DIR']+'/torch/hhr/'+pdb_hash[:3]+'/'+pdb_hash+'.pt')
-            xyz_t_, f1d_t_, mask_t_ = TemplFeaturize(tplt, Ls_prot[-1], params, npick=ntempl, 
+            xyz_t_, f1d_t_, mask_t_, tplt_ids_ = TemplFeaturize(tplt, Ls_prot[-1], params, npick=ntempl, 
                 offset=0, pick_top=pick_top, random_noise=random_noise)
             xyz_t_ch = torch.cat([xyz_t_]+[random_rot_trans(xyz_t_) for i in range(N_mer-1)], dim=1) # (ntempl, L*N_mer, natm, 3)
             f1d_t_ch = torch.cat([f1d_t_]*N_mer, dim=1) # (ntempl, L*N_mer, 21)
             mask_t_ch = torch.cat([mask_t_]*N_mer, dim=1) # (ntempl, L*N_mer, natm)
+            tplt_ids_ch = np.concatenate([tplt_ids_,], axis=0) # (ntempl) -- don't need to concatenate on the length dimension 
 
         xyz_t_prot.append(xyz_t_ch)
         f1d_t_prot.append(f1d_t_ch)
         mask_t_prot.append(mask_t_ch)
+        tplt_ids.append(tplt_ids_ch)
 
     # cartesian product over each chain's location permutations
     xyz_prot = cartprodcat(xyz_prot) # (prod_i(N_perm_i), sum_i(L_i*N_mer_i), N_atoms, 3)
     mask_prot = cartprodcat(mask_prot) # (prod_i(N_perm_i), sum_i(L_i*N_mer_i), N_atoms)
-
-    xyz_t_prot, f1d_t_prot, mask_t_prot = \
-        merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, Ls_prot)
+    
+    xyz_t_prot, f1d_t_prot, mask_t_prot, tplt_ids = \
+        merge_hetero_templates(xyz_t_prot, f1d_t_prot, mask_t_prot, tplt_ids, Ls_prot)
 
     ch_label_prot = torch.cat(ch_label_prot, dim=0)
     seq_prot = torch.cat(seq_prot, dim=0)
 
     return xyz_prot, mask_prot.bool(), seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
-           mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize
+           mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize, tplt_ids
 
 def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
     """Loads a single ligand in a specific assembly from a parsed CIF file into
@@ -3165,7 +3298,7 @@ def loader_sm_compl_assembly_single(*args, **kwargs):
     return loader_sm_compl_assembly(*args, **kwargs)
 
 
-def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task='sm_compl_asmb', 
+def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid2smpartners=None, task='sm_compl_asmb', 
     num_protein_chains=None, num_ligand_chains=None, pick_top=True, random_noise=5.0, fixbb=False,
     select_farthest_residues: bool = False, ligand_string_tuple: Optional[Tuple[str, str]] = None, is_negative: bool = False):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
@@ -3194,7 +3327,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
     # load pre-parsed cif assembly - requires cifutils.py in path for object definitions
     chains, asmb, covale, modres = \
         pickle.load(gzip.open(params['MOL_DIR']+f'/{pdb_id[1:3]}/{pdb_id}.pkl.gz'))
-
+    
     # list of proteins and ligands to featurize
     prot_partners = [p for p in item['PARTNERS'] if p[-1]=='polypeptide(L)']
     prot_partners = prot_partners[:params['MAXPROTCHAINS']]
@@ -3207,7 +3340,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
 
     # load protein chains
     xyz_prot, mask_prot, seq_prot, ch_label_prot, xyz_t_prot, f1d_t_prot, \
-    mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize = \
+    mask_t_prot, Ls_prot, ch_letters, mod_residues_to_atomize,tplt_ids = \
         featurize_asmb_prot(pdb_id, prot_partners, params, chains, asmb_xfs, modres,
                             chid2hash, pick_top=pick_top, random_noise=random_noise)
 
@@ -3227,7 +3360,8 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
                     and (p[0][0][2] not in METAL_RES_NAMES or np.random.rand() < params['P_METAL'])]
         lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + lig_partners
     
-        xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, _, residues_to_atomize = load_ligands_from_partners(lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains=num_ligand_chains)
+        xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
+            load_ligands_from_partners(lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains=num_ligand_chains)
 
     # combine protein & ligand coordinates
     N_symm_prot = xyz_prot.shape[0]
@@ -3244,11 +3378,15 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
 
     # combine protein & ligand templates
     N_tmpl = xyz_t_prot.shape[0]
-    xyz_t_sm, f1d_t_sm, mask_t_sm = blank_template(N_tmpl, sum(Ls_sm), random_noise)
+    if chid2smpartners is not None and params["SHOW_SM_TEMPLATES"]:
+        assert num_protein_chains == 1, "templating ligands not supported for multiple protein chains (complications in xyz_prev)"
+        xyz_t_sm, f1d_t_sm, mask_t_sm = generate_sm_template_feats(tplt_ids, resnames, akeys_sm, Ls_sm,chid2smpartners, params)
+    else:
+        xyz_t_sm, f1d_t_sm, mask_t_sm, _ = blank_template(N_tmpl, sum(Ls_sm), random_noise)
     xyz_t = torch.cat([xyz_t_prot, xyz_t_sm],dim=1)
     f1d_t = torch.cat([f1d_t_prot, f1d_t_sm],dim=1)
     mask_t = torch.cat([mask_t_prot, mask_t_sm],dim=1)
-
+    
     # bond features
     bond_feats_prot = [get_protein_bond_feats(L) for L in Ls_prot]
     bond_feats = torch.zeros((L_total, L_total)).long()
@@ -3302,7 +3440,11 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, task
                 Ls_sm,
                 akeys_sm
             )
-        
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )
+
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
     xyz_prev = torch.nan_to_num(xyz_prev)
@@ -3397,7 +3539,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     # handle template features
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']-1)
     ntempl = 0 # RK done to make atomization task harder
-    xyz_t_prot, f1d_t_prot, mask_t_prot = TemplFeaturize(tplt, len(pdb['xyz']), params, offset=0, 
+    xyz_t_prot, f1d_t_prot, mask_t_prot, _ = TemplFeaturize(tplt, len(pdb['xyz']), params, offset=0, 
         npick=ntempl, pick_top=pick_top, random_noise=random_noise)
 
     crop_len = params['CROP'] - n_res_atomize*10
@@ -3467,7 +3609,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
         xyz_t_sm, f1d_t_sm, mask_t_sm = spoof_template(xyz[0, protein_L:], seq_atomize_all, mask[0, protein_L:], atom_template_motif_idxs) 
     else:
         tplt_sm = {"ids":[]}
-        xyz_t_sm, f1d_t_sm, mask_t_sm = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0, pick_top=pick_top)
+        xyz_t_sm, f1d_t_sm, mask_t_sm, _ = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0, pick_top=pick_top)
     ntempl = xyz_t_prot.shape[0]    
     xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
     f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
@@ -3493,6 +3635,10 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
     
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
     # xyz_prev = xyz_t[0].clone()
@@ -3547,13 +3693,16 @@ def loader_sm(item, params, pick_top=True):
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params)
 
     idx = torch.arange(sm_L)
-    chain_idx = torch.ones((sm_L, sm_L)).long()
+    same_chain = torch.ones((sm_L, sm_L)).long()
     bond_feats = get_bond_feats(mol)
     dist_matrix = get_bond_distances(bond_feats)
 
-    xyz_t, f1d_t, mask_t = TemplFeaturize({"ids":[]}, sm_L, params, offset=0,
+    xyz_t, f1d_t, mask_t, _ = TemplFeaturize({"ids":[]}, sm_L, params, offset=0,
         npick=0, pick_top=pick_top)
-
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
     xyz = torch.nan_to_num(xyz)
@@ -3562,7 +3711,7 @@ def loader_sm(item, params, pick_top=True):
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, False, frames, bond_feats, dist_matrix, chirals, ch_label, 'C1', "sm", item
+           same_chain, False, False, frames, bond_feats, dist_matrix, chirals, ch_label, 'C1', "sm", item
 
 
 def crop_sm_compl(prot_xyz, lig_xyz, Ls, crop_size, mask_prot, seq_prot, 
@@ -3761,7 +3910,10 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
             sel = np.setdiff1d(sel, curr_chain_idx)
         offset += L_sm
     if len(sel) == 0: # we accidentally removed all the chains..
-        sel = prot_sel
+        if len(prot_sel) == 0: # if all the neighbors are not protein (seen in chlorophylls in photosystems for example)
+            sel = get_crop(Ls_prot[0], all_mask[:Ls_prot[0]],all_xyz.device, n_crop).cpu().numpy()
+        else:
+            sel = prot_sel
     return torch.from_numpy(sel).long()
 
 def crop_chirals(chirals, atom_sel):
@@ -4040,7 +4192,7 @@ class DatasetSM(data.Dataset):
         return out
 
 class DistilledDataset(data.Dataset):
-    def __init__(self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid, params, 
+    def __init__(self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid, chid2smpartners, params, 
                  native_NA_frac=0.05, p_short_crop=0.0, unclamp_cut=0.9, ligand_dictionary: Optional[Dict] = None):
 
         self.ID_dict = ID_dict
@@ -4050,6 +4202,7 @@ class DistilledDataset(data.Dataset):
         self.p_short_crop = p_short_crop
         self.chid2hash = chid2hash
         self.chid2taxid = chid2taxid
+        self.chid2smpartners = chid2smpartners
         self.params = params
         self.unclamp_cut = unclamp_cut
         self.native_NA_frac = native_NA_frac
@@ -4129,7 +4282,7 @@ class DistilledDataset(data.Dataset):
                 ID = self.ID_dict['sm_compl'][index-offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl'], ID)
                 out = self.loader_dict['sm_compl'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task='sm_compl', num_protein_chains=1)
+                self.chid2taxid, self.chid2smpartners, task='sm_compl', num_protein_chains=1)
             offset += len(self.index_dict['sm_compl'])
 
             if index >= offset and index < offset + len(self.index_dict['metal_compl']): 

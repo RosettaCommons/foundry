@@ -1261,4 +1261,19 @@ def load_pdb_ideal_sdf_strings(base_path: Optional[str] = script_dir, return_onl
         return mols_only_sdf
     else:
         return mols
+
+def load_tanimoto_sim_matrix(base_path=script_dir):
+    """
+    precomputed tanimoto similarities between ligands in the pdb until august 2021
+    returns num_molecules X num_molecules matrix of tanimoto scores and
+    list of names corresponding to indices in that matrix
+    """
+    file_name = 'tanimoto_ligands.npz'
+    if base_path is not None:
+        file_name = Path(base_path) / file_name
+
+    tanimoto_data = np.load(file_name, allow_pickle=True)
     
+    sim = tanimoto_data['sim']
+    names = tanimoto_data['names']
+    return sim, names

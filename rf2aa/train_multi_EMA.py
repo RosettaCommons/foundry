@@ -48,7 +48,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 #torch.backends.cudnn.benchmark = False
 #torch.backends.cudnn.deterministic = True
 
-#os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
+# os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
 
 # limit thread counts
 os.environ['OMP_NUM_THREADS'] = '4'
@@ -902,7 +902,7 @@ class Trainer():
         ligand_dictionary = load_pdb_ideal_sdf_strings(return_only_sdf_strings=True)
 
         # define dataset & data loader
-        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid = \
+        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid, chid2smpartners = \
             get_train_valid_set(self.loader_param)
 
         # define atomize_pdb train/valid sets, which use the same examples as pdb set
@@ -952,7 +952,7 @@ class Trainer():
         )
 
         train_set = DistilledDataset(
-            train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid,
+            train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid, chid2smpartners,
             self.loader_param, native_NA_frac=0.25, p_short_crop=self.dataset_param['p_short_crop'], ligand_dictionary=ligand_dictionary)
 
         train_sampler = DistributedWeightedSampler(
@@ -1435,8 +1435,20 @@ class Trainer():
         # processing template features
         mask_t_2d = mask_t[:,:,:,:3].all(dim=-1) # (B, T, L)
         mask_t_2d = mask_t_2d[:,:,None]*mask_t_2d[:,:,:,None] # (B, T, L, L)
-        mask_t_2d = mask_t_2d.float() * same_chain.float()[:,None] # (ignore inter-chain region)
-        t2d = xyz_to_t2d(xyz_t, mask_t_2d)
+
+        # we can provide sm_templates so we want to allow interchain templates bw protein chain 1 and sms
+        # specifically the templates are found for the query protein chain
+        Ls = Ls_from_same_chain_2d(same_chain)
+        prot_ch1_to_sm_2d = torch.zeros_like(same_chain) 
+        prot_ch1_to_sm_2d[:, :Ls[0], is_atom(seq)[0][0]] = 1
+        prot_ch1_to_sm_2d[:, is_atom(seq)[0][0], :Ls[0]] = 1
+
+        is_possible_t2d = same_chain.clone()
+        is_possible_t2d[prot_ch1_to_sm_2d.bool()] = 1
+
+        mask_t_2d = mask_t_2d.float() * is_possible_t2d.float()[:,None] # (ignore inter-chain region between proteins)
+        xyz_t_frame = xyz_t_to_frame_xyz(xyz_t, msa[:, 0,0], atom_frames)
+        t2d = xyz_to_t2d(xyz_t_frame, mask_t_2d)
 
         # get torsion angles from templates
         seq_tmp = t1d[...,:-1].argmax(dim=-1).reshape(-1,Lasu*Osub)

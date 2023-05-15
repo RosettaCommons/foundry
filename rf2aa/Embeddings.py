@@ -285,7 +285,10 @@ class Templ_emb(nn.Module):
         B, T, L, _ = t1d.shape
 
         templ = self._get_templ_emb(t1d, t2d)
-        rbf_feat = self._get_templ_rbf(xyz_t, mask_t)
+        # this looks a lot like a bug but it is not
+        # mask_t has already been updated by same_chain in the train_EMA script so pairwise distances between
+        # protein chains are ignored
+        rbf_feat = self._get_templ_rbf(xyz_t, mask_t) 
 
         # process each template pair feature
         templ = self.templ_stack(templ, rbf_feat, t1d, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop) # (B, T, L,L, d_templ)

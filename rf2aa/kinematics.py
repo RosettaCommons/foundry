@@ -111,7 +111,7 @@ def xyz_to_c6d(xyz, params=PARAMS):
     # 6d coordinates order: (dist,omega,theta,phi)
     c6d = torch.zeros([batch,nres,nres,4],dtype=xyz.dtype,device=xyz.device)
 
-    dist = get_pair_dist(Cb,Cb)
+    dist = get_pair_dist(Ca,Ca)
     dist[torch.isnan(dist)] = 999.9
     c6d[...,0] = dist + 999.9*torch.eye(nres,device=xyz.device)[None,...]
     b,i,j = torch.where(c6d[...,0]<params['DMAX'])
