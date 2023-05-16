@@ -604,7 +604,6 @@ def generate_sm_template_feats(tplt_ids, resnames, akeys, Ls_sm, chid2smpartners
             except Exception as e:
                 # this is expected to fail if the template ligand is on multiple chains
                 print(e)
-                print(f"This is the chain ID vector: {chid_}")
                 xyz_t, f1d_t, mask_t, _ = blank_template(1, L)
                 xyz_t_all_lig.append(xyz_t)
                 f1d_t_all_lig.append(f1d_t)
@@ -2316,7 +2315,7 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, p_dslf_crop=0.0, fi
 
     # get template features -- None
     tplt_blank = {"ids":[]}
-    xyz_t, f1d_t, mask_t = TemplFeaturize(tplt_blank, L, params, offset=0, npick=0)  
+    xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tplt_blank, L, params, offset=0, npick=0)  
 
     # Residue cropping
     croplen = params['CROP']
@@ -2369,7 +2368,7 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, p_dslf_crop=0.0, fi
 
         # generate (empty) template for atoms
         tplt_sm = {"ids":[]}
-        xyz_t_sm, f1d_t_sm, mask_t_sm = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0)
+        xyz_t_sm, f1d_t_sm, mask_t_sm, _ = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0)
         ntempl = xyz_t_prot.shape[0]
         xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
         f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
@@ -2558,14 +2557,14 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
 
     dist_matrix = get_bond_distances(bond_feats)
     chirals = torch.Tensor()
-    L1 = chain_idx[0,:].sum()
+    L1 = same_chain[0,:].sum()
     ch_label = torch.zeros(seq[0].shape)
     ch_label[L1:] = 1
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           chain_idx, False, negative, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', "compl", item
+           same_chain, False, negative, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', "compl", item
 
 def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_top=True, random_noise=5.0):
     pdb_set = item['CHAINID']
