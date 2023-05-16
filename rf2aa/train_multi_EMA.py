@@ -957,7 +957,7 @@ class Trainer():
         )
 
         train_set = DistilledDataset(
-            train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid,
+            train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid, chid2smpartners,
             self.loader_param, native_NA_frac=0.25, 
             p_short_crop=self.dataset_param['p_short_crop'], 
             p_dslf_crop=self.dataset_param['p_dslf_crop'], 
