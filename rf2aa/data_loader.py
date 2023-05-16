@@ -2025,7 +2025,7 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
 
         # generate (empty) template for atoms
         tplt_sm = {"ids":[]}
-        xyz_t_sm, f1d_t_sm, mask_t_sm = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0, pick_top=pick_top)
+        xyz_t_sm, f1d_t_sm, mask_t_sm,_ = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0, pick_top=pick_top)
         ntempl = xyz_t_prot.shape[0]    
         xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
         f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
@@ -2320,15 +2320,14 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, p_dslf_crop=0.0, fi
     # Residue cropping
     croplen = params['CROP']
     disulf_crop = False
-    if (np.random.rand() < p_dslf_crop):
-        # random disulfide loop
-        disulfs = get_dislf(msa[0],xyz,mask)
-        if (len(disulfs)>1):
-            start,stop,clen = min ([(x,y,y-x) for x,y in disulfs], key=lambda x:x[2])
-            if (clen<=20):
-                crop_idx = torch.arange(start,stop+1,device=msa.device)
-                disulf_crop = True
-                #print ('loader_fb crop',crop_idx)
+    # random disulfide loop
+    disulfs = get_dislf(msa[0],xyz,mask)
+    if (len(disulfs)>1) and (np.random.rand() < p_dslf_crop):
+        start,stop,clen = min ([(x,y,y-x) for x,y in disulfs], key=lambda x:x[2])
+        if (clen<=20):
+            crop_idx = torch.arange(start,stop+1,device=msa.device)
+            disulf_crop = True
+            #print ('loader_fb crop',crop_idx)
 
     if (not disulf_crop):
         if (np.random.rand() < p_short_crop):
