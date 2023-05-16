@@ -333,7 +333,7 @@ class Predictor():
                 G = util.get_nxgraph(mol)
                 atom_frames = util.get_atom_frames(msa_sm, G)
                 N_symmetry, sm_L, _ = xyz_sm.shape
-                Ls = [protein_L, sm_L]
+                Ls = Ls_prot + [ sm_L]
                 a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
                 msa = a3m['msa'].long()
                 ins = a3m['ins'].long()

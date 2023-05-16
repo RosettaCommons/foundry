@@ -71,7 +71,7 @@ if not os.path.exists(base_dir):
     na_dir = "/gscratch2/nucleic"
     fb_dir = "/gscratch2/fb_af1"
     sm_compl_dir = "/gscratch2/RF2_allatom"
-    mol_dir = "/gscratch2/RF2_allatom/rcsb/pkl"
+    mol_dir = "/gscratch2/RF2_allatom/rcsb/pkl_v2"
     csd_dir = "/gscratch2/RF2_allatom/csd543"
 
 default_dataloader_params = {
@@ -2049,9 +2049,9 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
         msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
             pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
         # N/C-terminus features for MSA features (need to generate before cropping)
-        term_info = get_term_feats(Ls)
-        term_info[protein_L:, :] = 0 # ligand chains don't get termini features
-        msa_featurization_kwargs["term_info"] = term_info
+        # term_info = get_term_feats(Ls)
+        # term_info[protein_L:, :] = 0 # ligand chains don't get termini features
+        # msa_featurization_kwargs["term_info"] = term_info
         seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, fixbb=fixbb, **msa_featurization_kwargs)
 
         xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
@@ -2392,9 +2392,11 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, p_dslf_crop=0.0, fi
         msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
             pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
         # N/C-terminus features for MSA features (need to generate before cropping)
-        term_info = get_term_feats(Ls)
-        term_info[protein_L:, :] = 0 # ligand chains don't get termini features
-        seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, term_info=term_info)
+        # term_info = get_term_feats(Ls)
+        # term_info[protein_L:, :] = 0 # ligand chains don't get termini features
+        seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, 
+        #term_info=term_info
+        )
 
         xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
@@ -3825,9 +3827,11 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
         pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
     
     # N/C-terminus features for MSA features (need to generate before cropping)
-    term_info = get_term_feats(Ls)
-    term_info[xyz_prot.shape[0]:, :] = 0 # ligand chains don't get termini features
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, term_info=term_info)
+    # term_info = get_term_feats(Ls)
+    # term_info[xyz_prot.shape[0]:, :] = 0 # ligand chains don't get termini features
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, 
+    #term_info=term_info
+    )
     
     ntempl = xyz_t.shape[0]
     xyz_t = torch.stack(
