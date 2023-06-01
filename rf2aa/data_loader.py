@@ -92,9 +92,13 @@ default_dataloader_params = {
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230515.pkl"%sm_compl_dir, # cache for faster loading 
+        # "DATAPKL"          : "%s/dataset_20230515.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "dude_cutoff_-5.pkl",
         "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
         "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
+        "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)
+        "DUDE_MSAS"        : "/home/dnan/projects/gald_distil_set/DUDE/fastas", # on digs (dnan)
+        "DUDE_PDB_DIR"     : "/home/dnan/projects/gald_distil_set/DUDE/pdbs_all",
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,

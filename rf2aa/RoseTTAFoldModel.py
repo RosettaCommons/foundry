@@ -64,7 +64,9 @@ class RoseTTAFoldModule(nn.Module):
         use_atom_frames=True,
         # New for diffusion
         freeze_track_motif=False,
-        assert_single_sequence_input=False
+        assert_single_sequence_input=False,
+        fit=False,
+        tscale=1.0
     ):
         super(RoseTTAFoldModule, self).__init__()
         self.freeze_track_motif = freeze_track_motif

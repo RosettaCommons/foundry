@@ -749,6 +749,14 @@ def torsion(a,b,c,d, eps=1e-6):
     cos_sin = torch.cat([cos_angle, sin_angle], axis=-1)/(t1_norm*t2_norm+eps) #[B,L,2]
     return cos_sin
 
+def cosangle( A,B,C, eps=1e-6 ):
+    AB = A-B
+    BC = C-B
+    ABn = torch.sqrt( torch.sum(torch.square(AB),dim=-1) + eps)
+    BCn = torch.sqrt( torch.sum(torch.square(BC),dim=-1) + eps)
+    return torch.clamp(torch.sum(AB*BC,dim=-1)/(ABn*BCn), -0.999,0.999)
+
+
 # ideal N-C distance, ideal cos(CA-C-N angle), ideal cos(C-N-CA angle)
 # for NA, we do not compute this as it is not computable from the stubs alone
 def calc_BB_bond_geom(
@@ -764,13 +772,6 @@ def calc_BB_bond_geom(
     Output:
      - bond length loss, bond angle loss
     '''
-    def cosangle( A,B,C ):
-        AB = A-B
-        BC = C-B
-        ABn = torch.sqrt( torch.sum(torch.square(AB),dim=-1) + eps)
-        BCn = torch.sqrt( torch.sum(torch.square(BC),dim=-1) + eps)
-        return torch.clamp(torch.sum(AB*BC,dim=-1)/(ABn*BCn), -0.999,0.999)
-
     B, L = pred.shape[:2]
 
     bonded = (idx[:,1:] - idx[:,:-1])==1
@@ -811,7 +812,11 @@ def calc_BB_bond_geom(
 
     return blen_loss + bang_loss
 
-def calc_atom_bond_loss(pred, true, bond_feats, seq, beta=0.2, eps=1e-6):
+def calc_atom_bond_loss(
+    pred, true, bond_feats, seq, beta=0.2, eps=1e-6,
+    ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, 
+    sig_len=0.02, sig_ang=0.05
+):
     """
     loss on distances between bonded atoms
     """
@@ -826,21 +831,41 @@ def calc_atom_bond_loss(pred, true, bond_feats, seq, beta=0.2, eps=1e-6):
     #lig_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp)) # from EquiBind
     lig_dist_loss = loss_func_sum(nat_dist, pred_dist)
 
-    # bonds between protein residues and ligand atoms (i.e. atomized protein)
-    inter_bonds = bond_feats==6 
-    _, i, j = torch.where(inter_bonds)
-    a = (seq[:,i]<22) & (seq[:,j]==39) # res N - atom C: binary indicator
-    b = (seq[:,i]<22) & (seq[:,j]==55) # res C - atom N
-    c = (seq[:,i]==39) & (seq[:,j]<22) # atom C - res N
-    d = (seq[:,i]==55) & (seq[:,j]<22) # atom N - res C
-    i_atom = 0*a + 2*b + 1*c + 1*d # (B, N_bonds) : indexes of atom that is bonded (N:0, C:2, 1:ligand atom)
-    j_atom = 1*a + 1*b + 0*c + 2*d # (B, N_bonds)
-    nat_dist = torch.sum(torch.square(true[0,i,i_atom[0],:]-true[0,j,j_atom[0],:]), dim=-1) # assumes B=1
-    pred_dist = torch.sum(torch.square(pred[0,i,i_atom[0],:]-pred[0,j,j_atom[0],:]), dim=-1)
-    #inter_dist_loss = torch.sum(torch.clamp(torch.square(nat_dist-pred_dist), max=clamp))
-    inter_dist_loss = loss_func_sum(nat_dist, pred_dist)
+    bond_dist_loss = (lig_dist_loss)/(atom_bonds.sum() + eps)
 
-    bond_dist_loss = (lig_dist_loss + inter_dist_loss)/(atom_bonds.sum() + inter_bonds.sum() + eps)
+    ###
+    # fd: calculate atom/protein bond losses exactly as in calc_BB_bond_geom
+    # find quadruples i_ca, i_c, j_n, j_ca
+    N = bond_feats.shape[-1]
+    i_s,j_s = torch.triu_indices(N,N,1, device=seq.device)
+    inter_bonds = bond_feats[:,i_s,j_s]==6
+    _, idx = torch.where(inter_bonds)
+    i,j = i_s[idx],j_s[idx] # all i-j residue pairs
+
+    # CA = first atom bonded to j (needs to be first as proline N has 2 bonds, CA always 1st)
+    j_ca = torch.argmax( torch.arange(N, device=seq.device )[None,:]*(bond_feats[0,j]==1), dim=1 )
+    resids = torch.stack([i,i,j,j_ca],dim=-1) # ASSUME: since atoms are at end, i,j pairs are all res,atom
+    atomids = torch.ones_like(resids)
+    atomids[:,0] = 1
+    toflip = seq[0,resids[:,2]] == 39 # seq 39 = C atom
+    atomids[toflip,1] = 0
+    atomids[~toflip,1] = 2
+    resids[toflip] = resids[toflip].flip(dims=(1,))
+    atomids[toflip] = atomids[toflip].flip(dims=(1,))
+
+    blen_CN_pred  = length(pred[:,resids[:,1],atomids[:,1]], pred[:,resids[:,2],atomids[:,2]])
+    CN_loss = torch.clamp( torch.square(blen_CN_pred - ideal_NC) - sig_len**2, min=0.0 )
+    n_viol = (CN_loss > 0.0).sum()
+    bond_dist_loss += CN_loss.sum() / (n_viol + eps)
+
+    bang_CACN_pred = cosangle(pred[:,resids[:,0],atomids[:,0]], pred[:,resids[:,1],atomids[:,1]], pred[:,resids[:,2],atomids[:,2]])
+    bang_CNCA_pred = cosangle(pred[:,resids[:,1],atomids[:,1]], pred[:,resids[:,2],atomids[:,2]], pred[:,resids[:,3],atomids[:,3]])
+    CACN_loss = torch.clamp( torch.square(bang_CACN_pred - ideal_CACN) - sig_ang**2,  min=0.0 )
+    CNCA_loss = torch.clamp( torch.square(bang_CNCA_pred - ideal_CNCA) - sig_ang**2,  min=0.0 )
+    bang_loss_prot = CACN_loss + CNCA_loss
+    n_viol = (bang_loss_prot > 0.0).sum()
+    bond_dist_loss += bang_loss_prot.sum() / (n_viol+eps)
+    ###
 
     # enforce LAS constraints between atoms 2 bonds away and aromatic groups
     atom_bonds_np = atom_bonds[0].cpu().numpy()

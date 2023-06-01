@@ -767,18 +767,80 @@ class SCPred(nn.Module):
         si = self.linear_out(F.relu_(si))
         return si.view(B, L, NTOTALDOFS, 2)
 
-def update_symm_Rs(xyz, Lasu, symmsub, symmRs):
+def update_symm_Rs(xyz, Lasu, symmsub, symmRs, fit=True, tscale=1.0):
+    def dist_error_comp(R0,T0,xyz,tscale):
+        B = xyz.shape[0]
+        Tcom = xyz[:,:Lasu].mean(dim=1,keepdim=True)
+        Tcorr = torch.einsum('ij,brj->bri', R0, xyz[:,:Lasu]-Tcom) + Tcom + tscale*T0[None,None,:]
+
+        # distance map loss
+        Xsymm = torch.einsum('sij,brj->bsri', symmRs[symmsub], Tcorr).reshape(B,-1,3)
+        Xtrue = Ts
+
+        delsx = Xsymm[:,:Lasu,None]-Xsymm[:, None, Lasu:]
+        deltx = Xtrue[:,:Lasu,None]-Xtrue[:, None, Lasu:]
+        dsymm = torch.linalg.norm(delsx, dim=-1)
+        dtrue = torch.linalg.norm(deltx, dim=-1)
+        loss1 = torch.abs(dsymm-dtrue).mean()
+
+        # clash loss
+        #Xsymmall = torch.einsum('sij,brj->bsri', symmRs, Tcorr).reshape(B,-1,3)
+        #delsxall = Xsymmall[:,:Lasu,None]-Xsymmall[:, None, Lasu:]
+        #dsymm = torch.linalg.norm(delsxall, dim=-1)
+
+        #CLASH = 4.0
+        #clash = torch.clamp( CLASH - dsymm , min=0 )
+        #loss2 = torch.sum(clash)/Lasu
+
+        return loss1,0.0 #loss2
+
+    def dist_error(R0,T0,xyz,tscale,w_clash=0.0):
+        l1,l2 = dist_error_comp(R0,T0,xyz,tscale)
+        return l1+w_clash*l2
+
+    def Q2R(Q):
+        Qs = torch.cat((torch.ones((1),device=Q.device),Q),dim=-1)
+        Qs = normQ(Qs)
+        return Qs2Rs(Qs[None,:]).squeeze(0)
+        
+
     B = xyz.shape[0]
 
     # symmetry correction 1: don't let COM (of entire complex) move
-    Tmean = xyz[:,:Lasu,1].reshape(-1,3).mean(dim=0)
+    Tmean = xyz[:,:Lasu].reshape(-1,3).mean(dim=0)
     Tmean = torch.einsum('sij,j->si', symmRs, Tmean).mean(dim=0)
+    xyz = xyz - Tmean
 
-    xyz = torch.einsum('sij,braj->bsrai', symmRs[symmsub], xyz[:,:Lasu] - Tmean[None,None,None,:])
-    xyz = xyz.reshape(B,-1,3,3) # (B,L,3,3)
+    if fit:
+        # symmetry correction 2: use minimization to minimize drms
+        with torch.enable_grad():
+            T0 = torch.zeros(3,device=xyz.device).requires_grad_(True)
+            Q0 = torch.zeros(3,device=xyz.device).requires_grad_(True)
+            lbfgs = torch.optim.LBFGS([T0,Q0],
+                        history_size=10, 
+                        max_iter=4,
+                        line_search_fn="strong_wolfe")
+            def closure():
+                lbfgs.zero_grad()
+                loss = dist_error(Q2R(Q0),T0,xyz[:,:,1], tscale)
+                loss.backward() #retain_graph=True)
+                return loss
+
+            for e in range(4):
+                loss = lbfgs.step(closure)
+
+            Tcom = xyz[:,:Lasu].mean(dim=1,keepdim=True).detach()
+            Q0 = Q0.detach()
+            T0 = T0.detach()
+            xyz = torch.einsum('ij,braj->brai', Q2R(Q0), xyz[:,:Lasu]-Tcom) +Tcom + tscale*T0[None,None,:]
+
+    xyz = torch.einsum('sij,braj->bsrai', symmRs[symmsub], xyz[:,:Lasu])
+    xyz = xyz.reshape(B,-1,3,3) # (B,S,L,3,3)
+
     return xyz
 
-def update_symm_subs(xyz, pair, symmids, symmsub, symmRs, metasymm):
+
+def update_symm_subs(xyz, pair, symmids, symmsub, symmRs, metasymm, fit=True, tscale=1.0):
     B,Ls = xyz.shape[0:2]
     Osub = symmsub.shape[0]
     L = Ls//Osub
@@ -829,7 +891,7 @@ def update_symm_subs(xyz, pair, symmids, symmsub, symmRs, metasymm):
     pair = pair.view(1,-1,pair.shape[-1])[:,idx.flatten(),:].view(1,Osub*L,Osub*L,pair.shape[-1])
 
     if symmsub is not None and symmsub.shape[0]>1:
-        xyz = update_symm_Rs(xyz, L, symmsub_new, symmRs)
+        xyz = update_symm_Rs(xyz, L, symmsub_new, symmRs, fit, tscale)
 
     return xyz, pair, symmsub_new
 
@@ -842,12 +904,16 @@ class IterBlock(nn.Module):
                  minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.15,
                  SE3_param={'l0_in_features':32, 'l0_out_features':16, 'num_edge_features':32},
                  nextra_l0=0, nextra_l1=0,
-                 symmetrize_repeats=None, repeat_length=None,symmsub_k=None, sym_method=None, main_block=None # repeat proteins
+                 symmetrize_repeats=None, repeat_length=None,symmsub_k=None, sym_method=None, main_block=None,
+                 fit=False, tscale=1.0
                  ):
 
         super(IterBlock, self).__init__()
         if d_hidden_msa == None:
             d_hidden_msa = d_hidden
+
+        self.fit = fit
+        self.tscale = tscale
 
         self.pos = PositionalEncoding2D(d_rbf, minpos=minpos, maxpos=maxpos, 
                                         maxpos_atom=maxpos_atom, p_drop=p_drop)
@@ -904,7 +970,7 @@ class IterBlock(nn.Module):
         # update contacting subunits
         # symmetrize pair features
         if symmsub is not None and symmsub.shape[0]>1:
-            xyz, pair, symmsub = update_symm_subs(xyz, pair, symmids, symmsub, symmRs, symmmeta)
+            xyz, pair, symmsub = update_symm_subs(xyz, pair, symmids, symmsub, symmRs, symmmeta, self.fit, self.tscale)
 
         return msa, pair, xyz, state, alpha, symmsub
 
@@ -921,7 +987,9 @@ class IterativeSimulator(nn.Module):
          repeat_length=None,
          symmsub_k=None,
          sym_method=None,
-         main_block=None
+         main_block=None,
+         fit=False,
+         tscale=1.0
     ):
         super(IterativeSimulator, self).__init__()
         self.n_extra_block = n_extra_block
@@ -939,6 +1007,8 @@ class IterativeSimulator(nn.Module):
         self.cb_ang = cb_ang
         self.cb_tor = cb_tor
         self.use_extra_l1 = use_extra_l1 # set to False to not use chiral & LJ grads
+        self.fit = fit
+        self.tscale = tscale
 
         # Update with extra sequences
         if n_extra_block > 0:
@@ -955,7 +1025,9 @@ class IterativeSimulator(nn.Module):
                                                         repeat_length=repeat_length,
                                                         symmsub_k=symmsub_k,
                                                         sym_method=sym_method,
-                                                        main_block=main_block)
+                                                        main_block=main_block,
+                                                        fit=fit,
+                                                        tscale=tscale)
                                                         for i in range(n_extra_block)])
 
         # Update with seed sequences
@@ -972,7 +1044,9 @@ class IterativeSimulator(nn.Module):
                                                        repeat_length=repeat_length,
                                                        symmsub_k=symmsub_k,
                                                        sym_method=sym_method,
-                                                       main_block=main_block)
+                                                       main_block=main_block,
+                                                       fit=fit,
+                                                       tscale=tscale)
                                                        for i in range(n_main_block)])
 
         # Final SE(3) refinement
@@ -1114,7 +1188,7 @@ class IterativeSimulator(nn.Module):
 
 
                 if symmsub is not None and symmsub.shape[0]>1:
-                    xyz = update_symm_Rs(xyz, Lasu, symmsub, symmRs)
+                    xyz = update_symm_Rs(xyz, Lasu, symmsub, symmRs, self.fit, self.tscale)
 
                 xyz_s.append(xyz)
                 alpha_s.append(alpha)

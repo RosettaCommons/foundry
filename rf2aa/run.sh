@@ -1,10 +1,10 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0 #,1
 
 python train_multi_EMA.py \
     -dataloader_num_workers 5 \
-    -model_name rf2a_fd3_20221125 \
+    -model_name RF2_25c \
     -p_drop 0.0 \
     -maxcycle 4 \
     -n_extra_block 4 \
@@ -15,7 +15,7 @@ python train_multi_EMA.py \
     -d_pair 192 \
     -n_head_pair 6 \
     -accum 2 \
-    -crop 375 \
+    -crop 384 \
     -w_bond 0.02 \
     -w_atom_bond 0.02 \
     -w_skip_bond 0.02 \
@@ -32,7 +32,7 @@ python train_multi_EMA.py \
     -w_bind 0.5 \
     -binder_loss_label_smoothing 0.05 \
     -subsmp UNI \
-    -num_epochs 800 \
+    -num_epochs 1200 \
     -skip_valid 4 \
     -slice CONT \
     -lr 0.0002 \
@@ -63,5 +63,6 @@ python train_multi_EMA.py \
     -n_valid_dude_actives 0 \
     -n_valid_dude_inactives 0 \
     -p_metal 0.75 \
-    -p_atomize_modres 0.75 \
-    -p_short_crop 0.25 \
+    -p_dslf_crop 0.75 \
+    -dslf_fb_upsample 100.0 \
+    -p_atomize_modres 0.75

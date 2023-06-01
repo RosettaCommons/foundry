@@ -42,6 +42,12 @@ def find_symm_subs(xyz,Rs,metasymm):
         xyz.shape[0],-1,xyz.shape[2],3)
     return xyz_new, subs
 
+def update_symm_subs(xyz,subs,Rs,metasymm):
+    xyz_new = torch.einsum('sij,braj->bsrai', Rs[subs], xyz).reshape(
+        xyz.shape[0],-1,xyz.shape[2],3)
+    return xyz_new
+
+
 def get_symm_map(subs,O):
     symmmask = torch.zeros(O,dtype=torch.long)
     symmmask[subs] = torch.arange(1,subs.shape[0]+1)

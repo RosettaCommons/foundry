@@ -187,6 +187,131 @@ def parse_fasta(filename,  maxseq=10000, rmsa_alphabet=False):
 
     return msa,ins
 
+# Parse a fasta file containing multiple chains separated by '/'
+def parse_multichain_fasta(filename,  maxseq=10000, rna_alphabet=False, dna_alphabet=False):
+    msa = []
+    ins = []
+
+    fstream = open(filename,"r")
+    table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
+
+    L_s = []
+    for line in fstream:
+        # skip labels
+        if line[0] == '>':
+            continue
+
+        # remove right whitespaces
+        line = line.rstrip()
+
+        if len(line) == 0:
+            continue
+
+        # remove lowercase letters and append to MSA
+        msa_i = line.translate(table)
+        msa_i = msa_i.replace('B','D') # hacky...
+        if L_s == []:
+            L_s = [len(x) for x in msa_i.split('/')]
+        msa_i = msa_i.replace('/','')
+        msa.append(msa_i)
+
+        # sequence length
+        L = len(msa[-1])
+
+        i = np.zeros((L))
+        ins.append(i)
+
+        if (len(msa) >= maxseq):
+            break
+
+    # convert letters into numbers
+    if rna_alphabet:
+        alphabet = np.array(list("00000000000000000000-000000ACGTN"), dtype='|S1').view(np.uint8)
+    elif dna_alphabet:
+        alphabet = np.array(list("00000000000000000000-0ACGTD00000"), dtype='|S1').view(np.uint8)
+    else:
+        alphabet = np.array(list("ARNDCQEGHILKMFPSTWYV-Xacgtxbdhuy"), dtype='|S1').view(np.uint8)
+    msa = np.array([list(s) for s in msa], dtype='|S1').view(np.uint8)
+
+    for i in range(alphabet.shape[0]):
+        msa[msa == alphabet[i]] = i
+
+    ins = np.array(ins, dtype=np.uint8)
+
+    return msa,ins,L_s
+
+#fd - parse protein/RNA coupled fastas
+def parse_mixed_fasta(filename,  maxseq=10000):
+    msa1,msa2 = [],[]
+
+    fstream = open(filename,"r")
+    table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
+
+    unpaired_r, unpaired_p = 0, 0
+
+    for line in fstream:
+        # skip labels
+        if line[0] == '>':
+            continue
+
+        # remove right whitespaces
+        line = line.rstrip()
+
+        if len(line) == 0:
+            continue
+
+        # remove lowercase letters and append to MSA
+        msa_i = line.translate(table)
+        msa_i = msa_i.replace('B','D') # hacky...
+
+        msas_i = msa_i.split('/')
+
+        if (len(msas_i)==1):
+            msas_i = [msas_i[0][:len(msa1[0])], msas_i[0][len(msa1[0]):]]
+
+        if (len(msa1)==0 or (
+            len(msas_i[0])==len(msa1[0]) and len(msas_i[1])==len(msa2[0])
+        )):
+            # skip if we've already found half of our limit in unpaired protein seqs
+            if sum([1 for x in msas_i[1] if x != '-']) == 0:
+                unpaired_p += 1
+                if unpaired_p > maxseq // 2:
+                    continue
+
+            # skip if we've already found half of our limit in unpaired rna seqs
+            if sum([1 for x in msas_i[0] if x != '-']) == 0:
+                unpaired_r += 1
+                if unpaired_r > maxseq // 2:
+                    continue
+
+            msa1.append(msas_i[0])
+            msa2.append(msas_i[1])
+        else:
+            print ("Len error",filename, len(msas_i[0]),len(msa1[0]),len(msas_i[1]),len(msas_i[1]))
+
+        if (len(msa1) >= maxseq):
+            break
+
+    # convert letters into numbers
+    alphabet = np.array(list("ARNDCQEGHILKMFPSTWYV-Xacgtxbdhuy"), dtype='|S1').view(np.uint8)
+    msa1 = np.array([list(s) for s in msa1], dtype='|S1').view(np.uint8)
+    for i in range(alphabet.shape[0]):
+        msa1[msa1 == alphabet[i]] = i
+    msa1[msa1>=31] = 21  # anything unknown to 'X'
+
+    alphabet = np.array(list("00000000000000000000-000000ACGTN"), dtype='|S1').view(np.uint8)
+    msa2 = np.array([list(s) for s in msa2], dtype='|S1').view(np.uint8)
+    for i in range(alphabet.shape[0]):
+        msa2[msa2 == alphabet[i]] = i
+    msa2[msa2>=31] = 30  # anything unknown to 'N'
+
+    msa = np.concatenate((msa1,msa2),axis=-1)
+
+    ins = np.zeros(msa.shape, dtype=np.uint8)
+
+    return msa,ins
+
+
 # parse a fasta alignment IF it exists
 # otherwise return single-sequence msa
 def parse_fasta_if_exists(seq, filename, maxseq=10000, rmsa_alphabet=False):

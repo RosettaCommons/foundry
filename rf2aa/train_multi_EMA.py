@@ -614,6 +614,7 @@ class Trainer():
             bond_feats=bond_feats[:,mask_BB[0]][:,:,mask_BB[0]],
             seq=seq[:,mask_BB[0]]
         )
+
         if w_atom_bond >= 0.0:
             tot_loss += w_atom_bond*atom_bond_loss
         loss_dict['atom_bond_loss'] = ( atom_bond_loss.detach() )
@@ -870,7 +871,6 @@ class Trainer():
         print('Saved git diff between current state and last commit')
 
     def train_model(self, rank, world_size):
-       
         if rank==0: self.record_git_commit()
 
         # wandb logging
@@ -1867,8 +1867,8 @@ class Trainer():
                     
                 if save_pdbs:
                     atom_mask = mask_crds[:,0]
-                    seq_unmasked = msa[:, 0, 0, :]
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}.pdb',
+                    seq_unmasked = msa[:, 0, 0, :].to(gpu)
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_true.pdb',
                         torch.nan_to_num(true_crds[res_mask][:,:23]), seq_unmasked[res_mask],
                         bond_feats=network_input['bond_feats'][:,res_mask[0]][:,:,res_mask[0]],
                         chain="A", atom_mask=atom_mask[res_mask])
@@ -1876,10 +1876,10 @@ class Trainer():
                     pred_sup = superimpose(torch.nan_to_num(pred_allatom[:,res_mask[0],:23]),
                                            torch.nan_to_num(true_crds[:,res_mask[0],:23]),
                                            atom_mask[:,res_mask[0],:23])
-                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}.pdb',
+                    writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_pred.pdb',
                         pred_sup, seq_unmasked[res_mask],
                         bond_feats=network_input['bond_feats'][:,res_mask[0]][:,:,res_mask[0]], 
-                        chain="B", file_mode='a', atom_mask=atom_mask[res_mask],
+                        chain="B", atom_mask=atom_mask[res_mask],
                         atom_idx_offset=int(atom_mask[res_mask].sum().item()))
 
                 if self.eval:

@@ -357,6 +357,7 @@ def superimpose(pred, true, atom_mask):
     
     return rP+ct
 
+
 def writepdb(filename, *args, file_mode='w', **kwargs, ):
     f = open(filename, file_mode)
     writepdb_file(f, *args, **kwargs)
@@ -400,12 +401,12 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
     if idx_pdb is None:
         idx_pdb = 1 + torch.arange(atomscpu.shape[0])
 
-    alphabet = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    alphabet = list('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')
     if chain_Ls is not None:
         chain_letters = np.concatenate([np.full(L, alphabet[i]) for i,L in enumerate(chain_Ls)])
     else:
         chain_letters = [chain]*len(scpu)
-        
+
     if modelnum is not None:
         f.write(f"MODEL        {modelnum}\n")
 
