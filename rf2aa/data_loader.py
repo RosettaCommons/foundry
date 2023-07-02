@@ -92,8 +92,7 @@ default_dataloader_params = {
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        # "DATAPKL"          : "%s/dataset_20230515.pkl"%sm_compl_dir, # cache for faster loading 
-        "DATAPKL"          : "dude_cutoff_-5.pkl",
+        "DATAPKL"          : "%s/dataset_20230515.pkl"%sm_compl_dir, # cache for faster loading 
         "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
         "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
         "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)
@@ -3496,7 +3495,7 @@ def loader_sm_compl_assembly_single(*args, **kwargs):
 
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid2smpartners=None, task='sm_compl_asmb', 
     num_protein_chains=None, num_ligand_chains=None, pick_top=True, random_noise=5.0, fixbb=False,
-    select_farthest_residues: bool = False, ligand_string_tuple: Optional[Tuple[str, str]] = None, is_negative: bool = False):
+    select_farthest_residues: bool = False, ligand_string_tuple: Optional[Tuple[str, str]] = None, is_negative: bool = False, max_msa_seqs: Optional[int] = None):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
     with query ligand.  Protein chains all come before ligand chains, and
@@ -3546,7 +3545,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         xyz_t_prot = xyz_t_prot[sel]
         mask_t_prot = mask_t_prot[sel]
         f1d_t_prot = f1d_t_prot[sel]
-    
+
     if ligand_string_tuple is not None:
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, _ = featurize_ligand_from_string(ligand_string=ligand_string_tuple[1], format=ligand_string_tuple[0])
         residues_to_atomize = mod_residues_to_atomize
@@ -3698,6 +3697,8 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     # create MSA features from cropped msa and insertions
     # if len(msa) > params['BLOCKCUT']:
     #     msa, ins = MSABlockDeletion(msa.long(), ins.long())
+    if max_msa_seqs is not None:
+        msa = msa[:max_msa_seqs]
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = \
         MSAFeaturize(msa.long(), ins.long(), params, term_info=term_info, fixbb=fixbb, seed_msa_clus=seed_msa_clus)
     
@@ -4571,7 +4572,7 @@ class DistilledDataset(data.Dataset):
                 ID = self.ID_dict['sm_compl_furthest_neg'][index - offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_furthest_neg'], ID)
                 out = self.loader_dict['sm_compl_furthest_neg'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task=task, num_protein_chains=1, num_ligand_chains=1, select_farthest_residues=True)
+                self.chid2taxid, task=task, num_protein_chains=1, num_ligand_chains=1, select_farthest_residues=True, is_negative=True)
                 # Note the extra argument to loader_sm_compl_assembly when we load the furthest residues from the ligand
             offset += len(self.index_dict['sm_compl_furthest_neg'])
 

@@ -303,12 +303,11 @@ class Trainer():
                 logit_pde=logit_pde,
             )
 
-            #fd pae/pde loss not computed correctly, zero for negatives
+            # fd pae/pde loss not computed correctly, zero for negatives
             # Pascal: I think the above is no longer true. PAE/PDE should
             # be computed correctly for intra chain
-            pae_loss *= 0.0
-            pde_loss *= 0.0
-
+            # pae_loss *= 0.0
+            # pde_loss *= 0.0
         else:
 
             if logit_pae is not None:
