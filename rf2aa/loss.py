@@ -17,7 +17,7 @@ from rf2aa.util import (
     find_all_paths_of_length_n,
     find_all_rigid_groups
 )
-from rf2aa.chemical import NFRAMES, NTOTAL
+from rf2aa.chemical import NFRAMES, NTOTAL, NTOTALTORS
 
 from rf2aa.kinematics import get_dih, get_ang
 from rf2aa.scoring import HbHybType
@@ -77,24 +77,41 @@ def calc_str_loss(pred, true, mask_2d, same_chain, negative=False, d_clamp_intra
     tot_loss = (w_loss * loss).sum()
     return tot_loss, loss.detach() 
 
-#resolve rotationally equivalent sidechains
+# Resolve rotationally equivalent sidechains
 def resolve_symmetry(xs, Rsnat_all, xsnat, Rsnat_all_alt, xsnat_alt, atm_mask):
-    dists = torch.linalg.norm( xs[:,:,None,:] - xs[atm_mask,:][None,None,:,:], dim=-1)
-    dists_nat = torch.linalg.norm( xsnat[:,:,None,:] - xsnat[atm_mask,:][None,None,:,:], dim=-1)
-    dists_natalt = torch.linalg.norm( xsnat_alt[:,:,None,:] - xsnat_alt[atm_mask,:][None,None,:,:], dim=-1)
+    # This function compares each side chain atom to its local N-CA-C-O backbone
+    # and computes all local distances and picks the rotation that best fits
+    # the given distances. Note that theoretically, you don't need all four points
+    # to resolve the symmetry - you only need a single non-axial reference point.
+    # Using only the nitrogen atom should be enough. The CA is the worst point to use 
+    # because it is by definition axial, but the off-axis N or C should suffice.
+    backbone_pred = xs[:, :4]
+    sidechains_pred = xs[:, 4:]
 
-    drms_nat = torch.sum(torch.abs(dists_nat-dists),dim=(-1,-2))
-    drms_natalt = torch.sum(torch.abs(dists_nat-dists_natalt), dim=(-1,-2))
+    backbone_true = xsnat[:, :4]
+    sidechains_true = xsnat[:, 4:]
 
-    Rsnat_symm = Rsnat_all
-    xs_symm = xsnat
+    backbone_alt = xsnat_alt[:, :4]
+    sidechains_alt = xsnat_alt[:, 4:]
 
-    toflip = drms_natalt<drms_nat
+    valid_distance_mask = atm_mask[:, :4, None] * atm_mask[:, None, 4:]
+    distances_pred = torch.cdist(backbone_pred, sidechains_pred, compute_mode="donot_use_mm_for_euclid_dist")
+    distances_true = torch.cdist(backbone_true, sidechains_true, compute_mode="donot_use_mm_for_euclid_dist")
+    distances_alt = torch.cdist(backbone_alt, sidechains_alt, compute_mode="donot_use_mm_for_euclid_dist")
 
-    Rsnat_symm[toflip,...] = Rsnat_all_alt[toflip,...]
-    xs_symm[toflip,...] = xsnat_alt[toflip,...]
+    distances_true_to_pred = torch.abs(distances_true - distances_pred) * valid_distance_mask
+    distances_alt_to_pred = torch.abs(distances_alt - distances_pred) * valid_distance_mask
 
-    return Rsnat_symm, xs_symm
+    distance_scores_true_to_pred = torch.sum(distances_true_to_pred, dim=(1, 2))
+    distance_scores_alt_to_pred = torch.sum(distances_alt_to_pred, dim=(1, 2))
+    is_better_alt = distance_scores_alt_to_pred < distance_scores_true_to_pred
+    is_better_alt_crds = is_better_alt[:, None, None].repeat(1, NTOTAL, 3)
+    is_better_alt_tors = is_better_alt[:, None, None, None].repeat(1, NTOTALTORS, 4, 4)
+
+    symmetry_resolved_true_crds = torch.where(is_better_alt_crds, xsnat_alt, xsnat)
+    symmetry_resolved_true_tors = torch.where(is_better_alt_tors, Rsnat_all_alt, Rsnat_all)
+    return symmetry_resolved_true_tors, symmetry_resolved_true_crds
+
 
 # resolve "equivalent" natives
 def resolve_equiv_natives(xs, natstack, maskstack):
