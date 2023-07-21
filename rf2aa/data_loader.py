@@ -3656,15 +3656,15 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     term_info[sum(Ls_prot):, :] = 0 # ligand chains don't get termini features
     
     # crop around query ligand (1st sm chain)
-    if L_total > params["CROP"]:
-        if select_farthest_residues or ligand_string_tuple is not None:
-            assert(len(Ls_prot)==1 and len(Ls_sm)==1), \
-                'crop_sm_compl() should only be called on examples with 1 protein and 1 ligand chain'
-            sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls_prot + Ls_sm, params['CROP'], mask_prot, 
-                                seq_prot, select_farthest_residues=select_farthest_residues)
-        else:
-            sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
-            mask = reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item)
+    # always need to run cropping function to remove erroneous ligand partners 
+    if select_farthest_residues or ligand_string_tuple is not None:
+        assert(len(Ls_prot)==1 and len(Ls_sm)==1), \
+            'crop_sm_compl() should only be called on examples with 1 protein and 1 ligand chain'
+        sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls_prot + Ls_sm, params['CROP'], mask_prot, 
+                            seq_prot, select_farthest_residues=select_farthest_residues)
+    else:
+        sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
+        mask = reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item)
 
         msa = msa[:, sel]
         ins = ins[:, sel]
@@ -4108,10 +4108,12 @@ def crop_sm_compl_assembly(all_xyz, all_mask, Ls_prot, Ls_sm, n_crop, use_partia
         dist_ = dist_prot_lig[:][:, lig_chain_sel]
         # dist_ = dist_[res_mask_prot][:,res_mask_lig[lig_chain_sel]]
         num_lig_contacts = (dist_<4).sum()
+        
         if num_lig_contacts < 4:
             curr_chain_idx = np.arange(L_sm) + offset
             sel = np.setdiff1d(sel, curr_chain_idx)
         offset += L_sm
+    
     if len(sel) == 0: # we accidentally removed all the chains..
         if len(prot_sel) == 0: # if all the neighbors are not protein (seen in chlorophylls in photosystems for example)
             sel = get_crop(Ls_prot[0], all_mask[:Ls_prot[0]],all_xyz.device, n_crop).cpu().numpy()

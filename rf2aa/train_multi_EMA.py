@@ -1690,6 +1690,7 @@ class Trainer():
                 name = item_['CHAINID']
             if save_pdbs:
                 seq_unmasked = msa[:, 0, 0, :]
+                res_mask = res_mask.cpu()
                 writepdb(out_dir+f'ep{epoch}_{task[0]}_{counter}.{rank}_{name}_xyz_prev.pdb', 
                     torch.nan_to_num(xyz_prev_orig[res_mask][:,:23]), network_input['seq_unmasked'][res_mask],
                     bond_feats=network_input['bond_feats'][:, res_mask[0]][:, :, res_mask[0]])
