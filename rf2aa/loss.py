@@ -22,7 +22,7 @@ from rf2aa.chemical import NFRAMES, NTOTAL, NTOTALTORS
 from rf2aa.kinematics import get_dih, get_ang
 from rf2aa.scoring import HbHybType
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 # Loss functions for the training
 # 1. BB rmsd loss
@@ -159,10 +159,6 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
     if len(xyz_true.shape) == 4:
         return xyz_true, mask
 
-    # NOTE: I am pretty sure these next two lines are a mistake. 
-    # if xyz_true.shape[1] == 1:
-    #     return xyz_true[:, 0, ...], mask[:, 0, ...]
-
     batch_size = xyz_pred.shape[0]
     assert batch_size == 1, "this function does not work if B!=1"
     total_protein_length = sum(Ls_prot)
@@ -185,39 +181,47 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
     # [A2, A3, A1, B]
     # [A3, A1, A2, B]
     # [A3, A2, A1, B]
-    
+
     pred_ca_ca_distances = torch.norm(
         xyz_pred[:, None, :total_protein_length, None, 1, :]
         - xyz_pred[:, None, None, :total_protein_length, 1, :],
         dim=-1,
     )
-    
+
     valid_protein_permutations = torch.any(torch.any(mask[:,:, :total_protein_length],dim=2), dim=2) # only take distances over valid protein permutations
-    xyz_true_valid_prot = xyz_true[:, valid_protein_permutations[0]] ## rk assumes B==1
-    mask_valid_prot = mask[:, valid_protein_permutations[0]] ## rk assumes B==1
+    xyz_true_valid_prot = xyz_true[:, valid_protein_permutations[0], :total_protein_length] ## rk assumes B==1
+    mask_valid_prot = mask[:, valid_protein_permutations[0], :total_protein_length] ## rk assumes B==1
     true_ca_ca_distances = torch.norm(
-        xyz_true_valid_prot[:, :, :total_protein_length, None, 1, :]
-        - xyz_true_valid_prot[:, :, None, :total_protein_length, 1, :],
+        xyz_true_valid_prot[:, :, :, None, 1, :]
+        - xyz_true_valid_prot[:, :, None, :, 1, :],
         dim=-1,
     )
-    pred_true_ca_ca_dist_diff = torch.sum(
-        torch.abs(true_ca_ca_distances - pred_ca_ca_distances), dim=(-2, -1)
-    )
+
+    # Note: we need to account for different masking patterns in this function. Basically,
+    # every copy of the SAME protein chain may have a different number of resolved CA atoms,
+    # so we need to separately index each copy by its respective atom mask.
+    mask_valid_prot_ca = mask_valid_prot[:, :, :, 1]
+    mask_valid_prot_ca_ca = mask_valid_prot_ca[:, :, :, None] * mask_valid_prot_ca[:, :, None, :]
+    num_valid_ca_ca_distances = torch.sum(mask_valid_prot_ca_ca, dim=(-2, -1))
+    # Another note: if there are 0 valid ca atoms for a given symmetry instance,
+    # torch handles 0 division by returning torch.inf, which should give the correct behavior.
+    # We never want to pick a chain with 0 valid ca atoms.
+
+    pred_true_ca_ca_dist_total = torch.abs(true_ca_ca_distances - pred_ca_ca_distances) * mask_valid_prot_ca_ca
+    pred_true_ca_ca_dist_diff = torch.sum(pred_true_ca_ca_dist_total, dim=(-2, -1))
     pred_true_ca_ca_dist_diff = torch.nan_to_num(
         pred_true_ca_ca_dist_diff, nan=torch.inf
     )
-    
+    pred_true_ca_ca_dist_diff = pred_true_ca_ca_dist_diff / num_valid_ca_ca_distances
     best_protein_perm_index_per_batch = torch.argmin(pred_true_ca_ca_dist_diff, axis=-1) # indices over indices of xyz_true_valid_prot
 
     best_protein_coords = xyz_true_valid_prot[
         torch.arange(batch_size),
         best_protein_perm_index_per_batch,
-        :total_protein_length,
     ]
     matching_protein_mask = mask_valid_prot[
         torch.arange(batch_size),
         best_protein_perm_index_per_batch,
-        :total_protein_length,
     ]
     xyz_out[:, :total_protein_length] = best_protein_coords
     mask_out[:, :total_protein_length] = matching_protein_mask
@@ -233,6 +237,8 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
     label_to_ligand_offsets = {} # indexing for to get coords for this chosen sm in length dimension
     label_to_symmetry_offsets = {} # indexing for to get coords for this chosen sm in symm dimension
     label_to_position_index = {} # holds information on alternative automorphs for same ligand
+    label_to_ligand_mask = {} # unrolled mask for each of the atoms in label_to_ligand_coordinates
+    label_to_num_copies_same = {} # number of copies of the same ligand
 
     running_offset = total_protein_length
     # This first for loop groups ligand coordinates by 
@@ -243,12 +249,13 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
         ligand_label = ch_label[0, running_offset].item()
         ligand_offsets = [running_offset, running_offset + ligand_length]
         ligand_coordinates = xyz_true[:, :, ligand_offsets[0] : ligand_offsets[1]]
-        ligand_mask = mask[:, :, ligand_offsets[0] : ligand_offsets[1]]
+        ligand_mask = mask[:, :, ligand_offsets[0] : ligand_offsets[1], 1]
         # any across coordinates (x, y, z) and length
-        ligand_mask_any_atoms = ligand_mask[:, :, :, 1].any(dim=-1) # B, NSymm
+        ligand_mask_any_atoms = ligand_mask.any(dim=-1) # B, NSymm
         ligand_coordinates_valid = ligand_coordinates[ligand_mask_any_atoms][None] # assumes B=1
+        ligand_mask_valid = ligand_mask[ligand_mask_any_atoms][None]
         
-        #NOTE: assumes that the first N dimensions are real coordinates and the rest are buffer 
+        #NOTE: assumes that the first N dimensions are real coordinates and the rest are buffer
         num_valid_ligand_perms = torch.sum(ligand_mask_any_atoms) 
         symmetry_offsets = torch.arange(
             num_valid_ligand_perms, device=ligand_coordinates_valid.device
@@ -266,14 +273,17 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
             label_to_ligand_offsets[ligand_label].append(ligand_offsets_tensor)
             label_to_symmetry_offsets[ligand_label].append(symmetry_offsets)
             label_to_position_index[ligand_label].append(position_index_tensor)
+            label_to_ligand_mask[ligand_label].append(ligand_mask_valid)
+            label_to_num_copies_same[ligand_label] += 1
         else:
             label_to_ligand_coordinates[ligand_label] = [ligand_coordinates_valid]
             label_to_ligand_offsets[ligand_label] = [ligand_offsets_tensor]
             label_to_symmetry_offsets[ligand_label] = [symmetry_offsets]
             label_to_position_index[ligand_label] = [position_index_tensor]
+            label_to_ligand_mask[ligand_label] = [ligand_mask_valid]
+            label_to_num_copies_same[ligand_label] = 1
 
         running_offset += ligand_length
-
     # This second for loop just stacks the accumulated tensors from the last
     # for loop into a single tensor
     for ligand_label in torch.unique(ch_label[0, total_protein_length:]):
@@ -290,10 +300,42 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
         label_to_position_index[ligand_label] = torch.cat(
             label_to_position_index[ligand_label], dim=0
         )
+        label_to_ligand_mask[ligand_label] = torch.cat(
+            label_to_ligand_mask[ligand_label], dim=1
+        )
 
+    # This third for loop is super niche: if there
+    # are two copies of the same ligand, and FURTHER
+    # loaded copies of that ligand from the additional
+    # cif loading code that Pascal wrote, those will be
+    # stacked in the symmetry dimension of the FIRST ligand.
+    # Every other copy of the same ligand will have only
+    # n_symm copies, but the first will have n_symm * n_additional_copies.
+    # The position index for each of these copies should only pertain
+    # to automorphs, so we need to adjust the position index in this case.
+    # So if position_index_tensor is something like [0, 0, 0, 0, 0, 0, 1, 1]
+    # we actually want it to be [0, 0, 1, 1, 2, 2, 3, 3].
+    for ligand_label, position_index_tensor in label_to_position_index.items():
+        if label_to_num_copies_same[ligand_label] == 1:
+            continue
+
+        unique_positions, counts = torch.unique(position_index_tensor, return_counts=True)
+        if torch.unique(counts).shape[0] == 1:
+            continue
+
+        min_count = torch.min(counts).item()
+        max_count = torch.max(counts).item()
+        if position_index_tensor.shape[0] % min_count != 0:
+            continue
+        if max_count % min_count != 0:
+            continue
+
+        num_count_copies = int(position_index_tensor.shape[0] / min_count)
+        new_position_index_tensor = torch.arange(num_count_copies, dtype=position_index_tensor.dtype, device=position_index_tensor.device)
+        new_position_index_tensor = new_position_index_tensor.repeat_interleave(min_count)
+        label_to_position_index[ligand_label] = new_position_index_tensor
     # This final for loop does the bulk of the computation:
     # for each ligand, it computes the ca-prot-lig distance
-    # error between that ligands predicted coordinates
     # and all possible positions of the ligand as gathered
     # in the previous for loop. It picks the best possible position
     # for that ligand, and then removes that ligand position and
@@ -330,15 +372,24 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
             xyz_true_lig_ca,
             compute_mode="donot_use_mm_for_euclid_dist",
         ) # (B, Nsymm*Nrepeats, L_prot+ L_query_lig, L_query_lig)
+        # Note: not all ligand atoms may be resolved, and the pattern of resolution
+        # may be DIFFERENT for different copies of the same ligand. We need
+        # to apply a per symmetry mask to account for resolved ligand atoms.
+        ligand_mask = label_to_ligand_mask[ligand_label]
+        expanded_ligand_mask = ligand_mask[:, :, None].repeat(1, 1, all_true_prot_lig_ca_distance.shape[2], 1)
 
-        pred_true_lig_prot_dist_diff = torch.sum(
-            torch.abs(pred_prot_lig_ca_distance - all_true_prot_lig_ca_distance),
-            dim=(-2, -1),
-        )
+        # The only valid distances are those for which both the ligand atoms are resolved
+        # AND the corresponding protein CA coordinates are also resolved, so we have
+        # to account for the protein mask as well here.
+        expanded_ligand_mask[:, :, :total_protein_length, :] = expanded_ligand_mask[:, :, :total_protein_length, :] * matching_protein_mask[:, None, :, 1, None]
+        
+        num_valid_distances_resolved = torch.sum(expanded_ligand_mask, dim=(-2, -1))
+        pred_true_lig_prot_dist_diff = torch.abs(pred_prot_lig_ca_distance - all_true_prot_lig_ca_distance) * expanded_ligand_mask
+        pred_true_lig_prot_dist_diff = torch.sum(pred_true_lig_prot_dist_diff, dim=(-2, -1))
         pred_true_lig_prot_dist_diff = torch.nan_to_num(
             pred_true_lig_prot_dist_diff, nan=torch.inf
         )
-
+        pred_true_lig_prot_dist_diff = pred_true_lig_prot_dist_diff / num_valid_distances_resolved
         best_ligand_dist_index = torch.argmin(pred_true_lig_prot_dist_diff)
         true_selected_lig_offsets = label_to_ligand_offsets[ligand_label][
             best_ligand_dist_index
@@ -374,9 +425,10 @@ def resolve_equiv_natives_asmb(xyz_pred, xyz_true, mask, ch_label, Ls_prot, Ls_s
         label_to_position_index[ligand_label] = label_to_position_index[ligand_label][
             remove_chosen_mask
         ]
-
+        label_to_ligand_mask[ligand_label] = label_to_ligand_mask[
+            ligand_label
+        ][:, remove_chosen_mask]
         running_offset += ligand_length
-
     return xyz_out, mask_out
 
 

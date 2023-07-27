@@ -8,7 +8,7 @@ import os, csv, random, pickle, gzip, itertools, time, ast, copy, sys
 from dateutil import parser
 from collections import OrderedDict, Counter
 from itertools import permutations
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List, Set, Any
 from pathlib import Path
 from openbabel import pybel
 from os.path import exists
@@ -25,17 +25,19 @@ import scipy
 from scipy.sparse.csgraph import shortest_path
 import networkx as nx
 
+from rf2aa import cifutils
 from rf2aa.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol, parse_mixed_fasta, get_dislf
 from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, UNKINDEX, \
     NTOTAL, NBTYPES, CHAIN_GAP, num2aa, METAL_RES_NAMES, aa2num, atomnum2atomtype, load_tanimoto_sim_matrix
 from rf2aa.kinematics import get_chirals
 from rf2aa.symmetry import get_symmetry
+from rf2aa.identical_ligands import get_extra_identical_copies_from_chains
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
     cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
     map_identical_prot_chains, cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, bond_feats_from_Ls, \
     reindex_protein_feats_after_atomize, get_residue_contacts, atomize_discontiguous_residues, pop_protein_feats, \
-        is_atom, get_atom_template_indices, reassign_symmetry_after_cropping, expand_xyz_sm_to_ntotal
+    is_atom, get_atom_template_indices, reassign_symmetry_after_cropping, expand_xyz_sm_to_ntotal, Ls_from_same_chain_2d
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -3484,7 +3486,14 @@ def load_ligands_from_partners(lig_partners, prot_partners, asmb_xfs, chains, co
     # load ligands
     xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names = \
         featurize_asmb_ligands(lig_partners, params, chains, asmb_xfs, covale)
-        
+
+    try:
+        xyz_sm, mask_sm = get_extra_identical_copies_from_chains(chains, covale, asmb_xfs, xyz_sm, mask_sm, Ls_sm, akeys_sm, lig_partners, exclude_covalent_to_protein=False)
+    except Exception as e:
+        print("Failed to get extra identical copies of the ligands from the cif assembly.")
+        print(f"The error was: {e}.")
+        pass
+    
     return xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, list(residues_to_atomize)
 
 
@@ -3557,7 +3566,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
             load_ligands_from_partners(lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains=num_ligand_chains)
-
+    
     # combine protein & ligand coordinates
     N_symm_prot = xyz_prot.shape[0]
     N_symm_sm = xyz_sm.shape[0]
@@ -3701,7 +3710,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         msa = msa[:max_msa_seqs]
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = \
         MSAFeaturize(msa.long(), ins.long(), params, term_info=term_info, fixbb=fixbb, seed_msa_clus=seed_msa_clus)
-    
+
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
