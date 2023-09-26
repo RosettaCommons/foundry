@@ -31,7 +31,7 @@ class DistanceNetwork(nn.Module):
         logits_symm = self.proj_symm(x)
         logits_symm = logits_symm + logits_symm.permute(0,2,1,3)
         logits_dist = logits_symm[:,:,:,:61].permute(0,3,1,2)
-        logits_omega = logits_symm[:,:,:,37:].permute(0,3,1,2)
+        logits_omega = logits_symm[:,:,:,61:].permute(0,3,1,2)
 
         return logits_dist, logits_omega, logits_theta, logits_phi
 
