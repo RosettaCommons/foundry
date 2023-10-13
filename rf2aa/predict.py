@@ -865,11 +865,11 @@ class Predictor():
             bond_featsfull[:,(i*Lasu):((i+1)*Lasu),(i*Lasu):((i+1)*Lasu)] = bond_feats[:,:Lasu,:Lasu]
             seq_full[:,0,(i*Lasu):((i+1)*Lasu)] = seq[:,0,:Lasu]
 
-        util.writepdb(out_prefix+".pdb", best_xyzfull[0], seq_full[0, -1], bfacts=100*best_lddtfull[0].float(), 
+        util.writepdb(out_prefix+".pdb", best_xyzfull[0], seq_full[0, -1], bfacts=best_lddtfull[0].float(), 
                       bond_feats=bond_featsfull, chain_Ls=Lsfull)
 
         if args.dump_extra_pdbs:
-            util.writepdb(out_prefix+"_last.pdb", xyz_prev[0], seq[0, -1], bfacts=100*best_lddtfull[0].float(),
+            util.writepdb(out_prefix+"_last.pdb", xyz_prev[0], seq[0, -1], bfacts=best_lddtfull[0].float(),
                           bond_feats=bond_featsfull)
             util.writepdb(out_prefix+"_init.pdb", xyz_prev_orig[0], seq[0, -1], bond_feats=bond_featsfull)
 
