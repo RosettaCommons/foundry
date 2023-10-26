@@ -125,7 +125,7 @@ class EMA(nn.Module):
             return self.shadow(*args, **kwargs)
 
 class Trainer():
-    def __init__(self, model_name='BFF',
+    def __init__(self, model_name='BFF', checkpoint_path=None,
                  n_epoch=100, step_lr=100, lr=1.0e-4, l2_coeff=1.0e-2, port=None, interactive=False,
                  model_param={}, loader_param={}, loss_param={}, dataset_param={}, batch_size=1, 
                  accum_step=1, maxcycle=4, eval=False, out_dir=None, wandb_prefix=None, 
@@ -741,11 +741,14 @@ class Trainer():
         )
         return err_dict
 
-    def load_model(self, model, model_name, rank, suffix='last', resume_train=False, 
+    def load_model(self, model, model_name, rank, suffix='last', checkpoint_path=None, resume_train=False, 
                    optimizer=None, scheduler=None, scaler=None):
         if self.debug_mode:
             return -1, 99999999.9
-        chk_fn = self.model_dir+"/%s_%s.pt"%(model_name, suffix)
+        if checkpoint_path==None:
+            chk_fn = self.model_dir+"/%s_%s.pt"%(model_name, suffix)
+        else:
+            chk_fn=checkpoint_path
         loaded_epoch = -1
         best_valid_loss = 999999.9
         if not os.path.exists(chk_fn):
@@ -2186,6 +2189,7 @@ if __name__ == "__main__":
 
     trainer_object = Trainer(
         model_name=args.model_name,
+        checkpoint_path = args.checkpoint_path, 
         n_epoch=args.num_epochs,
         step_lr=args.step_lr,
         lr=args.lr,

@@ -103,6 +103,7 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
         help="Set to True to disable CPU buffered memory pinning during data loading",
     )
     train_group.add_argument("-model_name", default=None, help="model name for saving")
+    train_group.add_argument("-checkpoint_path", default=None, help="path to a stored checkpoint")
     train_group.add_argument("-batch_size", type=int, default=1, help="Batch size [1]")
     train_group.add_argument(
         "-lr", type=float, default=2.0e-4, help="Learning rate [5.0e-4]"

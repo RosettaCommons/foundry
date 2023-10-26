@@ -188,7 +188,7 @@ def get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask, minpos_res=-32, max
         closest_atom = i_sm[torch.argmin(torch.abs(res_dist_prot[~sm_mask,:][:,i_prot]), dim=-1)]
         atom_dist_inter[~sm_mask,:] = atom_dist_sm[closest_atom,:] + 1
         atom_dist_inter[:,~sm_mask] = atom_dist_sm[:,closest_atom] + 1
-
+    
     res_dist = res_dist_prot * prot_mask_2d + res_dist_inter * inter_mask_2d + res_dist_sm * sm_mask_2d
     atom_dist = atom_dist_prot * prot_mask_2d + atom_dist_inter * inter_mask_2d + atom_dist_sm * sm_mask_2d
 

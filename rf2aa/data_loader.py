@@ -95,6 +95,7 @@ default_dataloader_params = {
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
         "DATAPKL"          : "%s/dataset_20230515.pkl"%sm_compl_dir, # cache for faster loading 
+#        "DATAPKL"          : "dude_cutoff_-5.pkl",
         "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
         "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
         "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)
@@ -1467,20 +1468,62 @@ def merge_a3m_hetero(a3mA, a3mB, L_s):
     return a3m
 
 # merge msa & insertion statistics of units in homo-oligomers
-def merge_a3m_homo(msa_orig, ins_orig, nmer):
-    N, L = msa_orig.shape[:2]
-    msa = torch.full((1+(N-1)*nmer, L*nmer), 20, dtype=msa_orig.dtype, device=msa_orig.device)
-    ins = torch.full((1+(N-1)*nmer, L*nmer), 0, dtype=ins_orig.dtype, device=msa_orig.device)
-    start=0
-    start2 = 1
-    for i_c in range(nmer):
-        msa[0, start:start+L] = msa_orig[0] 
-        msa[start2:start2+(N-1), start:start+L] = msa_orig[1:]
-        ins[0, start:start+L] = ins_orig[0]
-        ins[start2:start2+(N-1), start:start+L] = ins_orig[1:]
-        start += L
-        start2 += (N-1)
-    return msa, ins
+def merge_a3m_homo(msa_orig, ins_orig, nmer, mode="default"):
+     N, L = msa_orig.shape[:2]
+     if mode == "repeat":
+
+         # AAAAAA
+         # AAAAAA
+
+         msa = torch.tile(msa_orig,(1,nmer))
+         ins = torch.tile(ins_orig,(1,nmer))
+
+     elif mode == "diag":
+
+         # AAAAAA
+         # A-----
+         # -A----
+         # --A---
+         # ---A--
+         # ----A-
+         # -----A
+
+         N = N - 1
+         new_N = 1 + N * nmer
+         new_L = L * nmer
+         msa = torch.full((new_N, new_L), 20, dtype=msa_orig.dtype, device=msa_orig.device)
+         ins = torch.full((new_N, new_L), 0, dtype=ins_orig.dtype, device=msa_orig.device)
+
+         start_L = 0
+         start_N = 1
+         for i_c in range(nmer):
+             msa[0, start_L:start_L+L] = msa_orig[0] 
+             msa[start_N:start_N+N, start_L:start_L+L] = msa_orig[1:]
+             ins[0, start_L:start_L+L] = ins_orig[0]
+             ins[start_N:start_N+N, start_L:start_L+L] = ins_orig[1:]
+             start_L += L
+             start_N += N
+     else:
+
+         # AAAAAA
+         # A-----
+         # -AAAAA
+
+         msa = torch.full((2*N-1, L*nmer), 20, dtype=msa_orig.dtype, device=msa_orig.device)
+         ins = torch.full((2*N-1, L*nmer), 0, dtype=ins_orig.dtype, device=msa_orig.device)
+
+         msa[:N, :L] = msa_orig
+         ins[:N, :L] = ins_orig
+         start = L
+
+         for i_c in range(1,nmer):
+             msa[0, start:start+L] = msa_orig[0] 
+             msa[N:, start:start+L] = msa_orig[1:]
+             ins[0, start:start+L] = ins_orig[0]
+             ins[N:, start:start+L] = ins_orig[1:]
+             start += L        
+
+     return msa, ins
 
 def merge_msas(a3m_list, L_s):
     """

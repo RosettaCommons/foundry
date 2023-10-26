@@ -1,5 +1,6 @@
 import sys, os, json, pickle, glob
 import time
+from tqdm import tqdm
 from collections import OrderedDict
 import numpy as np
 import torch
@@ -9,6 +10,7 @@ from torch.utils import data
 script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(script_dir)
 
+import rf2aa
 import rf2aa.parsers as parsers
 from rf2aa.RoseTTAFoldModel  import RoseTTAFoldModule
 import rf2aa.util as util
@@ -49,7 +51,7 @@ def get_args():
     parser.add_argument("-atab", help='Input atab file.')
     parser.add_argument("-pt", help='PyTorch cached version of PDB') # fd unused
     parser.add_argument("-mol2", help='mol2 of small molecule to predict structure from')
-    #parser.add_argument("-smiles", help='smiles string of small molecule to predict structure from') # fd unused
+    parser.add_argument("-smiles", help='smiles string of small molecule to predict structure from') # fd unused
     parser.add_argument("-db", default=DB, required=False, help="HHsearch database [%s]"%DB)
 
     parser.add_argument("-list", help='list of PDB inputs')
@@ -154,14 +156,42 @@ def lddt_unbin(pred_lddt):
     pred_lddt = nn.Softmax(dim=1)(pred_lddt)
     return torch.sum(lddt_bins[None,:,None]*pred_lddt, dim=1)
 
-def pae_unbin(pred_pae):
-    # calculate pae loss
-    nbin = pred_pae.shape[1]
-    bin_step = 0.5
-    pae_bins = torch.linspace(bin_step, bin_step*(nbin-1), nbin, dtype=pred_pae.dtype, device=pred_pae.device)
+def pae_unbin(logits_pae, bin_step=0.5):
+    nbin = logits_pae.shape[1]
+    bins = torch.linspace(bin_step*0.5, bin_step*nbin-bin_step*0.5, nbin,
+                              dtype=logits_pae.dtype, device=logits_pae.device)
+    logits_pae = torch.nn.Softmax(dim=1)(logits_pae)
+    return torch.sum(bins[None,:,None,None]*logits_pae, dim=1)
 
-    pred_pae = nn.Softmax(dim=1)(pred_pae)
-    return torch.sum(pae_bins[None,:,None,None]*pred_pae, dim=1)
+def pde_unbin(logits_pde, bin_step=0.3):
+    nbin = logits_pde.shape[1]
+    bins = torch.linspace(bin_step*0.5, bin_step*nbin-bin_step*0.5, nbin,
+                              dtype=logits_pde.dtype, device=logits_pde.device)
+    logits_pde = torch.nn.Softmax(dim=1)(logits_pde)
+    return torch.sum(bins[None,:,None,None]*logits_pde, dim=1)
+
+def calc_pred_err(pred_lddts, logit_pae, logit_pde, seq):
+    """Calculates summary metrics on predicted lDDT and distance errors"""
+    plddts = lddt_unbin(pred_lddts)
+    pae = pae_unbin(logit_pae) if logit_pae is not None else None
+    pde = pde_unbin(logit_pde) if logit_pde is not None else None
+
+    sm_mask = is_atom(seq)
+    sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
+    prot_mask_2d = (~sm_mask[None,:])*(~sm_mask[:,None])
+    inter_mask_2d = sm_mask[None,:]*(~sm_mask[:,None]) + (~sm_mask[None,:])*sm_mask[:,None]
+    # assumes B=1
+    err_dict = dict(
+        plddt = float(plddts.mean()),
+        pae = float(pae.mean()) if pae is not None else None,
+        pae_prot = float(pae[0,prot_mask_2d].mean()) if pae is not None else None,
+        pae_inter = float(pae[0,inter_mask_2d].mean()) if pae is not None else None,
+        pde = float(pde.mean()) if pde is not None else None,
+        pde_lig = float(pde[0,sm_mask_2d].mean()) if pde is not None else None,
+        pde_prot = float(pde[0,prot_mask_2d].mean()) if pde is not None else None,
+        pde_inter = float(pde[0,inter_mask_2d].mean()) if pde is not None else None,
+    )
+    return err_dict
 
 def get_msa(a3mfilename):                                                                       
     msa,ins, _ = parsers.parse_a3m(a3mfilename)
@@ -384,7 +414,7 @@ class Predictor():
         self.cb_tor = cb_torsion_t.to(self.device),
 
     def predict(self, out_prefix, msa_fn=None, pdb_fn=None, tmpl_chain=None, pt_fn=None, 
-        a3m_fn=None, hhr_fn=None, atab_fn=None, mol2_fn=None, fasta_fn=None, oligo=None,
+        a3m_fn=None, hhr_fn=None, atab_fn=None, mol2_fn=None, smiles=None, fasta_fn=None, oligo=None,
         init_protein_tmpl=False, init_ligand_tmpl=False, init_protein_xyz=False,
         init_ligand_xyz=False, atomize_res=None, disulfidize_res=None,
         n_cycle=10, n_templ=4, random_noise=5.0, trunc_N=0,
@@ -483,7 +513,20 @@ class Predictor():
             ins = a3m['ins'].long()
             chirals = get_chirals(mol, xyz_sm[0])
             has_ligand = True
+        if smiles is not None:
+            a3m_prot = {"msa": msa_prot, "ins": ins_prot}
+            mol, msa_sm, ins_sm, xyz_sm, mask_sm = parsers.parse_mol(smiles,filetype="smiles", string=True, generate_conformer=True)
+            a3m_sm = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
+            G = util.get_nxgraph(mol)            
+            atom_frames = util.get_atom_frames(msa_sm, G)
+            N_symmetry, sm_L, _ = xyz_sm.shape
 
+            Ls = [protein_L, sm_L]
+            a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+            msa = a3m['msa'].long()
+            ins = a3m['ins'].long()
+            chirals = get_chirals(mol, xyz_sm[0])
+            has_ligand = True
         if not has_ligand:
             if not prot_na:
                 Ls = [msa_prot.shape[-1], 0]
@@ -641,7 +684,8 @@ class Predictor():
             conf = torch.zeros((1, sum(Ls), 1)).float()
             f1d_t = torch.cat((f1d_t, conf), -1)
             mask_t = torch.full((1,sum(Ls),NTOTAL), False)
-
+        ntempl = xyz_t.shape[0]
+        xyz_t_cloud = xyz_t_cloud.repeat(ntempl, 1,1,1)
         xyz_t[torch.isnan(xyz_t)] = xyz_t_cloud[torch.isnan(xyz_t)]
 
         ## symmetry 2: find contacting subunits and symmetrize inputs
@@ -695,11 +739,10 @@ class Predictor():
 
         seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, 
             p_mask=0.0, params={'MAXLAT': MAXLAT, 'MAXSEQ': MAXSEQ, 'MAXCYCLE': n_cycle}, tocpu=True)
-
-        seq = seq[None].to(self.device, non_blocking=True)
-        msa = msa_seed_orig[None].to(self.device, non_blocking=True)
-        msa_masked = msa_seed[None].to(self.device, non_blocking=True)
-        msa_full = msa_extra[None].to(self.device, non_blocking=True)
+ #       seq = seq[None].to(self.device, non_blocking=True)
+        msa_tmp = msa_seed_orig[None].to(self.device, non_blocking=True)
+  #      msa_masked = msa_seed[None].to(self.device, non_blocking=True)
+   #     msa_full = msa_extra[None].to(self.device, non_blocking=True)
         idx_pdb = idx_pdb[None].to(self.device, non_blocking=True) # (B, L)
         xyz_t = xyz_t[None].to(self.device, non_blocking=True)
         mask_t = mask_t[None].to(self.device, non_blocking=True)
@@ -721,17 +764,20 @@ class Predictor():
             subsymms[i] = subsymms[i].to(self.device)
 
         # transfer inputs to device
-        B, _, N, L = msa.shape
-
+        B, _, N, L = msa_tmp.shape
+        
         # processing template features
-        seq_unmasked = msa[:, 0, 0, :] # (B, L)
+        msa = msa.to(self.device)
+        ins = ins.to(self.device)
+        
+        seq_unmasked = msa_tmp[:, 0, 0, :] # (B, L)
         mask_t_2d = util.get_prot_sm_mask(mask_t, seq_unmasked[0]) # (B, T, L)
         mask_t_2d = mask_t_2d[:,:,None]*mask_t_2d[:,:,:,None] # (B, T, L, L)
         mask_t_2d = mask_t_2d.float() * same_chain.float()[:,None] # (ignore inter-chain region)
         mask_recycle = util.get_prot_sm_mask(mask_prev, seq_unmasked[0])
         mask_recycle = mask_recycle[:,:,None]*mask_recycle[:,None,:] # (B, L, L)
         mask_recycle = same_chain.float()*mask_recycle.float()
-
+        
         xyz_t_frames = util.xyz_t_to_frame_xyz(xyz_t, seq_unmasked, atom_frames)
         t2d = xyz_to_t2d(xyz_t_frames, mask_t_2d)
 
@@ -752,13 +798,16 @@ class Predictor():
         self.model.eval()
         all_pred = []
         all_pred_allatom = []
+        all_plddt = []
+        records = []
+
         with torch.no_grad():
             msa_prev = None
             pair_prev = None
-            alpha_prev = torch.zeros((1,L,NTOTALDOFS,2), device=seq.device)
+            alpha_prev = torch.zeros((1,L,NTOTALDOFS,2), device=mask_recycle.device)
             state_prev = None
 
-            best_lddt = torch.tensor([-1.0], device=seq.device)
+            best_lddt = torch.tensor([-1.0], device=mask_recycle.device)
             best_xyz = None
             best_logit = None
             best_aa = None
@@ -768,44 +817,54 @@ class Predictor():
             if prot_na:
                 print ("           PAE_p/p PAE_p/n PAE_n/n  p_bind   plddt    best")
 
-            for i_cycle in range(n_cycle):
-                logit_s, logit_aa_s, logit_pae, logit_pde, p_bind, pred_crds, alpha, pred_allatom, pred_lddt_binned, \
-                msa_prev, pair_prev, state_prev = self.model(
-                    msa_masked[:,i_cycle], 
-                    msa_full[:,i_cycle],
-                    seq[:,i_cycle], 
-                    msa[:,i_cycle,0], 
-                    xyz_prev, 
-                    alpha_prev,
-                    idx_pdb,
-                    bond_feats=bond_feats,
-                    dist_matrix=dist_matrix,
-                    chirals=chirals,
-                    atom_frames=atom_frames,
-                    t1d=t1d, 
-                    t2d=t2d,
-                    xyz_t=xyz_t[...,1,:],
-                    alpha_t=alpha_t,
-                    mask_t=mask_t_2d,
-                    same_chain=same_chain,
-                    msa_prev=msa_prev,
-                    pair_prev=pair_prev,
-                    state_prev=state_prev,
-                    mask_recycle=mask_recycle,
-                    symmids=symmids,
-                    symmsub=symmsub,
-                    symmRs=symmRs,
-                    symmmeta=symmmeta 
-                )
+            msa = msa.cpu()
+            ins = ins.cpu()
+            for i_cycle in tqdm(range(n_cycle)):
+                seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, 
+            p_mask=0.0, params={'MAXLAT': MAXLAT, 'MAXSEQ': MAXSEQ, 'MAXCYCLE': 1}, tocpu=True)
+                seq_network = seq.to(self.device, non_blocking=True)
+                msa_network = msa_seed_orig.to(self.device, non_blocking=True)
+                msa_masked_network = msa_seed.to(self.device, non_blocking=True)
+                msa_full_network = msa_extra.to(self.device, non_blocking=True)
+                with torch.cuda.amp.autocast(True):
+                    logit_s, logit_aa_s, logit_pae, logit_pde, p_bind, pred_crds, alpha, pred_allatom, pred_lddt_binned, \
+                    msa_prev, pair_prev, state_prev = self.model(
+                        msa_masked_network.half(), 
+                        msa_full_network.half(),
+                        seq_network, 
+                        msa_network[:,0], 
+                        xyz_prev, 
+                        alpha_prev,
+                        idx_pdb,
+                        bond_feats=bond_feats,
+                        dist_matrix=dist_matrix,
+                        chirals=chirals,
+                        atom_frames=atom_frames,
+                        t1d=t1d, 
+                        t2d=t2d,
+                        xyz_t=xyz_t[...,1,:],
+                        alpha_t=alpha_t,
+                        mask_t=mask_t_2d,
+                        same_chain=same_chain,
+                        msa_prev=msa_prev,
+                        pair_prev=pair_prev,
+                        state_prev=state_prev,
+                        mask_recycle=mask_recycle,
+                        symmids=symmids,
+                        symmsub=symmsub,
+                        symmRs=symmRs,
+                        symmmeta=symmmeta,
+                    )
 
                 logit_aa = logit_aa_s.reshape(B,-1,N,L)[:,:,0].permute(0,2,1)
                 xyz_prev = pred_allatom[-1].unsqueeze(0)
                 mask_recycle = None
 
                 all_pred.append(pred_crds)
-                all_pred_allatom.append(pred_allatom[-1])
-
+                all_pred_allatom.append(pred_allatom[-1].unsqueeze(0))
+                
                 pred_lddt = lddt_unbin(pred_lddt_binned)
+                all_plddt.append(pred_lddt)
                 if pred_lddt.mean() > best_lddt.mean():
                     best_xyz = xyz_prev.clone()
                     best_logit = logit_s
@@ -835,13 +894,23 @@ class Predictor():
                     print(f'RECYCLE {i_cycle}\tcurrent lddt: {pred_lddt.mean():.3f}\t'\
                           f'best lddt: {best_lddt.mean():.3f}')
 
+                err_dict = calc_pred_err(pred_lddt_binned, logit_pae, logit_pde, seq_network[0])
+                loss_dict = {}
+                loss_dict.update(err_dict)
+                loss_dict["recycle"] = i_cycle
+                records.append(loss_dict)
+                del msa_network
+                # del seq_network
+                del msa_full_network
+                del msa_masked_network
             prob_s = list()
             for logit in logit_s:
                 prob = self.active_fn(logit.float()) # distogram
                 prob = prob.reshape(-1, L, L) #.permute(1,2,0).cpu().numpy()
                 prob = prob / (torch.sum(prob, dim=0)[None]+1e-8)
                 prob_s.append(prob)
-        
+
+
         end = time.time()
 
         max_mem = torch.cuda.max_memory_allocated()/1e9
@@ -850,23 +919,24 @@ class Predictor():
 
         # output pdbs
         #  - make full complex
-        Lasu = sum(Ls)
-        best_xyzfull = torch.zeros( (B,O*Lasu,NTOTAL,3),device=best_xyz.device )
-        best_xyzfull[:,:Lasu] = best_xyz[:,:Lasu]
-        seq_full = torch.zeros( (B,1,O*Lasu),dtype=seq.dtype, device=seq.device )
-        seq_full[:,0,:Lasu] = seq[:,0,:Lasu]
-        best_lddtfull = torch.zeros( (B,O*Lasu),device=best_lddt.device )
-        best_lddtfull[:,:Lasu] = best_lddt[:,:Lasu]
-        bond_featsfull = torch.zeros( (B,O*Lasu,O*Lasu),device=best_lddt.device )
-        bond_featsfull[:,:Lasu,:Lasu] = bond_feats[:,:Lasu,:Lasu]
-        Lsfull = Ls*O
-        for i in range(1,O):
-            best_xyzfull[:,(i*Lasu):((i+1)*Lasu)] = torch.einsum('ij,braj->brai', symmRs[i], best_xyz[:,:Lasu])
-            bond_featsfull[:,(i*Lasu):((i+1)*Lasu),(i*Lasu):((i+1)*Lasu)] = bond_feats[:,:Lasu,:Lasu]
-            seq_full[:,0,(i*Lasu):((i+1)*Lasu)] = seq[:,0,:Lasu]
+        for recycle in range(n_cycle):
+            Lasu = sum(Ls)
+            best_xyzfull = torch.zeros( (B,O*Lasu,NTOTAL,3),device=best_xyz.device )
+            best_xyzfull[:,:Lasu] = all_pred_allatom[recycle][:,:Lasu]
+            seq_full = torch.zeros( (B,1,O*Lasu),dtype=seq.dtype, device=seq.device )
+            seq_full[:,0,:Lasu] = seq_network[None][:,0,:Lasu]
+            best_lddtfull = torch.zeros( (B,O*Lasu),device=best_lddt.device )
+            best_lddtfull[:,:Lasu] = all_plddt[recycle][:,:Lasu]
+            bond_featsfull = torch.zeros( (B,O*Lasu,O*Lasu),device=best_lddt.device )
+            bond_featsfull[:,:Lasu,:Lasu] = bond_feats[:,:Lasu,:Lasu]
+            Lsfull = Ls*O
+            for i in range(1,O):
+                best_xyzfull[:,(i*Lasu):((i+1)*Lasu)] = torch.einsum('ij,braj->brai', symmRs[i], best_xyz[:,:Lasu].float())
+                bond_featsfull[:,(i*Lasu):((i+1)*Lasu),(i*Lasu):((i+1)*Lasu)] = bond_feats[:,:Lasu,:Lasu]
+                seq_full[:,0,(i*Lasu):((i+1)*Lasu)] = seq_network[None][:,0,:Lasu]
 
-        util.writepdb(out_prefix+".pdb", best_xyzfull[0], seq_full[0, -1], bfacts=best_lddtfull[0].float(), 
-                      bond_feats=bond_featsfull, chain_Ls=Lsfull)
+            util.writepdb(out_prefix+f"_rec{recycle}.pdb", best_xyzfull[0], seq_full[0, -1], bfacts=100*best_lddtfull[0].float(), 
+                          bond_feats=bond_featsfull, chain_Ls=Lsfull)
 
         if args.dump_extra_pdbs:
             util.writepdb(out_prefix+"_last.pdb", xyz_prev[0], seq[0, -1], bfacts=best_lddtfull[0].float(),
@@ -874,11 +944,12 @@ class Predictor():
             util.writepdb(out_prefix+"_init.pdb", xyz_prev_orig[0], seq[0, -1], bond_feats=bond_featsfull)
 
         # output losses, model confidence
-        loss_dict = {}
-        loss_dict['pae'] = float(best_pae.mean())
-        loss_dict['pde'] = float(best_pde.mean())
-        loss_dict['plddt'] = float(best_lddt[0].mean())
-        loss_dict['p_bind'] = float(best_p_bind)
+        #err_dict = calc_pred_err(pred_lddt_binned, logit_pae, logit_pde, seq[0,0])
+        #loss_dict = {}
+        #loss_dict['best_pae'] = float(best_pae.mean())
+        #loss_dict['best_pde'] = float(best_pde.mean())
+        #loss_dict['best_plddt'] = float(best_lddt[0].mean())
+        #loss_dict.update(err_dict)
 
         if args.dump_aux:
             prob_s = [prob.permute(1,2,0).detach().cpu().numpy().astype(np.float16) for prob in prob_s]
@@ -913,7 +984,7 @@ class Predictor():
                 util.writepdb(out_prefix+"_traj.pdb", Y[i], seq[0,-1], 
                     modelnum=i+1, bond_feats=bond_feats, file_mode="a")
 
-        return loss_dict
+        return pd.DataFrame.from_records(records)
 
 
 if __name__ == "__main__":
@@ -930,9 +1001,13 @@ if __name__ == "__main__":
 
     # single prediction mode
     if args.list is None and args.folder is None:
+        from pathlib import Path
+        file = Path(args.out)
+        file.parent.mkdir(parents=True, exist_ok=True)
+        losses_list  = []
         for n in range(args.n_pred):
             print(f'Making prediction {n}...')
-            pred.predict(args.out+f'_{n}', 
+            loss_df = pred.predict(args.out+f'_{n}', 
                          msa_fn=args.msa,
                          pdb_fn=args.pdb,
                          fasta_fn=args.multi,
@@ -942,6 +1017,7 @@ if __name__ == "__main__":
                          hhr_fn=args.hhr, 
                          atab_fn=args.atab, 
                          mol2_fn=args.mol2, 
+                         smiles=args.smiles,
                          init_protein_tmpl=args.init_protein_tmpl,
                          init_ligand_tmpl=args.init_ligand_tmpl,
                          init_protein_xyz=args.init_protein_xyz,
@@ -949,10 +1025,17 @@ if __name__ == "__main__":
                          atomize_res=args.atomize_residues,
                          disulfidize_res=args.disulfidize_residues,
                          n_cycle=args.n_cycle,
+                         n_templ=1,
                          trunc_N=args.trunc_N,
                          trunc_C=args.trunc_C,
                          symm=args.symm
             )
+            loss_df["n_pred"] = n
+            losses_list.append(loss_df)
+        all_loss_df = pd.concat(losses_list)
+        print(f'Outputting scores to {args.outcsv}')
+        all_loss_df.to_csv(args.outcsv)
+
 
     # scoring a list of inputs
     else:

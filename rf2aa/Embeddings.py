@@ -46,7 +46,7 @@ class MSA_emb(nn.Module):
         #   - pair: Initial Pair embedding (B, L, L, d_pair)
 
         N = msa.shape[1] # number of sequenes in MSA
-        
+
         # msa embedding
         msa = self.emb(msa) # (B, N, L, d_pair) # MSA embedding
         tmp = self.emb_q(seq).unsqueeze(1) # (B, 1, L, d_pair) -- query embedding

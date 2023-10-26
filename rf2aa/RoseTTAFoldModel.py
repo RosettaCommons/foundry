@@ -199,7 +199,7 @@ class RoseTTAFoldModule(nn.Module):
         B, N, L = msa_latent.shape[:3]
         A = atom_frames.shape[1]
         dtype = msa_latent.dtype
-
+        
         if self.assert_single_sequence_input:
             assert_shape(msa_latent, (1, 1, L, 164))
             assert_shape(msa_full, (1, 1, L, 83))
@@ -237,15 +237,15 @@ class RoseTTAFoldModule(nn.Module):
             assert_that(same_chain.device).is_equal_to(device)
 
         if self.verbose_checks:
-            ic(is_motif.shape)
+            #ic(is_motif.shape)
             is_sm = rf2aa.util.is_atom(seq[0])  # (L)
-            is_protein_motif = is_motif & ~is_sm
-            if is_motif.any():
-                motif_protein_i = torch.where(is_motif)[0][0]
-            is_motif_sm = is_motif & is_sm
-            if is_sm.any():
-                motif_sm_i = torch.where(is_motif_sm)[0][0]
-            diffused_protein_i = torch.where(~is_sm & ~is_motif)[0][0]
+            #is_protein_motif = is_motif & ~is_sm
+            #if is_motif.any():
+            #    motif_protein_i = torch.where(is_motif)[0][0]
+            #is_motif_sm = is_motif & is_sm
+            #if is_sm.any():
+            #    motif_sm_i = torch.where(is_motif_sm)[0][0]
+            #diffused_protein_i = torch.where(~is_sm & ~is_motif)[0][0]
 
             """
             msa_full: NSEQ,N_INDEL,N_TERMINUS,
@@ -273,12 +273,12 @@ class RoseTTAFoldModule(nn.Module):
             ]
             msa_latent_terminus = np.r_[2 * NAATOKENS + 2 * NINDEL : NMSAMASKED]
 
-            i_name = [(diffused_protein_i, "diffused_protein")]
-            if is_sm.any():
-                i_name.insert(0, (motif_sm_i, "motif_sm"))
-            if is_motif.any():
-                i_name.insert(0, (motif_protein_i, "motif_protein"))
-
+            #i_name = [(diffused_protein_i, "diffused_protein")]
+            #if is_sm.any():
+            #    i_name.insert(0, (motif_sm_i, "motif_sm"))
+            #if is_motif.any():
+            #    i_name.insert(0, (motif_protein_i, "motif_protein"))
+            i_name = [(0, "tst")]
             for i, name in i_name:
                 ic(f"------------------{name}:{i}----------------")
                 msa_full_seq = msa_full[0, 0, i, np.r_[0:NAATOKENS]]

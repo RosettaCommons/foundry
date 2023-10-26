@@ -360,7 +360,7 @@ class PairStr2Pair(nn.Module):
 
         return pair + (pairnew/countnew[...,None]).reshape(N,L,L,-1)
 
-    def forward(self, pair, rbf_feat, state, crop=-1):
+    def forward(self, pair, rbf_feat, state, crop=64):
         B,L = pair.shape[:2]
 
         rbf_feat = self.emb_rbf(rbf_feat)
@@ -545,7 +545,7 @@ class Str2Str(nn.Module):
         
         offset = shift['1'].reshape(B, L, 2, 3)
         offset[:,is_motif,...] = 0            # NOTE: DJ - frozen motif!! 
-        T = offset[:,:,0,:] / 10.0
+        T = offset[:,:,0,:] / 10
         R = offset[:,:,1,:] / 100.0
 
         Qnorm = torch.sqrt( 1 + torch.sum(R*R, dim=-1) )
@@ -1106,7 +1106,6 @@ class IterativeSimulator(nn.Module):
             Lasu = L//symmsub.shape[0]
         else:
             Lasu = L
-
         rotation_mask = is_atom(seq_unmasked)
         xyz_s = list()
         alpha_s = list()
@@ -1116,6 +1115,7 @@ class IterativeSimulator(nn.Module):
             if self.use_extra_l1:
                 dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
                 extra_l1 = dchiraldxyz[0].detach()
+
             msa_full, pair, xyz, state, alpha, symmsub = self.extra_block[i_m](msa_full, pair,
                                                                xyz, state, seq_unmasked, idx, 
                                                                symmids, symmsub, symmRs, symmmeta,
@@ -1181,9 +1181,9 @@ class IterativeSimulator(nn.Module):
                     extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
 
                 xyz, state, alpha = self.str_refiner(
-                    msa, pair, xyz.detach(), state, idx,
+                    msa.float(), pair.float(), xyz.detach().float(), state.float(), idx,
                     rotation_mask, bond_feats,  dist_matrix, atom_frames, 
-                    is_motif, extra_l0, extra_l1, top_k=64, use_atom_frames=use_atom_frames     #fd 128->64
+                    is_motif, extra_l0.float(), extra_l1.float(), top_k=64, use_atom_frames=use_atom_frames     #fd 128->64
                 )
 
 

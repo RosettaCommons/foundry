@@ -5,8 +5,9 @@ import string
 import os,re
 from os.path import exists
 import random
-import rf2aa.util
+import rf2aa.util as util
 import gzip
+import rf2aa
 from rf2aa.ffindex import *
 import torch
 from rf2aa.chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP, to1letter, INIT_CRDS
@@ -118,7 +119,7 @@ def read_multichain_pdb(pdb_fn, tmpl_chain=None, tmpl_conf=0.1):
             if line[:4] != "ATOM":
                 continue
                 outbatch = 0
-
+            
             resNo, atom, aa = int(line[22:26]), line[12:16], line[17:20]
             aa_idx = aa2num[aa] if aa in aa2num.keys() else 20
 
@@ -775,7 +776,6 @@ def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_autom
     obConversion = openbabel.OBConversion()
     obConversion.SetInFormat(filetype)
     obmol = openbabel.OBMol()
-
     if string:
         obConversion.ReadString(obmol,filename)
     elif filetype=='sdf':
@@ -783,7 +783,6 @@ def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_autom
         obConversion.ReadString(obmol,molstring)
     else:
         obConversion.ReadFile(obmol,filename)
-
     if generate_conformer:
         builder = openbabel.OBBuilder()
         builder.Build(obmol)
@@ -794,7 +793,6 @@ def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_autom
             ff.GetCoordinates(obmol)
         else:
             raise ValueError(f"Failed to generate 3D coordinates for molecule {filename}.")
-
     if remove_H:
         obmol.DeleteHydrogens()
         # the above sometimes fails to get all the hydrogens
@@ -804,7 +802,6 @@ def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_autom
                 obmol.DeleteAtom(obmol.GetAtom(i))
             else:
                 i += 1
-
     atomtypes = [atomnum2atomtype.get(obmol.GetAtom(i).GetAtomicNum(), 'ATM') 
                  for i in range(1, obmol.NumAtoms()+1)]
     msa = torch.tensor([aa2num[x] for x in atomtypes])
@@ -815,6 +812,6 @@ def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_autom
     mask = torch.full(atom_coords.shape[:-1], True) # (1, natoms,)
 
     if find_automorphs:
-        atom_coords, mask = rf2aa.util.get_automorphs(obmol, atom_coords[0], mask[0])
+        atom_coords, mask = util.get_automorphs(obmol, atom_coords[0], mask[0])
 
     return obmol, msa, ins, atom_coords, mask
