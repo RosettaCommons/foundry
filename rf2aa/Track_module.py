@@ -37,9 +37,8 @@ class PositionalEncoding2D(nn.Module):
         self.nbin_atom = maxpos_atom+2 # include 0 and "unknown" token (maxpos_sm + 1)
         self.emb_res = nn.Embedding(self.nbin_res, d_pair)
         self.emb_atom = nn.Embedding(self.nbin_atom, d_pair)
-        self.emb_chain = nn.Embedding(2, d_pair)
 
-    def forward(self, seq, idx, bond_feats, dist_matrix, same_chain=None):
+    def forward(self, seq, idx, bond_feats, dist_matrix):
         sm_mask = is_atom(seq[0])
 
         res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask,
@@ -54,12 +53,6 @@ class PositionalEncoding2D(nn.Module):
         emb_atom = self.emb_atom(ib_atom) #(B, L, L, d_pair)
 
         out = emb_res + emb_atom
-
-        if same_chain is not None:
-            emb_c = self.emb_chain(same_chain.long()) # this is used for MSA_emb but not in IterBlock
-            #HACK: we found the same_chain embedding hurts multimer prediction, but we have to use all parameters
-            #TODO: remove this for fd4
-            out += emb_c*0 
 
         return out
 
@@ -948,7 +941,7 @@ class IterBlock(nn.Module):
         crop=-1
     ):
         cas = xyz[:,:,1].contiguous()
-        rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, dist_matrix, same_chain)
+        rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, dist_matrix)
         if use_checkpoint:
             msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state)
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair)

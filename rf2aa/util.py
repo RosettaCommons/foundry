@@ -1868,48 +1868,82 @@ def kabsch(xyz1, xyz2, eps=1e-6):
     return rmsd, U
 
 
-def get_contacts(xyz1, xyz2, max_dist=5):
-    """
-    gets a random contact between two xyz tensors within a certain distance cutoff
-    """
-    contacts = torch.cdist(xyz1, xyz2)
-    is_close_euclidean = contacts < max_dist
-    return is_close_euclidean
+# def get_contacts(xyz1, xyz2, max_dist=5):
+#     """
+#     gets a random contact between two xyz tensors within a certain distance cutoff
+#     """
+#     contacts = torch.cdist(xyz1, xyz2)
+#     is_close_euclidean = contacts < max_dist
+#     return is_close_euclidean
+# 
+# 
+# def get_triple_contact(is_close_euclidean_far_seq):
+#     """
+#     note: considered squaring the adjacency matrix for this computation but noticed it is slower than early stopping
+#     """
+#     contact_idxs = is_close_euclidean_far_seq.nonzero()
+#     contact_idxs = contact_idxs[torch.randperm(len(contact_idxs))]
+#     for i,j in contact_idxs:
+#         if j < i:
+#             continue
+#         K = (is_close_euclidean_far_seq[i,:] * is_close_euclidean_far_seq[j,:]).nonzero()
+#         if len(K):
+#             K = K[torch.randperm(len(K))]
+#             for k in K:
+#                 return torch.tensor([i,j,k])
+#     return None
 
 
-def get_triple_contact(is_close_euclidean_far_seq):
-    """
-    note: considered squaring the adjacency matrix for this computation but noticed it is slower than early stopping
-    """
-    contact_idxs = is_close_euclidean_far_seq.nonzero()
-    contact_idxs = contact_idxs[torch.randperm(len(contact_idxs))]
-    for i,j in contact_idxs:
-        if j < i:
-            continue
-        K = (is_close_euclidean_far_seq[i,:] * is_close_euclidean_far_seq[j,:]).nonzero()
-        if len(K):
-            K = K[torch.randperm(len(K))]
-            for k in K:
-                return torch.tensor([i,j,k])
-    return None
+#def get_residue_contacts(xyz, idx, max_dist=5, seq_dist_greater_than=10):
+#    """
+#    find two residues close in geometric space but far in sequence space 
+#    this mimics the theozyme task in diffusion so the structure prediction model can learn the task before 
+#    transfer learning
+#    """
+#    Cb = generate_Cbeta(xyz[:, 0], xyz[:, 1], xyz[:, 2])
+#    is_close_euclidean = get_contacts(Cb, Cb, max_dist=max_dist)
+#    seqsep = torch.abs(idx[None, :] - idx[:, None])
+#    is_far_seqsep = seqsep > seq_dist_greater_than
 
+#    is_close_euclidean_far_seq = is_close_euclidean * is_far_seqsep
 
-def get_residue_contacts(xyz, idx, max_dist=5, seq_dist_greater_than=10):
+#    triplet =  get_triple_contact(is_close_euclidean_far_seq) # returns absolute index in tensors but want residue indices for other functions
+
+#    if triplet is None:
+#        return None
+#    return idx[triplet]
+
+def get_residue_contacts(xyz, idx, seq_dist_greater_than=10, n_contacts=5):
     """
-    find two residues close in geometric space but far in sequence space 
+    find a cluster of residues close in geometric space but far in sequence space 
     this mimics the theozyme task in diffusion so the structure prediction model can learn the task before 
     transfer learning
     """
     Cb = generate_Cbeta(xyz[:, 0], xyz[:, 1], xyz[:, 2])
-    is_close_euclidean = get_contacts(Cb, Cb, max_dist=max_dist)
-    seqsep = torch.abs(idx[None, :] - idx[:, None])
-    is_far_seqsep = seqsep > seq_dist_greater_than
 
-    is_close_euclidean_far_seq = is_close_euclidean * is_far_seqsep
-
-    triplet =  get_triple_contact(is_close_euclidean_far_seq) # returns absolute index in tensors but want residue indices for other functions
-
-    if triplet is None:
+    if Cb.shape[0] <= n_contacts+seq_dist_greater_than:
         return None
-    return idx[triplet]
+
+    ds = torch.cdist(Cb, Cb)
+    mask = torch.abs(idx[:,None]-idx[None,:])<seq_dist_greater_than
+    ds[mask] += 99.0
+
+    x = torch.argsort(ds.flatten())[np.random.randint(10)]
+    L = ds.shape[0]
+    ii,jj=torch.div(x,L,rounding_mode='floor'),x%L
+    ds[ii,jj] = ds[jj,ii] = 999.
+    nodes = [ii,jj]
+    for i in range(2,n_contacts):
+        mindist,kk = 999.,-1
+        for j in nodes:
+            k = torch.argmin(ds[j,:])
+            if (ds[j,k]<mindist):
+                mindist = ds[j,k]
+                kk = k
+        for j in nodes:
+            ds[j,kk] = ds[kk,j] = 999.
+        nodes.append(kk)
+    nodes,_ = torch.sort(torch.stack(nodes))
+
+    return idx[nodes]
 

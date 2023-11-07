@@ -94,8 +94,7 @@ default_dataloader_params = {
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20230515.pkl"%sm_compl_dir, # cache for faster loading 
-#        "DATAPKL"          : "dude_cutoff_-5.pkl",
+        "DATAPKL"          : "%s/dataset_20231107.pkl"%sm_compl_dir, # cache for faster loading 
         "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
         "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
         "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)
@@ -127,8 +126,8 @@ default_dataloader_params = {
         "MAXATOMS"         : 100,
         "MAXSIM"           : 0.85,
         "MAXNSYMM"         : 1024,
-        "NRES_ATOMIZE_MIN" : 1,
-        "NRES_ATOMIZE_MAX" : 5,
+        "NRES_ATOMIZE_MIN" : 5,
+        "NRES_ATOMIZE_MAX" : 15,
         "ATOMIZE_FLANK"    : 0,
         "MAXPROTCHAINS"    : 6,
         "MAXLIGCHAINS"     : 10,
@@ -136,7 +135,7 @@ default_dataloader_params = {
         "P_METAL"          : 0.75,
         "P_ATOMIZE_MODRES" : 0.75,
         "MAXMONOMERLENGTH" : None,
-        "ATOMIZE_TRIPLE_CONTACT": True,
+        "ATOMIZE_CLUSTER"  : True,
         "P_ATOMIZE_TEMPLATE": 1.0,
         "NUM_SEQS_SUBSAMPLE": 50,
         "BLACK_HOLE_INIT"   : False,
@@ -972,7 +971,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     #fd: cluster RNA like others
     rna = pd.read_csv(params['RNA_LIST'])
     rna = _apply_date_res_cutoffs(rna)
-    rna['LEN'] = rna['LENA:B:C'].apply(lambda x: [int(y) for y in x.split(':')])
+    rna['LEN'] = rna['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
     #rna['CLUSTER'] = range(len(rna)) # for unweighted sampling
     rna['LEN_EXIST'] = rna['LEN'].apply(lambda x: sum(x))
 
@@ -2030,7 +2029,6 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
         if (clen<=20):
             crop_idx = torch.arange(start,stop+1,device=msa.device)
             disulf_crop = True
-            #print ('featurize_single_chain crop',crop_idx)
 
     if (not disulf_crop):
         if (np.random.rand() < p_short_crop):
@@ -3774,9 +3772,10 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
     
-    if params.get("NUM_SEQS_SUBSAMPLE", False):
-        if len(msa) > params["NUM_SEQS_SUBSAMPLE"]:
-            msa, ins = subsample_MSA(msa, ins, params["NUM_SEQS_SUBSAMPLE"])
+    #fd -- do not do this
+    #if params.get("NUM_SEQS_SUBSAMPLE", False):
+    #    if len(msa) > params["NUM_SEQS_SUBSAMPLE"]:
+    #        msa, ins = subsample_MSA(msa, ins, params["NUM_SEQS_SUBSAMPLE"])
 
     idx = torch.arange(len(pdb['xyz'])) 
     xyz = torch.full((len(idx),NTOTAL,3), np.nan).float()
@@ -3824,8 +3823,8 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
             + ("atomize_pdb", item,)
     
     res_idxs_to_atomize = None
-    if params.get("ATOMIZE_TRIPLE_CONTACT", False):
-        res_idxs_to_atomize = get_residue_contacts(xyz_prot[can_atomize_idx], can_atomize_idx)
+    if params.get("ATOMIZE_CLUSTER", False) and (np.random.rand()<0.9): # 10% of time do continuous crop
+        res_idxs_to_atomize = get_residue_contacts(xyz_prot[can_atomize_idx], can_atomize_idx, n_res_atomize)
 
     if res_idxs_to_atomize is None: # this is triggered if triple contact fails or if the task is not triple contact
         i_start = torch.randint(flank+1, can_atomize_idx.shape[0]-(n_res_atomize+flank+1),(1,))
@@ -3912,6 +3911,227 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
            xyz_prev.float(), mask_prev, \
            same_chain, False, False, frames_atomize_all, bond_feats.long(), dist_matrix, chirals_atomize_all, \
            ch_label, 'C1', "atomize_pdb", item
+
+
+def loader_atomize_complex(
+    item, params, homo, n_res_atomize, flank, unclamp=False,
+    pick_top=True, p_homo_cut=0.5, random_noise=5.0
+):
+    """ load complex with portions represented as atoms instead of residues """
+    pdb_pair, pMSA_hash, L_s, taxID = item['CHAINID'], item['HASH'], item['LEN'], item['TAXONOMY']
+    msaA_id, msaB_id = pMSA_hash.split('_')
+
+    if len(set(taxID.split(':'))) == 1: # two proteins have same taxID -- use paired MSA
+        # read pMSA
+        pMSA_fn = params['COMPL_DIR'] + '/pMSA/' + msaA_id[:3] + '/' + msaB_id[:3] + '/' + pMSA_hash + '.a3m.gz'
+        a3m = get_msa(pMSA_fn, pMSA_hash)
+    else:
+        # read MSA for each subunit & merge them
+        a3mA_fn = params['PDB_DIR'] + '/a3m/' + msaA_id[:3] + '/' + msaA_id + '.a3m.gz'
+        a3mB_fn = params['PDB_DIR'] + '/a3m/' + msaB_id[:3] + '/' + msaB_id + '.a3m.gz'
+        a3mA = get_msa(a3mA_fn, msaA_id)
+        a3mB = get_msa(a3mB_fn, msaB_id)
+        a3m = merge_a3m_hetero(a3mA, a3mB, L_s)
+
+    # get MSA features
+    msa = a3m['msa'].long()
+    ins = a3m['ins'].long()
+    if len(msa) > params['BLOCKCUT']:
+        msa, ins = MSABlockDeletion(msa, ins)
+
+    # read template info
+    tpltA_fn = params['PDB_DIR'] + '/torch/hhr/' + msaA_id[:3] + '/' + msaA_id + '.pt'
+    tpltB_fn = params['PDB_DIR'] + '/torch/hhr/' + msaB_id[:3] + '/' + msaB_id + '.pt'
+    tpltA = torch.load(tpltA_fn)
+    tpltB = torch.load(tpltB_fn)
+
+    ntemplA = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
+    ntemplB = np.random.randint(0, params['MAXTPLT']+1-ntemplA)
+    xyz_t_A, f1d_t_A, mask_t_A, _ = TemplFeaturize(tpltA, L_s[0], params, offset=0, npick=ntemplA, npick_global=max(1,max(ntemplA, ntemplB)), pick_top=pick_top, random_noise=random_noise)
+    xyz_t_B, f1d_t_B, mask_t_B, _ = TemplFeaturize(tpltB, L_s[1], params, offset=0, npick=ntemplB, npick_global=max(1,max(ntemplA, ntemplB)), pick_top=pick_top, random_noise=random_noise)
+    xyz_t_prot = torch.cat((xyz_t_A, random_rot_trans(xyz_t_B)), dim=1) # (T, L1+L2, natm, 3)
+    f1d_t_prot = torch.cat((f1d_t_A, f1d_t_B), dim=1) # (T, L1+L2, natm, 3)
+    mask_t_prot = torch.cat((mask_t_A, mask_t_B), dim=1) # (T, L1+L2, natm, 3)
+
+    # read PDB
+    pdbA_id, pdbB_id = pdb_pair.split(':')
+    pdbA = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdbA_id[1:3]+'/'+pdbA_id+'.pt')
+    pdbB = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdbB_id[1:3]+'/'+pdbB_id+'.pt')
+
+    # read metadata
+    pdbid = pdbA_id.split('_')[0]
+    meta = torch.load(params['PDB_DIR']+'/torch/pdb/'+pdbid[1:3]+'/'+pdbid+'.pt')
+
+    # get transform
+    xformA = meta['asmb_xform%d'%item['ASSM_A']][item['OP_A']]
+    xformB = meta['asmb_xform%d'%item['ASSM_B']][item['OP_B']]
+
+    # apply transform
+    xyzA = torch.einsum('ij,raj->rai', xformA[:3,:3], pdbA['xyz']) + xformA[:3,3][None,None,:]
+    xyzB = torch.einsum('ij,raj->rai', xformB[:3,:3], pdbB['xyz']) + xformB[:3,3][None,None,:]
+    xyz = torch.full((sum(L_s), NTOTAL, 3), np.nan).float()
+    xyz[:,:14] = torch.cat((xyzA, xyzB), dim=0)
+    mask = torch.full((sum(L_s), NTOTAL), False)
+    mask[:,:14] = torch.cat((pdbA['mask'], pdbB['mask']), dim=0)
+    xyz = torch.nan_to_num(xyz)
+
+    idx = torch.arange(sum(L_s))
+    idx[L_s[0]:] += CHAIN_GAP
+
+    same_chain = torch.zeros((sum(L_s), sum(L_s))).long()
+    same_chain[:L_s[0], :L_s[0]] = 1
+    same_chain[L_s[0]:, L_s[0]:] = 1
+    bond_feats = torch.zeros((sum(L_s), sum(L_s))).long()
+    bond_feats[:L_s[0], :L_s[0]] = get_protein_bond_feats(L_s[0])
+    bond_feats[L_s[0]:, L_s[0]:] = get_protein_bond_feats(sum(L_s[1:]))
+
+    # center templates
+    ntempl = xyz_t_prot.shape[0]
+    xyz_t_prot = torch.stack(
+        [center_and_realign_missing(xyz_t_prot[i], mask_t_prot[i], same_chain=same_chain) for i in range(ntempl)]
+    )
+
+    crop_len = params['CROP'] - n_res_atomize*12
+    if sum(L_s) > crop_len:
+        params_temp = copy.deepcopy(params)
+        params_temp['CROP'] = crop_len
+        crop_idx = get_spatial_crop(xyz, mask, torch.arange(sum(L_s)), L_s, params_temp, pdb_pair)
+    else:
+        crop_idx = torch.arange(sum(L_s))
+
+    msa_prot = msa[:, crop_idx]
+    ins_prot = ins[:, crop_idx]
+    xyz_prot = xyz[crop_idx]
+    mask_prot = mask[crop_idx]
+    idx = idx[crop_idx]
+    xyz_t_prot = xyz_t_prot[:, crop_idx]
+    f1d_t_prot = f1d_t_prot[:, crop_idx]
+    mask_t_prot = mask_t_prot[:, crop_idx]
+    bond_feats = bond_feats[crop_idx][:, crop_idx]
+    same_chain = same_chain[crop_idx][:, crop_idx]
+    protein_L, nprotatoms, _ = xyz_prot.shape
+
+    # choose region to atomize
+    can_atomize_mask = torch.ones((protein_L,))
+
+    idx_missing_N = torch.where(~mask_prot[1:,0])[0]+1 # residues missing bb N, excluding 1st residue
+    idx_missing_C = torch.where(~mask_prot[:-1,2])[0] # residues missing bb C, excluding last residue
+    can_atomize_mask[idx_missing_N-1] = 0 # can't atomize residues before a missing N
+    can_atomize_mask[idx_missing_C+1] = 0 # can't atomize residues after a missing C
+
+    num_atoms_per_res = allatom_mask[msa_prot[0],:14].sum(dim=-1) # how many atoms should each residue have?
+    num_atoms_exist = mask_prot.sum(dim=-1) # how many atoms have coords in each residue?
+    can_atomize_mask[(num_atoms_per_res != num_atoms_exist)] = 0
+    can_atomize_idx = torch.where(can_atomize_mask)[0]
+
+    # not enough valid residues to atomize and have space for flanks, treat as complex example
+    if flank + 1 >= can_atomize_idx.shape[0]-(n_res_atomize+flank+1):
+        print ('error atomizing complex',item, flank)
+        chirals = torch.Tensor()
+        L_s = [ torch.sum(crop_idx<L_s[0]).numpy(), torch.sum(crop_idx>=L_s[0]).numpy() ]
+        seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa_prot, ins_prot, params, L_s=L_s)
+        ch_label = torch.zeros(seq[0].shape)
+        ch_label[L_s[0]:] = 1
+        xyz_prev, mask_prev = generate_xyz_prev(xyz_t_prot, mask_t_prot, params)
+        dist_matrix = get_bond_distances(bond_feats)
+
+        return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+           xyz_prot.float(), mask_prot, idx.long(), \
+           xyz_t_prot.float(), f1d_t_prot.float(), mask_t_prot, \
+           xyz_prev.float(), mask_prev, \
+           same_chain, False, False, torch.zeros(seq.shape), bond_feats.long(), dist_matrix, chirals, \
+           ch_label, 'C1', "atomize_complex", item
+
+    res_idxs_to_atomize = None
+    if params.get("ATOMIZE_CLUSTER", False) and (np.random.rand()<0.9): # 10% of time do continuous crop
+        res_idxs_to_atomize = get_residue_contacts(xyz_prot[can_atomize_idx], can_atomize_idx, n_res_atomize)
+
+    if res_idxs_to_atomize is None: # this is triggered if triple contact fails or if the task is not triple contact
+        i_start = torch.randint(flank+1, can_atomize_idx.shape[0]-(n_res_atomize+flank+1),(1,))
+        i_start = can_atomize_idx[i_start] # index of the first residue to be atomized
+
+        for i_end in range(i_start+1, i_start + n_res_atomize):
+            if i_end not in can_atomize_idx:
+                n_res_atomize = int(i_end-i_start)
+                #print(f'WARNING: n_res_atomize set to {n_res_atomize} due to not enough consecutive '\
+                #      f'fully-resolved residues to atomize. {item} i_start={i_start}')
+                break
+        res_idxs_to_atomize = torch.arange(start=int(i_start), end=int(i_start+n_res_atomize))
+
+    seq_atomize_all, ins_atomize_all, xyz_atomize_all, mask_atomize_all, frames_atomize_all, chirals_atomize_all, \
+        bond_feats, same_chain = atomize_discontiguous_residues(res_idxs_to_atomize, msa_prot, xyz_prot, mask_prot, bond_feats, same_chain)
+
+    atom_template_motif_idxs = get_atom_template_indices(msa_prot,res_idxs_to_atomize)
+
+    # Generate ground truth structure: account for ligand symmetry
+    N_symmetry, sm_L, _ = xyz_atomize_all.shape
+    xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
+    mask = torch.full(xyz.shape[:-1], False).bool()
+    xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
+    xyz[:, protein_L:, 1, :] = xyz_atomize_all
+    mask[:, :protein_L, :nprotatoms] = mask_prot.expand(N_symmetry, protein_L, nprotatoms)
+    mask[:, protein_L:, 1] = mask_atomize_all
+
+    # generate template for atoms
+    if torch.rand(1) < params["P_ATOMIZE_TEMPLATE"]:
+        xyz_t_sm, f1d_t_sm, mask_t_sm = spoof_template(xyz[0, protein_L:], seq_atomize_all, mask[0, protein_L:], atom_template_motif_idxs)
+    else:
+        tplt_sm = {"ids":[]}
+        xyz_t_sm, f1d_t_sm, mask_t_sm, _ = TemplFeaturize(tplt_sm, xyz_atomize_all.shape[1], params, offset=0, npick=0, pick_top=pick_top)
+    ntempl = xyz_t_prot.shape[0]
+    xyz_t = torch.cat((xyz_t_prot, xyz_t_sm.repeat(ntempl,1,1,1)), dim=1)
+    f1d_t = torch.cat((f1d_t_prot, f1d_t_sm.repeat(ntempl,1,1)), dim=1)
+    mask_t = torch.cat((mask_t_prot, mask_t_sm.repeat(ntempl,1,1)), dim=1)
+
+    Ls = [xyz_prot.shape[0], xyz_atomize_all.shape[1]]
+    a3m_prot = {"msa": msa_prot, "ins": ins_prot}
+    a3m_sm = {"msa": seq_atomize_all.unsqueeze(0), "ins": ins_atomize_all.unsqueeze(0)}
+
+    a3m = merge_a3m_hetero(a3m_prot, a3m_sm, Ls)
+    msa = a3m['msa'].long()
+    ins = a3m['ins'].long()
+
+    # handle res_idx
+    last_res = idx[-1]
+    idx_sm = torch.arange(Ls[1]) + last_res
+    idx = torch.cat((idx, idx_sm))
+
+    ch_label = torch.zeros(sum(Ls))
+    # remove msa features for atomized portion
+    msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
+        pop_protein_feats(res_idxs_to_atomize, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
+
+    # N/C-terminus features for MSA features (need to generate before cropping)
+    # term_info = get_term_feats(Ls)
+    # term_info[xyz_prot.shape[0]:, :] = 0 # ligand chains don't get termini features
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params,
+    #term_info=term_info
+    )
+
+    ntempl = xyz_t.shape[0]
+    xyz_t = torch.stack(
+        [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
+    )
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+
+    # xyz_prev = xyz_t[0].clone()
+    # # xyz_prev[Ls[0]:] = xyz_prev[i_start] # no templates provided anymore this line won't work
+    # mask_prev = mask_t[0].clone()
+    xyz = torch.nan_to_num(xyz)
+
+    dist_matrix = get_bond_distances(bond_feats)
+
+    if chirals_atomize_all.shape[0]>0:
+        L1 = torch.sum(~is_atom(seq[0]))
+        chirals_atomize_all[:, :-1] = chirals_atomize_all[:, :-1] +L1
+
+    return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+           xyz.float(), mask, idx.long(), \
+           xyz_t.float(), f1d_t.float(), mask_t, \
+           xyz_prev.float(), mask_prev, \
+           same_chain, False, False, frames_atomize_all, bond_feats.long(), dist_matrix, chirals_atomize_all, \
+           ch_label, 'C1', "atomize_complex", item
+
 
 def loader_sm(item, params, pick_top=True):
     """Load small molecule with atom tokens. Also, compute frames for atom FAPE loss calc"""
@@ -4475,7 +4695,11 @@ class DistilledDataset(data.Dataset):
         ])
         self.ligand_dictionary = ligand_dictionary
 
-        correct_dataset_ordering = ["pdb", "fb", "compl", "neg_compl", "na_compl", "neg_na_compl", "rna", "sm_compl", "metal_compl", "sm_compl_multi", "sm_compl_covale", "sm_compl_asmb", "sm", "sm_compl_docked_neg", "sm_compl_permuted_neg", "sm_compl_furthest_neg", "atomize_pdb"]
+        correct_dataset_ordering = [
+            "pdb", "fb", "compl", "neg_compl", "na_compl", "neg_na_compl", "rna", "sm_compl",
+            "metal_compl", "sm_compl_multi", "sm_compl_covale", "sm_compl_asmb", "sm", "sm_compl_docked_neg",
+            "sm_compl_permuted_neg", "sm_compl_furthest_neg", "atomize_pdb", "atomize_complex"
+        ]
         for index, (key, dataset_name) in enumerate(zip(self.index_dict.keys(), correct_dataset_ordering)):
             error_message = f"Expected dataset {dataset_name} at index {index}, but you provided dataset {key}. "
             error_message += "See DistilledDataset for the correct dataset names and ordering."
@@ -4642,6 +4866,17 @@ class DistilledDataset(data.Dataset):
                     self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'], 
                     unclamp=(p_unclamp > self.unclamp_cut))
             offset += len(self.index_dict['atomize_pdb'])
+
+            if index >= offset and index < offset + len(self.index_dict['atomize_complex']):
+                task = "atomize_complex"
+                ID = self.ID_dict['atomize_complex'][index-offset]
+                item = sample_item(self.dataset_dict['atomize_complex'], ID)
+                n_res_atomize = np.random.randint(self.params['NRES_ATOMIZE_MIN'], self.params['NRES_ATOMIZE_MAX']+1)
+                out = self.loader_dict['atomize_complex'](item,
+                    self.params, self.homo, n_res_atomize, self.params['ATOMIZE_FLANK'],
+                    unclamp=(p_unclamp > self.unclamp_cut))
+            offset += len(self.index_dict['atomize_complex'])
+
         except Exception as e:
             print('error loading',item, '\n',repr(e), task)
             raise e
@@ -4669,6 +4904,7 @@ class DistributedWeightedSampler(data.Sampler):
             sm_compl_asmb=0,
             sm=0,
             atomize_pdb=0,
+            atomize_complex=0,
             sm_compl_furthest_neg=0,
             sm_compl_permuted_neg=0,
             sm_compl_docked_neg=0,

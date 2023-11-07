@@ -21,7 +21,7 @@ sys.path.append(script_dir)
 
 from rf2aa.data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex,
-    loader_na_complex, loader_rna, loader_sm, loader_atomize_pdb,
+    loader_na_complex, loader_rna, loader_sm, loader_atomize_pdb, loader_atomize_complex,
     loader_sm_compl_assembly, loader_sm_compl_assembly_single, 
     Dataset, DatasetComplex, DatasetNAComplex,
     DatasetRNA, DatasetSM, DatasetSMComplex, DatasetSMComplexAssembly,
@@ -913,6 +913,13 @@ class Trainer():
         train_dict['atomize_pdb'] = train_dict['pdb']
         valid_dict['atomize_pdb'] = valid_dict['pdb']
 
+        # define atomize_pdb train/valid sets, which use the same examples as pdb set
+        train_ID_dict['atomize_complex'] = train_ID_dict['compl']
+        valid_ID_dict['atomize_complex'] = valid_ID_dict['compl']
+        weights_dict['atomize_complex'] = weights_dict['compl']
+        train_dict['atomize_complex'] = train_dict['compl']
+        valid_dict['atomize_complex'] = valid_dict['compl']
+
         # reweight fb examples containing disulfide loops
         to_reweight_ex = train_dict['fb']['HAS_DSLF_LOOP']
         to_reweight_cluster = train_dict['fb'][to_reweight_ex].CLUSTER.unique()
@@ -953,6 +960,7 @@ class Trainer():
             sm_compl_asmb = loader_sm_compl_assembly,
             sm = loader_sm,
             atomize_pdb = loader_atomize_pdb,
+            atomize_complex = loader_atomize_complex,
             sm_compl_furthest_neg = loader_sm_compl_assembly,
             sm_compl_permuted_neg = loader_sm_compl_assembly,
             sm_compl_docked_neg = loader_sm_compl_assembly,
@@ -981,7 +989,12 @@ class Trainer():
             atomize_pdb = Dataset(
                 valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
                 loader_atomize_pdb, valid_dict['atomize_pdb'],
-                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0, p_short_crop=-1.0
+                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=9, flank=0, p_short_crop=-1.0
+            ),
+            atomize_complex = Dataset(
+                valid_ID_dict['atomize_complex'][:self.dataset_param['n_valid_atomize_complex']],
+                loader_atomize_complex, valid_dict['atomize_complex'],
+                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=9, flank=0, p_short_crop=-1.0
             ),
             pdb = Dataset(
                 valid_ID_dict['pdb'][:self.dataset_param['n_valid_pdb']],
@@ -1068,7 +1081,8 @@ class Trainer():
             sm_compl_covale = "Covalent_ligand",
             sm_compl_strict = 'SM_Compl_(strict)',
             sm = 'SM_CSD',
-            atomize_pdb = 'Monomer_atomize_3',
+            atomize_pdb = 'Monomer_atomize',
+            atomize_complex = 'Complex_atomize',
             sm_compl_asmb = 'SMCompl_Assembly',
         )
         valid_samplers = OrderedDict([
@@ -1371,14 +1385,12 @@ class Trainer():
         t1d = t1d.to(gpu, non_blocking=True)
         mask_t = mask_t.to(gpu, non_blocking=True)
         
-        xyz_prev = xyz_prev.to(gpu, non_blocking=True)
-        mask_prev = mask_prev.to(gpu, non_blocking=True)
+        #xyz_prev = xyz_prev.to(gpu, non_blocking=True)
+        #mask_prev = mask_prev.to(gpu, non_blocking=True)
 
-        #seq = seq.to(gpu, non_blocking=True)
-        #msa = msa.to(gpu, non_blocking=True)
-        #msa_masked = msa_masked.to(gpu, non_blocking=True)
-        #msa_full = msa_full.to(gpu, non_blocking=True)
-        #mask_msa = mask_msa.to(gpu, non_blocking=True)
+        #fd --- use black hole initialization
+        xyz_prev = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1).to(gpu, non_blocking=True)
+        mask_prev = torch.zeros((1,L,NTOTAL), dtype=torch.bool).to(gpu, non_blocking=True)
 
         atom_frames = atom_frames.to(gpu, non_blocking=True)
         bond_feats = bond_feats.to(gpu, non_blocking=True)
@@ -1504,10 +1516,9 @@ class Trainer():
                 input_i[key] = network_input[key][:,i_cycle].to(gpu, non_blocking=True)
             else:
                 input_i[key] = network_input[key]
-        msa_prev, pair_prev, xyz_prev, state_prev, alpha, mask_recycle = output_i
+        msa_prev, pair_prev, xyz_prev, alpha, mask_recycle = output_i
         input_i['msa_prev'] = msa_prev
         input_i['pair_prev'] = pair_prev
-        input_i['state_prev'] = state_prev
         input_i['xyz'] = xyz_prev
         input_i['mask_recycle'] = mask_recycle
         input_i['sctors'] = alpha
@@ -1519,7 +1530,7 @@ class Trainer():
         self, output_i, true_crds, atom_mask, same_chain,
         seq, msa, mask_msa, idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, ctrid=0
     ):
-        logit_s, logit_aa_s, logit_pae, logit_pde, p_bind, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = output_i
+        logit_s, logit_aa_s, logit_pae, logit_pde, p_bind, pred_crds, alphas, pred_allatom, pred_lddts, _, _ = output_i
 
         if (symmRs is not None):
             #print ('a', pred_crds.shape, true_crds.shape, mask_crds.shape)
@@ -1633,7 +1644,7 @@ class Trainer():
             
             N_cycle = np.random.randint(1, self.maxcycle+1) # number of recycling
 
-            output_i = (None, None, xyz_prev, None, alpha_prev, mask_recycle)
+            output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
             for i_cycle in range(N_cycle):
                 with ExitStack() as stack:
                     if i_cycle < N_cycle -1:
@@ -1812,7 +1823,7 @@ class Trainer():
 
                 N_cycle = self.maxcycle # number of recycling
 
-                output_i = (None, None, xyz_prev, None, alpha_prev, mask_recycle)
+                output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
                 for i_cycle in range(N_cycle):
                     with ExitStack() as stack:
                         stack.enter_context(torch.cuda.amp.autocast(enabled=USE_AMP))
@@ -1984,7 +1995,7 @@ class Trainer():
 
                 N_cycle = self.maxcycle # number of recycling
 
-                output_i = (None, None, xyz_prev, None, alpha_prev, mask_recycle)
+                output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
                 for i_cycle in range(N_cycle): 
                     with ExitStack() as stack:
                         stack.enter_context(torch.cuda.amp.autocast(enabled=USE_AMP))
@@ -2087,7 +2098,7 @@ class Trainer():
 
                 N_cycle = self.maxcycle # number of recycling
                 
-                output_i = (None, None, xyz_prev, None, alpha_prev, mask_recycle)
+                output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
                 for i_cycle in range(N_cycle): 
                     with ExitStack() as stack:
                         stack.enter_context(torch.cuda.amp.autocast(enabled=USE_AMP))

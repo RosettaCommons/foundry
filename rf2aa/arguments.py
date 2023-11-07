@@ -18,10 +18,12 @@ DATASET_PARAMS = [
     "fraction_sm_compl_covale",
     "fraction_sm",
     "fraction_atomize_pdb",
+    "fraction_atomize_complex",
     "fraction_sm_compl_asmb",
     "n_train",
     "n_valid_pdb",
     "n_valid_atomize_pdb",
+    "n_valid_atomize_complex",
     "fraction_sm_compl_furthest_neg",
     "fraction_sm_compl_permuted_neg",
     "fraction_sm_compl_docked_neg",
@@ -288,6 +290,8 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
             help="how often to sample small molecule crystals during training")
     dataset_group.add_argument('-fraction_atomize_pdb', type=float, default=0.00,
             help="how often to sample atomized pdb monomers during training")
+    dataset_group.add_argument('-fraction_atomize_complex', type=float, default=0.00,
+            help="how often to sample atomized pdb monomers during training")
     dataset_group.add_argument('-fraction_sm_compl_asmb', type=float, default=0.00,
             help="how often to sample atomized pdb monomers during training")
     dataset_group.add_argument('-fraction_sm_compl_furthest_neg', type=float, default=0.0,
@@ -314,6 +318,7 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
     dataset_group.add_argument('-n_valid_sm_compl_strict', type=int)
     dataset_group.add_argument('-n_valid_sm', type=int)
     dataset_group.add_argument('-n_valid_atomize_pdb', type=int)
+    dataset_group.add_argument('-n_valid_atomize_complex', type=int)
     dataset_group.add_argument('-n_valid_sm_compl_asmb', type=int)
     dataset_group.add_argument(
         "-n_valid_sm_compl_furthest_neg",

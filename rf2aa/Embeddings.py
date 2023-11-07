@@ -35,7 +35,7 @@ class MSA_emb(nn.Module):
 
         nn.init.zeros_(self.emb.bias)
 
-    def forward(self, msa, seq, idx, bond_feats, dist_matrix, same_chain):
+    def forward(self, msa, seq, idx, bond_feats, dist_matrix):
         # Inputs:
         #   - msa: Input MSA (B, N, L, d_init)
         #   - seq: Input Sequence (B, L)
@@ -57,7 +57,7 @@ class MSA_emb(nn.Module):
         left = self.emb_left(seq)[:,None] # (B, 1, L, d_pair)
         right = self.emb_right(seq)[:,:,None] # (B, L, 1, d_pair)
         pair = left + right # (B, L, L, d_pair)
-        pair = pair + self.pos(seq, idx, bond_feats, dist_matrix, same_chain) # add relative position
+        pair = pair + self.pos(seq, idx, bond_feats, dist_matrix) # add relative position
 
         # state embedding
         state = self.emb_state(seq)
@@ -340,38 +340,32 @@ class Templ_emb(nn.Module):
 class Recycling(nn.Module):
     def __init__(self, d_msa=256, d_pair=128, d_state=32, d_rbf=64):
         super(Recycling, self).__init__()
-        self.proj_dist = nn.Linear(d_rbf+d_state*2, d_pair)
+        self.proj_dist = nn.Linear(d_rbf, d_pair)
         self.norm_pair = nn.LayerNorm(d_pair)
-        self.proj_sctors = nn.Linear(2*NTOTALDOFS, d_msa)
         self.norm_msa = nn.LayerNorm(d_msa)
-        self.norm_state = nn.LayerNorm(d_state)
-
+        
         self.reset_parameter()
     
     def reset_parameter(self):
+        #self.emb_rbf = init_lecun_normal(self.emb_rbf)
+        #nn.init.zeros_(self.emb_rbf.bias)
         self.proj_dist = init_lecun_normal(self.proj_dist)
         nn.init.zeros_(self.proj_dist.bias)
-        self.proj_sctors = init_lecun_normal(self.proj_sctors)
-        nn.init.zeros_(self.proj_sctors.bias)
 
-    def forward(self, msa, pair, xyz, state, sctors, mask_recycle=None):
-        B, L = pair.shape[:2]
-        state = self.norm_state(state)
+    def forward(self, msa, pair, xyz, mask_recycle=None):
+        B, L = msa.shape[:2]
+        msa = self.norm_msa(msa)
+        pair = self.norm_pair(pair)
 
-        left = state.unsqueeze(2).expand(-1,-1,L,-1)
-        right = state.unsqueeze(1).expand(-1,L,-1,-1)
-        
-        Ca_or_P = xyz[:,:,1].contiguous()
+        Ca = xyz[:,:,1]
+        dist_CA = rbf(
+            torch.cdist(Ca, Ca)
+        ).reshape(B,L,L,-1)
 
-        dist = rbf(torch.cdist(Ca_or_P, Ca_or_P))
         if mask_recycle != None:
-            dist = mask_recycle[...,None].float()*dist
-        dist = torch.cat((dist, left, right), dim=-1)
-        dist = self.proj_dist(dist)
-        pair = dist + self.norm_pair(pair)
+            dist_CA = mask_recycle[...,None].float()*dist_CA
 
-        sctors = self.proj_sctors(sctors.reshape(B,-1,2*NTOTALDOFS))
-        msa = sctors + self.norm_msa(msa)
+        pair = pair + self.proj_dist(dist_CA) 
 
-        return msa, pair, state
+        return msa, pair
 

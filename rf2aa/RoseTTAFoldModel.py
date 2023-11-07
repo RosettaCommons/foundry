@@ -167,7 +167,7 @@ class RoseTTAFoldModule(nn.Module):
         dist_matrix,
         chirals, 
         atom_frames=None, t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
-        msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None, is_motif=None,
+        msa_prev=None, pair_prev=None, mask_recycle=None, is_motif=None,
         return_raw=False,
         use_checkpoint=False,
         return_infer=False, #fd ?
@@ -192,7 +192,6 @@ class RoseTTAFoldModule(nn.Module):
         # ic(get_shape(same_chain))
         # ic(get_shape(msa_prev))
         # ic(get_shape(pair_prev))
-        # ic(get_shape(state_prev))
         # ic(get_shape(mask_recycle))
         # ic()
         # ic()
@@ -325,7 +324,7 @@ class RoseTTAFoldModule(nn.Module):
 
         # Get embeddings
         msa_latent, pair, state = self.latent_emb(
-            msa_latent, seq, idx, bond_feats,  dist_matrix, same_chain
+            msa_latent, seq, idx, bond_feats,  dist_matrix
         )
         msa_full = self.full_emb(msa_full, seq, idx)
         pair = pair + self.bond_emb(bond_feats)
@@ -339,15 +338,12 @@ class RoseTTAFoldModule(nn.Module):
             msa_prev = torch.zeros_like(msa_latent[:,0])
         if pair_prev is None:
             pair_prev = torch.zeros_like(pair)
-        if state_prev is None:
-            state_prev = torch.zeros_like(state)
 
-        msa_recycle, pair_recycle, state_recycle = self.recycle(msa_prev, pair_prev, xyz, state_prev, sctors, mask_recycle)
-        msa_recycle, pair_recycle, state_recycle = msa_recycle.to(dtype), pair_recycle.to(dtype), state_recycle.to(dtype)
+        msa_recycle, pair_recycle = self.recycle(msa_prev, pair_prev, xyz, mask_recycle)
+        msa_recycle, pair_recycle = msa_recycle.to(dtype), pair_recycle.to(dtype)
 
         msa_latent[:,0] = msa_latent[:,0] + msa_recycle.reshape(B,L,-1)
         pair = pair + pair_recycle
-        state = state + state_recycle
 
         # add template embedding
         pair, state = self.templ_emb(t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop)
@@ -365,7 +361,7 @@ class RoseTTAFoldModule(nn.Module):
         if return_raw:
             # get last structure
             xyz_last = xyz_allatom[-1].unsqueeze(0)
-            return msa[:,0], pair, xyz_last, state, alpha_s[-1], None
+            return msa[:,0], pair, xyz_last, alpha_s[-1], None
 
         # predict masked amino acids
         logits_aa = self.aa_pred(msa)
@@ -408,5 +404,5 @@ class RoseTTAFoldModule(nn.Module):
 
         return (
             logits, logits_aa, logits_pae, logits_pde, p_bind, 
-            xyz, alpha_s, xyz_allatom, lddt, msa[:,0], pair, state
+            xyz, alpha_s, xyz_allatom, lddt, msa[:,0], pair
         )
