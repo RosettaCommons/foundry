@@ -760,7 +760,7 @@ class SCPred(nn.Module):
         si = self.linear_out(F.relu_(si))
         return si.view(B, L, NTOTALDOFS, 2)
 
-def update_symm_Rs(xyz, Lasu, symmsub, symmRs, fit=True, tscale=1.0):
+def update_symm_Rs(xyz, Lasu, symmsub, symmRs, fit=False, tscale=1.0):
     def dist_error_comp(R0,T0,xyz,tscale):
         B = xyz.shape[0]
         Tcom = xyz[:,:Lasu].mean(dim=1,keepdim=True)
@@ -775,15 +775,6 @@ def update_symm_Rs(xyz, Lasu, symmsub, symmRs, fit=True, tscale=1.0):
         dsymm = torch.linalg.norm(delsx, dim=-1)
         dtrue = torch.linalg.norm(deltx, dim=-1)
         loss1 = torch.abs(dsymm-dtrue).mean()
-
-        # clash loss
-        #Xsymmall = torch.einsum('sij,brj->bsri', symmRs, Tcorr).reshape(B,-1,3)
-        #delsxall = Xsymmall[:,:Lasu,None]-Xsymmall[:, None, Lasu:]
-        #dsymm = torch.linalg.norm(delsxall, dim=-1)
-
-        #CLASH = 4.0
-        #clash = torch.clamp( CLASH - dsymm , min=0 )
-        #loss2 = torch.sum(clash)/Lasu
 
         return loss1,0.0 #loss2
 
@@ -800,9 +791,9 @@ def update_symm_Rs(xyz, Lasu, symmsub, symmRs, fit=True, tscale=1.0):
     B = xyz.shape[0]
 
     # symmetry correction 1: don't let COM (of entire complex) move
-    Tmean = xyz[:,:Lasu].reshape(-1,3).mean(dim=0)
-    Tmean = torch.einsum('sij,j->si', symmRs, Tmean).mean(dim=0)
-    xyz = xyz - Tmean
+    #Tmean = xyz[:,:Lasu].reshape(-1,3).mean(dim=0)
+    #Tmean = torch.einsum('sij,j->si', symmRs, Tmean).mean(dim=0)
+    #xyz = xyz - Tmean
 
     if fit:
         # symmetry correction 2: use minimization to minimize drms
@@ -833,7 +824,7 @@ def update_symm_Rs(xyz, Lasu, symmsub, symmRs, fit=True, tscale=1.0):
     return xyz
 
 
-def update_symm_subs(xyz, pair, symmids, symmsub, symmRs, metasymm, fit=True, tscale=1.0):
+def update_symm_subs(xyz, pair, symmids, symmsub, symmRs, metasymm, fit=False, tscale=1.0):
     B,Ls = xyz.shape[0:2]
     Osub = symmsub.shape[0]
     L = Ls//Osub

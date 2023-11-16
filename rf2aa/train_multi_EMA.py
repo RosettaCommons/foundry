@@ -22,7 +22,7 @@ sys.path.append(script_dir)
 from rf2aa.data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex,
     loader_na_complex, loader_distil_tf, loader_tf_complex, loader_dna_rna, 
-    loader_sm, loader_atomize_pdb, loader_atomize_complex
+    loader_sm, loader_atomize_pdb, loader_atomize_complex,
     loader_sm_compl_assembly, loader_sm_compl_assembly_single, 
     Dataset, DatasetComplex, DatasetNAComplex, DatasetTFComplex,
     DatasetRNA, DatasetSM, DatasetSMComplex, DatasetSMComplexAssembly,
