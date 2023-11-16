@@ -21,9 +21,10 @@ sys.path.append(script_dir)
 
 from rf2aa.data_loader import (
     get_train_valid_set, loader_pdb, loader_fb, loader_complex,
-    loader_na_complex, loader_rna, loader_sm, loader_atomize_pdb, loader_atomize_complex,
+    loader_na_complex, loader_distil_tf, loader_tf_complex, loader_dna_rna, 
+    loader_sm, loader_atomize_pdb, loader_atomize_complex
     loader_sm_compl_assembly, loader_sm_compl_assembly_single, 
-    Dataset, DatasetComplex, DatasetNAComplex,
+    Dataset, DatasetComplex, DatasetNAComplex, DatasetTFComplex,
     DatasetRNA, DatasetSM, DatasetSMComplex, DatasetSMComplexAssembly,
     DistilledDataset, DistributedWeightedSampler, unbatch_item
 )
@@ -284,7 +285,12 @@ class Trainer():
         different_chain = ~same_chain.bool()
         frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3)
 
-        if negative: # inter-chain fapes should be ignored for negative cases
+#        ic(task, res_mask.sum(), pred.shape, true.shape)
+        if 'tf' in task[0] or res_mask.sum() == 0:
+            tot_str = 0.0 * pred.sum(axis=(1,2,3,4))
+            pae_loss = 0.0 * logit_pae.sum()
+            pde_loss = 0.0 * logit_pde.sum()
+        elif negative: # inter-chain fapes should be ignored for negative cases
 
             if logit_pae is not None:
                 logit_pae = logit_pae[:,:,res_mask[0]][:,:,:,res_mask[0]]
@@ -303,11 +309,12 @@ class Trainer():
                 logit_pde=logit_pde,
             )
 
-            # fd pae/pde loss not computed correctly, zero for negatives
+            #fd pae/pde loss not computed correctly, zero for negatives
             # Pascal: I think the above is no longer true. PAE/PDE should
             # be computed correctly for intra chain
-            # pae_loss *= 0.0
-            # pde_loss *= 0.0
+            #pae_loss *= 0.0
+            #pde_loss *= 0.0
+
         else:
 
             if logit_pae is not None:
@@ -519,7 +526,10 @@ class Trainer():
         # allatom fape and torsion angle loss
         # frames, frame_mask = get_frames(
         #     pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
-        if negative.item(): # inter-chain fapes should be ignored for negative cases
+        if 'tf' in task[0] or res_mask.sum() == 0:
+            l_fape = torch.zeros((pred.shape[0])).to(gpu)
+
+        elif negative.item(): # inter-chain fapes should be ignored for negative cases
             l_fape, _, _ = compute_general_FAPE(
                 pred_allatom[:,res_mask[0],:,:3],
                 nat_symm[None,res_mask[0],:,:3],
@@ -542,12 +552,15 @@ class Trainer():
         loss_dict['allatom_fape'] = l_fape[0].detach()
 
         # rmsd loss (for logging only)
-        rmsd = calc_crd_rmsd(
-            pred_allatom[:,mask_BB[0],:,:3],
-            nat_symm[None,mask_BB[0],:,:3],
-            xs_mask[:,mask_BB[0]]
-            )
-        loss_dict["rmsd"] = rmsd[0].detach()
+        if torch.any(mask_BB[0]):
+            rmsd = calc_crd_rmsd(
+                pred_allatom[:,mask_BB[0],:,:3],
+                nat_symm[None,mask_BB[0],:,:3],
+                xs_mask[:,mask_BB[0]]
+                )
+            loss_dict["rmsd"] = rmsd[0].detach()
+        else:
+            loss_dict["rmsd"] = torch.tensor(0, device=gpu)
 
         # create protein and not protein masks; not protein could include nucleic acids
         prot_mask_BB = is_protein(label_aa_s[0,0]) #*mask_BB[0] # (L,)
@@ -555,21 +568,21 @@ class Trainer():
         xs_mask_prot, xs_mask_lig = xs_mask.clone(), xs_mask.clone()
         xs_mask_prot[:,~prot_mask_BB] = False
         xs_mask_lig[:,~not_prot_mask_BB] = False
-        if torch.any(prot_mask_BB):
+        if torch.any(prot_mask_BB) and torch.any(mask_BB[0]):
             rmsd_prot_prot = calc_crd_rmsd(
                 pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
                 atom_mask=xs_mask_prot[:,mask_BB[0]], rmsd_mask=xs_mask_prot[:,mask_BB[0]]
             )
         else:
             rmsd_prot_prot = torch.tensor([0], device=pred.device)
-        if torch.any(not_prot_mask_BB):
+        if torch.any(not_prot_mask_BB) and torch.any(mask_BB[0]):
             rmsd_lig_lig = calc_crd_rmsd(
                 pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
                 atom_mask=xs_mask_lig[:,mask_BB[0]], rmsd_mask=xs_mask_lig[:,mask_BB[0]]
             )
         else:
             rmsd_lig_lig = torch.tensor([0], device=pred.device)
-        if torch.any(prot_mask_BB) and torch.any(not_prot_mask_BB):
+        if torch.any(prot_mask_BB) and torch.any(not_prot_mask_BB) and torch.any(mask_BB[0]):
             rmsd_prot_lig = calc_crd_rmsd(
                 pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
                 atom_mask=xs_mask_prot[:,mask_BB[0]], rmsd_mask=xs_mask_lig[:,mask_BB[0]],
@@ -607,12 +620,17 @@ class Trainer():
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
         loss_dict['clash_loss'] = clash_loss[0].detach()
-        atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(
-            pred=pred_allatom[:,mask_BB[0]],
-            true=nat_symm[None,mask_BB[0]],
-            bond_feats=bond_feats[:,mask_BB[0]][:,:,mask_BB[0]],
-            seq=seq[:,mask_BB[0]]
-        )
+        if torch.any(mask_BB[0]):
+            atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(
+                pred=pred_allatom[:,mask_BB[0]],
+                true=nat_symm[None,mask_BB[0]],
+                bond_feats=bond_feats[:,mask_BB[0]][:,:,mask_BB[0]],
+                seq=seq[:,mask_BB[0]]
+            )
+        else:
+            atom_bond_loss = torch.tensor(0, device=gpu)
+            skip_bond_loss = torch.tensor(0, device=gpu)
+            rigid_loss = torch.tensor(0, device=gpu)
 
         if w_atom_bond >= 0.0:
             tot_loss += w_atom_bond*atom_bond_loss
@@ -784,7 +802,7 @@ class Trainer():
                     #wrong size full_emb.emb.weight torch.Size([64, 33]) torch.Size([64, 35])
 
                     if rank == 0:
-                        print (
+                        ic(
                             'wrong size',param,
                              checkpoint['model_state_dict'][param].shape,
                              model.module.model.state_dict()[param].shape )
@@ -951,8 +969,12 @@ class Trainer():
             neg_compl = loader_complex,
             na_compl = loader_na_complex,
             neg_na_compl = loader_na_complex,
+            distil_tf = loader_distil_tf,
+            tf = loader_tf_complex,
+            neg_tf = loader_tf_complex,
             fb = loader_fb,
-            rna = loader_rna,
+            rna = loader_dna_rna,
+            dna = loader_dna_rna,
             sm_compl = loader_sm_compl_assembly_single,
             metal_compl = loader_sm_compl_assembly_single,
             sm_compl_multi = loader_sm_compl_assembly_single,
@@ -1013,8 +1035,23 @@ class Trainer():
             ),
             rna = DatasetRNA(
                 valid_ID_dict['rna'][:self.dataset_param['n_valid_rna']],
-                loader_rna, valid_dict['rna'],
+                loader_dna_rna, valid_dict['rna'],
                 self.loader_param
+            ),
+            dna = DatasetRNA(
+                valid_ID_dict['dna'][:self.dataset_param['n_valid_dna']],
+                loader_dna_rna, valid_dict['dna'],
+                self.loader_param
+            ),
+            distil_tf = DatasetNAComplex(
+                valid_ID_dict['distil_tf'][:self.dataset_param['n_valid_distil_tf']],
+                loader_distil_tf, valid_dict['distil_tf'],
+                self.loader_param, negative=False, native_NA_frac=0.0
+            ),
+            atomize_pdb = Dataset(
+                valid_ID_dict['atomize_pdb'][:self.dataset_param['n_valid_atomize_pdb']],
+                loader_atomize_pdb, valid_dict['atomize_pdb'],
+                self.loader_param, homo, p_homo_cut=-1.0, n_res_atomize=3, flank=0, p_short_crop=-1.0
             ),
             metal_compl = DatasetSMComplexAssembly(
                 valid_ID_dict['metal_compl'][:self.dataset_param['n_valid_metal_compl']],
@@ -1071,10 +1108,12 @@ class Trainer():
         )
 
         valid_headers = dict(
+            distil_tf = 'TF_Distil',
             pdb = 'Monomer',
             dslf = 'Disulfide_loop',
             homo = 'Homo',
             rna = 'RNA',
+            dna = 'DNA',
             sm_compl = 'SM_Compl',
             metal_compl = 'Metal_ion',
             sm_compl_multi = 'Multires_ligand',
@@ -1120,6 +1159,18 @@ class Trainer():
                     valid_ID_dict['neg_na_compl'][:self.dataset_param['n_valid_neg_na_compl']],
                     loader_na_complex, valid_dict['neg_na_compl'],
                     self.loader_param, negative=True, native_NA_frac=0.0
+                ),
+            ),
+            tf = (
+                DatasetTFComplex(
+                    valid_ID_dict['tf'][:self.dataset_param['n_valid_tf']],
+                    loader_tf_complex, valid_dict['tf'],
+                    self.loader_param, negative=False
+                ),
+                DatasetTFComplex(
+                    valid_ID_dict['neg_tf'][:self.dataset_param['n_valid_neg_tf']],
+                    loader_tf_complex, valid_dict['neg_tf'],
+                    self.loader_param, negative=True
                 ),
             ),
             sm_compl_furthest = (
@@ -1210,6 +1261,7 @@ class Trainer():
         valid_ppi_headers = dict(
             compl = 'Complex',
             na_compl = 'P/NA_Complex',
+            tf = 'TF_binding',
             sm_compl_furthest = 'SM_Complex_(furthest_crop)',
             sm_compl_permuted = 'SM_Complex_(property_matched)',
             sm_compl_docked = "SM_Complex_(docked)",
@@ -1286,19 +1338,16 @@ class Trainer():
                                                         scheduler=scheduler, scaler=scaler)
         valid_tot = None
         if loaded_epoch >= self.n_epoch:
-            DDP_cleanup()
+            #DDP_cleanup() # RM : this function does not exist
             return
 
         rng = np.random.RandomState(seed=rank)
-
-        ##fd  Uncomment to run validation set before beginning training
+        #fd  Uncomment to run validation set before beginning training
         #for dataset_name, valid_loader in valid_loaders.items():
-        #    #print (dataset_name, len(valid_loader))
         #    valid_tot_, valid_loss_, valid_acc_, _ = self.valid_pdb_cycle(ddp_model, 
         #        valid_loader, rank, gpu, world_size, loaded_epoch, rng, 
         #        header=valid_headers[dataset_name], verbose = self.eval) 
         #for dataset_name, (valid_pos_loader, valid_neg_loader) in valid_ppi_loaders.items():
-        #    #print (dataset_name, len(valid_pos_loader), len(valid_neg_loader))
         #    valid_tot_, valid_loss_, valid_acc_, _, _ = self.valid_ppi_cycle(ddp_model, 
         #        valid_pos_loader, valid_neg_loader, rank, gpu, world_size, loaded_epoch, rng, 
         #        header=valid_ppi_headers[dataset_name], verbose = self.eval) 
@@ -1602,8 +1651,8 @@ class Trainer():
             logit_aa_s, msa, mask_msa, logit_pae, logit_pde, p_bind,
             pred_crds, alphas, pred_allatom, true_crds, 
             atom_mask, res_mask, mask_2d, same_chain,
-            pred_lddts, idx_pdb, bond_feats, dist_matrix, atom_frames=atom_frames,
-            unclamp=unclamp, negative=negative,
+            pred_lddts, idx_pdb, bond_feats, dist_matrix,
+            atom_frames=atom_frames,unclamp=unclamp, negative=negative,
             ctr=ctrid, item=item, task=task, **self.loss_param
         )
         
@@ -1700,6 +1749,8 @@ class Trainer():
                 name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
             elif task[0]=='sm':
                 name = item_['label']
+            elif ('tf' in task[0]) or (task[0] == 'distil_tf'):
+                name = item_['gene_id']
             else:
                 name = item_['CHAINID']
             if save_pdbs:
@@ -1849,7 +1900,7 @@ class Trainer():
                         len(valid_loader)*rank+counter
                     )
                 except Exception as e:
-                    print(item)
+                    ic(item)
                     print(e)
                     loss = None
                     loss_dict = None
@@ -1876,6 +1927,8 @@ class Trainer():
                     name = item_['CHAINID']+'_asm'+str(int(item_['ASSEMBLY']))+'_'+lig_str
                 elif task[0]=='sm':
                     name = item_['label']
+                elif 'tf' in task[0]:
+                    name = item_['gene_id']
                 else:
                     name = item_['CHAINID']
                     

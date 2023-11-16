@@ -37,7 +37,7 @@ from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein
     cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
     map_identical_prot_chains, cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, bond_feats_from_Ls, \
     reindex_protein_feats_after_atomize, get_residue_contacts, atomize_discontiguous_residues, pop_protein_feats, \
-    is_atom, get_atom_template_indices, reassign_symmetry_after_cropping, expand_xyz_sm_to_ntotal, Ls_from_same_chain_2d
+        is_atom, get_atom_template_indices, reassign_symmetry_after_cropping, expand_xyz_sm_to_ntotal, Ls_from_same_chain_2d, is_nucleic
 
 # faster for remote/tukwila nodes 
 #base_dir = "/databases/TrRosetta/PDB-2021AUG02" 
@@ -55,34 +55,18 @@ fb_dir = "/projects/ml/TrRosetta/fb_af"
 sm_compl_dir = "/projects/ml/RF2_allatom"
 mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl" # for phase 3 dataloaders 
 # mol_dir = "/projects/ml/RF2_allatom/isdf" # for legacy datasets
-
-if not os.path.exists(base_dir):
-    # training on AWS
-    base_dir = "/data/databases/PDB-2021AUG02"
-    compl_dir = "/data/databases/RoseTTAComplex"
-    na_dir = "/data/databases/nucleic"
-    fb_dir = "/data/databases/fb_af"
-    sm_compl_dir = "/data/databases/RF2_allatom"
-    mol_dir = "/data/databases/RF2_allatom/pkl"
-    csd_dir = "/data/databases/csd543"
-
-if not os.path.exists(base_dir):
-    # training on blue
-    base_dir = "/gscratch2/PDB-2021AUG02"
-    compl_dir = "/gscratch2/RoseTTAComplex"
-    na_dir = "/gscratch2/nucleic"
-    fb_dir = "/gscratch2/fb_af1"
-    sm_compl_dir = "/gscratch2/RF2_allatom"
-    mol_dir = "/gscratch2/RF2_allatom/rcsb/pkl_v2"
-    csd_dir = "/gscratch2/RF2_allatom/csd543"
+tf_dir = "/projects/ml/prot_dna"
 
 default_dataloader_params = {
         "COMPL_LIST"       : "%s/list.hetero.csv"%compl_dir,
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
         "NEGATIVE_LIST"    : "%s/list.negative.csv"%compl_dir,
         "RNA_LIST"         : "%s/list.rnaonly.csv"%na_dir,
-        "NA_COMPL_LIST"    : "%s/list.nucleic.v2.csv"%na_dir,
-        "NEG_NA_COMPL_LIST": "%s/list.na_negatives.v2.csv"%na_dir,
+        "DNA_LIST"         : "%s/list.dnaonly.v3.csv"%na_dir,
+        "NA_COMPL_LIST"    : "%s/list.nucleic.v3.csv"%na_dir,
+        "NEG_NA_COMPL_LIST": "%s/list.na_negatives.v3.csv"%na_dir,
+        "TF_DISTIL_LIST"   : "%s/prot_na_distill.v3.csv"%tf_dir,
+        "TF_COMPL_LIST"    : "%s/tf_compl_list.v4.csv"%tf_dir,
         "SM_LIST"          : "%s/sm_compl_all_20230418.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02_w_taxid.csv"%sm_compl_dir, # on digs
         "PDB_METADATA"     : "%s/list_v00_w_taxid_20230201.csv"%sm_compl_dir, # on digs
@@ -90,11 +74,13 @@ default_dataloader_params = {
         "CSD_LIST"         : "%s/csd543_cleaned01.csv"%csd_dir, 
         "VAL_PDB"          : "%s/valid_remapped"%sm_compl_dir,
         "VAL_RNA"          : "%s/rna_valid.csv"%na_dir,
+        "VAL_DNA"          : "%s/dna_valid.csv"%na_dir,
         "VAL_COMPL"        : "%s/val_lists/xaa"%compl_dir,
         "VAL_NEG"          : "%s/val_lists/xaa.neg"%compl_dir,
+        "VAL_TF"           : "%s/tf_valid_clusters_v4.txt"%tf_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20231107.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20231116.pkl"%sm_compl_dir, # cache for faster loading 
         "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
         "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
         "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)
@@ -104,6 +90,7 @@ default_dataloader_params = {
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
         "NA_DIR"           : na_dir,
+        "TF_DIR"           : tf_dir,
         "MOL_DIR"          : mol_dir,
         "CSD_DIR"          : csd_dir,
         "MINTPLT"          : 0,
@@ -857,12 +844,13 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     val_compl_ids = set([int(l) for l in open(params['VAL_COMPL']).readlines()])
     val_neg_ids = set([int(l)+NEG_CLUSID_OFFSET for l in open(params['VAL_NEG']).readlines()])
     val_rna_pdb_ids = set([l.rstrip() for l in open(params['VAL_RNA']).readlines()])
+    val_dna_pdb_ids = set([l.rstrip() for l in open(params['VAL_DNA']).readlines()])
+    val_tf_ids = set([int(l) for l in open(params['VAL_TF']).readlines()])
     test_sm_ids = set([int(l) for l in open(params['TEST_SM']).readlines()])
 
     # pdb monomers
     pdb = _load_df(params['PDB_LIST'])
     pdb = _apply_date_res_cutoffs(pdb)
-    ic(params['MAXMONOMERLENGTH'])
     if params['MAXMONOMERLENGTH'] is not None:
         pdb = pdb[pdb["LEN_EXIST"] < params['MAXMONOMERLENGTH']]
         pdb = pdb[pdb["LEN_EXIST"]>60]
@@ -949,8 +937,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     na['LEN_EXIST'] = na['LEN'].apply(lambda x: sum(x))
     na['TOPAD?'] = na['TOPAD?'].apply(lambda x: bool(x))
 
-    valid_dict['na_compl'] = na[na.CLUSTER.isin(val_compl_ids)]
     train_dict['na_compl'] = na[(~na.CLUSTER.isin(val_compl_ids))]
+    valid_dict['na_compl'] = na[na.CLUSTER.isin(val_compl_ids)]
     train_ID_dict['na_compl'], weights_dict['na_compl'] = _get_IDs_weights(train_dict['na_compl'])
     valid_ID_dict['na_compl'] = valid_dict['na_compl'].CLUSTER.drop_duplicates().values
 
@@ -962,26 +950,74 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     na_neg['LEN'] = na_neg['LENA:B:C:D'].apply(lambda x: [int(y) for y in x.split(':')])
     na_neg['LEN_EXIST'] = na_neg['LEN'].apply(lambda x: sum(x))
 
-    valid_dict['neg_na_compl'] = na_neg[na_neg.CLUSTER.isin(val_neg_ids)]
     train_dict['neg_na_compl'] = na_neg[(~na_neg.CLUSTER.isin(val_neg_ids))]
+    valid_dict['neg_na_compl'] = na_neg[na_neg.CLUSTER.isin(val_neg_ids)]
     train_ID_dict['neg_na_compl'], weights_dict['neg_na_compl'] = _get_IDs_weights(train_dict['neg_na_compl'])
     valid_ID_dict['neg_na_compl'] = valid_dict['neg_na_compl'].CLUSTER.drop_duplicates().values
+    
+    # dna-protein distillation (from TF data) (RM)
+    distil_tf = _load_df(params['TF_DISTIL_LIST'])
+    distil_tf['CLUSTER'] = distil_tf['cluster_id']
+    distil_tf['LEN'] = [ 
+            [int(row['Domain size']), int(row['DNA size']), int(row['DNA size'])] if row['oligo'] == 'monomer' 
+            else [int(row['Domain size']), int(row['Domain size']), int(row['DNA size']), int(row['DNA size'])]
+            for _, row in distil_tf.iterrows() 
+            ]
+    distil_tf['LEN_EXIST'] = distil_tf['LEN'].apply(lambda x: sum(x))
+#    distil_tf['FAM_SIZE'] = distil_tf['family'].apply(lambda x: Counter(distil_tf['family'])[x])
+#    distil_tf['SQRT_FAM_SIZE'] = np.sqrt(distil_tf['FAM_SIZE'])
+    
+    train_dict['distil_tf'] = distil_tf[~distil_tf.CLUSTER.isin(val_tf_ids)]
+    valid_dict['distil_tf'] = distil_tf[distil_tf.CLUSTER.isin(val_tf_ids)]
+    train_ID_dict['distil_tf'], weights_dict['distil_tf'] = _get_IDs_weights(train_dict['distil_tf']) 
+    valid_ID_dict['distil_tf'] = valid_dict['distil_tf'].CLUSTER.drop_duplicates().values
+
+    # sequence-only DNA/protein complexes (TF data) (RM)
+    tf = _load_df(params['TF_COMPL_LIST'])
+    tf['CLUSTER'] = tf['cluster_id']
+    tf['LEN'] = [
+            [int(row['Domain size']), int(row['DNA size']), int(row['DNA size'])]
+            for _, row in tf.iterrows()
+            ]
+    tf['LEN_EXIST'] = tf['LEN'].apply(lambda x: sum(x))
+    #tf['FAM_SIZE'] = tf['family'].apply(lambda x: Counter(tf['family'])[x])
+    #tf['SQRT_FAM_SIZE'] = np.sqrt(tf['FAM_SIZE'])
+
+    train_dict['tf'] = tf[~tf.CLUSTER.isin(val_tf_ids)]
+    valid_dict['tf'] = tf[tf.CLUSTER.isin(val_tf_ids)]
+    train_ID_dict['tf'], weights_dict['tf'] = _get_IDs_weights(train_dict['tf'])
+    valid_ID_dict['tf'] = valid_dict['tf'].CLUSTER.drop_duplicates().values
+
+    train_dict['neg_tf'] = tf[~tf.CLUSTER.isin(val_tf_ids)]
+    valid_dict['neg_tf'] = tf[tf.CLUSTER.isin(val_tf_ids)]
+    train_ID_dict['neg_tf'], weights_dict['neg_tf'] = _get_IDs_weights(train_dict['neg_tf']) 
+    valid_ID_dict['neg_tf'] = valid_dict['neg_tf'].CLUSTER.drop_duplicates().values
 
     # rna
-    #fd: cluster RNA like others
     rna = pd.read_csv(params['RNA_LIST'])
     rna = _apply_date_res_cutoffs(rna)
     rna['LEN'] = rna['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
-    #rna['CLUSTER'] = range(len(rna)) # for unweighted sampling
     rna['LEN_EXIST'] = rna['LEN'].apply(lambda x: sum(x))
 
     in_val = rna['CHAINID'].apply(lambda x: any([y in val_rna_pdb_ids for y in x.split(':')]))
     train_dict['rna'] = rna[~in_val]
     valid_dict['rna'] = rna[in_val]
-    #train_ID_dict['rna'] = train_dict['rna'].CLUSTER.values # all unique
-    #weights_dict['rna'] = torch.ones(len(train_ID_dict['rna']))
     train_ID_dict['rna'], weights_dict['rna'] = _get_IDs_weights(train_dict['rna'])
     valid_ID_dict['rna'] = valid_dict['rna'].CLUSTER.drop_duplicates().values #fd
+
+    # dna
+    dna = pd.read_csv(params['DNA_LIST'])
+    dna = _apply_date_res_cutoffs(dna)
+    dna['LEN'] = dna['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
+    dna['CLUSTER'] = range(len(dna)) # for unweighted sampling
+    dna['LEN_EXIST'] = dna['LEN'].apply(lambda x: sum(x))
+
+    in_val = dna['CHAINID'].apply(lambda x: any([y in val_dna_pdb_ids for y in x.split(':')]))
+    train_dict['dna'] = dna[~in_val]
+    valid_dict['dna'] = dna[in_val]
+    train_ID_dict['dna'], weights_dict['dna'] = _get_IDs_weights(train_dict['dna'])
+    valid_ID_dict['dna'] = valid_dict['dna'].CLUSTER.drop_duplicates().values #fd
+
 
     # protein-small molecule complexes
     def _prep_sm_compl_data(df):
@@ -2633,9 +2669,11 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     NMDLS = 1
     if (len(pdb_ids)==2):
         pdbA = [ torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt') ]
-        pdbB = [ torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt') ]
-
-        msaB,insB = None,None
+        
+        filenameB = params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt'
+        if os.path.exists(filenameB+".v3"):
+            filenameB = filenameB+".v3"
+        pdbB = [ torch.load(filenameB) ]
 
         msaB,insB = parse_fasta_if_exists(
             pdbB[0]['seq'], params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.afa', 
@@ -2648,10 +2686,14 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     # protein + NA duplex
     elif (len(pdb_ids)==3):
         pdbA = [ torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt') ]
-        pdbB = [ 
-            torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt'),
-            torch.load(params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt')
-        ]
+        filenameB1 = params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt'
+        filenameB2 = params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt'
+        if os.path.exists(filenameB1+".v3"):
+            filenameB1 = filenameB1+".v3"
+        if os.path.exists(filenameB2+".v3"):
+            filenameB2 = filenameB2+".v3"
+        pdbB = [ torch.load(filenameB1), torch.load(filenameB2) ]
+
         msaB1,insB1 = parse_fasta_if_exists(
             pdbB[0]['seq'], params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.afa', 
             maxseq=5000,
@@ -2676,11 +2718,13 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
             torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt'),
             torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt')
         ]
-        pdbB = [ 
-            torch.load(params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt'),
-            torch.load(params['NA_DIR']+'/torch/'+pdb_ids[3][1:3]+'/'+pdb_ids[3]+'.pt')
-        ]
-
+        filenameB1 = params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt'
+        filenameB2 = params['NA_DIR']+'/torch/'+pdb_ids[3][1:3]+'/'+pdb_ids[3]+'.pt'
+        if os.path.exists(filenameB1+".v3"):
+            filenameB1 = filenameB1+".v3"
+        if os.path.exists(filenameB2+".v3"):
+            filenameB2 = filenameB2+".v3"
+        pdbB = [ torch.load(filenameB1), torch.load(filenameB2) ]
         msaB1,insB1 = parse_fasta_if_exists(
             pdbB[0]['seq'], params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.afa', 
             maxseq=5000,
@@ -2787,8 +2831,8 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     #       - ideally these should return the ensemble, but that requires reprocessing of proteins
     for pdb in pdbB:
         if (len(pdb['xyz'].shape) > 3):
-             pdb['xyz'] = pdb['xyz'][0,...]
-             pdb['mask'] = pdb['mask'][0,...]
+            pdb['xyz'] = pdb['xyz'][0,...]
+            pdb['mask'] = pdb['mask'][0,...]
 
     # read template info
     tpltA = torch.load(params['PDB_DIR'] + '/torch/hhr/' + msa_id[:3] + '/' + msa_id + '.pt')
@@ -2923,18 +2967,420 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
            xyz_prev.float(), mask_prev, \
            same_chain, False, negative, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', "na_compl", item
 
+def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=5.0):
+#    ic(item, negative)
 
-def loader_rna(item, params, random_noise=5.0):
+    gene_id = item["gene_id"]
+    HASH = item['HASH']
+
+    # read protein MSA from a3m file
+    a3mA = get_msa(params["TF_DIR"]+f'/a3m_v2/{gene_id[:2]}/{gene_id}_aligned_domain.a3m', HASH)
+    L_prot = a3mA['msa'].shape[1]
+
+    # pick a DNA sequence to use
+    tf_bind = 'neg' if negative else 'pos'
+    seqs_fn = params["TF_DIR"]+f'/train_seqs/{gene_id[:2]}/{gene_id}_{tf_bind}.afa'
+    with open(seqs_fn, 'r') as f_seqs:
+        seqs = [line.strip() for line in f_seqs]
+    # for positives, and in 20% of negatives, just pick a random sequence
+    if (not negative) or (np.random.rand() < 0.2):
+        seq = seqs[np.random.randint(len(seqs))]
+        _, nmer = choose_matching_seq([seq],seq)
+
+    # for the other 80% of negatives, look at a positive sequence and match its subseq symmetry
+    # e.g. if pos is a partial palindrome (GCACGTGG), neg must also be one (AGCCGGCG) 
+    else:
+        # choose a positive seq to use as reference
+        pos_seqs_fn = params["TF_DIR"]+f'/train_seqs/{gene_id[:2]}/{gene_id}_pos.afa'
+        with open(pos_seqs_fn, 'r') as f_seqs:
+            pos_seqs = [line.strip() for line in f_seqs]
+        pos_seq = pos_seqs[np.random.randint(len(pos_seqs))]
+
+        seq, nmer = choose_matching_seq(seqs, pos_seq)
+        if seq is None:
+            # no repetitions found in positive or no matches found in negatives
+            # revert to default and pick a random sequence
+            seq = seqs[np.random.randint(len(seqs))]
+    
+
+    # add padding from negative sequences
+    pad_options = np.array(['NONE','BOTH','LEFT','RIGHT'])
+    pad_weights = np.array([   2  ,   1  ,   1  ,   1   ])
+    pad_choice = np.random.choice(pad_options, 1, p=pad_weights/sum(pad_weights))
+    
+    if negative:
+        neg_seqs = seqs
+    elif pad_choice != 'NONE':
+        neg_seqs_fn = params["TF_DIR"]+f'/train_seqs/{gene_id[:2]}/{gene_id}_neg.afa'
+        with open(neg_seqs_fn, 'r') as f_seqs:
+            neg_seqs = [line.strip() for line in f_seqs]
+    
+    def get_pad(neg_seqs,MIN_PER=1,MAX_PER=8):
+        pad_seq = np.random.choice(neg_seqs,1)[0]
+        l_pad = np.random.randint(MIN_PER,MAX_PER+1)
+        pad_idx = np.random.randint(0, len(pad_seq) - l_pad + 1)
+        return pad_seq[pad_idx : (pad_idx+l_pad)]
+        
+    if pad_choice in ['LEFT','BOTH']:
+        seq = get_pad(neg_seqs) + seq
+    if pad_choice in ['RIGHT','BOTH']:
+        seq = seq + get_pad(neg_seqs)
+
+    # add sequence-unknown padding to DNA sequence for dimer predictions
+    LEN_OFFSET = np.random.randint(-1,5)
+    while len(seq) < 6 * nmer + LEN_OFFSET:
+        if random.random() < 0.5:
+            seq = seq + 'D'
+        else:
+            seq = 'D' + seq
+
+    Ls = [L_prot, len(seq), len(seq)] 
+
+    # oligomerize protein
+    if nmer > 1:
+        msaA, insA = merge_a3m_homo(a3mA['msa'].long(), a3mA['ins'].long(), nmer)
+        a3mA['msa'] = msaA
+        a3mA['ins'] = insA
+    while len(Ls) < nmer + 2:
+        Ls = [Ls[0]] + Ls
+
+    # compute reverse sequence
+    DNAPAIRS = {'A':'T','T':'A','C':'G','G':'C','D':'D'}
+    rseq = ''.join([DNAPAIRS[x] for x in seq][::-1])
+
+    # convert sequence to numbers and merge
+    alphabet = np.array(list("00000000000000000000-0ACGTD00000"), dtype='|S1').view(np.uint8)
+    msaB = np.array([list(seq)], dtype='|S1').view(np.uint8)
+    msaC = np.array([list(rseq)], dtype='|S1').view(np.uint8)
+    for i in range(alphabet.shape[0]):
+        msaB[msaB == alphabet[i]] = i
+        msaC[msaC == alphabet[i]] = i
+    insB = np.zeros((1,Ls[-2]))
+    insC = np.zeros((1,Ls[-1]))
+    a3mB = {'msa': torch.from_numpy(msaB), 'ins': torch.from_numpy(insB), 'label': HASH}
+    a3mC = {'msa': torch.from_numpy(msaC), 'ins': torch.from_numpy(insC), 'label': HASH}
+
+    a3mB = merge_a3m_hetero(a3mB, a3mC, [Ls[-2], Ls[-1]])
+#    ic(a3mA['msa'].shape,a3mB['msa'].shape,Ls,gene_id)
+    LA = a3mA['msa'].shape[1]
+    LB = a3mB['msa'].shape[1]
+    a3m  = merge_a3m_hetero(a3mA, a3mB, [LA,LB])
+    L = sum(Ls)
+    assert L == a3m['msa'].shape[1]
+
+    # read template info (no template)
+    ntempl = 0
+    tpltA = {'ids':[]} # a fake tpltA
+    xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tpltA, L, params, offset=0, npick=ntempl, pick_top=pick_top, random_noise=random_noise)
+    xyz_t[:,LA:] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,LB,1,1) + torch.rand(1,LB,1,3)*random_noise
+
+    # get MSA features
+    msa = a3m['msa'].long()
+    ins = a3m['ins'].long()
+    if len(msa) > params['BLOCKCUT']:
+        msa, ins = MSABlockDeletion(msa, ins)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
+
+    # build dummy "native" in case a loss function expects it 
+    xyz = torch.full((1, L, NTOTAL, 3), np.nan)
+    mask = torch.full((1, L, NTOTAL), False)
+
+    is_NA = is_nucleic(msa[0])
+    xyz[:,is_NA] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,is_NA.sum(),1,1) + torch.rand(1,is_NA.sum(),1,3)*random_noise
+    is_prot = ~is_NA
+    xyz[:,is_prot] = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,is_prot.sum(),1,1) + torch.rand(1,is_prot.sum(),1,3)*random_noise
+
+    xyz = torch.nan_to_num(xyz)
+
+    # adjust residue indices for chain breaks
+    idx = torch.arange(L)
+    for i in range(1,len(Ls)):
+        idx[sum(Ls[:i]):] += 100
+
+    # determine which residue pairs are on the same chain
+    chain_idx = torch.zeros((L,L)).long() # AKA "same_chain" in other places
+    chain_idx[:LA, :LA] = 1
+
+    chain_idx[LA:, LA:] = 1
+
+    # other features
+    bond_feats = bond_feats_from_Ls(Ls).long()
+    chirals = torch.Tensor()
+    ch_label = torch.zeros((L,)).long()
+    for i in range(len(Ls)):
+        ch_label[sum(Ls[:i]):sum(Ls[:i+1])] = i
+
+    # Do cropping
+    if sum(Ls) > params['CROP']:
+#        print (f'started cropping ({item["gene_id"]})')
+
+        sel = torch.full((L,), False)
+        # use all DNA
+        sel[LA:] = torch.full((LB,), True)
+
+        # use a random continous stretch of protein (same for each monomer)
+        pcrop = params['CROP'] - torch.sum(sel)
+        pcrop_per, pcrop_rem = pcrop // nmer, pcrop % nmer
+        remainder_places = np.array([np.random.randint(nmer) for _ in range(pcrop_rem)])
+        prop_bonuses = [sum(remainder_places==n) for n in range(nmer)]
+
+        cropbegin = np.random.randint(Ls[0]-pcrop_per+1)
+        for n in range(nmer):
+            start = sum(Ls[:n]) + cropbegin
+            end = start + pcrop_per
+            while prop_bonuses[n] > 0:
+                prop_bonuses[n] -= 1
+                if random.random() < 0.5 and end < sum(Ls[:n+1]):
+                    end += 1
+                elif start > 0:
+                    start -= 1
+            sel[start:end] = torch.full((end-start,), True)
+
+#        print (f'got crop sele w/ total size {torch.sum(sel)} ({item["gene_id"]})')
+
+        seq = seq[:,sel]
+        msa_seed_orig = msa_seed_orig[:,:,sel]
+        msa_seed = msa_seed[:,:,sel]
+        msa_extra = msa_extra[:,:,sel]
+        mask_msa = mask_msa[:,:,sel]
+        mask_t = mask_t[:,sel]
+        xyz = xyz[:,sel]
+        mask = mask[:,sel]
+        xyz_t = xyz_t[:,sel]
+        f1d_t = f1d_t[:,sel]
+        #
+        idx = idx[sel]
+        chain_idx = chain_idx[sel][:,sel]
+        bond_feats = bond_feats[sel][:, sel]
+
+    xyz_prev = xyz_t[0].clone()
+    mask_prev = mask_t[0].clone()
+
+    dist_matrix = get_bond_distances(bond_feats)
+
+    if negative:
+        task = 'neg_tf'
+    else:
+        task = 'tf'
+
+    return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+           xyz.float(), mask, idx.long(), \
+           xyz_t.float(), f1d_t.float(), mask_t, \
+           xyz_prev.float(), mask_prev, \
+           chain_idx, False, negative, \
+           torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', task, item
+
+def loader_distil_tf(item, params, random_noise=5.0, pick_top=True, native_NA_frac=0.0, negative=False):
+    # collect info
+    gene_id = item['gene_id']
+    Ls = item['LEN']
+    oligo = item['oligo']
+    dnaseq = item['DNA sequence']
+    HASH = item['HASH']
+
+    nmer = 2 if oligo == 'dimer' else 1
+
+    ##################################
+    # Load and prepare sequence data #
+    ##################################
+    # protein MSA from an a3m file
+    a3mA = get_msa(params["TF_DIR"]+f'/a3m_v2/{gene_id[:2]}/{gene_id}_aligned_domain.a3m', HASH)
+
+    # oligomerize protein
+    if nmer > 1:
+        msaA, insA = merge_a3m_homo(a3mA['msa'].long(), a3mA['ins'].long(), nmer)
+        a3mA['msa'] = msaA
+        a3mA['ins'] = insA
+        fseq = 'DD' + dnaseq + 'DD'
+    else:
+        fseq = dnaseq
+    
+    # DNA from a single sequence
+    DNAPAIRS = {'A':'T','T':'A','C':'G','G':'C','D':'D'}
+    rseq = ''.join([DNAPAIRS[x] for x in fseq][::-1])
+
+    # NOTE: padding?
+
+    # convert sequence to numbers and merge
+    alphabet = np.array(list("00000000000000000000-0ACGTD00000"), dtype='|S1').view(np.uint8)
+    msaB = np.array([list(fseq)], dtype='|S1').view(np.uint8)
+    msaC = np.array([list(rseq)], dtype='|S1').view(np.uint8)
+    for i in range(alphabet.shape[0]):
+        msaB[msaB == alphabet[i]] = i
+        msaC[msaC == alphabet[i]] = i
+    insB = np.zeros((1,Ls[-2]))
+    insC = np.zeros((1,Ls[-1]))
+    a3mB = {'msa': torch.from_numpy(msaB), 'ins': torch.from_numpy(insB), 'label': HASH}
+    a3mC = {'msa': torch.from_numpy(msaC), 'ins': torch.from_numpy(insC), 'label': HASH}
+
+    a3mB = merge_a3m_hetero(a3mB, a3mC, [Ls[-2], Ls[-1]])
+    a3m  = merge_a3m_hetero(a3mA, a3mB, [sum(Ls[:nmer]),sum(Ls[nmer:])])
+
+    # get MSA features
+    msa = a3m['msa'].long()
+    ins = a3m['ins'].long()
+    if len(msa) > params['BLOCKCUT']:
+        msa, ins = MSABlockDeletion(msa, ins)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
+
+    ###################################
+    # Load and prepare structure data #
+    ###################################
+    # load predicted structure as "truth"
+    xyz, mask, _, pdbseq = parse_pdb(
+            params["TF_DIR"]+f'/distill_v2/filtered/{gene_id[:2]}/{gene_id}_{dnaseq}.pdb',
+            seq=True,
+            lddtmask=True
+            )
+
+    xyz = torch.from_numpy(xyz)
+    mask = torch.from_numpy(mask)
+    pdbseq = torch.from_numpy(pdbseq)
+
+    # read template info (no template)
+    # NOTE: use templates?
+    ntempl = 0
+    tpltA = {'ids':[]} # a fake tpltA
+    xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=True, random_noise=random_noise)
+    NAstart = sum(Ls[:nmer])
+    xyz_t[:,NAstart:] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,sum(Ls[-2:]),1,1) + torch.rand(1,sum(Ls[-2:]),1,3)*random_noise
+
+    # other features
+    idx = idx_from_Ls(Ls)
+    same_chain = same_chain_2d_from_Ls(Ls)
+    bond_feats = bond_feats_from_Ls(Ls).long()
+    ch_label = torch.cat([torch.full((L_,), i) for i,L_ in enumerate(Ls)]).long()
+
+    ###############
+    # Do cropping #
+    ###############
+    
+    if sum(Ls) > params['CROP']:
+        sel = get_na_crop(seq[0], xyz, mask, torch.arange(sum(Ls)), Ls, params, negative=False)
+
+        seq = seq[:,sel]
+        msa_seed_orig = msa_seed_orig[:,:,sel]
+        msa_seed = msa_seed[:,:,sel]
+        msa_extra = msa_extra[:,:,sel]
+        mask_msa = mask_msa[:,:,sel]
+        xyz = xyz[sel]
+        mask = mask[sel]
+        xyz_t = xyz_t[:,sel]
+        f1d_t = f1d_t[:,sel]
+        mask_t = mask_t[:,sel]
+        #
+        idx = idx[sel]
+        same_chain = same_chain[sel][:,sel]
+        bond_feats = bond_feats[sel][:,sel]
+        ch_label = ch_label[sel]
+
+    chirals = torch.Tensor()
+    dist_matrix = get_bond_distances(bond_feats)
+    xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
+
+    return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
+           xyz.float(), mask, idx.long(), \
+           xyz_t.float(), f1d_t.float(), mask_t, \
+           xyz_prev.float(), mask_prev, \
+           same_chain, False, False, \
+           torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, \
+           ch_label, 'C1', "distil_tf", item
+
+def choose_matching_seq(seqs, pos_seq):
+    t0 = time.time()
+    
+    # convert all sequences to numerical msa format
+    alphabet = np.array(list("ACTG"), dtype='|S1').view(np.uint8)
+    N, L = len(seqs), len(seqs[0])
+    t03 = time.time()
+    msa = np.array(list(''.join(seqs)), dtype='|S1').view(np.uint8).reshape((N,L))
+    pos_msa = np.array([list(s) for s in [pos_seq]], dtype='|S1').view(np.uint8)
+    t04 = time.time()
+
+    for i in range(alphabet.shape[0]):
+        msa[msa == alphabet[i]] = i
+        pos_msa[pos_msa == alphabet[i]] = i
+
+    t05 = time.time()
+
+    # efficiently get complement sequences based on the alphabet indexes
+    pos_rc_msa = (pos_msa + 2) % 4
+    pos_rc_msa = pos_rc_msa[:,::-1]
+    pos_r_seq = ''.join(["ACTG"[i] for i in pos_rc_msa[0]])
+    rc_msa = (msa + 2) % 4
+    rc_msa = rc_msa[:,::-1]
+
+    t06 = time.time()
+
+    # identify length and placement of longest duplicate subsequence in positive sequence
+    N, L = msa.shape
+    # scan through all subseqs starting from 10 bp, down to 3 bp
+    for l in range(min(L,10),2,-1):
+        pos_counter = Counter(tuple(pos_msa[0,i:i+l]) for i in range(L + 1 - l))
+        pos_counter.update(tuple(pos_rc_msa[0,i:i+l]) for i in range(L + 1 - l))
+
+        # if all subseqs are unique, continue to next shorter length
+        nrep = max(pos_counter.values())
+        if nrep == 1:
+            continue
+
+        # else, find the count and sequence indexes of the most common subseq
+        pos_subseq = pos_counter.most_common(1)[0][0]
+
+        idxs  = tuple(i for i in range(L + 1 - l) if tuple(pos_msa[0,i:i+l]) == pos_subseq)
+        idxs += tuple(i+L for i in range(L + 1 - l) if tuple(pos_rc_msa[0,i:i+l]) == pos_subseq)
+        assert len(idxs) == nrep
+
+        break
+    else:
+        # if all subseqs down to 3 bp are unique, fail to produce output
+#        print(f"choose_matching_seq runtime was {time.time() - t0} seconds")
+        return None, nrep
+
+    
+    t1 = time.time()
+
+    # efficiently identify rows of msa where the analogous substrings match
+    both_msa = np.concatenate((msa,rc_msa),axis=1)
+    sub_msas = [both_msa[:,idxs[i]:idxs[i]+l].copy() for i in range(nrep)]
+    sub_msa = sub_msas[0]
+    for i in range(1,nrep):
+        sub_msa -= sub_msas[i]
+    match_mask = np.sum(sub_msa,axis=1) == 0
+    
+    t2 = time.time()
+    matching_msa = msa[match_mask]
+
+    # if there are enough hits, choose one at random and convert it back to a string
+    N, L = matching_msa.shape
+#    print(f"choose_matching_seq found {N} matches from {len(seqs)} seqs for a {l}-bp motif repeated {nrep} times")
+    if N > 3:
+        sel = matching_msa[np.random.randint(N),:]
+        seq = ''.join(["ACTG"[i] for i in sel])
+#        print(f"choose_matching_seq runtime was {time.time() - t0} seconds")
+        return seq, nrep
+    # if there aren't enough hits, failed to find a match
+    else:
+#        print(f"choose_matching_seq runtime was {time.time() - t0} seconds")
+        return None, nrep
+
+
+def loader_dna_rna(item, params, random_noise=5.0):
     # read PDBs
     pdb_ids = item['CHAINID'].split(':')
-    #Ls = item['LEN']  #fd  this is not reported correctly...
 
-    pdbA = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt')
+    filenameA = params['NA_DIR']+'/torch/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt'
+    if os.path.exists(filenameA+".v3"):
+        filenameA = filenameA+".v3"
+    pdbA = torch.load(filenameA)
     pdbB = None
     if (len(pdb_ids)==2):
-        pdbB = torch.load(params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt')
+        filenameB = params['NA_DIR']+'/torch/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt'
+        if os.path.exists(filenameB+".v3"):
+            filenameB = filenameB+".v3"
+        pdbB = torch.load(filenameB)
 
-    # msa for NA is sequence only
+    # RNAs may have an MSA defined, return one if one exists, otherwise, return single-sequence msa
     msaA,insA = parse_fasta_if_exists(pdbA['seq'], params['NA_DIR']+'/torch/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.afa', rmsa_alphabet=True)
     a3m = {'msa':torch.from_numpy(msaA), 'ins':torch.from_numpy(insA)}
     if (len(pdb_ids)==2):
@@ -2962,7 +3408,13 @@ def loader_rna(item, params, random_noise=5.0):
 
     xyz = torch.full((NMDLS, L, NTOTAL, 3), np.nan).float()
     mask = torch.full((NMDLS, L, NTOTAL), False)
+
+    #
     if (len(pdb_ids)==2):
+        #fd this can happen in rna/dna hybrids
+        if (len(pdbB['xyz'].shape) == 3):
+             pdbB['xyz'] = pdbB['xyz'].unsqueeze(0)
+             pdbB['mask'] = pdbB['mask'].unsqueeze(0)
         xyz[:,:,:23] = torch.cat((pdbA['xyz'], pdbB['xyz']), dim=1)
         mask[:,:,:23] = torch.cat((pdbA['mask'], pdbB['mask']), dim=1)
     else:
@@ -4539,17 +4991,22 @@ class DatasetNAComplex(data.Dataset):
         self.rng = np.random.RandomState(seed)
 
     def __len__(self):
-        return len(self.IDs)
+        return 5*len(self.IDs)
 
     def __getitem__(self, index):
+        index = index % len(self.IDs)
         ID = self.IDs[index]
         item = sample_item(self.data_df, ID, self.rng)
-        out = self.loader(item,
+        try:
+            out = self.loader(item,
                           self.params,
                           pick_top = self.pick_top,
                           negative = self.negative,
                           native_NA_frac = self.native_NA_frac
-        )
+            )
+        except Exception as e:
+            print('error in DatasetNAComplex',item)
+            raise e
         return out
 
 class DatasetRNA(data.Dataset):
@@ -4566,6 +5023,46 @@ class DatasetRNA(data.Dataset):
     def __getitem__(self, index):
         ID = self.IDs[index]
         item = sample_item(self.data_df, ID, self.rng)
+        out = self.loader(item, self.params)
+        return out
+
+class DatasetTFComplex(data.Dataset):
+    def __init__(self, IDs, loader, data_df, params, negative=False, seed=None):
+        self.IDs = IDs
+        self.data_df = data_df
+        self.loader = loader
+        self.params = params
+        self.negative = negative
+        self.rng = np.random.RandomState(seed)
+
+    def __len__(self):
+        return 5*len(self.IDs)
+
+    def __getitem__(self, index):
+        index = index % len(self.IDs)
+        ID = self.IDs[index]
+        item = sample_item(self.data_df, ID, self.rng)
+        try:
+            out = self.loader(item, self.params, negative=self.negative)
+        except Exception as e:
+            print('error in DatasetTFComplex',item)
+            raise e
+        return out
+
+class DatasetDNADistil(data.Dataset):
+    def __init__(self, IDs, loader, data_df, params, seed=None):
+        self.IDs = IDs
+        self.data_df = data_df
+        self.loader = loader
+        self.params = params
+        self.rng = np.random.RandomState(seed)
+
+    def __len__(self):
+        return len(self.IDs)
+
+    def __getitem__(self, index):
+        ID = self.IDs[index]
+        item = sample_item(self.data_df)
         out = self.loader(item, self.params)
         return out
 
@@ -4695,11 +5192,7 @@ class DistilledDataset(data.Dataset):
         ])
         self.ligand_dictionary = ligand_dictionary
 
-        correct_dataset_ordering = [
-            "pdb", "fb", "compl", "neg_compl", "na_compl", "neg_na_compl", "rna", "sm_compl",
-            "metal_compl", "sm_compl_multi", "sm_compl_covale", "sm_compl_asmb", "sm", "sm_compl_docked_neg",
-            "sm_compl_permuted_neg", "sm_compl_furthest_neg", "atomize_pdb", "atomize_complex"
-        ]
+        correct_dataset_ordering = ["pdb", "fb", "compl", "neg_compl", "na_compl", "neg_na_compl", "distil_tf","tf","neg_tf","rna","dna", "sm_compl", "metal_compl", "sm_compl_multi", "sm_compl_covale", "sm_compl_asmb", "sm", "sm_compl_docked_neg", "sm_compl_permuted_neg", "sm_compl_furthest_neg", "atomize_pdb", "atomize_complex"]
         for index, (key, dataset_name) in enumerate(zip(self.index_dict.keys(), correct_dataset_ordering)):
             error_message = f"Expected dataset {dataset_name} at index {index}, but you provided dataset {key}. "
             error_message += "See DistilledDataset for the correct dataset names and ordering."
@@ -4758,12 +5251,40 @@ class DistilledDataset(data.Dataset):
                 out = self.loader_dict['neg_na_compl'](item, self.params, negative=True, native_NA_frac=self.native_NA_frac)
             offset += len(self.index_dict['neg_na_compl'])
 
+            if index >= offset and index < offset + len(self.index_dict['distil_tf']):
+                task = 'distil_tf'
+                ID = self.ID_dict['distil_tf'][index-offset]
+                item = sample_item(self.dataset_dict['distil_tf'], ID)
+                out = self.loader_dict['distil_tf'](item, self.params)
+            offset += len(self.index_dict['distil_tf'])
+
+            if index >= offset and index < offset + len(self.index_dict['tf']):
+                task = 'tf'
+                ID = self.ID_dict['tf'][index-offset]
+                item = sample_item(self.dataset_dict['tf'], ID)
+                out = self.loader_dict['tf'](item, self.params, negative=False)
+            offset += len(self.index_dict['tf'])
+
+            if index >= offset and index < offset + len(self.index_dict['neg_tf']):
+                task = 'neg_tf'
+                ID = self.ID_dict['neg_tf'][index-offset]
+                item = sample_item(self.dataset_dict['neg_tf'], ID)
+                out = self.loader_dict['neg_tf'](item, self.params, negative=True)
+            offset += len(self.index_dict['neg_tf'])
+
             if index >= offset and index < offset + len(self.index_dict['rna']):
                 task = 'rna'
                 ID = self.ID_dict['rna'][index-offset]
                 item = sample_item(self.dataset_dict['rna'], ID)
                 out = self.loader_dict['rna'](item, self.params)
             offset += len(self.index_dict['rna'])
+
+            if index >= offset and index < offset + len(self.index_dict['dna']):
+                task = 'dna'
+                ID = self.ID_dict['dna'][index-offset]
+                item = sample_item(self.dataset_dict['dna'], ID)
+                out = self.loader_dict['dna'](item, self.params)
+            offset += len(self.index_dict['dna'])
 
             if index >= offset and index < offset + len(self.index_dict['sm_compl']):
                 task='sm_compl'
@@ -4896,7 +5417,11 @@ class DistributedWeightedSampler(data.Sampler):
             neg_compl=0,
             na_compl=0,
             neg_na_compl=0,
+            distil_tf=0,
+            tf=0,
+            neg_tf=0,
             rna=0,
+            dna=0,
             sm_compl=0,
             metal_compl=0,
             sm_compl_multi=0,
@@ -4936,8 +5461,9 @@ class DistributedWeightedSampler(data.Sampler):
 
         # account for rounding error
         dataset_names = list(self.dataset.dataset_dict.keys())
-        num_per_epoch_except_last = sum([self.num_per_epoch_dict[name] for name in dataset_names[:-1]])
-        self.num_per_epoch_dict[dataset_names[-1]] = num_example_per_epoch - num_per_epoch_except_last
+        nonzero_dataset_names = [name for name in dataset_names if self.num_per_epoch_dict[name] > 0]
+        num_per_epoch_actual = sum([self.num_per_epoch_dict[name] for name in nonzero_dataset_names])
+        self.num_per_epoch_dict[nonzero_dataset_names[0]] += num_example_per_epoch - num_per_epoch_actual
 
         self.total_size = num_example_per_epoch
         self.num_samples = self.total_size // self.num_replicas

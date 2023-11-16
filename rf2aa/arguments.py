@@ -11,29 +11,36 @@ DATASET_PARAMS = [
     "fraction_neg_compl",
     "fraction_na_compl",
     "fraction_neg_na_compl",
+    "fraction_distil_tf",
+    "fraction_tf",
+    "fraction_neg_tf",
     "fraction_rna",
+    "fraction_dna",
     "fraction_sm_compl",
     "fraction_sm_compl_multi",
     "fraction_metal_compl",
     "fraction_sm_compl_covale",
     "fraction_sm",
     "fraction_atomize_pdb",
-    "fraction_atomize_complex",
+    "fraction_atomize_complex"
     "fraction_sm_compl_asmb",
-    "n_train",
-    "n_valid_pdb",
-    "n_valid_atomize_pdb",
-    "n_valid_atomize_complex",
     "fraction_sm_compl_furthest_neg",
     "fraction_sm_compl_permuted_neg",
     "fraction_sm_compl_docked_neg",
+    "n_train",
+    "n_valid_pdb",
+    "n_valid_atomize_pdb",
     "n_valid_homo",
     "n_valid_dslf",
     "n_valid_compl",
     "n_valid_neg_compl",
     "n_valid_na_compl",
     "n_valid_neg_na_compl",
+    "n_valid_distil_tf",
+    "n_valid_tf",
+    "n_valid_neg_tf",
     "n_valid_rna",
+    "n_valid_dna",
     "n_valid_sm_compl",
     "n_valid_sm_compl_multi",
     "n_valid_metal_compl",
@@ -276,8 +283,16 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
             help="how often to sample protein-nucleic acid complexes during training")
     dataset_group.add_argument('-fraction_neg_na_compl', type=float, default=0.09,
             help="how often to sample negative protein-nucleic acid complexes during training")
+    dataset_group.add_argument('-fraction_distil_tf', type=float, default=0.00,
+            help="how often to sample distilled protein-DNA complexes from TF data during training")
+    dataset_group.add_argument('-fraction_tf', type=float, default=0.00,
+            help="how often to sample protein-DNA complexes from TF profile data during training")
+    dataset_group.add_argument('-fraction_neg_tf', type=float, default=0.00,
+            help="how often to sample negative protein-DNA complexes from TF profile data during training")
     dataset_group.add_argument('-fraction_rna', type=float, default=0.09,
             help="how often to sample rna during training")
+    dataset_group.add_argument('-fraction_dna', type=float, default=0.00,
+            help="how often to sample dna during training")
     dataset_group.add_argument('-fraction_sm_compl', type=float, default=0.1,
             help="how often to sample protein small molecule complexes during training")
     dataset_group.add_argument('-fraction_metal_compl', type=float, default=0.09,
@@ -310,7 +325,11 @@ def get_args(parser: Optional[argparse.ArgumentParser] = None, input_args: Optio
     dataset_group.add_argument('-n_valid_neg_compl', type=int)
     dataset_group.add_argument('-n_valid_na_compl', type=int)
     dataset_group.add_argument('-n_valid_neg_na_compl', type=int)
+    dataset_group.add_argument('-n_valid_distil_tf', type=int)
+    dataset_group.add_argument('-n_valid_tf', type=int)
+    dataset_group.add_argument('-n_valid_neg_tf', type=int)
     dataset_group.add_argument('-n_valid_rna', type=int)
+    dataset_group.add_argument('-n_valid_dna', type=int)
     dataset_group.add_argument('-n_valid_sm_compl', type=int)
     dataset_group.add_argument('-n_valid_metal_compl', type=int)
     dataset_group.add_argument('-n_valid_sm_compl_multi', type=int)
