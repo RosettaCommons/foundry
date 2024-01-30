@@ -1,0 +1,111 @@
+defaults:
+  - base
+
+experiment:
+  name: rf2a-fd4-20240116
+  trainer: "composed"
+
+model:
+  global_params:
+      d_msa: 256
+      d_msa_full: 64
+      d_pair: 192
+      d_state: 32
+
+  embedding:
+    rf2aa_nostate:
+      params:
+        p_drop: 0.15
+        d_templ: 64 
+        n_head_templ: 4
+        d_hidden_templ: 64
+        templ_p_drop: 0.25
+        recycling_type: "msa_pair"
+        use_same_chain: False
+  
+  blocks:
+    RF2_withgradients_full:
+      num_blocks: 4
+      params:
+        n_msa_head: 8
+        n_msa_channels: 64
+        p_drop_row: 0.25
+        p_drop_col: 0.25
+        structure_bias_type: "ungated"
+        structure_bias_channels: 64
+        n_pair_head: 6
+        n_pair_channels: 192
+        outer_product_channels: 16
+        intermediate_seq_channels: 192 #this is from AF2
+        n_se3_layers: 1
+        n_se3_channels: 32
+        n_se3_degrees: 2
+        n_se3_head: 4
+        n_div: 4
+        l0_in_features: 64
+        l0_out_features: 32
+        l1_in_features: 1
+        l1_out_features: 1
+        n_se3_edge_features: 64
+    RF2_withgradients:
+      num_blocks: 36
+      params:
+        n_msa_head: 8
+        n_msa_channels: 256
+        p_drop_row: 0.25
+        p_drop_col: 0.25
+        structure_bias_type: "ungated"
+        structure_bias_channels: 64
+        n_pair_head: 6
+        n_pair_channels: 192
+        outer_product_channels: 16
+        intermediate_seq_channels: 192 #this is from AF2
+        n_se3_layers: 1
+        n_se3_channels: 32
+        n_se3_degrees: 2
+        n_se3_head: 4
+        n_div: 4
+        l0_in_features: 64
+        l0_out_features: 32
+        l1_in_features: 1
+        l1_out_features: 1
+        n_se3_edge_features: 64
+  refinement:
+    local:
+      params:
+        num_iterations: 4
+        d_rbf: 64
+        n_se3_layers: 2
+        n_se3_channels: 32
+        n_se3_degrees: 2
+        n_se3_head: 4
+        n_div: 4
+        l0_in_features: 64
+        l0_out_features: 64
+        l1_in_features: 6
+        l1_out_features: 2
+        n_se3_edge_features: 64
+        top_k: 64
+        sc_pred_d_hidden: 128
+        sc_pred_p_drop: 0.15
+  
+  auxiliary_predictors:
+    c6d:
+      n_feat: 192
+      input_feature: "pair"
+    mlm:
+      n_feat: 256
+      input_feature: "msa"
+    pae:
+      n_feat: 192
+      input_feature: "pair"
+    plddt: 
+      n_feat: 64
+      input_feature: "state"
+    
+dataset_params:
+  fraction_sm_compl: 1
+  n_train: 25600
+
+training_params:
+  resume_train: False

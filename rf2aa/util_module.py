@@ -262,8 +262,7 @@ def make_full_graph(xyz, pair, idx):
     src = b*L+i
     tgt = b*L+j
     G = dgl.graph((src, tgt), num_nodes=B*L).to(device)
-    G.edata['rel_pos'] = (xyz[b,j,:] - xyz[b,i,:]).detach() # no gradient through basis function
-
+    G.edata['rel_pos'] = (xyz[b,j,:] - xyz[b,i,:]) #.detach() # no gradient through basis function
     return G, pair[b,i,j][...,None]
 
 def make_topk_graph(xyz, pair, idx, top_k=128, nlocal=33, topk_incl_local=True, eps=1e-6):

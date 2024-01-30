@@ -287,7 +287,7 @@ def xyz_t_to_frame_xyz_sm_mask(xyz_t, is_sm, atom_frames):
     return xyz_t_frame
 
 def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
-    B,L,natoms = xyz_in.shape[:3]
+    #B,L,natoms = xyz_in.shape[:3]
     frames = frame_indices[seq]
     atoms = is_atom(seq)
     if torch.any(atoms):
@@ -1117,6 +1117,7 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
     #HACK: use networkx graph to make the atom frames, correct implementation will include frames with "residue atoms"
+    # NOTE: REQUIRES NETWORKX < 3.0
     G = nx.from_numpy_matrix(bond_feats.numpy())
         
     frames = get_atom_frames(lig_seq, G)
@@ -1628,7 +1629,7 @@ def get_alt_query_ligand(chains, ligand_name, partners, lig_akeys, asmb_xfs):
 
     return xyz_alt_s, mask_alt_s
 
-def get_automorphs(mol, xyz_sm, mask_sm):
+def get_automorphs(mol, xyz_sm, mask_sm, max_symm=1000):
     """Enumerate atom symmetry permutations."""
     try:
         automorphs = openbabel.vvpairUIntUInt()
@@ -1647,7 +1648,9 @@ def get_automorphs(mol, xyz_sm, mask_sm):
     except Exception as e:
         xyz_sm = xyz_sm[None]
         mask_sm = mask_sm[None]
-
+    if xyz_sm.shape[0] > max_symm:
+        xyz_sm = xyz_sm[:max_symm]
+        mask_sm = mask_sm[:max_symm]
     return xyz_sm, mask_sm
 
 def expand_xyz_sm_to_ntotal(xyz_sm, mask_sm, N_symmetry=None):

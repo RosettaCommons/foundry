@@ -1,0 +1,357 @@
+import torch
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.multiprocessing as mp
+import numpy as np
+
+import hydra
+import os
+
+from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
+from rf2aa.data.data_loader import loader_atomize_pdb
+from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items
+from rf2aa.debug import debug_unused_params, debug_used_params
+from rf2aa.training.EMA import EMA, count_parameters
+from rf2aa.loss.loss_factory import get_loss_and_misc
+from rf2aa.training.optimizer import add_weight_decay
+from rf2aa.training.recycling import recycle_step_legacy, recycle_step_packed, recycle_sampling
+from rf2aa.model.network import RosettaFold
+from rf2aa.model.RoseTTAFoldModel import LegacyRoseTTAFoldModule
+from rf2aa.training.scheduler import get_stepwise_decay_schedule_with_warmup
+from rf2aa.util import frame_indices, long2alt, allatom_mask, num_bonds, \
+    atom_type_index, ljlk_parameters, lj_correction_parameters, hbtypes, \
+    hbbaseatoms, hbpolys, cb_length_t, cb_angle_t, cb_torsion_t
+import rf2aa.util as util
+from rf2aa.util_module import XYZConverter
+
+#TODO: control environment variables from config
+# limit thread counts
+os.environ['OMP_NUM_THREADS'] = '4'
+os.environ['OPENBLAS_NUM_THREADS'] = '4'
+#os.environ['PYTORCH_CUDA_ALLOC_CONF'] = "max_split_size_mb:512"
+
+## To reproduce errors
+import random
+
+def seed_all(seed=0):
+    random.seed(0)
+    torch.manual_seed(5924)
+    torch.cuda.manual_seed(5924)
+    np.random.seed(6636)
+
+torch.set_num_threads(4)
+#torch.autograd.set_detect_anomaly(True)
+
+class Trainer:
+    def __init__(self, config) -> None:
+        self.config = config
+        assert self.config.ddp_params.batch_size == 1, "batch size is assumed to be 1"
+        if self.config.experiment.output_dir is not None:
+            self.output_dir = self.config.experiment.output_dir 
+        else:
+            self.output_dir = "models/"
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
+
+    def construct_model(self):
+        raise NotImplementedError()
+
+    def construct_optimizer(self):
+        if self.config.training_params.weight_decay is not None:
+            opt_params = add_weight_decay(self.model, self.config.training_params.weight_decay)
+        else:
+            opt_params = self.model.parameters()
+        self.optimizer = torch.optim.AdamW(opt_params, lr=self.config.training_params.learning_rate)
+
+    def construct_scheduler(self):
+        self.scheduler = get_stepwise_decay_schedule_with_warmup(self.optimizer, \
+                                **self.config.training_params.learning_rate_schedule)    
+
+    def construct_scaler(self):
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.training_params.use_amp)
+    
+    def load_checkpoint(self, rank):
+        if self.config.training_params.resume_train:
+            checkpoint_path = f"{self.output_dir}/{self.config.experiment.name}_last.pt"
+        elif self.config.eval_params.checkpoint_path:
+            checkpoint_path = self.config.eval_params.checkpoint_path
+        map_location = {"cuda:0": f"cuda:{rank}"}
+        self.checkpoint = torch.load(checkpoint_path, map_location=map_location)
+        print(f"Loading checkpoint from {checkpoint_path} on rank:{rank}")
+
+    def load_model(self):
+        torch.cuda.empty_cache()
+        if self.config.training_params.resume_train is None:
+            raise ValueError("Should not load model when resume_train is True")
+        #TODO: check if model should load the final state dict and not the EMA
+        self.model.module.model.load_state_dict(self.checkpoint["final_state_dict"], strict=True)
+        self.model.module.shadow.load_state_dict(self.checkpoint["model_state_dict"], strict=False)
+        print("Checkpoint loaded into model")
+
+    def load_optimizer(self):
+        if self.config.training_params.resume_train is None:
+            raise ValueError("Should not load optimizer when resume_train is True") 
+        self.optimizer.load_state_dict(self.checkpoint['optimizer_state_dict'])
+
+    def load_scheduler(self):
+        if self.config.training_params.resume_train is None:
+            raise ValueError("Should not load scheduler when resume_train is True") 
+        self.scheduler.load_state_dict(self.checkpoint['scheduler_state_dict'])
+       
+    def load_scaler(self):
+        if self.config.training_params.resume_train is None:
+            raise ValueError("Should not load scaler when resume_train is True") 
+        self.scaler.load_state_dict(self.checkpoint['scaler_state_dict'])
+
+    def construct_dataset(self, rank, world_size):
+        return compose_dataset(self.config.dataset_params, self.config.loader_params, rank, world_size)
+    
+    def construct_loss_function(self):
+        raise NotImplementedError() 
+
+    def move_constants_to_device(self, gpu):
+        self.fi_dev = frame_indices.to(gpu)
+        self.xyz_converter = XYZConverter().to(gpu)
+
+        self.l2a = long2alt.to(gpu)
+        self.aamask = allatom_mask.to(gpu)
+        self.num_bonds = num_bonds.to(gpu)
+        self.atom_type_index = atom_type_index.to(gpu)
+        self.ljlk_parameters = ljlk_parameters.to(gpu)
+        self.lj_correction_parameters = lj_correction_parameters.to(gpu)
+        self.hbtypes = hbtypes.to(gpu)
+        self.hbbaseatoms = hbbaseatoms.to(gpu)
+        self.hbpolys = hbpolys.to(gpu)
+        self.cb_len = cb_length_t.to(gpu)
+        self.cb_ang = cb_angle_t.to(gpu)
+        self.cb_tor = cb_torsion_t.to(gpu)
+
+
+    def checkpoint_model(self, epoch, metadata={}):
+        checkpoint_data = {
+                    'epoch'               : epoch,
+                    'model_state_dict'    : self.model.module.shadow.state_dict(),
+                    'final_state_dict'    : self.model.module.model.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'scheduler_state_dict': self.scheduler.state_dict(),
+                    'scaler_state_dict'   : self.scaler.state_dict(),
+                    'training_config'     : dict(self.config),
+                    }
+        checkpoint_data.update(metadata)
+        torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
+
+    
+    def launch_distributed_training(self):
+        world_size = torch.cuda.device_count()
+        if ('MASTER_ADDR' not in os.environ):
+            os.environ['MASTER_ADDR'] = '127.0.0.1' # multinode requires this set in submit script
+        if ('MASTER_PORT' not in os.environ):
+            os.environ['MASTER_PORT'] = '%d'%self.config.ddp_params.port
+
+        if ("SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
+            world_size = int(os.environ["SLURM_NTASKS"])
+            rank = int (os.environ["SLURM_PROCID"])
+            print ("Launched from slurm", rank, world_size)
+            self.train_model(rank, world_size)
+            #mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
+
+        else:
+            print ("Launched from interactive")
+            world_size = torch.cuda.device_count()
+            if world_size == 1:
+                # No need for multiple processes with 1 GPU
+                self.train_model(0, world_size)
+            else:
+                mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
+
+    def init_process_group(self, rank, world_size):
+        gpu = rank % torch.cuda.device_count()
+        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
+        torch.cuda.set_device("cuda:%d"%gpu)
+        return gpu
+    
+    def cleanup(self):
+        dist.destroy_process_group()
+
+    def train_model(self, rank, world_size):
+        """ runs model training on each gpu """ 
+        gpu = self.init_process_group(rank, world_size) 
+        train_loader, train_sampler, valid_loaders, valid_sampler = self.construct_dataset(rank, world_size)
+        self.train_loader = train_loader
+
+        # move global information to device
+        self.move_constants_to_device(gpu)
+
+        self.construct_model(device=gpu)
+        self.model = DDP(self.model, device_ids=[gpu], find_unused_parameters=False, broadcast_buffers=False)
+        if rank == 0:
+            print(f"Loading model with {count_parameters(self.model)} parameters")
+
+        self.construct_optimizer()
+        self.construct_scheduler()
+        self.construct_scaler()
+        if self.config.training_params.resume_train:
+            self.load_checkpoint(rank)
+            self.load_model()
+            self.load_optimizer()
+            self.load_scheduler()
+            self.load_scaler()
+        self.recycle_schedule = recycle_sampling["by_batch"](self.config.loader_params.maxcycle, 
+                                                             self.config.experiment.n_epoch,
+                                                             self.config.dataset_params.n_train,
+                                                             world_size)
+        for epoch in range(self.config.experiment.n_epoch):
+            train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
+            self.train_epoch(epoch, rank)
+
+        self.cleanup() 
+
+    def train_epoch(self, epoch, rank):
+        """ train model """
+        # turn on gradients
+        self.model.train()
+
+        # clear gradients
+        self.optimizer.zero_grad()
+
+        for train_idx, inputs in enumerate(self.train_loader):
+            n_cycle = self.recycle_schedule[epoch, train_idx]  # number of recycling
+
+            # run forward pass and compute loss
+            loss, loss_dict = self.train_step(inputs, n_cycle)
+            
+            # aggregate loss and update parameters
+            loss = loss / self.config.ddp_params.accum
+            self.scaler.scale(loss).backward()
+
+            if train_idx%self.config.ddp_params.accum == 0:  
+                self.update_parameters()
+            
+                if train_idx % self.config.log_params.log_every_n_examples == 0 and rank == 0:
+                    self.log_intermediate_losses(inputs, loss_dict, n_cycle) 
+                torch.cuda.empty_cache()
+
+        if rank == 0:
+            self.checkpoint_model(epoch)
+
+    def train_step(self, inputs, n_cycle):
+        """ take an input from dataloader, run the model and compute a loss """
+        raise NotImplementedError()
+    
+    def update_parameters(self):
+        """ scale, clip gradients and update parameters """
+        # gradient clipping
+        self.scaler.unscale_(self.optimizer)
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.training_params.grad_clip)
+        self.scaler.step(self.optimizer)
+        scale = self.scaler.get_scale()
+        self.scaler.update()
+        skip_lr_sched = (scale != self.scaler.get_scale())
+        self.optimizer.zero_grad()
+        if not skip_lr_sched:
+            self.scheduler.step()
+        self.model.module.update() # apply EMA
+    
+    def log_intermediate_losses(self, inputs, loss_dict, n_cycle):
+        item = inputs[-1]
+        max_mem = torch.cuda.max_memory_allocated()/1e9
+        print(f"Example: {item} Max Memory:{max_mem} Recycle:{n_cycle}\n"+
+              "\t".join([f"{k}:{v}" for k,v in loss_dict.items()]))
+        torch.cuda.reset_peak_memory_stats()
+
+
+class LegacyTrainer(Trainer):
+    """ trains Legacy versions of RFAA """
+    def __init__(self, config) -> None:
+        super().__init__(config)
+
+    def construct_model(self, device="cpu"):
+        self.model = LegacyRoseTTAFoldModule(
+            **self.config.legacy_model_param,
+            aamask = util.allatom_mask.to(device),
+            atom_type_index = util.atom_type_index.to(device),
+            ljlk_parameters = util.ljlk_parameters.to(device),
+            lj_correction_parameters = util.lj_correction_parameters.to(device),
+            num_bonds = util.num_bonds.to(device),
+            cb_len = util.cb_length_t.to(device),
+            cb_ang = util.cb_angle_t.to(device),
+            cb_tor = util.cb_torsion_t.to(device),
+
+        ).to(device)
+        if self.config.training_params.EMA is not None:
+            self.model = EMA(self.model, self.config.training_params.EMA)
+
+    def train_step(self, inputs, n_cycle):
+        """ take an input from dataloader, run the model and compute a loss """
+        gpu = self.model.device
+        # HACK: certain features are constructed during the train step
+        # in the future this should only promote the constructed features onto gpu
+        task, item, network_input, true_crds, \
+            atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
+            = prepare_input(inputs, self.xyz_converter, gpu)
+
+        output_i = recycle_step_legacy(self.model, network_input, n_cycle, self.config.training_params.use_amp) 
+        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames = get_loss_calc_items(inputs, device=gpu)
+
+        #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
+        #HACK: need to promote some inputs to gpu for loss calculation, all promotions should happen together
+        msa = msa.to(gpu)
+        mask_msa = mask_msa.to(gpu)
+        loss, loss_dict = get_loss_and_misc(
+            self, # avoid reloading constants to device 
+            output_i, true_crds, atom_mask, same_chain,
+            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
+            self.config.loss_param
+        )
+        return loss, loss_dict
+
+
+class ComposedTrainer(Trainer):
+    """ trains composed versions of RFAA """
+    def __init__(self, config) -> None:
+        super().__init__(config)
+
+    def construct_model(self, device="cpu"):
+        self.model = RosettaFold(self.config).to(device)
+        if self.config.training_params.EMA is not None:
+            self.model = EMA(self.model, self.config.training_params.EMA)
+
+    def train_step(self, inputs, n_cycle):
+        """ take an input from dataloader, run the model and compute a loss """
+        gpu = self.model.device
+        # HACK: certain features are constructed during the train step
+        # in the future this should only promote the constructed features onto gpu
+        task, item, network_input, true_crds, \
+            atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
+            = prepare_input(inputs, self.xyz_converter, gpu)
+
+        output_i = recycle_step_packed(self.model, network_input, n_cycle, self.config.training_params.use_amp) 
+        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames = get_loss_calc_items(inputs, device=gpu)
+
+        #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
+        #HACK: need to promote some inputs to gpu for loss calculation, all promotions should happen together
+        msa = msa.to(gpu)
+        mask_msa = mask_msa.to(gpu)
+
+        loss, loss_dict = get_loss_and_misc(
+            self, # avoid reloading constants to device 
+            output_i, true_crds, atom_mask, same_chain,
+            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
+            self.config.loss_param
+        )
+        return loss, loss_dict
+
+
+@hydra.main(version_base=None, config_path='config/train')
+def main(config):
+    seed_all()
+    trainer = trainer_factory[config.experiment.trainer](config=config)
+    trainer.launch_distributed_training()
+
+trainer_factory = {
+    "legacy": LegacyTrainer,
+    "composed": ComposedTrainer,
+}
+
+if __name__ == "__main__":
+    main()

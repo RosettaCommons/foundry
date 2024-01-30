@@ -31,7 +31,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.cuda.nvtx import range as nvtx_range
 
-from se3_transformer.runtime.utils import degree_to_dim
+from rf2aa.SE3Transformer.se3_transformer.runtime.utils import degree_to_dim
 
 
 @lru_cache(maxsize=None)

@@ -31,7 +31,7 @@ import torch.distributed as dist
 import wandb
 from dllogger import Verbosity
 
-from se3_transformer.runtime.utils import rank_zero_only
+from rf2aa.SE3Transformer.se3_transformer.runtime.utils import rank_zero_only
 
 
 class Logger(ABC):

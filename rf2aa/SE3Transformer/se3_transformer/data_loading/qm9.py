@@ -31,9 +31,9 @@ from torch import Tensor
 from torch.utils.data import random_split, DataLoader, Dataset
 from tqdm import tqdm
 
-from se3_transformer.data_loading.data_module import DataModule
-from se3_transformer.model.basis import get_basis
-from se3_transformer.runtime.utils import get_local_rank, str2bool, using_tensor_cores
+from rf2aa.SE3Transformer.se3_transformer.data_loading.data_module import DataModule
+from rf2aa.SE3Transformer.se3_transformer.model.basis import get_basis
+from rf2aa.SE3Transformer.se3_transformer.runtime.utils import get_local_rank, str2bool, using_tensor_cores
 
 
 def _get_relative_pos(qm9_graph: DGLGraph) -> Tensor:

@@ -29,8 +29,8 @@ from typing import Optional
 import numpy as np
 import torch
 
-from se3_transformer.runtime.loggers import Logger
-from se3_transformer.runtime.metrics import MeanAbsoluteError
+from rf2aa.SE3Transformer.se3_transformer.runtime.loggers import Logger
+from rf2aa.SE3Transformer.se3_transformer.runtime.metrics import MeanAbsoluteError
 
 
 class BaseCallback(ABC):

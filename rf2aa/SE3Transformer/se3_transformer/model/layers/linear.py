@@ -29,7 +29,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from se3_transformer.model.fiber import Fiber
+from rf2aa.SE3Transformer.se3_transformer.model.fiber import Fiber
 
 
 class LinearSE3(nn.Module):

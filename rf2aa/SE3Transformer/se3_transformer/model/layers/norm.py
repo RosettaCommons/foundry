@@ -29,7 +29,7 @@ import torch.nn as nn
 from torch import Tensor
 from torch.cuda.nvtx import range as nvtx_range
 
-from se3_transformer.model.fiber import Fiber
+from rf2aa.SE3Transformer.se3_transformer.model.fiber import Fiber
 
 
 class NormSE3(nn.Module):

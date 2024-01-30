@@ -12,3 +12,5 @@ __pycache__/
 */run_scripts/
 */tests/
 unit_tests/
+ruff.toml
+*/scratch/

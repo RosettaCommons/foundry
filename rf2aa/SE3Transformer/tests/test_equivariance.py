@@ -23,8 +23,8 @@
 
 import torch
 
-from se3_transformer.model import SE3Transformer
-from se3_transformer.model.fiber import Fiber
+from rf2aa.SE3Transformer.se3_transformer.model import SE3Transformer
+from rf2aa.SE3Transformer.se3_transformer.model.fiber import Fiber
 from tests.utils import get_random_graph, assign_relative_pos, get_max_diff, rot
 
 # Tolerances for equivariance error abs( f(x) @ R  -  f(x @ R) )

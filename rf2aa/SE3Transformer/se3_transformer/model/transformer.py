@@ -29,14 +29,14 @@ import torch.nn as nn
 from dgl import DGLGraph
 from torch import Tensor
 
-from se3_transformer.model.basis import get_basis, update_basis_with_fused
-from se3_transformer.model.layers.attention import AttentionBlockSE3
-from se3_transformer.model.layers.convolution import ConvSE3, ConvSE3FuseLevel
-from se3_transformer.model.layers.linear import LinearSE3
-from se3_transformer.model.layers.norm import NormSE3
-from se3_transformer.model.layers.pooling import GPooling
-from se3_transformer.runtime.utils import str2bool
-from se3_transformer.model.fiber import Fiber
+from rf2aa.SE3Transformer.se3_transformer.model.basis import get_basis, update_basis_with_fused
+from rf2aa.SE3Transformer.se3_transformer.model.layers.attention import AttentionBlockSE3
+from rf2aa.SE3Transformer.se3_transformer.model.layers.convolution import ConvSE3, ConvSE3FuseLevel
+from rf2aa.SE3Transformer.se3_transformer.model.layers.linear import LinearSE3
+from rf2aa.SE3Transformer.se3_transformer.model.layers.norm import NormSE3
+from rf2aa.SE3Transformer.se3_transformer.model.layers.pooling import GPooling
+from rf2aa.SE3Transformer.se3_transformer.runtime.utils import str2bool
+from rf2aa.SE3Transformer.se3_transformer.model.fiber import Fiber
 
 
 class Sequential(nn.Sequential):

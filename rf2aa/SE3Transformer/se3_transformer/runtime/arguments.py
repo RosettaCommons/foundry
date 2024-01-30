@@ -24,9 +24,9 @@
 import argparse
 import pathlib
 
-from se3_transformer.data_loading import QM9DataModule
-from se3_transformer.model import SE3TransformerPooled
-from se3_transformer.runtime.utils import str2bool
+from rf2aa.SE3Transformer.se3_transformer.data_loading import QM9DataModule
+from rf2aa.SE3Transformer.se3_transformer.model import SE3TransformerPooled
+from rf2aa.SE3Transformer.se3_transformer.runtime.utils import str2bool
 
 PARSER = argparse.ArgumentParser(description='SE(3)-Transformer')
 

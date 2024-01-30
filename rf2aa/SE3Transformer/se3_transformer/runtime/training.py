@@ -36,16 +36,16 @@ from torch.optim import Optimizer
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 
-from se3_transformer.data_loading import QM9DataModule
-from se3_transformer.model import SE3TransformerPooled
-from se3_transformer.model.fiber import Fiber
-from se3_transformer.runtime import gpu_affinity
-from se3_transformer.runtime.arguments import PARSER
-from se3_transformer.runtime.callbacks import QM9MetricCallback, QM9LRSchedulerCallback, BaseCallback, \
+from rf2aa.SE3Transformer.se3_transformer.data_loading import QM9DataModule
+from rf2aa.SE3Transformer.se3_transformer.model import SE3TransformerPooled
+from rf2aa.SE3Transformer.se3_transformer.model.fiber import Fiber
+from rf2aa.SE3Transformer.se3_transformer.runtime import gpu_affinity
+from rf2aa.SE3Transformer.se3_transformer.runtime.arguments import PARSER
+from rf2aa.SE3Transformer.se3_transformer.runtime.callbacks import QM9MetricCallback, QM9LRSchedulerCallback, BaseCallback, \
     PerformanceCallback
-from se3_transformer.runtime.inference import evaluate
-from se3_transformer.runtime.loggers import LoggerCollection, DLLogger, WandbLogger, Logger
-from se3_transformer.runtime.utils import to_cuda, get_local_rank, init_distributed, seed_everything, \
+from rf2aa.SE3Transformer.se3_transformer.runtime.inference import evaluate
+from rf2aa.SE3Transformer.se3_transformer.runtime.loggers import LoggerCollection, DLLogger, WandbLogger, Logger
+from rf2aa.SE3Transformer.se3_transformer.runtime.utils import to_cuda, get_local_rank, init_distributed, seed_everything, \
     using_tensor_cores, increase_l2_fetch_granularity
 
 

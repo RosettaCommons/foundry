@@ -25,7 +25,7 @@ import torch.distributed as dist
 from abc import ABC
 from torch.utils.data import DataLoader, DistributedSampler, Dataset
 
-from se3_transformer.runtime.utils import get_local_rank
+from rf2aa.SE3Transformer.se3_transformer.runtime.utils import get_local_rank
 
 
 def _get_dataloader(dataset: Dataset, shuffle: bool, **kwargs) -> DataLoader:

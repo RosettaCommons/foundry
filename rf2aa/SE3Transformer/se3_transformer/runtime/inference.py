@@ -29,11 +29,11 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from se3_transformer.runtime import gpu_affinity
-from se3_transformer.runtime.arguments import PARSER
-from se3_transformer.runtime.callbacks import BaseCallback
-from se3_transformer.runtime.loggers import DLLogger
-from se3_transformer.runtime.utils import to_cuda, get_local_rank
+from rf2aa.SE3Transformer.se3_transformer.runtime import gpu_affinity
+from rf2aa.SE3Transformer.se3_transformer.runtime.arguments import PARSER
+from rf2aa.SE3Transformer.se3_transformer.runtime.callbacks import BaseCallback
+from rf2aa.SE3Transformer.se3_transformer.runtime.loggers import DLLogger
+from rf2aa.SE3Transformer.se3_transformer.runtime.utils import to_cuda, get_local_rank
 
 
 @torch.inference_mode()
@@ -57,10 +57,10 @@ def evaluate(model: nn.Module,
 
 
 if __name__ == '__main__':
-    from se3_transformer.runtime.callbacks import QM9MetricCallback, PerformanceCallback
-    from se3_transformer.runtime.utils import init_distributed, seed_everything
-    from se3_transformer.model import SE3TransformerPooled, Fiber
-    from se3_transformer.data_loading import QM9DataModule
+    from rf2aa.SE3Transformer.se3_transformer.runtime.callbacks import QM9MetricCallback, PerformanceCallback
+    from rf2aa.SE3Transformer.se3_transformer.runtime.utils import init_distributed, seed_everything
+    from rf2aa.SE3Transformer.se3_transformer.model import SE3TransformerPooled, Fiber
+    from rf2aa.SE3Transformer.se3_transformer.data_loading import QM9DataModule
     import torch.distributed as dist
     import logging
     import sys
