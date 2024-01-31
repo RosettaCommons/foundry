@@ -11,6 +11,7 @@ model:
   auxiliary_predictors: {}
 legacy_model: null
 dataset_params: 
+  validate_every_n_epochs: 0
   fraction_pdb: 0
   fraction_fb: 0
   fraction_compl: 0

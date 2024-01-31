@@ -7,28 +7,25 @@ from contextlib import ExitStack
 
 from rf2aa.util import INIT_CRDS, NTOTAL
 
-def recycle_step_legacy(ddp_model, input, n_cycle, use_amp):
+def recycle_step_legacy(ddp_model, input, n_cycle, use_amp, nograds=False):
     gpu = ddp_model.device
     xyz_prev, alpha_prev, mask_recycle = \
         input["xyz_prev"], input["alpha_prev"], input["mask_recycle"]
     output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
     for i_cycle in range(n_cycle):
         with ExitStack() as stack:
-            if i_cycle < n_cycle -1:
+            stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
+            if i_cycle < n_cycle -1 or nograds is True:
                 stack.enter_context(torch.no_grad())
                 stack.enter_context(ddp_model.no_sync())
-                stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
-                return_raw=True
-                use_checkpoint=False
-            else:
-                stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
-                return_raw=False
-                use_checkpoint=True
+            return_raw = (i_cycle < n_cycle -1)
+            use_checkpoint = not nograds and  (i_cycle == n_cycle -1)
+
             input_i = add_recycle_inputs(input, output_i, i_cycle, gpu, return_raw=return_raw, use_checkpoint=use_checkpoint)
             output_i = ddp_model(**input_i)
     return output_i
 
-def recycle_step_packed(ddp_model, input, n_cycle, use_amp):
+def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False):
     """ exactly same logic as legacy recycling, except inputs and outputs are dictionaries"""
     gpu = ddp_model.device
     xyz_prev, alpha_prev, mask_recycle = \
@@ -36,16 +33,13 @@ def recycle_step_packed(ddp_model, input, n_cycle, use_amp):
     output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
     for i_cycle in range(n_cycle):
         with ExitStack() as stack:
-            if i_cycle < n_cycle -1:
+            stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
+            if i_cycle < n_cycle -1 or nograds is True:
                 stack.enter_context(torch.no_grad())
                 stack.enter_context(ddp_model.no_sync())
-                stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
-                return_raw = True
-                use_checkpoint=False
-            else:
-                stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
-                return_raw = False
-                use_checkpoint=True
+            return_raw = (i_cycle < n_cycle -1)
+            use_checkpoint = not nograds and  (i_cycle == n_cycle -1)
+
             input_i = add_recycle_inputs(input, output_i, i_cycle, gpu, return_raw=return_raw, use_checkpoint=use_checkpoint)
             rf_outputs, rf_latents = ddp_model(input_i, use_checkpoint=use_checkpoint)
             output_i = unpack_outputs(rf_outputs, rf_latents, return_raw)

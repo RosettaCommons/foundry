@@ -177,7 +177,9 @@ class Trainer:
         """ runs model training on each gpu """ 
         gpu = self.init_process_group(rank, world_size) 
         train_loader, train_sampler, valid_loaders, valid_sampler = self.construct_dataset(rank, world_size)
+
         self.train_loader = train_loader
+        self.valid_loaders = valid_loaders
 
         # move global information to device
         self.move_constants_to_device(gpu)
@@ -203,6 +205,12 @@ class Trainer:
         for epoch in range(self.config.experiment.n_epoch):
             train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
             self.train_epoch(epoch, rank)
+
+            if (
+                self.config.dataset_params.validate_every_n_epochs > 0 
+                and epoch % self.config.dataset_params.validate_every_n_epochs==0
+            ):
+                self.valid_epoch(epoch, rank, world_size)
 
         self.cleanup() 
 
@@ -234,8 +242,40 @@ class Trainer:
         if rank == 0:
             self.checkpoint_model(epoch)
 
+    def valid_epoch(self, epoch, rank, world_size):
+        """ validate model """
+        # turn on gradients
+        self.model.eval()
+
+        for dataset_name, valid_loader in self.valid_loaders.items():
+            valid_loss_dict = None
+            for valid_idx, inputs in enumerate(self.train_loader):
+                n_cycle = self.config.loader_params.maxcycle
+
+                #fd We could make this a separate function call?
+                loss, loss_dict = self.train_step(inputs, n_cycle, nograds=True)  
+
+                if valid_loss_dict is None:
+                    valid_loss_dict = torch.zeros_like(torch.stack(list(loss_dict.values())))
+                valid_loss_dict += torch.stack(list(loss_dict.values()))
+
+            valid_loss_dict /= float(len(self.valid_loaders)*world_size)
+            dist.all_reduce(valid_loss_dict, op=dist.ReduceOp.SUM)
+
+            # reconstruct loss dictionary
+            dict_keys = list(loss_dict.keys())
+            valid_loss_dict = { 
+                dict_keys[i]:valid_loss_dict[i] for i in range(valid_loss_dict.shape[0]) 
+            }
+
+            self.log_validation_losses(dataset_name, valid_loss_dict)
+
     def train_step(self, inputs, n_cycle):
         """ take an input from dataloader, run the model and compute a loss """
+        raise NotImplementedError()
+    
+    def valid_step(self, inputs, n_cycle):
+        """ take an input from dataloader, run the model and compute a loss.  No grads/checkpointing """
         raise NotImplementedError()
     
     def update_parameters(self):
@@ -251,13 +291,17 @@ class Trainer:
         if not skip_lr_sched:
             self.scheduler.step()
         self.model.module.update() # apply EMA
-    
+
     def log_intermediate_losses(self, inputs, loss_dict, n_cycle):
         item = inputs[-1]
         max_mem = torch.cuda.max_memory_allocated()/1e9
-        print(f"Example: {item} Max Memory:{max_mem} Recycle:{n_cycle}\n"+
-              "\t".join([f"{k}:{v}" for k,v in loss_dict.items()]))
+        print(f"Example: {item} Max Memory:{max_mem:.4f} Recycle:{n_cycle}\n"+
+              "\t".join([f"{k}:{v:.4f}" for k,v in loss_dict.items()]))
         torch.cuda.reset_peak_memory_stats()
+
+    def log_validation_losses(self, dataset_name, loss_dict):
+        print(f"Dataset: {dataset_name} "+
+              "\t".join([f"{k}:{v:.4f}" for k,v in loss_dict.items()]))
 
 
 class LegacyTrainer(Trainer):
@@ -281,7 +325,7 @@ class LegacyTrainer(Trainer):
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
 
-    def train_step(self, inputs, n_cycle):
+    def train_step(self, inputs, n_cycle, nograds):
         """ take an input from dataloader, run the model and compute a loss """
         gpu = self.model.device
         # HACK: certain features are constructed during the train step
@@ -290,7 +334,7 @@ class LegacyTrainer(Trainer):
             atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
             = prepare_input(inputs, self.xyz_converter, gpu)
 
-        output_i = recycle_step_legacy(self.model, network_input, n_cycle, self.config.training_params.use_amp) 
+        output_i = recycle_step_legacy(self.model, network_input, n_cycle, self.config.training_params.use_amp, nograds=nograds) 
         seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames = get_loss_calc_items(inputs, device=gpu)
 
         #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
@@ -316,7 +360,7 @@ class ComposedTrainer(Trainer):
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
 
-    def train_step(self, inputs, n_cycle):
+    def train_step(self, inputs, n_cycle, nograds=False):
         """ take an input from dataloader, run the model and compute a loss """
         gpu = self.model.device
         # HACK: certain features are constructed during the train step
@@ -325,7 +369,7 @@ class ComposedTrainer(Trainer):
             atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
             = prepare_input(inputs, self.xyz_converter, gpu)
 
-        output_i = recycle_step_packed(self.model, network_input, n_cycle, self.config.training_params.use_amp) 
+        output_i = recycle_step_packed(self.model, network_input, n_cycle, self.config.training_params.use_amp, nograds=nograds) 
         seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames = get_loss_calc_items(inputs, device=gpu)
 
         #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
