@@ -2061,8 +2061,8 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
 
         ch_label = torch.zeros(seq[0].shape)
 
-        chirals_atomize_all = torch.Tensor()
-        frames_atomize_all = torch.zeros(seq.shape)
+        chirals_atomize_all = torch.zeros(0,5)
+        frames_atomize_all = torch.zeros(0,3,2)
 
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa, \
            xyz.float(), mask, idx.long(),\
@@ -2848,14 +2848,15 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     )
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
-    chirals = torch.Tensor()
+    atom_frames = torch.zeros(0,3,2)
+    chirals = torch.zeros(0,5)
     dist_matrix = get_bond_distances(bond_feats)
 
     return seq.long(), msa_seed_orig.long(), msa_seed.float(), msa_extra.float(), mask_msa,\
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           same_chain, False, negative, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', "na_compl", item
+           same_chain, False, negative, atom_frames, bond_feats, dist_matrix, chirals, ch_label, 'C1', "na_compl", item
 
 def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=5.0):
 #    ic(item, negative)
@@ -3343,8 +3344,8 @@ def loader_dna_rna(item, params, random_noise=5.0):
         [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
     )
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
- 
-    chirals = torch.Tensor()
+    atom_frames = torch.zeros(0,3,2)
+    chirals = torch.zeros(0,5)
     ch_label = torch.zeros((L,)).long()
     ch_label[Ls[0]:] = 1
     dist_matrix = get_bond_distances(bond_feats)
@@ -3353,7 +3354,7 @@ def loader_dna_rna(item, params, random_noise=5.0):
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           same_chain, False, False, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', "rna",item
+           same_chain, False, False, atom_frames, bond_feats, dist_matrix, chirals, ch_label, 'C1', "rna",item
 
 def find_residues_to_atomize_covale(lig_partners, prot_partners, covale):
     """
@@ -3942,7 +3943,6 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         xyz_t_prot = xyz_t_prot[sel]
         mask_t_prot = mask_t_prot[sel]
         f1d_t_prot = f1d_t_prot[sel]
-
     if ligand_string_tuple is not None:
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, _ = featurize_ligand_from_string(ligand_string=ligand_string_tuple[1], format=ligand_string_tuple[0])
         residues_to_atomize = mod_residues_to_atomize

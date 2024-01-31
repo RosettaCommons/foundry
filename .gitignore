@@ -10,7 +10,6 @@ slurm_logs/
 */models/
 __pycache__/
 */run_scripts/
-*/tests/
 unit_tests/
 ruff.toml
 */scratch/
