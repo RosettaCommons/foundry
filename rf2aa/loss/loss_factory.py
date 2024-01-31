@@ -201,7 +201,7 @@ def calc_loss(trainer, logit_s, label_s,
         frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3)
 
 #        ic(task, res_mask.sum(), pred.shape, true.shape)
-        if 'tf' in task[0] or res_mask.sum() == 0:
+        if task[0] in ['tf','neg_tf'] or res_mask.sum() == 0:
             tot_str = 0.0 * pred.sum(axis=(1,2,3,4))
             pae_loss = 0.0 * logit_pae.sum()
             pde_loss = 0.0 * logit_pde.sum()
@@ -442,7 +442,7 @@ def calc_loss(trainer, logit_s, label_s,
         # allatom fape and torsion angle loss
         # frames, frame_mask = get_frames(
         #     pred_allatom[-1,None,...], mask_crds, seq, self.fi_dev, atom_frames)
-        if 'tf' in task[0] or res_mask.sum() == 0:
+        if task[0] in ['tf','neg_tf'] or res_mask.sum() == 0:
             l_fape = torch.zeros((pred.shape[0])).to(gpu)
 
         elif negative.item(): # inter-chain fapes should be ignored for negative cases
