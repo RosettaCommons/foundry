@@ -107,7 +107,7 @@ training_params:
 
 loss_param:
   w_dist: 1.0
-  w_str: 1.0
+  w_str: 10.0
   w_inter_fape: 0.0
   w_lig_fape: 0.0
   w_lddt: 0.1
