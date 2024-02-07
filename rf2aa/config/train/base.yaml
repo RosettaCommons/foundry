@@ -34,7 +34,7 @@ dataset_params:
   fraction_sm_compl_furthest_neg: 0
   fraction_sm_compl_permuted_neg: 0 
   fraction_sm_compl_docked_neg: 0 
-  n_train: 256000
+  n_train: 25600
   n_valid_pdb: 0
   n_valid_homo: 0
   n_valid_dslf: 0 
