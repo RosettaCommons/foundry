@@ -45,6 +45,35 @@ def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False):
             output_i = unpack_outputs(rf_outputs, rf_latents, return_raw)
     return output_i
 
+def run_model_forward(model, network_input, device="cpu"):
+    """ run model forward pass, no recycling, no ddp (for tests) """
+    gpu = device
+    use_checkpoint = False
+    xyz_prev, alpha_prev, mask_recycle = \
+        network_input["xyz_prev"], network_input["alpha_prev"], network_input["mask_recycle"]
+    output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
+    input_i = add_recycle_inputs(network_input, output_i, 0, gpu, return_raw=False)
+    input_i["seq_unmasked"] = input_i["seq_unmasked"].to(gpu)
+    model.eval()
+    with torch.no_grad():
+        rf_outputs, rf_latents = model(input_i, use_checkpoint)
+    return rf_outputs, rf_latents
+
+def run_model_forward_legacy(model, network_input, device="cpu"):
+    """ run model forward pass, no recycling or ddp with legacy model (for tests)"""
+    gpu = device
+    xyz_prev, alpha_prev, mask_recycle = \
+        network_input["xyz_prev"], network_input["alpha_prev"], network_input["mask_recycle"]
+    output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
+    input_i = add_recycle_inputs(network_input, output_i, 0, gpu, return_raw=False, use_checkpoint=False)
+    input_i["seq_unmasked"] = input_i["seq_unmasked"].to(gpu)
+    input_i["sctors"] = input_i["sctors"].to(gpu)
+    model.eval()
+    with torch.no_grad():
+        output_i = model(**input_i)
+
+    return output_i
+
 def unpack_outputs(rf_outputs, rf_latents, return_raw):
     #HACK: this just unpacks the outputs into the way the previous RFAA loss function accepts it
     # in the future the loss function should accept rf_outputs and rf_latents
@@ -73,7 +102,6 @@ def unpack_outputs(rf_outputs, rf_latents, return_raw):
         return (c6d_logits, mlm_logits, pae_logits, pde_logits, p_bind, 
                 xyz, alphas, xyz_allatom, plddt_logits, msa[:, 0], pair, state)
 
-        
 def add_recycle_inputs(network_input, output_i, i_cycle, gpu, return_raw=False, use_checkpoint=False):
     input_i = {}
     for key in network_input:

@@ -357,7 +357,7 @@ def compose_single_item_dataset(item, loader_params, loader, loader_kwargs):
             return self.loader(item, self.loader_params, **self.loader_kwargs)
         def __len__(self):
             return 1
-    
+
     dataset = SpoofDataset(loader_params, loader, loader_kwargs)
     loader = data.DataLoader(dataset, **loader_params["dataloader_kwargs"])
     return loader

@@ -16,3 +16,10 @@ def debug_used_params(model):
     for name, param in model.named_parameters():
         if param.grad is not None:
             print(name)
+
+def debug_device(rf_inputs):
+    for name, tensor in rf_inputs.items():
+        if torch.is_tensor(tensor):
+            if not tensor.is_cuda():
+                print(name)
+                print(tensor.device)

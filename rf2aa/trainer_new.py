@@ -34,10 +34,10 @@ os.environ['OPENBLAS_NUM_THREADS'] = '4'
 import random
 
 def seed_all(seed=0):
-    random.seed(0)
-    torch.manual_seed(5924)
-    torch.cuda.manual_seed(5924)
-    np.random.seed(6636)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
 
 torch.set_num_threads(4)
 #torch.autograd.set_detect_anomaly(True)
