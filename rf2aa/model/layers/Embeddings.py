@@ -162,8 +162,11 @@ class TemplatePairStack(nn.Module):
 
         for i_block in range(self.n_block):
             if use_checkpoint:
-                templ = checkpoint.checkpoint(create_custom_forward(self.block[i_block]), templ, 
-                                                                    rbf_feat, state, p2p_crop)
+                templ = checkpoint.checkpoint(
+                    create_custom_forward(self.block[i_block]), 
+                    templ, rbf_feat, state, p2p_crop,
+                    use_reentrant=True
+                )
             else:
                 templ = self.block[i_block](templ, rbf_feat, state)
         return self.norm(templ).reshape(B, T, L, L, -1)
@@ -335,7 +338,9 @@ class Templ_emb(nn.Module):
         state = state.reshape(B*L, 1, -1)
         t1d = t1d.permute(0,2,1,3).reshape(B*L, T, -1)
         if use_checkpoint:
-            out = checkpoint.checkpoint(create_custom_forward(self.attn_tor), state, t1d, t1d)
+            out = checkpoint.checkpoint(
+                create_custom_forward(self.attn_tor), state, t1d, t1d, use_reentrant=True
+            )
             out = out.reshape(B, L, -1)
         else:
             out = self.attn_tor(state, t1d, t1d).reshape(B, L, -1)
@@ -346,7 +351,9 @@ class Templ_emb(nn.Module):
         pair = pair.reshape(B*L*L, 1, -1)
         templ = templ.permute(0, 2, 3, 1, 4).reshape(B*L*L, T, -1)
         if use_checkpoint:
-            out = checkpoint.checkpoint(create_custom_forward(self.attn), pair, templ, templ)
+            out = checkpoint.checkpoint(
+                create_custom_forward(self.attn), pair, templ, templ, use_reentrant=True
+            )
             out = out.reshape(B, L, L, -1)
         else:
             out = self.attn(pair, templ, templ).reshape(B, L, L, -1)

@@ -177,18 +177,19 @@ class FullyConnectedSE3_noR(nn.Module):
         l1_feats = get_chiral_vectors(xyz[...,:3,:], chirals)[..., 1:2, :] # only pass features from Calpha
         return l1_feats
 
-    def compute_structure_update(self, G, node, l1_feats, edge_feats, xyz, is_atom):
+    def compute_structure_update(self, G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer=False):
+        weight = 0. if drop_layer else 1.
         B, L = xyz.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
         
-        state = shift["0"].reshape(B, L, -1)
+        state = weight * shift["0"].reshape(B, L, -1)
         offset = shift["1"].reshape(B, L, 3)
         T = offset / 10.0
         xyz_update = xyz.clone()
-        xyz_update[...,1:2, :] = xyz[..., 1:2, :] +T[..., None, :]
+        xyz_update[...,1:2, :] = xyz[..., 1:2, :] + weight*T[..., None, :]
         return state, xyz_update
 
-    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals):
+    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, drop_layer=False):
         #TODO: allow these functions to accept kwargs so we can pass 
         # different inputs when iterating
         B, N, L = msa.shape[:3]
@@ -197,16 +198,24 @@ class FullyConnectedSE3_noR(nn.Module):
         G, edge_feats = self.construct_graph(xyz, edge)
         #TODO: get extra l1 feats automatically and populate the extra l1 dimension
         l1_feats = self.construct_l1_feats(xyz, is_atom, atom_frames, chirals)
-        state, xyz_update = self.compute_structure_update(G, node, l1_feats, edge_feats, xyz, is_atom)
+        state, xyz_update = self.compute_structure_update(
+            G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer
+        )
         return state, xyz_update
 
 
 class FullyConnectedSE3(FullyConnectedSE3_noR):
-    def __init__(self, d_msa, d_pair, d_state, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features, sc_pred_d_hidden, sc_pred_p_drop):
-        super().__init__(d_msa, d_pair, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features)
-        self.embed_node = nn.Linear(d_msa+d_state, l0_in_features)
-        self.norm_state = nn.LayerNorm(d_state)        
-
+    def __init__(
+        self, d_msa, d_pair, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, 
+        l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features, 
+        sc_pred_d_hidden, sc_pred_p_drop
+    ):
+        super().__init__(
+            d_msa, d_pair, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, 
+            l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features
+        )
+        self.embed_node = nn.Linear(d_msa+l0_in_features, l0_in_features)
+        self.norm_state = nn.LayerNorm(l0_in_features)        
         self.sc_predictor = SCPred(
             d_msa=d_msa,
             d_state=l0_out_features,
@@ -244,11 +253,13 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         )
         return l1_feats
 
-    def compute_structure_update(self, G, node, l1_feats, edge_feats, xyz, is_atom):
+    def compute_structure_update(self, G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer=False):
+        weight = 0. if drop_layer else 1.
+
         B, L = node.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
         
-        state = shift["0"].reshape(B, L, -1)
+        state = weight * shift["0"].reshape(B, L, -1)
         offset = shift["1"].reshape(B, L, 2, 3)
         T = offset[:,:,0,:] / 10
         R = offset[:,:,1,:] / 100.0
@@ -269,13 +280,16 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         Rout[:,:,2,2] = qA*qA-qB*qB-qC*qC+qD*qD
         I = torch.eye(3, device=Rout.device).expand(B,L,3,3)
         Rout = torch.where(is_atom.reshape(B, L, 1,1), I, Rout)
-        xyz = torch.einsum('blij,blaj->blai', Rout,v)+xyz[:,:,1:2,:]+T[:,:,None,:]
+        if (weight!=1):
+            Rout = (1-weight)*I + weight*Rout
+
+        xyz = torch.einsum('blij,blaj->blai', Rout,v)+xyz[:,:,1:2,:] + weight*T[:,:,None,:]
 
         return state, xyz    
 
-    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals):
+    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, drop_layer=False):
 
-        state, xyz = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals)
+        state, xyz = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals, drop_layer)
         alpha = self.sc_predictor(msa[:, 0], state)
         return {
             "state": state,

@@ -949,7 +949,7 @@ def find_all_rigid_groups(bond_feats):
     """
     rigid_atom_bonds = (bond_feats>1)*(bond_feats<5)
     rigid_atom_bonds_np = rigid_atom_bonds[0].cpu().numpy()
-    G = nx.from_numpy_matrix(rigid_atom_bonds_np)
+    G = nx.from_numpy_array(rigid_atom_bonds_np)
     connected_components = nx.connected_components(G)
     connected_components = [cc for cc in connected_components if len(cc)>2]
     connected_components = [torch.tensor(list(combinations(cc,2))) for cc in connected_components]
@@ -1118,7 +1118,7 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
     #HACK: use networkx graph to make the atom frames, correct implementation will include frames with "residue atoms"
     # NOTE: REQUIRES NETWORKX < 3.0
-    G = nx.from_numpy_matrix(bond_feats.numpy())
+    G = nx.from_numpy_array(bond_feats.numpy())
         
     frames = get_atom_frames(lig_seq, G)
     chirals = get_atomize_protein_chirals(residues_atomize, lig_xyz[0], residue_atomize_allatom_mask, bond_feats)
@@ -1213,7 +1213,7 @@ def atomize_discontiguous_residues(idxs, msa, xyz, mask, bond_feats, same_chain,
     
     # frames were calculated per residue -- we want them over all residues in case there are contiguous residues
     bond_feats_sm = bond_feats[protein_L:][:, protein_L:]
-    G = nx.from_numpy_matrix(bond_feats_sm.detach().cpu().numpy())
+    G = nx.from_numpy_array(bond_feats_sm.detach().cpu().numpy())
     frames_atomize_all = get_atom_frames(seq_atomize_all, G)
     
     # frames_atomize_all = torch.cat(frames_atomize_all)
@@ -1834,7 +1834,7 @@ def same_chain_from_bond_feats(bond_feats):
     assert(len(bond_feats.shape)==2) # assume no batch dimension
     L = bond_feats.shape[0]
     same_chain = torch.zeros((L,L))
-    G = nx.from_numpy_matrix(bond_feats.detach().cpu().numpy())
+    G = nx.from_numpy_array(bond_feats.detach().cpu().numpy())
     for idx in nx.connected_components(G):
         idx = list(idx)
         for i in idx:
@@ -1868,52 +1868,6 @@ def kabsch(xyz1, xyz2, eps=1e-6):
     rmsd = torch.sqrt(torch.sum((xyz2_-xyz1)*(xyz2_-xyz1), axis=(0,1)) / L + eps)
 
     return rmsd, U
-
-
-# def get_contacts(xyz1, xyz2, max_dist=5):
-#     """
-#     gets a random contact between two xyz tensors within a certain distance cutoff
-#     """
-#     contacts = torch.cdist(xyz1, xyz2)
-#     is_close_euclidean = contacts < max_dist
-#     return is_close_euclidean
-# 
-# 
-# def get_triple_contact(is_close_euclidean_far_seq):
-#     """
-#     note: considered squaring the adjacency matrix for this computation but noticed it is slower than early stopping
-#     """
-#     contact_idxs = is_close_euclidean_far_seq.nonzero()
-#     contact_idxs = contact_idxs[torch.randperm(len(contact_idxs))]
-#     for i,j in contact_idxs:
-#         if j < i:
-#             continue
-#         K = (is_close_euclidean_far_seq[i,:] * is_close_euclidean_far_seq[j,:]).nonzero()
-#         if len(K):
-#             K = K[torch.randperm(len(K))]
-#             for k in K:
-#                 return torch.tensor([i,j,k])
-#     return None
-
-
-#def get_residue_contacts(xyz, idx, max_dist=5, seq_dist_greater_than=10):
-#    """
-#    find two residues close in geometric space but far in sequence space 
-#    this mimics the theozyme task in diffusion so the structure prediction model can learn the task before 
-#    transfer learning
-#    """
-#    Cb = generate_Cbeta(xyz[:, 0], xyz[:, 1], xyz[:, 2])
-#    is_close_euclidean = get_contacts(Cb, Cb, max_dist=max_dist)
-#    seqsep = torch.abs(idx[None, :] - idx[:, None])
-#    is_far_seqsep = seqsep > seq_dist_greater_than
-
-#    is_close_euclidean_far_seq = is_close_euclidean * is_far_seqsep
-
-#    triplet =  get_triple_contact(is_close_euclidean_far_seq) # returns absolute index in tensors but want residue indices for other functions
-
-#    if triplet is None:
-#        return None
-#    return idx[triplet]
 
 def get_residue_contacts(xyz, idx, seq_dist_greater_than=10, n_contacts=5):
     """

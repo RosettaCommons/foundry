@@ -21,12 +21,13 @@ def get_loss_and_misc(
         loss_param
     ):
     logit_s, logit_aa_s, logit_pae, logit_pde, p_bind, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = output_i
+
     if pred_allatom is None:
         _, pred_allatom = trainer.xyz_converter.compute_all_atom(msa[0][0][None],pred_crds[-1][None], alphas[-1][None])
         pred_crds = pred_crds[:, None]
         alphas = alphas[:, None]
+
     if (symmRs is not None):
-        #print ('a', pred_crds.shape, true_crds.shape, mask_crds.shape)
         ###
         # resolve symmetry
         ###
@@ -200,13 +201,11 @@ def calc_loss(trainer, logit_s, label_s,
         different_chain = ~same_chain.bool()
         frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3)
 
-#        ic(task, res_mask.sum(), pred.shape, true.shape)
         if task[0] in ['tf','neg_tf'] or res_mask.sum() == 0:
             tot_str = 0.0 * pred.sum(axis=(1,2,3,4))
             pae_loss = 0.0 * logit_pae.sum()
             pde_loss = 0.0 * logit_pde.sum()
         elif negative: # inter-chain fapes should be ignored for negative cases
-
             if logit_pae is not None:
                 logit_pae = logit_pae[:,:,res_mask[0]][:,:,:,res_mask[0]]
             if logit_pde is not None:
@@ -224,19 +223,13 @@ def calc_loss(trainer, logit_s, label_s,
                 logit_pde=logit_pde,
             )
 
-            #fd pae/pde loss not computed correctly, zero for negatives
-            # Pascal: I think the above is no longer true. PAE/PDE should
-            # be computed correctly for intra chain
-            #pae_loss *= 0.0
-            #pde_loss *= 0.0
-
         else:
 
             if logit_pae is not None:
                 logit_pae = logit_pae[:,:,res_mask[0]][:,:,:,res_mask[0]]
             if logit_pde is not None:
                 logit_pde = logit_pde[:,:,res_mask[0]][:,:,:,res_mask[0]]
-            
+
             # change clamp for intra protein to 10, leave rest at 30
             dclamp_2d = torch.full_like(frame_atom_mask_2d_allatom, dclamp, dtype=torch.float32)
             if not unclamp:
@@ -284,115 +277,6 @@ def calc_loss(trainer, logit_s, label_s,
         ## small-molecule ligands
         sm_res_mask = is_atom(label_aa_s[0,0])*res_mask[0] # (L,)
 
-        #if not negative and bool(torch.any(~sm_res_mask)) and torch.any(frame_mask_BB[0,~sm_res_mask]):
-            ## protein fape (layer-averaged fape on protein coordinates with protein frames)
-            #l_fape_prot_intra, _, _ = compute_general_FAPE(
-                #pred[:, ~sm_res_mask[None],:,:3],
-                #true[:,~sm_res_mask,:3,:3],
-                #atom_mask = mask_crds[:,~sm_res_mask, :3],
-                #frames = frames_BB[:,~sm_res_mask],
-                #frame_mask = frame_mask_BB[:,~sm_res_mask],
-                #frame_atom_mask_2d=frame_atom_mask_2d_intra[:, ~sm_res_mask][:, :, :, ~sm_res_mask],
-            #)
-            #prot_fape = l_fape_prot_intra.mean()
-            
-            #l_fape_prot_inter, _, _ = compute_general_FAPE(
-                #pred[:, ~sm_res_mask[None],:,:3],
-                #true[:,~sm_res_mask,:3,:3],
-                #atom_mask = mask_crds[:,~sm_res_mask, :3],
-                #frames = frames_BB[:,~sm_res_mask],
-                #frame_mask = frame_mask_BB[:,~sm_res_mask],
-                #frame_atom_mask_2d=frame_atom_mask_2d_inter[:, ~sm_res_mask][:, :, :, ~sm_res_mask],
-            #)
-            #inter_prot_fape = l_fape_prot_inter.mean()
-        #else:
-            #prot_fape = torch.tensor(0).to(gpu)
-            #inter_prot_fape = torch.tensor(0).to(gpu)
-
-        #loss_dict['bb_fape_prot_intra'] = prot_fape.detach()
-        #loss_dict['bb_fape_prot_inter'] = inter_prot_fape.detach()
-
-        ##if bool(torch.any(sm_res_mask)) and torch.any(frame_mask_BB[0,sm_res_mask]):
-            ## ligand fape (layer-averaged fape on atom coordinates with atom frames)
-            #l_fape_sm_intra, _, _ = compute_general_FAPE(
-                #pred[:, sm_res_mask[None],:,:3],
-                #true[:,sm_res_mask,:3,:3],
-                #atom_mask = mask_crds[:,sm_res_mask, :3],
-                #frames = frames_BB[:,sm_res_mask],
-                #frame_mask = frame_mask_BB[:,sm_res_mask],
-                #frame_atom_mask_2d=frame_atom_mask_2d_intra[:, sm_res_mask][:, :, :, sm_res_mask],
-                #dclamp=dclamp_sm,
-                #Z=Z_sm
-            #)
-            #lig_fape = (w_bb_fape*l_fape_sm_intra).sum()
-            #tot_loss += 0.5*w_lig_fape*lig_fape
-            
-            #l_fape_sm_inter, _, _ = compute_general_FAPE(
-                #pred[:, sm_res_mask[None],:,:3],
-                #true[:,sm_res_mask,:3,:3],
-                #atom_mask = mask_crds[:,sm_res_mask, :3],
-                #frames = frames_BB[:,sm_res_mask],
-                #frame_mask = frame_mask_BB[:,sm_res_mask],
-                #frame_atom_mask_2d=frame_atom_mask_2d_inter[:, sm_res_mask][:, :, :, sm_res_mask],
-                #dclamp=dclamp_sm,
-                #Z=Z_sm
-            #)
-            #inter_lig_fape = l_fape_sm_inter.mean()
-        #else:
-            #lig_fape = torch.tensor(0).to(gpu)
-            #inter_lig_fape = torch.tensor(0).to(gpu)
-
-        #loss_dict['bb_fape_lig_intra'] = lig_fape.detach()
-        #loss_dict['bb_fape_lig_inter'] = inter_lig_fape.detach()
-
-        #if not bool(torch.all(sm_res_mask)) and bool(torch.any(sm_res_mask)):      
-            ## calculate interchain fape 
-            ## fape of protein coordinates wrt ligand frames 
-            #mask_crds_protein = mask_crds.clone()
-            #mask_crds_protein[:, sm_res_mask] = False
-            #frame_mask_BB_sm = frame_mask_BB.clone()
-            #frame_mask_BB_sm[:,~sm_res_mask] = False
-            #if torch.any(mask_crds_protein[:,res_mask[0], :3]) and torch.any(frame_mask_BB_sm[:,res_mask[0]]):
-                #l_fape_protein_sm, _, _ = compute_general_FAPE(
-                    #pred[:, res_mask,:,:3],
-                    #true[:, res_mask[0],:3,:3],
-                    #atom_mask = mask_crds_protein[:,res_mask[0], :3],
-                    #frames = frames_BB[:,res_mask[0]],
-                    #frame_mask = frame_mask_BB_sm[:,res_mask[0]],
-                    #frame_atom_mask = mask_crds[:,res_mask[0],:3],
-                    #dclamp=dclamp
-                #)
-            #else:
-                #l_fape_protein_sm = torch.tensor(0).to(gpu)
-                
-            ## fape of ligand coordinates wrt protein frames
-            #mask_crds_sm = mask_crds.clone()
-            #mask_crds_sm[:, ~sm_res_mask] = False
-            #frame_mask_BB_protein = frame_mask_BB.clone()
-            #frame_mask_BB_protein[:,sm_res_mask] = False
-            #if torch.any(mask_crds_sm[:,res_mask[0], :3]) and torch.any(frame_mask_BB_protein[:,res_mask[0]]):
-                #l_fape_sm_protein, _, _ = compute_general_FAPE(
-                    #pred[:, res_mask,:,:3],
-                    #true[:, res_mask[0],:3,:3],
-                    #atom_mask = mask_crds_sm[:,res_mask[0], :3],
-                    #frames = frames_BB[:,res_mask[0]],
-                    #frame_mask = frame_mask_BB_protein[:,res_mask[0]],
-                    #frame_atom_mask = mask_crds[:,res_mask[0],:3],
-                    #dclamp=dclamp
-                #)
-            #else:
-                #l_fape_sm_protein = torch.tensor(0).to(gpu)
-
-            ##frac_sm = torch.sum(frame_mask_BB_sm[:,res_mask[0]])/ torch.sum(frame_mask_BB[:,res_mask[0]])
-            ##inter_fape = frac_sm*l_fape_protein_sm + (1.0-frac_sm)*l_fape_sm_protein
-            #inter_fape = l_fape_sm_protein + l_fape_protein_sm
-            #bb_l_fape_inter = (w_bb_fape*inter_fape).sum()
-            #tot_loss += 0.5*w_inter_fape*bb_l_fape_inter
-        #else:
-            #bb_l_fape_inter = torch.tensor(0).to(gpu)
-
-        #loss_dict['bb_fape_inter'] = bb_l_fape_inter.detach()
-
         ## AllAtom loss
         # get ground-truth torsion angles
         true_tors, true_tors_alt, tors_mask, tors_planar = trainer.xyz_converter.get_torsions(
@@ -436,7 +320,6 @@ def calc_loss(trainer, logit_s, label_s,
         tot_loss += w_lddt*lddt_loss
         loss_dict['lddt_loss'] = lddt_loss.detach()
         loss_dict['allatom_lddt'] = allatom_lddt[0].detach()
-        #print (allatom_lddt[0].detach())
 
         # FAPE losses
         # allatom fape and torsion angle loss

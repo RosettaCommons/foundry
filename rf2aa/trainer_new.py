@@ -6,6 +6,7 @@ import numpy as np
 
 import hydra
 import os
+import time
 
 from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
 from rf2aa.data.data_loader import loader_atomize_pdb
@@ -158,7 +159,10 @@ class Trainer:
         else:
             print ("Launched from interactive")
             world_size = torch.cuda.device_count()
-            if world_size == 1:
+
+            if world_size == 0:
+                print ("Error! No GPUs found!")
+            elif world_size == 1:
                 # No need for multiple processes with 1 GPU
                 self.train_model(0, world_size)
             else:
@@ -176,7 +180,7 @@ class Trainer:
     def train_model(self, rank, world_size):
         """ runs model training on each gpu """ 
         gpu = self.init_process_group(rank, world_size) 
-        train_loader, train_sampler, valid_loaders, valid_sampler = self.construct_dataset(rank, world_size)
+        train_loader, train_sampler, valid_loaders, valid_samplers = self.construct_dataset(rank, world_size)
 
         self.train_loader = train_loader
         self.valid_loaders = valid_loaders
@@ -193,7 +197,7 @@ class Trainer:
         self.construct_scheduler()
         self.construct_scaler()
         if self.config.training_params.resume_train:
-            self.load_checkpoint(rank)
+            self.load_checkpoint(gpu)
             self.load_model()
             self.load_optimizer()
             self.load_scheduler()
@@ -204,7 +208,9 @@ class Trainer:
                                                              world_size)
         for epoch in range(self.config.experiment.n_epoch):
             train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
-            self.train_epoch(epoch, rank)
+            self.train_epoch(epoch, rank, world_size)
+            for _, valid_sampler in valid_samplers.items():
+                valid_sampler.set_epoch(epoch)
 
             if (
                 self.config.dataset_params.validate_every_n_epochs > 0 
@@ -214,14 +220,14 @@ class Trainer:
 
         self.cleanup() 
 
-    def train_epoch(self, epoch, rank):
+    def train_epoch(self, epoch, rank, world_size):
         """ train model """
         # turn on gradients
         self.model.train()
 
         # clear gradients
         self.optimizer.zero_grad()
-
+        start_time = time.time()
         for train_idx, inputs in enumerate(self.train_loader):
             n_cycle = self.recycle_schedule[epoch, train_idx]  # number of recycling
 
@@ -236,7 +242,11 @@ class Trainer:
                 self.update_parameters()
             
                 if train_idx % self.config.log_params.log_every_n_examples == 0 and rank == 0:
-                    self.log_intermediate_losses(inputs, loss_dict, n_cycle) 
+                    train_time = time.time() - start_time
+                    self.log_intermediate_losses(
+                        inputs, loss_dict, n_cycle, 
+                        (train_idx+1)*world_size, len(self.train_loader)*world_size, train_time
+                    ) 
                 torch.cuda.empty_cache()
 
         if rank == 0:
@@ -249,7 +259,7 @@ class Trainer:
 
         for dataset_name, valid_loader in self.valid_loaders.items():
             valid_loss_dict = None
-            for valid_idx, inputs in enumerate(self.train_loader):
+            for valid_idx, inputs in enumerate(valid_loader):
                 n_cycle = self.config.loader_params.maxcycle
 
                 #fd We could make this a separate function call?
@@ -259,7 +269,10 @@ class Trainer:
                     valid_loss_dict = torch.zeros_like(torch.stack(list(loss_dict.values())))
                 valid_loss_dict += torch.stack(list(loss_dict.values()))
 
-            valid_loss_dict /= float(len(self.valid_loaders)*world_size)
+            if len(valid_loader) == 0:
+                continue
+
+            valid_loss_dict /= float(len(valid_loader)*world_size)
             dist.all_reduce(valid_loss_dict, op=dist.ReduceOp.SUM)
 
             # reconstruct loss dictionary
@@ -268,7 +281,8 @@ class Trainer:
                 dict_keys[i]:valid_loss_dict[i] for i in range(valid_loss_dict.shape[0]) 
             }
 
-            self.log_validation_losses(dataset_name, valid_loss_dict)
+            if rank==0:
+                self.log_validation_losses(dataset_name, valid_loss_dict)
 
     def train_step(self, inputs, n_cycle):
         """ take an input from dataloader, run the model and compute a loss """
@@ -292,11 +306,12 @@ class Trainer:
             self.scheduler.step()
         self.model.module.update() # apply EMA
 
-    def log_intermediate_losses(self, inputs, loss_dict, n_cycle):
+    def log_intermediate_losses(self, inputs, loss_dict, n_cycle, Nex, Nepoch, runtime):
         item = inputs[-1]
         max_mem = torch.cuda.max_memory_allocated()/1e9
-        print(f"Example: {item} Max Memory:{max_mem:.4f} Recycle:{n_cycle}\n"+
-              "\t".join([f"{k}:{v:.4f}" for k,v in loss_dict.items()]))
+        print(f"Models: {Nex} of: {Nepoch} Max_Memory: {max_mem:.4f} Runtime: {runtime:.4f}")
+        print(f"Example: {item} Recycle:{n_cycle}\n"+
+              "\t".join([f"{k}: {v:.4f}" for k,v in loss_dict.items()]))
         torch.cuda.reset_peak_memory_stats()
 
     def log_validation_losses(self, dataset_name, loss_dict):

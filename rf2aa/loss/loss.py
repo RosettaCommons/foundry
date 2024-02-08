@@ -585,7 +585,6 @@ def compute_pae_loss(X, X_y, uX, Y, Y_y, uY, logit_pae, frame_mask, atom_mask, p
         frame_atom_ca_only_mask = frame_atom_ca_only_mask.unsqueeze(1)
         return torch.mean(frame_atom_ca_only_mask * cross_entropy_loss)
 
-
 def compute_pde_loss(X, Y, logit_pde, atom_mask, pde_bin_step=0.3, frame_atom_mask_2d=None):
     """Predicted Distance Error: C-alpha (or sm. mol atom) pairwise distances"""
     atom_mask_ca = atom_mask[0,:,1] # valid CA atoms (L,)
@@ -614,6 +613,7 @@ def compute_pde_loss(X, Y, logit_pde, atom_mask, pde_bin_step=0.3, frame_atom_ma
         frame_atom_ca_only_mask = frame_atom_ca_only_mask.unsqueeze(1)
         return torch.mean(frame_atom_ca_only_mask * cross_entropy_loss)
 
+
 # from Ivan: FAPE generalized over atom sets & frames
 def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=None, frame_atom_mask_2d=None, 
     logit_pae=None, logit_pde=None, Z=10.0, dclamp=10.0, dclamp_2d=None, gamma=0.99, mixing_factor=0.9, eps=1e-4):
@@ -626,7 +626,6 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     # frame_atom_mask     1 x L x natoms masks the frames over which fape is calculated
     # frame_atom_mask_2d 1 x L x nframes x L x natoms 2d mask, 2nd dimension frames, 3rd/4th dimension atoms so fape can be taken over some atoms for some frames (only works for BB fape)
     # logit_pae
-    # logit_pde
     # dclamp int
     # dclamp_2d 
     # gamma
@@ -956,7 +955,7 @@ def calc_atom_bond_loss(
 
     # enforce LAS constraints between atoms 2 bonds away and aromatic groups
     atom_bonds_np = atom_bonds[0].cpu().numpy()
-    G = nx.from_numpy_matrix(atom_bonds_np)
+    G = nx.from_numpy_array(atom_bonds_np)
     paths = find_all_paths_of_length_n(G,2)
     if paths:
         paths = torch.tensor(paths, device=pred.device)

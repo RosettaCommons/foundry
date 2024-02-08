@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from functools import partial
+import numpy as np
 
 from rf2aa.debug import debug_nans
 from rf2aa.model.layers.SE3_network import FullyConnectedSE3, FullyConnectedSE3_noR
@@ -29,6 +30,8 @@ class RF2_block(nn.Module):
         
         if self.is_full:
             d_msa = d_msa_full
+
+        self.layer_dropout = block_params.p_drop_layer #fd layer dropout
 
         self.norm_pair_bias = nn.LayerNorm(d_pair)
         self.norm_state_bias = nn.LayerNorm(d_state)
@@ -68,7 +71,6 @@ class RF2_block(nn.Module):
 
         self.structure_attn = FullyConnectedSE3(d_msa, 
                                                 d_pair, 
-                                                d_state,
                                                 block_params.d_rbf,
                                                 block_params.n_se3_layers,
                                                 block_params.n_se3_channels,
@@ -117,48 +119,76 @@ class RF2_block(nn.Module):
             latent_feats["alpha_intermediate"].append(alpha)
         return latent_feats
 
-    def _1d_update(self, msa, pair, state, xyz):
+    def _1d_update(self, msa, pair, state, xyz, drop_layer=False):
+        weight = 0. if drop_layer else 1.
+
         pair = self.norm_pair_bias(pair)
-        pair = pair + self.msa_str_bias(xyz)
+        pair = pair + weight*self.msa_str_bias(xyz)
 
         state = self.norm_state_bias(state)
-        state_update = self.proj_state_bias(state)
+        state_update = weight*self.proj_state_bias(state)
 
         msa = msa.type_as(state_update)
-        msa = msa.index_add(1, torch.tensor([0,], device=state_update.device), state_update[None])
-        msa = msa + self.drop_row(self.msa_row_attn(msa, pair))
-        msa = msa + self.msa_col_attn(msa)
-        msa = msa + self.msa_transition(msa)
+        msa = msa.index_add(1, torch.tensor([0,], device=state_update.device), weight*state_update[None])
+        msa = msa + weight*self.drop_row(self.msa_row_attn(msa, pair))
+        msa = msa + weight*self.msa_col_attn(msa)
+        msa = msa + weight*self.msa_transition(msa)
+
         return msa
 
-    def _2d_update(self, msa, pair, state, xyz):
+    def _2d_update(self, msa, pair, state, xyz, drop_layer=False):
+        weight = 0. if drop_layer else 1.
+
         msa_bias = self.outer_product(msa)
-        pair = pair + msa_bias
+        pair = pair + weight*msa_bias
         str_bias = self.structure_bias(xyz, state)
-        pair = pair + self.drop_row(self.tri_mul_outgoing(pair)) 
-        pair = pair + self.drop_row(self.tri_mul_incoming(pair)) 
-        pair = pair + self.drop_row(self.pair_row_attn(pair, str_bias)) 
-        pair = pair + self.drop_col(self.pair_col_attn(pair, str_bias)) 
-        pair = pair + self.pair_transition(pair)
+        pair = pair + weight*self.drop_row(self.tri_mul_outgoing(pair)) 
+        pair = pair + weight*self.drop_row(self.tri_mul_incoming(pair)) 
+        pair = pair + weight*self.drop_row(self.pair_row_attn(pair, str_bias)) 
+        pair = pair + weight*self.drop_col(self.pair_col_attn(pair, str_bias)) 
+        pair = pair + weight*self.pair_transition(pair)
         return pair
 
-    def _3d_update(self, msa, pair, state, xyz, is_atom, atom_frames, chirals):
-        block_outputs = self.structure_attn(msa, pair, state, xyz, is_atom, atom_frames, chirals)
+    def _3d_update(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, drop_layer=False):
+        block_outputs = self.structure_attn(
+            msa, pair, state, xyz, is_atom, atom_frames, chirals, drop_layer=drop_layer
+        )
         return block_outputs["state"], block_outputs["xyz"], block_outputs["alpha"]
 
     def forward(self, latent_feats, use_checkpoint):
         msa, pair, state, xyz, is_atom, atom_frames, chirals = self._unpack_inputs(latent_feats)
+
+        #fd layer drop
+        drop_layer = (np.random.rand() < self.layer_dropout)
+
+        #if (drop_layer):
+        #    msa_in = msa.clone()
+        #    pair_in = pair.clone()
+        #    state_in = state.clone()
+        #    xyz_in = xyz.clone()
+
         if use_checkpoint:
-            msa  = checkpoint.checkpoint(create_custom_forward(self._1d_update), msa, pair, state, xyz)
-            pair = checkpoint.checkpoint(create_custom_forward(self._2d_update), msa, pair, state, xyz)
+            msa  = checkpoint.checkpoint(create_custom_forward(self._1d_update, drop_layer=drop_layer), msa, pair, state, xyz, use_reentrant=True)
+            pair = checkpoint.checkpoint(create_custom_forward(self._2d_update, drop_layer=drop_layer), msa, pair, state, xyz, use_reentrant=True)
             # 3D track cannot use re-entrant = False because of chiral features call to autograd
             #TODO: allow this to happen since new versions of Pytorch will be using reentrant=False
-            state, xyz, alpha = checkpoint.checkpoint(create_custom_forward(self._3d_update), \
-                                                    msa, pair, state, xyz, is_atom, atom_frames, chirals)
+            state, xyz, alpha = checkpoint.checkpoint(
+                create_custom_forward(self._3d_update, drop_layer=drop_layer),
+                msa, pair, state, xyz, is_atom, atom_frames, chirals,
+                use_reentrant=True
+            )
         else:
-            msa= self._1d_update(msa, pair, state, xyz)
-            pair = self._2d_update(msa, pair, state, xyz)
-            state, xyz, alpha = self._3d_update(msa, pair, state, xyz, is_atom, atom_frames, chirals)
+            msa= self._1d_update(msa, pair, state, xyz, drop_layer=drop_layer)
+            pair = self._2d_update(msa, pair, state, xyz, drop_layer=drop_layer)
+            state, xyz, alpha = self._3d_update(msa, pair, state, xyz, is_atom, atom_frames, chirals, drop_layer=drop_layer)
+
+        #if (drop_layer):
+        #    print ('DROP LAYER')
+        #    assert torch.allclose(msa,msa_in)
+        #    assert torch.allclose(pair,pair_in)
+        #    assert torch.allclose(state,state_in)
+        #    assert torch.allclose(xyz,xyz_in)
+
         latent_feats = self._pack_outputs(msa, pair, state, xyz, alpha, latent_feats)
         return latent_feats
 
@@ -301,12 +331,15 @@ class RF2_withgradients(nn.Module):
         msa, pair, xyz, is_atom, atom_frames, chirals = self._unpack_inputs(latent_feats)
         state = None
         if use_checkpoint:
-            msa, pair = checkpoint.checkpoint(create_custom_forward(self._1d_update), msa, pair)
-            pair = checkpoint.checkpoint(create_custom_forward(self._2d_update), pair, xyz)
+            msa, pair = checkpoint.checkpoint(create_custom_forward(self._1d_update), msa, pair, use_reentrant=True)
+            pair = checkpoint.checkpoint(create_custom_forward(self._2d_update), pair, xyz, use_reentrant=True)
             # 3D track cannot use re-entrant = False because of chiral features call to autograd
             #TODO: allow this to happen since new versions of Pytorch will be using reentrant=False
-            msa, state, xyz = checkpoint.checkpoint(create_custom_forward(self._3d_update), \
-                                                    msa, pair, state, xyz, is_atom, atom_frames, chirals)
+            msa, state, xyz = checkpoint.checkpoint(
+                create_custom_forward(self._3d_update),
+                msa, pair, state, xyz, is_atom, atom_frames, chirals,
+                use_reentrant=True
+            )
         else:
             msa, pair = self._1d_update(msa, pair)
             pair = self._2d_update(pair, xyz)
@@ -314,11 +347,9 @@ class RF2_withgradients(nn.Module):
         latent_feats = self._pack_outputs(msa, pair, state, xyz, latent_feats)
         return latent_feats
 
-
-        
 block_factory = {
     "RF2_withgradients":        partial(RF2_withgradients, is_full=False), 
-    "RF2_withgradients_full":  partial(RF2_withgradients, is_full=True),
+    "RF2_withgradients_full":   partial(RF2_withgradients, is_full=True),
     "RF2aa":                    partial(RF2_block, is_full=False),
     "RF2aa_full":               partial(RF2_block, is_full=True)
 }

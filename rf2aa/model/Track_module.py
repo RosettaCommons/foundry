@@ -942,12 +942,15 @@ class IterBlock(nn.Module):
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, dist_matrix, same_chain)
         if use_checkpoint:
-            msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state)
-            pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair)
-            pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state, crop)
+            msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state, use_reentrant=True)
+            pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair, use_reentrant=True)
+            pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state, crop, use_reentrant=True)
 
             xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames)
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, 
+                rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames,
+                use_reentrant=True
+            )
 
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
@@ -1060,33 +1063,6 @@ class IterativeSimulator(nn.Module):
                                        nextra_l0=n_extra_l0,
                                        nextra_l1=n_extra_l1,
                                        )
-
-        # # Fine-tuning all-atom SE(3) refinement
-        # if n_finetune_block > 0:
-        #     d_state=16
-        #     self.allatom_embed = AllatomEmbed(
-        #         d_state_in = SE3_param['l0_out_features'],
-        #         d_state_out = d_state,
-        #         p_mask = 0.15
-        #     )
-        #     self.finetune_refiner = Allatom2Allatom( 
-        #         SE3_param = {
-        #             'num_layers':1,
-        #             'num_channels':16,
-        #             'num_degrees':2,
-        #             'l0_in_features':d_state,
-        #             'l0_out_features':d_state,
-        #             'l1_in_features':2,
-        #             'l1_out_features':1,
-        #             'num_edge_features':4,
-        #             'n_heads':4,
-        #             'div':2,
-        #         }
-        #     )
-        #     self.residue_embed = ResidueEmbed(
-        #         d_state_in = d_state,
-        #         d_state_out = SE3_param['l0_out_features']
-        #     )
 
         # To get all-atom coordinates
         self.xyzconverter = XYZConverter()

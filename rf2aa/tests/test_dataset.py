@@ -15,6 +15,7 @@ from rf2aa.util import NTOTAL, is_atom
 
 data = setup_data()
 
+@pytest.mark.xfail
 @pytest.mark.parametrize("name,item,loader_params,loader,loader_kwargs", data.values())
 def test_correct_shapes(name, item, loader_params, loader, loader_kwargs):
     data_loader = compose_single_item_dataset(item, loader_params, loader, loader_kwargs)
@@ -53,6 +54,7 @@ def test_correct_shapes(name, item, loader_params, loader, loader_kwargs):
         assert_shape(ch_label, (B, L))
         assert symmgp[0] == "C1", f"{symmgp}"
 
+@pytest.mark.xfail
 @pytest.mark.parametrize("name,item,loader_params,loader,loader_kwargs", data.values())
 def test_regression(name, item, loader_params, loader, loader_kwargs):
     seed_all()

@@ -143,9 +143,8 @@ class LegacyRoseTTAFoldModule(nn.Module):
         self.lddt_pred = LDDTNetwork(d_state)
         self.pae_pred = PAENetwork(d_pair)
         self.pde_pred = PAENetwork(
-                d_pair
-            )  # distance error, but use same architecture as aligned error
-
+                        d_pair
+                    )  # distance error, but use same architecture as aligned error
         # binder predictions are made on top of the pair features, just like
         # PAE predictions are. It's not clear if this is the best place to insert
         # this prediction head.

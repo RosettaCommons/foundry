@@ -33,6 +33,7 @@ default_dataloader_params = {
         "NEG_NA_COMPL_LIST": "%s/list.na_negatives.v3.csv"%na_dir,
         "TF_DISTIL_LIST"   : "%s/prot_na_distill.v3.csv"%tf_dir,
         "TF_COMPL_LIST"    : "%s/tf_compl_list.v4.csv"%tf_dir,
+        "SM_COMPL_DIR"     : sm_compl_dir, 
         "SM_LIST"          : "%s/sm_compl_all_20230418.csv"%sm_compl_dir, 
         "PDB_LIST"         : "%s/list_v02_w_taxid.csv"%sm_compl_dir, # on digs
         "PDB_METADATA"     : "%s/list_v00_w_taxid_20230201.csv"%sm_compl_dir, # on digs
@@ -46,7 +47,7 @@ default_dataloader_params = {
         "VAL_TF"           : "%s/tf_valid_clusters_v4.txt"%tf_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20231116.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20240131.pkl"%sm_compl_dir, # cache for faster loading 
         "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
         "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
         "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)
@@ -173,6 +174,7 @@ def compose_dataset(dataset_params, loader_params, rank, world_size):
     train_set = DistilledDataset(
         train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid, chid2smpartners,
         loader_params, native_NA_frac=0.25, 
+        p_homo_cut=dataset_params['p_homo_cut'], 
         p_short_crop=dataset_params['p_short_crop'], 
         p_dslf_crop=dataset_params['p_dslf_crop'])
 

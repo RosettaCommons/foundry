@@ -10,7 +10,7 @@ from rf2aa.util_module import rbf, make_topk_graph, init_lecun_normal
 class LocalRefinementSE3(FullyConnectedSE3):
 
     def __init__(self, global_config, block_params):
-        d_msa, d_pair, d_state = global_config.d_msa, global_config.d_pair, global_config.d_state
+        d_msa, d_pair = global_config.d_msa, global_config.d_pair
         d_rbf, num_layers, num_channels, num_degrees, n_heads, div, \
             l0_in_features, l0_out_features, l1_in_features, l1_out_features, \
                   num_edge_features, top_k, sc_pred_d_hidden, sc_pred_p_drop = \
@@ -23,7 +23,6 @@ class LocalRefinementSE3(FullyConnectedSE3):
 
         super(LocalRefinementSE3, self).__init__(d_msa, 
                                                  d_pair, 
-                                                 d_state,
                                                  d_rbf, 
                                                  num_layers, 
                                                  num_channels, 
@@ -59,7 +58,6 @@ class LocalRefinementSE3(FullyConnectedSE3):
         G, edge_feats = make_topk_graph(xyz[:,:,1,:], edge, idx, top_k=self.top_k)
         return  G, edge_feats
 
-
 class RecurrentLocalRefinement(nn.Module):
     
     def __init__(self, global_config, block_params):
@@ -93,6 +91,46 @@ class RecurrentLocalRefinement(nn.Module):
             "alphas": alphas, 
         }
 
+class RecurrentLocalRefinement_w_Adaptor(nn.Module):
+    def __init__(self, global_config, block_params):
+        super(RecurrentLocalRefinement_w_Adaptor, self).__init__()
+        self.num_iterations = block_params.num_iterations
+
+        self.proj_state_in = nn.Linear(block_params.adaptor_features, block_params.l0_in_features)
+        self.proj_state_out = nn.Linear(block_params.l0_in_features, block_params.adaptor_features)
+
+        self.se3 = LocalRefinementSE3(global_config, block_params)
+    
+    def _unpack_inputs(self, latent_feats):
+        msa, pair, state, xyz, is_atom, atom_frames, chirals = \
+            latent_feats["msa"], latent_feats["pair"], \
+            latent_feats["state"], latent_feats["xyz"], latent_feats["is_atom"], \
+                latent_feats["atom_frames"], latent_feats["chirals"]
+        return msa, pair, state, xyz, is_atom, atom_frames, chirals
+
+    def forward(self, latent_feats):
+        B, N, L = latent_feats["msa"].shape[:3]
+        xyzs = torch.full((self.num_iterations, L, 3, 3 ), torch.nan, device=latent_feats["msa"].device)
+        alphas = torch.full((self.num_iterations, L, NTOTALDOFS, 2), torch.nan, device=latent_feats["msa"].device) 
+
+        msa, pair, state, xyz, is_atom, atom_frames, chirals = self._unpack_inputs(latent_feats)
+
+        state = self.proj_state_in(state)
+        for i in range(self.num_iterations):
+            output = self.se3(msa, pair, state, xyz, is_atom, atom_frames, chirals)
+            xyzs[i] = output["xyz"]
+            alphas[i] = output["alpha"]
+
+        state = self.proj_state_out(state)
+        latent_feats["state"] = state
+
+        return {
+            "xyzs": xyzs,
+            "alphas": alphas, 
+        }
+
+
 refinement_factory ={
-    "local": RecurrentLocalRefinement
+    "local": RecurrentLocalRefinement,
+    "local_adaptor": RecurrentLocalRefinement_w_Adaptor
 }

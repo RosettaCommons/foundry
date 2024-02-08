@@ -1036,7 +1036,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     if add_negatives:
         train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict = \
             add_negative_sets(train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict,
-                              base_path = Path(sm_compl_dir))
+                              base_path = Path(params['SM_COMPL_DIR']))
 
     print(f'Done loading datasets in {time.time()-t0} seconds')
 
@@ -1166,6 +1166,14 @@ def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein
             mask_na1_rep = torch.gather(mask[:len_s[0]], 1, repatom[:len_s[0],None]).squeeze(1)
             mask_na2_rep = torch.gather(mask[len_s[0]:], 1, repatom[len_s[0]:,None]).squeeze(1)
             cond = torch.logical_and(cond, mask_na1_rep[:,None]*mask_na2_rep[None,:]) 
+
+            if (torch.sum(cond)==0):
+                i= np.random.randint(len_s[0]-1)
+                j= np.random.randint(len_s[1]-1)
+                while (not mask[i,1] or not mask[len_s[0]+j,1]):
+                    i= np.random.randint(len_s[0]-1)
+                    j= np.random.randint(len_s[1]-1)
+                cond[i,j] = True
         else:
             # 1 RNA chains
             xyz_na_rep = torch.gather(xyz, 1, repatom[:,None,None].repeat(1,1,3)).squeeze(1)
@@ -1173,11 +1181,11 @@ def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein
             mask_na_rep = torch.gather(mask, 1, repatom[:,None]).squeeze(1)
             cond = torch.logical_and(cond, mask_na_rep[:,None]*mask_na_rep[None,:])
 
-        if (torch.sum(cond)==0):
-            i= np.random.randint(len_s[0]-1)
-            while (not mask[i,1] or not mask[i+1,1]):
-                i = np.random.randint(len_s[0])
-            cond[i,i+1] = True
+            if (torch.sum(cond)==0):
+                i= np.random.randint(len_s[0]-1)
+                while (not mask[i,1] or not mask[i+1,1]):
+                    i = np.random.randint(len_s[0])
+                cond[i,i+1] = True
 
     else: # either 1prot+1NA, 1prot+2NA or 2prot+2NA
         # find NA:NA basepairs
@@ -2075,10 +2083,6 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
 def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0, fixbb=False):
     L = msa_orig.shape[1]
 
-    # msa always over 2 subunits (higher-order symms expand this)
-    msa, ins = merge_a3m_homo(msa_orig, ins_orig, 2) # make unpaired alignments, for training, we always use two chains
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=[L,L])
-
     # get ground-truth structures
     # load metadata
     PREFIX = "%s/torch/pdb/%s/%s"%(params['PDB_DIR'],pdbid[1:3],pdbid)
@@ -2099,23 +2103,6 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         mask[i_int,:,:14] = torch.cat((pdbA['mask'], pdbB['mask']), dim=0)
     xyz = torch.nan_to_num(xyz)
 
-    # detect any point symmetries
-    symmgp, symmsubs = get_symmetry(xyz,mask)
-    nsubs = len(symmsubs)+1
-
-    #print ('symmgp',symmgp)
-    # build full native complex (for loss calcs)
-    if (symmgp != 'C1'):
-        xyzfull = torch.zeros((1,nsubs*L,NTOTAL,3))
-        maskfull = torch.full((1,nsubs*L,NTOTAL), False)
-        xyzfull[0,:L] = xyz[0,:L]
-        maskfull[0,:L] = mask[0,:L]
-        for i in range(1,nsubs):
-            xyzfull[0,i*L:(i+1)*L] = xyz[symmsubs[i-1],L:]
-            maskfull[0,i*L:(i+1)*L] = mask[symmsubs[i-1],L:]
-        xyz = xyzfull
-        mask = maskfull
-
     # get template features
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
     if ntempl < 1:
@@ -2124,90 +2111,117 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tplt, L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
         # duplicate
 
-    if (symmgp != 'C1'):
-        # everything over ASU
-        idx = torch.arange(L)
-        same_chain = torch.ones((L, L)).long()
-        nsub = len(symmsubs)+1
-        bond_feats = get_protein_bond_feats(L)
-    else:  # either asymmetric dimer or (usually) helical symmetry...
-        # everything over 2 copies
-        xyz_t = torch.cat([xyz_t, random_rot_trans(xyz_t)], dim=1)
-        f1d_t = torch.cat([f1d_t]*2, dim=1)
-        mask_t = torch.cat([mask_t]*2, dim=1)
-        idx = torch.arange(L*2)
-        idx[L:] += 100 # to let network know about chain breaks
+    # detect any point symmetries
+    symmgp, symmsubs = get_symmetry(xyz,mask)
+    Osub_native = len(symmsubs)+1    # number of subunits in the "native"
 
-        same_chain = torch.zeros((2*L, 2*L)).long()
-        same_chain[:L, :L] = 1
-        same_chain[L:, L:] = 1
-        bond_feats = torch.zeros((2*L, 2*L)).long()
-        bond_feats[:L, :L] = get_protein_bond_feats(L)
-        bond_feats[L:, L:] = get_protein_bond_feats(L)
+    # number of subunits we are modelling
+    Osub = 1
+    if (symmgp[0]=='C'):
+        Osub = min(3, int(symmgp[1:]))
+    elif (symmgp[0]=='D'):
+        Osub = min(5, 2*int(symmgp[1:]))
+    else:
+        Osub = 6
 
-        nsub = 2
-    
+    # build up MSA
+    if (Osub > 1):
+        msa, ins = merge_a3m_homo(msa_orig, ins_orig, Osub) # make unpaired alignments, for training, we always use two chains
+    else:
+        msa, ins = msa_orig, ins_orig
+
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=[L,]*Osub)
+
+    idx = torch.arange(L)
+    same_chain = torch.ones((L, L)).long()
+    bond_feats = get_protein_bond_feats(L).long()
+    dist_matrix = get_bond_distances(bond_feats)
+
+    # build up symmetric data
+    if (Osub > 1):
+        # point-symmetric complex
+
+        # 'flatten' xyz and mask
+        # NOTE: the number of subunits is given by Osub_native, distinct from Osub!
+        xyzfull = torch.zeros((1,Osub_native*L,NTOTAL,3))
+        maskfull = torch.full((1,Osub_native*L,NTOTAL), False)
+        xyzfull[0,:L] = xyz[0,:L]
+        maskfull[0,:L] = mask[0,:L]
+        for i in range(1,Osub_native):
+            xyzfull[0,i*L:(i+1)*L] = xyz[symmsubs[i-1],L:]
+            maskfull[0,i*L:(i+1)*L] = mask[symmsubs[i-1],L:]
+        xyz = xyzfull
+        mask = maskfull
+
+        # symmetrize templates
+        xyz_t = xyz_t[:,:L].repeat(1,Osub,1,1)
+        mask_t = mask_t[:,:L].repeat(1,Osub,1)
+        f1d_t = f1d_t[:,:L].repeat(1,Osub,1)
+
+        # index, same chain, bond feats
+        idx = torch.arange(Osub*L)
+        same_chain = torch.zeros((Osub*L,Osub*L)).long()
+        bond_feats_new = torch.zeros((Osub*L,Osub*L)).long()
+        dist_matrix_new = torch.zeros((Osub*L,Osub*L)).long()
+        for o_i in range(Osub):
+            same_chain[o_i*L:(o_i+1)*L,o_i*L:(o_i+1)*L] = 1
+            idx[o_i*L:(o_i+1)*L] += 100*o_i
+            bond_feats_new[o_i*L:(o_i+1)*L,o_i*L:(o_i+1)*L] = bond_feats
+            dist_matrix_new[o_i*L:(o_i+1)*L,o_i*L:(o_i+1)*L] = dist_matrix
+        bond_feats = bond_feats_new
+        dist_matrix = dist_matrix_new
+
+    else:  
+        # asymmetric dimer or helical symmetry.  model as monomer
+        xyz = xyz[:,:L]
+        mask = mask[:,:L]
+        xyz_t = xyz_t[:,:L]
+        mask_t = mask_t[:,:L]
+        f1d_t = f1d_t[:,:L]
+
     ntempl = xyz_t.shape[0]
     xyz_t = torch.stack(
         [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
     )
+
     # get initial coordinates
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
-    # figure out crop
-    if (symmgp =='C1'):
-        cropsub = 2
-    elif (symmgp[0]=='C'):
-        cropsub = min(3, int(symmgp[1:]))
-    elif (symmgp[0]=='D'):
-        cropsub = min(5, 2*int(symmgp[1:]))
-    else:
-        cropsub = 6
-
     # Residue cropping
-    if cropsub*L > params['CROP']:
-        #if np.random.rand() < 0.5: # 50% --> interface crop
-        #    spatial_crop_tgt = np.random.randint(0, npairs)
-        #    crop_idx = get_spatial_crop(xyz[spatial_crop_tgt], mask[spatial_crop_tgt], torch.arange(L*2), [L,L], params, interfaces[spatial_crop_tgt][0])
-        #else: # 50% --> have same cropped regions across all copies
-        #    crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//2, unclamp=False) # cropped region for first copy
-        #    crop_idx = torch.cat((crop_idx, crop_idx+L)) # get same crops
-        #    #print ("check_crop", crop_idx, crop_idx.shape)
-
+    if Osub*L > params['CROP']:
         # fd: always use same cropped regions across all copies
-        crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//cropsub, unclamp=False) # cropped region for first copy
-        crop_idx_full = torch.cat([crop_idx,crop_idx+L])
-        if (symmgp == 'C1'):
-            crop_idx = crop_idx_full
-            crop_idx_complete = crop_idx_full
+        crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//Osub, unclamp=False) # cropped region for first copy
+        if (Osub > 1):
+            crop_idx_full, crop_idx_native = [], []
+            for i in range(Osub):
+                crop_idx_full.append(crop_idx+i*L)
+            for i in range(Osub_native):
+                crop_idx_native.append(crop_idx+i*L)
+            crop_idx = torch.cat(crop_idx_full)
+            crop_idx_native = torch.cat(crop_idx_native)
         else:
-            crop_idx_complete = []
-            for i in range(nsub):
-                crop_idx_complete.append(crop_idx+i*L)
-            crop_idx_complete = torch.cat(crop_idx_complete)
+            crop_idx_native = crop_idx
 
-        # over 2 copies
-        seq = seq[:,crop_idx_full]
-        msa_seed_orig = msa_seed_orig[:,:,crop_idx_full]
-        msa_seed = msa_seed[:,:,crop_idx_full]
-        msa_extra = msa_extra[:,:,crop_idx_full]
-        mask_msa = mask_msa[:,:,crop_idx_full]
+        seq = seq[:,crop_idx]
+        msa_seed_orig = msa_seed_orig[:,:,crop_idx]
+        msa_seed = msa_seed[:,:,crop_idx]
+        msa_extra = msa_extra[:,:,crop_idx]
+        mask_msa = mask_msa[:,:,crop_idx]
 
-        # over 1 copy (symmetric) or 2 copies (asymmetric)
         xyz_t = xyz_t[:,crop_idx]
         f1d_t = f1d_t[:,crop_idx]
         mask_t = mask_t[:,crop_idx]
         idx = idx[crop_idx]
         same_chain = same_chain[crop_idx][:,crop_idx]
         bond_feats = bond_feats[crop_idx][:,crop_idx]
+        dist_matrix = dist_matrix[crop_idx][:,crop_idx]
         xyz_prev = xyz_prev[crop_idx]
         mask_prev = mask_prev[crop_idx]
 
-        # over >=2 copies
-        xyz = xyz[:,crop_idx_complete]
-        mask = mask[:,crop_idx_complete]
+        # native over different # of subunits
+        xyz = xyz[:,crop_idx_native]
+        mask = mask[:,crop_idx_native]
 
-    dist_matrix = get_bond_distances(bond_feats)
     chirals = torch.Tensor()
     ch_label = torch.zeros(seq[0].shape)
 
@@ -5184,13 +5198,17 @@ class DatasetSM(data.Dataset):
         return out
 
 class DistilledDataset(data.Dataset):
-    def __init__(self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid,chid2smpartners, params, 
-                 native_NA_frac=0.05, p_short_crop=0.0, p_dslf_crop=0.0, unclamp_cut=0.9, ligand_dictionary: Optional[Dict] = None):
+    def __init__(
+        self, ID_dict, dataset_dict, loader_dict, homo, chid2hash, chid2taxid,chid2smpartners, params, 
+        native_NA_frac=0.05, p_homo_cut=0.0, p_short_crop=0.0, p_dslf_crop=0.0, unclamp_cut=0.9, 
+        ligand_dictionary: Optional[Dict] = None
+    ):
 
         self.ID_dict = ID_dict
         self.dataset_dict = dataset_dict
         self.loader_dict = loader_dict
         self.homo = homo
+        self.p_homo_cut = p_homo_cut
         self.p_short_crop = p_short_crop
         self.p_dslf_crop = p_dslf_crop
         self.chid2hash = chid2hash
@@ -5224,7 +5242,10 @@ class DistilledDataset(data.Dataset):
                 ID = self.ID_dict['pdb'][index-offset]
                 item = sample_item(self.dataset_dict['pdb'], ID)
                 out = self.loader_dict['pdb'](
-                    item, self.params, self.homo, p_short_crop=self.p_short_crop, p_dslf_crop=self.p_dslf_crop, unclamp=(p_unclamp > self.unclamp_cut))
+                    item, self.params, self.homo, 
+                    p_homo_cut=self.p_homo_cut, p_short_crop=self.p_short_crop, p_dslf_crop=self.p_dslf_crop, 
+                    unclamp=(p_unclamp > self.unclamp_cut)
+                )
             offset += len(self.index_dict['pdb'])
 
             if index >= offset and index < offset + len(self.index_dict['fb']):

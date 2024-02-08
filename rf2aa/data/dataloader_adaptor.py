@@ -39,7 +39,15 @@ def prepare_input(inputs, xyz_converter, gpu):
 
         # symmetry - reprocess (many) inputs
         if (symmgp != 'C1'):
-            Lasu = L//2 # msa contains intra/inter block
+            if (symmgp[0]=='C'):
+                Osub = min(3, int(symmgp[1:]))
+            elif (symmgp[0]=='D'):
+                Osub = min(5, 2*int(symmgp[1:]))
+            else:
+                Osub = 6
+            Lasu = L//Osub
+
+            # load symm data from symmetry group
             symmids, symmRs, symmmeta, symmoffset = symm_subunit_matrix(symmgp)
             symmids = symmids.to(gpu, non_blocking=True)
             symmRs = symmRs.to(gpu, non_blocking=True)
@@ -48,42 +56,13 @@ def prepare_input(inputs, xyz_converter, gpu):
                 [x.to(gpu, non_blocking=True) for x in symmmeta[0]],
                 symmmeta[1])
             O = symmids.shape[0]
+
+            # offset initial model away from symmetry center
             xyz_prev = xyz_prev + symmoffset*Lasu**(1/3)
 
             # find contacting subunits
             xyz_prev, symmsub = find_symm_subs(xyz_prev[:,:Lasu], symmRs, symmmeta)
             symmsub = symmsub.to(gpu, non_blocking=True)
-            Osub = symmsub.shape[0]
-            mask_prev = mask_prev[:,:L].repeat(1,Osub,1)
-
-            # symmetrize msa
-            seq = torch.cat([seq[:,:,:Lasu],*[seq[:,:,Lasu:]]*(Osub-1)], dim=2)
-            msa = torch.cat([msa[:,:,:,:Lasu],*[msa[:,:,:,Lasu:]]*(Osub-1)], dim=3)
-            msa_masked = torch.cat([msa_masked[:,:,:,:Lasu],*[msa_masked[:,:,:,Lasu:]]*(Osub-1)], dim=3)
-            msa_full = torch.cat([msa_full[:,:,:,:Lasu],*[msa_full[:,:,:,Lasu:]]*(Osub-1)], dim=3)
-            mask_msa = torch.cat([mask_msa[:,:,:,:Lasu],*[mask_msa[:,:,:,Lasu:]]*(Osub-1)], dim=3)
-
-            # symmetrize templates
-            xyz_t = xyz_t[:,:,:Lasu].repeat(1,1,Osub,1,1)
-            mask_t = mask_t[:,:,:Lasu].repeat(1,1,Osub,1)
-            t1d = t1d[:,:,:Lasu].repeat(1,1,Osub,1)
-
-            # symmetrize atom_frames
-            atom_frames = torch.cat([atom_frames[:,:,:Lasu],*[atom_frames[:,:,Lasu:]]*(Osub-1)], dim=2)
-
-            # index, same chain, bond feats
-            idx_pdb = torch.arange(Osub*Lasu, device=gpu)[None,:]
-            same_chain = torch.zeros((1,Osub*Lasu,Osub*Lasu), device=gpu).long()
-            bond_feats_new = torch.zeros((1,Osub*Lasu,Osub*Lasu), device=gpu).long()
-            dist_matrix_new = torch.zeros((1,Osub*Lasu,Osub*Lasu), device=gpu).long()
-            for o_i in range(Osub):
-                same_chain[:,o_i*Lasu:(o_i+1)*Lasu,o_i*Lasu:(o_i+1)*Lasu] = 1
-                idx_pdb[:,o_i*Lasu:(o_i+1)*Lasu] += 100*o_i
-                bond_feats_new[:,o_i*Lasu:(o_i+1)*Lasu,o_i*Lasu:(o_i+1)*Lasu] = bond_feats
-                dist_matrix_new[:,o_i*Lasu:(o_i+1)*Lasu,o_i*Lasu:(o_i+1)*Lasu] = dist_matrix
-
-            bond_feats = bond_feats_new
-            dist_matrix = dist_matrix_new
 
         else:
             Lasu = L

@@ -107,7 +107,6 @@ class RF2_embedding_nostate(RF2_embedding):
     def __init__(self, global_params, block_params):
         super(RF2_embedding_nostate, self).__init__(global_params, block_params)
         d_msa, d_msa_full, d_pair, d_state = global_params["d_msa"], global_params["d_msa_full"], global_params["d_pair"], global_params["d_state"]
-
         self.latent_emb = MSA_emb_nostate(
             d_msa=d_msa, 
             d_pair=d_pair, 

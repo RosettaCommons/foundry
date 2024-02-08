@@ -61,6 +61,7 @@ dataset_params:
   n_valid_sm_compl_docked_neg: 0 
   n_valid_dude_actives: 0 
   n_valid_dude_inactives: 0 
+  p_homo_cut: 0
   p_short_crop: 0 
   p_dslf_crop: 0 
   dslf_fb_upsample: 1
