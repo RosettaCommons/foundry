@@ -182,7 +182,7 @@ class FullyConnectedSE3_noR(nn.Module):
         B, L = xyz.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
         
-        state = weight * shift["0"].reshape(B, L, -1)
+        state = state + weight * shift["0"].reshape(B, L, -1)
         offset = shift["1"].reshape(B, L, 3)
         T = offset / 10.0
         xyz_update = xyz.clone()
@@ -259,7 +259,7 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         B, L = node.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
         
-        state = weight * shift["0"].reshape(B, L, -1)
+        state = state + weight * shift["0"].reshape(B, L, -1)
         offset = shift["1"].reshape(B, L, 2, 3)
         T = offset[:,:,0,:] / 10
         R = offset[:,:,1,:] / 100.0
