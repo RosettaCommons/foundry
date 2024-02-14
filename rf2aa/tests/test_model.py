@@ -11,6 +11,7 @@ from rf2aa.tensor_util import assert_equal
 from rf2aa.tests.test_conditions import setup_array,\
       configs, make_deterministic, dataset_pickle_path, model_pickle_path
 from rf2aa.util_module import XYZConverter
+from rf2aa.chemical import ChemicalData as ChemData
 
 
 # goal is to test all the configs on a broad set of datasets
@@ -61,8 +62,6 @@ def test_regression_legacy(example, model):
     output_names = ("logits_c6d", "logits_aa", "logits_pae", \
                         "logits_pde", "p_bind", "xyz", "alpha", "xyz_allatom", \
                         "lddt", "seq", "pair", "state")
-    
-
 
     if not os.path.exists(model_pickle):
         torch.save(output_i, model_pickle)
@@ -84,20 +83,25 @@ def test_regression_legacy(example, model):
                 try:
                     assert torch.allclose(got, want, atol=1e-4)
                 except Exception as e:
-                    raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}")
+                    raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
             else:
                 try:
                     assert_equal(got, want)
                 except Exception as e:
                     raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
-    
 
 def setup_test(example, model):
+    model_name, model, config = model
+
+    # initialize chemical database
+    ChemData.reset() # force reload chemical data
+    ChemData(config)
+
+    model = model.to(gpu)
     dataset_name = example[0]
     dataloader_inputs = torch.load(dataset_pickle_path(dataset_name), map_location=gpu)
     xyz_converter = XYZConverter().to(gpu)
     task, item, network_input, true_crds, mask_crds, msa, mask_msa, unclamp, \
         negative, symmRs, Lasu, ch_label = prepare_input(dataloader_inputs,xyz_converter, gpu)
-    model_name, model = model
-    model = model.to(gpu)
     return dataset_name, network_input, model_name, model
+

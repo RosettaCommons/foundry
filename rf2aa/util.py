@@ -8,8 +8,6 @@ import torch
 import warnings
 from assertpy import assert_that
 
-import scipy.sparse
-import scipy.sparse.csgraph
 import networkx as nx
 import itertools
 from itertools import combinations
@@ -18,9 +16,8 @@ from openbabel import openbabel
 from scipy.spatial.transform import Rotation
 from icecream import ic
 
-import rf2aa.chemical as chemical
-from rf2aa.chemical import *
-from rf2aa.kinematics import get_atomize_protein_chirals
+from rf2aa.chemical import ChemicalData as ChemData
+from rf2aa.kinematics import get_atomize_protein_chirals, generate_Cbeta
 from rf2aa.scoring import *
 
 
@@ -104,36 +101,24 @@ def center_and_realign_missing(xyz, mask_t, seq=None, same_chain=None, should_ce
 
     return xyz
 
-def th_ang_v(ab,bc,eps:float=1e-8):
-    def th_norm(x,eps:float=1e-8):
-        return x.square().sum(-1,keepdim=True).add(eps).sqrt()
-    def th_N(x,alpha:float=0):
-        return x/th_norm(x).add(alpha)
-    ab, bc = th_N(ab),th_N(bc)
-    cos_angle = torch.clamp( (ab*bc).sum(-1), -1, 1)
-    sin_angle = torch.sqrt(1-cos_angle.square() + eps)
-    dih = torch.stack((cos_angle,sin_angle),-1)
-    return dih
 
-def th_dih_v(ab,bc,cd):
-    def th_cross(a,b):
-        a,b = torch.broadcast_tensors(a,b)
-        return torch.cross(a,b, dim=-1)
-    def th_norm(x,eps:float=1e-8):
-        return x.square().sum(-1,keepdim=True).add(eps).sqrt()
-    def th_N(x,alpha:float=0):
-        return x/th_norm(x).add(alpha)
+# note: needs consistency with chemical.py
+def is_protein(seq):
+    return seq < ChemData().NPROTAAS
 
-    ab, bc, cd = th_N(ab),th_N(bc),th_N(cd)
-    n1 = th_N( th_cross(ab,bc) )
-    n2 = th_N( th_cross(bc,cd) )
-    sin_angle = (th_cross(n1,bc)*n2).sum(-1)
-    cos_angle = (n1*n2).sum(-1)
-    dih = torch.stack((cos_angle,sin_angle),-1)
-    return dih
+def is_nucleic(seq):
+    return (seq>=ChemData().NPROTAAS) * (seq <= ChemData().NNAPROTAAS)
 
-def th_dih(a,b,c,d):
-    return th_dih_v(a-b,b-c,c-d)
+# fd hacky
+def is_DNA(seq):
+    return (seq>=ChemData().NPROTAAS) * (seq < ChemData().NPROTAAS+5)
+
+# fd hacky
+def is_RNA(seq):
+    return (seq>=ChemData().NPROTAAS+5) * (seq < ChemData().NNAPROTAAS)
+
+def is_atom(seq):
+    return seq > ChemData().NNAPROTAAS
 
 # build a frame from 3 points
 #fd  -  more complicated version splits angle deviations between CA-N and CA-C (giving more accurate CB position)
@@ -154,8 +139,8 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-4):
 
     costgt = torch.full(dims, -0.3616, device=N.device)
     if is_na is not None:
-       costgt[is_na] = -0.4929
-    
+       costgt[is_na] = ChemData().costgtNA
+
     cos2del = torch.clamp( cosref*costgt + torch.sqrt((1-cosref*cosref)*(1-costgt*costgt)+eps), min=-1.0, max=1.0 )
 
     cosdel = torch.sqrt(0.5*(1+cos2del)+eps)
@@ -171,16 +156,6 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-4):
 
     return R, Ca
 
-# note: needs consistency with chemical.py
-def is_protein(seq):
-    return seq < NPROTAAS
-
-def is_nucleic(seq):
-    return (seq>=NPROTAAS) * (seq <= NNAPROTAAS)
-
-def is_atom(seq):
-    return seq > NNAPROTAAS
-
 def idealize_reference_frame(seq, xyz_in):
     xyz = xyz_in.clone()
 
@@ -189,18 +164,12 @@ def idealize_reference_frame(seq, xyz_in):
 
     protmask = ~namask
 
-    Nideal = torch.tensor([-0.5272, 1.3593, 0.000], device=xyz_in.device)
-    Cideal = torch.tensor([1.5233, 0.000, 0.000], device=xyz_in.device)
-
-    OP1ideal = torch.tensor([-0.7319, 1.2920, 0.000], device=xyz_in.device)
-    OP2ideal = torch.tensor([1.4855, 0.000, 0.000], device=xyz_in.device)
-
     pmask_bs,pmask_rs = protmask.nonzero(as_tuple=True)
     nmask_bs,nmask_rs = namask.nonzero(as_tuple=True)
-    xyz[pmask_bs,pmask_rs,0,:] = torch.einsum('...ij,j->...i', Rs[pmask_bs,pmask_rs], Nideal) + Ts[pmask_bs,pmask_rs]
-    xyz[pmask_bs,pmask_rs,2,:] = torch.einsum('...ij,j->...i', Rs[pmask_bs,pmask_rs], Cideal) + Ts[pmask_bs,pmask_rs]
-    xyz[nmask_bs,nmask_rs,0,:] = torch.einsum('...ij,j->...i', Rs[nmask_bs,nmask_rs], OP1ideal) + Ts[nmask_bs,nmask_rs]
-    xyz[nmask_bs,nmask_rs,2,:] = torch.einsum('...ij,j->...i', Rs[nmask_bs,nmask_rs], OP2ideal) + Ts[nmask_bs,nmask_rs]
+    xyz[pmask_bs,pmask_rs,0,:] = torch.einsum('...ij,j->...i', Rs[pmask_bs,pmask_rs], ChemData().init_N.to(device=xyz_in.device) ) + Ts[pmask_bs,pmask_rs]
+    xyz[pmask_bs,pmask_rs,2,:] = torch.einsum('...ij,j->...i', Rs[pmask_bs,pmask_rs], ChemData().init_C.to(device=xyz_in.device) ) + Ts[pmask_bs,pmask_rs]
+    xyz[nmask_bs,nmask_rs,0,:] = torch.einsum('...ij,j->...i', Rs[nmask_bs,nmask_rs], ChemData().init_O1.to(device=xyz_in.device) ) + Ts[nmask_bs,nmask_rs]
+    xyz[nmask_bs,nmask_rs,2,:] = torch.einsum('...ij,j->...i', Rs[nmask_bs,nmask_rs], ChemData().init_O2.to(device=xyz_in.device) ) + Ts[nmask_bs,nmask_rs]
 
     return xyz
 
@@ -365,8 +334,6 @@ def writepdb(filename, *args, file_mode='w', **kwargs, ):
 def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=None, 
              bond_feats=None, file_mode="w",atom_mask=None, atom_idx_offset=0, chain_Ls=None,
              remap_atomtype=True, lig_name='LG1', atom_names=None):
-    #ic(atoms.shape, seq.shape, bond_feats.shape)
-    #ic(chain_Ls)
 
     def _get_atom_type(atom_name):
         atype = ''
@@ -388,9 +355,9 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
         42,   74,   23,   92,   65,   39,   4,    12,   20,   3,    19,   0] 
     atomnum2atomtype_ = dict(zip(atom_num,atom_names_))
     if remap_atomtype:
-        atomtype_map = {v:atomnum2atomtype_[k] for k,v in chemical.atomnum2atomtype.items()}
+        atomtype_map = {v:atomnum2atomtype_[k] for k,v in ChemData().atomnum2atomtype.items()}
     else:
-        atomtype_map = {v:v for k,v in chemical.atomnum2atomtype.items()} # no change
+        atomtype_map = {v:v for k,v in ChemData().atomnum2atomtype.items()} # no change
         
     ctr = 1+atom_idx_offset
     scpu = seq.cpu().squeeze(0)
@@ -419,7 +386,7 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
         #    print ('bad size!', natoms, NHEAVY, NTOTAL, atoms.shape)
         #    assert(False)
 
-        if s >= len(aa2long):
+        if s >= len(ChemData().aa2long):
             atom_idxs[i_res] = ctr
 
             # hack to make sure H's are output properly (they are not in RFAA alphabet)
@@ -427,7 +394,7 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
                 atom_type = _get_atom_type(atom_names[i_res_lig])
                 atom_name = atom_names[i_res_lig]
             else:
-                atom_type = atomtype_map[num2aa[s]]
+                atom_type = atomtype_map[ChemData().num2aa[s]]
                 atom_name = atom_type
 
             f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f          %+2s\n"%(
@@ -438,13 +405,13 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
             ctr += 1
             continue
 
-        atms = aa2long[s]
+        atms = ChemData().aa2long[s]
 
         for i_atm,atm in enumerate(atms):
             if atom_mask is not None and not atom_mask[i_res,i_atm]: continue # skip missing atoms
             if (i_atm<natoms and atm is not None and not torch.isnan(atomscpu[i_res,i_atm,:]).any()):
                 f.write ("%-6s%5s %4s %3s %s%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n"%(
-                    "ATOM", ctr, atm, num2aa[s],
+                    "ATOM", ctr, atm, ChemData().num2aa[s],
                     ch, idx_pdb[i_res], atomscpu[i_res,i_atm,0], atomscpu[i_res,i_atm,1], atomscpu[i_res,i_atm,2],
                     1.0, Bfacts[i_res] ) )
                 ctr += 1
@@ -458,475 +425,7 @@ def writepdb_file(f, atoms, seq, modelnum=None, chain="A", idx_pdb=None, bfacts=
     if modelnum is not None:
         f.write("ENDMDL\n")
 
-    
-# process ideal frames
-def make_frame(X, Y):
-    Xn = X / torch.linalg.norm(X)
-    Y = Y - torch.dot(Y, Xn) * Xn
-    Yn = Y / torch.linalg.norm(Y)
-    Z = torch.cross(Xn,Yn)
-    Zn =  Z / torch.linalg.norm(Z)
-    return torch.stack((Xn,Yn,Zn), dim=-1)
 
-
-# resolve tip atom indices
-tip_indices = torch.full((NAATOKENS,), 0)
-for i in range(NAATOKENS):
-    if i > NNAPROTAAS-1:
-        # all atoms are at index 1 in the atom array 
-        tip_indices[i] = 1
-    else:
-        tip_atm = aa2tip[i]
-        atm_long = aa2long[i]
-        tip_indices[i] = atm_long.index(tip_atm)
-
-
-# resolve torsion indices
-#  a negative index indicates the previous residue
-# order:
-#    omega/phi/psi: 0-2
-#    chi_1-4(prot): 3-6
-#    cb/cg bend: 7-9
-#    eps(p)/zeta(p): 10-11
-#    alpha/beta/gamma/delta: 12-15
-#    nu2/nu1/nu0: 16-18
-#    chi_1(na): 19
-torsion_indices = torch.full((NAATOKENS,NTOTALDOFS,4),0)
-torsion_can_flip = torch.full((NAATOKENS,NTOTALDOFS),False,dtype=torch.bool)
-for i in range(NPROTAAS):
-    i_l, i_a = aa2long[i], aa2longalt[i]
-
-    # protein omega/phi/psi
-    torsion_indices[i,0,:] = torch.tensor([-1,-2,0,1]) # omega
-    torsion_indices[i,1,:] = torch.tensor([-2,0,1,2]) # phi
-    torsion_indices[i,2,:] = torch.tensor([0,1,2,3]) # psi (+pi)
-
-    # protein chis
-    for j in range(4):
-        if torsions[i][j] is None:
-            continue
-        for k in range(4):
-            a = torsions[i][j][k]
-            torsion_indices[i,3+j,k] = i_l.index(a)
-            if (i_l.index(a) != i_a.index(a)):
-                torsion_can_flip[i,3+j] = True ##bb tors never flip
-
-    # CB/CG angles (only masking uses these indices)
-    torsion_indices[i,7,:] = torch.tensor([0,2,1,4]) # CB ang1
-    torsion_indices[i,8,:] = torch.tensor([0,2,1,4]) # CB ang2
-    torsion_indices[i,9,:] = torch.tensor([0,2,4,5]) # CG ang (arg 1 ignored)
-
-# HIS is a special case for flip
-torsion_can_flip[8,4]=False
-
-for i in range(NPROTAAS,NNAPROTAAS):
-    # NA BB tors
-    torsion_indices[i,10,:] = torch.tensor([-5,-7,-8,1])  # epsilon_prev
-    torsion_indices[i,11,:] = torch.tensor([-7,-8,1,3])   # zeta_prev
-    torsion_indices[i,12,:] = torch.tensor([0,1,3,4])     # alpha (+2pi/3)
-    torsion_indices[i,13,:] = torch.tensor([1,3,4,5])     # beta
-    torsion_indices[i,14,:] = torch.tensor([3,4,5,7])     # gamma
-    torsion_indices[i,15,:] = torch.tensor([4,5,7,8])     # delta
-
-    if (i<NPROTAAS+5):
-        # is DNA
-        torsion_indices[i,16,:] = torch.tensor([4,5,6,10])     # nu2
-        torsion_indices[i,17,:] = torch.tensor([5,6,10,9])     # nu1
-        torsion_indices[i,18,:] = torch.tensor([6,10,9,7])     # nu0
-    else:   
-        # is RNA (fd: my fault since I flipped C1'/C2' order for DNA and RNA)
-        torsion_indices[i,16,:] = torch.tensor([4,5,6,9])     # nu2
-        torsion_indices[i,17,:] = torch.tensor([5,6,9,10])     # nu1
-        torsion_indices[i,18,:] = torch.tensor([6,9,10,7])     # nu0
-
-    # NA chi
-    if torsions[i][0] is not None:
-        i_l = aa2long[i]
-        for k in range(4):
-            a = torsions[i][0][k]
-            torsion_indices[i,19,k] = i_l.index(a) # chi
-        # no NA torsion flips
-
-# build the mapping from atoms in the full rep (Nx27) to the "alternate" rep
-allatom_mask = torch.zeros((NAATOKENS,NTOTAL), dtype=torch.bool)
-long2alt = torch.zeros((NAATOKENS,NTOTAL), dtype=torch.long)
-for i in range(NNAPROTAAS):
-    i_l, i_lalt = aa2long[i],  aa2longalt[i]
-    for j,a in enumerate(i_l):
-        if (a is None):
-            long2alt[i,j] = j
-        else:
-            long2alt[i,j] = i_lalt.index(a)
-            allatom_mask[i,j] = True
-for i in range(NNAPROTAAS, NAATOKENS):
-    for j in range(NTOTAL):
-        long2alt[i, j] = j
-allatom_mask[NNAPROTAAS:,1] = True
-
-# bond graph traversal
-num_bonds = torch.zeros((NAATOKENS,NTOTAL,NTOTAL), dtype=torch.long)
-for i in range(NNAPROTAAS):
-    num_bonds_i = np.zeros((NTOTAL,NTOTAL))
-    for (bnamei,bnamej) in aabonds[i]:
-        bi,bj = aa2long[i].index(bnamei),aa2long[i].index(bnamej)
-        num_bonds_i[bi,bj] = 1
-    num_bonds_i = scipy.sparse.csgraph.shortest_path (num_bonds_i,directed=False)
-    num_bonds_i[num_bonds_i>=4] = 4
-    num_bonds[i,...] = torch.tensor(num_bonds_i)
-
-
-# atom type indices
-idx2aatype = []
-for x in aa2type:
-    for y in x:
-        if y and y not in idx2aatype:
-            idx2aatype.append(y)
-aatype2idx = {x:i for i,x in enumerate(idx2aatype)}
-
-# element indices
-idx2elt = []
-for x in aa2elt:
-    for y in x:
-        if y and y not in idx2elt:
-            idx2elt.append(y)
-elt2idx = {x:i for i,x in enumerate(idx2elt)}
-
-# LJ/LK scoring parameters
-atom_type_index = torch.zeros((NAATOKENS,NTOTAL), dtype=torch.long)
-element_index = torch.zeros((NAATOKENS,NTOTAL), dtype=torch.long)
-
-ljlk_parameters = torch.zeros((NAATOKENS,NTOTAL,5), dtype=torch.float)
-lj_correction_parameters = torch.zeros((NAATOKENS,NTOTAL,4), dtype=bool) # donor/acceptor/hpol/disulf
-for i in range(NNAPROTAAS):
-    for j,a in enumerate(aa2type[i]):
-        if (a is not None):
-            atom_type_index[i,j] = aatype2idx[a]
-            ljlk_parameters[i,j,:] = torch.tensor( type2ljlk[a] )
-            lj_correction_parameters[i,j,0] = (type2hb[a]==HbAtom.DO)+(type2hb[a]==HbAtom.DA)
-            lj_correction_parameters[i,j,1] = (type2hb[a]==HbAtom.AC)+(type2hb[a]==HbAtom.DA)
-            lj_correction_parameters[i,j,2] = (type2hb[a]==HbAtom.HP)
-            lj_correction_parameters[i,j,3] = (a=="SH1" or a=="HS")
-    for j,a in enumerate(aa2elt[i]):
-        if (a is not None):
-            element_index[i,j] = elt2idx[a]
-
-# hbond scoring parameters
-def donorHs(D,bonds,atoms):
-    dHs = []
-    for (i,j) in bonds:
-        if (i==D):
-            idx_j = atoms.index(j)
-            if (idx_j>=NHEAVY):  # if atom j is a hydrogen
-                dHs.append(idx_j)
-        if (j==D):
-            idx_i = atoms.index(i)
-            if (idx_i>=NHEAVY):  # if atom j is a hydrogen
-                dHs.append(idx_i)
-    assert (len(dHs)>0)
-    return dHs
-
-def acceptorBB0(A,hyb,bonds,atoms):
-    if (hyb == HbHybType.SP2):
-        for (i,j) in bonds:
-            if (i==A):
-                B = atoms.index(j)
-                if (B<NHEAVY):
-                    break
-            if (j==A):
-                B = atoms.index(i)
-                if (B<NHEAVY):
-                    break
-        for (i,j) in bonds:
-            if (i==atoms[B]):
-                B0 = atoms.index(j)
-                if (B0<NHEAVY):
-                    break
-            if (j==atoms[B]):
-                B0 = atoms.index(i)
-                if (B0<NHEAVY):
-                    break
-    elif (hyb == HbHybType.SP3 or hyb == HbHybType.RING):
-        for (i,j) in bonds:
-            if (i==A):
-                B = atoms.index(j)
-                if (B<NHEAVY):
-                    break
-            if (j==A):
-                B = atoms.index(i)
-                if (B<NHEAVY):
-                    break
-        for (i,j) in bonds:
-            if (i==A and j!=atoms[B]):
-                B0 = atoms.index(j)
-                break
-            if (j==A and i!=atoms[B]):
-                B0 = atoms.index(i)
-                break
-
-    return B,B0
-
-
-hbtypes = torch.full((NAATOKENS,NTOTAL,3),-1, dtype=torch.long) # (donortype, acceptortype, acchybtype)
-hbbaseatoms = torch.full((NAATOKENS,NTOTAL,2),-1, dtype=torch.long) # (B,B0) for acc; (D,-1) for don
-hbpolys = torch.zeros((HbDonType.NTYPES,HbAccType.NTYPES,3,15)) # weight,xmin,xmax,ymin,ymax,c9,...,c0
-
-for i in range(NNAPROTAAS):
-    for j,a in enumerate(aa2type[i]):
-        if (a in type2dontype):
-            j_hs = donorHs(aa2long[i][j],aabonds[i],aa2long[i])
-            for j_h in j_hs:
-                hbtypes[i,j_h,0] = type2dontype[a]
-                hbbaseatoms[i,j_h,0] = j
-        if (a in type2acctype):
-            j_b, j_b0 = acceptorBB0(aa2long[i][j],type2hybtype[a],aabonds[i],aa2long[i])
-            hbtypes[i,j,1] = type2acctype[a]
-            hbtypes[i,j,2] = type2hybtype[a]
-            hbbaseatoms[i,j,0] = j_b
-            hbbaseatoms[i,j,1] = j_b0
-
-for i in range(HbDonType.NTYPES):
-    for j in range(HbAccType.NTYPES):
-        weight = dontype2wt[i]*acctype2wt[j]
-
-        pdist,pbah,pahd = hbtypepair2poly[(i,j)]
-        xrange,yrange,coeffs = hbpolytype2coeffs[pdist]
-        hbpolys[i,j,0,0] = weight
-        hbpolys[i,j,0,1:3] = torch.tensor(xrange)
-        hbpolys[i,j,0,3:5] = torch.tensor(yrange)
-        hbpolys[i,j,0,5:] = torch.tensor(coeffs)
-        xrange,yrange,coeffs = hbpolytype2coeffs[pahd]
-        hbpolys[i,j,1,0] = weight
-        hbpolys[i,j,1,1:3] = torch.tensor(xrange)
-        hbpolys[i,j,1,3:5] = torch.tensor(yrange)
-        hbpolys[i,j,1,5:] = torch.tensor(coeffs)
-        xrange,yrange,coeffs = hbpolytype2coeffs[pbah]
-        hbpolys[i,j,2,0] = weight
-        hbpolys[i,j,2,1:3] = torch.tensor(xrange)
-        hbpolys[i,j,2,3:5] = torch.tensor(yrange)
-        hbpolys[i,j,2,5:] = torch.tensor(coeffs)
-
-# cartbonded scoring parameters
-# (0) inter-res
-cb_lengths_CN = (1.32868, 369.445)
-cb_angles_CACN = (2.02807,160)
-cb_angles_CNCA = (2.12407,96.53)
-cb_torsions_CACNH = (0.0,41.830) # also used for proline CACNCD
-cb_torsions_CANCO = (0.0,38.668)
-
-# note for the below, the extra amino acid corrsponds to cb params for HIS_D
-# (1) intra-res lengths
-cb_lengths = [[] for i in range(NAATOKENS+1)]
-for cst in cartbonded_data_raw['lengths']:
-    res_idx = aa2num[ cst['res'] ]
-    cb_lengths[res_idx].append( (
-        aa2long[res_idx].index(cst['atm1']),
-        aa2long[res_idx].index(cst['atm2']),
-        cst['x0'],cst['K']
-    ) )
-ncst_per_res=max([len(i) for i in cb_lengths])
-cb_length_t = torch.zeros(NAATOKENS+1,ncst_per_res,4)
-for i in range(NNAPROTAAS+1):
-    src = i
-    if (num2aa[i]=='UNK' or num2aa[i]=='MAS'):
-        src=aa2num['ALA']
-    if (len(cb_lengths[src])>0):
-        cb_length_t[i,:len(cb_lengths[src]),:] = torch.tensor(cb_lengths[src])
-
-# (2) intra-res angles
-cb_angles = [[] for i in range(NAATOKENS+1)]
-for cst in cartbonded_data_raw['angles']:
-    res_idx = aa2num[ cst['res'] ]
-    cb_angles[res_idx].append( (
-        aa2long[res_idx].index(cst['atm1']),
-        aa2long[res_idx].index(cst['atm2']),
-        aa2long[res_idx].index(cst['atm3']),
-        cst['x0'],cst['K']
-    ) )
-ncst_per_res=max([len(i) for i in cb_angles])
-cb_angle_t = torch.zeros(NAATOKENS+1,ncst_per_res,5)
-for i in range(NNAPROTAAS+1):
-    src = i
-    if (num2aa[i]=='UNK' or num2aa[i]=='MAS'):
-        src=aa2num['ALA']
-
-    if (len(cb_angles[src])>0):
-        cb_angle_t[i,:len(cb_angles[src]),:] = torch.tensor(cb_angles[src])
-
-# (3) intra-res torsions
-cb_torsions = [[] for i in range(NAATOKENS+1)]
-for cst in cartbonded_data_raw['torsions']:
-    res_idx = aa2num[ cst['res'] ]
-    cb_torsions[res_idx].append( (
-        aa2long[res_idx].index(cst['atm1']),
-        aa2long[res_idx].index(cst['atm2']),
-        aa2long[res_idx].index(cst['atm3']),
-        aa2long[res_idx].index(cst['atm4']),
-        cst['x0'],cst['K'],cst['period']
-    ) )
-ncst_per_res=max([len(i) for i in cb_torsions])
-cb_torsion_t = torch.zeros(NAATOKENS+1,ncst_per_res,7)
-cb_torsion_t[...,6]=1.0 # periodicity
-for i in range(NNAPROTAAS):
-    src = i
-    if (num2aa[i]=='UNK' or num2aa[i]=='MAS'):
-        src=aa2num['ALA']
-
-    if (len(cb_torsions[src])>0):
-        cb_torsion_t[i,:len(cb_torsions[src]),:] = torch.tensor(cb_torsions[src])
-
-# kinematic parameters
-base_indices = torch.full((NAATOKENS,NTOTAL),0, dtype=torch.long) # base frame that builds each atom
-xyzs_in_base_frame = torch.ones((NAATOKENS,NTOTAL,4)) # coords of each atom in the base frame
-RTs_by_torsion = torch.eye(4).repeat(NAATOKENS,NTOTALTORS,1,1) # torsion frames
-reference_angles = torch.ones((NAATOKENS,NPROTANGS,2)) # reference values for bendable angles
-
-## PROTEIN
-for i in range(NPROTAAS):
-    i_l = aa2long[i]
-    for name, base, coords in ideal_coords[i]:
-        idx = i_l.index(name)
-        base_indices[i,idx] = base
-        xyzs_in_base_frame[i,idx,:3] = torch.tensor(coords)
-
-    # omega frame
-    RTs_by_torsion[i,0,:3,:3] = torch.eye(3)
-    RTs_by_torsion[i,0,:3,3] = torch.zeros(3)
-
-    # phi frame
-    RTs_by_torsion[i,1,:3,:3] = make_frame(
-        xyzs_in_base_frame[i,0,:3] - xyzs_in_base_frame[i,1,:3],
-        torch.tensor([1.,0.,0.])
-    )
-    RTs_by_torsion[i,1,:3,3] = xyzs_in_base_frame[i,0,:3]
-
-    # psi frame
-    RTs_by_torsion[i,2,:3,:3] = make_frame(
-        xyzs_in_base_frame[i,2,:3] - xyzs_in_base_frame[i,1,:3],
-        xyzs_in_base_frame[i,1,:3] - xyzs_in_base_frame[i,0,:3]
-    )
-    RTs_by_torsion[i,2,:3,3] = xyzs_in_base_frame[i,2,:3]
-
-    # chi1 frame
-    if torsions[i][0] is not None:
-        a0,a1,a2 = torsion_indices[i,3,0:3]
-        RTs_by_torsion[i,3,:3,:3] = make_frame(
-            xyzs_in_base_frame[i,a2,:3]-xyzs_in_base_frame[i,a1,:3],
-            xyzs_in_base_frame[i,a0,:3]-xyzs_in_base_frame[i,a1,:3],
-        )
-        RTs_by_torsion[i,3,:3,3] = xyzs_in_base_frame[i,a2,:3]
-
-    # chi2/3/4 frame
-    for j in range(1,4):
-        if torsions[i][j] is not None:
-            a2 = torsion_indices[i,3+j,2]
-            if ((i==18 and j==2) or (i==8 and j==2)):  # TYR CZ-OH & HIS CE1-HE1 a special case
-                a0,a1 = torsion_indices[i,3+j,0:2]
-                RTs_by_torsion[i,3+j,:3,:3] = make_frame(
-                    xyzs_in_base_frame[i,a2,:3]-xyzs_in_base_frame[i,a1,:3],
-                    xyzs_in_base_frame[i,a0,:3]-xyzs_in_base_frame[i,a1,:3] )
-            else:
-                RTs_by_torsion[i,3+j,:3,:3] = make_frame(
-                    xyzs_in_base_frame[i,a2,:3],
-                    torch.tensor([-1.,0.,0.]), )
-            RTs_by_torsion[i,3+j,:3,3] = xyzs_in_base_frame[i,a2,:3]
-
-    # CB/CG angles
-    NCr = 0.5*(xyzs_in_base_frame[i,0,:3]+xyzs_in_base_frame[i,2,:3])
-    CAr = xyzs_in_base_frame[i,1,:3]
-    CBr = xyzs_in_base_frame[i,4,:3]
-    CGr = xyzs_in_base_frame[i,5,:3]
-    reference_angles[i,0,:]=th_ang_v(CBr-CAr,NCr-CAr)
-    NCp = xyzs_in_base_frame[i,2,:3]-xyzs_in_base_frame[i,0,:3]
-    NCpp = NCp - torch.dot(NCp,NCr)/ torch.dot(NCr,NCr) * NCr
-    reference_angles[i,1,:]=th_ang_v(CBr-CAr,NCpp)
-    reference_angles[i,2,:]=th_ang_v(CGr,torch.tensor([-1.,0.,0.]))
-
-## NUCLEIC ACIDS
-for i in range(NPROTAAS, NNAPROTAAS):
-    i_l = aa2long[i]
-
-    for name, base, coords in ideal_coords[i]:
-        idx = i_l.index(name)
-        base_indices[i,idx] = base
-        xyzs_in_base_frame[i,idx,:3] = torch.tensor(coords)
-
-    # epsilon(p)/zeta(p) - like omega in protein, not used to build atoms
-    #                    - keep as identity
-    RTs_by_torsion[i,NPROTTORS+0,:3,:3] = torch.eye(3)
-    RTs_by_torsion[i,NPROTTORS+0,:3,3] = torch.zeros(3)
-    RTs_by_torsion[i,NPROTTORS+1,:3,:3] = torch.eye(3)
-    RTs_by_torsion[i,NPROTTORS+1,:3,3] = torch.zeros(3)
-
-    # alpha
-    RTs_by_torsion[i,NPROTTORS+2,:3,:3] = make_frame(
-        xyzs_in_base_frame[i,3,:3] - xyzs_in_base_frame[i,1,:3], # P->O5'
-        xyzs_in_base_frame[i,0,:3] - xyzs_in_base_frame[i,1,:3]  # P<-OP1
-    )
-    RTs_by_torsion[i,NPROTTORS+2,:3,3] = xyzs_in_base_frame[i,3,:3] # O5'
-
-    # beta
-    RTs_by_torsion[i,NPROTTORS+3,:3,:3] = make_frame(
-        xyzs_in_base_frame[i,4,:3] , torch.tensor([-1.,0.,0.])
-    )
-    RTs_by_torsion[i,NPROTTORS+3,:3,3] = xyzs_in_base_frame[i,4,:3] # C5'
-
-    # gamma
-    RTs_by_torsion[i,NPROTTORS+4,:3,:3] = make_frame(
-        xyzs_in_base_frame[i,5,:3] , torch.tensor([-1.,0.,0.])
-    )
-    RTs_by_torsion[i,NPROTTORS+4,:3,3] = xyzs_in_base_frame[i,5,:3] # C4'
-
-    # delta
-    RTs_by_torsion[i,NPROTTORS+5,:3,:3] = make_frame(
-        xyzs_in_base_frame[i,7,:3] , torch.tensor([-1.,0.,0.])
-    )
-    RTs_by_torsion[i,NPROTTORS+5,:3,3] = xyzs_in_base_frame[i,7,:3] # C3'
-
-    # nu2
-    RTs_by_torsion[i,NPROTTORS+6,:3,:3] = make_frame(
-        xyzs_in_base_frame[i,6,:3] , torch.tensor([-1.,0.,0.])
-    )
-    RTs_by_torsion[i,NPROTTORS+6,:3,3] = xyzs_in_base_frame[i,6,:3] # O4'
-
-    # nu1
-    if i<NPROTAAS+5:
-        # is DNA
-        C1idx,C2idx = 10,9
-    else:
-        # is RNA
-        C1idx,C2idx = 9,10
-
-    RTs_by_torsion[i,NPROTTORS+7,:3,:3] = make_frame(
-        xyzs_in_base_frame[i,C1idx,:3] , torch.tensor([-1.,0.,0.])
-    )
-    RTs_by_torsion[i,NPROTTORS+7,:3,3] = xyzs_in_base_frame[i,C1idx,:3] # C1'
-
-    # nu0
-    RTs_by_torsion[i,NPROTTORS+8,:3,:3] = make_frame(
-        xyzs_in_base_frame[i,C2idx,:3] , torch.tensor([-1.,0.,0.])
-    )
-    RTs_by_torsion[i,NPROTTORS+8,:3,3] = xyzs_in_base_frame[i,C2idx,:3] # C2'
-
-    # NA chi
-    if torsions[i][0] is not None:
-        a2 = torsion_indices[i,19,2]
-        RTs_by_torsion[i,NPROTTORS+9,:3,:3] = make_frame(
-            xyzs_in_base_frame[i,a2,:3] , torch.tensor([-1.,0.,0.])
-        )
-        RTs_by_torsion[i,NPROTTORS+9,:3,3] = xyzs_in_base_frame[i,a2,:3]
-#Small molecules
-xyzs_in_base_frame[NNAPROTAAS:,1, :3] = 0
-# general FAPE parameters
-frame_indices = torch.full((NAATOKENS,NFRAMES,3,2),0, dtype=torch.long)
-for i in range(NNAPROTAAS):
-    i_l = aa2long[i]
-    for j,x in enumerate(frames[i]):
-        if x is not None:
-            # frames are stored as (residue offset, atom position)
-            frame_indices[i,j,0] = torch.tensor((0, i_l.index(x[0])))
-            frame_indices[i,j,1] = torch.tensor((0, i_l.index(x[1])))
-            frame_indices[i,j,2] = torch.tensor((0, i_l.index(x[2])))
-    
 ### Create atom frames for FAPE loss calculation ###
 def get_nxgraph(mol):
     '''build NetworkX graph from openbabel's OBMol'''
@@ -1000,8 +499,8 @@ def get_atom_frames(msa, G):
         for frame in frames_with_n:
             # hacky but uses the "query_seq" to convert index of the atom into an "atom type" and converts that into a priority
             indices = [index for index in frame if index!=n]
-            aas = [num2aa[int(query_seq[index].numpy())] for index in indices]
-            frame_priorities.append(sorted([atom2frame_priority[aa] for aa in aas]))
+            aas = [ChemData().num2aa[int(query_seq[index].numpy())] for index in indices]
+            frame_priorities.append(sorted([ChemData().atom2frame_priority[aa] for aa in aas]))
             
         # np.argsort doesn't sort tuples correctly so just sort a list of indices using a key
         sorted_indices = sorted(range(len(frame_priorities)), key=lambda i: frame_priorities[i])
@@ -1053,9 +552,9 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
     N = len(ra2ind.keys())
     bond_feats = torch.zeros((N, N))
     for i, res in enumerate(msa[0, i_start:i_start+n_res_atomize]):
-        for j, bond in enumerate(aabonds[res]):
-            start_idx = aa2long[res].index(bond[0])
-            end_idx = aa2long[res].index(bond[1])
+        for j, bond in enumerate(ChemData().aabonds[res]):
+            start_idx = ChemData().aa2long[res].index(bond[0])
+            end_idx = ChemData().aa2long[res].index(bond[1])
             if (i, start_idx) not in ra2ind or (i, end_idx) not in ra2ind:
                 #skip bonds with atoms that aren't observed in the structure
                 continue
@@ -1063,8 +562,8 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
             end_idx = ra2ind[(i, end_idx)]
 
             # maps the 2d index of the start and end indices to btype
-            bond_feats[start_idx, end_idx] = aabtypes[res][j]
-            bond_feats[end_idx, start_idx] = aabtypes[res][j]
+            bond_feats[start_idx, end_idx] = ChemData().aabtypes[res][j]
+            bond_feats[end_idx, start_idx] = ChemData().aabtypes[res][j]
         #accounting for peptide bonds
         if i > 0:
             if (i-1, 2) not in ra2ind or (i, 0) not in ra2ind:
@@ -1072,8 +571,8 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
                 continue
             start_idx = ra2ind[(i-1, 2)]
             end_idx = ra2ind[(i, 0)]
-            bond_feats[start_idx, end_idx] = SINGLE_BOND
-            bond_feats[end_idx, start_idx] = SINGLE_BOND
+            bond_feats[start_idx, end_idx] = ChemData().SINGLE_BOND
+            bond_feats[end_idx, start_idx] = ChemData().SINGLE_BOND
     return bond_feats
 
 
@@ -1081,14 +580,14 @@ def get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=5):
 def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     """ given an index i_start, make the following flank residues into "atom" nodes """
     residues_atomize = msa[0, i_start:i_start+n_res_atomize]
-    residues_atom_types = [aa2elt[num][:14] for num in residues_atomize]
+    residues_atom_types = [ChemData().aa2elt[num][:14] for num in residues_atomize]
     residue_atomize_mask = mask[i_start:i_start+n_res_atomize].float() # mask of resolved atoms in the sidechain
-    residue_atomize_allatom_mask = allatom_mask[residues_atomize][:, :14] # the indices that have heavy atoms in that sidechain
+    residue_atomize_allatom_mask = ChemData().allatom_mask[residues_atomize][:, :14] # the indices that have heavy atoms in that sidechain
     xyz_atomize = xyz[i_start:i_start+n_res_atomize]
 
     # handle symmetries
     xyz_alt = torch.zeros_like(xyz.unsqueeze(0))
-    xyz_alt.scatter_(2, long2alt[msa[0],:,None].repeat(1,1,1,3), xyz.unsqueeze(0))
+    xyz_alt.scatter_(2, ChemData().long2alt[msa[0],:,None].repeat(1,1,1,3), xyz.unsqueeze(0))
     xyz_alt_atomize = xyz_alt[0, i_start:i_start+n_res_atomize]
 
     coords_stack = torch.stack((xyz_atomize, xyz_alt_atomize), dim=0)
@@ -1108,7 +607,7 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
         nat_symm = xyz_atomize.unsqueeze(0)
     # every heavy atom that is in the sidechain is modelled but losses only applied to resolved atoms
     ra = residue_atomize_allatom_mask.nonzero()
-    lig_seq = torch.tensor([aa2num[residues_atom_types[r][a]] if residues_atom_types[r][a] in aa2num else aa2num["ATM"] for r,a in ra])
+    lig_seq = torch.tensor([ChemData().aa2num[residues_atom_types[r][a]] if residues_atom_types[r][a] in ChemData().aa2num else ChemData().aa2num["ATM"] for r,a in ra])
     ins = torch.zeros_like(lig_seq)
 
     r,a = ra.T
@@ -1117,7 +616,6 @@ def atomize_protein(i_start, msa, xyz, mask, n_res_atomize=5):
     lig_mask = residue_atomize_mask[r, a].repeat(nat_symm.shape[0], 1)
     bond_feats = get_atomize_protein_bond_feats(i_start, msa, ra, n_res_atomize=n_res_atomize)
     #HACK: use networkx graph to make the atom frames, correct implementation will include frames with "residue atoms"
-    # NOTE: REQUIRES NETWORKX < 3.0
     G = nx.from_numpy_array(bond_feats.numpy())
         
     frames = get_atom_frames(lig_seq, G)
@@ -1227,12 +725,12 @@ def get_atom_template_indices(msa,res_idxs_to_atomize):
     chooses a random frame (with high probability of choosing later frames) from each atomized residue to provide as a 
     template to resemble diffusion training returns indices that represent that frame in the atomized region of the rosettafold input
     """
-    aa2long_ = [[x.strip() if x is not None else None for x in y] for y in aa2long]
+    aa2long_ = [[x.strip() if x is not None else None for x in y] for y in ChemData().aa2long]
     residues_atomize = msa[0, res_idxs_to_atomize]
-    residue_atomize_allatom_mask = allatom_mask[residues_atomize][:, :14] # the indices that have heavy atoms in that sidechain
+    residue_atomize_allatom_mask = ChemData().allatom_mask[residues_atomize][:, :14] # the indices that have heavy atoms in that sidechain
     num_atoms_per_residue = torch.sum(residue_atomize_allatom_mask,dim=1)
 
-    frames_per_residue = [frames[i] for i in residues_atomize]
+    frames_per_residue = [ChemData().frames[i] for i in residues_atomize]
     chosen_frame_per_residue = [random.choices(frames, weights=range(len(frames)), k=1)[0] for frames in frames_per_residue]
 
     atom_indices_per_residue = [[aa2long_[res].index(atom.strip()) for atom in frame] for res, frame in zip(residues_atomize, chosen_frame_per_residue)]
@@ -1373,14 +871,14 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
     assert(ch.id == ch_xf[0])
 
     # atom names from cif don't have whitespace
-    aa2long_ = [[x.strip() if x is not None else None for x in y] for y in aa2long]
+    aa2long_ = [[x.strip() if x is not None else None for x in y] for y in ChemData().aa2long]
 
     idx = [int(k[1]) for k in ch.atoms]
     i_min, i_max = np.min(idx), np.max(idx)
     L = i_max - i_min + 1
 
-    xyz = torch.zeros(L, NTOTAL, 3)
-    mask = torch.zeros(L, NTOTAL).bool()
+    xyz = torch.zeros(L, ChemData().NTOTAL, 3)
+    mask = torch.zeros(L, ChemData().NTOTAL).bool()
     seq = torch.full((L,), np.nan)
     chid = ['-']*L
     resi = ['-']*L
@@ -1389,11 +887,11 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
     residues_to_atomize = set()
     for (ch_letter, res_num, res_name, atom_name), atom_val in ch.atoms.items():
         i_res = int(res_num)-i_min
-        if res_name in aa2num: # standard AA
-            aa = aa2num[res_name]
-        elif res_name in modres and modres[res_name] in aa2num: # nonstandard AA, map to standard
+        if res_name in ChemData().aa2num: # standard AA
+            aa = ChemData().aa2num[res_name]
+        elif res_name in modres and modres[res_name] in ChemData().aa2num: # nonstandard AA, map to standard
             #print('nonstandard AA',k,modres[k[2]])
-            aa = aa2num[modres[res_name]]
+            aa = ChemData().aa2num[modres[res_name]]
             residues_to_atomize.add((ch_letter, res_num, res_name))
         else: # unknown AA, still try to store BB atoms
             #print('unknown AA',k)
@@ -1478,11 +976,11 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
         v = atoms_no_H[k]
         xyz[i, :] = torch.tensor(v.xyz)
         occ[i] = v.occ # can contain fractionally occupied atom positions
-        if v.element not in chemical.atomnum2atomtype:
+        if v.element not in ChemData().atomnum2atomtype:
             #print('Element not in alphabet:',v.element)
-            seq[i] = chemical.aa2num['ATM']
+            seq[i] = ChemData().aa2num['ATM']
         else:
-            seq[i] = chemical.aa2num[chemical.atomnum2atomtype[v.element]]
+            seq[i] = ChemData().aa2num[ChemData().atomnum2atomtype[v.element]]
         akeys[i] = k
         chid[i] = k[0]
 
@@ -1697,10 +1195,10 @@ def get_prot_seqstring(ch, modres):
 
     for k,v in ch.atoms.items():
         i_res = int(k[1])-i_min
-        if k[2] in to1letter: # standard AA
-            aa = to1letter[k[2]]
-        elif k[2] in modres and modres[k[2]] in to1letter: # nonstandard AA, map to standard
-            aa = to1letter[modres[k[2]]]
+        if k[2] in ChemData().to1letter: # standard AA
+            aa = ChemData().to1letter[k[2]]
+        elif k[2] in modres and modres[k[2]] in ChemData().to1letter: # nonstandard AA, map to standard
+            aa = ChemData().to1letter[modres[k[2]]]
         else: # unknown AA, still try to store BB atoms
             aa = 'X'
         seq[i_res] = aa
@@ -1813,7 +1311,7 @@ def idx_from_Ls(Ls):
     offset = 0
     for L in Ls:
         idx.append(torch.arange(L)+offset)
-        offset = offset+L+CHAIN_GAP
+        offset = offset+L+ChemData().CHAIN_GAP
     return torch.cat(idx, dim=0)
 
 
@@ -1840,6 +1338,7 @@ def same_chain_from_bond_feats(bond_feats):
         for i in idx:
             same_chain[i,idx] = 1
     return same_chain
+
 
 def kabsch(xyz1, xyz2, eps=1e-6):
     """Superimposes `xyz2` coordinates onto `xyz1`, returns RMSD and rotation matrix."""
@@ -1868,6 +1367,7 @@ def kabsch(xyz1, xyz2, eps=1e-6):
     rmsd = torch.sqrt(torch.sum((xyz2_-xyz1)*(xyz2_-xyz1), axis=(0,1)) / L + eps)
 
     return rmsd, U
+
 
 def get_residue_contacts(xyz, idx, seq_dist_greater_than=10, n_contacts=5):
     """

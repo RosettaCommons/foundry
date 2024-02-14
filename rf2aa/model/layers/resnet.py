@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 
-from rf2aa.chemical import NTOTALDOFS
 from rf2aa.util_module import init_lecun_normal
+from rf2aa.chemical import ChemicalData as ChemData
 
 # pre-activation bottleneck resblock
 class ResBlock2D_bottleneck(nn.Module):
@@ -92,7 +92,7 @@ class SCPred(nn.Module):
         self.linear_4 = nn.Linear(d_hidden, d_hidden)
 
         # Final outputs
-        self.linear_out = nn.Linear(d_hidden, 2*NTOTALDOFS)
+        self.linear_out = nn.Linear(d_hidden, 2*ChemData().NTOTALDOFS)
 
         self.reset_parameter()
 
@@ -135,5 +135,5 @@ class SCPred(nn.Module):
         si = si + self.linear_4(F.relu_(self.linear_3(F.relu_(si))))
 
         si = self.linear_out(F.relu_(si))
-        return si.view(B, L, NTOTALDOFS, 2)
+        return si.view(B, L, ChemData().NTOTALDOFS, 2)
 

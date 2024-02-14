@@ -7,6 +7,8 @@ import copy
 import dgl
 import networkx as nx
 from rf2aa.util import *
+from rf2aa.chemical import ChemicalData as ChemData
+from rf2aa.chemical import th_dih, th_ang_v
 
 def init_lecun_normal(module, scale=1.0):
     def truncated_normal(uniform, mu=0.0, sigma=1.0, a=-2, b=2):
@@ -444,12 +446,12 @@ class XYZConverter(nn.Module):
     def __init__(self):
         super(XYZConverter, self).__init__()
         
-        self.register_buffer("torsion_indices", torsion_indices, persistent=False)
-        self.register_buffer("torsion_can_flip", torsion_can_flip.to(torch.int32), persistent=False)
-        self.register_buffer("ref_angles", reference_angles, persistent=False)
-        self.register_buffer("base_indices", base_indices, persistent=False)
-        self.register_buffer("RTs_in_base_frame", RTs_by_torsion, persistent=False)
-        self.register_buffer("xyzs_in_base_frame", xyzs_in_base_frame, persistent=False)
+        self.register_buffer("torsion_indices", ChemData().torsion_indices, persistent=False)
+        self.register_buffer("torsion_can_flip", ChemData().torsion_can_flip.to(torch.int32), persistent=False)
+        self.register_buffer("ref_angles", ChemData().reference_angles, persistent=False)
+        self.register_buffer("base_indices", ChemData().base_indices, persistent=False)
+        self.register_buffer("RTs_in_base_frame", ChemData().RTs_by_torsion, persistent=False)
+        self.register_buffer("xyzs_in_base_frame", ChemData().xyzs_in_base_frame, persistent=False)
 
     def compute_all_atom(self, seq, xyz, alphas):
         B,L = xyz.shape[:2]
@@ -524,45 +526,88 @@ class XYZConverter(nn.Module):
 
         # ignore RTs_in_base_frame[seq,7:9,:] and alphas[:,:,10:12,:]
 
-        # NA alpha
-        RTF9 = torch.einsum(
-            'brij,brjk,brkl->bril', 
-            RTF0, self.RTs_in_base_frame[seq,9,:], make_rotX(alphas[:,:,12,:]))
+        # which mode are we running in
+        if (not ChemData().params.use_phospate_frames_for_NA):
+            # NA nu1 --> from base frame
+            RTF14 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF0, self.RTs_in_base_frame[seq,14,:], make_rotX(alphas[:,:,17,:]))
 
-        # NA beta
-        RTF10 = torch.einsum(
-            'brij,brjk,brkl->bril', 
-            RTF9, self.RTs_in_base_frame[seq,10,:], make_rotX(alphas[:,:,13,:]))
+            # NA nu0 --> from base frame
+            RTF15 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF0, self.RTs_in_base_frame[seq,15,:], make_rotX(alphas[:,:,18,:]))
 
-        # NA gamma
-        RTF11 = torch.einsum(
-            'brij,brjk,brkl->bril', 
-            RTF10, self.RTs_in_base_frame[seq,11,:], make_rotX(alphas[:,:,14,:]))
+            # NA chi --> from base frame
+            RTF16= torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF0, self.RTs_in_base_frame[seq,16,:], make_rotX(alphas[:,:,19,:]))
 
-        # NA delta
-        RTF12 = torch.einsum(
-            'brij,brjk,brkl->bril', 
-            RTF11, self.RTs_in_base_frame[seq,12,:], make_rotX(alphas[:,:,15,:]))
+            # NA nu2 --> from nu1 frame
+            RTF13 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF14, self.RTs_in_base_frame[seq,13,:], make_rotX(alphas[:,:,16,:]))
 
-        # NA nu2 - from gamma frame
-        RTF13 = torch.einsum(
-            'brij,brjk,brkl->bril', 
-            RTF11, self.RTs_in_base_frame[seq,13,:], make_rotX(alphas[:,:,16,:]))
+            # NA delta --> from nu2 frame
+            RTF12 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF13, self.RTs_in_base_frame[seq,12,:], make_rotX(alphas[:,:,15,:]))
 
-        # NA nu1
-        RTF14 = torch.einsum(
-            'brij,brjk,brkl->bril', 
-            RTF13, self.RTs_in_base_frame[seq,14,:], make_rotX(alphas[:,:,17,:]))
+            # NA gamma --> from delta frame
+            RTF11 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF12, self.RTs_in_base_frame[seq,11,:], make_rotX(alphas[:,:,14,:]))
 
-        # NA nu0
-        RTF15 = torch.einsum(
-            'brij,brjk,brkl->bril', 
-            RTF14, self.RTs_in_base_frame[seq,15,:], make_rotX(alphas[:,:,18,:]))
+            # NA beta --> from gamma frame
+            RTF10 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF11, self.RTs_in_base_frame[seq,10,:], make_rotX(alphas[:,:,13,:]))
 
-        # NA chi - from nu1 frame
-        RTF16= torch.einsum(
-            'brij,brjk,brkl->bril', 
-            RTF14, self.RTs_in_base_frame[seq,16,:], make_rotX(alphas[:,:,19,:]))
+            # NA alpha --> from beta frame
+            RTF9 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF10, self.RTs_in_base_frame[seq,9,:], make_rotX(alphas[:,:,12,:]))
+        else:
+            # NA alpha
+            RTF9 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF0, self.RTs_in_base_frame[seq,9,:], make_rotX(alphas[:,:,12,:]))
+
+            # NA beta
+            RTF10 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF9, self.RTs_in_base_frame[seq,10,:], make_rotX(alphas[:,:,13,:]))
+
+            # NA gamma
+            RTF11 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF10, self.RTs_in_base_frame[seq,11,:], make_rotX(alphas[:,:,14,:]))
+
+            # NA delta
+            RTF12 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF11, self.RTs_in_base_frame[seq,12,:], make_rotX(alphas[:,:,15,:]))
+
+            # NA nu2 - from gamma frame
+            RTF13 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF11, self.RTs_in_base_frame[seq,13,:], make_rotX(alphas[:,:,16,:]))
+
+            # NA nu1
+            RTF14 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF13, self.RTs_in_base_frame[seq,14,:], make_rotX(alphas[:,:,17,:]))
+
+            # NA nu0
+            RTF15 = torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF14, self.RTs_in_base_frame[seq,15,:], make_rotX(alphas[:,:,18,:]))
+
+            # NA chi - from nu1 frame
+            RTF16= torch.einsum(
+                'brij,brjk,brkl->bril', 
+                RTF14, self.RTs_in_base_frame[seq,16,:], make_rotX(alphas[:,:,19,:]))
+
 
         RTframes = torch.stack((
             RTF0,RTF1,RTF2,RTF3,RTF4,RTF5,RTF6,RTF7,RTF8,
@@ -607,16 +652,20 @@ class XYZConverter(nn.Module):
         ys = torch.abs(ts)
         xyzs_bytor = xyz[bs,xs,ys,:]
 
-        torsions = torch.zeros( (B,L,NTOTALDOFS,2), device=xyz_in.device )
+        torsions = torch.zeros( (B,L,ChemData().NTOTALDOFS,2), device=xyz_in.device )
+
+        # protein torsion
         torsions[...,:7,:] = th_dih(
             xyzs_bytor[...,:7,0,:],xyzs_bytor[...,:7,1,:],xyzs_bytor[...,:7,2,:],xyzs_bytor[...,:7,3,:]
         )
         torsions[:,:,2,:] = -1 * torsions[:,:,2,:] # shift psi by pi
+
+        # NA
         torsions[...,10:,:] = th_dih(
             xyzs_bytor[...,10:,0,:],xyzs_bytor[...,10:,1,:],xyzs_bytor[...,10:,2,:],xyzs_bytor[...,10:,3,:]
         )
 
-        # angles (hardcoded)
+        # protein angles
         # CB bend
         NC = 0.5*( xyz[:,:,0,:3] + xyz[:,:,2,:3] )
         CA = xyz[:,:,1,:3]
@@ -656,7 +705,7 @@ class XYZConverter(nn.Module):
 
         # torsions to restrain to 0 or 180 degree
         # (this should be specified in chemical?)
-        tors_planar = torch.zeros((B, L, NTOTALDOFS), dtype=torch.bool, device=xyz_in.device)
-        tors_planar[:,:,5] = seq == aa2num['TYR'] # TYR chi 3 should be planar
+        tors_planar = torch.zeros((B, L, ChemData().NTOTALDOFS), dtype=torch.bool, device=xyz_in.device)
+        tors_planar[:,:,5] = seq == ChemData().aa2num['TYR'] # TYR chi 3 should be planar
 
         return torsions, torsions_alt, tors_mask, tors_planar

@@ -239,3 +239,5 @@ model:
       n_feat: 32
       input_feature: "state"
    
+chem_params:
+  use_phospate_frames_for_NA: False

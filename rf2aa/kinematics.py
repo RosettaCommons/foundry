@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from icecream import ic
 from openbabel import openbabel
-from rf2aa.chemical import aachirals, NTOTAL, generate_Cbeta
+from rf2aa.chemical import ChemicalData as ChemData
 
 PARAMS = {
     'DMIN':1, 
@@ -81,8 +81,21 @@ def get_dih(a, b, c, d, eps=1e-6):
 
     return torch.atan2(y+eps, x+eps)
 
-
 # ============================================================
+
+def generate_Cbeta(N,Ca,C):
+    # recreate Cb given N,Ca,C
+    b = Ca - N
+    c = C - Ca
+    a = torch.cross(b, c, dim=-1)
+    #Cb = -0.58273431*a + 0.56802827*b - 0.54067466*c + Ca
+    # fd: below matches sidechain generator (=Rosetta params)
+    Cb = -0.57910144*a + 0.5689693*b - 0.5441217*c + Ca
+
+    return Cb
+    
+# ============================================================
+
 def xyz_to_c6d(xyz, params=PARAMS):
     """convert cartesian coordinates into 2d distance 
     and orientation maps
@@ -266,7 +279,7 @@ def get_atomize_protein_chirals(residues_atomize, lig_xyz, residue_atomize_mask,
     Enumerate chiral centers in residues and provide features for chiral centers
     """
     angle = np.arcsin(1/3**0.5) # perfect tetrahedral geometry
-    chiral_atoms = aachirals[residues_atomize]
+    chiral_atoms = ChemData().aachirals[residues_atomize]
     ra = residue_atomize_mask.nonzero()
     r,a = ra.T
 

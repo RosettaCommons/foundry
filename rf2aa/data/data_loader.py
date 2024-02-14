@@ -24,21 +24,53 @@ import networkx as nx
 
 import rf2aa.cifutils as cifutils
 from rf2aa.data.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol, parse_mixed_fasta, get_dislf
-from rf2aa.chemical import INIT_CRDS, INIT_NA_CRDS, NAATOKENS, MASKINDEX, UNKINDEX, \
-    NTOTAL, NBTYPES, CHAIN_GAP, num2aa, METAL_RES_NAMES, aa2num, atomnum2atomtype, load_tanimoto_sim_matrix, NPROTAAS
+from rf2aa.chemical import ChemicalData as ChemData
+from rf2aa.chemical import load_tanimoto_sim_matrix
+
 
 from rf2aa.kinematics import get_chirals
 from rf2aa.symmetry import get_symmetry
 from rf2aa.data.identical_ligands import get_extra_identical_copies_from_chains
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
-    center_and_realign_missing, random_rot_trans, allatom_mask, cif_prot_to_xyz, \
+    center_and_realign_missing, random_rot_trans, cif_prot_to_xyz, \
     cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
     map_identical_prot_chains, cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, bond_feats_from_Ls, \
     reindex_protein_feats_after_atomize, get_residue_contacts, atomize_discontiguous_residues, pop_protein_feats, \
-        is_atom, get_atom_template_indices, reassign_symmetry_after_cropping, expand_xyz_sm_to_ntotal, Ls_from_same_chain_2d, \
-              is_protein, is_nucleic, is_atom
-
+    is_atom, get_atom_template_indices, reassign_symmetry_after_cropping, expand_xyz_sm_to_ntotal, Ls_from_same_chain_2d, \
+    is_protein, is_nucleic, is_RNA, is_DNA, is_atom
 assert "rf2aa" in os.path.abspath(cifutils.__file__)
+
+
+#fd NA structures are in a different order internally than they are stored
+#fd on disk.  This function remaps the loaded order->model order
+#old:
+#       0      1      2      3      4      5      6      7      8      9      10  
+#    (" OP1"," P  "," OP2"," O5'"," C5'"," C4'"," O4'"," C3'"," O3'"," C1'"," C2'", ... #   A
+#    (" OP1"," P  "," OP2"," O5'"," C5'"," C4'"," O4'"," C3'"," O3'"," C1'"," C2'", ... #   C
+#    (" OP1"," P  "," OP2"," O5'"," C5'"," C4'"," O4'"," C3'"," O3'"," C1'"," C2'", ... #   G
+#    (" OP1"," P  "," OP2"," O5'"," C5'"," C4'"," O4'"," C3'"," O3'"," C1'"," C2'", ... #   U
+
+#new:
+#    (" O4'"," C1'"," C2'"," OP1"," P  "," OP2"," O5'"," C5'"," C4'"," C3'"," O3'", ... #27   A
+#    (" O4'"," C1'"," C2'"," OP1"," P  "," OP2"," O5'"," C5'"," C4'"," C3'"," O3'", ... #28   C
+#    (" O4'"," C1'"," C2'"," OP1"," P  "," OP2"," O5'"," C5'"," C4'"," C3'"," O3'", ... #29   G
+#    (" O4'"," C1'"," C2'"," OP1"," P  "," OP2"," O5'"," C5'"," C4'"," C3'"," O3'", ... #30   U
+
+def remap_NA_xyz_tensors(xyz,mask,seq):
+    if ChemData().params.use_phospate_frames_for_NA:
+        return xyz,mask
+
+    dna_mask = is_DNA(seq)
+    DNAMAP = (6,10,9,0,1,2,3,4,5,7,8)
+    xyz[:,dna_mask,:11] = xyz[:,dna_mask][...,DNAMAP,:]
+    mask[:,dna_mask,:11] = mask[:,dna_mask][...,DNAMAP]
+
+    rna_mask = is_RNA(seq)
+    RNAMAP = (6,9,10,0,1,2,3,4,5,7,8)
+    xyz[:,rna_mask,:11] = xyz[:,rna_mask][...,RNAMAP,:]
+    mask[:,rna_mask,:11] = mask[:,rna_mask][...,RNAMAP]
+
+    return xyz,mask
 
 def MSABlockDeletion(msa, ins, nb=5):
     '''
@@ -124,8 +156,8 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[],
     binding_site = torch.zeros((L,0), device=msa.device).float() # keeping this off for now (Jue 12/19)
         
     # raw MSA profile
-    raw_profile = torch.nn.functional.one_hot(msa, num_classes=NAATOKENS)
-    raw_profile = raw_profile.float().mean(dim=0) 
+    raw_profile = torch.nn.functional.one_hot(msa, num_classes=ChemData().NAATOKENS) # N x L x NAATOKENS
+    raw_profile = raw_profile.float().mean(dim=0) # L x NAATOKENS
 
     # Select Nclust sequence randomly (seed MSA or latent MSA)
     Nclust = (min(N, params['MAXLAT'])-1) // nmer 
@@ -171,20 +203,20 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[],
         # - 70%: replaced with a special token ("mask")
         seq = msa_clust[0]
         
-        random_aa = torch.tensor([[0.05]*20 + [0.0]*(NAATOKENS-20)], device=msa.device)
-        same_aa = torch.nn.functional.one_hot(msa_clust, num_classes=NAATOKENS)
+        random_aa = torch.tensor([[0.05]*20 + [0.0]*(ChemData().NAATOKENS-20)], device=msa.device)
+        same_aa = torch.nn.functional.one_hot(msa_clust, num_classes=ChemData().NAATOKENS)
         # explicitly remove probabilities from nucleic acids and atoms
-        same_aa[..., NPROTAAS:] = 0
-        raw_profile[...,NPROTAAS:] = 0
+        same_aa[..., ChemData().NPROTAAS:] = 0
+        raw_profile[...,ChemData().NPROTAAS:] = 0
         probs = 0.1*random_aa + 0.1*raw_profile + 0.1*same_aa
         #probs = torch.nn.functional.pad(probs, (0, 1), "constant", 0.7)
         
         # explicitly set the probability of masking for nucleic acids and atoms
-        probs[...,is_protein(seq),MASKINDEX]=0.7
+        probs[...,is_protein(seq),ChemData().MASKINDEX]=0.7
         probs[...,~is_protein(seq), :] = 0 # probably overkill but set all none protein elements to 0
         probs[1:, ~is_protein(seq),20] = 1.0 # want to leave the gaps as gaps
-        probs[0,is_nucleic(seq), MASKINDEX] = 1.0
-        probs[0,is_atom(seq), aa2num["ATM"]] = 1.0
+        probs[0,is_nucleic(seq), ChemData().MASKINDEX] = 1.0
+        probs[0,is_atom(seq), ChemData().aa2num["ATM"]] = 1.0
         
         sampler = torch.distributions.categorical.Categorical(probs=probs)
         mask_sample = sampler.sample()
@@ -214,8 +246,8 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[],
         N_extra = msa_extra.shape[0]
         
         # clustering (assign remaining sequences to their closest cluster by Hamming distance
-        msa_clust_onehot = torch.nn.functional.one_hot(msa_masked, num_classes=NAATOKENS)
-        msa_extra_onehot = torch.nn.functional.one_hot(msa_extra, num_classes=NAATOKENS)
+        msa_clust_onehot = torch.nn.functional.one_hot(msa_masked, num_classes=ChemData().NAATOKENS)
+        msa_extra_onehot = torch.nn.functional.one_hot(msa_extra, num_classes=ChemData().NAATOKENS)
         count_clust = torch.logical_and(~mask_pos, msa_clust != 20).float() # 20: index for gap, ignore both masked & gaps
         count_extra = torch.logical_and(~extra_mask, msa_extra != 20).float()
         agreement = torch.matmul((count_extra[:,:,None]*msa_extra_onehot).view(N_extra, -1), (count_clust[:,:,None]*msa_clust_onehot).view(Nclust, -1).T)
@@ -280,12 +312,12 @@ def MSAFeaturize(msa, ins, params, p_mask=0.15, eps=1e-6, nmer=1, L_s=[],
     return b_seq, b_msa_clust, b_msa_seed, b_msa_extra, b_mask_pos
 
 def blank_template(n_tmpl, L, random_noise=5.0):
-    xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(n_tmpl,L,1,1) \
+    xyz = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(n_tmpl,L,1,1) \
         + torch.rand(n_tmpl,L,1,3)*random_noise - random_noise/2
-    t1d = torch.nn.functional.one_hot(torch.full((n_tmpl, L), 20).long(), num_classes=NAATOKENS-1).float() # all gaps
+    t1d = torch.nn.functional.one_hot(torch.full((n_tmpl, L), 20).long(), num_classes=ChemData().NAATOKENS-1).float() # all gaps
     conf = torch.zeros((n_tmpl, L, 1)).float()
     t1d = torch.cat((t1d, conf), -1)
-    mask_t = torch.full((n_tmpl,L,NTOTAL), False)
+    mask_t = torch.full((n_tmpl,L,ChemData().NTOTAL), False)
     return xyz, t1d, mask_t, np.full((n_tmpl), "")
 
 
@@ -317,8 +349,8 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
     else: # only consider top 50 templates
         sample = torch.randperm(min(50,ntplt))[:npick]
 
-    xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(npick_global,qlen,1,1) + torch.rand(1,qlen,1,3)*random_noise
-    mask_t = torch.full((npick_global,qlen,NTOTAL),False) # True for valid atom, False for missing atom
+    xyz = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(npick_global,qlen,1,1) + torch.rand(1,qlen,1,3)*random_noise
+    mask_t = torch.full((npick_global,qlen,ChemData().NTOTAL),False) # True for valid atom, False for missing atom
     t1d = torch.full((npick_global, qlen), 20).long()
     t1d_val = torch.zeros((npick_global, qlen)).float()
     for i,nt in enumerate(sample):
@@ -335,7 +367,7 @@ def TemplFeaturize(tplt, qlen, params, offset=0, npick=1, npick_global=None, pic
         t1d_val[i,pos] = tplt['f1d'][0,sel,2] # alignment confidence
         # xyz[i] = center_and_realign_missing(xyz[i], mask_t[i], same_chain=same_chain)
 
-    t1d = torch.nn.functional.one_hot(t1d, num_classes=NAATOKENS-1).float() # (no mask token)
+    t1d = torch.nn.functional.one_hot(t1d, num_classes=ChemData().NAATOKENS-1).float() # (no mask token)
     t1d = torch.cat((t1d, t1d_val[...,None]), dim=-1)
 
     tplt_ids = np.array(tplt["ids"])[sample].flatten() # np.array of chain ids (ordered)
@@ -393,20 +425,20 @@ def spoof_template(xyz, seq, mask, is_motif=None, template_conf=1, random_noise=
     if is_motif is None:
         is_motif = torch.arange(L)
 
-    xyz_t = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*random_noise
+    xyz_t = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*random_noise
 
     t1d = torch.cat((
         torch.nn.functional.one_hot(
             torch.full((1, L), 20).long(),
-            num_classes=NAATOKENS-1).float(), # all gaps (no mask token)
+            num_classes=ChemData().NAATOKENS-1).float(), # all gaps (no mask token)
         torch.zeros((1, L, 1)).float()
     ), -1) # (1, L_protein + L_sm, NAATOKENS)
-    mask_t = torch.full((1, L, NTOTAL), False)
+    mask_t = torch.full((1, L, ChemData().NTOTAL), False)
 
     xyz_t[0, is_motif, :14] = xyz[is_motif, :14]
     xyz_t = torch.nan_to_num(xyz_t) # xyz has NaNs
     t1d[0, is_motif] = torch.cat((
-        torch.nn.functional.one_hot(seq[is_motif], num_classes=NAATOKENS-1).float(),
+        torch.nn.functional.one_hot(seq[is_motif], num_classes=ChemData().NAATOKENS-1).float(),
         torch.full((len(is_motif), 1), template_conf).float()
     ), -1) # (1, L_protein, NAATOKENS)
     mask_t[0, is_motif, :14] = mask[is_motif, :14]
@@ -533,7 +565,7 @@ def generate_sm_template_feats(tplt_ids, resnames, akeys, Ls_sm, chid2smpartners
                 occ_ = torch.full((L,), True)
                 #HACK templates have NTOKENS-1 classes (no mask token) but the ATM token appears after the 
                 # mask token so need to decrement the token number by 1
-                msa_ = torch.full((L,), aa2num["ATM"] - 1 )
+                msa_ = torch.full((L,), ChemData().aa2num["ATM"] - 1 )
             else:
                 assert input_akeys == akeys_, "if provided input akeys, output akeys must match"
 
@@ -1036,7 +1068,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     if add_negatives:
         train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict = \
             add_negative_sets(train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict,
-                              base_path = Path(params['SM_COMPL_DIR']))
+                              base_path = Path(sm_compl_dir))
 
     print(f'Done loading datasets in {time.time()-t0} seconds')
 
@@ -1168,11 +1200,11 @@ def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein
             cond = torch.logical_and(cond, mask_na1_rep[:,None]*mask_na2_rep[None,:]) 
 
             if (torch.sum(cond)==0):
-                i= np.random.randint(len_s[0]-1)
-                j= np.random.randint(len_s[1]-1)
-                while (not mask[i,1] or not mask[len_s[0]+j,1]):
-                    i= np.random.randint(len_s[0]-1)
-                    j= np.random.randint(len_s[1]-1)
+                i= np.random.randint(len_s[0])
+                j= np.random.randint(len_s[1])
+                while (not mask[i,1] or not mask[j,1]):
+                    i= np.random.randint(len_s[0])
+                    j= np.random.randint(len_s[1])
                 cond[i,j] = True
         else:
             # 1 RNA chains
@@ -1184,7 +1216,7 @@ def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein
             if (torch.sum(cond)==0):
                 i= np.random.randint(len_s[0]-1)
                 while (not mask[i,1] or not mask[i+1,1]):
-                    i = np.random.randint(len_s[0])
+                    i = np.random.randint(len_s[0]-1)
                 cond[i,i+1] = True
 
     else: # either 1prot+1NA, 1prot+2NA or 2prot+2NA
@@ -1545,7 +1577,7 @@ def merge_msas(a3m_list, L_s):
 
 def remove_all_gap_seqs(a3m):
     """Removes sequences that are all gaps from an MSA represented as `a3m` dictionary"""
-    idx_seq_keep = ~(a3m['msa']==UNKINDEX).all(dim=1)
+    idx_seq_keep = ~(a3m['msa']==ChemData().UNKINDEX).all(dim=1)
     a3m['msa'] = a3m['msa'][idx_seq_keep]
     a3m['ins'] = a3m['ins'][idx_seq_keep]
     return a3m
@@ -1620,7 +1652,7 @@ def join_msas_by_taxid(a3mA, a3mB, idx_overlap=None):
     # |-|*|-|*|   msaB_unpaired
     if idx_overlap is not None:
         assert((a3mA['msa'][i_pairedA, i1A:i2A]==a3mB['msa'][i_pairedB, i1B:i2B]) |
-               (a3mA['msa'][i_pairedA, i1A:i2A]==UNKINDEX)).all(),\
+               (a3mA['msa'][i_pairedA, i1A:i2A]==ChemData().UNKINDEX)).all(),\
             'Paired MSAs should be identical (or 1st MSA should be all gaps) in overlap region'
 
         # overlap region gets sequences from 2nd MSA bc sometimes 1st MSA will be all gaps here
@@ -1629,10 +1661,10 @@ def join_msas_by_taxid(a3mA, a3mB, idx_overlap=None):
                                 a3mA['msa'][i_pairedA, i2A:],
                                 a3mB['msa'][i_pairedB, i1B_new:i2B_new] ], dim=1)
         msaA_unpaired = torch.cat([a3mA['msa'][i_unpairedA],
-                                 torch.full((N_unpairedA, i2B_new-i1B_new), UNKINDEX) ], dim=1)
-        msaB_unpaired = torch.cat([torch.full((N_unpairedB, i1A), UNKINDEX),
+                                 torch.full((N_unpairedA, i2B_new-i1B_new), ChemData().UNKINDEX) ], dim=1)
+        msaB_unpaired = torch.cat([torch.full((N_unpairedB, i1A), ChemData().UNKINDEX),
                                  a3mB['msa'][i_unpairedB, i1B:i2B],
-                                 torch.full((N_unpairedB, L_A-i2A), UNKINDEX),
+                                 torch.full((N_unpairedB, L_A-i2A), ChemData().UNKINDEX),
                                  a3mB['msa'][i_unpairedB, i1B_new:i2B_new] ], dim=1)
     else:
         # no overlap region, simple offset pad & stack
@@ -1640,8 +1672,8 @@ def join_msas_by_taxid(a3mA, a3mB, idx_overlap=None):
         # this out explicitly here to make the logic more clear
         msa_paired = torch.cat([a3mA['msa'][i_pairedA], a3mB['msa'][i_pairedB, i1B_new:i2B_new]], dim=1)
         msaA_unpaired = torch.cat([a3mA['msa'][i_unpairedA],
-                                 torch.full((N_unpairedA, L_B), UNKINDEX)], dim=1) # pad with gaps
-        msaB_unpaired = torch.cat([torch.full((N_unpairedB, L_A), UNKINDEX),
+                                 torch.full((N_unpairedA, L_B), ChemData().UNKINDEX)], dim=1) # pad with gaps
+        msaB_unpaired = torch.cat([torch.full((N_unpairedB, L_A), ChemData().UNKINDEX),
                                  a3mB['msa'][i_unpairedB]], dim=1) # pad with gaps
 
     # stack paired & unpaired
@@ -1851,7 +1883,7 @@ def expand_multi_msa(a3m, hashes_in, hashes_out, Ls_in, Ls_out, params):
     msa_in, ins_in = a3m['msa'], a3m['ins']
 
     # initialize destination MSA to gap characters
-    msa_out = torch.full((N_out, sum(Ls_out)), UNKINDEX)
+    msa_out = torch.full((N_out, sum(Ls_out)), ChemData().UNKINDEX)
     ins_out = torch.full((N_out, sum(Ls_out)), 0)
 
     # for each destination chain
@@ -1939,14 +1971,14 @@ def get_bond_distances(bond_feats):
 def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=True, random_noise=5.0, fixbb=False, p_short_crop=0.0, p_dslf_crop=0.0):
     msa_featurization_kwargs = {}
     if fixbb:
-        ic('setting msa feat kwargs')
+#        ic('setting msa feat kwargs')
         msa_featurization_kwargs['p_mask'] = 0.0
 
     # get ground-truth structures
     idx = torch.arange(len(pdb['xyz'])) 
-    xyz = torch.full((len(idx),NTOTAL,3),np.nan).float()
+    xyz = torch.full((len(idx),ChemData().NTOTAL,3),np.nan).float()
     xyz[:,:14,:] = pdb['xyz']
-    mask = torch.full((len(idx), NTOTAL), False)
+    mask = torch.full((len(idx), ChemData().NTOTAL), False)
     mask[:,:14] = pdb['mask']
     xyz = torch.nan_to_num(xyz)
 
@@ -1996,7 +2028,7 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
 
         # Generate ground truth structure: account for ligand symmetry
         N_symmetry, sm_L, _ = xyz_atomize_all.shape
-        xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
+        xyz = torch.full((N_symmetry, protein_L+sm_L, ChemData().NTOTAL, 3), np.nan).float()
         mask = torch.full(xyz.shape[:-1], False).bool()
         xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
         xyz[:, protein_L:, 1, :] = xyz_atomize_all
@@ -2083,6 +2115,10 @@ def featurize_single_chain(msa, ins, tplt, pdb, params, unclamp=False, pick_top=
 def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pick_top=True, random_noise=5.0, fixbb=False):
     L = msa_orig.shape[1]
 
+    # msa always over 2 subunits (higher-order symms expand this)
+    msa, ins = merge_a3m_homo(msa_orig, ins_orig, 2) # make unpaired alignments, for training, we always use two chains
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=[L,L])
+
     # get ground-truth structures
     # load metadata
     PREFIX = "%s/torch/pdb/%s/%s"%(params['PDB_DIR'],pdbid[1:3],pdbid)
@@ -2090,8 +2126,8 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
 
     # get all possible pairs
     npairs = len(interfaces)
-    xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(npairs, 2*L, 1, 1)
-    mask = torch.full((npairs, 2*L, NTOTAL), False)
+    xyz = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(npairs, 2*L, 1, 1)
+    mask = torch.full((npairs, 2*L, ChemData().NTOTAL), False)
     #print ("featurize_homo",pdbid,interfaces)
     for i_int,interface in enumerate(interfaces):
         pdbB = torch.load(params['PDB_DIR']+'/torch/pdb/'+interface['CHAIN_B'][1:3]+'/'+interface['CHAIN_B']+'.pt')
@@ -2103,6 +2139,23 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         mask[i_int,:,:14] = torch.cat((pdbA['mask'], pdbB['mask']), dim=0)
     xyz = torch.nan_to_num(xyz)
 
+    # detect any point symmetries
+    symmgp, symmsubs = get_symmetry(xyz,mask)
+    nsubs = len(symmsubs)+1
+
+    #print ('symmgp',symmgp)
+    # build full native complex (for loss calcs)
+    if (symmgp != 'C1'):
+        xyzfull = torch.zeros((1,nsubs*L,ChemData().NTOTAL,3))
+        maskfull = torch.full((1,nsubs*L,ChemData().NTOTAL), False)
+        xyzfull[0,:L] = xyz[0,:L]
+        maskfull[0,:L] = mask[0,:L]
+        for i in range(1,nsubs):
+            xyzfull[0,i*L:(i+1)*L] = xyz[symmsubs[i-1],L:]
+            maskfull[0,i*L:(i+1)*L] = mask[symmsubs[i-1],L:]
+        xyz = xyzfull
+        mask = maskfull
+
     # get template features
     ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
     if ntempl < 1:
@@ -2111,117 +2164,90 @@ def featurize_homo(msa_orig, ins_orig, tplt, pdbA, pdbid, interfaces, params, pi
         xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tplt, L, params, npick=ntempl, offset=0, pick_top=pick_top, random_noise=random_noise)
         # duplicate
 
-    # detect any point symmetries
-    symmgp, symmsubs = get_symmetry(xyz,mask)
-    Osub_native = len(symmsubs)+1    # number of subunits in the "native"
+    if (symmgp != 'C1'):
+        # everything over ASU
+        idx = torch.arange(L)
+        same_chain = torch.ones((L, L)).long()
+        nsub = len(symmsubs)+1
+        bond_feats = get_protein_bond_feats(L)
+    else:  # either asymmetric dimer or (usually) helical symmetry...
+        # everything over 2 copies
+        xyz_t = torch.cat([xyz_t, random_rot_trans(xyz_t)], dim=1)
+        f1d_t = torch.cat([f1d_t]*2, dim=1)
+        mask_t = torch.cat([mask_t]*2, dim=1)
+        idx = torch.arange(L*2)
+        idx[L:] += 100 # to let network know about chain breaks
 
-    # number of subunits we are modelling
-    Osub = 1
-    if (symmgp[0]=='C'):
-        Osub = min(3, int(symmgp[1:]))
-    elif (symmgp[0]=='D'):
-        Osub = min(5, 2*int(symmgp[1:]))
-    else:
-        Osub = 6
+        same_chain = torch.zeros((2*L, 2*L)).long()
+        same_chain[:L, :L] = 1
+        same_chain[L:, L:] = 1
+        bond_feats = torch.zeros((2*L, 2*L)).long()
+        bond_feats[:L, :L] = get_protein_bond_feats(L)
+        bond_feats[L:, L:] = get_protein_bond_feats(L)
 
-    # build up MSA
-    if (Osub > 1):
-        msa, ins = merge_a3m_homo(msa_orig, ins_orig, Osub) # make unpaired alignments, for training, we always use two chains
-    else:
-        msa, ins = msa_orig, ins_orig
-
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=[L,]*Osub)
-
-    idx = torch.arange(L)
-    same_chain = torch.ones((L, L)).long()
-    bond_feats = get_protein_bond_feats(L).long()
-    dist_matrix = get_bond_distances(bond_feats)
-
-    # build up symmetric data
-    if (Osub > 1):
-        # point-symmetric complex
-
-        # 'flatten' xyz and mask
-        # NOTE: the number of subunits is given by Osub_native, distinct from Osub!
-        xyzfull = torch.zeros((1,Osub_native*L,NTOTAL,3))
-        maskfull = torch.full((1,Osub_native*L,NTOTAL), False)
-        xyzfull[0,:L] = xyz[0,:L]
-        maskfull[0,:L] = mask[0,:L]
-        for i in range(1,Osub_native):
-            xyzfull[0,i*L:(i+1)*L] = xyz[symmsubs[i-1],L:]
-            maskfull[0,i*L:(i+1)*L] = mask[symmsubs[i-1],L:]
-        xyz = xyzfull
-        mask = maskfull
-
-        # symmetrize templates
-        xyz_t = xyz_t[:,:L].repeat(1,Osub,1,1)
-        mask_t = mask_t[:,:L].repeat(1,Osub,1)
-        f1d_t = f1d_t[:,:L].repeat(1,Osub,1)
-
-        # index, same chain, bond feats
-        idx = torch.arange(Osub*L)
-        same_chain = torch.zeros((Osub*L,Osub*L)).long()
-        bond_feats_new = torch.zeros((Osub*L,Osub*L)).long()
-        dist_matrix_new = torch.zeros((Osub*L,Osub*L)).long()
-        for o_i in range(Osub):
-            same_chain[o_i*L:(o_i+1)*L,o_i*L:(o_i+1)*L] = 1
-            idx[o_i*L:(o_i+1)*L] += 100*o_i
-            bond_feats_new[o_i*L:(o_i+1)*L,o_i*L:(o_i+1)*L] = bond_feats
-            dist_matrix_new[o_i*L:(o_i+1)*L,o_i*L:(o_i+1)*L] = dist_matrix
-        bond_feats = bond_feats_new
-        dist_matrix = dist_matrix_new
-
-    else:  
-        # asymmetric dimer or helical symmetry.  model as monomer
-        xyz = xyz[:,:L]
-        mask = mask[:,:L]
-        xyz_t = xyz_t[:,:L]
-        mask_t = mask_t[:,:L]
-        f1d_t = f1d_t[:,:L]
-
+        nsub = 2
+    
     ntempl = xyz_t.shape[0]
     xyz_t = torch.stack(
         [center_and_realign_missing(xyz_t[i], mask_t[i], same_chain=same_chain) for i in range(ntempl)]
     )
-
     # get initial coordinates
     xyz_prev, mask_prev = generate_xyz_prev(xyz_t, mask_t, params)
 
+    # figure out crop
+    if (symmgp =='C1'):
+        cropsub = 2
+    elif (symmgp[0]=='C'):
+        cropsub = min(3, int(symmgp[1:]))
+    elif (symmgp[0]=='D'):
+        cropsub = min(5, 2*int(symmgp[1:]))
+    else:
+        cropsub = 6
+
     # Residue cropping
-    if Osub*L > params['CROP']:
+    if cropsub*L > params['CROP']:
+        #if np.random.rand() < 0.5: # 50% --> interface crop
+        #    spatial_crop_tgt = np.random.randint(0, npairs)
+        #    crop_idx = get_spatial_crop(xyz[spatial_crop_tgt], mask[spatial_crop_tgt], torch.arange(L*2), [L,L], params, interfaces[spatial_crop_tgt][0])
+        #else: # 50% --> have same cropped regions across all copies
+        #    crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//2, unclamp=False) # cropped region for first copy
+        #    crop_idx = torch.cat((crop_idx, crop_idx+L)) # get same crops
+        #    #print ("check_crop", crop_idx, crop_idx.shape)
+
         # fd: always use same cropped regions across all copies
-        crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//Osub, unclamp=False) # cropped region for first copy
-        if (Osub > 1):
-            crop_idx_full, crop_idx_native = [], []
-            for i in range(Osub):
-                crop_idx_full.append(crop_idx+i*L)
-            for i in range(Osub_native):
-                crop_idx_native.append(crop_idx+i*L)
-            crop_idx = torch.cat(crop_idx_full)
-            crop_idx_native = torch.cat(crop_idx_native)
+        crop_idx = get_crop(L, mask[0,:L], msa_seed_orig.device, params['CROP']//cropsub, unclamp=False) # cropped region for first copy
+        crop_idx_full = torch.cat([crop_idx,crop_idx+L])
+        if (symmgp == 'C1'):
+            crop_idx = crop_idx_full
+            crop_idx_complete = crop_idx_full
         else:
-            crop_idx_native = crop_idx
+            crop_idx_complete = []
+            for i in range(nsub):
+                crop_idx_complete.append(crop_idx+i*L)
+            crop_idx_complete = torch.cat(crop_idx_complete)
 
-        seq = seq[:,crop_idx]
-        msa_seed_orig = msa_seed_orig[:,:,crop_idx]
-        msa_seed = msa_seed[:,:,crop_idx]
-        msa_extra = msa_extra[:,:,crop_idx]
-        mask_msa = mask_msa[:,:,crop_idx]
+        # over 2 copies
+        seq = seq[:,crop_idx_full]
+        msa_seed_orig = msa_seed_orig[:,:,crop_idx_full]
+        msa_seed = msa_seed[:,:,crop_idx_full]
+        msa_extra = msa_extra[:,:,crop_idx_full]
+        mask_msa = mask_msa[:,:,crop_idx_full]
 
+        # over 1 copy (symmetric) or 2 copies (asymmetric)
         xyz_t = xyz_t[:,crop_idx]
         f1d_t = f1d_t[:,crop_idx]
         mask_t = mask_t[:,crop_idx]
         idx = idx[crop_idx]
         same_chain = same_chain[crop_idx][:,crop_idx]
         bond_feats = bond_feats[crop_idx][:,crop_idx]
-        dist_matrix = dist_matrix[crop_idx][:,crop_idx]
         xyz_prev = xyz_prev[crop_idx]
         mask_prev = mask_prev[crop_idx]
 
-        # native over different # of subunits
-        xyz = xyz[:,crop_idx_native]
-        mask = mask[:,crop_idx_native]
+        # over >=2 copies
+        xyz = xyz[:,crop_idx_complete]
+        mask = mask[:,crop_idx_complete]
 
+    dist_matrix = get_bond_distances(bond_feats)
     chirals = torch.Tensor()
     ch_label = torch.zeros(seq[0].shape)
 
@@ -2294,9 +2320,9 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, p_dslf_crop=0.0, fi
 
     # get ground-truth structures
     idx = pdb['idx']
-    xyz = torch.full((len(idx),NTOTAL,3),np.nan).float()
+    xyz = torch.full((len(idx),ChemData().NTOTAL,3),np.nan).float()
     xyz[:,:27,:] = pdb['xyz'][:,:27]
-    mask = torch.full((len(idx),NTOTAL), False)
+    mask = torch.full((len(idx),ChemData().NTOTAL), False)
     mask[:,:27] = pdb['mask'][:,:27]
 
     # get template features -- None
@@ -2344,7 +2370,7 @@ def loader_fb(item, params, unclamp=False, p_short_crop=0.0, p_dslf_crop=0.0, fi
 
         # Generate ground truth structure: account for ligand symmetry
         N_symmetry, sm_L, _ = xyz_atomize_all.shape
-        xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
+        xyz = torch.full((N_symmetry, protein_L+sm_L, ChemData().NTOTAL, 3), np.nan).float()
         mask = torch.full(xyz.shape[:-1], False).bool()
         xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
         xyz[:, protein_L:, 1, :] = xyz_atomize_all
@@ -2491,19 +2517,19 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
         # apply transform
         xyzA = torch.einsum('ij,raj->rai', xformA[:3,:3], pdbA['xyz']) + xformA[:3,3][None,None,:]
         xyzB = torch.einsum('ij,raj->rai', xformB[:3,:3], pdbB['xyz']) + xformB[:3,3][None,None,:]
-        xyz = torch.full((sum(L_s), NTOTAL, 3), np.nan).float()
+        xyz = torch.full((sum(L_s), ChemData().NTOTAL, 3), np.nan).float()
         xyz[:,:14] = torch.cat((xyzA, xyzB), dim=0)
-        mask = torch.full((sum(L_s), NTOTAL), False)
+        mask = torch.full((sum(L_s), ChemData().NTOTAL), False)
         mask[:,:14] = torch.cat((pdbA['mask'], pdbB['mask']), dim=0)
     else:
-        xyz = torch.full((sum(L_s), NTOTAL, 3), np.nan).float()
+        xyz = torch.full((sum(L_s), ChemData().NTOTAL, 3), np.nan).float()
         xyz[:,:14] = torch.cat((pdbA['xyz'], pdbB['xyz']), dim=0)
-        mask = torch.full((sum(L_s), NTOTAL), False)
+        mask = torch.full((sum(L_s), ChemData().NTOTAL), False)
         mask[:,:14] = torch.cat((pdbA['mask'], pdbB['mask']), dim=0)
     xyz = torch.nan_to_num(xyz)
 
     idx = torch.arange(sum(L_s))
-    idx[L_s[0]:] += CHAIN_GAP
+    idx[L_s[0]:] += ChemData().CHAIN_GAP
 
     same_chain = torch.zeros((sum(L_s), sum(L_s))).long()
     same_chain[:L_s[0], :L_s[0]] = 1
@@ -2622,7 +2648,7 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
             torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[0][1:3]+'/'+pdb_ids[0]+'.pt'),
             torch.load(params['PDB_DIR']+'/torch/pdb/'+pdb_ids[1][1:3]+'/'+pdb_ids[1]+'.pt')
         ]
-        filenameB1 = params['NA_DIR'] + '/torch/' + pdb_ids[2][1:3] + '/' + pdb_ids[2] + '.pt'
+        filenameB1 = params['NA_DIR']+'/torch/'+pdb_ids[2][1:3]+'/'+pdb_ids[2]+'.pt'
         filenameB2 = params['NA_DIR']+'/torch/'+pdb_ids[3][1:3]+'/'+pdb_ids[3]+'.pt'
         if os.path.exists(filenameB1+".v3"):
             filenameB1 = filenameB1+".v3"
@@ -2754,16 +2780,16 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
         ntmpl = xyz_t.shape[0]
         nNA = sum(Ls[2:])
         xyz_t = torch.cat( 
-            (xyz_t, INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(ntmpl,nNA,1,1) + torch.rand(ntmpl,nNA,1,3)*random_noise), dim=1)
+            (xyz_t, ChemData().INIT_NA_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(ntmpl,nNA,1,1) + torch.rand(ntmpl,nNA,1,3)*random_noise), dim=1)
         f1d_t = torch.cat(
-            (f1d_t, torch.nn.functional.one_hot(torch.full((ntmpl,nNA), 20).long(), num_classes=NAATOKENS).float()), dim=1) # add extra class for 0 confidence
+            (f1d_t, torch.nn.functional.one_hot(torch.full((ntmpl,nNA), 20).long(), num_classes=ChemData().NAATOKENS).float()), dim=1) # add extra class for 0 confidence
         mask_t = torch.cat( 
-            (mask_t, torch.full((ntmpl,nNA,NTOTAL), False)), dim=1)
+            (mask_t, torch.full((ntmpl,nNA,ChemData().NTOTAL), False)), dim=1)
 
         NAstart = 2*Ls[0]
     else:
         xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=pick_top, random_noise=random_noise)
-        xyz_t[:,Ls[0]:] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,sum(Ls[1:]),1,1) + torch.rand(1,sum(Ls[1:]),1,3)*random_noise
+        xyz_t[:,Ls[0]:] = ChemData().INIT_NA_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,sum(Ls[1:]),1,1) + torch.rand(1,sum(Ls[1:]),1,3)*random_noise
         NAstart = Ls[0]
 
     # seed with native NA
@@ -2772,14 +2798,14 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
         maskNA_templ = torch.cat( [x['mask'] for x in pdbB], dim=0)
 
         # construct template from NA
-        xyz_t_B = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,sum(Ls),1,1) + torch.rand(1,sum(Ls),1,3)*random_noise
-        mask_t_B = torch.full((1,sum(Ls),NTOTAL), False)
+        xyz_t_B = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,sum(Ls),1,1) + torch.rand(1,sum(Ls),1,3)*random_noise
+        mask_t_B = torch.full((1,sum(Ls),ChemData().NTOTAL), False)
         mask_t_B[:,NAstart:,:23] = maskNA_templ
         xyz_t_B[mask_t_B] = natNA_templ[maskNA_templ]
 
         seq_t_B = torch.cat( (torch.full((1, NAstart), 20).long(),  a3mB['msa'][0:1]), dim=1)
         seq_t_B[seq_t_B>21] -= 1 # remove mask token
-        f1d_t_B = torch.nn.functional.one_hot(seq_t_B, num_classes=NAATOKENS-1).float()
+        f1d_t_B = torch.nn.functional.one_hot(seq_t_B, num_classes=ChemData().NAATOKENS-1).float()
         conf_B = torch.cat( (
             torch.zeros((1,NAstart,1)),
             torch.full((1,sum(Ls)-NAstart,1),1.0),
@@ -2798,8 +2824,8 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
 
     # build native from components
-    xyz = torch.full((NMDLS, sum(Ls), NTOTAL, 3), np.nan)
-    mask = torch.full((NMDLS, sum(Ls), NTOTAL), False)
+    xyz = torch.full((NMDLS, sum(Ls), ChemData().NTOTAL, 3), np.nan)
+    mask = torch.full((NMDLS, sum(Ls), ChemData().NTOTAL), False)
     if (len(pdb_ids)==2):
         xyz[0,:NAstart,:14] = pdbA[0]['xyz']
         xyz[0,NAstart:,:23] = pdbB[0]['xyz']
@@ -2828,6 +2854,8 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
             mask[3,:NAstart,:14] = torch.cat( (pdbA[1]['mask'], pdbA[0]['mask']), dim=0)
             mask[2:,NAstart:,:23] = torch.cat( (pdbB[1]['mask'], pdbB[0]['mask']), dim=0)[None,...]
     xyz = torch.nan_to_num(xyz)
+
+    xyz, mask = remap_NA_xyz_tensors(xyz,mask,msa[0])
 
     # other features
     idx = idx_from_Ls(Ls)
@@ -2910,7 +2938,7 @@ def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=
 
     # add padding from negative sequences
     pad_options = np.array(['NONE','BOTH','LEFT','RIGHT'])
-    pad_weights = np.array([   2  ,   1  ,   1  ,   1   ])
+    pad_weights = np.array([   2  ,   0  ,   0  ,   0   ])
     pad_choice = np.random.choice(pad_options, 1, p=pad_weights/sum(pad_weights))
     
     if negative:
@@ -2977,7 +3005,7 @@ def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=
     ntempl = 0
     tpltA = {'ids':[]} # a fake tpltA
     xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tpltA, L, params, offset=0, npick=ntempl, pick_top=pick_top, random_noise=random_noise)
-    xyz_t[:,LA:] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,LB,1,1) + torch.rand(1,LB,1,3)*random_noise
+    xyz_t[:,LA:] = ChemData().INIT_NA_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,LB,1,1) + torch.rand(1,LB,1,3)*random_noise
 
     # get MSA features
     msa = a3m['msa'].long()
@@ -2987,13 +3015,13 @@ def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
 
     # build dummy "native" in case a loss function expects it 
-    xyz = torch.full((1, L, NTOTAL, 3), np.nan)
-    mask = torch.full((1, L, NTOTAL), False)
+    xyz = torch.full((1, L, ChemData().NTOTAL, 3), np.nan)
+    mask = torch.full((1, L, ChemData().NTOTAL), False)
 
     is_NA = is_nucleic(msa[0])
-    xyz[:,is_NA] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,is_NA.sum(),1,1) + torch.rand(1,is_NA.sum(),1,3)*random_noise
+    xyz[:,is_NA] = IChemData().NIT_NA_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,is_NA.sum(),1,1) + torch.rand(1,is_NA.sum(),1,3)*random_noise
     is_prot = ~is_NA
-    xyz[:,is_prot] = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,is_prot.sum(),1,1) + torch.rand(1,is_prot.sum(),1,3)*random_noise
+    xyz[:,is_prot] = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,is_prot.sum(),1,1) + torch.rand(1,is_prot.sum(),1,3)*random_noise
 
     xyz = torch.nan_to_num(xyz)
 
@@ -3142,13 +3170,14 @@ def loader_distil_tf(item, params, random_noise=5.0, pick_top=True, native_NA_fr
     mask = torch.from_numpy(mask)
     pdbseq = torch.from_numpy(pdbseq)
 
+    # Don't need to remap because we load directly from .pdb with re-mapped chemical.py
     # read template info (no template)
     # NOTE: use templates?
     ntempl = 0
     tpltA = {'ids':[]} # a fake tpltA
     xyz_t, f1d_t, mask_t, _ = TemplFeaturize(tpltA, sum(Ls), params, offset=0, npick=ntempl, pick_top=True, random_noise=random_noise)
     NAstart = sum(Ls[:nmer])
-    xyz_t[:,NAstart:] = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,sum(Ls[-2:]),1,1) + torch.rand(1,sum(Ls[-2:]),1,3)*random_noise
+    xyz_t[:,NAstart:] = ChemData().INIT_NA_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,sum(Ls[-2:]),1,1) + torch.rand(1,sum(Ls[-2:]),1,3)*random_noise
 
     # other features
     idx = idx_from_Ls(Ls)
@@ -3298,9 +3327,9 @@ def loader_dna_rna(item, params, random_noise=5.0):
 
     # get template features -- None
     L = sum(Ls)
-    xyz_t = INIT_NA_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*random_noise
-    f1d_t = torch.nn.functional.one_hot(torch.full((1, L), 20).long(), num_classes=NAATOKENS-1).float() # all gaps
-    mask_t = torch.full((1,L,NTOTAL), False)
+    xyz_t = ChemData().INIT_NA_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*random_noise
+    f1d_t = torch.nn.functional.one_hot(torch.full((1, L), 20).long(), num_classes=ChemData().NAATOKENS-1).float() # all gaps
+    mask_t = torch.full((1,L,ChemData().NTOTAL), False)
     conf = torch.zeros((1,L,1)).float() # zero confidence
     f1d_t = torch.cat((f1d_t, conf), -1)
 
@@ -3311,8 +3340,8 @@ def loader_dna_rna(item, params, random_noise=5.0):
     ins = a3m['ins'].long()
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
 
-    xyz = torch.full((NMDLS, L, NTOTAL, 3), np.nan).float()
-    mask = torch.full((NMDLS, L, NTOTAL), False)
+    xyz = torch.full((NMDLS, L, ChemData().NTOTAL, 3), np.nan).float()
+    mask = torch.full((NMDLS, L, ChemData().NTOTAL), False)
 
     #
     if (len(pdb_ids)==2):
@@ -3326,10 +3355,12 @@ def loader_dna_rna(item, params, random_noise=5.0):
         xyz[:,:,:23] = pdbA['xyz']
         mask[:,:,:23] = pdbA['mask']
 
+    xyz, mask = remap_NA_xyz_tensors(xyz,mask,msa[0])
+
     # other features
     idx = torch.arange(L)
     if (len(pdb_ids)==2):
-        idx[Ls[0]:] += CHAIN_GAP
+        idx[Ls[0]:] += ChemData().CHAIN_GAP
     same_chain = same_chain_2d_from_Ls(Ls)
     bond_feats = bond_feats_from_Ls(Ls).long()
 
@@ -3957,13 +3988,14 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         xyz_t_prot = xyz_t_prot[sel]
         mask_t_prot = mask_t_prot[sel]
         f1d_t_prot = f1d_t_prot[sel]
+    
     if ligand_string_tuple is not None:
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, _ = featurize_ligand_from_string(ligand_string=ligand_string_tuple[1], format=ligand_string_tuple[0])
         residues_to_atomize = mod_residues_to_atomize
     else:
         lig_partners = [p for p in item['PARTNERS']
                     if p[-1]=='nonpoly' 
-                    and (p[0][0][2] not in METAL_RES_NAMES or np.random.rand() < params['P_METAL'])]
+                    and (p[0][0][2] not in ChemData().METAL_RES_NAMES or np.random.rand() < params['P_METAL'])]
         lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + lig_partners
     
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
@@ -3974,11 +4006,11 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     N_symm_sm = xyz_sm.shape[0]
     L_total = sum(Ls_prot)+sum(Ls_sm)
 
-    xyz = torch.full((max(N_symm_prot, N_symm_sm), L_total, NTOTAL, 3), np.nan).float()
+    xyz = torch.full((max(N_symm_prot, N_symm_sm), L_total, ChemData().NTOTAL, 3), np.nan).float()
     xyz[:N_symm_prot, :sum(Ls_prot)] = xyz_prot
     xyz[:N_symm_sm, sum(Ls_prot):, 1, :] = xyz_sm
 
-    mask = torch.full((max(N_symm_prot, N_symm_sm), L_total, NTOTAL), False).bool()
+    mask = torch.full((max(N_symm_prot, N_symm_sm), L_total, ChemData().NTOTAL), False).bool()
     mask[:N_symm_prot, :sum(Ls_prot)] = mask_prot
     mask[:N_symm_sm, sum(Ls_prot):, 1] = mask_sm
 
@@ -4141,9 +4173,9 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     #        msa, ins = subsample_MSA(msa, ins, params["NUM_SEQS_SUBSAMPLE"])
 
     idx = torch.arange(len(pdb['xyz'])) 
-    xyz = torch.full((len(idx),NTOTAL,3), np.nan).float()
+    xyz = torch.full((len(idx),ChemData().NTOTAL,3), np.nan).float()
     xyz[:,:14,:] = pdb['xyz']
-    mask = torch.full((len(idx), NTOTAL), False)
+    mask = torch.full((len(idx), ChemData().NTOTAL), False)
     mask[:,:14] = pdb['mask']
     bond_feats = get_protein_bond_feats(len(idx))
     same_chain = torch.ones(len(idx), len(idx))
@@ -4175,7 +4207,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
     can_atomize_mask[idx_missing_N-1] = 0 # can't atomize residues before a missing N
     can_atomize_mask[idx_missing_C+1] = 0 # can't atomize residues after a missing C
 
-    num_atoms_per_res = allatom_mask[msa_prot[0],:14].sum(dim=-1) # how many atoms should each residue have?
+    num_atoms_per_res = ChemData().allatom_mask[msa_prot[0],:14].sum(dim=-1) # how many atoms should each residue have?
     num_atoms_exist = mask_prot.sum(dim=-1) # how many atoms have coords in each residue?
     can_atomize_mask[(num_atoms_per_res != num_atoms_exist)] = 0
     can_atomize_idx = torch.where(can_atomize_mask)[0]
@@ -4208,7 +4240,7 @@ def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False,
 
     # Generate ground truth structure: account for ligand symmetry
     N_symmetry, sm_L, _ = xyz_atomize_all.shape
-    xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
+    xyz = torch.full((N_symmetry, protein_L+sm_L, ChemData().NTOTAL, 3), np.nan).float()
     mask = torch.full(xyz.shape[:-1], False).bool()
     xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
     xyz[:, protein_L:, 1, :] = xyz_atomize_all
@@ -4332,14 +4364,14 @@ def loader_atomize_complex(
     # apply transform
     xyzA = torch.einsum('ij,raj->rai', xformA[:3,:3], pdbA['xyz']) + xformA[:3,3][None,None,:]
     xyzB = torch.einsum('ij,raj->rai', xformB[:3,:3], pdbB['xyz']) + xformB[:3,3][None,None,:]
-    xyz = torch.full((sum(L_s), NTOTAL, 3), np.nan).float()
+    xyz = torch.full((sum(L_s), ChemData().NTOTAL, 3), np.nan).float()
     xyz[:,:14] = torch.cat((xyzA, xyzB), dim=0)
-    mask = torch.full((sum(L_s), NTOTAL), False)
+    mask = torch.full((sum(L_s), ChemData().NTOTAL), False)
     mask[:,:14] = torch.cat((pdbA['mask'], pdbB['mask']), dim=0)
     xyz = torch.nan_to_num(xyz)
 
     idx = torch.arange(sum(L_s))
-    idx[L_s[0]:] += CHAIN_GAP
+    idx[L_s[0]:] += ChemData().CHAIN_GAP
 
     same_chain = torch.zeros((sum(L_s), sum(L_s))).long()
     same_chain[:L_s[0], :L_s[0]] = 1
@@ -4382,7 +4414,7 @@ def loader_atomize_complex(
     can_atomize_mask[idx_missing_N-1] = 0 # can't atomize residues before a missing N
     can_atomize_mask[idx_missing_C+1] = 0 # can't atomize residues after a missing C
 
-    num_atoms_per_res = allatom_mask[msa_prot[0],:14].sum(dim=-1) # how many atoms should each residue have?
+    num_atoms_per_res = ChemData().allatom_mask[msa_prot[0],:14].sum(dim=-1) # how many atoms should each residue have?
     num_atoms_exist = mask_prot.sum(dim=-1) # how many atoms have coords in each residue?
     can_atomize_mask[(num_atoms_per_res != num_atoms_exist)] = 0
     can_atomize_idx = torch.where(can_atomize_mask)[0]
@@ -4428,7 +4460,7 @@ def loader_atomize_complex(
 
     # Generate ground truth structure: account for ligand symmetry
     N_symmetry, sm_L, _ = xyz_atomize_all.shape
-    xyz = torch.full((N_symmetry, protein_L+sm_L, NTOTAL, 3), np.nan).float()
+    xyz = torch.full((N_symmetry, protein_L+sm_L, ChemData().NTOTAL, 3), np.nan).float()
     mask = torch.full(xyz.shape[:-1], False).bool()
     xyz[:, :protein_L, :nprotatoms, :] = xyz_prot.expand(N_symmetry, protein_L, nprotatoms, 3)
     xyz[:, protein_L:, 1, :] = xyz_atomize_all
@@ -4519,7 +4551,7 @@ def loader_sm(item, params, pick_top=True):
         return [torch.tensor([-1])]*20 # flag for bad example
 
     # Generate ground truth structure: account for ligand symmetry
-    xyz = torch.full((N_symmetry, sm_L, NTOTAL, 3), np.nan).float()
+    xyz = torch.full((N_symmetry, sm_L, ChemData().NTOTAL, 3), np.nan).float()
     xyz[:, :, 1, :] = xyz_sm
 
     mask = torch.full(xyz.shape[:-1], False).bool()
@@ -4932,6 +4964,7 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
     # uniformly sample from unique PDB chains
     chid = np.random.choice(tmp_df.CHAINID.drop_duplicates().values)
     tmp_df = tmp_df[tmp_df.CHAINID==chid]
+
     if dedup_ligand and "LIGAND" in tmp_df:
         # uniform sample from unique ligands
         lignames = list(set([x[0][2] for x in tmp_df['LIGAND']]))
@@ -5234,7 +5267,8 @@ class DistilledDataset(data.Dataset):
     def __getitem__(self, index):
         p_unclamp = np.random.rand()
 
-        try:
+        #try:
+        if True:
             # order of datasets here must match key order in self.dataset_dict
             offset = 0
             if index >= offset and index < offset + len(self.index_dict['pdb']):
@@ -5431,10 +5465,12 @@ class DistilledDataset(data.Dataset):
                     unclamp=(p_unclamp > self.unclamp_cut))
             offset += len(self.index_dict['atomize_complex'])
 
-        except Exception as e:
-            print('error loading',item, '\n',repr(e), task)
-            raise e
+        #except Exception as e:
+        #    print('error loading',item, '\n',repr(e), task)
+        #    raise e
         return out
+
+
 
 class DistributedWeightedSampler(data.Sampler):
     def __init__(

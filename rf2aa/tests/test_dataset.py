@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import numpy as np
 import torch
+from functools import partial
 from hydra import initialize, compose
 
 from rf2aa.data.compose_dataset import set_data_loader_params, compose_single_item_dataset
@@ -11,14 +12,24 @@ from rf2aa.data.data_loader import loader_pdb, loader_complex, loader_na_complex
 from rf2aa.tensor_util import assert_shape, assert_equal
 from rf2aa.tests.test_conditions import setup_data, dataset_pickle_path
 from rf2aa.trainer_new import seed_all
-from rf2aa.util import NTOTAL, is_atom
+from rf2aa.chemical import ChemicalData as ChemData
+from rf2aa.util import is_atom
 
 data = setup_data()
 
+# helper function to load chemical database with specified config
+def initialize_chemdata(config, worker_id=None):
+    ChemData(config)
+
 @pytest.mark.xfail
-@pytest.mark.parametrize("name,item,loader_params,loader,loader_kwargs", data.values())
-def test_correct_shapes(name, item, loader_params, loader, loader_kwargs):
-    data_loader = compose_single_item_dataset(item, loader_params, loader, loader_kwargs)
+@pytest.mark.parametrize("name,item,loader_params,chem_params,loader,loader_kwargs", data.values())
+def test_correct_shapes(name, item, loader_params, chem_params,loader, loader_kwargs):
+    # initialize chemical database.  Force a reload
+    ChemData.reset()
+    init = partial(initialize_chemdata,chem_params)
+    init()
+
+    data_loader = compose_single_item_dataset(init, item, loader_params, loader, loader_kwargs)
     for inputs in data_loader:
         (
         seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
@@ -34,15 +45,15 @@ def test_correct_shapes(name, item, loader_params, loader, loader_kwargs):
         assert_shape(msa_full, (B, recycles, N_full, L, 83)) #HACK:: hardcoded for current features
         assert_shape(mask_msa, (B, recycles, N, L)) 
         N_symm = true_crds.shape[1]
-        assert_shape(true_crds, (B, N_symm, L, NTOTAL, 3))
-        assert_shape(mask_crds, (B, N_symm, L, NTOTAL))
+        assert_shape(true_crds, (B, N_symm, L, ChemData().NTOTAL, 3))
+        assert_shape(mask_crds, (B, N_symm, L, ChemData().NTOTAL))
         assert_shape(idx_pdb, (B, L))
         N_templ = xyz_t.shape[1]
-        assert_shape(xyz_t, (B, N_templ, L, NTOTAL, 3))
+        assert_shape(xyz_t, (B, N_templ, L, ChemData().NTOTAL, 3))
         assert_shape(t1d, (B, N_templ, L, 80)) # hack hard coded dimension
-        assert_shape(mask_t, (B, N_templ, L, NTOTAL))
-        assert_shape(xyz_prev, (B, L, NTOTAL, 3))
-        assert_shape(mask_prev, (B, L, NTOTAL))
+        assert_shape(mask_t, (B, N_templ, L, ChemData().NTOTAL))
+        assert_shape(xyz_prev, (B, L, ChemData().NTOTAL, 3))
+        assert_shape(mask_prev, (B, L, ChemData().NTOTAL))
         assert_shape(same_chain, (B, L, L))
         assert type(unclamp.item()) == bool
         assert type(negative.item()) == bool
@@ -55,10 +66,15 @@ def test_correct_shapes(name, item, loader_params, loader, loader_kwargs):
         assert symmgp[0] == "C1", f"{symmgp}"
 
 @pytest.mark.xfail
-@pytest.mark.parametrize("name,item,loader_params,loader,loader_kwargs", data.values())
-def test_regression(name, item, loader_params, loader, loader_kwargs):
+@pytest.mark.parametrize("name,item,loader_params,chem_params,loader,loader_kwargs", data.values())
+def test_regression(name, item, loader_params, chem_params, loader, loader_kwargs):
+    # initialize chemical database.  Force a reload
+    ChemData.reset()
+    init = partial(initialize_chemdata,chem_params)
+    init()
+
     seed_all()
-    data_loader = compose_single_item_dataset(item, loader_params, loader, loader_kwargs)
+    data_loader = compose_single_item_dataset(init, item, loader_params, loader, loader_kwargs)
     regression_pickle = dataset_pickle_path(name)
     for inputs in data_loader:
         names = ["seq", "msa", "msa_masked", "msa_full", "mask_msa", "true_crds",\

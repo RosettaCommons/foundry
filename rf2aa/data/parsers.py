@@ -10,12 +10,12 @@ import gzip
 import rf2aa
 from rf2aa.ffindex import *
 import torch
-from rf2aa.chemical import NAATOKENS, aa2num, aa2long, atomnum2atomtype, NTOTAL, CHAIN_GAP, to1letter, INIT_CRDS
 from openbabel import openbabel
+from rf2aa.chemical import ChemicalData as ChemData
 
 def get_dislf(seq, xyz, mask):
     L = seq.shape[0]
-    resolved_cys_mask = ((seq==aa2num['CYS']) * mask[:,5]).nonzero().squeeze(-1)  # cys[5]=='sg'
+    resolved_cys_mask = ((seq==ChemData().aa2num['CYS']) * mask[:,5]).nonzero().squeeze(-1)  # cys[5]=='sg'
     sgs = xyz[resolved_cys_mask,5]
     ii,jj = torch.triu_indices(sgs.shape[0],sgs.shape[0],1)
     d_sg_sg = torch.linalg.norm(sgs[ii,:]-sgs[jj,:], dim=-1)
@@ -45,7 +45,7 @@ def read_template_pdb(L, pdb_fn, target_chain=None):
                     offset = len(seq_full)
             prev_chain = line[21]
             aa = line[17:20]
-            seq_full.append(aa2num[aa] if aa in aa2num.keys() else 20)
+            seq_full.append(ChemData().aa2num[aa] if aa in ChemData().aa2num.keys() else 20)
 
     seq_full = torch.tensor(seq_full).long()
 
@@ -58,10 +58,10 @@ def read_template_pdb(L, pdb_fn, target_chain=None):
             if line[:4] != "ATOM":
                 continue
             resNo, atom, aa = int(line[22:26]), line[12:16], line[17:20]
-            aa_idx = aa2num[aa] if aa in aa2num.keys() else 20
+            aa_idx = ChemData().aa2num[aa] if aa in ChemData().aa2num.keys() else 20
             #
             idx = resNo - 1
-            for i_atm, tgtatm in enumerate(aa2long[aa_idx]):
+            for i_atm, tgtatm in enumerate(ChemData().aa2long[aa_idx]):
                 if tgtatm == atom:
                     xyz[idx, i_atm, :] = torch.tensor([float(line[30:38]), float(line[38:46]), float(line[46:54])])
                     break
@@ -96,7 +96,7 @@ def read_multichain_pdb(pdb_fn, tmpl_chain=None, tmpl_conf=0.1):
                     offset = len(seq_full)
             prev_chain = line[21]
             aa = line[17:20]
-            seq_full.append(aa2num[aa] if aa in aa2num.keys() else 20)
+            seq_full.append(ChemData().aa2num[aa] if aa in ChemData().aa2num.keys() else 20)
     L_s.append(len(seq_full) - offset)
 
     seq_full = torch.tensor(seq_full).long()
@@ -106,11 +106,11 @@ def read_multichain_pdb(pdb_fn, tmpl_chain=None, tmpl_conf=0.1):
     msa[2,L_s[0]:] = 20
     ins = torch.zeros_like(msa)
 
-    xyz = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*5.0
-    xyz_t = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*5.0
+    xyz = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*5.0
+    xyz_t = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,L,1,1) + torch.rand(1,L,1,3)*5.0
 
-    mask = torch.full((1, L, NTOTAL), False)
-    mask_t = torch.full((1, L, NTOTAL), False)
+    mask = torch.full((1, L, ChemData().NTOTAL), False)
+    mask_t = torch.full((1, L, ChemData().NTOTAL), False)
     seq = torch.full((1, L,), 20).long()
     conf = torch.zeros(1, L,1).float()
 
@@ -121,11 +121,11 @@ def read_multichain_pdb(pdb_fn, tmpl_chain=None, tmpl_conf=0.1):
                 outbatch = 0
             
             resNo, atom, aa = int(line[22:26]), line[12:16], line[17:20]
-            aa_idx = aa2num[aa] if aa in aa2num.keys() else 20
+            aa_idx = ChemData().aa2num[aa] if aa in ChemData().aa2num.keys() else 20
 
             idx = resNo - 1
 
-            for i_atm, tgtatm in enumerate(aa2long[aa_idx]):
+            for i_atm, tgtatm in enumerate(ChemData().aa2long[aa_idx]):
                 if tgtatm == atom:
                     xyz_i = torch.tensor([float(line[30:38]), float(line[38:46]), float(line[46:54])])
                     xyz[0, idx, i_atm, :] = xyz_i
@@ -144,7 +144,7 @@ def read_multichain_pdb(pdb_fn, tmpl_chain=None, tmpl_conf=0.1):
     # assign confidence 'CONF' to all residues with backbone in template
     conf = torch.where(mask_t[...,:3].all(dim=-1)[...,None], torch.full((1,L,1),tmpl_conf), torch.zeros(L,1)).float()
 
-    seq_1hot = torch.nn.functional.one_hot(seq, num_classes=NAATOKENS-1).float()
+    seq_1hot = torch.nn.functional.one_hot(seq, num_classes=ChemData().NAATOKENS-1).float()
     t1d = torch.cat((seq_1hot, conf), -1)
 
     return msa, ins, L_s, xyz_t, mask_t, t1d, dslf
@@ -492,36 +492,19 @@ def parse_pdb_lines_w_seq(lines, lddt_mask=False):
     pdb_idx_s = [(r[0], int(r[1])) for r in res]
     idx_s = [int(r[1]) for r in res]
     plddt = [float(r[3]) for r in res]
-    seq = [aa2num[r[2]] if r[2] in aa2num.keys() else 20 for r in res]
+    seq = [ChemData().aa2num[r[2]] if r[2] in ChemData().aa2num.keys() else 20 for r in res]
 
     # 4 BB + up to 10 SC atoms
-    xyz = np.full((len(idx_s), NTOTAL, 3), np.nan, dtype=np.float32)
+    xyz = np.full((len(idx_s), ChemData().NTOTAL, 3), np.nan, dtype=np.float32)
     for l in lines:
         if l[:4] != "ATOM":
             continue
         chain, resNo, atom, aa = l[21:22].strip(), int(l[22:26]), l[12:16], l[17:20]
         idx = pdb_idx_s.index((chain,resNo))
-        for i_atm, tgtatm in enumerate(aa2long[aa2num[aa]]):
+        for i_atm, tgtatm in enumerate(ChemData().aa2long[ChemData().aa2num[aa]]):
             if tgtatm == atom:
                 xyz[idx,i_atm,:] = [float(l[30:38]), float(l[38:46]), float(l[46:54])]
                 break
-
-    #if parse_hetatom:
-    #    # parse ligand atoms
-    #    offset = max(idx_s)
-    #    res_lig = [l[12:16].strip() for l in lines if l[:6]=="HETATM"]
-    #    res_lig = [(i+offset+CHAIN_GAP,l) for i,l in enumerate(res_lig)]
-    #    idx_s_lig = [int(r[0]) for r in res_lig]
-    #    seq_lig = [aa2num[r[1]] if r[1] in aa2num.keys() else 20 for r in res_lig]
-
-    #    xyz_s_lig = [[float(l[30:38]), float(l[38:46]), float(l[46:54])] for l in lines if l[:6]=='HETATM']
-
-    #    if len(xyz_s_lig)>0:
-    #        xyz_lig = np.full((len(idx_s_lig), NTOTAL, 3), np.nan, dtype=np.float32)
-    #        xyz_lig[:,1,:] = np.array(xyz_s_lig)
-    #        xyz = np.concatenate([xyz, xyz_lig],axis=0)
-    #        idx_s = idx_s + idx_s_lig
-    #        seq = seq + seq_lig
 
     # save atom mask
     mask = np.logical_not(np.isnan(xyz[...,0]))
@@ -544,13 +527,13 @@ def parse_pdb_lines(lines):
     idx_s = [int(r[1]) for r in res]
 
     # 4 BB + up to 10 SC atoms
-    xyz = np.full((len(idx_s), NTOTAL, 3), np.nan, dtype=np.float32)
+    xyz = np.full((len(idx_s), ChemData().NTOTAL, 3), np.nan, dtype=np.float32)
     for l in lines:
         if l[:4] != "ATOM":
             continue
         chain, resNo, atom, aa = l[21:22].strip(), int(l[22:26]), l[12:16], l[17:20]
         idx = pdb_idx_s.index((chain,resNo))
-        for i_atm, tgtatm in enumerate(aa2long[aa2num[aa]]):
+        for i_atm, tgtatm in enumerate(ChemData().aa2long[ChemData().aa2num[aa]]):
             if tgtatm == atom:
                 xyz[idx,i_atm,:] = [float(l[30:38]), float(l[38:46]), float(l[46:54])]
                 break
@@ -711,15 +694,15 @@ def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
 
     npick = min(n_templ, len(ids))
     if npick < 1: # no templates
-        xyz = torch.full((1,qlen,NTOTAL,3),np.nan).float()
+        xyz = torch.full((1,qlen,ChemData().NTOTAL,3),np.nan).float()
         t1d = torch.nn.functional.one_hot(torch.full((1, qlen), 20).long(), num_classes=21).float() # all gaps
         t1d = torch.cat((t1d, torch.zeros((1,qlen,1)).float()), -1)
         return xyz, t1d
 
     sample = torch.arange(npick)
     #
-    xyz = torch.full((npick, qlen, NTOTAL, 3), np.nan).float()
-    mask = torch.full((npick, qlen, NTOTAL), False)
+    xyz = torch.full((npick, qlen, ChemData().NTOTAL, 3), np.nan).float()
+    mask = torch.full((npick, qlen, ChemData().NTOTAL), False)
     f1d = torch.full((npick, qlen), 20).long()
     f1d_val = torch.zeros((npick, qlen, 1)).float()
     #
@@ -732,7 +715,7 @@ def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
         f1d_val[i,pos] = t1d[sel, 2].unsqueeze(-1)
         xyz[i] = util.center_and_realign_missing(xyz[i], mask[i], seq=f1d[i])
 
-    f1d = torch.nn.functional.one_hot(f1d, num_classes=NAATOKENS-1).float()
+    f1d = torch.nn.functional.one_hot(f1d, num_classes=ChemData().NAATOKENS-1).float()
     f1d = torch.cat((f1d, f1d_val), dim=-1)
 
     return xyz, mask, f1d
@@ -809,9 +792,9 @@ def parse_mol(filename, filetype="mol2", string=False, remove_H=True, find_autom
                 obmol.DeleteAtom(obmol.GetAtom(i))
             else:
                 i += 1
-    atomtypes = [atomnum2atomtype.get(obmol.GetAtom(i).GetAtomicNum(), 'ATM') 
+    atomtypes = [ChemData().atomnum2atomtype.get(obmol.GetAtom(i).GetAtomicNum(), 'ATM') 
                  for i in range(1, obmol.NumAtoms()+1)]
-    msa = torch.tensor([aa2num[x] for x in atomtypes])
+    msa = torch.tensor([ChemData().aa2num[x] for x in atomtypes])
     ins = torch.zeros_like(msa)
 
     atom_coords = torch.tensor([[obmol.GetAtom(i).x(),obmol.GetAtom(i).y(), obmol.GetAtom(i).z()] 

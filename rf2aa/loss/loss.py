@@ -8,16 +8,11 @@ import networkx as nx
 from rf2aa.util import (
     is_protein,
     rigid_from_3_points,
-    cb_lengths_CN,
-    cb_angles_CACN,
-    cb_angles_CNCA,
-    cb_torsions_CACNH,
-    cb_torsions_CANCO,
     is_nucleic,
     find_all_paths_of_length_n,
     find_all_rigid_groups
 )
-from rf2aa.chemical import NFRAMES, NTOTAL, NTOTALTORS
+from rf2aa.chemical import ChemicalData as ChemData
 
 from rf2aa.kinematics import get_dih, get_ang
 from rf2aa.scoring import HbHybType
@@ -113,8 +108,8 @@ def resolve_symmetry(xs, Rsnat_all, xsnat, Rsnat_all_alt, xsnat_alt, atm_mask):
     distance_scores_true_to_pred = torch.sum(distances_true_to_pred, dim=(1, 2))
     distance_scores_alt_to_pred = torch.sum(distances_alt_to_pred, dim=(1, 2))
     is_better_alt = distance_scores_alt_to_pred < distance_scores_true_to_pred
-    is_better_alt_crds = is_better_alt[:, None, None].repeat(1, NTOTAL, 3)
-    is_better_alt_tors = is_better_alt[:, None, None, None].repeat(1, NTOTALTORS, 4, 4)
+    is_better_alt_crds = is_better_alt[:, None, None].repeat(1, ChemData().NTOTAL, 3)
+    is_better_alt_tors = is_better_alt[:, None, None, None].repeat(1, ChemData().NTOTALTORS, 4, 4)
 
     symmetry_resolved_true_crds = torch.where(is_better_alt_crds, xsnat_alt, xsnat)
     symmetry_resolved_true_tors = torch.where(is_better_alt_tors, Rsnat_all_alt, Rsnat_all)
@@ -636,8 +631,8 @@ def compute_general_FAPE(X, Y, atom_mask, frames, frame_mask, frame_atom_mask=No
     N, L, natoms, _ = X.shape
 
     # flatten middle dims so can gather across residues
-    X_prime = X.reshape(N, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
-    Y_prime = Y.reshape(1, L*natoms, -1, 3).repeat(1,1,NFRAMES,1)
+    X_prime = X.reshape(N, L*natoms, -1, 3).repeat(1,1,ChemData().NFRAMES,1)
+    Y_prime = Y.reshape(1, L*natoms, -1, 3).repeat(1,1,ChemData().NFRAMES,1)
 
     frames_reindex, frame_mask = mask_unresolved_frames(frames, frame_mask, frame_atom_mask)
     
@@ -714,7 +709,7 @@ def mask_unresolved_frames(frames, frame_mask, atom_mask):
     frame_mask_update = frame_mask.clone()
     frame_mask_update *= ~masked_atom_frames 
     frame_mask_update *= torch.all(
-        torch.gather(atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*NFRAMES*3)).reshape(1,L,-1,3),
+        torch.gather(atom_mask.reshape(1, L*natoms),1,frames_reindex.reshape(1,L*ChemData().NFRAMES*3)).reshape(1,L,-1,3),
         axis=-1)
 
     return frames_reindex, frame_mask_update
@@ -871,7 +866,9 @@ def calc_BB_bond_geom(
     blen_loss = CN_loss.sum() / (n_viol + eps)
 
     # bond length: P-O
-    blen_OP_pred  = length(pred[:,:-1,8], pred[:,1:,1]).reshape(B,L-1) # (B, L-1)
+    iP, iO3p, iOP1, iOP2, iC3p = 4, 10, 3, 5, 9  # DNA BB indices! Should live in chemical?
+
+    blen_OP_pred  = length(pred[:,:-1,iO3p], pred[:,1:,iP]).reshape(B,L-1) # (B, L-1)
     OP_loss = bonded*is_NA*torch.clamp( torch.square(blen_OP_pred - ideal_OP) - sig_len**2, min=0.0 )
     n_viol = (OP_loss > 0.0).sum()
     blen_loss += OP_loss.sum() / (n_viol + eps)
@@ -886,9 +883,9 @@ def calc_BB_bond_geom(
     bang_loss = bang_loss_prot.sum() / (n_viol+eps)
 
     # bond angle: O1PO, O2PO, OPC
-    bang_O1PO_pred = cosangle(pred[:,:-1,8], pred[:,1:,1], pred[:,1:,0]).reshape(B,L-1)
-    bang_O2PO_pred = cosangle(pred[:,:-1,8], pred[:,1:,1], pred[:,1:,2]).reshape(B,L-1)
-    bang_OPC_pred  = cosangle(pred[:,:-1,7], pred[:,:-1,8], pred[:,1:,1]).reshape(B,L-1)
+    bang_O1PO_pred = cosangle(pred[:,:-1,iO3p], pred[:,1:,iP], pred[:,1:,iOP1]).reshape(B,L-1)
+    bang_O2PO_pred = cosangle(pred[:,:-1,iO3p], pred[:,1:,iP], pred[:,1:,iOP2]).reshape(B,L-1)
+    bang_OPC_pred  = cosangle(pred[:,:-1,iC3p], pred[:,:-1,iO3p], pred[:,1:,iP]).reshape(B,L-1)
     O1PO_loss = bonded*is_NA*torch.clamp( torch.square(bang_O1PO_pred - ideal_OPO) - sig_ang**2,  min=0.0 )
     O2PO_loss = bonded*is_NA*torch.clamp( torch.square(bang_O2PO_pred - ideal_OPO) - sig_ang**2,  min=0.0 )
     OPC_loss = bonded*is_NA*torch.clamp( torch.square(bang_OPC_pred - ideal_OPC) - sig_ang**2,  min=0.0 )
@@ -1061,16 +1058,16 @@ def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-6):
     # bond length: C-N
     bonded = (idx[:,1:] - idx[:,:-1])==1
     blen_CN_pred  = length(pred[:,:-1,2], pred[:,1:,0]).reshape(N,L-1) # (B, L-1)
-    CN_loss = cb_lengths_CN[1] * boundfunc(blen_CN_pred - cb_lengths_CN[0])
+    CN_loss = ChemData().cb_lengths_CN[1] * boundfunc(blen_CN_pred - ChemData().cb_lengths_CN[0])
     cb_loss += (bonded*CN_loss).sum(dim=1) / (bonded.sum())
 
     # bond angle: CA-C-N, C-N-CA
     bang_CACN_pred = get_ang(pred[:,:-1,2], pred[:,1:,0], pred[:,1:,1]).reshape(N,L-1)
-    CACN_loss = cb_angles_CACN[1] * boundfunc(bang_CACN_pred - cb_angles_CACN[0])
+    CACN_loss = ChemData().cb_angles_CACN[1] * boundfunc(bang_CACN_pred - ChemData().cb_angles_CACN[0])
     cb_loss += (bonded*CACN_loss).sum(dim=1) / (bonded.sum())
 
     bang_CNCA_pred = get_ang(pred[:,:-1,2], pred[:,1:,0], pred[:,1:,1]).reshape(N,L-1)
-    CNCA_loss = cb_angles_CNCA[1] * boundfunc(bang_CNCA_pred - cb_angles_CNCA[0])
+    CNCA_loss = ChemData().cb_angles_CNCA[1] * boundfunc(bang_CNCA_pred - ChemData().cb_angles_CNCA[0])
     cb_loss += (bonded*CNCA_loss).sum(dim=1) / (bonded.sum())
 
     # improper torsions CA-C-N-H (CD-C-N-CA), CA-N-C-O
@@ -1081,18 +1078,18 @@ def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-6):
     btor_CACNH_delta = (
         get_dih(
             pred[:,:-1,1], pred[:,:-1,2], pred[:,1:,0], atom4[:,1:,0]
-        ) - cb_torsions_CACNH[0] + np.pi/2
+        ) - ChemData().cb_torsions_CACNH[0] + np.pi/2
     ) % np.pi - np.pi/2
-    CACNH_loss = cb_torsions_CACNH[1] * boundfunc( btor_CACNH_delta )
+    CACNH_loss = ChemData().cb_torsions_CACNH[1] * boundfunc( btor_CACNH_delta )
     cb_loss += (bonded*CACNH_loss).sum(dim=1) / (bonded.sum())
 
     # planarity around C
     btor_CANCO_delta = (
         get_dih(
             pred[:,:-1,1], pred[:,1:,0], pred[:,:-1,2], pred[:,:-1,3]
-        ) - cb_torsions_CANCO[0] + np.pi/2
+        ) - ChemData().cb_torsions_CANCO[0] + np.pi/2
     ) % np.pi - np.pi/2
-    CANCO_loss = cb_torsions_CANCO[1] * boundfunc( btor_CANCO_delta )
+    CANCO_loss = ChemData().cb_torsions_CANCO[1] * boundfunc( btor_CANCO_delta )
     cb_loss += (bonded*CANCO_loss).sum(dim=1) / (bonded.sum())
 
     return cb_loss

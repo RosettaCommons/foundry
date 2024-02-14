@@ -129,3 +129,6 @@ log_params:
   log_every_n_examples: 1
 
 eval_params: null
+
+chem_params:
+  use_phospate_frames_for_NA: True

@@ -9,6 +9,7 @@ from rf2aa.data.compose_dataset import set_data_loader_params
 from rf2aa.data.data_loader import loader_pdb, loader_complex, loader_na_complex, \
                                     loader_dna_rna, loader_sm_compl_assembly_single, loader_sm_compl_assembly
 from rf2aa.trainer_new import trainer_factory, seed_all
+from rf2aa.chemical import ChemicalData as ChemData
 
 # SUPPORTED PORTIONS OF CODE
 configs = ["rf2aa", "legacy_train"]
@@ -40,6 +41,7 @@ def setup_data(config=None):
                                                      "loader_params.maxtplt=2"
                                                      ])
  
+    chem_params = cfg.chem_params
     loader_params = set_data_loader_params(loader_params=cfg.loader_params) 
     datasets = ["pdb", "compl", "na_compl", "rna", \
                 "sm_compl", "sm_compl_covale", "sm_compl_asmb"]
@@ -74,10 +76,11 @@ def setup_data(config=None):
         {}
     ]   
     loader_params_list  = [loader_params] * len(datasets)
-    return dict(zip(datasets, zip(datasets, items, loader_params_list, loaders, loader_kwargs)))
+    chem_params_list  = [chem_params] * len(datasets)
+    return dict(zip(datasets, zip(datasets, items, loader_params_list, chem_params_list, loaders, loader_kwargs)))
 
 def setup_models(device="cpu"):
-    models = []
+    models, chem_cfgs = [], []
     for config in configs:
         with initialize(version_base=None, config_path="../config/train"):
             cfg = compose(config_name=config, overrides=["loader_params.p_msa_mask=0.0", 
@@ -85,13 +88,19 @@ def setup_models(device="cpu"):
                                                         "loader_params.mintplt=0",
                                                         "loader_params.maxtplt=2"
                                                         ])
-            
+
+            # initializing the model needs the chemical DB initialized.  Force a reload
+            ChemData.reset()
+            ChemData(cfg.chem_params)
+
             trainer = trainer_factory[cfg.experiment.trainer](cfg)
             seed_all()
             trainer.construct_model(device=device)
             models.append(trainer.model)
+            chem_cfgs.append(cfg.chem_params)
             trainer = None 
-    return dict(zip(configs, (zip(configs, models))))
+
+    return dict(zip(configs, (zip(configs, models, chem_cfgs))))
 
 def setup_array(datasets, models, device="cpu"):
     test_data = setup_data()

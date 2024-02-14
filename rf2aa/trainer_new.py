@@ -4,6 +4,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
 import numpy as np
 
+from functools import partial
+
 import hydra
 import os
 import time
@@ -19,11 +21,9 @@ from rf2aa.training.recycling import recycle_step_legacy, recycle_step_packed, r
 from rf2aa.model.network import RosettaFold
 from rf2aa.model.RoseTTAFoldModel import LegacyRoseTTAFoldModule
 from rf2aa.training.scheduler import get_stepwise_decay_schedule_with_warmup
-from rf2aa.util import frame_indices, long2alt, allatom_mask, num_bonds, \
-    atom_type_index, ljlk_parameters, lj_correction_parameters, hbtypes, \
-    hbbaseatoms, hbpolys, cb_length_t, cb_angle_t, cb_torsion_t
 import rf2aa.util as util
 from rf2aa.util_module import XYZConverter
+from rf2aa.chemical import ChemicalData as ChemData
 
 #TODO: control environment variables from config
 # limit thread counts
@@ -43,9 +43,14 @@ def seed_all(seed=0):
 torch.set_num_threads(4)
 #torch.autograd.set_detect_anomaly(True)
 
+# helper function to load chemical database with specified config
+def initialize_chemdata(config, worker_id=None):
+    ChemData(config)
+
 class Trainer:
     def __init__(self, config) -> None:
         self.config = config
+
         assert self.config.ddp_params.batch_size == 1, "batch size is assumed to be 1"
         if self.config.experiment.output_dir is not None:
             self.output_dir = self.config.experiment.output_dir 
@@ -104,28 +109,30 @@ class Trainer:
             raise ValueError("Should not load scaler when resume_train is True") 
         self.scaler.load_state_dict(self.checkpoint['scaler_state_dict'])
 
-    def construct_dataset(self, rank, world_size):
-        return compose_dataset(self.config.dataset_params, self.config.loader_params, rank, world_size)
+    def construct_dataset(self, init_db, rank, world_size):
+        return compose_dataset(
+            init_db, self.config.dataset_params, self.config.loader_params, rank, world_size
+        )
     
     def construct_loss_function(self):
         raise NotImplementedError() 
 
     def move_constants_to_device(self, gpu):
-        self.fi_dev = frame_indices.to(gpu)
+        self.fi_dev = ChemData().frame_indices.to(gpu)
         self.xyz_converter = XYZConverter().to(gpu)
 
-        self.l2a = long2alt.to(gpu)
-        self.aamask = allatom_mask.to(gpu)
-        self.num_bonds = num_bonds.to(gpu)
-        self.atom_type_index = atom_type_index.to(gpu)
-        self.ljlk_parameters = ljlk_parameters.to(gpu)
-        self.lj_correction_parameters = lj_correction_parameters.to(gpu)
-        self.hbtypes = hbtypes.to(gpu)
-        self.hbbaseatoms = hbbaseatoms.to(gpu)
-        self.hbpolys = hbpolys.to(gpu)
-        self.cb_len = cb_length_t.to(gpu)
-        self.cb_ang = cb_angle_t.to(gpu)
-        self.cb_tor = cb_torsion_t.to(gpu)
+        self.l2a = ChemData().long2alt.to(gpu)
+        self.aamask = ChemData().allatom_mask.to(gpu)
+        self.num_bonds = ChemData().num_bonds.to(gpu)
+        self.atom_type_index = ChemData().atom_type_index.to(gpu)
+        self.ljlk_parameters = ChemData().ljlk_parameters.to(gpu)
+        self.lj_correction_parameters = ChemData().lj_correction_parameters.to(gpu)
+        self.hbtypes = ChemData().hbtypes.to(gpu)
+        self.hbbaseatoms = ChemData().hbbaseatoms.to(gpu)
+        self.hbpolys = ChemData().hbpolys.to(gpu)
+        self.cb_len = ChemData().cb_length_t.to(gpu)
+        self.cb_ang = ChemData().cb_angle_t.to(gpu)
+        self.cb_tor = ChemData().cb_torsion_t.to(gpu)
 
 
     def checkpoint_model(self, epoch, metadata={}):
@@ -180,7 +187,15 @@ class Trainer:
     def train_model(self, rank, world_size):
         """ runs model training on each gpu """ 
         gpu = self.init_process_group(rank, world_size) 
-        train_loader, train_sampler, valid_loaders, valid_samplers = self.construct_dataset(rank, world_size)
+
+        #fd initialize chemical data based on input arguments
+        #   this needs to be initialized first
+        init = partial(initialize_chemdata,self.config.chem_params)
+        init()
+
+        train_loader, train_sampler, valid_loaders, valid_samplers = self.construct_dataset(
+            init, rank, world_size
+        )
 
         self.train_loader = train_loader
         self.valid_loaders = valid_loaders
@@ -327,14 +342,14 @@ class LegacyTrainer(Trainer):
     def construct_model(self, device="cpu"):
         self.model = LegacyRoseTTAFoldModule(
             **self.config.legacy_model_param,
-            aamask = util.allatom_mask.to(device),
-            atom_type_index = util.atom_type_index.to(device),
-            ljlk_parameters = util.ljlk_parameters.to(device),
-            lj_correction_parameters = util.lj_correction_parameters.to(device),
-            num_bonds = util.num_bonds.to(device),
-            cb_len = util.cb_length_t.to(device),
-            cb_ang = util.cb_angle_t.to(device),
-            cb_tor = util.cb_torsion_t.to(device),
+            aamask = ChemData().allatom_mask.to(device),
+            atom_type_index = ChemData().atom_type_index.to(device),
+            ljlk_parameters = ChemData().ljlk_parameters.to(device),
+            lj_correction_parameters = ChemData().lj_correction_parameters.to(device),
+            num_bonds = ChemData().num_bonds.to(device),
+            cb_len = ChemData().cb_length_t.to(device),
+            cb_ang = ChemData().cb_angle_t.to(device),
+            cb_tor = ChemData().cb_torsion_t.to(device),
 
         ).to(device)
         if self.config.training_params.EMA is not None:

@@ -4,8 +4,8 @@ import torch.nn as nn
 from rf2aa.debug import debug_nans
 from rf2aa.model.layers.SE3_network import FullyConnectedSE3, get_backbone_offset_vectors, get_chiral_vectors
 from rf2aa.model.Track_module import SCPred
-from rf2aa.util import NTOTAL, NTOTALDOFS
 from rf2aa.util_module import rbf, make_topk_graph, init_lecun_normal
+from rf2aa.chemical import ChemicalData as ChemData
 
 class LocalRefinementSE3(FullyConnectedSE3):
 
@@ -76,7 +76,7 @@ class RecurrentLocalRefinement(nn.Module):
     def forward(self, latent_feats):
         B, N, L = latent_feats["msa"].shape[:3]
         xyzs = torch.full((self.num_iterations, L, 3, 3 ), torch.nan, device=latent_feats["msa"].device)
-        alphas = torch.full((self.num_iterations, L, NTOTALDOFS, 2), torch.nan, device=latent_feats["msa"].device) 
+        alphas = torch.full((self.num_iterations, L, ChemData().NTOTALDOFS, 2), torch.nan, device=latent_feats["msa"].device) 
 
         msa, pair, state, xyz, is_atom, atom_frames, chirals = self._unpack_inputs(latent_feats)
 
@@ -111,7 +111,7 @@ class RecurrentLocalRefinement_w_Adaptor(nn.Module):
     def forward(self, latent_feats):
         B, N, L = latent_feats["msa"].shape[:3]
         xyzs = torch.full((self.num_iterations, L, 3, 3 ), torch.nan, device=latent_feats["msa"].device)
-        alphas = torch.full((self.num_iterations, L, NTOTALDOFS, 2), torch.nan, device=latent_feats["msa"].device) 
+        alphas = torch.full((self.num_iterations, L, ChemData().NTOTALDOFS, 2), torch.nan, device=latent_feats["msa"].device) 
 
         msa, pair, state, xyz, is_atom, atom_frames, chirals = self._unpack_inputs(latent_feats)
 

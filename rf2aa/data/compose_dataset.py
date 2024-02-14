@@ -112,7 +112,7 @@ def set_data_loader_params(loader_params):
             default_dataloader_params[param] = value
     return default_dataloader_params
 
-def compose_dataset(dataset_params, loader_params, rank, world_size):
+def compose_dataset(loader_fn, dataset_params, loader_params, rank, world_size):
     # define dataset & data loader
     # this function overrides the default dataloader params with those in the config
     #TODO: cache this in checkpoints so checkpoints use the same dataloder params as training
@@ -189,7 +189,10 @@ def compose_dataset(dataset_params, loader_params, rank, world_size):
         batch_by_dataset=loader_params["BATCH_BY_DATASET"],
         batch_by_length=loader_params["BATCH_BY_LENGTH"],
     )
-    train_loader = data.DataLoader(train_set, sampler=train_sampler, batch_size=1, **loader_params["dataloader_kwargs"])
+    train_loader = data.DataLoader(
+        train_set, sampler=train_sampler, batch_size=1, 
+        worker_init_fn = loader_fn,
+        **loader_params["dataloader_kwargs"])
 
     valid_sets = dict(
         atomize_pdb = Dataset(
@@ -308,13 +311,17 @@ def compose_dataset(dataset_params, loader_params, rank, world_size):
         for k,v in valid_sets.items()
     ])
     valid_loaders = OrderedDict([
-        (k, data.DataLoader(v, sampler=valid_samplers[k], **loader_params["dataloader_kwargs"]))
+        (k, data.DataLoader(
+            v, sampler=valid_samplers[k], 
+            worker_init_fn = loader_fn,
+            **loader_params["dataloader_kwargs"]
+        ))
         for k,v in valid_sets.items()
     ])
     return train_loader, train_sampler, valid_loaders, valid_samplers
 
 
-def compose_posebusters(loader_params, rank, world_size):
+def compose_posebusters(loader_fn, loader_params, rank, world_size):
     loader_params = set_data_loader_params(loader_params=loader_params) 
     valid_ID_dict, valid_dict = {}, {}
     
@@ -344,10 +351,14 @@ def compose_posebusters(loader_params, rank, world_size):
             num_ligand_chains=2,
         )
     sampler = data.distributed.DistributedSampler(benchmark, rank=rank, num_replicas=world_size)
-    loader = data.DataLoader(benchmark, sampler=sampler, **loader_params["dataloader_kwargs"])
+    loader = data.DataLoader(
+        benchmark, sampler=sampler,
+        worker_init_fn = loader_fn,
+        **loader_params["dataloader_kwargs"]
+      )
     return loader
 
-def compose_single_item_dataset(item, loader_params, loader, loader_kwargs):
+def compose_single_item_dataset(loader_fn, item, loader_params, loader, loader_kwargs):
     class SpoofDataset(data.Dataset):
         def __init__(self, loader_params, loader, loader_kwargs) -> None:
             super().__init__()
@@ -361,7 +372,7 @@ def compose_single_item_dataset(item, loader_params, loader, loader_kwargs):
             return 1
 
     dataset = SpoofDataset(loader_params, loader, loader_kwargs)
-    loader = data.DataLoader(dataset, **loader_params["dataloader_kwargs"])
+    loader = data.DataLoader(dataset, worker_init_fn = loader_fn, **loader_params["dataloader_kwargs"])
     return loader
 
     

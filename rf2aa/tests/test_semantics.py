@@ -3,13 +3,15 @@
 import pytest
 import torch
 import copy
+from functools import partial
 
 from rf2aa.data.compose_dataset import compose_single_item_dataset
 from rf2aa.data.dataloader_adaptor import prepare_input
 from rf2aa.tests.test_conditions import setup_array, configs, make_deterministic, random_param_init
 from rf2aa.tensor_util import assert_equal
 from rf2aa.training.recycling import run_model_forward, add_recycle_inputs
-from rf2aa.util import is_atom, allatom_mask
+from rf2aa.util import is_atom
+from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.util_module import XYZConverter
 
 import rf2aa.cifutils as cifutils
@@ -42,7 +44,7 @@ def test_fake_NC_position_noise(example, model):
             rf_outputs, rf_latents = model(input_i, use_checkpoint)
         return rf_outputs, rf_latents
 
-    model_name, model, network_input = setup_test(model, example) 
+    model_name, model, network_input = setup_test(example, model) 
     make_deterministic() 
     rf_outputs, rf_latents = run_model_forward(model, network_input, gpu)
     make_deterministic()
@@ -55,7 +57,7 @@ def test_fake_sm_idx(example, model):
     this tests if the idx feature which should be semantically meaningless 
     for small molecules affects the network
     """
-    model_name, model, network_input = setup_test(model, example) 
+    model_name, model, network_input = setup_test(example, model) 
     make_deterministic() 
     rf_outputs, rf_latents = run_model_forward(model, network_input, gpu)
     network_input_noise = copy.deepcopy(network_input)
@@ -74,7 +76,7 @@ def test_mask_t(example, model):
     this tests if random values in xyz_t, t1d or t2d affects the network
     if mask_t is all False
     """
-    model_name, model, network_input = setup_test(model, example) 
+    model_name, model, network_input = setup_test(example, model) 
     network_input["mask_t"] = torch.full_like(network_input["mask_t"], False)
     make_deterministic() 
     rf_outputs, rf_latents = run_model_forward(model, network_input, gpu)
@@ -91,7 +93,7 @@ def test_same_chain(example, model):
     """
     same_chain should not affect the outputs of the network
     """
-    model_name, model, network_input = setup_test(model, example) 
+    model_name, model, network_input = setup_test(example, model) 
     make_deterministic() 
     rf_outputs, rf_latents = run_model_forward(model, network_input, gpu)
     network_input_noise = copy.deepcopy(network_input)
@@ -102,12 +104,23 @@ def test_same_chain(example, model):
     rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, gpu)
     check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise)
 
-def setup_test(model, example):
-    model_name, model = model
+# helper function to load chemical database with specified config
+def initialize_chemdata(config, worker_id=None):
+    ChemData(config)
+
+def setup_test(example, model):
+    model_name, model, config = model
+
+    # initialize chemical database.  Force a reload
+    ChemData.reset()
+    init = partial(initialize_chemdata,config)
+    init()
+    
     model = random_param_init(model)
     model = model.to(gpu)
     xyz_converter = XYZConverter().to(gpu)
-    loader = compose_single_item_dataset(*example[1:])
+    _, item, loader_params, _, loader, loader_kwargs = example
+    loader = compose_single_item_dataset(init, item, loader_params, loader, loader_kwargs)
     dataloader_inputs = next(iter(loader))
     task, item, network_input, true_crds, mask_crds, msa, mask_msa, unclamp, \
         negative, symmRs, Lasu, ch_label = prepare_input(dataloader_inputs,xyz_converter, gpu)
@@ -122,7 +135,7 @@ def check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_n
             if name == "xyzs":
                 # xyzs will be different because of the semantically meaningless coordinates
                 # only measure similarity over meaningful outputs
-                mask = allatom_mask.to(gpu)[network_input["seq_unmasked"]][..., :3]
+                mask = ChemData().allatom_mask.to(gpu)[network_input["seq_unmasked"]][..., :3]
                 output = output[:, mask[0]]
                 assert torch.sum(mask) > 0 
                 assert_equal(rf_outputs_noise[name][:, mask[0]], output)

@@ -2,14 +2,14 @@ import torch
 import torch.nn as nn
 from collections import OrderedDict
 
-from rf2aa.chemical import NAATOKENS
 from rf2aa.kinematics import xyz_to_c6d, c6d_to_bins
 from rf2aa.loss.loss import resolve_equiv_natives, resolve_equiv_natives_asmb, \
     resolve_symmetry_predictions, resolve_symmetry, mask_unresolved_frames, \
     compute_general_FAPE, torsionAngleLoss, calc_lddt, calc_allatom_lddt_loss, \
     calc_crd_rmsd, calc_BB_bond_geom, calc_l1_clash_loss, calc_atom_bond_loss
 from rf2aa.util import is_atom, is_protein, Ls_from_same_chain_2d, get_prot_sm_mask, \
-    xyz_to_frame_xyz, get_frames, NTOTALDOFS, NTOTAL
+    xyz_to_frame_xyz, get_frames, writepdb
+from rf2aa.chemical import ChemicalData as ChemData
 
 cce_loss = nn.CrossEntropyLoss(reduction='none')
 
@@ -43,9 +43,9 @@ def get_loss_and_misc(
             logit_s_new.append(li)
         logit_s = tuple(logit_s_new)
 
-        logit_aa_s = logit_aa_s.view(1,NAATOKENS,msa.shape[-2],msa.shape[-1])
-        logit_aa_s = torch.gather(logit_aa_s,3,mapT2P[-1][None,None,None,:].repeat(1,NAATOKENS,logit_aa_s.shape[-2],1))
-        logit_aa_s = logit_aa_s.view(1,NAATOKENS,-1)
+        logit_aa_s = logit_aa_s.view(1,ChemData().NAATOKENS,msa.shape[-2],msa.shape[-1])
+        logit_aa_s = torch.gather(logit_aa_s,3,mapT2P[-1][None,None,None,:].repeat(1,ChemData().NAATOKENS,logit_aa_s.shape[-2],1))
+        logit_aa_s = logit_aa_s.view(1,ChemData().NAATOKENS,-1)
 
         msa = torch.gather(msa,2,mapT2P[-1][None,None,:].repeat(1,msa.shape[-2],1))
         mask_msa = torch.gather(mask_msa,2,mapT2P[-1][None,None,:].repeat(1,mask_msa.shape[-2],1))
@@ -57,8 +57,8 @@ def get_loss_and_misc(
         logit_pde=torch.gather(logit_pde,3,mapT2P[-1][None,None,None,:].repeat(1,logit_pde.shape[1],logit_pde.shape[2],1))
 
         pred_crds = torch.gather(pred_crds,2,mapT2P[:,None,:,None,None].repeat(1,1,1,3,3))
-        pred_allatom = torch.gather(pred_allatom,1,mapT2P[-1,None,:,None,None].repeat(1,1,NTOTAL,3))
-        alphas = torch.gather(alphas,2,mapT2P[:,None,:,None,None].repeat(1,1,1,NTOTALDOFS,2))
+        pred_allatom = torch.gather(pred_allatom,1,mapT2P[-1,None,:,None,None].repeat(1,1,ChemData().NTOTAL,3))
+        alphas = torch.gather(alphas,2,mapT2P[:,None,:,None,None].repeat(1,1,1,ChemData().NTOTALDOFS,2))
 
         same_chain=torch.gather(same_chain,1,mapT2P[-1][None,:,None].repeat(1,1,same_chain.shape[-1]))
         same_chain=torch.gather(same_chain,2,mapT2P[-1][None,None,:].repeat(1,same_chain.shape[1],1))
@@ -196,7 +196,7 @@ def calc_loss(trainer, logit_s, label_s,
         nframes = frame_mask.shape[-1]
         frame_atom_mask_2d_allatom = torch.einsum('bfn,bra->bfnra', frame_mask_BB, mask_crds).bool() # B, L, nframes, L, natoms
         frame_atom_mask_2d = frame_atom_mask_2d_allatom[:, :, :, :, :3]
-        frame_atom_mask_2d_intra_allatom = frame_atom_mask_2d_allatom * same_chain[:, :,None, :, None].bool().expand(-1,-1,nframes,-1, NTOTAL)
+        frame_atom_mask_2d_intra_allatom = frame_atom_mask_2d_allatom * same_chain[:, :,None, :, None].bool().expand(-1,-1,nframes,-1, ChemData().NTOTAL)
         frame_atom_mask_2d_intra = frame_atom_mask_2d_intra_allatom[:, :, :, :, :3]
         different_chain = ~same_chain.bool()
         frame_atom_mask_2d_inter = frame_atom_mask_2d*different_chain[:, :,None, :, None].expand(-1,-1,nframes,-1, 3)

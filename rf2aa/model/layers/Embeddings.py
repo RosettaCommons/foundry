@@ -1,4 +1,3 @@
-from rf2aa.util import NAATOKENS
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,20 +7,23 @@ from rf2aa.util import *
 from rf2aa.util_module import Dropout, get_clones, create_custom_forward, rbf, init_lecun_normal, get_res_atom_dist
 from rf2aa.model.layers.Attention_module import Attention, TriangleMultiplication, TriangleAttention, FeedForwardLayer
 from rf2aa.model.Track_module import PairStr2Pair, PositionalEncoding2D
-from rf2aa.chemical import NAATOKENS,NTOTALDOFS, NBTYPES
+from rf2aa.chemical import ChemicalData as ChemData
 
 # Module contains classes and functions to generate initial embeddings
 
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
-    def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=2*NAATOKENS+2+2,
+    def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=0,
                  minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1, use_same_chain=False):
+        if (d_init==0):
+            d_init = 2*ChemData().NAATOKENS+2+2
+
         super(MSA_emb, self).__init__()
         self.emb = nn.Linear(d_init, d_msa) # embedding for general MSA
-        self.emb_q = nn.Embedding(NAATOKENS, d_msa) # embedding for query sequence -- used for MSA embedding
-        self.emb_left = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
-        self.emb_right = nn.Embedding(NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
-        self.emb_state = nn.Embedding(NAATOKENS, d_state)
+        self.emb_q = nn.Embedding(ChemData().NAATOKENS, d_msa) # embedding for query sequence -- used for MSA embedding
+        self.emb_left = nn.Embedding(ChemData().NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
+        self.emb_right = nn.Embedding(ChemData().NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
+        self.emb_state = nn.Embedding(ChemData().NAATOKENS, d_state)
         self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, 
                                         maxpos_atom=maxpos_atom, p_drop=p_drop, use_same_chain=use_same_chain)
         
@@ -75,8 +77,10 @@ class MSA_emb(nn.Module):
         return msa, pair, state
 
 class MSA_emb_nostate(MSA_emb):
-    def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=2 * NAATOKENS + 2 + 2, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1, use_same_chain=False):
+    def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=0, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1, use_same_chain=False):
         super().__init__(d_msa, d_pair, d_state, d_init, minpos, maxpos, maxpos_atom, p_drop, use_same_chain)
+        if d_init==0:
+            d_init = 2*ChemData().NAATOKENS + 2 + 2
         self.emb_state = None # emb state is just the identity
 
     def forward(self, msa, seq, idx, bond_feats, dist_matrix):
@@ -86,10 +90,12 @@ class MSA_emb_nostate(MSA_emb):
 
 class Extra_emb(nn.Module):
     # Get initial seed MSA embedding
-    def __init__(self, d_msa=256, d_init=NAATOKENS-1+4, p_drop=0.1):
+    def __init__(self, d_msa=256, d_init=0, p_drop=0.1):
         super(Extra_emb, self).__init__()
+        if d_init==0:
+            d_init=ChemData().NAATOKENS-1+4
         self.emb = nn.Linear(d_init, d_msa) # embedding for general MSA
-        self.emb_q = nn.Embedding(NAATOKENS, d_msa) # embedding for query sequence
+        self.emb_q = nn.Embedding(ChemData().NAATOKENS, d_msa) # embedding for query sequence
         #self.drop = nn.Dropout(p_drop)
         
 
@@ -114,8 +120,12 @@ class Extra_emb(nn.Module):
         return (msa)
 
 class Bond_emb(nn.Module):
-    def __init__(self, d_pair=128, d_init=NBTYPES):
+    def __init__(self, d_pair=128, d_init=0):
         super(Bond_emb, self).__init__()
+
+        if d_init==0:
+            d_init = ChemData().NBTYPES
+
         self.emb = nn.Linear(d_init, d_pair)
 
         self.reset_parameter()
@@ -125,7 +135,7 @@ class Bond_emb(nn.Module):
         nn.init.zeros_(self.emb.bias)
 
     def forward(self, bond_feats):
-        bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=NBTYPES)
+        bond_feats = torch.nn.functional.one_hot(bond_feats, num_classes=ChemData().NBTYPES)
         return self.emb(bond_feats.float())
 
 class TemplatePairStack(nn.Module):
@@ -235,12 +245,16 @@ class Templ_emb(nn.Module):
     #   - tiled AA sequence (20 standard aa + gap)
     #   - confidence (1)
     #   
-    def __init__(self, d_t1d=(NAATOKENS-1)+1, d_t2d=67+1, d_tor=3*NTOTALDOFS, d_pair=128, d_state=32, 
+    def __init__(self, d_t1d=0, d_t2d=67+1, d_tor=0, d_pair=128, d_state=32, 
                  n_block=2, d_templ=64,
                  n_head=4, d_hidden=16, p_drop=0.25,
                  symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='mean', 
                  main_block=None, copy_main_block=None, additional_dt1d=0):
-        
+        if d_t1d==0:
+            d_t1d=(ChemData().NAATOKENS-1)+1
+        if d_tor==0:
+            d_tor=3*ChemData().NTOTALDOFS
+
         self.main_block = main_block
         self.symmetrize_repeats = symmetrize_repeats
         self.copy_main_block = copy_main_block
@@ -401,7 +415,7 @@ class RecyclingAllFeatures(nn.Module):
         super(RecyclingAllFeatures, self).__init__()
         self.proj_dist = nn.Linear(d_rbf+d_state*2, d_pair)
         self.norm_pair = nn.LayerNorm(d_pair)
-        self.proj_sctors = nn.Linear(2*NTOTALDOFS, d_msa)
+        self.proj_sctors = nn.Linear(2*ChemData().NTOTALDOFS, d_msa)
         self.norm_msa = nn.LayerNorm(d_msa)
         self.norm_state = nn.LayerNorm(d_state)
 
@@ -429,7 +443,7 @@ class RecyclingAllFeatures(nn.Module):
         dist = self.proj_dist(dist)
         pair = dist + self.norm_pair(pair)
 
-        sctors = self.proj_sctors(sctors.reshape(B,-1,2*NTOTALDOFS))
+        sctors = self.proj_sctors(sctors.reshape(B,-1,2*ChemData().NTOTALDOFS))
         msa = sctors + self.norm_msa(msa)
 
         return msa, pair, state

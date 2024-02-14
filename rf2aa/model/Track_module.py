@@ -10,13 +10,13 @@ from contextlib import ExitStack, nullcontext
 from rf2aa.util_module import *
 from rf2aa.model.layers.Attention_module import *
 from rf2aa.model.layers.SE3_network import SE3TransformerWrapper
-from rf2aa.util import INIT_CRDS, is_atom, xyz_frame_from_rotation_mask
+from rf2aa.util import is_atom, xyz_frame_from_rotation_mask
 from rf2aa.loss.loss import (
     calc_BB_bond_geom_grads, calc_lj_grads, calc_hb_grads, calc_cart_bonded_grads, calc_ljallatom_grads, 
     calc_lj, calc_cart_bonded, calc_chiral_grads
 )
-from rf2aa.chemical import NTOTALDOFS
 from rf2aa.symmetry import get_symm_map
+from rf2aa.chemical import ChemicalData as ChemData
 
 
 # Components for three-track blocks
@@ -723,7 +723,7 @@ class SCPred(nn.Module):
         self.linear_4 = nn.Linear(d_hidden, d_hidden)
 
         # Final outputs
-        self.linear_out = nn.Linear(d_hidden, 2*NTOTALDOFS)
+        self.linear_out = nn.Linear(d_hidden, 2*ChemData().NTOTALDOFS)
 
         self.reset_parameter()
 
@@ -766,7 +766,7 @@ class SCPred(nn.Module):
         si = si + self.linear_4(F.relu_(self.linear_3(F.relu_(si))))
 
         si = self.linear_out(F.relu_(si))
-        return si.view(B, L, NTOTALDOFS, 2)
+        return si.view(B, L, ChemData().NTOTALDOFS, 2)
 
 def update_symm_Rs(xyz, Lasu, symmsub, symmRs, fit=False, tscale=1.0):
     def dist_error_comp(R0,T0,xyz,tscale):
@@ -1054,7 +1054,7 @@ class IterativeSimulator(nn.Module):
             if self.use_chiral_l1:
                 n_extra_l1 += 3
             if self.use_lj_l1:
-                n_extra_l0 += 2*NTOTALDOFS
+                n_extra_l0 += 2*ChemData().NTOTALDOFS
                 n_extra_l1 += 3
             self.str_refiner = Str2Str(d_msa=d_msa, d_pair=d_pair,
                                        d_state=SE3_param['l0_out_features'],
@@ -1153,7 +1153,7 @@ class IterativeSimulator(nn.Module):
                          self.lj_correction_parameters, 
                          self.num_bonds, 
                          lj_lin=self.lj_lin)
-                    extra_l0 = dljdalpha.reshape(1,-1,2*NTOTALDOFS).detach()
+                    extra_l0 = dljdalpha.reshape(1,-1,2*ChemData().NTOTALDOFS).detach()
                     extra_l1.append(dljdxyz[0].detach())
 
                 if self.use_chiral_l1:

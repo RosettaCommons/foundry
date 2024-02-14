@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from rf2aa.chemical import NAATOKENS
+from rf2aa.chemical import ChemicalData as ChemData
 
 class DistanceNetwork(nn.Module):
     def __init__(self, n_feat, p_drop=0.0):
@@ -41,7 +41,7 @@ class MaskedTokenNetwork(nn.Module):
 
         #fd note this predicts probability for the mask token (which is never in ground truth)
         #   it should be ok though(?)
-        self.proj = nn.Linear(n_feat, NAATOKENS)
+        self.proj = nn.Linear(n_feat, ChemData().NAATOKENS)
         
         self.reset_parameter()
     

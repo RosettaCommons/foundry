@@ -2,8 +2,9 @@ import torch
 
 from rf2aa.kinematics import xyz_to_t2d
 from rf2aa.symmetry import symm_subunit_matrix, find_symm_subs
-from rf2aa.util import INIT_CRDS, NTOTAL, NTOTALDOFS, is_atom, \
+from rf2aa.util import  is_atom, \
     Ls_from_same_chain_2d, xyz_t_to_frame_xyz, get_prot_sm_mask
+from rf2aa.chemical import ChemicalData as ChemData
 
 
 
@@ -27,8 +28,8 @@ def prepare_input(inputs, xyz_converter, gpu):
         mask_t = mask_t.to(gpu, non_blocking=True)
         
         #fd --- use black hole initialization
-        xyz_prev = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1).to(gpu, non_blocking=True)
-        mask_prev = torch.zeros((1,L,NTOTAL), dtype=torch.bool).to(gpu, non_blocking=True)
+        xyz_prev = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,L,1,1).to(gpu, non_blocking=True)
+        mask_prev = torch.zeros((1,L,ChemData().NTOTAL), dtype=torch.bool).to(gpu, non_blocking=True)
 
         atom_frames = atom_frames.to(gpu, non_blocking=True)
         bond_feats = bond_feats.to(gpu, non_blocking=True)
@@ -92,11 +93,11 @@ def prepare_input(inputs, xyz_converter, gpu):
 
         # get torsion angles from templates
         seq_tmp = t1d[...,:-1].argmax(dim=-1).reshape(-1,Lasu*Osub)
-        alpha, _, alpha_mask, _ = xyz_converter.get_torsions(xyz_t.reshape(-1,Lasu*Osub,NTOTAL,3), seq_tmp, mask_in=mask_t.reshape(-1,Lasu*Osub,NTOTAL))
-        alpha = alpha.reshape(B,-1,Lasu*Osub,NTOTALDOFS,2)
-        alpha_mask = alpha_mask.reshape(B,-1,Lasu*Osub,NTOTALDOFS,1)
-        alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, Lasu*Osub, 3*NTOTALDOFS)
-        alpha_prev = torch.zeros((B,Lasu*Osub,NTOTALDOFS,2))
+        alpha, _, alpha_mask, _ = xyz_converter.get_torsions(xyz_t.reshape(-1,Lasu*Osub,ChemData().NTOTAL,3), seq_tmp, mask_in=mask_t.reshape(-1,Lasu*Osub,ChemData().NTOTAL))
+        alpha = alpha.reshape(B,-1,Lasu*Osub,ChemData().NTOTALDOFS,2)
+        alpha_mask = alpha_mask.reshape(B,-1,Lasu*Osub,ChemData().NTOTALDOFS,1)
+        alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, Lasu*Osub, 3*ChemData().NTOTALDOFS)
+        alpha_prev = torch.zeros((B,Lasu*Osub,ChemData().NTOTALDOFS,2))
 
         network_input = {}
         network_input['msa_latent'] = msa_masked

@@ -12,9 +12,9 @@ from rf2aa.model.layers.AuxiliaryPredictor import (
     PAENetwork,
     BinderNetwork,
 )
-from rf2aa.chemical import INIT_CRDS, NAATOKENS, NBTYPES, NTOTAL
 from rf2aa.tensor_util import assert_shape, assert_equal
 import rf2aa.util
+from rf2aa.chemical import ChemicalData as ChemData
 
 
 def get_shape(t):
@@ -82,9 +82,9 @@ class LegacyRoseTTAFoldModule(nn.Module):
             d_msa=d_msa, d_pair=d_pair, d_state=d_state, p_drop=p_drop, use_same_chain=use_same_chain
         )
         self.full_emb = Extra_emb(
-            d_msa=d_msa_full, d_init=NAATOKENS - 1 + 4, p_drop=p_drop
+            d_msa=d_msa_full, d_init=ChemData().NAATOKENS - 1 + 4, p_drop=p_drop
         )
-        self.bond_emb = Bond_emb(d_pair=d_pair, d_init=NBTYPES)
+        self.bond_emb = Bond_emb(d_pair=d_pair, d_init=ChemData().NBTYPES)
 
         self.templ_emb = Templ_emb(d_pair=d_pair, 
                                    d_templ=d_templ, 
@@ -205,7 +205,7 @@ class LegacyRoseTTAFoldModule(nn.Module):
             assert_shape(msa_full, (1, 1, L, 83))
             assert_shape(seq, (1, L))
             assert_shape(seq_unmasked, (1, L))
-            assert_shape(xyz, (1, L, NTOTAL, 3))
+            assert_shape(xyz, (1, L, ChemData().NTOTAL, 3))
             assert_shape(sctors, (1, L, 20, 2))
             assert_shape(idx, (1, L))
             assert_shape(bond_feats, (1, L, L))
@@ -252,26 +252,25 @@ class LegacyRoseTTAFoldModule(nn.Module):
             msa_masked: NSEQ,NSEQ,N_INDEL,N_INDEL,N_TERMINUS
             """
             import numpy as np
-            from rf2aa.chemical import NAATOKENS
 
             NINDEL = 1
             NTERMINUS = 2
-            NMSAFULL = NAATOKENS + NINDEL + NTERMINUS
-            NMSAMASKED = NAATOKENS + NAATOKENS + NINDEL + NINDEL + NTERMINUS
+            NMSAFULL = ChemData().NAATOKENS + NINDEL + NTERMINUS
+            NMSAMASKED = ChemData().NAATOKENS + ChemData().NAATOKENS + NINDEL + NINDEL + NTERMINUS
             assert_that(msa_latent.shape[-1]).is_equal_to(NMSAMASKED)
             assert_that(msa_full.shape[-1]).is_equal_to(NMSAFULL)
 
-            msa_full_seq = np.r_[0:NAATOKENS]
-            msa_full_indel = np.r_[NAATOKENS : NAATOKENS + NINDEL]
-            msa_full_term = np.r_[NAATOKENS + NINDEL : NMSAFULL]
+            msa_full_seq = np.r_[0:ChemData().NAATOKENS]
+            msa_full_indel = np.r_[ChemData().NAATOKENS : ChemData().NAATOKENS + NINDEL]
+            msa_full_term = np.r_[ChemData().NAATOKENS + NINDEL : NMSAFULL]
 
-            msa_latent_seq1 = np.r_[0:NAATOKENS]
-            msa_latent_seq2 = np.r_[NAATOKENS : 2 * NAATOKENS]
-            msa_latent_indel1 = np.r_[2 * NAATOKENS : 2 * NAATOKENS + NINDEL]
+            msa_latent_seq1 = np.r_[0:ChemData().NAATOKENS]
+            msa_latent_seq2 = np.r_[ChemData().NAATOKENS : 2 * ChemData().NAATOKENS]
+            msa_latent_indel1 = np.r_[2 * ChemData().NAATOKENS : 2 * ChemData().NAATOKENS + NINDEL]
             msa_latent_indel2 = np.r_[
-                2 * NAATOKENS + NINDEL : 2 * NAATOKENS + NINDEL + NINDEL
+                2 * ChemData().NAATOKENS + NINDEL : 2 * ChemData().NAATOKENS + NINDEL + NINDEL
             ]
-            msa_latent_terminus = np.r_[2 * NAATOKENS + 2 * NINDEL : NMSAMASKED]
+            msa_latent_terminus = np.r_[2 * ChemData().NAATOKENS + 2 * NINDEL : NMSAMASKED]
 
             #i_name = [(diffused_protein_i, "diffused_protein")]
             #if is_sm.any():
@@ -281,25 +280,25 @@ class LegacyRoseTTAFoldModule(nn.Module):
             i_name = [(0, "tst")]
             for i, name in i_name:
                 ic(f"------------------{name}:{i}----------------")
-                msa_full_seq = msa_full[0, 0, i, np.r_[0:NAATOKENS]]
+                msa_full_seq = msa_full[0, 0, i, np.r_[0:ChemData().NAATOKENS]]
                 msa_full_indel = msa_full[
-                    0, 0, i, np.r_[NAATOKENS : NAATOKENS + NINDEL]
+                    0, 0, i, np.r_[ChemData().NAATOKENS : ChemData().NAATOKENS + NINDEL]
                 ]
-                msa_full_term = msa_full[0, 0, i, np.r_[NAATOKENS + NINDEL : NMSAFULL]]
+                msa_full_term = msa_full[0, 0, i, np.r_[ChemData().NAATOKENS + NINDEL : NMSAFULL]]
 
-                msa_latent_seq1 = msa_latent[0, 0, i, np.r_[0:NAATOKENS]]
-                msa_latent_seq2 = msa_latent[0, 0, i, np.r_[NAATOKENS : 2 * NAATOKENS]]
+                msa_latent_seq1 = msa_latent[0, 0, i, np.r_[0:ChemData().NAATOKENS]]
+                msa_latent_seq2 = msa_latent[0, 0, i, np.r_[ChemData().NAATOKENS : 2 * ChemData().NAATOKENS]]
                 msa_latent_indel1 = msa_latent[
-                    0, 0, i, np.r_[2 * NAATOKENS : 2 * NAATOKENS + NINDEL]
+                    0, 0, i, np.r_[2 * ChemData().NAATOKENS : 2 * ChemData().NAATOKENS + NINDEL]
                 ]
                 msa_latent_indel2 = msa_latent[
                     0,
                     0,
                     i,
-                    np.r_[2 * NAATOKENS + NINDEL : 2 * NAATOKENS + NINDEL + NINDEL],
+                    np.r_[2 * ChemData().NAATOKENS + NINDEL : 2 * ChemData().NAATOKENS + NINDEL + NINDEL],
                 ]
                 msa_latent_term = msa_latent[
-                    0, 0, i, np.r_[2 * NAATOKENS + 2 * NINDEL : NMSAMASKED]
+                    0, 0, i, np.r_[2 * ChemData().NAATOKENS + 2 * NINDEL : NMSAMASKED]
                 ]
 
                 assert_equal(msa_full_seq, msa_latent_seq1)

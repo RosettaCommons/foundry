@@ -5,7 +5,7 @@ import numpy as np
 
 from contextlib import ExitStack
 
-from rf2aa.util import INIT_CRDS, NTOTAL
+from rf2aa.chemical import ChemicalData as ChemData
 
 def recycle_step_legacy(ddp_model, input, n_cycle, use_amp, nograds=False):
     gpu = ddp_model.device
@@ -112,7 +112,7 @@ def add_recycle_inputs(network_input, output_i, i_cycle, gpu, return_raw=False, 
 
     L = input_i["msa_latent"].shape[2]
     msa_prev, pair_prev, _, alpha, mask_recycle = output_i
-    xyz_prev = INIT_CRDS.reshape(1,1,NTOTAL,3).repeat(1,L,1,1).to(gpu, non_blocking=True)
+    xyz_prev = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,L,1,1).to(gpu, non_blocking=True)
 
     input_i['msa_prev'] = msa_prev
     input_i['pair_prev'] = pair_prev

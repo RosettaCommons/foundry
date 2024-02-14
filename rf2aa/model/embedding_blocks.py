@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from rf2aa.model.layers.Embeddings import MSA_emb, MSA_emb_nostate, \
             Extra_emb, Bond_emb, Templ_emb, recycling_factory
-from rf2aa.chemical import NBTYPES, NAATOKENS
+from rf2aa.chemical import ChemicalData as ChemData
 
 
 class RF2_embedding(nn.Module):
@@ -20,10 +20,10 @@ class RF2_embedding(nn.Module):
         )
         self.full_emb = Extra_emb(
             d_msa=d_msa_full, 
-            d_init=NAATOKENS - 1 + 4, #HACK: should define this freom the config (4: ins/del,nterm/cterm feats)
+            d_init=ChemData().NAATOKENS - 1 + 4, #HACK: should define this freom the config (4: ins/del,nterm/cterm feats)
             p_drop=block_params.p_drop
         )
-        self.bond_emb = Bond_emb(d_pair=d_pair, d_init=NBTYPES)
+        self.bond_emb = Bond_emb(d_pair=d_pair, d_init=ChemData().NBTYPES)
 
         self.templ_emb = Templ_emb(d_pair=d_pair, 
                                    d_templ=block_params.d_templ, 
