@@ -24,6 +24,7 @@ from rf2aa.training.scheduler import get_stepwise_decay_schedule_with_warmup
 import rf2aa.util as util
 from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import ChemicalData as ChemData
+from rf2aa.chemical import initialize_chemdata
 
 #TODO: control environment variables from config
 # limit thread counts
@@ -42,10 +43,6 @@ def seed_all(seed=0):
 
 torch.set_num_threads(4)
 #torch.autograd.set_detect_anomaly(True)
-
-# helper function to load chemical database with specified config
-def initialize_chemdata(config, worker_id=None):
-    ChemData(config)
 
 class Trainer:
     def __init__(self, config) -> None:

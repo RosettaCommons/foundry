@@ -55,6 +55,9 @@ def th_dih_v(ab,bc,cd):
 def th_dih(a,b,c,d):
     return th_dih_v(a-b,b-c,c-d)
 
+# helper function to load chemical database with specified config
+def initialize_chemdata(config, worker_id=None):
+    ChemicalData(config)
 
 # A singleton class that stores chemical data
 class ChemicalData:

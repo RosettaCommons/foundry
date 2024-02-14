@@ -14,12 +14,9 @@ from rf2aa.tests.test_conditions import setup_data, dataset_pickle_path
 from rf2aa.trainer_new import seed_all
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.util import is_atom
+from rf2aa.chemical import initialize_chemdata
 
 data = setup_data()
-
-# helper function to load chemical database with specified config
-def initialize_chemdata(config, worker_id=None):
-    ChemData(config)
 
 @pytest.mark.xfail
 @pytest.mark.parametrize("name,item,loader_params,chem_params,loader,loader_kwargs", data.values())

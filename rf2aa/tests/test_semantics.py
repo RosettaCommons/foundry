@@ -13,6 +13,7 @@ from rf2aa.training.recycling import run_model_forward, add_recycle_inputs
 from rf2aa.util import is_atom
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.util_module import XYZConverter
+from rf2aa.chemical import initialize_chemdata
 
 import rf2aa.cifutils as cifutils
 assert "rf2aa" in cifutils.__name__
@@ -103,10 +104,6 @@ def test_same_chain(example, model):
     make_deterministic()
     rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, gpu)
     check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise)
-
-# helper function to load chemical database with specified config
-def initialize_chemdata(config, worker_id=None):
-    ChemData(config)
 
 def setup_test(example, model):
     model_name, model, config = model
