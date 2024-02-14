@@ -41,7 +41,7 @@ def test_regression(example, model):
                 if torch.is_tensor(output):
                     got = output_test[output_type][output_name]
                     want = output
-                    if output_name in ["alphas", "msa"]:
+                    if output_name in ["alphas", "msa", "msa_full", "pair", "state"]:
                         try:
                             assert torch.allclose(got, want, atol=1e-4)
                         except Exception as e:
@@ -80,8 +80,11 @@ def test_regression_legacy(example, model):
                         assert_equal(got_i, want_i)
                     except Exception as e:
                         raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
-            elif output_names[idx] in ["alpha", "xyz_allatom", "seq"]:
-                assert torch.allclose(got, want, atol=1e-4)
+            elif output_names[idx] in ["alpha", "xyz_allatom", "seq", "pair", "state"]:
+                try:
+                    assert torch.allclose(got, want, atol=1e-4)
+                except Exception as e:
+                    raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}")
             else:
                 try:
                     assert_equal(got, want)

@@ -12,7 +12,8 @@ from rf2aa.training.recycling import run_model_forward, add_recycle_inputs
 from rf2aa.util import is_atom, allatom_mask
 from rf2aa.util_module import XYZConverter
 
-
+import rf2aa.cifutils as cifutils
+assert "rf2aa" in cifutils.__name__
 
 test_conditions = setup_array(["sm_compl"], ["rf2aa"])
 gpu = "cuda:0" if torch.cuda.is_available() else "cpu"

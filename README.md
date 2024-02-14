@@ -33,8 +33,10 @@ If all the tests pass, you have a stable version of the code.
 
 We use a package called hydra to configure different training runs of the model. Config files for different training runs can be found in `rf2aa/config/train`. The base trainable version is `rf2aa/config/train/rf2aa.yaml`, to run training with this version, run:
 ```
-/software/containers/Se3nv.sif trainer_new.py --config-name rf2aa
+apptainer exec /software/containers/versions/SE3nv/SE3nv-20240131.sif pytest tests/
 ```
+These tests are most often run on a4000s on digs. If you have a separate installation of cifutils in your home directory, this can potentially break the tests.
+
 If you make changes in the code, they should NOT break backwards compatibility, e.g. there should be a flag in the yaml files that would make it as if your changes were never committed. 
 
 ### Contributing to model code
