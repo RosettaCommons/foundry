@@ -767,8 +767,8 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
             if "SLURM_PROCID" in os.environ and int(os.environ["SLURM_PROCID"])==0:
                 print ('Loading',params['DATAPKL'],'...')
             train_ID_dict, valid_ID_dict, weights_dict, \
-                train_dict, valid_dict, homo, chid2hash, chid2taxid, chid2smpartners = pickle.load(f)
-        return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid, chid2smpartners
+                train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra = pickle.load(f)
+        return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra
 
     t0 = time.time()
     print(f"cached train/valid datasets {params['DATAPKL']} not found. "\
@@ -3673,7 +3673,7 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
             mask_ = mask_[:params['MAXNSYMM']]
 
         G = get_nxgraph(mol_)
-        frames_ = get_atom_frames(msa_, G)
+        frames_ = get_atom_frames(msa_, G, omit_permutation=params['OMIT_PERMUTATE'])
         chirals_ = get_chirals(mol_, xyz_[0])
 
         # if ligand has too many masked atoms, remove all masked atoms
@@ -3687,7 +3687,7 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
             akeys_ = [k for m,k in zip(mask_[0],akeys_) if m]
             bond_feats_ = bond_feats_[mask_[0]][:,mask_[0]]
             G = nx.Graph(bond_feats_.cpu().numpy())
-            frames_ = get_atom_frames(msa_, G)
+            frames_ = get_atom_frames(msa_, G, omit_permutation=params['OMIT_PERMUTATE'])
             chirals_ = crop_chirals(chirals_, torch.where(mask_[0])[0])
             mask_ = mask_[:,mask_[0]]
 
@@ -3887,7 +3887,7 @@ def featurize_ligand_from_string(ligand_string: str, format: str = "smiles"):
     bond_feats_sm = get_bond_feats(mol)
 
     mol_graph = get_nxgraph(mol)
-    frames = get_atom_frames(msa_sm, mol_graph)
+    frames = get_atom_frames(msa_sm, mol_graph, omit_permutation=params['OMIT_PERMUTATE'])
     ch_label_sm = torch.zeros((small_molecule_length), dtype=int)
     lig_names = [ligand_string]
 
@@ -3934,7 +3934,8 @@ def loader_sm_compl_assembly_single(*args, **kwargs):
 
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid2smpartners=None, task='sm_compl_asmb', 
     num_protein_chains=None, num_ligand_chains=None, pick_top=True, random_noise=5.0, fixbb=False,
-    select_farthest_residues: bool = False, ligand_string_tuple: Optional[Tuple[str, str]] = None, is_negative: bool = False, max_msa_seqs: Optional[int] = None):
+    select_farthest_residues: bool = False, ligand_string_tuple: Optional[Tuple[str, str]] = None, is_negative: bool = False, max_msa_seqs: Optional[int] = None,
+    remove_residue=True):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
     with query ligand.  Protein chains all come before ligand chains, and
@@ -4047,7 +4048,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         a3m_sm = dict(msa=msa_sm, ins=torch.zeros_like(msa_sm))
         a3m = merge_a3m_hetero(a3m_prot, a3m_sm, [sum(Ls_prot), sum(Ls_sm)])
         msa, ins = a3m['msa'].long(), a3m['ins'].long()
-
+        
         # ensure that some MSA clusters are fully paired sequences
         # omit query sequence as in MSAFeaturize()
         seed_msa_clus = choose_multimsa_clusters(a3m_prot['is_paired'][1:], params)
@@ -4077,7 +4078,8 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
                 ch_label,
                 Ls_prot,
                 Ls_sm,
-                akeys_sm
+                akeys_sm,
+                remove_residue=remove_residue
             )
     ntempl = xyz_t.shape[0]
     xyz_t = torch.stack(
@@ -4107,8 +4109,10 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls_prot + Ls_sm, params['CROP'], mask_prot, 
                             seq_prot, select_farthest_residues=select_farthest_residues)
     else:
-        #sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
-        sel = crop_sm_compl_asmb_contig(xyz[0], mask[0], Ls_prot, Ls_sm, bond_feats, params['CROP'], use_partial_ligands=False)
+        if params['RADIAL_CROP']:
+            sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
+        else:
+            sel = crop_sm_compl_asmb_contig(xyz[0], mask[0], Ls_prot, Ls_sm, bond_feats, params['CROP'], use_partial_ligands=False)
         mask = reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item)
 
         msa = msa[:, sel]
@@ -4130,8 +4134,8 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         # crop small molecule features, assumes all sm chains are after all protein chains
         atom_sel = sel[sel>=sum(Ls_prot)] - sum(Ls_prot) # 0 index all the selected atoms
         frames = frames[atom_sel]
-        chirals = crop_chirals(chirals, atom_sel)    
-    
+        chirals = crop_chirals(chirals, atom_sel)
+        
     # reindex chiral atom positions - assumes all sm chains are after all protein chains
     if chirals.shape[0]>0:
         L1 = is_prot.sum()
@@ -4537,7 +4541,7 @@ def loader_sm(item, params, pick_top=True):
     mol, msa_sm, ins_sm, xyz_sm, mask_sm = parse_mol(data["mol2"], string=True)
     a3m = {"msa": msa_sm.unsqueeze(0), "ins": ins_sm.unsqueeze(0)}
     G = get_nxgraph(mol)
-    frames = get_atom_frames(msa_sm, G)
+    frames = get_atom_frames(msa_sm, G, omit_permutation=params['OMIT_PERMUTATE'])
 
     if xyz_sm.shape[0] > params['MAXNSYMM']: # clip no. of symmetry variants to save GPU memory
         xyz_sm = xyz_sm[:params['MAXNSYMM']]

@@ -326,7 +326,6 @@ def superimpose(pred, true, atom_mask):
     
     return rP+ct
 
-
 def writepdb(filename, *args, file_mode='w', **kwargs, ):
     f = open(filename, file_mode)
     writepdb_file(f, *args, **kwargs)
@@ -459,7 +458,8 @@ def find_all_rigid_groups(bond_feats):
     return connected_components
 
 def find_all_paths_of_length_n(G : nx.Graph,
-                               n : int) -> torch.Tensor:
+                               n : int,
+                               **karg) -> torch.Tensor:
     '''find all paths of length N in a networkx graph
     https://stackoverflow.com/questions/28095646/finding-all-paths-walks-of-given-length-in-a-networkx-graph'''
 
@@ -473,17 +473,19 @@ def find_all_paths_of_length_n(G : nx.Graph,
     allpaths = [tuple(p) if p[0]<p[-1] else tuple(reversed(p))
                 for node in G for p in findPaths(G,node,n)]
 
+    if 'omit_permutation' in karg.keys() and not karg['omit_permutation']:
+        allpaths = [tuple(p) for node in G for p in findPaths(G,node,n)]
+
     # unique paths
     allpaths = list(set(allpaths))
 
     #return torch.tensor(allpaths)
     return allpaths
 
-def get_atom_frames(msa, G):
+def get_atom_frames(msa, G, **karg):
     """choose a frame of 3 bonded atoms for each atom in the molecule, rule based system that chooses frame based on atom priorities"""
-
     query_seq = msa
-    frames = find_all_paths_of_length_n(G, 2)
+    frames = find_all_paths_of_length_n(G, 2, **karg)
     selected_frames = []
     for n in range(msa.shape[0]):
         frames_with_n = [frame for frame in frames if n == frame[1]]
@@ -500,7 +502,12 @@ def get_atom_frames(msa, G):
             # hacky but uses the "query_seq" to convert index of the atom into an "atom type" and converts that into a priority
             indices = [index for index in frame if index!=n]
             aas = [ChemData().num2aa[int(query_seq[index].numpy())] for index in indices]
-            frame_priorities.append(sorted([ChemData().atom2frame_priority[aa] for aa in aas]))
+            if 'omit_permutation' in karg.keys() and not karg['omit_permutation']:
+                frame_priorities.append([ChemData().atom2frame_priority[aa] for aa in aas])
+            else:
+                frame_priorities.append(sorted([ChemData().atom2frame_priority[aa] for aa in aas]))
+
+
             
         # np.argsort doesn't sort tuples correctly so just sort a list of indices using a key
         sorted_indices = sorted(range(len(frame_priorities)), key=lambda i: frame_priorities[i])
@@ -510,7 +517,7 @@ def get_atom_frames(msa, G):
     assert msa.shape[0] == len(selected_frames)
     return torch.tensor(selected_frames).long()
 
-    
+
 ### Generate bond features for small molecules ###
 def get_bond_feats(mol):                                                                                 
     """creates 2d bond graph for small molecules"""
@@ -759,7 +766,8 @@ def reindex_protein_feats_after_atomize(
     ch_label,
     Ls_prot,
     Ls_sm, 
-    akeys_sm
+    akeys_sm,
+    remove_residue=True
 ):
     """
     Removes residues that have been atomized from protein features.
@@ -807,12 +815,23 @@ def reindex_protein_feats_after_atomize(
         same_chain[chain_bins[residue_chain_num]: chain_bins[residue_chain_num+1], \
                    chain_bins[lig_chain_num]:chain_bins[lig_chain_num+1]] = 1
 
-    # remove atomized residues from feature tensors
-    msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label = \
-        pop_protein_feats(residue_indices, msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls)
+    if remove_residue:
+        # remove atomized residues from feature tensors
+        i_res = torch.tensor([i for i in range(sum(Ls)) if i not in residue_indices])
+        msa = msa[:,i_res]
+        ins = ins[:,i_res]
+        xyz = xyz[:,i_res]
+        mask = mask[:,i_res]
+        bond_feats = bond_feats[i_res][:,i_res]
+        idx = idx[i_res]
+        xyz_t = xyz_t[:,i_res]
+        f1d_t = f1d_t[:,i_res]
+        mask_t = mask_t[:,i_res]
+        same_chain = same_chain[i_res][:,i_res]
+        ch_label = ch_label[i_res]
 
-    for i_ch in residue_chain_nums:
-        Ls_prot[i_ch] -= 1
+        for i_ch in residue_chain_nums:
+            Ls_prot[i_ch] -= 1
 
     return msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label, Ls_prot, Ls_sm
 

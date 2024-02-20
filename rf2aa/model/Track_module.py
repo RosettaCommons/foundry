@@ -27,7 +27,7 @@ from rf2aa.chemical import ChemicalData as ChemData
 
 class PositionalEncoding2D(nn.Module):
     # Add relative positional encoding to pair features
-    def __init__(self, d_pair, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.15, use_same_chain=False):
+    def __init__(self, d_pair, minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.15, use_same_chain=False, enable_same_chain=False):
         super(PositionalEncoding2D, self).__init__()
         self.minpos = minpos
         self.maxpos = maxpos
@@ -40,7 +40,7 @@ class PositionalEncoding2D(nn.Module):
         self.use_same_chain = use_same_chain
         if use_same_chain:
             self.emb_chain = nn.Embedding(2, d_pair)
-
+        self.enable_same_chain = enable_same_chain
 
     def forward(self, seq, idx, bond_feats, dist_matrix, same_chain=None):
         sm_mask = is_atom(seq[0])
@@ -58,9 +58,12 @@ class PositionalEncoding2D(nn.Module):
 
         out = emb_res + emb_atom
 
-        if self.use_same_chain and same_chain is not None:
+        if self.use_same_chain and self.enable_same_chain == False and same_chain is not None:
             emb_c = self.emb_chain(same_chain.long())
             out += emb_c*0 # cursed but exists for backwards compatibility
+        elif self.enable_same_chain == True:
+            emb_c = self.emb_chain(same_chain.long())
+            out += emb_c
 
         return out
 
@@ -568,8 +571,7 @@ class Str2Str(nn.Module):
         xyz = torch.einsum('blij,blaj->blai', Rout,v)+xyz[:,:,1:2,:]+T[:,:,None,:]
 
         alpha = self.sc_predictor(msa[:,0], state)
-
-        return xyz, state, alpha
+        return xyz, state, alpha, torch.stack([qA, qB, qC, qD], dim=2)
 
 
 class Allatom2Allatom(nn.Module):
@@ -895,7 +897,7 @@ class IterBlock(nn.Module):
                  d_hidden=32, d_hidden_msa=None, 
                  minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.15,
                  SE3_param={'l0_in_features':32, 'l0_out_features':16, 'num_edge_features':32},
-                 nextra_l0=0, nextra_l1=0, use_same_chain=False,
+                 nextra_l0=0, nextra_l1=0, use_same_chain=False, enable_same_chain=False,
                  symmetrize_repeats=None, repeat_length=None,symmsub_k=None, sym_method=None, main_block=None,
                  fit=False, tscale=1.0
                  ):
@@ -908,7 +910,9 @@ class IterBlock(nn.Module):
         self.tscale = tscale
 
         self.pos = PositionalEncoding2D(d_rbf, minpos=minpos, maxpos=maxpos, 
-                                        maxpos_atom=maxpos_atom, p_drop=p_drop, use_same_chain=use_same_chain)
+                                        maxpos_atom=maxpos_atom, p_drop=p_drop, 
+                                        use_same_chain=use_same_chain,
+                                        enable_same_chain=enable_same_chain)
 
         self.msa2msa = MSAPairStr2MSA(d_msa=d_msa, d_pair=d_pair, d_rbf=d_rbf,
                                       n_head=n_head_msa,
@@ -946,18 +950,18 @@ class IterBlock(nn.Module):
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair, use_reentrant=True)
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state, crop, use_reentrant=True)
 
-            xyz, state, alpha = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
+            xyz, state, alpha, quat = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
                 msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, 
                 rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames,
                 use_reentrant=True
             )
-
+            
         else:
             msa = self.msa2msa(msa, pair, rbf_feat, state)
             pair = self.msa2pair(msa, pair)
             pair = self.pair2pair(pair, rbf_feat, state, crop)
-
-            xyz, state, alpha = self.str2str(
+            
+            xyz, state, alpha, quat = self.str2str(
                 msa.float(), pair.float(), xyz.detach().float(), state.float(), 
                 idx, rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames, top_k=top_k
             )
@@ -967,7 +971,7 @@ class IterBlock(nn.Module):
         if symmsub is not None and symmsub.shape[0]>1:
             xyz, pair, symmsub = update_symm_subs(xyz, pair, symmids, symmsub, symmRs, symmmeta, self.fit, self.tscale)
 
-        return msa, pair, xyz, state, alpha, symmsub
+        return msa, pair, xyz, state, alpha, symmsub, quat
 
 class IterativeSimulator(nn.Module):
     def __init__(self, n_extra_block=4, n_main_block=12, n_ref_block=4, n_finetune_block=0,
@@ -977,7 +981,8 @@ class IterativeSimulator(nn.Module):
          atom_type_index=None, aamask=None, 
          ljlk_parameters=None, lj_correction_parameters=None,
          cb_len=None, cb_ang=None, cb_tor=None,
-         num_bonds=None, lj_lin=0.6, use_same_chain=False, use_chiral_l1=True, use_lj_l1=False,
+         num_bonds=None, lj_lin=0.6, use_same_chain=False, enable_same_chain=False,
+         use_chiral_l1=True, use_lj_l1=False, refiner_topk=64,
          symmetrize_repeats=None,
          repeat_length=None,
          symmsub_k=None,
@@ -1003,6 +1008,7 @@ class IterativeSimulator(nn.Module):
         self.cb_tor = cb_tor
         self.use_chiral_l1 = use_chiral_l1
         self.use_lj_l1 = use_lj_l1
+        self.enable_same_chain = enable_same_chain
         self.fit = fit
         self.tscale = tscale
 
@@ -1018,6 +1024,7 @@ class IterativeSimulator(nn.Module):
                                                         SE3_param=SE3_param,
                                                         nextra_l1=3 if self.use_chiral_l1 else 0,
                                                         use_same_chain=use_same_chain,
+                                                        enable_same_chain=enable_same_chain,
                                                         symmetrize_repeats=symmetrize_repeats,
                                                         repeat_length=repeat_length,
                                                         symmsub_k=symmsub_k,
@@ -1038,6 +1045,7 @@ class IterativeSimulator(nn.Module):
                                                        SE3_param=SE3_param,
                                                        nextra_l1=3 if self.use_chiral_l1 else 0,
                                                        use_same_chain=use_same_chain,
+                                                       enable_same_chain=enable_same_chain,
                                                        symmetrize_repeats=symmetrize_repeats,
                                                        repeat_length=repeat_length,
                                                        symmsub_k=symmsub_k,
@@ -1067,6 +1075,7 @@ class IterativeSimulator(nn.Module):
         # To get all-atom coordinates
         self.xyzconverter = XYZConverter()
 
+        self.refiner_topk = refiner_topk
 
     def forward(
         self, seq_unmasked, msa, msa_full, pair, xyz, state, idx, 
@@ -1079,6 +1088,9 @@ class IterativeSimulator(nn.Module):
         #   msa: initial MSA embeddings (N, L, d_msa)
         #   pair: initial residue pair embeddings (L, L, d_pair)
 
+        if self.enable_same_chain == False:
+            same_chain = None
+
         B,_,L = msa.shape[:3]
         if symmsub is not None:
             Lasu = L//symmsub.shape[0]
@@ -1087,14 +1099,15 @@ class IterativeSimulator(nn.Module):
         rotation_mask = is_atom(seq_unmasked)
         xyz_s = list()
         alpha_s = list()
+        quat_s = list()
         for i_m in range(self.n_extra_block):
             extra_l0 = None
             extra_l1 = None
             if self.use_chiral_l1:
                 dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
                 extra_l1 = dchiraldxyz[0].detach()
-
-            msa_full, pair, xyz, state, alpha, symmsub = self.extra_block[i_m](msa_full, pair,
+                
+            msa_full, pair, xyz, state, alpha, symmsub, quat = self.extra_block[i_m](msa_full, pair,
                                                                xyz, state, seq_unmasked, idx, 
                                                                symmids, symmsub, symmRs, symmmeta,
                                                                bond_feats,
@@ -1109,6 +1122,7 @@ class IterativeSimulator(nn.Module):
                                                                use_atom_frames=use_atom_frames, crop=p2p_crop)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
+            quat_s.append(quat)
 
         for i_m in range(self.n_main_block):
             extra_l0 = None
@@ -1116,7 +1130,7 @@ class IterativeSimulator(nn.Module):
             if self.use_chiral_l1:
                 dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
                 extra_l1 = dchiraldxyz[0].detach()
-            msa, pair, xyz, state, alpha, symmsub = self.main_block[i_m](msa, pair,
+            msa, pair, xyz, state, alpha, symmsub, quat = self.main_block[i_m](msa, pair,
                                                          xyz, state, seq_unmasked, idx, 
                                                          symmids, symmsub, symmRs, symmmeta,
                                                          bond_feats,
@@ -1131,6 +1145,7 @@ class IterativeSimulator(nn.Module):
                                                          use_atom_frames=use_atom_frames, crop=p2p_crop)
             xyz_s.append(xyz)
             alpha_s.append(alpha)
+            quat_s.append(quat)
 
         _, xyzallatom = self.xyzconverter.compute_all_atom(seq_unmasked, xyz, alpha)  # think about detach here...
 
@@ -1162,10 +1177,10 @@ class IterativeSimulator(nn.Module):
                     extra_l1.append(dchiraldxyz[0].detach())
                 extra_l1 = torch.cat(extra_l1, dim=1)
 
-                xyz, state, alpha = self.str_refiner(
+                xyz, state, alpha, quat = self.str_refiner(
                     msa.float(), pair.float(), xyz.detach().float(), state.float(), idx,
                     rotation_mask, bond_feats,  dist_matrix, atom_frames, 
-                    is_motif, extra_l0, extra_l1.float(), top_k=64, use_atom_frames=use_atom_frames     #fd 128->64
+                    is_motif, extra_l0, extra_l1.float(), top_k=self.refiner_topk, use_atom_frames=use_atom_frames
                 )
 
 
@@ -1174,6 +1189,7 @@ class IterativeSimulator(nn.Module):
 
                 xyz_s.append(xyz)
                 alpha_s.append(alpha)
+                quat_s.append(quat)
         
         _, xyzallatom = self.xyzconverter.compute_all_atom(seq_unmasked, xyz, alpha)  # think about detach here...
         xyzallatom_s = list()
@@ -1200,5 +1216,6 @@ class IterativeSimulator(nn.Module):
         xyz = torch.stack(xyz_s, dim=0)
         alpha_s = torch.stack(alpha_s, dim=0)
         xyzallatom_s = torch.cat(xyzallatom_s, dim=0)
+        quat = torch.stack(quat_s, dim=1)
 
-        return msa, pair, xyz, alpha_s, xyzallatom_s, state, symmsub
+        return msa, pair, xyz, alpha_s, xyzallatom_s, state, symmsub, quat

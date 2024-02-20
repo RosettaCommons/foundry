@@ -67,6 +67,8 @@ dataset_params:
   dslf_fb_upsample: 1
 
 loader_params: 
+  RADIAL_CROP: False
+  OMIT_PERMUTATE: True
   maxseq: 1024
   maxtoken: 1024
   maxlat: 128

@@ -11,7 +11,8 @@ PARAMS = {
     'DMAX':20.0, 
     'DBINS1':30, 
     'DBINS2':30,
-    'ABINS':36
+    'ABINS':36,
+    'USE_CB':False
 }
 
 # ============================================================
@@ -124,7 +125,11 @@ def xyz_to_c6d(xyz, params=PARAMS):
     # 6d coordinates order: (dist,omega,theta,phi)
     c6d = torch.zeros([batch,nres,nres,4],dtype=xyz.dtype,device=xyz.device)
 
-    dist = get_pair_dist(Ca,Ca)
+    if params['USE_CB']:
+        dist = get_pair_dist(Cb,Cb)
+    else:
+        dist = get_pair_dist(Ca,Ca)
+
     dist[torch.isnan(dist)] = 999.9
     c6d[...,0] = dist + 999.9*torch.eye(nres,device=xyz.device)[None,...]
     b,i,j = torch.where(c6d[...,0]<params['DMAX'])

@@ -47,7 +47,8 @@ class LegacyRoseTTAFoldModule(nn.Module):
         n_head_pair=4, 
         n_head_templ=4,
         d_hidden=32, 
-        d_hidden_templ=64, 
+        d_hidden_templ=64,
+        d_t1d=0,
         p_drop=0.15,
         additional_dt1d=0,
         recycling_type="msa_pair",
@@ -65,6 +66,9 @@ class LegacyRoseTTAFoldModule(nn.Module):
         use_lj_l1=False,
         use_atom_frames=True,
         use_same_chain=False,
+        enable_same_chain=False,
+        refiner_topk=64,
+        get_quaternion=False,
         # New for diffusion
         freeze_track_motif=False,
         assert_single_sequence_input=False,
@@ -79,14 +83,16 @@ class LegacyRoseTTAFoldModule(nn.Module):
         # Input Embeddings
         d_state = SE3_param["l0_out_features"]
         self.latent_emb = MSA_emb(
-            d_msa=d_msa, d_pair=d_pair, d_state=d_state, p_drop=p_drop, use_same_chain=use_same_chain
+            d_msa=d_msa, d_pair=d_pair, d_state=d_state, p_drop=p_drop, use_same_chain=use_same_chain,
+            enable_same_chain=enable_same_chain
         )
         self.full_emb = Extra_emb(
             d_msa=d_msa_full, d_init=ChemData().NAATOKENS - 1 + 4, p_drop=p_drop
         )
         self.bond_emb = Bond_emb(d_pair=d_pair, d_init=ChemData().NBTYPES)
 
-        self.templ_emb = Templ_emb(d_pair=d_pair, 
+        self.templ_emb = Templ_emb(d_t1d=d_t1d,
+                                   d_pair=d_pair,
                                    d_templ=d_templ, 
                                    d_state=d_state, 
                                    n_head=n_head_templ,
@@ -134,7 +140,9 @@ class LegacyRoseTTAFoldModule(nn.Module):
             symmsub_k=symmsub_k,
             sym_method=sym_method,
             main_block=main_block,
-            use_same_chain=use_same_chain
+            use_same_chain=use_same_chain,
+            enable_same_chain=enable_same_chain,
+            refiner_topk=refiner_topk
         )
 
         ##
@@ -153,6 +161,8 @@ class LegacyRoseTTAFoldModule(nn.Module):
         self.bind_pred = BinderNetwork() #fd - expose n_hidden as variable?
 
         self.use_atom_frames = use_atom_frames
+        self.enable_same_chain = enable_same_chain
+        self.get_quaternion = get_quaternion
         self.verbose_checks = False
 
     def forward(
@@ -323,8 +333,10 @@ class LegacyRoseTTAFoldModule(nn.Module):
                 )
 
         # Get embeddings
+        #if self.enable_same_chain == False:
+        #    same_chain = None
         msa_latent, pair, state = self.latent_emb(
-            msa_latent, seq, idx, bond_feats,  dist_matrix
+            msa_latent, seq, idx, bond_feats, dist_matrix, same_chain=same_chain
         )
         msa_full = self.full_emb(msa_full, seq, idx)
         pair = pair + self.bond_emb(bond_feats)
@@ -353,7 +365,7 @@ class LegacyRoseTTAFoldModule(nn.Module):
 
         # Predict coordinates from given inputs
         is_motif = is_motif if self.freeze_track_motif else torch.zeros_like(seq).bool()[0]
-        msa, pair, xyz, alpha_s, xyz_allatom, state, symmsub = self.simulator(
+        msa, pair, xyz, alpha_s, xyz_allatom, state, symmsub, quat = self.simulator(
             seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx,
             symmids, symmsub, symmRs, symmmeta,
             bond_feats, dist_matrix, same_chain, chirals, is_motif, atom_frames, 
@@ -394,7 +406,13 @@ class LegacyRoseTTAFoldModule(nn.Module):
         #fd  predict bind/no-bind
         p_bind = self.bind_pred(logits_pae,same_chain)
 
-        return (
+        if self.get_quaternion:
+            return (
             logits, logits_aa, logits_pae, logits_pde, p_bind, 
-            xyz, alpha_s, xyz_allatom, lddt, msa[:,0], pair, state
-        )
+            xyz, alpha_s, xyz_allatom, lddt, msa[:,0], pair, state, quat
+            )
+        else:
+            return (
+                logits, logits_aa, logits_pae, logits_pde, p_bind, 
+                xyz, alpha_s, xyz_allatom, lddt, msa[:,0], pair, state
+            )

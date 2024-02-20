@@ -14,10 +14,10 @@ from rf2aa.chemical import ChemicalData as ChemData
 class MSA_emb(nn.Module):
     # Get initial seed MSA embedding
     def __init__(self, d_msa=256, d_pair=128, d_state=32, d_init=0,
-                 minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1, use_same_chain=False):
+                 minpos=-32, maxpos=32, maxpos_atom=8, p_drop=0.1, use_same_chain=False, enable_same_chain=False):
         if (d_init==0):
             d_init = 2*ChemData().NAATOKENS+2+2
-
+            
         super(MSA_emb, self).__init__()
         self.emb = nn.Linear(d_init, d_msa) # embedding for general MSA
         self.emb_q = nn.Embedding(ChemData().NAATOKENS, d_msa) # embedding for query sequence -- used for MSA embedding
@@ -25,8 +25,9 @@ class MSA_emb(nn.Module):
         self.emb_right = nn.Embedding(ChemData().NAATOKENS, d_pair) # embedding for query sequence -- used for pair embedding
         self.emb_state = nn.Embedding(ChemData().NAATOKENS, d_state)
         self.pos = PositionalEncoding2D(d_pair, minpos=minpos, maxpos=maxpos, 
-                                        maxpos_atom=maxpos_atom, p_drop=p_drop, use_same_chain=use_same_chain)
-        
+                                        maxpos_atom=maxpos_atom, p_drop=p_drop, use_same_chain=use_same_chain,
+                                        enable_same_chain=enable_same_chain)
+        self.enable_same_chain = enable_same_chain
         self.reset_parameter()
     
     def reset_parameter(self):
@@ -47,18 +48,18 @@ class MSA_emb(nn.Module):
 
         return msa
 
-    def _pair_emb(self, seq, idx, bond_feats, dist_matrix):
+    def _pair_emb(self, seq, idx, bond_feats, dist_matrix, same_chain=None):
         left = self.emb_left(seq)[:,None] # (B, 1, L, d_pair)
         right = self.emb_right(seq)[:,:,None] # (B, L, 1, d_pair)
         pair = left + right # (B, L, L, d_pair)
-        pair = pair + self.pos(seq, idx, bond_feats, dist_matrix) # add relative position
+        pair = pair + self.pos(seq, idx, bond_feats, dist_matrix, same_chain=same_chain) # add relative position
 
         return pair
 
     def _state_emb(self, seq):
         return self.emb_state(seq)
 
-    def forward(self, msa, seq, idx, bond_feats, dist_matrix):
+    def forward(self, msa, seq, idx, bond_feats, dist_matrix, same_chain=None):
         # Inputs:
         #   - msa: Input MSA (B, N, L, d_init)
         #   - seq: Input Sequence (B, L)
@@ -68,10 +69,13 @@ class MSA_emb(nn.Module):
         #   - msa: Initial MSA embedding (B, N, L, d_msa)
         #   - pair: Initial Pair embedding (B, L, L, d_pair)
 
+        if self.enable_same_chain == False:
+            same_chain = None
+
         msa = self._msa_emb(msa, seq)
 
         # pair embedding 
-        pair = self._pair_emb(seq, idx, bond_feats, dist_matrix)
+        pair = self._pair_emb(seq, idx, bond_feats, dist_matrix, same_chain=same_chain)
         # state embedding
         state = self._state_emb(seq)
         return msa, pair, state

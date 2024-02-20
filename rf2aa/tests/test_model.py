@@ -62,7 +62,7 @@ def test_regression_legacy(example, model):
     output_names = ("logits_c6d", "logits_aa", "logits_pae", \
                         "logits_pde", "p_bind", "xyz", "alpha", "xyz_allatom", \
                         "lddt", "seq", "pair", "state")
-
+    
     if not os.path.exists(model_pickle):
         torch.save(output_i, model_pickle)
     else:
