@@ -4,6 +4,7 @@ import torch.nn as nn
 from collections import OrderedDict
 from copy import deepcopy
 
+import contextlib
 
 class EMA(nn.Module):
 
@@ -44,6 +45,10 @@ class EMA(nn.Module):
         for name, buffer in model_buffers.items():
             # buffers are copied
             shadow_buffers[name].copy_(buffer)
+
+    #fd A hack to allow non-DDP models to be passed into the Trainer
+    def no_sync(self):
+        return contextlib.nullcontext()
 
     def forward(self, *args, **kwargs):
         if self.training:

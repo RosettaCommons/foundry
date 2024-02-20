@@ -7,8 +7,12 @@ from contextlib import ExitStack
 
 from rf2aa.chemical import ChemicalData as ChemData
 
-def recycle_step_legacy(ddp_model, input, n_cycle, use_amp, nograds=False):
-    gpu = ddp_model.device
+def recycle_step_legacy(ddp_model, input, n_cycle, use_amp, nograds=False, force_device=None):
+    if force_device is not None:
+        gpu = force_device
+    else:
+        gpu = ddp_model.device
+
     xyz_prev, alpha_prev, mask_recycle = \
         input["xyz_prev"], input["alpha_prev"], input["mask_recycle"]
     output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
@@ -25,9 +29,13 @@ def recycle_step_legacy(ddp_model, input, n_cycle, use_amp, nograds=False):
             output_i = ddp_model(**input_i)
     return output_i
 
-def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False):
+def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False, force_device=None):
     """ exactly same logic as legacy recycling, except inputs and outputs are dictionaries"""
-    gpu = ddp_model.device
+    if force_device is not None:
+        gpu = force_device
+    else:
+        gpu = ddp_model.device
+
     xyz_prev, alpha_prev, mask_recycle = \
         input["xyz_prev"], input["alpha_prev"], input["mask_recycle"]
     output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)

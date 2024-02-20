@@ -84,7 +84,7 @@ class RecurrentLocalRefinement(nn.Module):
             output = self.se3(msa, pair, state, xyz, is_atom, atom_frames, chirals)
             xyzs[i] = output["xyz"]
             alphas[i] = output["alpha"]
-            latent_feats["state"] = output["state"]
+            state, xyz = output["state"], output["xyz"]
         
         return {
             "xyzs": xyzs,
@@ -120,6 +120,7 @@ class RecurrentLocalRefinement_w_Adaptor(nn.Module):
             output = self.se3(msa, pair, state, xyz, is_atom, atom_frames, chirals)
             xyzs[i] = output["xyz"]
             alphas[i] = output["alpha"]
+            state, xyz = output["state"], output["xyz"]
 
         state = self.proj_state_out(state)
         latent_feats["state"] = state
