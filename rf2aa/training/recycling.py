@@ -23,7 +23,7 @@ def recycle_step_legacy(ddp_model, input, n_cycle, use_amp, nograds=False, force
                 stack.enter_context(torch.no_grad())
                 stack.enter_context(ddp_model.no_sync())
             return_raw = (i_cycle < n_cycle -1)
-            use_checkpoint = not nograds and  (i_cycle == n_cycle -1)
+            use_checkpoint = not nograds and (i_cycle == n_cycle -1)
 
             input_i = add_recycle_inputs(input, output_i, i_cycle, gpu, return_raw=return_raw, use_checkpoint=use_checkpoint)
             output_i = ddp_model(**input_i)
@@ -99,11 +99,11 @@ def unpack_outputs(rf_outputs, rf_latents, return_raw):
         p_bind = None
         xyz, alphas = rf_outputs["xyzs"], rf_outputs["alphas"]
         if "xyz_intermediate" in rf_latents:
-            intermediate_xyzs = torch.cat(rf_latents["xyz_intermediate"], dim=0)
+            intermediate_xyzs = torch.stack(rf_latents["xyz_intermediate"], dim=0)
             xyz = torch.cat((intermediate_xyzs, xyz), dim=0)
 
         if "alpha_intermediate" in rf_latents:
-            alpha_intermediate = torch.cat(rf_latents["alpha_intermediate"], dim=0)
+            alpha_intermediate = torch.stack(rf_latents["alpha_intermediate"], dim=0)
             alphas = torch.cat((alpha_intermediate, alphas), dim=0)
 
         xyz_allatom = None

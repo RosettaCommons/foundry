@@ -65,7 +65,10 @@ class RosettaFold(nn.Module):
                 "is_atom": is_atom(rf_inputs["seq_unmasked"]),
                 "atom_frames": rf_inputs["atom_frames"],
                 "chirals": rf_inputs["chirals"],
-                "xyz": rf_inputs["xyz"]
+                "xyz": rf_inputs["xyz"],
+                "idx": rf_inputs["idx"],
+                "bond_feats": rf_inputs["bond_feats"],
+                "dist_matrix": rf_inputs["dist_matrix"],
             }
         )
         for block in self.simulator:

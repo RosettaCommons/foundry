@@ -15,6 +15,7 @@ from rf2aa.model.layers.Attention_module import FeedForwardLayer
 from rf2aa.SE3Transformer.se3_transformer.model import SE3Transformer
 from rf2aa.SE3Transformer.se3_transformer.model.fiber import Fiber
 from rf2aa.model.layers.resnet import SCPred
+from rf2aa.util_module import get_seqsep_protein_sm
 
 se3_transformer_path = inspect.getfile(SE3Transformer)
 se3_fiber_path = inspect.getfile(Fiber)
@@ -123,7 +124,7 @@ class FullyConnectedSE3_noR(nn.Module):
         self.ff_node = FeedForwardLayer(l0_in_features, 2) #HACK: hardcoded value
         self.norm_node = nn.LayerNorm(l0_in_features)
 
-        self.embed_edge = nn.Linear(d_pair+d_rbf, num_edge_features)
+        self.embed_edge = nn.Linear(d_pair+d_rbf+1, num_edge_features)
         self.ff_edge = FeedForwardLayer(num_edge_features, 2)
         self.norm_edge = nn.LayerNorm(num_edge_features)
 
@@ -157,11 +158,12 @@ class FullyConnectedSE3_noR(nn.Module):
         node = self.norm_node(node)
         return node
 
-    def embed_edge_feats(self, pair, xyz):
+    def embed_edge_feats(self, pair, xyz, idx, bond_feats, dist_matrix, rotation_mask):
+        neighbor = get_seqsep_protein_sm(idx, bond_feats, dist_matrix, rotation_mask)
         pair = self.norm_pair(pair)
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas))
-        edge = torch.cat((pair, rbf_feat), dim=-1)
+        edge = torch.cat((pair, rbf_feat, neighbor), dim=-1)
         edge = self.embed_edge(edge)
         edge = edge + self.ff_edge(edge)
         edge = self.norm_edge(edge)
@@ -182,19 +184,19 @@ class FullyConnectedSE3_noR(nn.Module):
         B, L = xyz.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
         
-        state = state + weight * shift["0"].reshape(B, L, -1)
+        state = shift["0"].reshape(B, L, -1)
         offset = shift["1"].reshape(B, L, 3)
         T = offset / 10.0
         xyz_update = xyz.clone()
         xyz_update[...,1:2, :] = xyz[..., 1:2, :] + weight*T[..., None, :]
         return state, xyz_update
 
-    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, drop_layer=False):
+    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False):
         #TODO: allow these functions to accept kwargs so we can pass 
         # different inputs when iterating
         B, N, L = msa.shape[:3]
         node = self.embed_node_feats(msa, state)
-        edge = self.embed_edge_feats(pair, xyz)
+        edge = self.embed_edge_feats(pair, xyz, idx, bond_feats, dist_matrix, is_atom)
         G, edge_feats = self.construct_graph(xyz, edge)
         #TODO: get extra l1 feats automatically and populate the extra l1 dimension
         l1_feats = self.construct_l1_feats(xyz, is_atom, atom_frames, chirals)
@@ -233,8 +235,6 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         nn.init.zeros_(self.embed_node.bias)
         nn.init.zeros_(self.embed_edge.bias)
 
-        nn.init.ones_(self.norm_msa.weight)
-        nn.init.ones_(self.norm_pair.weight)
     
     def embed_node_feats(self, msa, state):
         seq = self.norm_msa(msa[:, 0])
@@ -259,7 +259,7 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         B, L = node.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
         
-        state = state + weight * shift["0"].reshape(B, L, -1)
+        state = shift["0"].reshape(B, L, -1)
         offset = shift["1"].reshape(B, L, 2, 3)
         T = offset[:,:,0,:] / 10
         R = offset[:,:,1,:] / 100.0
@@ -287,9 +287,9 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
 
         return state, xyz    
 
-    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, drop_layer=False):
+    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False):
 
-        state, xyz = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals, drop_layer)
+        state, xyz = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix)
         alpha = self.sc_predictor(msa[:, 0], state)
         return {
             "state": state,

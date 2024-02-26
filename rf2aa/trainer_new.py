@@ -13,7 +13,7 @@ import time
 from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
 from rf2aa.data.data_loader import loader_atomize_pdb
 from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items
-from rf2aa.debug import debug_unused_params, debug_used_params
+from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads
 from rf2aa.training.EMA import EMA, count_parameters
 from rf2aa.loss.loss_factory import get_loss_and_misc
 from rf2aa.training.optimizer import add_weight_decay
@@ -352,7 +352,7 @@ class LegacyTrainer(Trainer):
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
 
-    def train_step(self, inputs, n_cycle, nograds):
+    def train_step(self, inputs, n_cycle, nograds=False):
         """ take an input from dataloader, run the model and compute a loss """
         gpu = self.model.device
         # HACK: certain features are constructed during the train step

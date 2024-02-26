@@ -3,9 +3,10 @@ import torch.nn as nn
 
 from rf2aa.debug import debug_nans
 from rf2aa.model.layers.SE3_network import FullyConnectedSE3, get_backbone_offset_vectors, get_chiral_vectors
-from rf2aa.model.Track_module import SCPred
+from rf2aa.model.Track_module import Str2Str
 from rf2aa.util_module import rbf, make_topk_graph, init_lecun_normal
 from rf2aa.chemical import ChemicalData as ChemData
+from rf2aa.loss.loss import calc_chiral_grads
 
 class LocalRefinementSE3(FullyConnectedSE3):
 
@@ -49,9 +50,6 @@ class LocalRefinementSE3(FullyConnectedSE3):
         nn.init.zeros_(self.embed_node.bias)
         nn.init.zeros_(self.embed_edge.bias)
 
-        nn.init.ones_(self.norm_msa.weight)
-        nn.init.ones_(self.norm_pair.weight)
-
     def construct_graph(self, xyz, edge):
         L = xyz.shape[1]
         idx = torch.arange(L, device=edge.device)[None]
@@ -71,24 +69,24 @@ class RecurrentLocalRefinement(nn.Module):
             latent_feats["msa"], latent_feats["pair"], \
             latent_feats["state"], latent_feats["xyz"], latent_feats["is_atom"], \
                 latent_feats["atom_frames"], latent_feats["chirals"]
-        return msa, pair, state, xyz, is_atom, atom_frames, chirals
+        idx, bond_feats, dist_matrix = latent_feats["idx"], latent_feats["bond_feats"], latent_feats["dist_matrix"]
+        return msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix
 
     def forward(self, latent_feats):
         B, N, L = latent_feats["msa"].shape[:3]
-        xyzs = torch.full((self.num_iterations, L, 3, 3 ), torch.nan, device=latent_feats["msa"].device)
-        alphas = torch.full((self.num_iterations, L, ChemData().NTOTALDOFS, 2), torch.nan, device=latent_feats["msa"].device) 
-
-        msa, pair, state, xyz, is_atom, atom_frames, chirals = self._unpack_inputs(latent_feats)
-
+        msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix = self._unpack_inputs(latent_feats)
+        xyzs = []
+        alphas = []
         for i in range(self.num_iterations):
-            output = self.se3(msa, pair, state, xyz, is_atom, atom_frames, chirals)
-            xyzs[i] = output["xyz"]
-            alphas[i] = output["alpha"]
+            output = self.se3(msa, pair, state, xyz.detach(), is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix)
+            xyzs.append(output["xyz"])
+            alphas.append(output["alpha"])
             state, xyz = output["state"], output["xyz"]
-        
+
         return {
-            "xyzs": xyzs,
-            "alphas": alphas, 
+            "xyzs": torch.stack(xyzs, dim=0),
+            "state": state,
+            "alphas": torch.stack(alphas, dim=0)
         }
 
 class RecurrentLocalRefinement_w_Adaptor(nn.Module):
@@ -110,28 +108,91 @@ class RecurrentLocalRefinement_w_Adaptor(nn.Module):
 
     def forward(self, latent_feats):
         B, N, L = latent_feats["msa"].shape[:3]
-        xyzs = torch.full((self.num_iterations, L, 3, 3 ), torch.nan, device=latent_feats["msa"].device)
-        alphas = torch.full((self.num_iterations, L, ChemData().NTOTALDOFS, 2), torch.nan, device=latent_feats["msa"].device) 
+        #xyzs = torch.full((self.num_iterations, L, 3, 3 ), torch.nan, device=latent_feats["msa"].device)
+        #alphas = torch.full((self.num_iterations, L, ChemData().NTOTALDOFS, 2), torch.nan, device=latent_feats["msa"].device) 
+        xyzs = []
+        alphas = []
 
         msa, pair, state, xyz, is_atom, atom_frames, chirals = self._unpack_inputs(latent_feats)
 
         state = self.proj_state_in(state)
         for i in range(self.num_iterations):
             output = self.se3(msa, pair, state, xyz, is_atom, atom_frames, chirals)
-            xyzs[i] = output["xyz"]
-            alphas[i] = output["alpha"]
+            xyzs.append(output["xyz"])
+            alphas.append(output["alpha"])    
             state, xyz = output["state"], output["xyz"]
 
         state = self.proj_state_out(state)
         latent_feats["state"] = state
 
         return {
-            "xyzs": xyzs,
-            "alphas": alphas, 
+            "xyzs": torch.stack(xyzs, dim=0),
+            "state": state,
+            "alphas": torch.stack(alphas, dim=0)
         }
 
+class LegacyRefiner(nn.Module):
+    def __init__(self, global_params, block_params):
+        super(LegacyRefiner, self).__init__()
+
+        self.str_refiner = Str2Str(
+            d_msa=256,
+            d_pair=192,
+            d_state=64,
+            d_rbf=64,
+            nextra_l1=3,
+            SE3_param={
+                "num_layers": 2,
+                "num_channels": 32,
+                "num_degrees": 2,
+                "l0_in_features": 64, 
+                "l0_out_features": 64, 
+                "l1_in_features": 3,
+                "l1_out_features": 2,
+                "num_edge_features": 64,
+                "n_heads": 4,
+                "div": 4
+            }
+        )
+        self.refiner_topk = 64
+    def _unpack_latents(self, latent_feats):
+        msa, pair, xyz, state, idx, rotation_mask, bond_feats, dist_matrix, atom_frames, chirals = \
+        latent_feats["msa"], latent_feats["pair"], latent_feats["xyz"], latent_feats["state"], \
+        latent_feats["idx"], latent_feats["is_atom"], latent_feats["bond_feats"], latent_feats["dist_matrix"],  \
+        latent_feats["atom_frames"], latent_feats["chirals"]
+        return msa, pair, xyz, state, idx, rotation_mask, bond_feats, dist_matrix, atom_frames, chirals
+    
+    def forward(self, latent_feats):
+        msa, pair, xyz, state, idx, rotation_mask, bond_feats, dist_matrix, atom_frames, chirals = \
+        self._unpack_latents(latent_feats)
+        is_motif = torch.zeros_like(state[..., 0][0], device=msa.device).bool()
+        xyzs = []
+        alphas = []
+        for i in range(4):
+            extra_l0 = None
+            extra_l1 = []
+
+            dchiraldxyz, = calc_chiral_grads(xyz.detach(),chirals)
+            #extra_l1 = torch.cat((dljdxyz[0].detach(), dchiraldxyz[0].detach()), dim=1)
+            extra_l1.append(dchiraldxyz[0].detach())
+            extra_l1 = torch.cat(extra_l1, dim=1)
+
+            xyz, state, alpha, quat = self.str_refiner(
+                        msa.float(), pair.float(), xyz.detach().float(), state.float(), idx,
+                        rotation_mask, bond_feats,  dist_matrix, atom_frames, 
+                        is_motif, extra_l0, extra_l1.float(), top_k=self.refiner_topk, use_atom_frames=True
+                    )
+            xyzs.append(xyz)
+            alphas.append(alpha)
+
+        return {
+            "xyzs": torch.stack(xyzs, dim=0),
+            "state": state,
+            "alphas": torch.stack(alphas, dim=0)
+        }
 
 refinement_factory ={
     "local": RecurrentLocalRefinement,
-    "local_adaptor": RecurrentLocalRefinement_w_Adaptor
+    "local_adaptor": RecurrentLocalRefinement_w_Adaptor,
+    "legacy": LegacyRefiner
 }

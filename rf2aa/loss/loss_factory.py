@@ -23,9 +23,9 @@ def get_loss_and_misc(
     logit_s, logit_aa_s, logit_pae, logit_pde, p_bind, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = output_i
 
     if pred_allatom is None:
-        _, pred_allatom = trainer.xyz_converter.compute_all_atom(msa[0][0][None],pred_crds[-1][None], alphas[-1][None])
-        pred_crds = pred_crds[:, None]
-        alphas = alphas[:, None]
+        _, pred_allatom = trainer.xyz_converter.compute_all_atom(msa[0][0][None],pred_crds[-1], alphas[-1])
+        #pred_crds = pred_crds[:, None]
+        #alphas = alphas[:, None]
 
     if (symmRs is not None):
         ###

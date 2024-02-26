@@ -23,3 +23,8 @@ def debug_device(rf_inputs):
             if not tensor.is_cuda():
                 print(name)
                 print(tensor.device)
+
+def debug_grads(model):
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            print(f"{name}: {param.grad.norm().item()}")

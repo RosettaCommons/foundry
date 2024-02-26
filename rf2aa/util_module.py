@@ -260,7 +260,6 @@ def make_full_graph(xyz, pair, idx):
     # seq sep
     sep = idx[:,None,:] - idx[:,:,None]
     b,i,j = torch.where(sep.abs() > 0)
-   
     src = b*L+i
     tgt = b*L+j
     G = dgl.graph((src, tgt), num_nodes=B*L).to(device)

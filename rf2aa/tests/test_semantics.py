@@ -69,7 +69,7 @@ def test_fake_sm_idx(example, model):
 
     make_deterministic()
     rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, gpu)
-    check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise)
+    check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise, exclude=["idx"])
 
 @pytest.mark.parametrize("example,model", test_conditions)
 def test_mask_t(example, model):
@@ -123,31 +123,35 @@ def setup_test(example, model):
         negative, symmRs, Lasu, ch_label = prepare_input(dataloader_inputs,xyz_converter, gpu)
     return model_name, model, network_input
 
-def check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise):
+def check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise, exclude=None):
     """
     check that the outputs of the network are semantically the same
     """
+    if exclude is None:
+        exclude = []
     for name, output in rf_outputs.items():
         if torch.is_tensor(output):
             if name == "xyzs":
                 # xyzs will be different because of the semantically meaningless coordinates
                 # only measure similarity over meaningful outputs
                 mask = ChemData().allatom_mask.to(gpu)[network_input["seq_unmasked"]][..., :3]
-                output = output[:, mask[0]]
+                output = output[..., mask[0], :]
                 assert torch.sum(mask) > 0 
-                assert_equal(rf_outputs_noise[name][:, mask[0]], output)
+                assert_equal(rf_outputs_noise[name][..., mask[0], :], output)
                 continue
             try:
                 assert_equal(rf_outputs_noise[name], output)
             except Exception as e:
-                raise ValueError(f"{name} not equivalent for {model_name} on {example[0]} dataset") \
+                raise ValueError(f"{name} not equivalent for {model_name}") \
                     from e
     
-    for name, latent in rf_latents.items():
+    for name, latent in rf_latents.items(): 
         if name == "xyz":
             continue # already tested this above
-        if torch.is_tensor(latent):
+        # latents holds a lot of constants too, so if changing one of the constants you have to 
+        # exclude it from comparison
+        if torch.is_tensor(latent) and name not in exclude:
             try:
                 assert_equal(rf_latents_noise[name], latent)
             except Exception as e:
-                raise ValueError(f"{name} not equivalent for {model_name} on {example[0]} dataset") from e 
+                raise ValueError(f"{name} not equivalent for {model_name}") from e 
