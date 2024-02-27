@@ -126,7 +126,13 @@ The following performance optimizations were implemented in this model:
 - The layout (order of dimensions) of the bases tensors is optimized to avoid copies to contiguous memory in the downstream TFN layers
 - When Tensor Cores are available, and the output feature dimension of computed bases is odd, then it is padded with zeros to make more effective use of Tensor Cores (AMP and TF32 precisions)
 - Multiple levels of fusion for TFN convolutions (and radial profiles) are provided and automatically used when conditions are met
-- A low-memory mode is provided that will trade throughput for less memory use (`--low_memory`)
+- A low-memory mode is provided that will trade throughput for less memory use (`--low_memory`). Overview of memory savings over the official implementation (batch size 100), depending on the precision and the low memory mode:
+
+    |   | FP32               | AMP                
+    |---|-----------------------|--------------------------
+    |`--low_memory false` (default)   |         4.7x | 7.1x
+    |`--low_memory true`   |         29.4x | 43.6x 
+
 
 **Self-attention optimizations**
 
@@ -155,11 +161,11 @@ Competitive training results and analysis are provided for the following hyperpa
 
 This model supports the following features:: 
 
-| Feature               | SE(3)-Transformer                
-|-----------------------|--------------------------
-|Automatic mixed precision (AMP)   |         Yes 
-|Distributed data parallel (DDP)   |         Yes 
-         
+| Feature                         | SE(3)-Transformer |
+|---------------------------------|-------------------|
+| Automatic mixed precision (AMP) | Yes               |
+| Distributed data parallel (DDP) | Yes               |
+
 #### Features
 
 
@@ -246,9 +252,9 @@ The following section lists the requirements that you need to meet in order to s
 
 ### Requirements
 
-This repository contains a Dockerfile which extends the PyTorch 21.07 NGC container and encapsulates some dependencies. Aside from these dependencies, ensure you have the following components:
+This repository contains a Dockerfile which extends the PyTorch 23.01 NGC container and encapsulates some dependencies. Aside from these dependencies, ensure you have the following components:
 - [NVIDIA Docker](https://github.com/NVIDIA/nvidia-docker)
-- PyTorch 21.07+ NGC container
+- PyTorch 23.01+ NGC container
 - Supported GPUs:
     - [NVIDIA Volta architecture](https://www.nvidia.com/en-us/data-center/volta-gpu-architecture/)
     - [NVIDIA Turing architecture](https://www.nvidia.com/en-us/design-visualization/technologies/turing-architecture/)
@@ -268,7 +274,7 @@ To train your model using mixed or TF32 precision with Tensor Cores or FP32, per
 1. Clone the repository.
     ```
     git clone https://github.com/NVIDIA/DeepLearningExamples
-    cd DeepLearningExamples/PyTorch/DrugDiscovery/SE3Transformer
+    cd DeepLearningExamples/DGLPyTorch/DrugDiscovery/SE3Transformer
     ```
    
 2.  Build the `se3-transformer` PyTorch NGC container.
@@ -279,12 +285,12 @@ To train your model using mixed or TF32 precision with Tensor Cores or FP32, per
 3.  Start an interactive session in the NGC container to run training/inference.
     ```
     mkdir -p results
-    docker run -it --runtime=nvidia --shm-size=8g --ulimit memlock=-1 --ulimit stack=67108864 --rm -v ${PWD}/results:/results se3-transformer:latest
+    docker run -it --runtime=nvidia --shm-size=8g --ulimit memlock=-1 --ulimit stack=67108864 --rm -v ${PWD}/results:/workspace/se3-transformer/results se3-transformer:latest
     ```
 
 4. Start training.
    ```
-   bash scripts/train.sh
+   bash scripts/train.sh  # or scripts/train_multi_gpu.sh
    ```
 
 5. Start inference/predictions.
@@ -328,7 +334,7 @@ The complete list of the available parameters for the `training.py` script conta
 - `--gradient_clip`: Clipping of the gradient norms (default: `None`)
 - `--accumulate_grad_batches`: Gradient accumulation (default: `1`)
 - `--ckpt_interval`: Save a checkpoint every N epochs (default: `-1`)
-- `--eval_interval`: Do an evaluation round every N epochs (default: `1`)
+- `--eval_interval`: Do an evaluation round every N epochs (default: `20`)
 - `--silent`: Minimize stdout output (default: `false`)
 
 **Paths**
@@ -358,7 +364,7 @@ The complete list of the available parameters for the `training.py` script conta
 - `--pooling`: Type of graph pooling (default: `max`)
 - `--norm`: Apply a normalization layer after each attention block (default: `false`)
 - `--use_layer_norm`: Apply layer normalization between MLP layers (default: `false`)
-- `--low_memory`: If true, will use fused ops that are slower but use less memory (expect 25 percent less memory). Only has an effect if AMP is enabled on NVIDIA Volta GPUs or if running on Ampere GPUs (default: `false`)
+- `--low_memory`: If true, will use ops that are slower but use less memory (default: `false`)
 - `--num_degrees`: Number of degrees to use. Hidden features will have types [0, ..., num_degrees - 1] (default: `4`)
 - `--num_channels`: Number of channels for the hidden features (default: `32`)
 
@@ -407,7 +413,8 @@ The training script is `se3_transformer/runtime/training.py`, to be run as a mod
 
 By default, the resulting logs are stored in `/results/`. This can be changed with `--log_dir`.
 
-You can connect your existing Weights & Biases account by setting the `WANDB_API_KEY` environment variable.
+You can connect your existing Weights & Biases account by setting the WANDB_API_KEY environment variable, and enabling the `--wandb` flag.
+If no API key is set, `--wandb` will log the run anonymously to Weights & Biases.
 
 **Checkpoints**
 
@@ -452,11 +459,11 @@ The following section shows how to run benchmarks measuring the model performanc
 
 #### Training performance benchmark
 
-To benchmark the training performance on a specific batch size, run `bash scripts/benchmarck_train.sh {BATCH_SIZE}` for single GPU, and `bash scripts/benchmarck_train_multi_gpu.sh {BATCH_SIZE}` for multi-GPU.
+To benchmark the training performance on a specific batch size, run `bash scripts/benchmark_train.sh {BATCH_SIZE}` for single GPU, and `bash scripts/benchmark_train_multi_gpu.sh {BATCH_SIZE}` for multi-GPU.
 
 #### Inference performance benchmark
 
-To benchmark the inference performance on a specific batch size, run `bash scripts/benchmarck_inference.sh {BATCH_SIZE}`.
+To benchmark the inference performance on a specific batch size, run `bash scripts/benchmark_inference.sh {BATCH_SIZE}`.
 
 ### Results
 
@@ -467,36 +474,37 @@ The following sections provide details on how we achieved our performance and ac
 
 ##### Training accuracy: NVIDIA DGX A100 (8x A100 80GB)
 
-Our results were obtained by running the `scripts/train.sh` training script in the PyTorch 21.07 NGC container on NVIDIA DGX A100 (8x A100 80GB) GPUs.
+Our results were obtained by running the `scripts/train.sh` and `scripts/train_multi_gpu.sh` training scripts in the PyTorch 23.01 NGC container on NVIDIA DGX A100 (8x A100 80GB) GPUs.
 
-| GPUs    | Batch size / GPU    | Absolute error - TF32  | Absolute error - mixed precision  |   Time to train - TF32  |  Time to train - mixed precision | Time to train speedup (mixed precision to TF32) |       
-|:------------------:|:----------------------:|:--------------------:|:------------------------------------:|:---------------------------------:|:----------------------:|:----------------------------------------------:|
-|  1                 |    240                   |           0.03456                            |        0.03460                                |        1h23min      |    1h03min                |    1.32x              |
-|  8                 |    240                   |           0.03417                            |        0.03424                                |        15min          |    12min                |    1.25x              |
+| GPUs | Batch size / GPU | Absolute error - TF32 | Absolute error - mixed precision | Time to train - TF32 | Time to train - mixed precision | Time to train speedup (mixed precision to TF32) |       
+|:----:|:----------------:|:---------------------:|:--------------------------------:|:--------------------:|:-------------------------------:|:-----------------------------------------------:|
+|  1   |       240        |        0.03038        |             0.02987              |       1h02min        |              50min              |                      1.24x                      |
+|  8   |       240        |        0.03466        |             0.03436              |        13min         |              10min              |                      1.27x                      |
 
 
 ##### Training accuracy: NVIDIA DGX-1 (8x V100 16GB)
 
-Our results were obtained by running the `scripts/train.sh` training script in the PyTorch 21.07 NGC container on NVIDIA DGX-1 with (8x V100 16GB) GPUs.
+Our results were obtained by running the `scripts/train.sh` and `scripts/train_multi_gpu.sh` training scripts in the PyTorch 23.01 NGC container on NVIDIA DGX-1 with (8x V100 16GB) GPUs.
 
-| GPUs    | Batch size / GPU    | Absolute error - FP32  | Absolute error - mixed precision  |   Time to train - FP32  |  Time to train - mixed precision | Time to train speedup (mixed precision to FP32)  |      
-|:------------------:|:----------------------:|:--------------------:|:------------------------------------:|:---------------------------------:|:----------------------:|:----------------------------------------------:|
-|  1                 |    240                   |           0.03432                            |        0.03439                                |         2h25min         |    1h33min                |    1.56x              |
-|  8                 |    240                   |           0.03380                            |        0.03495                                |        29min          |    20min                |    1.45x              |
+| GPUs | Batch size / GPU | Absolute error - FP32 | Absolute error - mixed precision | Time to train - FP32 | Time to train - mixed precision | Time to train speedup (mixed precision to FP32) |      
+|:----:|:----------------:|:---------------------:|:--------------------------------:|:--------------------:|:-------------------------------:|:-----------------------------------------------:|
+|  1   |       240        |        0.03044        |             0.03076              |       2h07min        |             1h22min             |                      1.55x                      |
+|  8   |       240        |        0.03435        |             0.03495              |        27min         |              19min              |                      1.42x                      |
+
 
 
 #### Training performance results
 
 ##### Training performance: NVIDIA DGX A100 (8x A100 80GB)
 
-Our results were obtained by running the `scripts/benchmark_train.sh` and `scripts/benchmark_train_multi_gpu.sh` benchmarking scripts in the PyTorch 21.07 NGC container on NVIDIA DGX A100 with 8x A100 80GB GPUs. Performance numbers (in molecules per millisecond) were averaged over five  entire training epochs after a warmup epoch.
+Our results were obtained by running the `scripts/benchmark_train.sh` and `scripts/benchmark_train_multi_gpu.sh` benchmarking scripts in the PyTorch 23.01 NGC container on NVIDIA DGX A100 with 8x A100 80GB GPUs. Performance numbers (in molecules per millisecond) were averaged over five  entire training epochs after a warmup epoch.
 
-| GPUs             | Batch size / GPU     | Throughput - TF32 [mol/ms]                             | Throughput - mixed precision [mol/ms]      | Throughput speedup (mixed precision - TF32)   | Weak scaling - TF32    | Weak scaling - mixed precision |
-|:------------------:|:----------------------:|:--------------------:|:------------------------------------:|:---------------------------------:|:----------------------:|:----------------------------------------------:|
-|   1              |     240             |   2.21                                       |   2.92                            |   1.32x                         |                      |                                              |
-|   1              |     120              |  1.81                                        |  2.04                             |  1.13x                          |                      |                                              |
-|   8              |     240             |   17.15                                      |     22.95                         |   1.34x                         |   7.76               |    7.86                                     |
-|   8              |     120              |  13.89                                       |    15.62                          |  1.12x                          |       7.67           |    7.66                                       |
+|       GPUs       |  Batch size / GPU   | Throughput - TF32 [mol/ms] | Throughput - mixed precision [mol/ms] | Throughput speedup (mixed precision - TF32) | Weak scaling - TF32 | Weak scaling - mixed precision |
+|:----------------:|:-------------------:|:--------------------------:|:-------------------------------------:|:-------------------------------------------:|:-------------------:|:------------------------------:|
+|        1         |         240         |            2.59            |                 3.23                  |                    1.25x                    |                     |                                |
+|        1         |         120         |            1.89            |                 1.89                  |                    1.00x                    |                     |                                |
+|        8         |         240         |           18.38            |                 21.42                 |                    1.17x                    |        7.09         |              6.63              |
+|        8         |         120         |           13.23            |                 13.23                 |                    1.00x                    |        7.00         |              7.00              |
 
 
 To achieve these same results, follow the steps in the [Quick Start Guide](#quick-start-guide).
@@ -504,14 +512,14 @@ To achieve these same results, follow the steps in the [Quick Start Guide](#quic
 
 ##### Training performance: NVIDIA DGX-1 (8x V100 16GB)
 
-Our results were obtained by running the `scripts/benchmark_train.sh` and `scripts/benchmark_train_multi_gpu.sh` benchmarking scripts in the PyTorch 21.07 NGC container on NVIDIA DGX-1 with 8x V100 16GB GPUs. Performance numbers (in molecules per millisecond) were averaged over five  entire training epochs after a warmup epoch.
+Our results were obtained by running the `scripts/benchmark_train.sh` and `scripts/benchmark_train_multi_gpu.sh` benchmarking scripts in the PyTorch 23.01 NGC container on NVIDIA DGX-1 with 8x V100 16GB GPUs. Performance numbers (in molecules per millisecond) were averaged over five  entire training epochs after a warmup epoch.
 
-| GPUs             | Batch size / GPU     | Throughput - FP32 [mol/ms] | Throughput - mixed precision  [mol/ms]     | Throughput speedup (FP32 - mixed precision)   | Weak scaling - FP32    | Weak scaling - mixed precision |
-|:------------------:|:----------------------:|:--------------------:|:------------------------------------:|:---------------------------------:|:----------------------:|:----------------------------------------------:|
-|   1              |     240              |    1.25          |    1.88                           |  1.50x                          |                      |                                              |
-|   1              |     120              |    1.03           |   1.41                            |  1.37x                          |                      |                                              |
-|   8              |     240              |    9.33           |   14.02                           |  1.50x                          |      7.46            |      7.46                                    |
-|   8              |     120              |    7.39           |   9.41                           |   1.27x                         |        7.17          |        6.67                                  |
+|       GPUs       |   Batch size / GPU   | Throughput - FP32 [mol/ms] | Throughput - mixed precision  [mol/ms] | Throughput speedup (FP32 - mixed precision) | Weak scaling - FP32 | Weak scaling - mixed precision |
+|:----------------:|:--------------------:|:--------------------------:|:--------------------------------------:|:-------------------------------------------:|:-------------------:|:------------------------------:|
+|        1         |         240          |            1.23            |                  1.91                  |                    1.55x                    |                     |                                |
+|        1         |         120          |            1.01            |                  1.23                  |                    1.22x                    |                     |                                |
+|        8         |         240          |            8.44            |                 11.28                  |                    1.34x                    |         6.8         |              5.90              |
+|        8         |         120          |            6.06            |                  7.36                  |                    1.21x                    |        6.00         |              5.98              |
 
 
 To achieve these same results, follow the steps in the [Quick Start Guide](#quick-start-guide).
@@ -522,23 +530,23 @@ To achieve these same results, follow the steps in the [Quick Start Guide](#quic
 
 ##### Inference performance: NVIDIA DGX A100 (1x A100 80GB)
 
-Our results were obtained by running the `scripts/benchmark_inference.sh` inferencing benchmarking script in the PyTorch 21.07 NGC container on NVIDIA DGX A100 with 1x A100 80GB GPU.
+Our results were obtained by running the `scripts/benchmark_inference.sh` inferencing benchmarking script in the PyTorch 23.01 NGC container on NVIDIA DGX A100 with 1x A100 80GB GPU.
 
-FP16
+AMP
 
-| Batch size | Throughput Avg [mol/ms] | Latency Avg [ms] | Latency 90% [ms] |Latency 95% [ms] |Latency 99% [ms] |
-|:------------:|:------:|:-----:|:-----:|:-----:|:-----:|
-| 1600 | 11.60 | 140.94 | 138.29 | 140.12 | 386.40 |
-| 800 | 10.74 | 75.69 | 75.74 | 76.50 | 79.77 |
-| 400 | 8.86 | 45.57 | 46.11 | 46.60 | 49.97 |
+| Batch size | Throughput Avg [mol/ms] | Latency Avg [ms] | Latency 90% [ms] | Latency 95% [ms] | Latency 99% [ms] |
+|:----------:|:-----------------------:|:----------------:|:----------------:|:----------------:|:----------------:|
+|    1600    |          9.71           |      175.2       |      190.2       |      191.8       |      432.4       |
+|    800     |          7.90           |      114.5       |      134.3       |      135.8       |      140.2       |
+|    400     |          7.18           |      75.49       |      108.6       |      109.6       |      113.2       |
 
 TF32
 
-| Batch size | Throughput Avg [mol/ms] | Latency Avg [ms] | Latency 90% [ms] |Latency 95% [ms] |Latency 99% [ms] |
-|:------------:|:------:|:-----:|:-----:|:-----:|:-----:|
-| 1600 | 8.58 | 189.20 | 186.39 | 187.71 | 420.28 |
-| 800 | 8.28 | 97.56 | 97.20 | 97.73 | 101.13 |
-| 400 | 7.55 | 53.38 | 53.72 | 54.48 | 56.62 |
+| Batch size | Throughput Avg [mol/ms] | Latency Avg [ms] | Latency 90% [ms] | Latency 95% [ms] | Latency 99% [ms] |
+|:----------:|:-----------------------:|:----------------:|:----------------:|:----------------:|:----------------:|
+|    1600    |          8.19           |      198.2       |      206.8       |      208.5       |      377.0       |
+|    800     |          7.56           |      107.5       |      119.6       |      120.5       |      125.7       |
+|    400     |          6.97           |       59.8       |       75.1       |       75.7       |       81.3       |
 
 To achieve these same results, follow the steps in the [Quick Start Guide](#quick-start-guide).
 
@@ -546,23 +554,23 @@ To achieve these same results, follow the steps in the [Quick Start Guide](#quic
 
 ##### Inference performance: NVIDIA DGX-1 (1x V100 16GB)
 
-Our results were obtained by running the `scripts/benchmark_inference.sh` inferencing benchmarking script in the PyTorch 21.07 NGC container on NVIDIA DGX-1 with 1x V100 16GB GPU.
+Our results were obtained by running the `scripts/benchmark_inference.sh` inferencing benchmarking script in the PyTorch 23.01 NGC container on NVIDIA DGX-1 with 1x V100 16GB GPU.
 
-FP16
+AMP
 
-| Batch size | Throughput Avg [mol/ms] | Latency Avg [ms] | Latency 90% [ms] |Latency 95% [ms] |Latency 99% [ms] |
-|:------------:|:------:|:-----:|:-----:|:-----:|:-----:|
-| 1600 | 6.42 | 254.54 | 247.97 | 249.29 | 721.15 |
-| 800 | 6.13 | 132.07 | 131.90 | 132.70 | 140.15 |
-| 400 | 5.37 | 75.12 | 76.01 | 76.66 | 79.90 |
+| Batch size | Throughput Avg [mol/ms] | Latency Avg [ms] | Latency 90% [ms] | Latency 95% [ms] | Latency 99% [ms] |
+|:----------:|:-----------------------:|:----------------:|:----------------:|:----------------:|:----------------:|
+|    1600    |          5.39           |      306.6       |      321.2       |      324.9       |      819.1       |
+|    800     |          4.67           |      179.8       |      201.5       |      203.8       |      213.3       |
+|    400     |          4.25           |      108.2       |      142.0       |      143.0       |      149.0       |
 
 FP32
 
-| Batch size | Throughput Avg [mol/ms] | Latency Avg [ms] | Latency 90% [ms] |Latency 95% [ms] |Latency 99% [ms] |
-|:------------:|:------:|:-----:|:-----:|:-----:|:-----:|
-| 1600 | 3.39 | 475.86 | 473.82 | 475.64 | 891.18 |
-| 800 | 3.36 | 239.17 | 240.64 | 241.65 | 243.70 |
-| 400 | 3.17 | 126.67 | 128.19 | 128.82 | 130.54 |
+| Batch size | Throughput Avg [mol/ms] | Latency Avg [ms] | Latency 90% [ms] | Latency 95% [ms] | Latency 99% [ms] |
+|:----------:|:-----------------------:|:----------------:|:----------------:|:----------------:|:----------------:|
+|    1600    |          3.14           |      510.9       |      518.83      |      521.1       |      808.0       |
+|    800     |          3.10           |      258.7       |      269.4       |      271.1       |      278.9       |
+|    400     |          2.93           |      137.3       |      147.5       |      148.8       |      151.7       |
 
 
 To achieve these same results, follow the steps in the [Quick Start Guide](#quick-start-guide).
@@ -572,9 +580,32 @@ To achieve these same results, follow the steps in the [Quick Start Guide](#quic
 
 ### Changelog
 
+February 2023:
+- Upgraded base container
+- Fixed benchmarking code
+
+August 2022:
+- Slight performance improvements
+- Upgraded base container
+
+November 2021:
+- Improved low memory mode to give further 6x memory savings
+- Disabled W&B logging by default
+- Fixed persistent workers when using one data loading process
+
+October 2021:
+- Updated README performance tables
+- Fixed shape mismatch when using partially fused TFNs per output degree
+- Fixed shape mismatch when using partially fused TFNs per input degree with edge degrees > 0
+
+September 2021:
+- Moved to new location (from `PyTorch/DrugDiscovery` to `DGLPyTorch/DrugDiscovery`)
+- Fixed multi-GPUs training script
+
 August 2021
 - Initial release
 
 ### Known issues
 
 If you encounter `OSError: [Errno 12] Cannot allocate memory` during the Dataloader iterator creation (more precisely during the `fork()`, this is most likely due to the use of the `--precompute_bases` flag. If you cannot add more RAM or Swap to your machine, it is recommended to turn off bases precomputation by removing the `--precompute_bases` flag or using `--precompute_bases false`.
+

@@ -24,7 +24,7 @@
 # run docker daemon with --default-runtime=nvidia for GPU detection during build
 # multistage build for DGL with CUDA and FP16
 
-ARG FROM_IMAGE_NAME=nvcr.io/nvidia/pytorch:21.07-py3
+ARG FROM_IMAGE_NAME=nvcr.io/nvidia/pytorch:23.01-py3
 
 FROM ${FROM_IMAGE_NAME} AS dgl_builder
 
@@ -33,16 +33,23 @@ RUN apt-get update \
     && apt-get install -y git build-essential python3-dev make cmake \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /dgl
-RUN git clone --branch v0.7.0 --recurse-submodules --depth 1 https://github.com/dmlc/dgl.git .
-RUN sed -i 's/"35 50 60 70"/"60 70 80"/g' cmake/modules/CUDA.cmake
+RUN git clone --branch 1.0.0 --recurse-submodules --depth 1 https://github.com/dmlc/dgl.git .
 WORKDIR build
-RUN cmake -DUSE_CUDA=ON -DUSE_FP16=ON ..
-RUN make -j8
+RUN export NCCL_ROOT=/usr \
+    && cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release \
+        -DUSE_CUDA=ON -DCUDA_ARCH_BIN="60 70 80" -DCUDA_ARCH_PTX="80" \
+        -DCUDA_ARCH_NAME="Manual" \
+        -DUSE_FP16=ON \
+        -DBUILD_TORCH=ON \
+        -DUSE_NCCL=ON \
+        -DUSE_SYSTEM_NCCL=ON \
+        -DBUILD_WITH_SHARED_NCCL=ON \
+        -DUSE_AVX=ON \
+    && cmake --build .
 
 
 FROM ${FROM_IMAGE_NAME}
 
-RUN rm -rf /workspace/*
 WORKDIR /workspace/se3-transformer
 
 # copy built DGL and install it
@@ -56,3 +63,5 @@ ADD . .
 
 ENV DGLBACKEND=pytorch
 ENV OMP_NUM_THREADS=1
+
+

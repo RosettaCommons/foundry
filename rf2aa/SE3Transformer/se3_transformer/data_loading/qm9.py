@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -18,7 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 #
-# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES
+# SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES
 # SPDX-License-Identifier: MIT
 from typing import Tuple
 
@@ -31,9 +31,9 @@ from torch import Tensor
 from torch.utils.data import random_split, DataLoader, Dataset
 from tqdm import tqdm
 
-from rf2aa.SE3Transformer.se3_transformer.data_loading.data_module import DataModule
-from rf2aa.SE3Transformer.se3_transformer.model.basis import get_basis
-from rf2aa.SE3Transformer.se3_transformer.runtime.utils import get_local_rank, str2bool, using_tensor_cores
+from se3_transformer.data_loading.data_module import DataModule
+from se3_transformer.model.basis import get_basis
+from se3_transformer.runtime.utils import get_local_rank, str2bool, using_tensor_cores
 
 
 def _get_relative_pos(qm9_graph: DGLGraph) -> Tensor:
@@ -99,10 +99,10 @@ class QM9DataModule(DataModule):
     def _collate(self, samples):
         graphs, y, *bases = map(list, zip(*samples))
         batched_graph = dgl.batch(graphs)
-        edge_feats = {'0': batched_graph.edata['edge_attr'][..., None]}
+        edge_feats = {'0': batched_graph.edata['edge_attr'][:, :self.EDGE_FEATURE_DIM, None]}
         batched_graph.edata['rel_pos'] = _get_relative_pos(batched_graph)
         # get node features
-        node_feats = {'0': batched_graph.ndata['attr'][:, :6, None]}
+        node_feats = {'0': batched_graph.ndata['attr'][:, :self.NODE_FEATURE_DIM, None]}
         targets = (torch.cat(y) - self.targets_mean) / self.targets_std
 
         if bases:

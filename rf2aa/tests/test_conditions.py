@@ -131,7 +131,6 @@ def setup_array(datasets, models, device="cpu"):
 # set up job array for benchmarking
 def setup_benchmark_array(datasets, models, device="cpu"):
     test_data = setup_benchmark_data()
-    print (test_data)
     test_trainers = setup_benchmark_trainers(device=device)
     test_data = [test_data[dataset] for dataset in datasets]
     test_trainers = [test_trainers[model] for model in models]

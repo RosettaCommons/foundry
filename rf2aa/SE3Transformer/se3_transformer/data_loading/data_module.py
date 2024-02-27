@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -18,14 +18,14 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 #
-# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES
+# SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES
 # SPDX-License-Identifier: MIT
 
 import torch.distributed as dist
 from abc import ABC
 from torch.utils.data import DataLoader, DistributedSampler, Dataset
 
-from rf2aa.SE3Transformer.se3_transformer.runtime.utils import get_local_rank
+from se3_transformer.runtime.utils import get_local_rank
 
 
 def _get_dataloader(dataset: Dataset, shuffle: bool, **kwargs) -> DataLoader:
@@ -46,7 +46,8 @@ class DataModule(ABC):
         if dist.is_initialized():
             dist.barrier(device_ids=[get_local_rank()])
 
-        self.dataloader_kwargs = {'pin_memory': True, 'persistent_workers': True, **dataloader_kwargs}
+        self.dataloader_kwargs = {'pin_memory': True, 'persistent_workers': dataloader_kwargs.get('num_workers', 0) > 0,
+                                  **dataloader_kwargs}
         self.ds_train, self.ds_val, self.ds_test = None, None, None
 
     def prepare_data(self):

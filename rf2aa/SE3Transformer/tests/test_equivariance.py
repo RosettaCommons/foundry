@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -18,15 +18,19 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 #
-# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES
+# SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES
 # SPDX-License-Identifier: MIT
 
 import torch
 import pytest
 
-from rf2aa.SE3Transformer.se3_transformer.model import SE3Transformer
-from rf2aa.SE3Transformer.se3_transformer.model.fiber import Fiber
-from tests.utils import get_random_graph, assign_relative_pos, get_max_diff, rot
+from se3_transformer.model import SE3Transformer
+from se3_transformer.model.fiber import Fiber
+
+if __package__ is None or __package__ == '':
+  from utils import get_random_graph, assign_relative_pos, get_max_diff, rot
+else:
+  from .utils import get_random_graph, assign_relative_pos, get_max_diff, rot
 
 # Tolerances for equivariance error abs( f(x) @ R  -  f(x @ R) )
 TOL = 1e-3
@@ -67,6 +71,7 @@ def _get_model(**kwargs):
         **kwargs
     )
 
+
 @pytest.mark.skip
 def test_equivariance():
     model = _get_model()
@@ -80,6 +85,7 @@ def test_equivariance():
     assert torch.allclose(out2['1'], (out1['1'] @ R), atol=TOL), \
         f'type-1 features should be equivariant {get_max_diff(out1["1"] @ R, out2["1"])}'
 
+
 @pytest.mark.skip
 def test_equivariance_pooled():
     model = _get_model(pooling='avg', return_type=1)
@@ -90,6 +96,7 @@ def test_equivariance_pooled():
 
     assert torch.allclose(out2, (out1 @ R), atol=TOL), \
         f'type-1 features should be equivariant {get_max_diff(out1 @ R, out2)}'
+
 
 @pytest.mark.skip
 def test_invariance_pooled():

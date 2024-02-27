@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -18,7 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 #
-# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES
+# SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES
 # SPDX-License-Identifier: MIT
 
 from enum import Enum
@@ -29,6 +29,7 @@ import dgl
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint
 from dgl import DGLGraph
 from torch import Tensor
 from torch.cuda.nvtx import range as nvtx_range
@@ -112,7 +113,7 @@ class RadialProfile(nn.Module):
             nn.Linear(mid_dim, num_freq * channels_in * channels_out, bias=False)
         ]
 
-        self.net = nn.Sequential(*[m for m in modules if m is not None])
+        self.net = torch.jit.script(nn.Sequential(*[m for m in modules if m is not None]))
 
     def forward(self, features: Tensor) -> Tensor:
         return self.net(features)
@@ -146,31 +147,25 @@ class VersatileConvSE3(nn.Module):
         with nvtx_range(f'VersatileConvSE3'):
             num_edges = features.shape[0]
             in_dim = features.shape[2]
-            if (self.training or num_edges<=4096):
+            EDGESTRIDE = 65536
+            if (self.training or num_edges<=EDGESTRIDE):
                 with nvtx_range(f'RadialProfile'):
                     radial_weights = self.radial_func(invariant_edge_feats) \
                         .view(-1, self.channels_out, self.channels_in * self.freq_sum)
 
                 if basis is not None:
                     # This block performs the einsum n i l, n o i f, n l f k -> n o k
-                    out_dim = basis.shape[-1]
-                    if self.fuse_level != ConvSE3FuseLevel.FULL:
-                        out_dim += out_dim % 2 - 1  # Account for padded basis
                     basis_view = basis.view(num_edges, in_dim, -1)
                     tmp = (features @ basis_view).view(num_edges, -1, basis.shape[-1])
-                    retval = (radial_weights @ tmp)[:, :, :out_dim]
-                    return retval
+                    return radial_weights @ tmp
                 else:
                     # k = l = 0 non-fused case
                     retval = radial_weights @ features
                     
             else:
                 #fd reduce memory in inference
-                EDGESTRIDE = 65536 #16384
                 if basis is not None:
                     out_dim = basis.shape[-1]
-                    if self.fuse_level != ConvSE3FuseLevel.FULL:
-                        out_dim += out_dim % 2 - 1  # Account for padded basis
                 else:
                     out_dim = features.shape[-1]
 
@@ -200,6 +195,7 @@ class VersatileConvSE3(nn.Module):
 
                 return retval
 
+
 class ConvSE3(nn.Module):
     """
     SE(3)-equivariant graph convolution (Tensor Field Network convolution).
@@ -223,10 +219,10 @@ class ConvSE3(nn.Module):
             pool: bool = True,
             use_layer_norm: bool = False,
             self_interaction: bool = False,
-            sum_over_edge: bool = True,
             max_degree: int = 4,
             fuse_level: ConvSE3FuseLevel = ConvSE3FuseLevel.FULL,
-            allow_fused_output: bool = False
+            allow_fused_output: bool = False,
+            low_memory: bool = False
     ):
         """
         :param fiber_in:           Fiber describing the input features
@@ -244,9 +240,9 @@ class ConvSE3(nn.Module):
         self.fiber_in = fiber_in
         self.fiber_out = fiber_out
         self.self_interaction = self_interaction
-        self.sum_over_edge = sum_over_edge
         self.max_degree = max_degree
         self.allow_fused_output = allow_fused_output
+        self.conv_checkpoint = torch.utils.checkpoint.checkpoint if low_memory else lambda m, *x: m(*x)
 
         # channels_in: account for the concatenation of edge features
         channels_in_set = set([f.channels + fiber_edge[f.degree] * (f.degree > 0) for f in self.fiber_in])
@@ -286,9 +282,10 @@ class ConvSE3(nn.Module):
             self.used_fuse_level = ConvSE3FuseLevel.PARTIAL
             self.conv_in = nn.ModuleDict()
             for d_in, c_in in fiber_in:
+                channels_in_new = c_in + fiber_edge[d_in] * (d_in > 0)
                 sum_freq = sum([degree_to_dim(min(d_in, d)) for d in fiber_out.degrees])
-                self.conv_in[str(d_in)] = VersatileConvSE3(sum_freq, c_in, list(channels_out_set)[0],
-                                                           fuse_level=ConvSE3FuseLevel.FULL, **common_args)
+                self.conv_in[str(d_in)] = VersatileConvSE3(sum_freq, channels_in_new, list(channels_out_set)[0],
+                                                           fuse_level=self.used_fuse_level, **common_args)
         else:
             # Use pairwise TFN convolutions
             self.used_fuse_level = ConvSE3FuseLevel.NONE
@@ -306,6 +303,15 @@ class ConvSE3(nn.Module):
                 if fiber_in[degree_out]:
                     self.to_kernel_self[str(degree_out)] = nn.Parameter(
                         torch.randn(channels_out, fiber_in[degree_out]) / np.sqrt(fiber_in[degree_out]))
+
+    def _try_unpad(self, feature, basis):
+        # Account for padded basis
+        if basis is not None:
+            out_dim = basis.shape[-1]
+            out_dim += out_dim % 2 - 1
+            return feature[..., :out_dim]
+        else:
+            return feature
 
     def forward(
             self,
@@ -330,7 +336,9 @@ class ConvSE3(nn.Module):
 
             if self.used_fuse_level == ConvSE3FuseLevel.FULL:
                 in_features_fused = torch.cat(in_features, dim=-1)
-                out = self.conv(in_features_fused, invariant_edge_feats, basis['fully_fused'])
+                out = self.conv_checkpoint(
+                    self.conv, in_features_fused, invariant_edge_feats, basis['fully_fused']
+                )
 
                 if not self.allow_fused_output or self.self_interaction or self.pool:
                     out = unfuse_features(out, self.fiber_out.degrees)
@@ -338,14 +346,18 @@ class ConvSE3(nn.Module):
             elif self.used_fuse_level == ConvSE3FuseLevel.PARTIAL and hasattr(self, 'conv_out'):
                 in_features_fused = torch.cat(in_features, dim=-1)
                 for degree_out in self.fiber_out.degrees:
-                    out[str(degree_out)] = self.conv_out[str(degree_out)](in_features_fused, invariant_edge_feats,
-                                                                          basis[f'out{degree_out}_fused'])
+                    basis_used = basis[f'out{degree_out}_fused']
+                    out[str(degree_out)] = self._try_unpad(
+                        self.conv_checkpoint(
+                            self.conv_out[str(degree_out)], in_features_fused, invariant_edge_feats, basis_used
+                        ), basis_used)
 
             elif self.used_fuse_level == ConvSE3FuseLevel.PARTIAL and hasattr(self, 'conv_in'):
                 out = 0
                 for degree_in, feature in zip(self.fiber_in.degrees, in_features):
-                    out += self.conv_in[str(degree_in)](feature, invariant_edge_feats,
-                                                        basis[f'in{degree_in}_fused'])
+                    out = out + self.conv_checkpoint(
+                        self.conv_in[str(degree_in)], feature, invariant_edge_feats, basis[f'in{degree_in}_fused']
+                    )
                 if not self.allow_fused_output or self.self_interaction or self.pool:
                     out = unfuse_features(out, self.fiber_out.degrees)
             else:
@@ -354,8 +366,11 @@ class ConvSE3(nn.Module):
                     out_feature = 0
                     for degree_in, feature in zip(self.fiber_in.degrees, in_features):
                         dict_key = f'{degree_in},{degree_out}'
-                        out_feature = out_feature + self.conv[dict_key](feature, invariant_edge_feats,
-                                                                        basis.get(dict_key, None))
+                        basis_used = basis.get(dict_key, None)
+                        out_feature = out_feature + self._try_unpad(
+                            self.conv_checkpoint(
+                                self.conv[dict_key], feature, invariant_edge_feats, basis_used
+                            ), basis_used)
                     out[str(degree_out)] = out_feature
 
             for degree_out in self.fiber_out.degrees:
@@ -363,7 +378,7 @@ class ConvSE3(nn.Module):
                     with nvtx_range(f'self interaction'):
                         dst_features = node_feats[str(degree_out)][dst]
                         kernel_self = self.to_kernel_self[str(degree_out)]
-                        out[str(degree_out)] += kernel_self @ dst_features
+                        out[str(degree_out)] = out[str(degree_out)] + kernel_self @ dst_features
 
                 if self.pool:
                     if self.sum_over_edge:

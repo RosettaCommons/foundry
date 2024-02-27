@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -18,7 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 #
-# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES
+# SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES
 # SPDX-License-Identifier: MIT
 
 import logging
@@ -106,15 +106,11 @@ class SE3Transformer(nn.Module):
         self.low_memory = low_memory
         self.populate_edge = populate_edge
 
-        if low_memory and not tensor_cores:
-            logging.warning('Low memory mode will have no effect with no Tensor Cores')
-
-        # Fully fused convolutions when using Tensor Cores (and not low memory mode)
-        fuse_level = ConvSE3FuseLevel.FULL if tensor_cores and not low_memory else ConvSE3FuseLevel.PARTIAL
-        
-        div = dict((str(degree), channels_div) for degree in range(self.max_degree+1))
-        div_fin = dict((str(degree), 1) for degree in range(self.max_degree+1))
-        div_fin['0'] = channels_div
+        if low_memory:
+            self.fuse_level = ConvSE3FuseLevel.NONE
+        else:
+            # Fully fused convolutions when using Tensor Cores (and not low memory mode)
+            self.fuse_level = ConvSE3FuseLevel.FULL if tensor_cores else ConvSE3FuseLevel.PARTIAL
 
         graph_modules = []
         for i in range(num_layers):
@@ -122,10 +118,11 @@ class SE3Transformer(nn.Module):
                                                    fiber_out=fiber_hidden,
                                                    fiber_edge=fiber_edge,
                                                    num_heads=num_heads,
-                                                   channels_div=div,
+                                                   channels_div=channels_div,
                                                    use_layer_norm=use_layer_norm,
                                                    max_degree=self.max_degree,
-                                                   fuse_level=fuse_level))
+                                                   fuse_level=self.fuse_level,
+                                                   low_memory=low_memory))
             if norm:
                 graph_modules.append(NormSE3(fiber_hidden))
             fiber_in = fiber_hidden
@@ -137,7 +134,9 @@ class SE3Transformer(nn.Module):
                                          self_interaction=True,
                                          sum_over_edge=sum_over_edge,
                                          use_layer_norm=use_layer_norm,
-                                         max_degree=self.max_degree))
+                                         max_degree=self.max_degree,
+                                         fuse_level=self.fuse_level,
+                                         low_memory=low_memory))
         elif final_layer == "lin":
             graph_modules.append(LinearSE3(fiber_in=fiber_in,
                                            fiber_out=fiber_out))
@@ -149,7 +148,10 @@ class SE3Transformer(nn.Module):
                                                    channels_div=div_fin,
                                                    use_layer_norm=use_layer_norm,
                                                    max_degree=self.max_degree,
-                                                   fuse_level=fuse_level))
+                                                   fuse_level=fuse_level,
+                                                   low_memory=low_memory))
+
+
         self.graph_modules = Sequential(*graph_modules)
 
         if pooling is not None:
@@ -166,8 +168,8 @@ class SE3Transformer(nn.Module):
 
         # Add fused bases (per output degree, per input degree, and fully fused) to the dict
         basis = update_basis_with_fused(basis, self.max_degree, use_pad_trick=self.tensor_cores and not self.low_memory,
-                                        fully_fused=self.tensor_cores and not self.low_memory)
-        
+                                        fully_fused=self.fuse_level == ConvSE3FuseLevel.FULL)
+
         if self.populate_edge=='lin':
             edge_feats = get_populated_edge_features(graph.edata['rel_pos'], edge_feats)
         elif self.populate_edge=='arcsin':

@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -18,7 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 #
-# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES
+# SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES
 # SPDX-License-Identifier: MIT
 
 import dgl
@@ -78,11 +78,10 @@ class AttentionSE3(nn.Module):
 
             with nvtx_range('attention dot product + softmax'):
                 # Compute attention weights (softmax of inner product between key and query)
-                with torch.cuda.amp.autocast(False):
-                    edge_weights = dgl.ops.e_dot_v(graph, key, query).squeeze(-1)
-                    edge_weights /= np.sqrt(self.key_fiber.num_features)
-                    edge_weights = edge_softmax(graph, edge_weights)
-                    edge_weights = edge_weights[..., None, None]
+                edge_weights = dgl.ops.e_dot_v(graph, key, query).squeeze(-1)
+                edge_weights = edge_weights / np.sqrt(self.key_fiber.num_features)
+                edge_weights = edge_softmax(graph, edge_weights)
+                edge_weights = edge_weights[..., None, None]
 
             with nvtx_range('weighted sum'):
                 if isinstance(value, Tensor):
@@ -113,10 +112,11 @@ class AttentionBlockSE3(nn.Module):
             fiber_out: Fiber,
             fiber_edge: Optional[Fiber] = None,
             num_heads: int = 4,
-            channels_div: Optional[Dict[str,int]] = None,
+            channels_div: int = 2,
             use_layer_norm: bool = False,
             max_degree: bool = 4,
             fuse_level: ConvSE3FuseLevel = ConvSE3FuseLevel.FULL,
+            low_memory: bool = False,
             **kwargs
     ):
         """
@@ -134,20 +134,17 @@ class AttentionBlockSE3(nn.Module):
             fiber_edge = Fiber({})
         self.fiber_in = fiber_in
         # value_fiber has same structure as fiber_out but #channels divided by 'channels_div'
-        if channels_div is not None:
-            value_fiber = Fiber([(degree, channels // channels_div[str(degree)]) for degree, channels in fiber_out])
-        else:
-            value_fiber = Fiber([(degree, channels) for degree, channels in fiber_out])
-
+        value_fiber = Fiber([(degree, channels // channels_div) for degree, channels in fiber_out])
         # key_query_fiber has the same structure as fiber_out, but only degrees which are in in_fiber
         # (queries are merely projected, hence degrees have to match input)
         key_query_fiber = Fiber([(fe.degree, fe.channels) for fe in value_fiber if fe.degree in fiber_in.degrees])
 
         self.to_key_value = ConvSE3(fiber_in, value_fiber + key_query_fiber, pool=False, fiber_edge=fiber_edge,
                                     use_layer_norm=use_layer_norm, max_degree=max_degree, fuse_level=fuse_level,
-                                    allow_fused_output=True)
+                                    allow_fused_output=True, low_memory=low_memory)
         self.to_query = LinearSE3(fiber_in, key_query_fiber)
         self.attention = AttentionSE3(num_heads, key_query_fiber, value_fiber)
+
         self.project = LinearSE3(value_fiber + fiber_in, fiber_out)
 
     def forward(
@@ -163,8 +160,7 @@ class AttentionBlockSE3(nn.Module):
                 key, value = self._get_key_value_from_fused(fused_key_value)
 
             with nvtx_range('queries'):
-                with torch.cuda.amp.autocast(False):
-                    query = self.to_query(node_features)
+                query = self.to_query(node_features)
 
             z = self.attention(value, key, query, graph)
             z_concat = aggregate_residual(node_features, z, 'cat')

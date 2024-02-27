@@ -51,7 +51,7 @@ class SE3TransformerWrapper(nn.Module):
                 fiber_in = Fiber({0: l0_in_features})
                 fiber_hidden = Fiber.create(num_degrees, num_channels)
                 fiber_out = Fiber({0: l0_out_features})
-        
+
         self.se3 = SE3Transformer(num_layers=num_layers,
                                   fiber_in=fiber_in,
                                   fiber_hidden=fiber_hidden,

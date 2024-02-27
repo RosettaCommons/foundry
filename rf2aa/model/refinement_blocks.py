@@ -104,20 +104,20 @@ class RecurrentLocalRefinement_w_Adaptor(nn.Module):
             latent_feats["msa"], latent_feats["pair"], \
             latent_feats["state"], latent_feats["xyz"], latent_feats["is_atom"], \
                 latent_feats["atom_frames"], latent_feats["chirals"]
-        return msa, pair, state, xyz, is_atom, atom_frames, chirals
+        idx, bond_feats, dist_matrix = latent_feats["idx"], latent_feats["bond_feats"], latent_feats["dist_matrix"]
+        return msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix
 
     def forward(self, latent_feats):
         B, N, L = latent_feats["msa"].shape[:3]
-        #xyzs = torch.full((self.num_iterations, L, 3, 3 ), torch.nan, device=latent_feats["msa"].device)
-        #alphas = torch.full((self.num_iterations, L, ChemData().NTOTALDOFS, 2), torch.nan, device=latent_feats["msa"].device) 
         xyzs = []
         alphas = []
 
-        msa, pair, state, xyz, is_atom, atom_frames, chirals = self._unpack_inputs(latent_feats)
+        msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix = self._unpack_inputs(latent_feats)
 
         state = self.proj_state_in(state)
+
         for i in range(self.num_iterations):
-            output = self.se3(msa, pair, state, xyz, is_atom, atom_frames, chirals)
+            output = self.se3(msa, pair, state, xyz.detach(), is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix)
             xyzs.append(output["xyz"])
             alphas.append(output["alpha"])    
             state, xyz = output["state"], output["xyz"]
