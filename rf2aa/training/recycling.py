@@ -18,7 +18,7 @@ def recycle_step_legacy(ddp_model, input, n_cycle, use_amp, nograds=False, force
     output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
     for i_cycle in range(n_cycle):
         with ExitStack() as stack:
-            stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
+            #stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
             if i_cycle < n_cycle -1 or nograds is True:
                 stack.enter_context(torch.no_grad())
                 stack.enter_context(ddp_model.no_sync())
@@ -41,7 +41,7 @@ def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False, force
     output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
     for i_cycle in range(n_cycle):
         with ExitStack() as stack:
-            stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
+            #stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
             if i_cycle < n_cycle -1 or nograds is True:
                 stack.enter_context(torch.no_grad())
                 stack.enter_context(ddp_model.no_sync())
@@ -49,7 +49,7 @@ def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False, force
             use_checkpoint = not nograds and  (i_cycle == n_cycle -1)
 
             input_i = add_recycle_inputs(input, output_i, i_cycle, gpu, return_raw=return_raw, use_checkpoint=use_checkpoint)
-            rf_outputs, rf_latents = ddp_model(input_i, use_checkpoint=use_checkpoint)
+            rf_outputs, rf_latents = ddp_model(input_i, use_checkpoint=use_checkpoint, use_amp=use_amp)
             output_i = unpack_outputs(rf_outputs, rf_latents, return_raw)
     return output_i
 
@@ -57,6 +57,7 @@ def run_model_forward(model, network_input, device="cpu"):
     """ run model forward pass, no recycling, no ddp (for tests) """
     gpu = device
     use_checkpoint = False
+    use_amp = False
     xyz_prev, alpha_prev, mask_recycle = \
         network_input["xyz_prev"], network_input["alpha_prev"], network_input["mask_recycle"]
     output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
@@ -64,7 +65,7 @@ def run_model_forward(model, network_input, device="cpu"):
     input_i["seq_unmasked"] = input_i["seq_unmasked"].to(gpu)
     model.eval()
     with torch.no_grad():
-        rf_outputs, rf_latents = model(input_i, use_checkpoint)
+        rf_outputs, rf_latents = model(input_i, use_checkpoint, use_amp)
     return rf_outputs, rf_latents
 
 def run_model_forward_legacy(model, network_input, device="cpu"):

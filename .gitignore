@@ -5,7 +5,8 @@ run_digs.sh
 *.pdb
 .vscode
 slurm_logs/
-*/output/
+**/output/
+**/outputs/
 */notebooks/
 */models/
 __pycache__/

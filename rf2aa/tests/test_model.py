@@ -95,7 +95,7 @@ def setup_test(example, model):
 
     # initialize chemical database
     ChemData.reset() # force reload chemical data
-    ChemData(config)
+    ChemData(config.chem_params)
 
     model = model.to(gpu)
     dataset_name = example[0]

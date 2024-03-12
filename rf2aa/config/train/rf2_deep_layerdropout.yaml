@@ -61,6 +61,8 @@ dataset_params:
   dslf_fb_upsample: 1
 
 loader_params: 
+  RADIAL_CROP: False
+  OMIT_PERMUTATE: True
   maxseq: 1024
   maxtoken: 1024
   maxlat: 128
@@ -98,7 +100,7 @@ training_params:
     num_steps_decay: 5000
     decay_rate: 0.95
   grad_clip: 0.2
-  use_amp: False
+  use_amp: True
 
 loss_param:
   w_dist: 1.0
@@ -128,7 +130,7 @@ model:
   global_params:
     d_msa: 256
     d_msa_full: 64
-    d_pair: 128
+    d_pair: 192
     d_state: 32
 
   embedding:
@@ -155,7 +157,7 @@ model:
         d_rbf: 64
         p_drop_row: 0.25
         p_drop_pair: 0.25
-        p_drop_layer: 0.15
+        p_drop_layer: 0.0
         msa_transition_drop: 0.0
         outer_product_channels: 16 
         p_drop_outer_product: 0.0
@@ -177,13 +179,16 @@ model:
         n_se3_edge_features: 32
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.0
+        residual_state: True
+        norm_msa_row: True
+        use_flash_attn: True
     RF2aa:
       num_blocks: 48
       params:
         d_rbf: 64
         p_drop_row: 0.25
         p_drop_pair: 0.25
-        p_drop_layer: 0.15
+        p_drop_layer: 0.0
         msa_transition_drop: 0.0
         outer_product_channels: 16 
         p_drop_outer_product: 0.0
@@ -205,6 +210,9 @@ model:
         n_se3_edge_features: 32
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.0
+        residual_state: True
+        norm_msa_row: True
+        use_flash_attn: True
   refinement:
     local_adaptor:
       params:
@@ -224,16 +232,17 @@ model:
         top_k: 64
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.15
-  
+        residual_state: False
+
   auxiliary_predictors:
     c6d:
-      n_feat: 128
+      n_feat: 192
       input_feature: "pair"
     mlm:
       n_feat: 256
       input_feature: "msa"
     pae:
-      n_feat: 128
+      n_feat: 192
       input_feature: "pair"
     plddt: 
       n_feat: 32

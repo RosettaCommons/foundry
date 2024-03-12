@@ -47,6 +47,9 @@ model:
         l1_in_features: 1
         l1_out_features: 1
         n_se3_edge_features: 64
+        residual_state: False
+        norm_msa_row: False
+        use_flash_attn: False
     RF2_withgradients:
       num_blocks: 36
       params:
@@ -70,6 +73,9 @@ model:
         l1_in_features: 1
         l1_out_features: 1
         n_se3_edge_features: 64
+        residual_state: False
+        norm_msa_row: False
+        use_flash_attn: False
   refinement:
     local:
       params:
@@ -88,6 +94,7 @@ model:
         top_k: 64
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.15
+        residual_state: False
   
   auxiliary_predictors:
     c6d:
@@ -109,3 +116,4 @@ dataset_params:
 
 training_params:
   resume_train: False
+

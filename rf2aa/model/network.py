@@ -57,7 +57,7 @@ class RosettaFold(nn.Module):
             for aux_task in model_params.auxiliary_predictors.keys()
         }
 
-    def forward(self, rf_inputs, use_checkpoint):
+    def forward(self, rf_inputs, use_checkpoint, use_amp):
         latent_feats = self.embedding(rf_inputs)
         #load useful primitives into latent_features
         latent_feats.update(
@@ -72,7 +72,7 @@ class RosettaFold(nn.Module):
             }
         )
         for block in self.simulator:
-            latent_feats = block(latent_feats,use_checkpoint)
+            latent_feats = block(latent_feats, use_checkpoint, use_amp)
 
         rf_outputs = self.refinement(latent_feats)
 

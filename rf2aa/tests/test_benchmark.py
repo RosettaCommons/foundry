@@ -72,7 +72,7 @@ def test_benchmark_fw_bw(benchmark, example, trainer):
     mask_msa = mask_msa.to(gpu)
 
     def run():
-        output_i = recycle_step_packed(trainer.model, network_input, 1, False, nograds=False, force_device=gpu) 
+        output_i = recycle_step_packed(trainer.model, network_input, 1, trainer.config.training_params.use_amp, nograds=False, force_device=gpu) 
         seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames = get_loss_calc_items(dataloader_inputs, device=gpu)
 
         loss, loss_dict = get_loss_and_misc(

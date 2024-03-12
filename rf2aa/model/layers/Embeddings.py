@@ -243,7 +243,7 @@ class Templ_emb(nn.Module):
     # Get template embedding
     # Features are
     #   t2d:
-    #   - 61 distogram bins + 6 orientations (67)
+    #   - 61 distogram bins 
     #   - Mask (missing/unaligned) (1)
     #   t1d:
     #   - tiled AA sequence (20 standard aa + gap)
@@ -279,8 +279,6 @@ class Templ_emb(nn.Module):
         # process torsion angles
         self.emb_t1d = nn.Linear(d_t1d+d_tor, d_templ)
         self.proj_t1d = nn.Linear(d_templ, d_templ)
-        #self.tor_stack = TemplateTorsionStack(n_block=n_block, d_templ=d_templ, n_head=n_head,
-        #                                      d_hidden=d_hidden, p_drop=p_drop)
         self.attn_tor = Attention(d_state, d_templ, n_head, d_hidden, d_state, p_drop=p_drop)
 
         self.reset_parameter()
@@ -377,6 +375,128 @@ class Templ_emb(nn.Module):
             out = self.attn(pair, templ, templ).reshape(B, L, L, -1)
         #
         pair = pair.reshape(B, L, L, -1)
+        pair = pair + out
+
+        return pair, state
+
+
+class Templ_emb_NoPtwise(nn.Module):
+    # Get template embedding.  do not use pointwise embedding
+    # Features are
+    #   t2d:
+    #   - 61 distogram bins + 6 orientations (67)
+    #   - Mask (missing/unaligned) (1)
+    #   t1d:
+    #   - tiled AA sequence (20 standard aa + gap)
+    #   - confidence (1)
+    #   
+    def __init__(self, d_t1d=0, d_t2d=67+1, d_tor=0, d_pair=128, d_state=32, 
+                 n_block=2, d_templ=64,
+                 n_head=4, d_hidden=16, p_drop=0.25,
+                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='mean', 
+                 main_block=None, copy_main_block=None, additional_dt1d=0):
+        super(Templ_emb_NoPtwise, self).__init__()
+
+        if d_t1d==0:
+            d_t1d=(ChemData().NAATOKENS-1)+1
+        if d_tor==0:
+            d_tor=3*ChemData().NTOTALDOFS
+
+        self.main_block = main_block
+        self.symmetrize_repeats = symmetrize_repeats
+        self.copy_main_block = copy_main_block
+        self.repeat_length = repeat_length
+        d_t1d += additional_dt1d
+
+        # process 2D features
+        self.emb = nn.Linear(d_t1d*2+d_t2d, d_templ)
+
+        self.templ_stack = TemplatePairStack(n_block=n_block, d_templ=d_templ, n_head=n_head,
+                                             d_hidden=d_hidden, d_t1d=d_t1d, d_state=d_state, p_drop=p_drop,
+                                             symmetrize_repeats=symmetrize_repeats, repeat_length=repeat_length,
+                                             symmsub_k=symmsub_k, sym_method=sym_method)
+        self.proj_templ = nn.Linear(d_templ, d_pair)
+
+        # process torsion angles
+        self.emb_t1d = nn.Linear(d_t1d+d_tor, d_templ)
+        self.proj_t1d = nn.Linear(d_templ, d_state)
+
+        self.reset_parameter()
+    
+    def reset_parameter(self):
+        self.emb = init_lecun_normal(self.emb)
+        nn.init.zeros_(self.emb.bias)
+
+        nn.init.kaiming_normal_(self.emb_t1d.weight, nonlinearity='relu')
+        nn.init.zeros_(self.emb_t1d.bias)
+        
+        self.proj_t1d = init_lecun_normal(self.proj_t1d)
+        nn.init.zeros_(self.proj_t1d.bias)
+
+    def _get_templ_emb(self, t1d, t2d):
+        B, T, L, _ = t1d.shape
+        # Prepare 2D template features
+        left = t1d.unsqueeze(3).expand(-1,-1,-1,L,-1)
+        right = t1d.unsqueeze(2).expand(-1,-1,L,-1,-1)
+        #
+        templ = torch.cat((t2d, left, right), -1) # (B, T, L, L, 88)
+        return self.emb(templ) # Template templures (B, T, L, L, d_templ)
+
+    def _get_templ_rbf(self, xyz_t, mask_t):
+        B, T, L = xyz_t.shape[:3]
+
+        # process each template features
+        xyz_t = xyz_t.reshape(B*T, L, 3).contiguous()
+        mask_t = mask_t.reshape(B*T, L, L)
+        assert(xyz_t.is_contiguous())
+        rbf_feat = rbf(torch.cdist(xyz_t, xyz_t)) * mask_t[...,None] # (B*T, L, L, d_rbf)
+        return rbf_feat
+
+    def forward(self, t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=False, p2p_crop=-1):
+        # Input
+        #   - t1d: 1D template info (B, T, L, 30)
+        #   - t2d: 2D template info (B, T, L, L, 44)
+        #   - alpha_t: torsion angle info (B, T, L, 30) - DOUBLE-CHECK
+        #   - xyz_t: template CA coordinates (B, T, L, 3)
+        #   - mask_t: is valid residue pair? (B, T, L, L)
+        #   - pair: query pair features (B, L, L, d_pair)
+        #   - state: query state features (B, L, d_state)
+        B, T, L, _ = t1d.shape
+
+        templ = self._get_templ_emb(t1d, t2d)
+        # this looks a lot like a bug but it is not
+        # mask_t has already been updated by same_chain in the train_EMA script so pairwise distances between
+        # protein chains are ignored
+        rbf_feat = self._get_templ_rbf(xyz_t, mask_t) 
+
+        # process each template pair feature
+        templ = self.templ_stack(templ, rbf_feat, t1d, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop) # (B, T, L,L, d_templ)
+        templ = self.proj_templ(templ)
+
+        # DJ - repeat protein symmetrization (2D)
+        if self.copy_main_block:
+            assert not (self.main_block is None)
+            assert self.symmetrize_repeats
+            # copy the main repeat unit internally down the pair representation diagonal 
+            templ = copy_main_2d(templ, self.repeat_length, self.main_block)
+
+        # Prepare 1D template torsion angle features
+        t1d = torch.cat((t1d, alpha_t), dim=-1) # (B, T, L, 30+3*17)
+        # process each template features
+        t1d = self.proj_t1d(F.relu_(self.emb_t1d(t1d)))
+
+        # DJ - repeat protein symmetrization (1D)
+        if self.copy_main_block:
+            # already made assertions above 
+            # copy main unit down single rep 
+            t1d = copy_main_1d(t1d, self.repeat_length, self.main_block)
+
+        #fd replace pointwise atten with sum (state)
+        out = t1d.sum(dim=1)
+        state = state + out
+
+        #fd replace pointwise atten with sum (pair)
+        out = templ.sum(dim=1)
         pair = pair + out
 
         return pair, state

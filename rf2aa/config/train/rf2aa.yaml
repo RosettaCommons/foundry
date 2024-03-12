@@ -58,6 +58,9 @@ model:
         n_se3_edge_features: 64
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.0
+        residual_state: False
+        norm_msa_row: False
+        use_flash_attn: False
     RF2aa:
       num_blocks: 32
       params:
@@ -86,6 +89,9 @@ model:
         n_se3_edge_features: 64
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.0
+        residual_state: False
+        norm_msa_row: False
+        use_flash_attn: False
   refinement:
     local:
       params:
@@ -104,7 +110,8 @@ model:
         top_k: 64
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.15
-  
+        residual_state: False
+
   auxiliary_predictors:
     c6d:
       n_feat: 192

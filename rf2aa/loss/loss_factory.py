@@ -151,14 +151,16 @@ def calc_loss(trainer, logit_s, label_s,
                 # Don't compute inter-chain distogram losses
                 # for negative examples.
                 mask_2d_ = mask_2d_ * same_chain
-            loss = (mask_2d_*loss).sum() / (mask_2d_.sum() + eps)
+
+            #fd upcast loss to float to avoid overflow
+            loss = (mask_2d_*loss.float()).sum() / (mask_2d_.sum() + eps)
             tot_loss += w_dist*loss
             loss_dict[f'c6d_{i}'] = loss.detach()
 
         # masked token prediction loss
         loss = cce_loss(logit_aa_s, label_aa_s.reshape(B, -1))
         loss = loss * mask_aa_s.reshape(B, -1)
-        loss = loss.sum() / (mask_aa_s.sum() + 1e-8)
+        loss = loss.float().sum() / (mask_aa_s.sum() + 1e-8)
         tot_loss += w_aa*loss
         loss_dict['aa_cce'] = loss.detach()
 

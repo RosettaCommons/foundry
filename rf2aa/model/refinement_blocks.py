@@ -22,6 +22,8 @@ class LocalRefinementSE3(FullyConnectedSE3):
                                 block_params.n_se3_edge_features, block_params.top_k, \
                                     block_params.sc_pred_d_hidden, block_params.sc_pred_p_drop
 
+        residual_state = block_params.residual_state
+
         super(LocalRefinementSE3, self).__init__(d_msa, 
                                                  d_pair, 
                                                  d_rbf, 
@@ -36,7 +38,8 @@ class LocalRefinementSE3(FullyConnectedSE3):
                                                  l1_out_features, 
                                                  num_edge_features,
                                                  sc_pred_d_hidden,
-                                                 sc_pred_p_drop
+                                                 sc_pred_p_drop,
+                                                 residual_state
                                                  )
         self.top_k = top_k
         self.reset_parameter() 

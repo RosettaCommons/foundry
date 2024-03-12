@@ -14,6 +14,7 @@ model:
         n_head_templ: 4
         d_hidden_templ: 64
         templ_p_drop: 0.25
+        templ_ptwise_attn: True
         recycling_type: "msa_pair"
         use_same_chain: False
   
@@ -38,26 +39,32 @@ model:
         l1_in_features: 1
         l1_out_features: 1
         n_se3_edge_features: 64
+        residual_state: False
+        norm_msa_row: False
+        use_flash_attn: False
     RF2_withgradients:
-          num_blocks: 1
-          params:
-            n_msa_head: 8
-            n_msa_channels: 256
-            structure_bias_channels: 64
-            n_pair_head: 6
-            n_pair_channels: 192
-            outer_product_channels: 16
-            intermediate_seq_channels: 192 #this is from AF2
-            n_se3_layers: 1
-            n_se3_channels: 32
-            n_se3_degrees: 2
-            n_se3_head: 4
-            n_div: 4
-            l0_in_features: 64
-            l0_out_features: 64
-            l1_in_features: 1
-            l1_out_features: 1
-            n_se3_edge_features: 64
+        num_blocks: 1
+        params:
+          n_msa_head: 8
+          n_msa_channels: 256
+          structure_bias_channels: 64
+          n_pair_head: 6
+          n_pair_channels: 192
+          outer_product_channels: 16
+          intermediate_seq_channels: 192 #this is from AF2
+          n_se3_layers: 1
+          n_se3_channels: 32
+          n_se3_degrees: 2
+          n_se3_head: 4
+          n_div: 4
+          l0_in_features: 64
+          l0_out_features: 64
+          l1_in_features: 1
+          l1_out_features: 1
+          n_se3_edge_features: 64
+        residual_state: False
+        norm_msa_row: False
+        use_flash_attn: False
   refinement:
     local:
       params:
@@ -76,7 +83,8 @@ model:
         top_k: 64
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.15
-  
+        residual_state: False
+
   auxiliary_predictors:
     c6d:
       n_feat: 192

@@ -3,7 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from opt_einsum import contract as einsum
+from einops import rearrange
 from rf2aa.util_module import init_lecun_normal
+
 class FeedForwardLayer(nn.Module):
     def __init__(self, d_model, r_ff, p_drop=0.1):
         super(FeedForwardLayer, self).__init__()
@@ -28,6 +30,7 @@ class FeedForwardLayer(nn.Module):
         src = self.linear2(self.dropout(F.relu_(self.linear1(src))))
         return src
 
+# Attention model used in template embedding (if ptwise attn is enabled)
 class Attention(nn.Module):
     # calculate multi-head attention
     def __init__(self, d_query, d_key, n_head, d_hidden, d_out, p_drop=0.1):
@@ -74,6 +77,7 @@ class Attention(nn.Module):
 
         return out
 
+
 # MSA Attention (row/column) from AlphaFold architecture
 class SequenceWeight(nn.Module):
     def __init__(self, d_msa, n_head, d_hidden, p_drop=0.1):
@@ -106,7 +110,7 @@ class SequenceWeight(nn.Module):
         return self.dropout(attn)
 
 class MSARowAttentionWithBias(nn.Module):
-    def __init__(self, d_msa=256, d_pair=128, n_head=8, d_hidden=32):
+    def __init__(self, d_msa=256, d_pair=128, n_head=8, d_hidden=32, nseq_normalization=False):
         super(MSARowAttentionWithBias, self).__init__()
         self.norm_msa = nn.LayerNorm(d_msa)
         self.norm_pair = nn.LayerNorm(d_pair)
@@ -120,6 +124,7 @@ class MSARowAttentionWithBias(nn.Module):
         self.to_out = nn.Linear(n_head*d_hidden, d_msa)
 
         self.scaling = 1/math.sqrt(d_hidden)
+        self.nseq_normalization = nseq_normalization
         self.h = n_head
         self.dim = d_hidden
 
@@ -156,7 +161,11 @@ class MSARowAttentionWithBias(nn.Module):
         gate = torch.sigmoid(self.to_g(msa))
         #
         query = query * seq_weight.expand(-1, -1, -1, -1, self.dim)
-        key = key * self.scaling
+        if self.nseq_normalization:
+            key = key * self.scaling * 1/math.sqrt(N)  #fd: from nate, change to match msa xformer paper
+        else:
+            key = key * self.scaling 
+
         attn = einsum('bsqhd,bskhd->bqkh', query, key)
         attn = attn + bias
         attn = F.softmax(attn, dim=-2)
@@ -168,8 +177,93 @@ class MSARowAttentionWithBias(nn.Module):
         return out
 
 class MSAColAttention(nn.Module):
+    """
+    Efficient implementation of MSA gated column attention using FlashAttention, when available.
+    """
     def __init__(self, d_msa=256, n_head=8, d_hidden=32):
+        """
+        args:
+            d_msa: latent dimension of MSA embedding
+            n_head: number of attention heads
+            d_hidden: dimmension of each attention head
+        """
         super(MSAColAttention, self).__init__()
+        
+        # Initilialize linear layers (Q, K, V) and layer normalization
+        self.norm_msa = nn.LayerNorm(d_msa)
+        self.to_q = nn.Linear(d_msa, n_head * d_hidden, bias=False)
+        self.to_k = nn.Linear(d_msa, n_head * d_hidden, bias=False)
+        self.to_v = nn.Linear(d_msa, n_head * d_hidden, bias=False)
+        
+        # Gating
+        self.to_g = nn.Linear(d_msa, n_head * d_hidden)
+        
+        # Output projection
+        self.to_out = nn.Linear(n_head * d_hidden, d_msa)
+
+        # Scaling
+        self.scale_factor = 1 / math.sqrt(d_hidden)
+
+        # Parameters
+        self.n_head = n_head # number of heads
+        self.d_head = d_hidden # the per-head dimension
+        
+        # Iniialize parameters
+        self.reset_parameter()
+
+    def reset_parameter(self):
+        # query/key/value projection: Glorot uniform / Xavier uniform
+        nn.init.xavier_uniform_(self.to_q.weight)
+        nn.init.xavier_uniform_(self.to_k.weight)
+        nn.init.xavier_uniform_(self.to_v.weight)
+
+        # gating: zero weights, one biases (mostly open gate at the begining)
+        nn.init.zeros_(self.to_g.weight)
+        nn.init.ones_(self.to_g.bias)
+
+        # to_out: right before residual connection: zero initialize to ensure residual operation is same to the Identity at the begining
+        nn.init.zeros_(self.to_out.weight)
+        nn.init.zeros_(self.to_out.bias)
+
+    def forward(self, msa):
+        """
+        Input:
+            msa: (B, N, L, d_msa) MSA tensor. MSA tensors must be float16 or bfloat16 in order to use PyTorch's optimized SDPA function. Generally, this is handled by mixed precision training.
+        Output:
+            attn: (B, N, L, d_msa) Attention output tensor.
+        """
+        # Layer normalization (Note: automatically performed in float32 for mixed precision training given overflow issues with float16)
+        msa = self.norm_msa(msa) # (B, N, L, d_msa)
+        
+        # (B, N, L, d_msa) --(projection)--> (B, N, L, h * d_head) --(rearrange)--> (BL, H, h, N, d_head)
+        # We need to rearrange the tensor to match the input format of the PyTorch's optimized SDPA function, namely:
+        # 1. The last two dimensions will undergo the attention operations (n, d_h)
+        # 2. The tensors must be four-dimensional, so we need to flatten the batch and residue dimensions (b, l)
+        query = rearrange(self.to_q(msa), 'b n l (h d_h) -> (b l) h n d_h', h=self.n_head)
+        key = rearrange(self.to_k(msa), 'b n l (h d_h) -> (b l) h n d_h', h=self.n_head)
+        value = rearrange(self.to_v(msa), 'b n l (h d_h) -> (b l) h n d_h', h=self.n_head)
+        
+        # Gating
+        gate = torch.sigmoid(self.to_g(msa)) # (B, N, L, d_msa)
+        
+        # SDPA, using PyTorch's scaled_dot_product_attention (defaults to FlashAttention with float16 or bfloat16)
+        use_flash = torch.cuda.get_device_properties(0).major >= 8
+        with torch.backends.cuda.sdp_kernel(enable_flash=use_flash, enable_math=True, enable_mem_efficient=False):
+           attn = F.scaled_dot_product_attention(query, key, value, scale=self.scale_factor) # (BL, h, N, N) -> (BL, h, N, d_h)
+        
+        # Concatenate the heads and unsqueeze the batch (b) and residue (l) dimensions
+        # (BL, h, N, d_h) -> (B, N, L, d_msa)
+        attn = rearrange(attn, '(b l) h n d_h -> b n l (h d_h)', b=msa.shape[0])  
+        
+        # Apply gating
+        attn = gate * attn
+        
+        # Output projection W_o
+        return self.to_out(attn) # (B, N, L, d_msa)
+
+class OldMSAColAttention(nn.Module):
+    def __init__(self, d_msa=256, n_head=8, d_hidden=32):
+        super(OldMSAColAttention, self).__init__()
         self.norm_msa = nn.LayerNorm(d_msa)
         #
         self.to_q = nn.Linear(d_msa, n_head*d_hidden, bias=False)
@@ -181,7 +275,7 @@ class MSAColAttention(nn.Module):
         self.scaling = 1/math.sqrt(d_hidden)
         self.h = n_head
         self.dim = d_hidden
-        
+
         self.reset_parameter()
 
     def reset_parameter(self):
@@ -216,11 +310,90 @@ class MSAColAttention(nn.Module):
         out = gate * out
         #
         out = self.to_out(out)
+
         return out
 
 class MSAColGlobalAttention(nn.Module):
+    """
+    Efficient implementation of MSA gated global column attention using FlashAttention, when available.
+    """
     def __init__(self, d_msa=64, n_head=8, d_hidden=8):
         super(MSAColGlobalAttention, self).__init__()
+        
+        # Initilialize linear layers (Q, K, V) and layer normalization
+        self.norm_msa = nn.LayerNorm(d_msa)
+        self.to_q = nn.Linear(d_msa, n_head*d_hidden, bias=False)
+        self.to_k = nn.Linear(d_msa, d_hidden, bias=False) # Note that the key is not multi-headed
+        self.to_v = nn.Linear(d_msa, d_hidden, bias=False) # Note that the value is not multi-headed
+        
+        # Gating
+        self.to_g = nn.Linear(d_msa, n_head*d_hidden)
+        
+        # Output projection
+        self.to_out = nn.Linear(n_head*d_hidden, d_msa)
+
+        # Scaling
+        self.scale_factor = 1 / math.sqrt(d_hidden)
+        
+        # Parameters
+        self.h = n_head
+        self.d_head = d_hidden
+        
+        # Initialize parameters
+        self.reset_parameter()
+
+    def reset_parameter(self):
+        # query/key/value projection: Glorot uniform / Xavier uniform
+        nn.init.xavier_uniform_(self.to_q.weight)
+        nn.init.xavier_uniform_(self.to_k.weight)
+        nn.init.xavier_uniform_(self.to_v.weight)
+
+        # gating: zero weights, one biases (mostly open gate at the begining)
+        nn.init.zeros_(self.to_g.weight)
+        nn.init.ones_(self.to_g.bias)
+
+        # to_out: right before residual connection: zero initialize -- to make it sure residual operation is same to the Identity at the begining
+        nn.init.zeros_(self.to_out.weight)
+        nn.init.zeros_(self.to_out.bias)
+
+    def forward(self, msa):
+        """
+        Input:
+            msa: (B, N, L, d_msa) MSA tensor. MSA tensors must be float16 or bfloat16 in order to use PyTorch's optimized SDPA function. Generally, this is handled by mixed precision training.
+        Output:
+            attn: (B, N, L, d_msa) Attention output tensor.
+        """
+        # Layer normalization (Note: automatically performed in float32 for mixed precision training given overflow issues with float16)
+        msa = self.norm_msa(msa) # (B, N, L, d_msa)
+        
+        # (B, N, L, d_msa) --(projection)--> (B, N, L, h * d_head) --(rearrange)--> (B, N, L, h, d_head)
+        query = rearrange(self.to_q(msa), 'b n l (h d_h) -> b n l h d_h', h=self.h)
+        query = query.mean(dim=1) # (B, L, h, d_head)
+    
+        # Key and value are not multi-headed   
+        key = rearrange(self.to_k(msa), 'b n l d_h -> b l n d_h') # (B, L, N, d_h)
+        value = rearrange(self.to_v(msa), 'b n l d_h -> b l n d_h') # (B, L, N, d_h)
+        
+        # Gating
+        gate = torch.sigmoid(self.to_g(msa)) # (B, N, L, d_msa)
+        
+        # SDPA, using PyTorch's scaled_dot_product_attention (defaults to FlashAttention with float16 or bfloat16)
+        use_flash = torch.cuda.get_device_properties(0).major >= 8
+        with torch.backends.cuda.sdp_kernel(enable_flash=use_flash, enable_math=True, enable_mem_efficient=False):
+           attn = F.scaled_dot_product_attention(query, key, value, scale=self.scale_factor) # (B, L, h, N)
+
+        # Concatenate on the head dimension, re-introduce a dimension to make multiplication work
+        attn = rearrange(attn, 'b l h n -> b 1 l (h n)') # (B, 1, L, d_msa)
+
+        # Apply gating
+        out = gate * attn # (B, N, L, d_msa)
+        
+        # Output projection W_o
+        return self.to_out(out) # (B, N, L, d_msa)
+
+class OldMSAColGlobalAttention(nn.Module):
+    def __init__(self, d_msa=64, n_head=8, d_hidden=8):
+        super(OldMSAColGlobalAttention, self).__init__()
         self.norm_msa = nn.LayerNorm(d_msa)
         #
         self.to_q = nn.Linear(d_msa, n_head*d_hidden, bias=False)

@@ -41,11 +41,12 @@ def test_fake_NC_position_noise(example, model):
         input_i["xyz"][is_atom(input_i["seq_unmasked"]), :, 0] += 1
         input_i["xyz"][is_atom(input_i["seq_unmasked"]), :, 2] += 1
         model.eval()
+        use_amp = False
         with torch.no_grad():
-            rf_outputs, rf_latents = model(input_i, use_checkpoint)
+            rf_outputs, rf_latents = model(input_i, use_checkpoint, use_amp)
         return rf_outputs, rf_latents
 
-    model_name, model, network_input = setup_test(example, model) 
+    model_name, model, network_input = setup_test(example, model)
     make_deterministic() 
     rf_outputs, rf_latents = run_model_forward(model, network_input, gpu)
     make_deterministic()
@@ -110,7 +111,7 @@ def setup_test(example, model):
 
     # initialize chemical database.  Force a reload
     ChemData.reset()
-    init = partial(initialize_chemdata,config)
+    init = partial(initialize_chemdata,config.chem_params)
     init()
     
     model = random_param_init(model)

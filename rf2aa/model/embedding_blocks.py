@@ -2,12 +2,11 @@ import torch
 import torch.nn as nn
 
 from rf2aa.model.layers.Embeddings import MSA_emb, MSA_emb_nostate, \
-            Extra_emb, Bond_emb, Templ_emb, recycling_factory
+            Extra_emb, Bond_emb, Templ_emb, Templ_emb_NoPtwise, recycling_factory
 from rf2aa.chemical import ChemicalData as ChemData
 
 
 class RF2_embedding(nn.Module):
-    
     def __init__(self, global_params, block_params):
         super(RF2_embedding, self).__init__()
         d_msa, d_msa_full, d_pair, d_state = global_params["d_msa"], global_params["d_msa_full"], global_params["d_pair"], global_params["d_state"]
@@ -102,6 +101,26 @@ class RF2_embedding(nn.Module):
             "state": state
         }
 
+class RF2_embedding_no_ptwise(RF2_embedding):
+    
+    def __init__(self, global_params, block_params):
+        super(RF2_embedding_no_ptwise, self).__init__(global_params, block_params)
+        d_msa, d_msa_full, d_pair, d_state = global_params["d_msa"], global_params["d_msa_full"], global_params["d_pair"], global_params["d_state"]
+        self.templ_emb = Templ_emb_NoPtwise(d_pair=d_pair, 
+                                   d_templ=block_params.d_templ, 
+                                   d_state=d_state, 
+                                   n_head=block_params.n_head_templ,
+                                   d_hidden=block_params.d_hidden_templ, 
+                                   p_drop=block_params.templ_p_drop,
+                                   symmetrize_repeats=block_params.symmetrize_repeats, # repeat protein stuff 
+                                   repeat_length=block_params.repeat_length, 
+                                   symmsub_k=block_params.symmsub_k,
+                                   sym_method=block_params.sym_method, 
+                                   main_block=block_params.main_block, 
+                                   copy_main_block=block_params.copy_main_block_template,
+                                   additional_dt1d=block_params.additional_dt1d)
+
+
 class RF2_embedding_nostate(RF2_embedding):
 
     def __init__(self, global_params, block_params):
@@ -119,6 +138,6 @@ class RF2_embedding_nostate(RF2_embedding):
 
 embedding_factory = {
     "rf2aa": RF2_embedding,
+    "rf2aa_noptwise": RF2_embedding_no_ptwise,
     "rf2aa_nostate": RF2_embedding_nostate
 }
- 

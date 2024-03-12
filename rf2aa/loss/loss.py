@@ -518,6 +518,7 @@ def resolve_symmetry_predictions(pred, true, mask, Lasu):
 #torsion angle predictor loss
 def torsionAngleLoss( alpha, alphanat, alphanat_alt, tors_mask, tors_planar, eps=1e-8 ):
     I = alpha.shape[0]
+    alpha = alpha.float()
     lnat = torch.sqrt( torch.sum( torch.square(alpha), dim=-1 ) + eps )
     anorm = alpha / (lnat[...,None])
 

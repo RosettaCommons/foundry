@@ -8,7 +8,8 @@ from rf2aa.debug import debug_nans
 from rf2aa.model.layers.SE3_network import FullyConnectedSE3, FullyConnectedSE3_noR
 from rf2aa.model.layers.structure_bias import structure_bias_factory
 from rf2aa.model.layers.Attention_module import BiasedAxialAttention, FeedForwardLayer, MSAColAttention, \
-    MSARowAttentionWithBias, TriangleMultiplication, MSAColGlobalAttention
+    MSARowAttentionWithBias, TriangleMultiplication, MSAColGlobalAttention, \
+    OldMSAColAttention, OldMSAColGlobalAttention
 from rf2aa.model.layers.outer_product import OuterProductMean # need to code this correctly
 from rf2aa.training.checkpoint import create_custom_forward
 from rf2aa.util_module import Dropout
@@ -24,8 +25,12 @@ class RF2_block(nn.Module):
     
     def __init__(self, global_config, block_params, is_full, **kwargs):
         super(RF2_block, self).__init__()
-        d_msa, d_msa_full, d_pair, d_state = global_config.d_msa, global_config.d_msa_full, global_config.d_pair, \
-                                                global_config.d_state
+        d_msa, d_msa_full, d_pair, d_state = (
+            global_config.d_msa, 
+            global_config.d_msa_full, 
+            global_config.d_pair,
+            global_config.d_state
+        )
         self.is_full = is_full
         
         if self.is_full:
@@ -42,19 +47,38 @@ class RF2_block(nn.Module):
         self.drop_col = Dropout(broadcast_dim=2, p_drop=block_params.p_drop_pair)
 
         self.msa_row_attn = MSARowAttentionWithBias(
-            d_msa=d_msa, d_pair=d_pair, n_head=block_params.n_msa_head, d_hidden=block_params.n_msa_channels)
-        if self.is_full:
-            self.msa_col_attn = MSAColGlobalAttention(
-                d_msa=d_msa,
-                n_head=block_params.n_msa_head,
-                d_hidden=block_params.n_msa_channels
+            d_msa=d_msa, 
+            d_pair=d_pair, 
+            n_head=block_params.n_msa_head, 
+            d_hidden=block_params.n_msa_channels,
+            nseq_normalization=block_params.norm_msa_row
         )
+        if self.is_full:
+            if block_params.use_flash_attn:
+                self.msa_col_attn = MSAColGlobalAttention(
+                    d_msa=d_msa,
+                    n_head=block_params.n_msa_head,
+                    d_hidden=block_params.n_msa_channels
+                )
+            else:
+                self.msa_col_attn = OldMSAColGlobalAttention(
+                    d_msa=d_msa,
+                    n_head=block_params.n_msa_head,
+                    d_hidden=block_params.n_msa_channels
+                )
         else:
-            self.msa_col_attn = MSAColAttention(
-                d_msa=d_msa, 
-                n_head=block_params.n_msa_head, 
-                d_hidden=block_params.n_msa_channels
-            )
+            if block_params.use_flash_attn:
+                self.msa_col_attn = MSAColAttention(
+                    d_msa=d_msa, 
+                    n_head=block_params.n_msa_head, 
+                    d_hidden=block_params.n_msa_channels
+                )
+            else:
+                self.msa_col_attn = OldMSAColAttention(
+                    d_msa=d_msa,
+                    n_head=block_params.n_msa_head,
+                    d_hidden=block_params.n_msa_channels
+                )
         self.msa_transition = FeedForwardLayer(d_msa, 4, p_drop=block_params.msa_transition_drop)
         
         # Pair update parameters
@@ -83,7 +107,8 @@ class RF2_block(nn.Module):
                                                 block_params.l1_out_features,
                                                 block_params.n_se3_edge_features,
                                                 block_params.sc_pred_d_hidden,
-                                                block_params.sc_pred_p_drop
+                                                block_params.sc_pred_p_drop,
+                                                block_params.residual_state,
                                                 )
         
     def _unpack_inputs(self, latent_feats):
@@ -156,24 +181,27 @@ class RF2_block(nn.Module):
         )
         return block_outputs["state"], block_outputs["xyz"], block_outputs["alpha"]
 
-    def forward(self, latent_feats, use_checkpoint):
+    def forward(self, latent_feats, use_checkpoint, use_amp):
         msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx = self._unpack_inputs(latent_feats)
         drop_layer = 0
         if use_checkpoint:
-            msa  = checkpoint.checkpoint(create_custom_forward(self._1d_update, drop_layer=drop_layer), msa, pair, state, xyz, use_reentrant=True)
-            pair = checkpoint.checkpoint(create_custom_forward(self._2d_update, drop_layer=drop_layer), msa, pair, state, xyz, use_reentrant=True)
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                msa  = checkpoint.checkpoint(create_custom_forward(self._1d_update, drop_layer=drop_layer), msa, pair, state, xyz, use_reentrant=True)
+                pair = checkpoint.checkpoint(create_custom_forward(self._2d_update, drop_layer=drop_layer), msa, pair, state, xyz, use_reentrant=True)
             # 3D track cannot use re-entrant = False because of chiral features call to autograd
             #TODO: allow this to happen since new versions of Pytorch will be using reentrant=False
+            msa, pair = msa.float(), pair.float()
             state, xyz, alpha = checkpoint.checkpoint(
                 create_custom_forward(self._3d_update, drop_layer=drop_layer),
                 msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx,
                 use_reentrant=True
             )
         else:
-            msa= self._1d_update(msa, pair, state, xyz, drop_layer=drop_layer)
-            pair = self._2d_update(msa, pair, state, xyz, drop_layer=drop_layer)
+            with torch.cuda.amp.autocast(enabled=use_amp):
+              msa= self._1d_update(msa, pair, state, xyz, drop_layer=drop_layer)
+              pair = self._2d_update(msa, pair, state, xyz, drop_layer=drop_layer)
+            msa, pair = msa.float(), pair.float()
             state, xyz, alpha = self._3d_update(msa, pair, state, xyz, is_atom, atom_frames, chirals,bond_feats, dist_matrix, idx, drop_layer=drop_layer)
-
 
         latent_feats = self._pack_outputs(msa, pair, state, xyz, alpha, latent_feats)
         return latent_feats

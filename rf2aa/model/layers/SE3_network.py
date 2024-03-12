@@ -114,7 +114,8 @@ class FullyConnectedSE3_noR(nn.Module):
                 l0_out_features,
                 l1_in_features,
                 l1_out_features,
-                num_edge_features
+                num_edge_features,
+                residual_state,
     ):
         super(FullyConnectedSE3_noR, self).__init__()
         # initial node & pair feature process
@@ -127,6 +128,8 @@ class FullyConnectedSE3_noR(nn.Module):
         self.embed_edge = nn.Linear(d_pair+d_rbf+1, num_edge_features)
         self.ff_edge = FeedForwardLayer(num_edge_features, 2)
         self.norm_edge = nn.LayerNorm(num_edge_features)
+
+        self.residual_state = residual_state
 
         self.se3 = SE3TransformerWrapper(
             num_layers=num_layers, 
@@ -183,8 +186,12 @@ class FullyConnectedSE3_noR(nn.Module):
         weight = 0. if drop_layer else 1.
         B, L = xyz.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
-        
-        state = shift["0"].reshape(B, L, -1)
+
+        if self.residual_state:
+            state = state + shift["0"].reshape(B, L, -1)
+        else:
+            state = shift["0"].reshape(B, L, -1)
+
         offset = shift["1"].reshape(B, L, 3)
         T = offset / 10.0
         xyz_update = xyz.clone()
@@ -210,11 +217,12 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
     def __init__(
         self, d_msa, d_pair, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, 
         l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features, 
-        sc_pred_d_hidden, sc_pred_p_drop
+        sc_pred_d_hidden, sc_pred_p_drop, residual_state
     ):
         super().__init__(
             d_msa, d_pair, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, 
-            l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features
+            l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features,
+            residual_state
         )
         self.embed_node = nn.Linear(d_msa+l0_in_features, l0_in_features)
         self.norm_state = nn.LayerNorm(l0_in_features)        
@@ -258,8 +266,12 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
 
         B, L = node.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
-        
-        state = shift["0"].reshape(B, L, -1)
+
+        if self.residual_state:
+            state = state + shift["0"].reshape(B, L, -1) #fd change
+        else:
+            state = shift["0"].reshape(B, L, -1) #fd change
+
         offset = shift["1"].reshape(B, L, 2, 3)
         T = offset[:,:,0,:] / 10
         R = offset[:,:,1,:] / 100.0
@@ -289,7 +301,10 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
 
     def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False):
 
-        state, xyz = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix)
+        state, xyz = super().forward(
+            msa.float(), pair.float(), state.float(), xyz.float(), 
+            is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix
+        )
         alpha = self.sc_predictor(msa[:, 0], state)
         return {
             "state": state,

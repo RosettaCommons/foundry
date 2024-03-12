@@ -143,7 +143,9 @@ class Trainer:
                     'training_config'     : dict(self.config),
                     }
         checkpoint_data.update(metadata)
-        torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
+        torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_last.pt")
+        if epoch%10==0:
+            torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
 
     
     def launch_distributed_training(self):
@@ -211,9 +213,14 @@ class Trainer:
         if self.config.training_params.resume_train:
             self.load_checkpoint(gpu)
             self.load_model()
-            self.load_optimizer()
-            self.load_scheduler()
-            self.load_scaler()
+            try:
+                self.load_optimizer()
+                self.load_scheduler()
+                self.load_scaler()
+            except Exception as ex:
+                print ('Error in loading optimizer parameters:',ex)
+                print ('Continuing...')
+
         self.recycle_schedule = recycle_sampling["by_batch"](self.config.loader_params.maxcycle, 
                                                              self.config.experiment.n_epoch,
                                                              self.config.dataset_params.n_train,
@@ -410,6 +417,7 @@ class ComposedTrainer(Trainer):
             seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
             self.config.loss_param
         )
+
         return loss, loss_dict
 
 

@@ -81,7 +81,7 @@ def setup_models(device="cpu"):
             seed_all()
             trainer.construct_model(device=device)
             models.append(trainer.model)
-            chem_cfgs.append(cfg.chem_params)
+            chem_cfgs.append(cfg)
             trainer = None 
 
     return dict(zip(configs, (zip(configs, models, chem_cfgs))))
@@ -93,7 +93,7 @@ def setup_benchmark_data(config=None):
     with initialize(version_base=None, config_path="../config/train"):
         cfg = compose(config_name=config, overrides=cfg_overrides)
  
-    chem_params = cfg.chem_params
+    cfgs = cfg
     loader_params = set_data_loader_params(loader_params=cfg.loader_params) 
     names = list(benchmark_datasets.keys())
     loaders = [ benchmark_datasets[i][0] for i in names]
@@ -101,8 +101,8 @@ def setup_benchmark_data(config=None):
     loader_kwargs = [ benchmark_datasets[i][2] for i in names]
 
     loader_params_list  = [loader_params] * len(benchmark_datasets)
-    chem_params_list  = [chem_params] * len(benchmark_datasets)
-    return dict(zip(names, zip(names, items, loader_params_list, chem_params_list, loaders, loader_kwargs)))
+    cfgs_list  = [cfgs] * len(benchmark_datasets)
+    return dict(zip(names, zip(names, items, loader_params_list, cfgs_list, loaders, loader_kwargs)))
 
 # set up trainers for benchmark tests
 def setup_benchmark_trainers(device="cpu"):
