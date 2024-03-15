@@ -25,7 +25,7 @@ export PYTHONPATH=".../RF2-allatom"
 
 First, run the test suite:
 ```
-apptainer exec /software/containers/versions/SE3nv/SE3nv-20240131.sif pytest tests/
+apptainer exec --nv /software/containers/versions/SE3nv/SE3nv-20240301.sif pytest tests/
 ```
 If all the tests pass, you have a stable version of the code.
 

@@ -10,6 +10,7 @@ from rf2aa.training.recycling import run_model_forward, run_model_forward_legacy
 from rf2aa.tensor_util import assert_equal
 from rf2aa.tests.test_conditions import setup_array,\
       configs, make_deterministic, dataset_pickle_path, model_pickle_path
+from rf2aa.util import Ls_from_same_chain_2d, is_atom
 from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import ChemicalData as ChemData
 
@@ -103,5 +104,32 @@ def setup_test(example, model):
     xyz_converter = XYZConverter().to(gpu)
     task, item, network_input, true_crds, mask_crds, msa, mask_msa, unclamp, \
         negative, symmRs, Lasu, ch_label = prepare_input(dataloader_inputs,xyz_converter, gpu)
+    network_input = grab_one_from_each_chain(network_input)
     return dataset_name, network_input, model_name, model
 
+def grab_one_from_each_chain(network_input):
+    Ls = Ls_from_same_chain_2d(network_input["same_chain"])
+    Ls.insert(0,0)
+    first_in_chain = torch.cumsum(torch.tensor(Ls), dim=0)
+    node_from_each_chain = torch.zeros(sum(Ls), device=network_input["seq_unmasked"].device)
+    node_from_each_chain[first_in_chain[:-1]] = 1
+    is_atom_node = is_atom(network_input["seq_unmasked"])
+    chosen_nodes = torch.logical_or(node_from_each_chain, is_atom_node)
+    import pdb; pdb.set_trace()
+    network_input['msa_latent'] = network_input['msa_latent'][..., chosen_nodes, :]
+    network_input['msa_full'] = network_input["msa_full"][..., chosen_nodes, :]
+    network_input['seq'] = network_input["seq"][..., chosen_nodes]
+    network_input['seq_unmasked'] = network_input["seq_unmasked"][..., chosen_nodes]
+    network_input['idx'] = network_input["idx"][..., chosen_nodes]
+    network_input['t1d'] = network_input["t1d"][..., chosen_nodes, :]
+    network_input['t2d']  = network_input["t2d"][..., chosen_nodes, :, :][..., chosen_nodes, :]
+    network_input['xyz_t']
+    network_input['alpha_t'] 
+    network_input['mask_t']
+    network_input['same_chain']
+    network_input['bond_feats'] 
+    network_input['dist_matrix'] 
+    network_input['chirals']
+    network_input['atom_frames'] 
+    network_input['xyz_prev']
+    network_input['alpha_prev']
