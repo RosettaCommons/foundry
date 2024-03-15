@@ -20,6 +20,7 @@ from rf2aa.chemical import ChemicalData as ChemData
 gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_compl_covale"], ["rf2aa"])
+
 legacy_test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_compl_covale"], ["legacy_train"], device=gpu)
 
 
@@ -104,32 +105,51 @@ def setup_test(example, model):
     xyz_converter = XYZConverter().to(gpu)
     task, item, network_input, true_crds, mask_crds, msa, mask_msa, unclamp, \
         negative, symmRs, Lasu, ch_label = prepare_input(dataloader_inputs,xyz_converter, gpu)
-    network_input = grab_one_from_each_chain(network_input)
+    network_input = grab_three_from_each_chain(network_input)
     return dataset_name, network_input, model_name, model
 
-def grab_one_from_each_chain(network_input):
+def grab_three_from_each_chain(network_input):
+    """ for polymer chains, chose three residues, for atom chain choose all atoms (intended to make test pickles smaller)"""
     Ls = Ls_from_same_chain_2d(network_input["same_chain"])
     Ls.insert(0,0)
+
     first_in_chain = torch.cumsum(torch.tensor(Ls), dim=0)
+    first_in_chain = first_in_chain[first_in_chain<sum(Ls)] # remove cases where the chain is only one node
+
     node_from_each_chain = torch.zeros(sum(Ls), device=network_input["seq_unmasked"].device)
-    node_from_each_chain[first_in_chain[:-1]] = 1
+    node_from_each_chain[first_in_chain] = 1
+    second_in_chain = first_in_chain + 1
+    second_in_chain = second_in_chain[second_in_chain<sum(Ls)] # remove cases where the chain is only one node
+    node_from_each_chain[second_in_chain] = 1
+    third_in_chain = second_in_chain + 1 # se3 transofmer would like more than 1 edge during fwd pass
+    third_in_chain = third_in_chain[third_in_chain<sum(Ls)] # remove cases where the chain is only one node
+    node_from_each_chain[third_in_chain] = 1
     is_atom_node = is_atom(network_input["seq_unmasked"])
-    chosen_nodes = torch.logical_or(node_from_each_chain, is_atom_node)
-    import pdb; pdb.set_trace()
+    chosen_nodes = torch.logical_or(node_from_each_chain.bool(), is_atom_node).squeeze()
+
+    return downsample_network_inputs(network_input, chosen_nodes)
+    
+def downsample_network_inputs(network_input, chosen_nodes):
     network_input['msa_latent'] = network_input['msa_latent'][..., chosen_nodes, :]
     network_input['msa_full'] = network_input["msa_full"][..., chosen_nodes, :]
     network_input['seq'] = network_input["seq"][..., chosen_nodes]
     network_input['seq_unmasked'] = network_input["seq_unmasked"][..., chosen_nodes]
     network_input['idx'] = network_input["idx"][..., chosen_nodes]
     network_input['t1d'] = network_input["t1d"][..., chosen_nodes, :]
-    network_input['t2d']  = network_input["t2d"][..., chosen_nodes, :, :][..., chosen_nodes, :]
-    network_input['xyz_t']
-    network_input['alpha_t'] 
-    network_input['mask_t']
-    network_input['same_chain']
-    network_input['bond_feats'] 
-    network_input['dist_matrix'] 
-    network_input['chirals']
-    network_input['atom_frames'] 
-    network_input['xyz_prev']
-    network_input['alpha_prev']
+    network_input['t2d']  = network_input["t2d"][:, :, chosen_nodes][:, :, :, chosen_nodes]
+    network_input['xyz_t'] = network_input["xyz_t"][..., chosen_nodes, :]
+    network_input['alpha_t'] = network_input["alpha_t"][..., chosen_nodes, :] 
+    network_input['mask_t'] = network_input["mask_t"][..., chosen_nodes, :][..., chosen_nodes] # mask_t is t2d tensor
+    network_input['same_chain'] = network_input["same_chain"][:, chosen_nodes][:, :, chosen_nodes]
+    network_input['bond_feats'] = network_input["bond_feats"][:, chosen_nodes][:, :, chosen_nodes]
+    network_input['dist_matrix'] = network_input["dist_matrix"][:, chosen_nodes][:, :, chosen_nodes]
+    network_input['xyz_prev'] = network_input["xyz_prev"][..., chosen_nodes, :, :]
+    network_input["alpha_prev"] = network_input['alpha_prev'].to(network_input["seq_unmasked"].device)
+    network_input['alpha_prev'] = network_input["alpha_prev"][..., chosen_nodes, :, :]
+    
+    # need to decremetn chirals for all the deleted residues
+    # assumes all ligand atoms come after protein atoms and no ligand atoms were removed
+    num_deleted_residues = (~chosen_nodes).sum()
+    network_input["chirals"][..., :-1] = network_input["chirals"][..., :-1] - num_deleted_residues
+
+    return network_input
