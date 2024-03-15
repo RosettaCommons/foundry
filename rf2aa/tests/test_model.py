@@ -126,7 +126,6 @@ def grab_three_from_each_chain(network_input):
     node_from_each_chain[third_in_chain] = 1
     is_atom_node = is_atom(network_input["seq_unmasked"])
     chosen_nodes = torch.logical_or(node_from_each_chain.bool(), is_atom_node).squeeze()
-
     return downsample_network_inputs(network_input, chosen_nodes)
     
 def downsample_network_inputs(network_input, chosen_nodes):

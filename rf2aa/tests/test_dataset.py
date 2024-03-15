@@ -62,7 +62,6 @@ def test_correct_shapes(name, item, loader_params, chem_params,loader, loader_kw
         assert_shape(ch_label, (B, L))
         assert symmgp[0] == "C1", f"{symmgp}"
 
-@pytest.mark.xfail
 @pytest.mark.parametrize("name,item,loader_params,chem_params,loader,loader_kwargs", data.values())
 def test_regression(name, item, loader_params, chem_params, loader, loader_kwargs):
     # initialize chemical database.  Force a reload

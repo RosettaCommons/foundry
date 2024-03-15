@@ -39,7 +39,10 @@ cfg_overrides = [
     "loader_params.p_msa_mask=0.0", 
     "loader_params.crop=100000",
     "loader_params.mintplt=0",
-    "loader_params.maxtplt=2"
+    "loader_params.maxtplt=2",
+    "loader_params.maxcycle=1",
+    "loader_params.maxlat=2",
+    "loader_params.maxseq=5"
 ]
 
 def make_deterministic(seed=0):
