@@ -997,15 +997,16 @@ class IterativeSimulator(nn.Module):
         self.n_ref_block = n_ref_block
         self.n_finetune_block = n_finetune_block
 
-        self.atom_type_index = atom_type_index
-        self.aamask = aamask
-        self.ljlk_parameters = ljlk_parameters 
-        self.lj_correction_parameters = lj_correction_parameters
-        self.num_bonds = num_bonds
+        self.register_buffer('aamask', aamask, persistent=False)
+        self.register_buffer('atom_type_index', atom_type_index, persistent=False)
+        self.register_buffer('ljlk_parameters', ljlk_parameters, persistent=False)
+        self.register_buffer('lj_correction_parameters', lj_correction_parameters, persistent=False)
+        self.register_buffer('cb_len', cb_len, persistent=False)
+        self.register_buffer('cb_ang', cb_ang, persistent=False)
+        self.register_buffer('cb_tor', cb_tor, persistent=False)
+        self.register_buffer('num_bonds', num_bonds, persistent=False)
+
         self.lj_lin = lj_lin
-        self.cb_len = cb_len
-        self.cb_ang = cb_ang
-        self.cb_tor = cb_tor
         self.use_chiral_l1 = use_chiral_l1
         self.use_lj_l1 = use_lj_l1
         self.enable_same_chain = enable_same_chain
@@ -1165,7 +1166,7 @@ class IterativeSimulator(nn.Module):
                          bond_feats, dist_matrix, 
                          self.aamask, 
                          self.ljlk_parameters, 
-                         self.lj_correction_parameters, 
+                         self.lj_correction_parameters.bool(), 
                          self.num_bonds, 
                          lj_lin=self.lj_lin)
                     extra_l0 = dljdalpha.reshape(1,-1,2*ChemData().NTOTALDOFS).detach()

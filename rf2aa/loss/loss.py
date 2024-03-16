@@ -18,6 +18,8 @@ from rf2aa.kinematics import get_dih, get_ang
 from rf2aa.scoring import HbHybType
 
 from typing import List, Dict, Optional
+import logging
+logger = logging.getLogger(__name__)
 
 # Loss functions for the training
 # 1. BB rmsd loss
@@ -1570,7 +1572,7 @@ def calc_lj_grads(
     Elj = calc_lj(
         seq[0], 
         xyzaa[...,:3], 
-        aamask,
+        aamask.bool(),
         bond_feats,
         dist_matrix,
         ljparams, 

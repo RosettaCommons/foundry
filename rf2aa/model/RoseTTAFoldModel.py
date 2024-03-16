@@ -15,6 +15,8 @@ from rf2aa.model.layers.AuxiliaryPredictor import (
 from rf2aa.tensor_util import assert_shape, assert_equal
 import rf2aa.util
 from rf2aa.chemical import ChemicalData as ChemData
+import logging
+logger = logging.getLogger(__name__)
 
 
 def get_shape(t):
