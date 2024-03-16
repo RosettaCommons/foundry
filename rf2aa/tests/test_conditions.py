@@ -147,7 +147,7 @@ def random_param_init(model):
     with torch.no_grad():
         fake_state_dict = OrderedDict()
         for name, param in model.model.named_parameters():
-            fake_state_dict[name] = torch.randn_like(param)
+            fake_state_dict[name] = torch.randn_like(param) * 1e-2
         model.model.load_state_dict(fake_state_dict)
         model.shadow.load_state_dict(fake_state_dict)
     return model

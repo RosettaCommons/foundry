@@ -81,27 +81,11 @@ def test_regression_legacy(example, model):
                         assert_equal(got_i, want_i)
                     except Exception as e:
                         raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
-            elif output_names[idx] in ["xyz_allatom", "seq", "pair"]:
+            elif output_names[idx] in ["xyz_allatom", "seq", "pair", "xyz", "lddt", "state", "alpha"]:
                 try:
                     assert torch.allclose(got, want, atol=1e-2)
                 except Exception as e:
                     raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
-            elif output_names[idx] in ["alpha"]:
-                # these values explode with random parameters so normalize by 1e6
-                got = got / 1e6
-                want = want / 1e6
-                try:
-                    assert torch.allclose(got, want, atol=1e-2)
-                except Exception as e:
-                    raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
-            elif output_names[idx] in ["xyz","lddt", "state"]:
-                got = got / 1e3
-                want = want / 1e3
-                try:
-                    assert torch.allclose(got, want, atol=1e-2)
-                except Exception as e:
-                    raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
-
             else:
                 try:
                     assert_equal(got, want)
