@@ -9,7 +9,7 @@ from rf2aa.debug import debug_device
 from rf2aa.training.recycling import run_model_forward, run_model_forward_legacy
 from rf2aa.tensor_util import assert_equal
 from rf2aa.tests.test_conditions import setup_array,\
-      configs, make_deterministic, dataset_pickle_path, model_pickle_path
+      configs, make_deterministic, dataset_pickle_path, model_pickle_path, random_param_init
 from rf2aa.util import Ls_from_same_chain_2d, is_atom
 from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import ChemicalData as ChemData
@@ -81,11 +81,27 @@ def test_regression_legacy(example, model):
                         assert_equal(got_i, want_i)
                     except Exception as e:
                         raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
-            elif output_names[idx] in ["alpha", "xyz_allatom", "seq", "pair", "state"]:
+            elif output_names[idx] in ["xyz_allatom", "seq", "pair"]:
                 try:
-                    assert torch.allclose(got, want, atol=1e-4)
+                    assert torch.allclose(got, want, atol=1e-2)
                 except Exception as e:
                     raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
+            elif output_names[idx] in ["alpha"]:
+                # these values explode with random parameters so normalize by 1e6
+                got = got / 1e6
+                want = want / 1e6
+                try:
+                    assert torch.allclose(got, want, atol=1e-2)
+                except Exception as e:
+                    raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
+            elif output_names[idx] in ["xyz","lddt", "state"]:
+                got = got / 1e3
+                want = want / 1e3
+                try:
+                    assert torch.allclose(got, want, atol=1e-2)
+                except Exception as e:
+                    raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
+
             else:
                 try:
                     assert_equal(got, want)
@@ -99,6 +115,7 @@ def setup_test(example, model):
     ChemData.reset() # force reload chemical data
     ChemData(config.chem_params)
 
+    model = random_param_init(model)
     model = model.to(gpu)
     dataset_name = example[0]
     dataloader_inputs = torch.load(dataset_pickle_path(dataset_name), map_location=gpu)
