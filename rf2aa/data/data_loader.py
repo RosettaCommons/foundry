@@ -1899,7 +1899,7 @@ def expand_multi_msa(a3m, hashes_in, hashes_out, Ls_in, Ls_out, params):
 
         # copy over query sequence
         msa_out[0, i1_res_out:i2_res_out] = msa_in[0, i1_res_in:i2_res_in]
-        ins_out[0, i1_res_out:i2_res_out] = msa_in[0, i1_res_in:i2_res_in]
+        ins_out[0, i1_res_out:i2_res_out] = ins_in[0, i1_res_in:i2_res_in]
 
         # offset non-query sequences along sequence dimension based on repeat number of a given hash
         i1_seq_out = 1+(n_copy[i_out]-1)*(N_in-1)
@@ -3019,7 +3019,7 @@ def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=
     mask = torch.full((1, L, ChemData().NTOTAL), False)
 
     is_NA = is_nucleic(msa[0])
-    xyz[:,is_NA] = IChemData().NIT_NA_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,is_NA.sum(),1,1) + torch.rand(1,is_NA.sum(),1,3)*random_noise
+    xyz[:,is_NA] = ChemData().NIT_NA_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,is_NA.sum(),1,1) + torch.rand(1,is_NA.sum(),1,3)*random_noise
     is_prot = ~is_NA
     xyz[:,is_prot] = ChemData().INIT_CRDS.reshape(1,1,ChemData().NTOTAL,3).repeat(1,is_prot.sum(),1,1) + torch.rand(1,is_prot.sum(),1,3)*random_noise
 
@@ -3573,7 +3573,6 @@ def featurize_asmb_prot(pdb_id, partners, params, chains, asmb_xfs, modres,
         chnum += 1
 
         ## protein templates
-        random_noise = 0.0
         ntempl = np.random.randint(params['MINTPLT'], params['MAXTPLT']+1)
         if chid2hash is None or ntempl < 1:
             xyz_t_ch, f1d_t_ch, mask_t_ch, tplt_ids_ch = \
@@ -4017,7 +4016,6 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
 
     # combine protein & ligand templates
     N_tmpl = xyz_t_prot.shape[0]
-    random_noise = 0.0
     if chid2smpartners is not None and params["SHOW_SM_TEMPLATES"]:
         assert num_protein_chains == 1, "templating ligands not supported for multiple protein chains (complications in xyz_prev)"
         xyz_t_sm, f1d_t_sm, mask_t_sm = generate_sm_template_feats(tplt_ids, resnames, akeys_sm, Ls_sm,chid2smpartners, params)
