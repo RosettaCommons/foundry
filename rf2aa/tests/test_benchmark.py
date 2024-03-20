@@ -10,10 +10,12 @@ from rf2aa.training.recycling import run_model_forward, recycle_step_packed
 from rf2aa.loss.loss_factory import get_loss_and_misc
 from rf2aa.tensor_util import assert_equal
 from rf2aa.tests.test_conditions import setup_benchmark_array,\
-      configs, make_deterministic, dataset_pickle_path, model_pickle_path
+      make_deterministic, setup_data
 from rf2aa.util_module import XYZConverter
-from rf2aa.chemical import ChemicalData as ChemData
+from rf2aa.chemical import ChemicalData as ChemData, initialize_chemdata
 from rf2aa.data.compose_dataset import compose_single_item_dataset
+from rf2aa.random import seed_all
+from functools import partial
 
 
 # goal is to test all the configs on a broad set of datasets
@@ -45,6 +47,7 @@ def setup_test(example, trainer):
     inputs = prepare_input(dataloader_inputs, xyz_converter, gpu)
     return dataset_name, dataloader_inputs, inputs
 
+@pytest.mark.gpu
 @pytest.mark.benchmark(group="forward")
 @pytest.mark.parametrize("example,trainer", test_conditions, ids=test_ids)
 def test_benchmark_fw(benchmark, example, trainer):
@@ -60,7 +63,7 @@ def test_benchmark_fw(benchmark, example, trainer):
 
     result = benchmark(run)
 
-
+@pytest.mark.gpu
 @pytest.mark.benchmark(group="forward_backward")
 @pytest.mark.parametrize("example,trainer", test_conditions, ids=test_ids)
 def test_benchmark_fw_bw(benchmark, example, trainer):
@@ -86,5 +89,24 @@ def test_benchmark_fw_bw(benchmark, example, trainer):
         torch.cuda.synchronize(gpu)
         return loss
 
+
+    result = benchmark(run)
+
+overrides = []
+test_data = setup_data(overrides=overrides)
+@pytest.mark.benchmark(group="forward_backward")
+@pytest.mark.parametrize("name,item,loader_params,chem_params,loader,loader_kwargs", test_data.values())
+def test_benchmark_dataloading(benchmark, name, item, loader_params, chem_params,loader, loader_kwargs):
+    ChemData.reset()
+    init = partial(initialize_chemdata,chem_params)
+    init()
+
+    seed_all()
+    data_loader = compose_single_item_dataset(init, item, loader_params, loader, loader_kwargs)
+    xyz_converter = XYZConverter().to(gpu)
+    def run():
+        dataloader_inputs = next(iter(data_loader))
+        task, item, network_input, true_crds, mask_crds, msa, mask_msa, unclamp, \
+            negative, symmRs, Lasu, ch_label = prepare_input(dataloader_inputs,xyz_converter, gpu)
 
     result = benchmark(run)

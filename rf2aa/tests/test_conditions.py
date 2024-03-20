@@ -8,7 +8,8 @@ from hydra import initialize, compose
 from rf2aa.data.compose_dataset import set_data_loader_params
 from rf2aa.data.data_loader import loader_pdb, loader_complex, loader_na_complex, \
                                     loader_dna_rna, loader_sm_compl_assembly_single, loader_sm_compl_assembly
-from rf2aa.trainer_new import trainer_factory, seed_all
+from rf2aa.random import seed_all
+from rf2aa.trainer_new import trainer_factory
 from rf2aa.chemical import ChemicalData as ChemData
 
 # examples used in testing
@@ -52,9 +53,12 @@ def make_deterministic(seed=0):
         torch.backends.cudnn.benchmark = False
 
 # set up data for regression tests
-def setup_data(config=None):
+def setup_data(config=None, overrides=None):
     if config is None:
         config="base"
+    if overrides == None:
+        overrides = cfg_overrides
+
     with initialize(version_base=None, config_path="../config/train"):
         cfg = compose(config_name=config, overrides=cfg_overrides)
  

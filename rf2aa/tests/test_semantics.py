@@ -21,6 +21,7 @@ assert "rf2aa" in cifutils.__name__
 test_conditions = setup_array(["sm_compl"], ["rf2aa"])
 gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("example,model", test_conditions)
 def test_fake_NC_position_noise(example, model):
     """
@@ -52,7 +53,8 @@ def test_fake_NC_position_noise(example, model):
     make_deterministic()
     rf_outputs_noise, rf_latents_noise = run_model_forward_noise(model, network_input, gpu)
     check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise)
-    
+
+@pytest.mark.gpu   
 @pytest.mark.parametrize("example,model", test_conditions)
 def test_fake_sm_idx(example, model):
     """
@@ -72,6 +74,7 @@ def test_fake_sm_idx(example, model):
     rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, gpu)
     check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise, exclude=["idx"])
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("example,model", test_conditions)
 def test_mask_t(example, model):
     """
@@ -90,6 +93,7 @@ def test_mask_t(example, model):
     rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, gpu)
     check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise)
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("example,model", test_conditions)
 def test_same_chain(example, model):
     """

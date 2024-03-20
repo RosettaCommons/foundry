@@ -11,7 +11,6 @@ import os
 import time
 
 from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
-from rf2aa.data.data_loader import loader_atomize_pdb
 from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items
 from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads
 from rf2aa.training.EMA import EMA, count_parameters
@@ -25,6 +24,7 @@ import rf2aa.util as util
 from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.chemical import initialize_chemdata
+from rf2aa.random import seed_all
 
 #TODO: control environment variables from config
 # limit thread counts
@@ -33,13 +33,6 @@ os.environ['OPENBLAS_NUM_THREADS'] = '4'
 #os.environ['PYTORCH_CUDA_ALLOC_CONF'] = "max_split_size_mb:512"
 
 ## To reproduce errors
-import random
-
-def seed_all(seed=0):
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    np.random.seed(seed)
 
 torch.set_num_threads(4)
 #torch.autograd.set_detect_anomaly(True)

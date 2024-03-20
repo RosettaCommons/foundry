@@ -23,7 +23,7 @@ test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_compl_c
 
 legacy_test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_compl_covale"], ["legacy_train"], device=gpu)
 
-
+@pytest.mark.gpu
 @pytest.mark.parametrize("example,model", test_conditions)
 def test_regression(example, model):
     dataset_name, dataset_inputs, model_name, model = setup_test(example, model)
@@ -55,6 +55,7 @@ def test_regression(example, model):
                         except Exception as e:
                             raise ValueError(f"{output_name} does not match for model: {model_name} on dataset: {dataset_name}") from e
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("example,model", legacy_test_conditions)
 def test_regression_legacy(example, model):
     dataset_name, dataset_inputs, model_name, model = setup_test(example, model)

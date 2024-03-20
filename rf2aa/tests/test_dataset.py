@@ -95,4 +95,3 @@ def test_regression(name, item, loader_params, chem_params, loader, loader_kwarg
                         print("t1d fails for sm_compl_assembly")
                         continue
                     raise AssertionError(f"{names[idx]} did not match") from e
-
