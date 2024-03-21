@@ -9,7 +9,8 @@ from rf2aa.debug import debug_device
 from rf2aa.training.recycling import run_model_forward, run_model_forward_legacy
 from rf2aa.tensor_util import assert_equal
 from rf2aa.tests.test_conditions import setup_array,\
-      configs, make_deterministic, dataset_pickle_path, model_pickle_path, random_param_init
+      configs, make_deterministic, dataset_pickle_path, model_pickle_path, random_param_init, \
+        find_device
 from rf2aa.util import Ls_from_same_chain_2d, is_atom
 from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import ChemicalData as ChemData
@@ -17,7 +18,7 @@ from rf2aa.chemical import ChemicalData as ChemData
 
 # goal is to test all the configs on a broad set of datasets
 
-gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
+gpu = find_device()
 
 test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_compl_covale"], ["rf2aa", "rf_with_gradients", "untied_p2p", "rf2_deep_layerdropout"])
 legacy_test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_compl_covale"], ["legacy_train"], device=gpu)

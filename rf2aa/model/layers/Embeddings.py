@@ -310,7 +310,6 @@ class Templ_emb(nn.Module):
 
     def _get_templ_rbf(self, xyz_t, mask_t):
         B, T, L = xyz_t.shape[:3]
-
         # process each template features
         xyz_t = xyz_t.reshape(B*T, L, 3).contiguous()
         mask_t = mask_t.reshape(B*T, L, L)
@@ -328,7 +327,6 @@ class Templ_emb(nn.Module):
         #   - pair: query pair features (B, L, L, d_pair)
         #   - state: query state features (B, L, d_state)
         B, T, L, _ = t1d.shape
-
         templ = self._get_templ_emb(t1d, t2d)
         # this looks a lot like a bug but it is not
         # mask_t has already been updated by same_chain in the train_EMA script so pairwise distances between

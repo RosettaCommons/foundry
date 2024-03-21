@@ -199,7 +199,7 @@ def xyz_to_c6d(xyz, params=PARAMS):
     
     return c6d
     
-def xyz_to_t2d(xyz_t, mask, params=PARAMS):
+def xyz_to_t2d(xyz_t, mask, has_rotation=None, params=PARAMS):
     """convert template cartesian coordinates into 2d distance 
     and orientation maps
     
@@ -209,6 +209,8 @@ def xyz_to_t2d(xyz_t, mask, params=PARAMS):
             stores Cartesian coordinates of template backbone N,Ca,C atoms
     mask :  pytorch tensor [batch,templ,nres,nres]
             indicates whether valid residue pairs or not
+    has_rotation : pytorch tensor [batch,templ, nres] 
+            indicates whether a nodes has a rotation or not (eg atoms do not have rotations)
     Returns
     -------
     t2d : pytorch tensor of shape [batch,nres,nres,37+6+3]
@@ -223,6 +225,10 @@ def xyz_to_t2d(xyz_t, mask, params=PARAMS):
     dist = dist_to_onehot(c6d[...,0], params)*mask
     orien = torch.cat((torch.sin(c6d[...,1:]), torch.cos(c6d[...,1:])), dim=-1)*mask # (B, T, L, L, 6)
     #
+    if has_rotation is not None:
+        has_rotation_2d = has_rotation[..., None, :] * has_rotation[...,None]
+        no_rotation_2d  = ~has_rotation_2d
+        orien[:, :, no_rotation_2d] = 0.0
     t2d = torch.cat((dist, orien, mask), dim=-1)
     return t2d
 

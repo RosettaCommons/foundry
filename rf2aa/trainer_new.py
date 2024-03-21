@@ -7,7 +7,6 @@ from functools import partial
 import hydra
 import os
 import time
-import wandb
 import omegaconf
 from contextlib import nullcontext
 import datetime
@@ -16,12 +15,14 @@ import certifi
 import warnings
 
 from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
-from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items
+from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items, prepare_input_fm
+from rf2aa.flow_matching.interpolant import Interpolant
+from rf2aa.flow_matching.sampler import Sampler
 from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads
 from rf2aa.training.EMA import EMA, count_parameters
 from rf2aa.loss.loss_factory import get_loss_and_misc
 from rf2aa.training.optimizer import add_weight_decay
-from rf2aa.training.recycling import recycle_step_legacy, recycle_step_packed, recycle_sampling
+from rf2aa.training.recycling import recycle_step_legacy, recycle_step_packed, recycle_sampling, run_model_forward
 from rf2aa.model.network import RosettaFold
 from rf2aa.model.RoseTTAFoldModel import LegacyRoseTTAFoldModule
 from rf2aa.training.scheduler import get_stepwise_decay_schedule_with_warmup
@@ -54,8 +55,8 @@ class Trainer:
             self.output_dir = "models/"
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
-        
-    def construct_model(self):
+
+    def construct_model(self, device):
         raise NotImplementedError()
 
     def construct_optimizer(self):
@@ -197,17 +198,20 @@ class Trainer:
 
         # Define context manager for training run (either nullcontext or W&B)
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        context_manager = (
-            wandb.init(
-                project=self.config.log_params.wandb_project, 
-                config=omegaconf.OmegaConf.to_container(
-                    self.config, resolve=True, throw_on_missing=True
-                ),
-                name = f"{self.config.experiment.name}_{timestamp}"
-            ) 
-            if self.config.log_params.use_wandb and rank == 0 
-            else nullcontext() # Does nothing
-        )
+        
+        if self.config.log_params.use_wandb:    
+            import wandb
+            wandb.login()
+            context_manager = wandb.init(
+                    project=self.config.log_params.wandb_project, 
+                    config=omegaconf.OmegaConf.to_container(
+                        self.config, resolve=True, throw_on_missing=True
+                    ),
+                    name = f"{self.config.experiment.name}_{timestamp}"
+                ) 
+        else:
+            context_manager = nullcontext() # Does nothing
+        
 
         # Without W&B, context manager does nothing
         with context_manager: 
@@ -458,6 +462,113 @@ class ComposedTrainer(Trainer):
             return loss, loss_dict
 
 
+class FlowMatchingTrainer(Trainer):
+
+    def construct_model(self, device="cpu"):
+        self.model = RosettaFold(self.config).to(device)
+        if self.config.training_params.EMA is not None:
+            self.model = EMA(self.model, self.config.training_params.EMA)
+        self.sampler = Sampler(self.model, 
+                               self.config.interpolant.sampling.num_timesteps,
+                               self.config.interpolant.min_t,
+                               self.interpolant,
+                               self.xyz_converter,
+                               is_training=True)
+
+    def move_constants_to_device(self, gpu):
+        self.interpolant = Interpolant(self.config.interpolant)
+        self.interpolant.set_device(gpu)
+        super().move_constants_to_device(gpu) 
+
+    def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
+        gpu = self.model.device
+        task, item, network_input, true_crds, \
+            atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
+            = prepare_input_fm(inputs, self.interpolant, self.xyz_converter, gpu)
+
+        output_i = recycle_step_packed(self.model, network_input, 1, self.config.training_params.use_amp, nograds=no_grads)
+        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames, true_crds, atom_mask = get_loss_calc_items(inputs, device=gpu)
+
+        #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
+        #HACK: need to promote some inputs to gpu for loss calculation, all promotions should happen together
+        msa = msa.to(gpu)
+        mask_msa = mask_msa.to(gpu)
+
+        loss, loss_dict = get_loss_and_misc(
+            self, # avoid reloading constants to device 
+            output_i, true_crds, atom_mask, same_chain,
+            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
+            self.config.loss_param
+        )
+
+        if return_outputs:
+            return loss, loss_dict, output_i
+        else:
+            return loss, loss_dict
+
+    def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
+        gpu = self.interpolant._device
+        self.sampler.model = self.model
+        task, item, network_input, true_crds, \
+            atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
+            = prepare_input_fm(inputs, self.interpolant, self.xyz_converter, gpu)
+
+        output_i = self.sampler.sample(inputs)
+        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames, true_crds, atom_mask \
+              = get_loss_calc_items(inputs, device=gpu)
+
+        #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
+        #HACK: need to promote some inputs to gpu for loss calculation, all promotions should happen together
+        msa = msa.to(gpu)
+        mask_msa = mask_msa.to(gpu)
+
+        loss, loss_dict = get_loss_and_misc(
+            self, # avoid reloading constants to device 
+            output_i, true_crds, atom_mask, same_chain,
+            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
+            self.config.loss_param
+        )
+
+        if return_outputs:
+            return loss, loss_dict, output_i
+        else:
+            return loss, loss_dict
+
+    def valid_epoch(self, epoch, rank, world_size):
+        """ validate model """
+        # turn on gradients
+        self.model.eval()
+        for dataset_name, valid_loader in self.valid_loaders.items():
+            valid_loss_dict = None
+            for valid_idx, inputs in enumerate(valid_loader):
+                n_cycle = self.config.loader_params.maxcycle
+
+                loss, loss_dict = self.valid_step(inputs, n_cycle)  
+
+                if valid_loss_dict is None:
+                    valid_loss_dict = torch.zeros_like(torch.stack(list(loss_dict.values())))
+                valid_loss_dict += torch.stack(list(loss_dict.values()))
+
+            if len(valid_loader) == 0:
+                continue
+
+            valid_loss_dict /= float(len(valid_loader)*world_size)
+            dist.all_reduce(valid_loss_dict, op=dist.ReduceOp.SUM)
+
+            # reconstruct loss dictionary
+            dict_keys = list(loss_dict.keys())
+            valid_loss_dict = { 
+                dict_keys[i]:valid_loss_dict[i] for i in range(valid_loss_dict.shape[0]) 
+            }
+
+            if rank==0:
+                self.log_validation_losses(dataset_name, valid_loss_dict)
+                # If using W&B, log the validation losses (note: this is only done for rank = 0)
+                if self.config.log_params.use_wandb:
+                    wandb.log(valid_loss_dict)
+
+
+
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
     seed_all()
@@ -478,6 +589,7 @@ def main(config):
 trainer_factory = {
     "legacy": LegacyTrainer,
     "composed": ComposedTrainer,
+    "flow_matching": FlowMatchingTrainer
 }
 
 if __name__ == "__main__":

@@ -157,6 +157,9 @@ def random_param_init(model):
         model.shadow.load_state_dict(fake_state_dict)
     return model
 
+def find_device():
+    return "cuda:0" if torch.cuda.is_available() else "cpu"
+
 def dataset_pickle_path(dataset_name):
     return f"test_pickles/data/{dataset_name}_regression.pt"
 

@@ -58,7 +58,7 @@ default_dataloader_params = {
         "VAL_TF"           : "%s/tf_valid_clusters_v4.txt"%tf_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20240328.pkl"%rf2aa_file_path, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20240318.pkl"%rf2aa_file_path, # cache for faster loading 
         "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
         "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
         "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)
