@@ -26,7 +26,8 @@ class SE3TransformerWrapper(nn.Module):
     def __init__(self, num_layers=2, num_channels=32, num_degrees=3, n_heads=4, div=4,
                  l0_in_features=32, l0_out_features=32,
                  l1_in_features=3, l1_out_features=2,
-                 num_edge_features=32):
+                 num_edge_features=32,
+                 compute_gradients=False):
         super().__init__()
         # Build the network
         self.l1_in = l1_in_features
@@ -61,7 +62,9 @@ class SE3TransformerWrapper(nn.Module):
                                   fiber_edge=fiber_edge,
                                   populate_edge="arcsin",
                                   final_layer="lin",
-                                  use_layer_norm=True)
+                                  use_layer_norm=True,
+                                  compute_gradients=compute_gradients
+                                  )
 
         self.reset_parameter()
 
@@ -116,6 +119,7 @@ class FullyConnectedSE3_noR(nn.Module):
                 l1_out_features,
                 num_edge_features,
                 residual_state,
+                compute_gradients,
     ):
         super(FullyConnectedSE3_noR, self).__init__()
         # initial node & pair feature process
@@ -141,7 +145,8 @@ class FullyConnectedSE3_noR(nn.Module):
             l0_out_features=l0_out_features,
             l1_in_features=l1_in_features, 
             l1_out_features=l1_out_features,
-            num_edge_features=num_edge_features
+            num_edge_features=num_edge_features,
+            compute_gradients=compute_gradients
         )
         self.reset_parameter()
 
@@ -210,22 +215,26 @@ class FullyConnectedSE3_noR(nn.Module):
         state, xyz_update = self.compute_structure_update(
             G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer
         )
-        return state, xyz_update
+        return {
+            "state": state, 
+            "xyz": xyz_update
+        }
 
 
 class FullyConnectedSE3(FullyConnectedSE3_noR):
     def __init__(
         self, d_msa, d_pair, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, 
         l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features, 
-        sc_pred_d_hidden, sc_pred_p_drop, residual_state
+        sc_pred_d_hidden, sc_pred_p_drop, residual_state, compute_gradients
     ):
         super().__init__(
             d_msa, d_pair, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, 
             l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features,
-            residual_state
+            residual_state,
+            compute_gradients
         )
-        self.embed_node = nn.Linear(d_msa+l0_in_features, l0_in_features)
-        self.norm_state = nn.LayerNorm(l0_in_features)        
+        self.embed_node = nn.Linear(d_msa+l0_out_features, l0_in_features)
+        self.norm_state = nn.LayerNorm(l0_out_features)        
         self.sc_predictor = SCPred(
             d_msa=d_msa,
             d_state=l0_out_features,
@@ -301,10 +310,9 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
 
     def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False):
 
-        state, xyz = super().forward(
-            msa.float(), pair.float(), state.float(), xyz.float(), 
-            is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix
-        )
+        block_outputs = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix)
+        state, xyz = block_outputs["state"], block_outputs["xyz"]
+        
         alpha = self.sc_predictor(msa[:, 0], state)
         return {
             "state": state,

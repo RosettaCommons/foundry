@@ -18,7 +18,7 @@ from rf2aa.chemical import initialize_chemdata
 import rf2aa.cifutils as cifutils
 assert "rf2aa" in cifutils.__name__
 
-test_conditions = setup_array(["sm_compl"], ["rf2aa"])
+test_conditions = setup_array(["sm_compl"], ["rf2aa", "rf_with_gradients"])
 gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 @pytest.mark.gpu

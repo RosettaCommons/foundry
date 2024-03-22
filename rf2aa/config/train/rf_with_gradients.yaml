@@ -13,13 +13,20 @@ model:
       d_state: 32
 
   embedding:
-    rf2aa_nostate:
+    rf2aa:
       params:
         p_drop: 0.15
         d_templ: 64 
         n_head_templ: 4
         d_hidden_templ: 64
         templ_p_drop: 0.25
+        symmetrize_repeats: False
+        repeat_length: null
+        symmsub_k: null
+        sym_method: null
+        main_block: null
+        copy_main_block_template: False
+        additional_dt1d: 0
         recycling_type: "msa_pair"
         use_same_chain: False
   
@@ -27,55 +34,67 @@ model:
     RF2_withgradients_full:
       num_blocks: 4
       params:
-        n_msa_head: 8
-        n_msa_channels: 64
+        d_rbf: 64
         p_drop_row: 0.25
-        p_drop_col: 0.25
-        structure_bias_type: "ungated"
-        structure_bias_channels: 64
+        p_drop_pair: 0.25
+        p_drop_layer: 0.0
+        msa_transition_drop: 0.0
+        outer_product_channels: 16 
+        p_drop_outer_product: 0.0
         n_pair_head: 6
-        n_pair_channels: 192
-        outer_product_channels: 16
-        intermediate_seq_channels: 192 #this is from AF2
+        n_pair_channels: 32
+        n_msa_head: 8
+        n_msa_channels: 32
+        structure_bias_gate_channels: 16
+        structure_bias_channels: 64
         n_se3_layers: 1
         n_se3_channels: 32
         n_se3_degrees: 2
         n_se3_head: 4
         n_div: 4
-        l0_in_features: 64
+        l0_in_features: 32
         l0_out_features: 32
         l1_in_features: 1
         l1_out_features: 1
         n_se3_edge_features: 64
+        sc_pred_d_hidden: 128
+        sc_pred_p_drop: 0.15
         residual_state: False
         norm_msa_row: False
         use_flash_attn: False
+        compute_gradients: True
     RF2_withgradients:
       num_blocks: 36
       params:
-        n_msa_head: 8
-        n_msa_channels: 256
+        d_rbf: 64
         p_drop_row: 0.25
-        p_drop_col: 0.25
-        structure_bias_type: "ungated"
-        structure_bias_channels: 64
+        p_drop_pair: 0.25
+        p_drop_layer: 0.0
+        msa_transition_drop: 0.0
+        outer_product_channels: 16 
+        p_drop_outer_product: 0.0
         n_pair_head: 6
-        n_pair_channels: 192
-        outer_product_channels: 16
-        intermediate_seq_channels: 192 #this is from AF2
+        n_pair_channels: 32
+        n_msa_head: 8
+        n_msa_channels: 32
+        structure_bias_gate_channels: 16
+        structure_bias_channels: 64
         n_se3_layers: 1
         n_se3_channels: 32
         n_se3_degrees: 2
         n_se3_head: 4
         n_div: 4
-        l0_in_features: 64
+        l0_in_features: 32
         l0_out_features: 32
         l1_in_features: 1
         l1_out_features: 1
         n_se3_edge_features: 64
+        sc_pred_d_hidden: 128
+        sc_pred_p_drop: 0.15
         residual_state: False
         norm_msa_row: False
         use_flash_attn: False
+        compute_gradients: True
   refinement:
     local:
       params:
@@ -86,8 +105,8 @@ model:
         n_se3_degrees: 2
         n_se3_head: 4
         n_div: 4
-        l0_in_features: 64
-        l0_out_features: 64
+        l0_in_features: 32
+        l0_out_features: 32
         l1_in_features: 6
         l1_out_features: 2
         n_se3_edge_features: 64
@@ -95,6 +114,7 @@ model:
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.15
         residual_state: False
+        compute_gradients: False
   
   auxiliary_predictors:
     c6d:
@@ -107,12 +127,30 @@ model:
       n_feat: 192
       input_feature: "pair"
     plddt: 
-      n_feat: 64
+      n_feat: 32
       input_feature: "state"
     
-dataset_params:
-  fraction_sm_compl: 1
-  n_train: 25600
+dataset_params:  
+  fraction_pdb: 0.11
+  fraction_fb: 0.36
+  fraction_compl: 0.055
+  fraction_na_compl: 0.055
+  fraction_distil_tf: 0.055
+  fraction_rna: 0.02
+  fraction_dna: 0.005
+  fraction_sm_compl: 0.11
+  fraction_metal_compl: 0.03 
+  fraction_sm_compl_multi: 0.025 
+  fraction_sm_compl_covale: 0.025 
+  fraction_atomize_pdb: 0.0425
+  fraction_atomize_complex: 0.0425 
+  fraction_sm_compl_asmb: 0.065
+  n_valid_pdb: 256
+  n_valid_compl: 256
+  n_valid_rna: 256
+  n_valid_dna: 256
+  n_valid_sm_compl: 256
+  n_valid_sm_compl_strict: 256
 
 training_params:
   resume_train: False

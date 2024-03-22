@@ -16,7 +16,7 @@ from rf2aa.data.compose_dataset import compose_single_item_dataset
 # goal is to test all the configs on a broad set of datasets
 gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-test_conditions, test_ids = setup_benchmark_array(["pdb256"], ["rf2aa"], device=gpu)
+test_conditions, test_ids = setup_benchmark_array(["pdb256"], ["rf_with_gradients"], device=gpu)
 
 def setup_test(example, trainer):
     model = trainer.model

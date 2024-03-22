@@ -133,6 +133,11 @@ class RF2_embedding_nostate(RF2_embedding):
             p_drop=block_params.p_drop, 
             use_same_chain=block_params.use_same_chain
         )
+        self.templ_emb = None
+
+    def _add_templ_features(self, rf_inputs, pair, state):
+        #identity
+        return pair, state
 
 
 

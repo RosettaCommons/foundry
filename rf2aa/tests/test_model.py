@@ -19,8 +19,7 @@ from rf2aa.chemical import ChemicalData as ChemData
 
 gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_compl_covale"], ["rf2aa"])
-
+test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_compl_covale"], ["rf2aa", "rf_with_gradients"])
 legacy_test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_compl_covale"], ["legacy_train"], device=gpu)
 
 @pytest.mark.gpu

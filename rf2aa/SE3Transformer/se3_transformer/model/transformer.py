@@ -78,6 +78,7 @@ class SE3Transformer(nn.Module):
                  low_memory: bool = False,
                  populate_edge: Optional[Literal['lin', 'arcsin', 'log', 'zero']] = 'lin',
                  sum_over_edge: bool = True,
+                 compute_gradients: bool = False,
                  **kwargs):
         """
         :param num_layers:          Number of attention layers
@@ -105,6 +106,7 @@ class SE3Transformer(nn.Module):
         self.tensor_cores = tensor_cores
         self.low_memory = low_memory
         self.populate_edge = populate_edge
+        self.compute_gradients = compute_gradients
 
         if low_memory:
             self.fuse_level = ConvSE3FuseLevel.NONE
@@ -162,7 +164,7 @@ class SE3Transformer(nn.Module):
                 edge_feats: Optional[Dict[str, Tensor]] = None,
                 basis: Optional[Dict[str, Tensor]] = None):
         # Compute bases in case they weren't precomputed as part of the data loading
-        basis = basis or get_basis(graph.edata['rel_pos'], max_degree=self.max_degree, compute_gradients=False,
+        basis = basis or get_basis(graph.edata['rel_pos'], max_degree=self.max_degree, compute_gradients=self.compute_gradients,
                                    use_pad_trick=self.tensor_cores and not self.low_memory,
                                    amp=torch.is_autocast_enabled())
 

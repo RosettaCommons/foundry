@@ -109,6 +109,7 @@ class RF2_block(nn.Module):
                                                 block_params.sc_pred_d_hidden,
                                                 block_params.sc_pred_p_drop,
                                                 block_params.residual_state,
+                                                compute_gradients=block_params.compute_gradients
                                                 )
         
     def _unpack_inputs(self, latent_feats):
@@ -206,8 +207,64 @@ class RF2_block(nn.Module):
         latent_feats = self._pack_outputs(msa, pair, state, xyz, alpha, latent_feats)
         return latent_feats
 
+class RF2_withgradients(RF2_block):
+    def __init__(self, global_config, block_params, is_full, **kwargs):
+        super().__init__(global_config, block_params, is_full, **kwargs)
+        d_msa, d_msa_full, d_pair = global_config.d_msa, global_config.d_msa_full, global_config.d_pair
+        self.is_full = is_full
+        
+        if self.is_full:
+            d_msa = d_msa_full
+
+        self.structure_attn = FullyConnectedSE3_noR(d_msa, 
+                                                d_pair, 
+                                                block_params.d_rbf,
+                                                block_params.n_se3_layers,
+                                                block_params.n_se3_channels,
+                                                block_params.n_se3_degrees,
+                                                block_params.n_se3_head,
+                                                block_params.n_div,
+                                                block_params.l0_in_features,
+                                                block_params.l0_out_features,
+                                                block_params.l1_in_features,
+                                                block_params.l1_out_features,
+                                                block_params.n_se3_edge_features,
+                                                block_params.residual_state,
+                                                compute_gradients=block_params.compute_gradients
+                                                )
+    def _3d_update(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, drop_layer=False):
+        block_outputs = self.structure_attn(
+            msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix, drop_layer=drop_layer
+        )
+        block_outputs["alpha"] = None
+        return block_outputs["state"], block_outputs["xyz"], block_outputs["alpha"]
+
+    def _pack_outputs(self, msa, pair, state, xyz, alpha, latent_feats):
+        if self.is_full:
+            latent_feats["msa_full"] = msa
+        else:
+            latent_feats["msa"] = msa
+        latent_feats["pair"] = pair
+        latent_feats["state"] = state
+        latent_feats["xyz"] = xyz
+        ##HACK: appending to growing list, this could cause weird memory problems in pytorch
+        ## eventually want to refactor this to make it more elegant
+        #if "xyz_intermediate" not in latent_feats:
+            #latent_feats["xyz_intermediate"] = [xyz]
+        #else:
+            #latent_feats["xyz_intermediate"].append(xyz)
+        
+        #if "alpha_intermediate" not in latent_feats:
+            #latent_feats["alpha_intermediate"] = [alpha]
+        #else:
+            #latent_feats["alpha_intermediate"].append(alpha)
+        return latent_feats
+
+
 
 block_factory = {
     "RF2aa":                    partial(RF2_block, is_full=False),
-    "RF2aa_full":               partial(RF2_block, is_full=True)
+    "RF2aa_full":               partial(RF2_block, is_full=True),
+    "RF2_withgradients":       partial(RF2_withgradients, is_full=False),
+    "RF2_withgradients_full":  partial(RF2_withgradients, is_full=True)
 }

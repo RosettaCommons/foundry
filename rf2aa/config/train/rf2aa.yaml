@@ -61,6 +61,7 @@ model:
         residual_state: False
         norm_msa_row: False
         use_flash_attn: False
+        compute_gradients: False
     RF2aa:
       num_blocks: 32
       params:
@@ -92,6 +93,7 @@ model:
         residual_state: False
         norm_msa_row: False
         use_flash_attn: False
+        compute_gradients: False
   refinement:
     local:
       params:
@@ -111,7 +113,8 @@ model:
         sc_pred_d_hidden: 128
         sc_pred_p_drop: 0.15
         residual_state: False
-
+        compute_gradients: False
+  
   auxiliary_predictors:
     c6d:
       n_feat: 192

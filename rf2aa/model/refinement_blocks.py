@@ -14,13 +14,14 @@ class LocalRefinementSE3(FullyConnectedSE3):
         d_msa, d_pair = global_config.d_msa, global_config.d_pair
         d_rbf, num_layers, num_channels, num_degrees, n_heads, div, \
             l0_in_features, l0_out_features, l1_in_features, l1_out_features, \
-                  num_edge_features, top_k, sc_pred_d_hidden, sc_pred_p_drop = \
+                  num_edge_features, top_k, sc_pred_d_hidden, sc_pred_p_drop, compute_gradients = \
                 block_params.d_rbf, block_params.n_se3_layers, block_params.n_se3_channels, \
                     block_params.n_se3_degrees, block_params.n_se3_head, block_params.n_div, \
                         block_params.l0_in_features, block_params.l0_out_features, \
                             block_params.l1_in_features, block_params.l1_out_features, \
                                 block_params.n_se3_edge_features, block_params.top_k, \
-                                    block_params.sc_pred_d_hidden, block_params.sc_pred_p_drop
+                                    block_params.sc_pred_d_hidden, block_params.sc_pred_p_drop, \
+                                    block_params.compute_gradients
 
         residual_state = block_params.residual_state
 
@@ -39,7 +40,8 @@ class LocalRefinementSE3(FullyConnectedSE3):
                                                  num_edge_features,
                                                  sc_pred_d_hidden,
                                                  sc_pred_p_drop,
-                                                 residual_state
+                                                 residual_state,
+                                                 compute_gradients
                                                  )
         self.top_k = top_k
         self.reset_parameter() 

@@ -375,4 +375,35 @@ def compose_single_item_dataset(loader_fn, item, loader_params, loader, loader_k
     loader = data.DataLoader(dataset, worker_init_fn = loader_fn, **loader_params["dataloader_kwargs"])
     return loader
 
+def compose_similar_posebusters(loader_params, rank, world_size):
+    loader_params = set_data_loader_params(loader_params=loader_params) 
+    valid_ID_dict, valid_dict = {}, {}
     
+    valid_dict["benchmark"] = _load_df("/home/rohith/RF2ligand/posebusters_benchmark.csv", pad_hash=False, eval_cols=["LIGAND", "PARTNERS", "LIGXF"])
+    valid_ID_dict["benchmark"] = valid_dict["benchmark"]["CLUSTER"] 
+
+    with open(
+        "/projects/ml/RF2_allatom/posebusters/posebusters_chid2hash_081723.pkl", "rb"
+    ) as f:
+        chid2hash = pickle.load(f)
+    
+    with open(
+        "/projects/ml/RF2_allatom/posebusters/posebusters_chid2taxid_081723.pkl", "rb"
+    ) as f:
+        chid2taxid = pickle.load(f)
+    loader_params["MINTPLT"] = 0
+    loader_params["MAXTPLT"] = 0
+    loader_params["PDB_DIR"] = "/projects/ml/RF2_allatom/benchmark"
+
+    benchmark = DatasetSMComplexAssembly(
+            valid_ID_dict['benchmark'],
+            loader_sm_compl_assembly, valid_dict['benchmark'],
+            chid2hash, chid2taxid, # used for MSA generation of assemblies
+            loader_params,
+            task='sm_compl',
+            num_protein_chains=1,
+            num_ligand_chains=2,
+        )
+    sampler = data.distributed.DistributedSampler(benchmark, rank=rank, num_replicas=world_size)
+    loader = data.DataLoader(benchmark, sampler=sampler, **loader_params["dataloader_kwargs"])
+    return loader
