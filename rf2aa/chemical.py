@@ -167,9 +167,12 @@ class ChemicalData:
 
         # this is taken from a query string for a link named "metals in PDB" on BioLiP website 
         # hopefully they put a lot of thought into it
-        self.METAL_RES_NAMES = ['LA','NI','3CO','K','CR','ZN','CD','PD','TB','YT3','OS','EU','NA','RB','W','YB','HO3',
-                  'CE','MN','TL','LI','MN3','AU3','AU','EU3','AL','3NI','FE2','PT','FE','CA','AG','CU1',
-                  'LU','HG','CO','SR','MG','PB','CS','GA','BA','SM','SB','CU','MO','CU2']
+        self.METAL_RES_NAMES = [
+            'LA','NI','3CO','K','CR','ZN','CD','PD','TB','YT3','OS','EU','NA','RB','W','YB','HO3',
+            'CE','MN','TL','LI','MN3','AU3','AU','EU3','AL','3NI','FE2','PT','FE','CA','AG','CU1',
+            'LU','HG','CO','SR','MG','PB','CS','GA','BA','SM','SB','CU','MO','CU2',
+            'KR', 'OS4', 'TA0', 'TE', 'Y1' # FD additions
+        ]
 
         # full sc atom representation
         if (not params.use_phospate_frames_for_NA):

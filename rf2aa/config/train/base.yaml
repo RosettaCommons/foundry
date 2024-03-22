@@ -86,6 +86,9 @@ loader_params:
   p_atomize_modres: 1
   batch_by_dataset: True
   batch_by_length: True
+  ligands_to_remove: []
+  min_metal_contacts: 0
+  min_metal_contact_dist: 2.6
   dataloader_kwargs:
     shuffle: False
     num_workers: 0

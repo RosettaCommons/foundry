@@ -24,7 +24,7 @@ import rf2aa.util as util
 from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.chemical import initialize_chemdata
-from rf2aa.random import seed_all
+from rf2aa.set_seed import seed_all
 
 #TODO: control environment variables from config
 # limit thread counts
@@ -218,6 +218,7 @@ class Trainer:
                                                              self.config.experiment.n_epoch,
                                                              self.config.dataset_params.n_train,
                                                              world_size)
+        #self.valid_epoch(-1, rank, world_size)
         for epoch in range(self.config.experiment.n_epoch):
             train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
             self.train_epoch(epoch, rank, world_size)

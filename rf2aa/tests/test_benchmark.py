@@ -14,7 +14,7 @@ from rf2aa.tests.test_conditions import setup_benchmark_array,\
 from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import ChemicalData as ChemData, initialize_chemdata
 from rf2aa.data.compose_dataset import compose_single_item_dataset
-from rf2aa.random import seed_all
+from rf2aa.set_seed import seed_all
 from functools import partial
 
 

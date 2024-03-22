@@ -8,7 +8,7 @@ from hydra import initialize, compose
 from rf2aa.data.compose_dataset import set_data_loader_params
 from rf2aa.data.data_loader import loader_pdb, loader_complex, loader_na_complex, \
                                     loader_dna_rna, loader_sm_compl_assembly_single, loader_sm_compl_assembly
-from rf2aa.random import seed_all
+from rf2aa.set_seed import seed_all
 from rf2aa.trainer_new import trainer_factory
 from rf2aa.chemical import ChemicalData as ChemData
 

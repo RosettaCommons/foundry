@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 import torch.utils.data as data
 from collections import OrderedDict
+import os
 
 from rf2aa.data.data_loader import get_train_valid_set, loader_pdb, loader_complex, loader_na_complex, \
     loader_distil_tf, loader_tf_complex, loader_fb, loader_dna_rna, loader_sm_compl_assembly_single, \
@@ -22,6 +23,12 @@ mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl" # for phase 3 dataloaders
 tf_dir = "/projects/ml/prot_dna"
 csd_dir = "/databases/csd543"
 sample_lengths_dir = "/projects/ml/RF2_allatom"
+
+#fd store the pickle file in rf2aa directory
+#   rf2aa is parent dir to this one
+rf2aa_file_path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), os.pardir
+)
 
 default_dataloader_params = {
         "COMPL_LIST"       : "%s/list.hetero.csv"%compl_dir,
@@ -47,7 +54,7 @@ default_dataloader_params = {
         "VAL_TF"           : "%s/tf_valid_clusters_v4.txt"%tf_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20240131.pkl"%sm_compl_dir, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20240318.pkl"%rf2aa_file_path, # cache for faster loading 
         "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
         "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
         "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)

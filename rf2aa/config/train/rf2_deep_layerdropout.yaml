@@ -1,3 +1,6 @@
+defaults:
+  - ligand_exclusions 
+
 experiment:
   name: rf2_deep_layerdropout
   trainer: "composed"
@@ -34,7 +37,7 @@ dataset_params:
   n_valid_dslf: 0 
   n_valid_compl: 256
   n_valid_neg_compl: 0 
-  n_valid_na_compl: 0 
+  n_valid_na_compl: 0
   n_valid_neg_na_compl: 0 
   n_valid_distil_tf: 0 
   n_valid_tf: 0 
@@ -82,11 +85,11 @@ loader_params:
   batch_by_length: True
   dataloader_kwargs:
     shuffle: False
-    num_workers: 3
+    num_workers: 4
     pin_memory: True
 
 ddp_params:
-  accum: 1
+  accum: 2
   batch_size: 1
   port: 12435
 

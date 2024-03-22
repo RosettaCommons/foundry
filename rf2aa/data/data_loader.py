@@ -28,7 +28,7 @@ from rf2aa.chemical import load_tanimoto_sim_matrix
 
 from rf2aa.kinematics import get_chirals
 from rf2aa.symmetry import get_symmetry
-from rf2aa.random import seed_all
+from rf2aa.set_seed import seed_all
 from rf2aa.data.identical_ligands import get_extra_identical_copies_from_chains
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
     center_and_realign_missing, random_rot_trans, cif_prot_to_xyz, \
@@ -624,7 +624,7 @@ def generate_sm_template_feats(tplt_ids, resnames, akeys, Ls_sm, chid2smpartners
         the t1d features for seq are set to the ATM token and the template confidence is scaled to the 
         tanimoto similarity of the morgan fingerprint
     """
-    sim, names = load_tanimoto_sim_matrix(base_path=sm_compl_dir) # could load this earlier...
+    sim, names = load_tanimoto_sim_matrix(base_path=params['SM_COMPL_DIR']) # could load this earlier...
     name2idx = dict(zip(names,range(len(names))))
     
     xyz_t_all_template = []
@@ -896,7 +896,7 @@ def _load_df(filename, pad_hash=True, eval_cols=[]):
         return df
 
 
-def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, diffusion_training=False, add_negatives: bool = True):
+def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, diffusion_training=False, add_negatives: bool = True):
     """Loads training/validation sets as pandas DataFrames and returns them in
     dictionaries keyed by their dataset names.
 
@@ -929,26 +929,38 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         keys are names of datasets, values are pandas DataFrames
     """
     ignore = ['DATASETS', 'DATASET_PROB', 'DIFF_MASK_PROBS']
-    params = {k:v for k,v in params.items() if k not in ignore}
+    loader_params = {k:v for k,v in loader_params.items() if k not in ignore}
 
     # try to load cached datasets 
-    if os.path.exists(params['DATAPKL']):
-        with open(params['DATAPKL'], "rb") as f:
+    if os.path.exists(loader_params['DATAPKL']):
+        with open(loader_params['DATAPKL'], "rb") as f:
             if "SLURM_PROCID" in os.environ and int(os.environ["SLURM_PROCID"])==0:
-                print ('Loading',params['DATAPKL'],'...')
-            train_ID_dict, valid_ID_dict, weights_dict, \
-                train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra = pickle.load(f)
-        return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra
+                print ('Loading',loader_params['DATAPKL'],'...')
+            data = pickle.load(f)
+            if type(data) is dict and data['ligands_to_remove'] == loader_params['ligands_to_remove']:
+                return (
+                    data['train_ID_dict'],
+                    data['valid_ID_dict'],
+                    data['weights_dict'],
+                    data['train_dict'],
+                    data['valid_dict'],
+                    data['homo'],
+                    data['chid2hash'],
+                    data['chid2taxid'],
+                    data['chid2smpartners'],
+                )
+            else:
+                print ('Stored dataset has mismatch in ligand exclusion set! Regenerating...')
 
     t0 = time.time()
-    print(f"cached train/valid datasets {params['DATAPKL']} not found. "\
+    print(f"cached train/valid datasets {loader_params['DATAPKL']} not found. "\
           f"re-parsing train/valid metadata...")
     
     # helper functions
     def _apply_date_res_cutoffs(df):
         """filter dataframe by date and resolution cutoffs"""
-        return df[(df.RESOLUTION <= params['RESCUT']) & 
-                  (df.DEPOSITION.apply(lambda x: parser.parse(x)) <= parser.parse(params['DATCUT']))]
+        return df[(df.RESOLUTION <= loader_params['RESCUT']) & 
+                  (df.DEPOSITION.apply(lambda x: parser.parse(x)) <= parser.parse(loader_params['DATCUT']))]
     
     def _get_IDs_weights(df):
         """return unique cluster IDs and AF2-style sampling weights based on seq length"""
@@ -956,25 +968,32 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         IDs = tmp_df.CLUSTER.values
         weights = (1/512.)*np.clip(tmp_df.LEN_EXIST.values, 256, 512)
         return IDs, torch.tensor(weights)
-    
+
+    #fd remove "bad" ligands from the training/validation sets
+    def _apply_lig_exclusions(df, excl):
+        """filter dataframe by residue exclusions.  if ANY res in multires is excluded, all is."""
+        ids=[tuple(y[-1] for y in x) for x in df['LIGAND'].tolist()]
+        mask=[not any([x in excl for x in I]) for I in ids]
+        return df[mask]
+
     # containers for returning the training data/metadata
     train_dict, valid_dict, train_ID_dict, valid_ID_dict, weights_dict = \
         OrderedDict(), OrderedDict(), OrderedDict(), OrderedDict(), OrderedDict()
     
     # validation IDs for PDB set
-    val_pdb_ids = set([int(l) for l in open(params['VAL_PDB']).readlines()])
-    val_compl_ids = set([int(l) for l in open(params['VAL_COMPL']).readlines()])
-    val_neg_ids = set([int(l)+NEG_CLUSID_OFFSET for l in open(params['VAL_NEG']).readlines()])
-    val_rna_pdb_ids = set([l.rstrip() for l in open(params['VAL_RNA']).readlines()])
-    val_dna_pdb_ids = set([l.rstrip() for l in open(params['VAL_DNA']).readlines()])
-    val_tf_ids = set([int(l) for l in open(params['VAL_TF']).readlines()])
-    test_sm_ids = set([int(l) for l in open(params['TEST_SM']).readlines()])
+    val_pdb_ids = set([int(l) for l in open(loader_params['VAL_PDB']).readlines()])
+    val_compl_ids = set([int(l) for l in open(loader_params['VAL_COMPL']).readlines()])
+    val_neg_ids = set([int(l)+NEG_CLUSID_OFFSET for l in open(loader_params['VAL_NEG']).readlines()])
+    val_rna_pdb_ids = set([l.rstrip() for l in open(loader_params['VAL_RNA']).readlines()])
+    val_dna_pdb_ids = set([l.rstrip() for l in open(loader_params['VAL_DNA']).readlines()])
+    val_tf_ids = set([int(l) for l in open(loader_params['VAL_TF']).readlines()])
+    test_sm_ids = set([int(l) for l in open(loader_params['TEST_SM']).readlines()])
 
     # pdb monomers
-    pdb = _load_df(params['PDB_LIST'])
+    pdb = _load_df(loader_params['PDB_LIST'])
     pdb = _apply_date_res_cutoffs(pdb)
-    if params['MAXMONOMERLENGTH'] is not None:
-        pdb = pdb[pdb["LEN_EXIST"] < params['MAXMONOMERLENGTH']]
+    if loader_params['MAXMONOMERLENGTH'] is not None:
+        pdb = pdb[pdb["LEN_EXIST"] < loader_params['MAXMONOMERLENGTH']]
         pdb = pdb[pdb["LEN_EXIST"]>60]
     train_dict['pdb'] = pdb[(~pdb.CLUSTER.isin(val_pdb_ids)) & (~pdb.CLUSTER.isin(test_sm_ids))]
     valid_dict['pdb'] = pdb[pdb.CLUSTER.isin(val_pdb_ids) & (~pdb.CLUSTER.isin(test_sm_ids))]
@@ -982,22 +1001,22 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     train_ID_dict['pdb'], weights_dict['pdb'] = _get_IDs_weights(train_dict['pdb'])
     valid_ID_dict['pdb'] = valid_dict['pdb'].CLUSTER.drop_duplicates().values    
 
-    pdb_metadata = _load_df(params['PDB_METADATA'])
+    pdb_metadata = _load_df(loader_params['PDB_METADATA'])
     chid2hash = dict(zip(pdb_metadata.CHAINID, pdb_metadata.HASH))
     tmp = pdb_metadata.dropna(subset=['TAXID'])
     chid2taxid = dict(zip(tmp.CHAINID, tmp.TAXID))
 
     # short dslf loops
-    dslf = pd.read_csv(params['DSLF_LIST'])
+    dslf = pd.read_csv(loader_params['DSLF_LIST'])
     tmp_df = pdb[ pdb.CHAINID.isin(dslf.CHAIN_A)]
     valid_dict['dslf'] = dslf.merge(tmp_df[['CHAINID','HASH','CLUSTER']], 
                                     left_on='CHAIN_A', right_on='CHAINID', how='right')
     valid_ID_dict['dslf'] = valid_dict['dslf'].CLUSTER.drop_duplicates().values
 
-    dslf_fb = pd.read_csv(params['DSLF_FB_LIST'])
+    dslf_fb = pd.read_csv(loader_params['DSLF_FB_LIST'])
 
     # homo-oligomers
-    homo = pd.read_csv(params['HOMO_LIST'])
+    homo = pd.read_csv(loader_params['HOMO_LIST'])
     tmp_df = pdb[pdb.CLUSTER.isin(val_pdb_ids) & 
                  (pdb.CHAINID.isin(homo['CHAIN_A'])) & 
                  (~pdb.CLUSTER.isin(test_sm_ids))]
@@ -1006,7 +1025,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['homo'] = valid_dict['homo'].CLUSTER.drop_duplicates().values
 
     # facebook AF2 distillation set
-    fb = pd.read_csv(params['FB_LIST'])
+    fb = pd.read_csv(loader_params['FB_LIST'])
     fb = fb.rename(columns={'#CHAINID':'CHAINID'})
     fb = fb[(fb.plDDT>80) & (fb.SEQUENCE.apply(len) > 200)]
     fb['LEN_EXIST'] = fb.SEQUENCE.apply(len)
@@ -1020,7 +1039,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     train_ID_dict['fb'], weights_dict['fb'] = _get_IDs_weights(train_dict['fb'])
 
     # pdb hetero complexes
-    compl = pd.read_csv(params['COMPL_LIST'],skiprows=1,header=None)
+    compl = pd.read_csv(loader_params['COMPL_LIST'],skiprows=1,header=None)
     compl.columns = ['CHAINID','DEPOSITION','RESOLUTION','HASH','CLUSTER',
                      'LENA:B','TAXONOMY','ASSM_A','OP_A','ASSM_B','OP_B','HETERO']
     compl = _apply_date_res_cutoffs(compl)
@@ -1037,7 +1056,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['compl'] = valid_dict['compl'].CLUSTER.drop_duplicates().values
 
     # negative complexes
-    neg = pd.read_csv(params['NEGATIVE_LIST'])
+    neg = pd.read_csv(loader_params['NEGATIVE_LIST'])
     neg = _apply_date_res_cutoffs(neg)
     neg['CLUSTER'] = neg.CLUSTER + NEG_CLUSID_OFFSET
     neg['HASH_A'] = neg.HASH.apply(lambda x: x.split('_')[0])
@@ -1053,7 +1072,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['neg_compl'] = valid_dict['neg_compl'].CLUSTER.drop_duplicates().values
 
     # nucleic acid complexes
-    na = _load_df(params['NA_COMPL_LIST'])
+    na = _load_df(loader_params['NA_COMPL_LIST'])
     na = _apply_date_res_cutoffs(na)
     na['LEN'] = na['LENA:B:C:D'].apply(lambda x: [int(y) for y in x.split(':')])
     na['LEN_EXIST'] = na['LEN'].apply(lambda x: sum(x))
@@ -1065,7 +1084,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['na_compl'] = valid_dict['na_compl'].CLUSTER.drop_duplicates().values
 
     # negative nucleic acid complexes
-    na_neg = _load_df(params['NEG_NA_COMPL_LIST'])
+    na_neg = _load_df(loader_params['NEG_NA_COMPL_LIST'])
     na_neg = _apply_date_res_cutoffs(na_neg)
     na_neg['CLUSTER'] = na_neg.CLUSTER + NEG_CLUSID_OFFSET
 
@@ -1078,7 +1097,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['neg_na_compl'] = valid_dict['neg_na_compl'].CLUSTER.drop_duplicates().values
     
     # dna-protein distillation (from TF data) (RM)
-    distil_tf = _load_df(params['TF_DISTIL_LIST'])
+    distil_tf = _load_df(loader_params['TF_DISTIL_LIST'])
     distil_tf['CLUSTER'] = distil_tf['cluster_id']
     distil_tf['LEN'] = [ 
             [int(row['Domain size']), int(row['DNA size']), int(row['DNA size'])] if row['oligo'] == 'monomer' 
@@ -1086,8 +1105,6 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
             for _, row in distil_tf.iterrows() 
             ]
     distil_tf['LEN_EXIST'] = distil_tf['LEN'].apply(lambda x: sum(x))
-#    distil_tf['FAM_SIZE'] = distil_tf['family'].apply(lambda x: Counter(distil_tf['family'])[x])
-#    distil_tf['SQRT_FAM_SIZE'] = np.sqrt(distil_tf['FAM_SIZE'])
     
     train_dict['distil_tf'] = distil_tf[~distil_tf.CLUSTER.isin(val_tf_ids)]
     valid_dict['distil_tf'] = distil_tf[distil_tf.CLUSTER.isin(val_tf_ids)]
@@ -1095,15 +1112,13 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['distil_tf'] = valid_dict['distil_tf'].CLUSTER.drop_duplicates().values
 
     # sequence-only DNA/protein complexes (TF data) (RM)
-    tf = _load_df(params['TF_COMPL_LIST'])
+    tf = _load_df(loader_params['TF_COMPL_LIST'])
     tf['CLUSTER'] = tf['cluster_id']
     tf['LEN'] = [
             [int(row['Domain size']), int(row['DNA size']), int(row['DNA size'])]
             for _, row in tf.iterrows()
             ]
     tf['LEN_EXIST'] = tf['LEN'].apply(lambda x: sum(x))
-    #tf['FAM_SIZE'] = tf['family'].apply(lambda x: Counter(tf['family'])[x])
-    #tf['SQRT_FAM_SIZE'] = np.sqrt(tf['FAM_SIZE'])
 
     train_dict['tf'] = tf[~tf.CLUSTER.isin(val_tf_ids)]
     valid_dict['tf'] = tf[tf.CLUSTER.isin(val_tf_ids)]
@@ -1116,7 +1131,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['neg_tf'] = valid_dict['neg_tf'].CLUSTER.drop_duplicates().values
 
     # rna
-    rna = pd.read_csv(params['RNA_LIST'])
+    rna = pd.read_csv(loader_params['RNA_LIST'])
     rna = _apply_date_res_cutoffs(rna)
     rna['LEN'] = rna['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
     rna['LEN_EXIST'] = rna['LEN'].apply(lambda x: sum(x))
@@ -1128,7 +1143,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     valid_ID_dict['rna'] = valid_dict['rna'].CLUSTER.drop_duplicates().values #fd
 
     # dna
-    dna = pd.read_csv(params['DNA_LIST'])
+    dna = pd.read_csv(loader_params['DNA_LIST'])
     dna = _apply_date_res_cutoffs(dna)
     dna['LEN'] = dna['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
     dna['CLUSTER'] = range(len(dna)) # for unweighted sampling
@@ -1164,9 +1179,12 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         return train_df, valid_df, train_IDs, valid_IDs, torch.tensor(weights)
 
     # protein / small molecule complexes
-    df_sm = _load_df(params['SM_LIST'], eval_cols=['COVALENT','LIGAND','LIGXF','PARTNERS'])
+    df_sm = _load_df(loader_params['SM_LIST'], eval_cols=['COVALENT','LIGAND','LIGXF','PARTNERS'])
     df_sm = _apply_date_res_cutoffs(df_sm)
-    df_sm = df_sm[df_sm['LIGATOMS']<=params['CROP']//2]
+    df_sm = _apply_lig_exclusions(df_sm, loader_params['ligands_to_remove'])
+    # remove very big things 
+    #  (fd: only 80 examples are larger than 196 atoms, the majority are "not useful cases")
+    df_sm = df_sm[df_sm['LIGATOMS']<=196] 
 
     df = df_sm[df_sm['SUBSET']=='organic']
     train_dict['sm_compl'], valid_dict['sm_compl'], train_ID_dict['sm_compl'], \
@@ -1193,7 +1211,7 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
         valid_ID_dict['sm_compl_asmb'], weights_dict['sm_compl_asmb'] = _prep_sm_compl_data(df)
 
     # strict protein / ligand validation set
-    val_df = _load_df(params['VAL_SM_STRICT'], params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
+    val_df = _load_df(loader_params['VAL_SM_STRICT'], loader_params, eval_cols=['LIGAND','LIGXF','PARTNERS'])
     val_df = _apply_date_res_cutoffs(val_df)
     valid_dict['sm_compl_strict'] = val_df
     valid_ID_dict['sm_compl_strict'] = val_df.CLUSTER.drop_duplicates().values
@@ -1215,13 +1233,13 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     train_ID_dict['pdb'], weights_dict['pdb'] = _get_IDs_weights(train_dict['pdb'])
 
     # cambridge small molecule database
-    sm = _load_df(params['CSD_LIST'], pad_hash=False, eval_cols=['sim','sim_valid','sim_test'])
-    sim_idx = int(params["MAXSIM"]*100-50)
+    sm = _load_df(loader_params['CSD_LIST'], pad_hash=False, eval_cols=['sim','sim_valid','sim_test'])
+    sim_idx = int(loader_params["MAXSIM"]*100-50)
     sm = sm[
-        (sm['r_factor'] <= params['RMAX']) &
-        (sm['nres'] <= params['MAXRES']) &
-        (sm['nheavy'] <= params['MAXATOMS']) &
-        (sm['nheavy'] >= params['MINATOMS']) &
+        (sm['r_factor'] <= loader_params['RMAX']) &
+        (sm['nres'] <= loader_params['MAXRES']) &
+        (sm['nheavy'] <= loader_params['MAXATOMS']) &
+        (sm['nheavy'] >= loader_params['MINATOMS']) &
         (sm['sim_test'].apply(lambda x: x[sim_idx]==0))
     ]
     sm['CLUSTER'] = range(len(sm)) # for unweighted sampling
@@ -1238,15 +1256,26 @@ def get_train_valid_set(params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, 
     if add_negatives:
         train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict = \
             add_negative_sets(train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict,
-                              base_path = Path(sm_compl_dir))
+                              base_path = Path(loader_params['SM_COMPL_DIR']))
 
     print(f'Done loading datasets in {time.time()-t0} seconds')
 
     # cache datasets for faster loading next time
-    with open(params['DATAPKL'], "wb") as f:
-        print ('Writing',params['DATAPKL'],'...')
-        pickle.dump((train_ID_dict, valid_ID_dict, weights_dict, 
-                     train_dict, valid_dict, homo, chid2hash, chid2taxid, chid2smpartners), f)
+    with open(loader_params['DATAPKL'], "wb") as f:
+        print ('Writing',loader_params['DATAPKL'],'...')
+        data = {
+            'train_ID_dict':train_ID_dict, 
+            'valid_ID_dict':valid_ID_dict, 
+            'weights_dict':weights_dict, 
+            'train_dict':train_dict, 
+            'valid_dict':valid_dict, 
+            'homo':homo, 
+            'chid2hash':chid2hash, 
+            'chid2taxid':chid2taxid, 
+            'chid2smpartners':chid2smpartners,
+            'ligands_to_remove': loader_params['ligands_to_remove']
+        }
+        pickle.dump(data, f)
         print ('...done')
 
     return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, \
@@ -4064,14 +4093,19 @@ def featurize_ligand_from_string(ligand_string: str, format: str = "smiles"):
     return xyz_sm, mask_sm, msa_sm.unsqueeze(0), [bond_feats_sm], frames, chirals, [small_molecule_length], ch_label_sm, akeys_sm, lig_names
 
 
-def load_ligands_from_partners(lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains: Optional[int] = None):
+def load_ligands_from_partners(
+    lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, 
+    num_ligand_chains: Optional[int] = None, 
+    check_for_nonpartner_duplicates: Optional[bool] = True
+):
+    import time
+
     lig_partners = lig_partners[:params['MAXLIGCHAINS']]
     if num_ligand_chains is not None:
         lig_partners = lig_partners[:min(num_ligand_chains, params['MAXLIGCHAINS'])]
 
     # update ligand partners to atomize residues that are covalently linked to proteins
     lig_partners, residues_to_atomize = find_residues_to_atomize_covale(lig_partners, prot_partners, covale) 
-
 
     # subsample non-standard residues to atomize
     mod_residues_to_atomize = [res for res in mod_residues_to_atomize 
@@ -4086,15 +4120,67 @@ def load_ligands_from_partners(lig_partners, prot_partners, asmb_xfs, chains, co
     xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names = \
         featurize_asmb_ligands(lig_partners, params, chains, asmb_xfs, covale)
 
-    try:
-        xyz_sm, mask_sm = get_extra_identical_copies_from_chains(chains, covale, asmb_xfs, xyz_sm, mask_sm, Ls_sm, akeys_sm, lig_partners, exclude_covalent_to_protein=False)
-    except Exception as e:
-        print("Failed to get extra identical copies of the ligands from the cif assembly.")
-        print(f"The error was: {e}.")
-        pass
-    
+    if (check_for_nonpartner_duplicates):
+        try:
+            xyz_sm, mask_sm = get_extra_identical_copies_from_chains(
+                chains, covale, asmb_xfs, xyz_sm, mask_sm, Ls_sm, akeys_sm, lig_partners, exclude_covalent_to_protein=False
+            )
+        except Exception as e:
+            print("Failed to get extra identical copies of the ligands from the cif assembly.")
+            print(f"The error was: {e}.")
+            pass
+
     return xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, list(residues_to_atomize)
 
+def remove_unsupported_metals(
+    lig_partners, 
+    xyz_prot, mask_prot, xyz_sm, mask_sm, 
+    msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize,
+    prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains,
+    min_metal_contacts, min_metal_contact_dist
+):
+    i_start = 0
+    lig_partners_new = []
+    rebuild = False
+    for i,res in enumerate(resnames):
+        i_stop = i_start+Ls_sm[i]
+        if res in ChemData().METAL_RES_NAMES:
+            assert Ls_sm[i]==1
+
+            # 1) get ligand contacts
+            ds = torch.linalg.norm(xyz_sm[0] - xyz_sm[0,i_start], dim=-1)
+            nself = sum( ds[mask_sm[0]]<min_metal_contact_dist )-1 #-1 for self
+
+            # 2) get protein contacts
+            ds = torch.linalg.norm(xyz_prot[0,:,1] - xyz_sm[0,i_start], dim=-1)
+            # trim to residue contacts (8 is maximal CA/SC atom distance)
+            resmask = (ds < (min_metal_contact_dist + 8.0)) * mask_prot[0,:,1]
+            ds = torch.linalg.norm(xyz_prot[0,resmask,:] - xyz_sm[0,i_start], dim=-1)
+            nprot = sum( ds[mask_prot[0,resmask]]<min_metal_contact_dist )
+            if nprot+nself >= min_metal_contacts:
+                lig_partners_new.append(lig_partners[i])
+            else:
+                rebuild = True
+        else:
+            # nonmetal, keep
+            lig_partners_new.append(lig_partners[i])
+
+        i_start = i_stop
+
+    if rebuild:
+        if len(lig_partners_new) == 0: # no ligands left after trimming
+            return (
+                torch.tensor([]), torch.tensor([],dtype=torch.bool), torch.tensor([]), [], torch.tensor([],dtype=torch.long), \
+                torch.tensor([]),  [], torch.tensor([],dtype=torch.long), [], [], []
+            )
+        else:
+            return load_ligands_from_partners(
+                    lig_partners_new, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, 
+                    num_ligand_chains=num_ligand_chains,
+                    check_for_nonpartner_duplicates=False
+                )
+    else:
+        return xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize
 
 def loader_sm_compl_assembly_single(*args, **kwargs): 
     kwargs['num_protein_chains'] = 1
@@ -4125,6 +4211,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     `min_dist` is the minimum distance in angstroms between a heavy atom and
     the ligand.  
     """
+
     pdb_chain = item['CHAINID']
     pdb_id = pdb_chain.split('_')[0]
     # load pre-parsed cif assembly - requires cifutils.py in path for object definitions
@@ -4158,19 +4245,52 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         xyz_t_prot = xyz_t_prot[sel]
         mask_t_prot = mask_t_prot[sel]
         f1d_t_prot = f1d_t_prot[sel]
-    
+
+    # prune ligands based on exclusion list
+    def _prune_lig_partners(lig_items, params):
+        lig_partners = [p for p in lig_items if p[-1]=='nonpoly'] # remove polymer
+        lig_partners = [
+          p for p in lig_partners
+          if (p[0][0][2] not in ChemData().METAL_RES_NAMES or np.random.rand() < params['P_METAL'])
+        ] # remove metals (dep. on param)
+        lig_partners = [ 
+          p for p in lig_partners
+          if p[0][0][2] not in params['ligands_to_remove']
+        ] #fd remove exclusion list
+        return lig_partners
+
+    tag=False
+
     if ligand_string_tuple is not None:
-        xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, _ = featurize_ligand_from_string(ligand_string=ligand_string_tuple[1], format=ligand_string_tuple[0])
+        xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, _ = featurize_ligand_from_string(
+            ligand_string=ligand_string_tuple[1], format=ligand_string_tuple[0])
         residues_to_atomize = mod_residues_to_atomize
     else:
-        lig_partners = [p for p in item['PARTNERS']
-                    if p[-1]=='nonpoly' 
-                    and (p[0][0][2] not in ChemData().METAL_RES_NAMES or np.random.rand() < params['P_METAL'])]
+        import time
+        b0 = time.time()
+
+        lig_partners = _prune_lig_partners(item['PARTNERS'], params)
+        b1 = time.time()
         lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + lig_partners
-    
+        b2 = time.time()
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
-            load_ligands_from_partners(lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains=num_ligand_chains)
-    
+            load_ligands_from_partners(
+                lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, 
+                num_ligand_chains=num_ligand_chains,
+                check_for_nonpartner_duplicates=False
+            )
+
+        #fd remove unsupported metals (param dependent)
+        #fd this needs all ligand coords loaded, so unfortunately we potentially call load_ligands_from_partners twice
+        if params['min_metal_contacts'] > 0:
+            xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
+                remove_unsupported_metals(
+                    lig_partners, xyz_prot, mask_prot, xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, 
+                    Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize,
+                    prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains,
+                    params['min_metal_contacts'], params['min_metal_contact_dist']
+                )
+
     # combine protein & ligand coordinates
     N_symm_prot = xyz_prot.shape[0]
     N_symm_sm = xyz_sm.shape[0]
@@ -4178,11 +4298,13 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
 
     xyz = torch.full((max(N_symm_prot, N_symm_sm), L_total, ChemData().NTOTAL, 3), np.nan).float()
     xyz[:N_symm_prot, :sum(Ls_prot)] = xyz_prot
-    xyz[:N_symm_sm, sum(Ls_prot):, 1, :] = xyz_sm
+    if xyz_sm.shape[0] > 0:
+        xyz[:N_symm_sm, sum(Ls_prot):, 1, :] = xyz_sm
 
     mask = torch.full((max(N_symm_prot, N_symm_sm), L_total, ChemData().NTOTAL), False).bool()
     mask[:N_symm_prot, :sum(Ls_prot)] = mask_prot
-    mask[:N_symm_sm, sum(Ls_prot):, 1] = mask_sm
+    if xyz_sm.shape[0] > 0:
+        mask[:N_symm_sm, sum(Ls_prot):, 1] = mask_sm
 
     # combine protein & ligand templates
     N_tmpl = xyz_t_prot.shape[0]
@@ -4194,7 +4316,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     xyz_t = torch.cat([xyz_t_prot, xyz_t_sm],dim=1)
     f1d_t = torch.cat([f1d_t_prot, f1d_t_sm],dim=1)
     mask_t = torch.cat([mask_t_prot, mask_t_sm],dim=1)
-    
+
     # bond features
     bond_feats_prot = [get_protein_bond_feats(L) for L in Ls_prot]
     bond_feats = torch.zeros((L_total, L_total)).long()
@@ -4213,8 +4335,11 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     if chid2hash is not None: 
         chain_ids = [pdb_id+'_'+chlet for chlet in ch_letters]
         a3m_prot = load_multi_msa(chain_ids, Ls_prot, chid2hash, chid2taxid, params)
-        a3m_sm = dict(msa=msa_sm, ins=torch.zeros_like(msa_sm))
-        a3m = merge_a3m_hetero(a3m_prot, a3m_sm, [sum(Ls_prot), sum(Ls_sm)])
+        if msa_sm.shape[0]>0:
+            a3m_sm = dict(msa=msa_sm, ins=torch.zeros_like(msa_sm))
+            a3m = merge_a3m_hetero(a3m_prot, a3m_sm, [sum(Ls_prot), sum(Ls_sm)])
+        else:
+            a3m = a3m_prot
         msa, ins = a3m['msa'].long(), a3m['ins'].long()
         
         # ensure that some MSA clusters are fully paired sequences
@@ -4277,10 +4402,13 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls_prot + Ls_sm, params['CROP'], mask_prot, 
                             seq_prot, select_farthest_residues=select_farthest_residues)
     else:
-        if params['RADIAL_CROP']:
-            sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
+        if sum(Ls_sm)==0:
+            sel = get_crop(len(idx), mask[0], msa.device, params['CROP'])
         else:
-            sel = crop_sm_compl_asmb_contig(xyz[0], mask[0], Ls_prot, Ls_sm, bond_feats, params['CROP'], use_partial_ligands=False)
+            if params['RADIAL_CROP']:
+                sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
+            else:
+                sel = crop_sm_compl_asmb_contig(xyz[0], mask[0], Ls_prot, Ls_sm, bond_feats, params['CROP'], use_partial_ligands=False)
         mask = reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item)
 
         msa = msa[:, sel]
@@ -5750,6 +5878,9 @@ class DistributedWeightedSampler(data.Sampler):
         # Other datasets (e.g., small molecule datasets) will be sampled WITHOUT replacement (since LEN_EXIST is not the appropriate weighting)
         self.datasets_with_replacement = datasets_with_replacement
         if (rank==0):
+            print(f"Total examples:")
+            for k,v in self.dataset.ID_dict.items():
+                print('  '+k, ':', len(v))
             print(f"Training examples per epoch ({self.total_size} total):")
             for k,v in self.num_per_epoch_dict.items():
                 print('  '+k, ':', v)
