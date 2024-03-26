@@ -169,7 +169,7 @@ class Trainer:
 
     def init_process_group(self, rank, world_size):
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend="gloo", world_size=world_size, rank=rank)
+        dist.init_process_group(backend=self.config.training_params.ddp_backend, world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
         return gpu
     

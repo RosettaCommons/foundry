@@ -104,6 +104,7 @@ training_params:
     decay_rate: 0.95
   grad_clip: 0.2
   use_amp: True
+  ddp_backend: nccl
 
 loss_param:
   w_dist: 1.0
