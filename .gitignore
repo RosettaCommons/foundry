@@ -14,3 +14,5 @@ __pycache__/
 unit_tests/
 ruff.toml
 */scratch/
+*/wandb/
+rf2aa/dataset_20240318.pkl

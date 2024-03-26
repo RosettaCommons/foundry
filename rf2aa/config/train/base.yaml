@@ -133,6 +133,8 @@ loss_param:
 
 log_params:
   log_every_n_examples: 1
+  use_wandb: False
+  wandb_project: 'rf2aa'
 
 eval_params: null
 
