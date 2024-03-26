@@ -646,3 +646,73 @@ class BiasedAxialAttention(nn.Module):
             out = out.permute(0,2,1,3)
         return out
 
+class BiasedUntiedAxialAttention(nn.Module):
+    def __init__(self, d_pair, d_bias, n_head, d_hidden, is_row=True):
+        super(BiasedUntiedAxialAttention, self).__init__()
+        #
+        self.is_row = is_row
+        self.norm_pair = nn.LayerNorm(d_pair)
+        self.norm_bias = nn.LayerNorm(d_bias)
+
+        self.to_q = nn.Linear(d_pair, n_head*d_hidden, bias=False)
+        self.to_k = nn.Linear(d_pair, n_head*d_hidden, bias=False)
+        self.to_v = nn.Linear(d_pair, n_head*d_hidden, bias=False)
+        self.to_b = nn.Linear(d_bias, n_head, bias=False) 
+        self.to_g = nn.Linear(d_pair, n_head*d_hidden)
+        self.to_out = nn.Linear(n_head*d_hidden, d_pair)
+        
+        self.scaling = 1/math.sqrt(d_hidden)
+        self.h = n_head
+        self.dim = d_hidden
+        
+        # initialize all parameters properly
+        self.reset_parameter()
+
+    def reset_parameter(self):
+        # query/key/value projection: Glorot uniform / Xavier uniform
+        nn.init.xavier_uniform_(self.to_q.weight)
+        nn.init.xavier_uniform_(self.to_k.weight)
+        nn.init.xavier_uniform_(self.to_v.weight)
+
+        # bias: normal distribution
+        self.to_b = init_lecun_normal(self.to_b)
+
+        # gating: zero weights, one biases (mostly open gate at the begining)
+        nn.init.zeros_(self.to_g.weight)
+        nn.init.ones_(self.to_g.bias)
+
+        # to_out: right before residual connection: zero initialize -- to make it sure residual operation is same to the Identity at the begining
+        nn.init.zeros_(self.to_out.weight)
+        nn.init.zeros_(self.to_out.bias)
+
+    def forward(self, pair, bias):
+        # pair: (B, L, L, d_pair)
+        B, L = pair.shape[:2]
+        
+        if self.is_row:
+            pair = pair.permute(0,2,1,3)
+            bias = bias.permute(0,2,1,3)
+
+        pair = self.norm_pair(pair)
+        bias = self.norm_bias(bias)
+
+        query = self.to_q(pair).reshape(B, L, L, self.h, self.dim)
+        key = self.to_k(pair).reshape(B, L, L, self.h, self.dim)
+        value = self.to_v(pair).reshape(B, L, L, self.h, self.dim)
+        bias = self.to_b(bias) # (B, L, L, h)
+        gate = torch.sigmoid(self.to_g(pair)) # (B, L, L, h*dim) 
+        
+        query = query * self.scaling
+        key = key / L # normalize for tied attention
+        attn = einsum('bnihk,bnjhk->bnijh', query, key) # tied attention
+        attn = attn + bias # apply bias
+        attn = F.softmax(attn, dim=-2) # (B, L, L, L, h)
+        
+        out = einsum('bnijh,bnjhd->bnihd', attn, value).reshape(B, L, L, -1)
+        out = gate * out
+        
+        out = self.to_out(out)
+        if self.is_row:
+            out = out.permute(0,2,1,3)
+        return out
+

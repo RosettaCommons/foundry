@@ -9,7 +9,7 @@ from rf2aa.model.layers.SE3_network import FullyConnectedSE3, FullyConnectedSE3_
 from rf2aa.model.layers.structure_bias import structure_bias_factory
 from rf2aa.model.layers.Attention_module import BiasedAxialAttention, FeedForwardLayer, MSAColAttention, \
     MSARowAttentionWithBias, TriangleMultiplication, MSAColGlobalAttention, \
-    OldMSAColAttention, OldMSAColGlobalAttention
+    OldMSAColAttention, OldMSAColGlobalAttention, BiasedUntiedAxialAttention
 from rf2aa.model.layers.outer_product import OuterProductMean # need to code this correctly
 from rf2aa.training.checkpoint import create_custom_forward
 from rf2aa.util_module import Dropout
@@ -261,10 +261,20 @@ class RF2_withgradients(RF2_block):
         return latent_feats
 
 
+class RF2_untied(RF2_block):
+    def __init__(self, global_config, block_params, is_full, **kwargs):
+        super().__init__(global_config, block_params, is_full, **kwargs)
+        d_pair = global_config.d_pair
+        self.pair_row_attn = BiasedUntiedAxialAttention(d_pair, d_pair, block_params.n_pair_head, block_params.n_pair_channels, is_row=True)
+        self.pair_col_attn = BiasedUntiedAxialAttention(d_pair, d_pair, block_params.n_pair_head, block_params.n_pair_channels, is_row=False)
 
+ 
 block_factory = {
     "RF2aa":                    partial(RF2_block, is_full=False),
     "RF2aa_full":               partial(RF2_block, is_full=True),
+    "untied_p2p":               partial(RF2_untied, is_full=False),
+    "untied_p2p_full":          partial(RF2_untied, is_full=True),
     "RF2_withgradients":       partial(RF2_withgradients, is_full=False),
     "RF2_withgradients_full":  partial(RF2_withgradients, is_full=True)
+
 }
