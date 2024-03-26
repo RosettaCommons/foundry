@@ -12,7 +12,7 @@ from rf2aa.model.layers.Attention_module import *
 from rf2aa.model.layers.SE3_network import SE3TransformerWrapper
 from rf2aa.util import is_atom, xyz_frame_from_rotation_mask
 from rf2aa.loss.loss import (
-    calc_BB_bond_geom_grads, calc_lj_grads, calc_hb_grads, calc_cart_bonded_grads, calc_ljallatom_grads, 
+    calc_BB_bond_geom_grads, calc_lj_grads, calc_hb_grads, calc_cart_bonded_grads, 
     calc_lj, calc_cart_bonded, calc_chiral_grads
 )
 from rf2aa.symmetry import get_symm_map

@@ -1113,122 +1113,6 @@ def calc_clash(xs, mask):
     clash = torch.sum( torch.clamp(DISTCUT-dij[allmask],0.0) ) / torch.sum(mask)
     return clash
 
-def calc_l1_clash_loss(xs, seq, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds, lj_hb_dis=3.0, \
-                       lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, tolerance=1.5, agg="sum", eps=1e-8):
-    """
-    The LJ potential doesnt work for large systems because it means the energy over all atoms, so 1-2 clashes wash
-    out of the loss. To remedy this, we want to only apply a loss on the violating elements. if doing this, the 
-    contribution of the london dispersion forces no longer matter (you will never evaluate these because they 
-    are not violations). Thus, switching the functional form of this to be a flat bottom L1 loss similar to the 
-    other bond losses in RF. 
-    """
-    def compute_loss(deltas, ljrs, tolerance, eps=1e-8):
-        """
-        deltas: differences between atom positions between valid pairs (natom_pairs, 3)
-        ljrs: lj radii of valid pairs 
-        tolerance: how large the deviation can be (this could become a more complicated hyperparameter)
-        """
-        dist = torch.sqrt( torch.sum ( torch.square( deltas ), dim=-1 ) + eps ) # compute distances 
-        deviations = torch.clamp(ljrs - dist - tolerance, min=0)
-        return torch.sum(deviations), torch.sum(deviations > 0)
-
-    N, L = xs.shape[:2]
-    rs = torch.triu_indices(L,L,0, device=xs.device)
-    ri,rj = rs[0],rs[1]
-
-    # batch during inference for huge systems
-    BATCHSIZE = 65536//N
-
-    running_clash_val = 0
-    running_num_violations = 0
-    #NOTE: a lot of this is similar to calc_lj -- probably should move into its own fx
-    for i_batch in range((len(ri)-1)//BATCHSIZE + 1):
-        idx = torch.arange(
-            i_batch*BATCHSIZE, 
-            min( (i_batch+1)*BATCHSIZE, len(ri)),
-            device=xs.device
-        )
-        rii,rjj = ri[idx],rj[idx] # residue pairs we consider
-
-        ridx,ai,aj = (
-            aamask[seq[rii]][:,:,None]*aamask[seq[rjj]][:,None,:]
-        ).nonzero(as_tuple=True)
-
-        deltas = xs[:,rii,:,None,:]-xs[:,rjj,None,:,:] # N,BATCHSIZE,Natm,Natm,3
-        seqi,seqj = seq[rii[ridx]], seq[rjj[ridx]]
-
-        mask = torch.ones_like(ridx, dtype=torch.bool) # are atoms defined?
-
-        # mask out atom pairs from too-distant residues (C-alpha dist > 24A)
-        ca_dist = torch.linalg.norm(deltas[:,:,1,1],dim=-1)
-        mask *= (ca_dist[:,ridx]<24).any(dim=0)  # will work for batch>1 but very inefficient
-
-        intrares = (rii[ridx]==rjj[ridx])
-        mask[intrares*(ai<aj)] = False  # upper tri (atoms)
-
-        ## count-pair
-        # a) intra-protein
-        mask[intrares] *= num_bonds[seqi[intrares],ai[intrares],aj[intrares]]>=4
-        pepbondres = ri[ridx]+1==rj[ridx]
-        mask[pepbondres] *= (
-            num_bonds[seqi[pepbondres],ai[pepbondres],2]
-            + num_bonds[seqj[pepbondres],0,aj[pepbondres]]
-            + 1) >=4
-
-        # b) intra-ligand
-        atommask = (ai==1)*(aj==1)
-        dist_matrix = torch.nan_to_num(dist_matrix, posinf=4.0) #NOTE: need to run nan_to_num to remove infinities
-        resmask = (dist_matrix[0,rii,rjj] >= 4) # * will only work for batch=1
-        mask[atommask] *= resmask[ ridx[atommask] ]
-
-        # c) protein/ligand
-        ##fd NOTE1: changed 6->5 in masking (atom 5 is CG which should always be 4+ bonds away from connected atom)
-        ##fd NOTE2: this does NOT work correctly for nucleic acids
-        ##fd     for NAs atoms 0-4 are masked, but also 5,7,8 and 9 should be masked!
-        bbatommask = (ai<5)*(aj<5)
-        resmask = (bond_feats[0,rii,rjj] != 6) # * will only work for batch=1
-        mask[bbatommask] *= resmask[ ridx[bbatommask] ]
-        # d) potential disulfide
-        # disulfide correction previously this was done by reducing well depth but 
-        # since this loss does not have a well depth it is done by masking the pairs of atoms
-        potential_disulf = (ljcorr[seqi,ai,3]*ljcorr[seqj,aj,3] )
-        mask *= ~potential_disulf
-
-        # apply mask.  only interactions to be scored remain
-        ai,aj,seqi,seqj,ridx = ai[mask],aj[mask],seqi[mask],seqj[mask],ridx[mask]
-        deltas = deltas[:,ridx,ai,aj]
-
-        # hbond correction
-        use_hb_dis = (
-            ljcorr[seqi,ai,0]*ljcorr[seqj,aj,1] 
-            + ljcorr[seqi,ai,1]*ljcorr[seqj,aj,0] ).nonzero()
-        use_ohdon_dis = ( # OH are both donors & acceptors
-            ljcorr[seqi,ai,0]*ljcorr[seqi,ai,1]*ljcorr[seqj,aj,0] 
-            +ljcorr[seqi,ai,0]*ljcorr[seqj,aj,0]*ljcorr[seqj,aj,1] 
-        ).nonzero()
-        use_hb_hdis = (
-            ljcorr[seqi,ai,2]*ljcorr[seqj,aj,1] 
-            +ljcorr[seqi,ai,1]*ljcorr[seqj,aj,2] 
-        ).nonzero()
-
-        ljrs = ljparams[seqi,ai,0] + ljparams[seqj,aj,0]
-        ljrs[use_hb_dis] = lj_hb_dis
-        ljrs[use_ohdon_dis] = lj_OHdon_dis
-        ljrs[use_hb_hdis] = lj_hbond_hdis
-
-        clash_val, num_violations = compute_loss(deltas, ljrs, tolerance, eps=eps)
-        running_clash_val += clash_val
-        running_num_violations += num_violations
-    
-    # aggregate values from all batches
-    if agg=="sum":
-        return running_clash_val, running_num_violations
-    elif agg=="mean_over_viol":
-        return running_clash_val/running_num_violations, running_num_violations
-    else:
-        raise NotImplementedError("{agg} not an accepted aggregation method for clash loss")
-    
-
 #fd more efficient LJ loss
 class LJLoss(torch.autograd.Function):
     @staticmethod
@@ -1258,7 +1142,7 @@ class LJLoss(torch.autograd.Function):
     def forward(
         ctx, xs, seq, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds, 
         lj_lin=0.75, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
-        eps=1e-8, training=True
+        eps=1e-8, normNviolations=True, useH=False, training=True
     ):
         N, L, A = xs.shape[:3]
         assert (N==1) # see comment below
@@ -1282,9 +1166,14 @@ class LJLoss(torch.autograd.Function):
             )
             rii,rjj = ri[idx],rj[idx] # residue pairs we consider
 
-            ridx,ai,aj = (
-                aamask[seq[rii]][:,:,None]*aamask[seq[rjj]][:,None,:]
-            ).nonzero(as_tuple=True)
+            if not useH:
+                ridx,ai,aj = (
+                    aamask[seq[rii],:14][:,:,None]*aamask[seq[rjj],:14][:,None,:]
+                ).nonzero(as_tuple=True)
+            else:
+                ridx,ai,aj = (
+                    aamask[seq[rii]][:,:,None]*aamask[seq[rjj]][:,None,:]
+                ).nonzero(as_tuple=True)
 
             deltas = xs[:,rii,:,None,:]-xs[:,rjj,None,:,:] # N,BATCHSIZE,Natm,Natm,3
             seqi,seqj = seq[rii[ridx]], seq[rjj[ridx]]
@@ -1348,11 +1237,26 @@ class LJLoss(torch.autograd.Function):
 
             ljss = torch.sqrt( ljparams[seqi,ai,1] * ljparams[seqj,aj,1] + eps )
             ljss [potential_disulf] = 0.0
+            
+            ljval_batch,dljEdd_i = LJLoss.ljVdV(deltas,ljrs,ljss,lj_lin,eps)
 
-            natoms = torch.sum(aamask[seq])
-            ljval_i,dljEdd_i = LJLoss.ljVdV(deltas,ljrs,ljss,lj_lin,eps)
+            if not normNviolations:
+                if not useH:
+                    natoms = torch.sum(aamask[seq,:14])
+                else:
+                    natoms = torch.sum(aamask[seq])
+                ljval_batch = ljval_batch/natoms
+                dljEdd_i = dljEdd_i / natoms
+            else: # mean over "clashing" atoms
+                dist = torch.sqrt( torch.sum ( torch.square( deltas ), dim=-1 ) + eps )
+                clashes  = ljrs-dist
+                
+                clashing_pairs = torch.where(clashes < 0, 0, clashes)
+                natoms = torch.sum(clashing_pairs)
+                ljval_batch = ljval_batch / natoms
+                dljEdd_i = dljEdd_i / natoms
 
-            ljval += ljval_i / natoms
+            ljval += ljval_batch 
 
             # sum per-atom-pair grads into per-atom grads
             # note this is stochastic op on GPU
@@ -1377,7 +1281,7 @@ class LJLoss(torch.autograd.Function):
         dljEdx, = ctx.saved_tensors
         return (
             grad_output * dljEdx, 
-            None, None, None, None, None, None, None, None, None, None, None, None, None
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
         )
 
 # Rosetta-like version of LJ (fa_atr+fa_rep)
@@ -1386,12 +1290,15 @@ def calc_lj(
     seq, xs, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds,  
     lj_lin=0.75, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
     lj_maxrad=-1.0, eps=1e-8,
-    training=True
+    normNviolations=True, useH=False, training=True
 ):
     lj = LJLoss.apply
+
     ljval = lj(
         xs, seq, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds, 
-        lj_lin, lj_hb_dis, lj_OHdon_dis, lj_hbond_hdis, eps, training)
+        lj_lin, lj_hb_dis, lj_OHdon_dis, lj_hbond_hdis, eps, 
+        normNviolations, useH, training
+    )
 
     return ljval
 
@@ -1410,7 +1317,7 @@ def calc_hb(
         maxmask = ds>xrange[...,1]
         v[maxmask] = yrange[maxmask][...,1]
         return v
-    
+
     def cosangle( A,B,C ):
         AB = A-B
         BC = C-B
@@ -1532,33 +1439,9 @@ def calc_cart_bonded_grads(seq, pred, idx, len_param, ang_param, tor_param, eps=
     Ecb = calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps)
     return torch.autograd.grad(Ecb, pred)
 
-@torch.enable_grad()
-def calc_ljallatom_grads(
-    seq, xyzaa, 
-    aamask, bond_feats, dist_matrix, 
-    ljparams, ljcorr, num_bonds, 
-    lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
-    lj_maxrad=-1.0, eps=1e-8
-):
-    xyzaa.requires_grad_(True)
-    Elj = calc_lj(
-        seq[0], 
-        xyzaa[...,:3], 
-        aamask,
-        bond_feats,
-        dist_matrix,
-        ljparams, 
-        ljcorr, 
-        num_bonds, 
-        lj_lin, 
-        lj_hb_dis, 
-        lj_OHdon_dis, 
-        lj_hbond_hdis, 
-        lj_maxrad,
-        eps
-    )
-    return torch.autograd.grad(Elj, (xyzaa,))
-
+#FD note different defaults in normNviolations and useH compared to 'calc_lj'
+#FD  - this fn is not used in loss but as network inputs
+#FD  - only used in legacy model
 @torch.enable_grad()
 def calc_lj_grads(
     seq, xyz, alpha, toaa, bond_feats, dist_matrix, 
@@ -1566,6 +1449,10 @@ def calc_lj_grads(
     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
     lj_maxrad=-1.0, eps=1e-8
 ):
+    # hardcoded
+    normNviolations=False
+    useH=True
+
     xyz.requires_grad_(True)
     alpha.requires_grad_(True)
     _, xyzaa = toaa(seq, xyz, alpha)
@@ -1583,9 +1470,16 @@ def calc_lj_grads(
         lj_OHdon_dis, 
         lj_hbond_hdis, 
         lj_maxrad,
-        eps
+        eps,
+        normNviolations,
+        useH
     )
-    return torch.autograd.grad(Elj, (xyz,alpha))
+
+    #fd a bug in the original implementation meant unnormalized lj grads were returned
+    #fd   fix that here
+    natoms = torch.sum(aamask.bool()[seq])
+
+    return torch.autograd.grad(natoms*Elj, (xyz,alpha))
 
 @torch.enable_grad()
 def calc_hb_grads(

@@ -6,7 +6,7 @@ from rf2aa.kinematics import xyz_to_c6d, c6d_to_bins
 from rf2aa.loss.loss import resolve_equiv_natives, resolve_equiv_natives_asmb, \
     resolve_symmetry_predictions, resolve_symmetry, mask_unresolved_frames, \
     compute_general_FAPE, torsionAngleLoss, calc_lddt, calc_allatom_lddt_loss, \
-    calc_crd_rmsd, calc_BB_bond_geom, calc_l1_clash_loss, calc_atom_bond_loss
+    calc_crd_rmsd, calc_BB_bond_geom, calc_lj, calc_atom_bond_loss
 from rf2aa.util import is_atom, is_protein, Ls_from_same_chain_2d, get_prot_sm_mask, \
     xyz_to_frame_xyz, get_frames, writepdb
 from rf2aa.chemical import ChemicalData as ChemData
@@ -402,27 +402,15 @@ def calc_loss(trainer, logit_s, label_s,
             tot_loss += w_bond*bond_loss
         loss_dict['bond_geom'] = bond_loss.detach()
 
-        # if (pred_allatom.shape[0] > 1):
-        #     bond_loss = calc_cart_bonded(seq, pred_allatom[1:], idx, self.cb_len, self.cb_ang, self.cb_tor)
-        #     if w_bond > 0.0:
-        #         tot_loss += w_bond*bond_loss.mean()
-        #     loss_dict['clash_loss'] = ( bond_loss.detach() )
-        # else:
-        #     bond_loss = torch.tensor(0).to(gpu)
-        # loss_dict['bond_loss'] = bond_loss.detach()
-
         # clash [use all atoms not just those in native]
-        # clash_loss = calc_lj(
-        #     seq[0], pred_allatom, 
-        #     self.aamask, bond_feats, dist_matrix, self.ljlk_parameters, self.lj_correction_parameters, self.num_bonds,
-        #     lj_lin=lj_lin
-        # )
-        clash_loss, num_violations = calc_l1_clash_loss(pred_allatom, seq[0],\
-                                                        trainer.aamask, bond_feats, dist_matrix, trainer.ljlk_parameters, \
-                                                        trainer.lj_correction_parameters, trainer.num_bonds)
+        clash_loss = calc_lj(
+            seq[0], pred_allatom, 
+            trainer.aamask, bond_feats, dist_matrix, trainer.ljlk_parameters, trainer.lj_correction_parameters, trainer.num_bonds,
+            lj_lin=lj_lin
+        )
         if w_clash > 0.0:
             tot_loss += w_clash*clash_loss.mean()
-        loss_dict['clash_loss'] = clash_loss.detach()
+        loss_dict['clash_loss'] = clash_loss[0].detach()
         if torch.any(mask_BB[0]):
             atom_bond_loss, skip_bond_loss, rigid_loss = calc_atom_bond_loss(
                 pred=pred_allatom[:,mask_BB[0]],
