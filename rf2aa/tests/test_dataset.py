@@ -4,17 +4,17 @@ import pandas as pd
 import numpy as np
 import torch
 from functools import partial
+import itertools
 from hydra import initialize, compose
 
 from rf2aa.data.compose_dataset import set_data_loader_params, compose_single_item_dataset
-from rf2aa.data.data_loader import loader_pdb, loader_complex, loader_na_complex, \
-                                    loader_dna_rna, loader_sm_compl_assembly_single, loader_sm_compl_assembly
+from rf2aa.data.data_loader import get_crop
 from rf2aa.tensor_util import assert_shape, assert_equal
 from rf2aa.tests.test_conditions import setup_data, dataset_pickle_path
-from rf2aa.trainer_new import seed_all
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.util import is_atom
 from rf2aa.chemical import initialize_chemdata
+from rf2aa.set_seed import seed_all
 
 data = setup_data()
 
@@ -95,3 +95,17 @@ def test_regression(name, item, loader_params, chem_params, loader, loader_kwarg
                         print("t1d fails for sm_compl_assembly")
                         continue
                     raise AssertionError(f"{names[idx]} did not match") from e
+
+def test_get_crop():
+    l = 5
+    mask = torch.ones(l, 36)
+    device = "cpu"
+    crop= 3
+    sel_list = []
+    for i in range(5):
+        seed_all(i)
+        sel = get_crop(l, mask, device, crop)
+        sel_list.append(sel)
+    assert any([torch.all(~torch.eq(sel_i, sel_j))
+                if sel_i.shape == sel_j.shape else True # if shapes are different, they are not equal
+                for sel_i, sel_j in itertools.combinations(sel_list, 2)]), "get_crop is not random"
