@@ -380,7 +380,7 @@ class LegacyTrainer(Trainer):
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
 
-    def train_step(self, inputs, n_cycle, nograds=False):
+    def train_step(self, inputs, n_cycle, nograds=False, return_outputs=False):
         """ take an input from dataloader, run the model and compute a loss """
         gpu = self.model.device
         # HACK: certain features are constructed during the train step
@@ -402,7 +402,11 @@ class LegacyTrainer(Trainer):
             seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
             self.config.loss_param
         )
-        return loss, loss_dict
+        if return_outputs:
+            return loss, loss_dict, output_i
+        else:
+            return loss, loss_dict
+
 
 
 class ComposedTrainer(Trainer):
@@ -415,7 +419,7 @@ class ComposedTrainer(Trainer):
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
 
-    def train_step(self, inputs, n_cycle, nograds=False):
+    def train_step(self, inputs, n_cycle, nograds=False, return_outputs=False):
         """ take an input from dataloader, run the model and compute a loss """
         gpu = self.model.device
         # HACK: certain features are constructed during the train step
@@ -439,7 +443,10 @@ class ComposedTrainer(Trainer):
             self.config.loss_param
         )
 
-        return loss, loss_dict
+        if return_outputs:
+            return loss, loss_dict, output_i
+        else:
+            return loss, loss_dict
 
 
 @hydra.main(version_base=None, config_path='config/train')

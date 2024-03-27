@@ -30,6 +30,8 @@ rf2aa_file_path = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), os.pardir
 )
 
+posebusters_csv = os.path.join(rf2aa_file_path,"posebusters_benchmark.csv")
+
 default_dataloader_params = {
         "COMPL_LIST"       : "%s/list.hetero.csv"%compl_dir,
         "HOMO_LIST"        : "%s/list.homo.csv"%compl_dir,
@@ -332,7 +334,7 @@ def compose_posebusters(loader_fn, loader_params, rank, world_size):
     loader_params = set_data_loader_params(loader_params=loader_params) 
     valid_ID_dict, valid_dict = {}, {}
     
-    valid_dict["benchmark"] = _load_df("/home/rohith/RF2ligand/posebusters_benchmark.csv", pad_hash=False, eval_cols=["LIGAND", "PARTNERS", "LIGXF"])
+    valid_dict["benchmark"] = _load_df(posebusters_csv, pad_hash=False, eval_cols=["LIGAND", "PARTNERS", "LIGXF"])
     valid_ID_dict["benchmark"] = valid_dict["benchmark"]["CLUSTER"] 
 
     with open(
@@ -386,7 +388,7 @@ def compose_similar_posebusters(loader_params, rank, world_size):
     loader_params = set_data_loader_params(loader_params=loader_params) 
     valid_ID_dict, valid_dict = {}, {}
     
-    valid_dict["benchmark"] = _load_df("/home/rohith/RF2ligand/posebusters_benchmark.csv", pad_hash=False, eval_cols=["LIGAND", "PARTNERS", "LIGXF"])
+    valid_dict["benchmark"] = _load_df(posebusters_csv, pad_hash=False, eval_cols=["LIGAND", "PARTNERS", "LIGXF"])
     valid_ID_dict["benchmark"] = valid_dict["benchmark"]["CLUSTER"] 
 
     with open(

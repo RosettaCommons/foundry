@@ -3,65 +3,99 @@ import os
 import hydra
 import pandas as pd
 from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.multiprocessing as mp
 
-from rf2aa.trainer_new import LegacyTrainer
+from rf2aa.trainer_new import trainer_factory
 from rf2aa.data.compose_dataset import compose_posebusters
+from rf2aa.chemical import initialize_chemdata
+from rf2aa.util import writepdb
+from rf2aa.data.dataloader_adaptor import get_loss_calc_items
 
-class Validator(LegacyTrainer):
+from functools import partial
 
-    def evaluate_model(self, rank, world_size):
-        raise NotImplementedError()
-    
-    def compose_dataset(self):
-        raise NotImplementedError()
-    
-    def valid_step(self, inputs, n_cycle):
-        pass
+class PoseBustersBenchmark:
+    def __init__(self, config):
+        self.config = config
 
+        assert self.config.ddp_params.batch_size == 1, "batch size is assumed to be 1"
+        if self.config.experiment.output_dir is not None:
+            self.output_dir = self.config.experiment.output_dir 
+        else:
+            self.output_dir = "output/"
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
 
-class PoseBustersBenchmark(Validator):
+        self.trainer = trainer_factory[config.experiment.trainer](config=config)
 
     def construct_dataset(self, rank, world_size):
-        return compose_posebusters(self.config.loader_params, rank, world_size)
+        #fd initialize chemical data based on input arguments
+        #   this needs to be initialized first
+        init = partial(initialize_chemdata,self.config.chem_params)
+        init()
 
-    def evaluate_model(self, rank, world_size):
+        return compose_posebusters(init, self.config.loader_params, rank, world_size)
+
+    def launch_distributed_eval(self):
         world_size = torch.cuda.device_count()
         if ('MASTER_ADDR' not in os.environ):
             os.environ['MASTER_ADDR'] = '127.0.0.1' # multinode requires this set in submit script
         if ('MASTER_PORT' not in os.environ):
             os.environ['MASTER_PORT'] = '%d'%self.config.ddp_params.port
 
-        gpu = self.init_process_group(rank, world_size) 
+        world_size = torch.cuda.device_count()
+
+        if world_size == 0:
+            print ("Error! No GPUs found!")
+        elif world_size == 1:
+            # No need for multiple processes with 1 GPU
+            self.evaluate_model(0, world_size)
+        else:
+            mp.spawn(self.evaluate_model, args=(world_size,), nprocs=world_size, join=True)
+
+    def evaluate_model(self, rank, world_size):
+        gpu = self.trainer.init_process_group(rank, world_size) 
         benchmark_loader = self.construct_dataset(rank, world_size)
 
         # move global information to device
-        self.move_constants_to_device(gpu)
+        self.trainer.move_constants_to_device(gpu)
 
-        self.construct_model(device=gpu)
-        self.model = DDP(self.model, device_ids=[gpu], find_unused_parameters=False, broadcast_buffers=False)
+        self.trainer.construct_model(device=gpu)
+        self.trainer.model = DDP(
+            self.trainer.model, device_ids=[gpu], find_unused_parameters=False, broadcast_buffers=False
+        )
 
-        self.load_checkpoint(rank)
-        self.load_model()
-        self.model.eval()
+        self.trainer.load_checkpoint(rank)
+        self.trainer.load_model()
+        self.trainer.model.eval()
         records = []
         for inputs in benchmark_loader:
             item = inputs[-1]
             with torch.no_grad():
-                loss, loss_dict = self.train_step(inputs, self.config.loader_params.maxcycle) 
+                loss, loss_dict, outputs = self.trainer.train_step(
+                    inputs, self.config.loader_params.maxcycle, nograds=True, return_outputs=True
+                ) 
             loss_dict["CHAINID"] = item["CHAINID"][0]
             for k, v in loss_dict.items():
                 if torch.is_tensor(v):
                     loss_dict[k] = v.item()
             records.append(loss_dict)
             df = pd.DataFrame(records)
-            df.to_csv(f"{self.output_dir}/{self.config.experiment.name}_posebusters.csv")
+            df.to_csv(f"{self.output_dir}/{self.config.experiment.name}_{rank}_posebusters.csv")
             torch.cuda.empty_cache()
 
+            true_crds = inputs[5]
+            seq, _, idx_pdb, bond_feats, _, _ = get_loss_calc_items(inputs, device=gpu)
+            pred_crds, alphas, pred_lddts = outputs[5], outputs[6], outputs[8]
+            _, pred_allatom = self.trainer.xyz_converter.compute_all_atom(seq[:,0], pred_crds[-1], alphas[-1])
 
-@hydra.main(version_base=None, config_path='config/train')
+            print (pred_allatom.shape)
+            writepdb(f"{self.output_dir}/{item['CHAINID'][0]}_nat.pdb", true_crds[:,0], seq[:,0].long(), bond_feats=bond_feats)
+            writepdb(f"{self.output_dir}/{item['CHAINID'][0]}_pred.pdb", pred_allatom[0], seq[:,0].long(), bond_feats=bond_feats)
+
+@hydra.main(version_base=None, config_path='config/inference')
 def main(config):
     benchmarker = PoseBustersBenchmark(config=config)
-    benchmarker.evaluate_model(0, 1)
+    benchmarker.launch_distributed_eval()
 
 if __name__ == "__main__":
     main()
