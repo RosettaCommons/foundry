@@ -953,6 +953,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
                 )
             else:
                 print ('Stored dataset has mismatch in ligand exclusion set! Regenerating...')
+                print ('Specified:',loader_params['ligands_to_remove'])
 
     t0 = time.time()
     print(f"cached train/valid datasets {loader_params['DATAPKL']} not found. "\

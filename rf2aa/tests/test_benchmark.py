@@ -21,7 +21,7 @@ from functools import partial
 # goal is to test all the configs on a broad set of datasets
 gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-test_conditions, test_ids = setup_benchmark_array(["pdb256"], ["rf2aa","rf2_deep_layerdropout"])
+test_conditions, test_ids = setup_benchmark_array(["pdb196"], ["rf2aa","rf2_deep_layerdropout"])
 
 def setup_test(example, trainer):
     model = trainer.model

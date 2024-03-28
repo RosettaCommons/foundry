@@ -357,7 +357,7 @@ def compose_posebusters(loader_fn, loader_params, rank, world_size):
             loader_params,
             task='sm_compl',
             num_protein_chains=1,
-            num_ligand_chains=2,
+            num_ligand_chains=9,
         )
     sampler = data.distributed.DistributedSampler(benchmark, rank=rank, num_replicas=world_size)
     loader = data.DataLoader(

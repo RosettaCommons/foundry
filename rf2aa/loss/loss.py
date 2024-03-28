@@ -1252,7 +1252,7 @@ class LJLoss(torch.autograd.Function):
                 clashes  = ljrs-dist
                 
                 clashing_pairs = torch.where(clashes < 0, 0, clashes)
-                natoms = torch.sum(clashing_pairs)
+                natoms = torch.sum(clashing_pairs) + 0.1
                 ljval_batch = ljval_batch / natoms
                 dljEdd_i = dljEdd_i / natoms
 

@@ -1,4 +1,5 @@
 defaults:
+  - base
   - ligand_exclusions 
 
 experiment:
@@ -8,7 +9,7 @@ experiment:
   output_dir: null
 
 dataset_params: 
-  n_train: 4800
+  n_train: 24000
   validate_every_n_epochs: 1
   fraction_pdb: 0.12
   fraction_fb: 0.36
@@ -124,11 +125,6 @@ loss_param:
   w_pae: 0.1
   w_pde: 0.0
   lj_lin: 0.75
-
-log_params:
-  log_every_n_examples: 16
-
-eval_params: null
 
 model: 
   global_params:
