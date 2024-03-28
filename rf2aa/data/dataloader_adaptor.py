@@ -97,7 +97,7 @@ def prepare_input(inputs, xyz_converter, gpu):
         alpha = alpha.reshape(B,-1,Lasu*Osub,ChemData().NTOTALDOFS,2)
         alpha_mask = alpha_mask.reshape(B,-1,Lasu*Osub,ChemData().NTOTALDOFS,1)
         alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, Lasu*Osub, 3*ChemData().NTOTALDOFS)
-        alpha_prev = torch.zeros((B,Lasu*Osub,ChemData().NTOTALDOFS,2))
+        alpha_prev = torch.zeros((B,Lasu*Osub,ChemData().NTOTALDOFS,2)).to(gpu, non_blocking=True)
 
         network_input = {}
         network_input['msa_latent'] = msa_masked
@@ -125,6 +125,7 @@ def prepare_input(inputs, xyz_converter, gpu):
         network_input["xyz_prev"] = xyz_prev
         network_input["alpha_prev"] = alpha_prev
         network_input["mask_recycle"] = None
+
         return task, item, network_input, true_crds, mask_crds, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label
 
 
