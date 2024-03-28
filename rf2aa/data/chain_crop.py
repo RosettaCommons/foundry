@@ -571,16 +571,13 @@ def crop_chirals(chirals, atom_sel):
     if chirals.numel() == 0: # no chirals in this selection
         return chirals
 
-    ncrop_atoms  = atom_sel.shape[0]
-    # update absolute indexing if there are ligands "cropped". There will never be part of a ligand that is cropped, only entire ligands
-    idx_update = dict(zip(atom_sel.numpy().tolist(), range(ncrop_atoms))) 
-    cropped_chirals = []
-    for chiral_center in chirals:
-        if all([chiral_neighbor in atom_sel for chiral_neighbor in chiral_center[:-1]]):
-            updated_chiral_center = np.array([idx_update[chiral_neighbor.item()] for chiral_neighbor in chiral_center[:-1]] + [chiral_center[-1]])
-            updated_chiral_center = torch.from_numpy(updated_chiral_center)
-            cropped_chirals.append(updated_chiral_center)
-    if not cropped_chirals: # all the chiral centers were in ligands that were removed
-        return torch.Tensor()
-    return torch.stack(cropped_chirals).float()
+    # clone so that we don't modify the original tensor
+    chirals = chirals.clone()
+    chiral_indices = chirals[:, :4].long()
+    keep_mask = torch.isin(chiral_indices, atom_sel).all(dim=1)
+
+    num_indices_less_than_chiral_index = (atom_sel[:, None, None] < chiral_indices[None]).sum(dim=0)
+    chirals[:, :4] = num_indices_less_than_chiral_index.float()
+    chirals = chirals[keep_mask]
+    return chirals
 
