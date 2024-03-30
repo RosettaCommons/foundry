@@ -124,7 +124,7 @@ class RF2_block(nn.Module):
         else:
             msa = latent_feats["msa"]
         bond_feats, dist_matrix, idx = latent_feats["bond_feats"], latent_feats["dist_matrix"], latent_feats["idx"]
-        return msa, pair, state, xyz[..., :3, :], is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx
+        return msa, pair, state, xyz[..., :3, :], is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, latent_feats["is_motif"]
 
     def _pack_outputs(self, msa, pair, state, xyz, alpha, quat_update, latent_feats):
         if self.is_full:
@@ -182,16 +182,16 @@ class RF2_block(nn.Module):
         pair = pair + weight*self.pair_transition(pair)
         return pair
 
-    def _3d_update(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, drop_layer=False):
+    def _3d_update(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, drop_layer=False, is_motif=None):
         if not self.xyz_grads:
             xyz = xyz.detach()
         block_outputs = self.structure_attn(
-            msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix, drop_layer=drop_layer
+            msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix, drop_layer=drop_layer, is_motif=is_motif,
         )
         return block_outputs["state"], block_outputs["xyz"], block_outputs["alpha"], block_outputs["quat_update"]
 
     def forward(self, latent_feats, use_checkpoint, use_amp):
-        msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx = self._unpack_inputs(latent_feats)
+        msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, is_motif = self._unpack_inputs(latent_feats)
         drop_layer = 0
         if use_checkpoint:
             with torch.cuda.amp.autocast(enabled=use_amp):
@@ -201,7 +201,7 @@ class RF2_block(nn.Module):
             #TODO: allow this to happen since new versions of Pytorch will be using reentrant=False
             msa, pair = msa.float(), pair.float()
             state, xyz, alpha, quat_update = checkpoint.checkpoint(
-                create_custom_forward(self._3d_update, drop_layer=drop_layer),
+                create_custom_forward(self._3d_update, drop_layer=drop_layer, is_motif=is_motif),
                 msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx,
                 use_reentrant=True
             )
@@ -210,7 +210,7 @@ class RF2_block(nn.Module):
               msa= self._1d_update(msa, pair, state, xyz, drop_layer=drop_layer)
               pair = self._2d_update(msa, pair, state, xyz, drop_layer=drop_layer)
             msa, pair = msa.float(), pair.float()
-            state, xyz, alpha, quat_update = self._3d_update(msa, pair, state, xyz, is_atom, atom_frames, chirals,bond_feats, dist_matrix, idx, drop_layer=drop_layer)
+            state, xyz, alpha, quat_update = self._3d_update(msa, pair, state, xyz, is_atom, atom_frames, chirals,bond_feats, dist_matrix, idx, drop_layer=drop_layer, is_motif=is_motif)
 
         latent_feats = self._pack_outputs(msa, pair, state, xyz, alpha, quat_update, latent_feats)
         return latent_feats
@@ -238,11 +238,11 @@ class RF2_withgradients(RF2_block):
                                                 block_params.l1_out_features,
                                                 block_params.n_se3_edge_features,
                                                 block_params.residual_state,
-                                                compute_gradients=block_params.compute_gradients
+                                                compute_gradients=block_params.compute_gradients,
                                                 )
-    def _3d_update(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, drop_layer=False):
+    def _3d_update(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, drop_layer=False, is_motif=None):
         block_outputs = self.structure_attn(
-            msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix, drop_layer=drop_layer
+            msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix, drop_layer=drop_layer, is_motif=is_motif,
         )
         block_outputs["alpha"] = None
         return block_outputs["state"], block_outputs["xyz"], block_outputs["alpha"], None

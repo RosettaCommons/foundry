@@ -72,6 +72,7 @@ class RosettaFold(nn.Module):
                 "idx": rf_inputs["idx"],
                 "bond_feats": rf_inputs["bond_feats"],
                 "dist_matrix": rf_inputs["dist_matrix"],
+                "is_motif": rf_inputs.get("is_motif", None),
             }
         )
         for block in self.simulator:
