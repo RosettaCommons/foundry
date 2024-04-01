@@ -144,7 +144,8 @@ class LegacyRoseTTAFoldModule(nn.Module):
             main_block=main_block,
             use_same_chain=use_same_chain,
             enable_same_chain=enable_same_chain,
-            refiner_topk=refiner_topk
+            refiner_topk=refiner_topk,
+            use_flash_attention=False,
         )
 
         ##
