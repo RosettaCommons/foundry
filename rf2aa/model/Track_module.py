@@ -907,6 +907,7 @@ class IterBlock(nn.Module):
                  nextra_l0=0, nextra_l1=0, use_same_chain=False, enable_same_chain=False,
                  symmetrize_repeats=None, repeat_length=None,symmsub_k=None, sym_method=None, main_block=None,
                  fit=False, tscale=1.0, use_flash_attention=True,
+                 detach_xyz=True,
                  ):
 
         super(IterBlock, self).__init__()
@@ -915,6 +916,7 @@ class IterBlock(nn.Module):
 
         self.fit = fit
         self.tscale = tscale
+        self.detach_xyz = detach_xyz
 
         self.pos = PositionalEncoding2D(d_rbf, minpos=minpos, maxpos=maxpos, 
                                         maxpos_atom=maxpos_atom, p_drop=p_drop, 
@@ -953,13 +955,15 @@ class IterBlock(nn.Module):
     ):
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, dist_matrix, same_chain)
+        if self.detach_xyz:
+            xyz = xyz.detach()
         if use_checkpoint:
             msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state, use_reentrant=True)
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair, use_reentrant=True)
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state, crop, use_reentrant=True)
 
             xyz, state, alpha, quat = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, 
+                msa.float(), pair.float(), xyz.float(), state.float(), idx, 
                 rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames,
                 use_reentrant=True
             )
@@ -970,7 +974,7 @@ class IterBlock(nn.Module):
             pair = self.pair2pair(pair, rbf_feat, state, crop)
             
             xyz, state, alpha, quat = self.str2str(
-                msa.float(), pair.float(), xyz.detach().float(), state.float(), 
+                msa.float(), pair.float(), xyz.float(), state.float(), 
                 idx, rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames, top_k=top_k
             )
 
@@ -999,6 +1003,7 @@ class IterativeSimulator(nn.Module):
          fit=False,
          tscale=1.0,
          use_flash_attention=True,
+         detach_xyz=True,
     ):
         super(IterativeSimulator, self).__init__()
         self.n_extra_block = n_extra_block
@@ -1043,6 +1048,7 @@ class IterativeSimulator(nn.Module):
                                                         fit=fit,
                                                         tscale=tscale,
                                                         use_flash_attention=use_flash_attention,
+                                                        detach_xyz=detach_xyz,
                                                         )
                                                         for i in range(n_extra_block)])
 
@@ -1065,7 +1071,9 @@ class IterativeSimulator(nn.Module):
                                                        main_block=main_block,
                                                        fit=fit,
                                                        tscale=tscale,
-                                                       use_flash_attention=use_flash_attention)
+                                                       use_flash_attention=use_flash_attention,
+                                                       detach_xyz=detach_xyz,
+                                                       )
                                                        for i in range(n_main_block)])
 
         # Final SE(3) refinement
