@@ -71,7 +71,7 @@ class PositionalEncoding2D(nn.Module):
 # Update MSA with biased self-attention. bias from Pair & Str
 class MSAPairStr2MSA(nn.Module):
     def __init__(self, d_msa=256, d_pair=128, n_head=8, d_state=16, d_rbf=64,
-                 d_hidden=32, p_drop=0.15, use_global_attn=False, use_flash_attention = True):
+                 d_hidden=32, p_drop=0.15, use_global_attn=False):
         super(MSAPairStr2MSA, self).__init__()
         self.norm_pair = nn.LayerNorm(d_pair)
         self.emb_rbf = nn.Linear(d_rbf, d_pair)
@@ -80,17 +80,10 @@ class MSAPairStr2MSA(nn.Module):
         self.drop_row = Dropout(broadcast_dim=1, p_drop=p_drop)
         self.row_attn = MSARowAttentionWithBias(d_msa=d_msa, d_pair=d_pair,
                                                 n_head=n_head, d_hidden=d_hidden) 
-        
         if use_global_attn:
-            attention_module = OldMSAColGlobalAttention
-            if use_flash_attention:
-                attention_module = MSAColGlobalAttention
-            self.col_attn = attention_module(d_msa=d_msa, n_head=n_head, d_hidden=d_hidden) 
+            self.col_attn = MSAColGlobalAttention(d_msa=d_msa, n_head=n_head, d_hidden=d_hidden) 
         else:
-            attention_module = OldMSAColAttention
-            if use_flash_attention:
-                attention_module = MSAColAttention
-            self.col_attn = attention_module(d_msa=d_msa, n_head=n_head, d_hidden=d_hidden) 
+            self.col_attn = MSAColAttention(d_msa=d_msa, n_head=n_head, d_hidden=d_hidden) 
         self.ff = FeedForwardLayer(d_msa, 4, p_drop=p_drop)
         
         # Do proper initialization
@@ -906,8 +899,7 @@ class IterBlock(nn.Module):
                  SE3_param={'l0_in_features':32, 'l0_out_features':16, 'num_edge_features':32},
                  nextra_l0=0, nextra_l1=0, use_same_chain=False, enable_same_chain=False,
                  symmetrize_repeats=None, repeat_length=None,symmsub_k=None, sym_method=None, main_block=None,
-                 fit=False, tscale=1.0, use_flash_attention=True,
-                 detach_xyz=True,
+                 fit=False, tscale=1.0
                  ):
 
         super(IterBlock, self).__init__()
@@ -916,7 +908,6 @@ class IterBlock(nn.Module):
 
         self.fit = fit
         self.tscale = tscale
-        self.detach_xyz = detach_xyz
 
         self.pos = PositionalEncoding2D(d_rbf, minpos=minpos, maxpos=maxpos, 
                                         maxpos_atom=maxpos_atom, p_drop=p_drop, 
@@ -927,8 +918,7 @@ class IterBlock(nn.Module):
                                       n_head=n_head_msa,
                                       d_state=SE3_param['l0_out_features'],
                                       use_global_attn=use_global_attn,
-                                      d_hidden=d_hidden_msa, p_drop=p_drop,
-                                      use_flash_attention=use_flash_attention)
+                                      d_hidden=d_hidden_msa, p_drop=p_drop)
 
         self.msa2pair = MSA2Pair(d_msa=d_msa, d_pair=d_pair,
                                  d_hidden=d_hidden//2, p_drop=p_drop)   
@@ -955,15 +945,13 @@ class IterBlock(nn.Module):
     ):
         cas = xyz[:,:,1].contiguous()
         rbf_feat = rbf(torch.cdist(cas, cas)) + self.pos(seq_unmasked, idx, bond_feats, dist_matrix, same_chain)
-        if self.detach_xyz:
-            xyz = xyz.detach()
         if use_checkpoint:
             msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state, use_reentrant=True)
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair, use_reentrant=True)
             pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), pair, rbf_feat, state, crop, use_reentrant=True)
 
             xyz, state, alpha, quat = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.float(), state.float(), idx, 
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), idx, 
                 rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames,
                 use_reentrant=True
             )
@@ -974,7 +962,7 @@ class IterBlock(nn.Module):
             pair = self.pair2pair(pair, rbf_feat, state, crop)
             
             xyz, state, alpha, quat = self.str2str(
-                msa.float(), pair.float(), xyz.float(), state.float(), 
+                msa.float(), pair.float(), xyz.detach().float(), state.float(), 
                 idx, rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames, top_k=top_k
             )
 
@@ -1001,9 +989,7 @@ class IterativeSimulator(nn.Module):
          sym_method=None,
          main_block=None,
          fit=False,
-         tscale=1.0,
-         use_flash_attention=True,
-         detach_xyz=True,
+         tscale=1.0
     ):
         super(IterativeSimulator, self).__init__()
         self.n_extra_block = n_extra_block
@@ -1046,10 +1032,7 @@ class IterativeSimulator(nn.Module):
                                                         sym_method=sym_method,
                                                         main_block=main_block,
                                                         fit=fit,
-                                                        tscale=tscale,
-                                                        use_flash_attention=use_flash_attention,
-                                                        detach_xyz=detach_xyz,
-                                                        )
+                                                        tscale=tscale)
                                                         for i in range(n_extra_block)])
 
         # Update with seed sequences
@@ -1070,10 +1053,7 @@ class IterativeSimulator(nn.Module):
                                                        sym_method=sym_method,
                                                        main_block=main_block,
                                                        fit=fit,
-                                                       tscale=tscale,
-                                                       use_flash_attention=use_flash_attention,
-                                                       detach_xyz=detach_xyz,
-                                                       )
+                                                       tscale=tscale)
                                                        for i in range(n_main_block)])
 
         # Final SE(3) refinement

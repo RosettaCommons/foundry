@@ -75,8 +75,7 @@ class LegacyRoseTTAFoldModule(nn.Module):
         freeze_track_motif=False,
         assert_single_sequence_input=False,
         fit=False,
-        tscale=1.0,
-        detach_xyz=True,
+        tscale=1.0
     ):
         super(LegacyRoseTTAFoldModule, self).__init__()
         self.freeze_track_motif = freeze_track_motif
@@ -145,9 +144,7 @@ class LegacyRoseTTAFoldModule(nn.Module):
             main_block=main_block,
             use_same_chain=use_same_chain,
             enable_same_chain=enable_same_chain,
-            refiner_topk=refiner_topk,
-            use_flash_attention=False,
-            detach_xyz=detach_xyz,
+            refiner_topk=refiner_topk
         )
 
         ##

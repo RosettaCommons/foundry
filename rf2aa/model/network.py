@@ -35,16 +35,13 @@ class RosettaFold(nn.Module):
         
         self.simulator = nn.ModuleList(blocks)
         
-        n_refinement_blocks = len(model_params.refinement.keys())
-        assert n_refinement_blocks <= 1, "only can have one refinment block"
-        self.refinement = None
-        if n_refinement_blocks == 1:
-            refinement_type = next(iter(model_params.refinement.keys()))
+        assert len(model_params.refinement.keys()) == 1, "only can have one refinment block"
+        refinement_type = next(iter(model_params.refinement.keys()))
 
-            self.refinement = refinement_factory[refinement_type](
-                model_params["global_params"], 
-                model_params.refinement[refinement_type]["params"]
-            )
+        self.refinement = refinement_factory[refinement_type](
+            model_params["global_params"], 
+            model_params.refinement[refinement_type]["params"]
+        )
 
         aux_tasks = {}
         for aux_task in model_params.auxiliary_predictors.keys():
@@ -72,15 +69,12 @@ class RosettaFold(nn.Module):
                 "idx": rf_inputs["idx"],
                 "bond_feats": rf_inputs["bond_feats"],
                 "dist_matrix": rf_inputs["dist_matrix"],
-                "is_motif": rf_inputs.get("is_motif", None),
             }
         )
         for block in self.simulator:
             latent_feats = block(latent_feats, use_checkpoint, use_amp)
 
-        rf_outputs = {}
-        if self.refinement:
-            rf_outputs = self.refinement(latent_feats)
+        rf_outputs = self.refinement(latent_feats)
 
         for aux_task, aux_predictor in self.auxiliary_predictors.items():
             input_feature = self.auxiliary_predictor_input_feats[aux_task]

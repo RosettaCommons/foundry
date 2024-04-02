@@ -939,10 +939,6 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
             if "SLURM_PROCID" in os.environ and int(os.environ["SLURM_PROCID"])==0:
                 print ('Loading',loader_params['DATAPKL'],'...')
             data = pickle.load(f)
-            if isinstance(data, tuple):
-                train_ID_dict, valid_ID_dict, weights_dict, \
-                    train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra = data
-                return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra
             if type(data) is dict and data['ligands_to_remove'] == loader_params['ligands_to_remove']:
                 return (
                     data['train_ID_dict'],
