@@ -230,6 +230,11 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features, 
         sc_pred_d_hidden, sc_pred_p_drop, residual_state, compute_gradients
     ):
+        """
+        Params:
+            sc_pred_d_hidden: Hidden dimension of the sidechain predictor.
+                Set to 0 to omit sidechain prediction.
+        """
         super().__init__(
             d_msa, d_pair, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, 
             l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features,

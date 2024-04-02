@@ -23,7 +23,7 @@ class RF2_block(nn.Module):
         - the "is_bonded" boolean feature is no longer embedded with the edge features of the SE3 transformer
     """
     
-    def __init__(self, global_config, block_params, is_full, xyz_grads=False, **kwargs):
+    def __init__(self, global_config, block_params, is_full, backprop_through_xyz=False, **kwargs):
         super(RF2_block, self).__init__()
         d_msa, d_msa_full, d_pair, d_state = (
             global_config.d_msa, 
@@ -32,7 +32,7 @@ class RF2_block(nn.Module):
             global_config.d_state
         )
         self.is_full = is_full
-        self.xyz_grads = xyz_grads
+        self.backprop_through_xyz = backprop_through_xyz
         
         if self.is_full:
             d_msa = d_msa_full
@@ -183,7 +183,7 @@ class RF2_block(nn.Module):
         return pair
 
     def _3d_update(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, drop_layer=False, is_motif=None):
-        if not self.xyz_grads:
+        if not self.backprop_through_xyz:
             xyz = xyz.detach()
         block_outputs = self.structure_attn(
             msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix, drop_layer=drop_layer, is_motif=is_motif,
@@ -284,5 +284,5 @@ block_factory = {
     "untied_p2p_full":          partial(RF2_untied, is_full=True),
     "RF2_withgradients":       partial(RF2_withgradients, is_full=False),
     "RF2_withgradients_full":  partial(RF2_withgradients, is_full=True),
-    "RF2_withgradients_R":       partial(RF2_block, is_full=False, xyz_grads=True),
+    "RF2_withgradients_R":       partial(RF2_block, is_full=False, backprop_through_xyz=True),
 }
