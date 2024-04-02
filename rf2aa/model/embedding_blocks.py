@@ -139,10 +139,20 @@ class RF2_embedding_nostate(RF2_embedding):
         #identity
         return pair, state
 
+# Null module for overloading existing modules with a no-op
+class Noop(nn.Module):
+    def forward(*args, **kwargs):
+        return torch.tensor([0.])
+
+class RF2_embedding_no_ptwise_no_full(RF2_embedding_no_ptwise):
+    def __init__(self, global_params, block_params):
+        super(RF2_embedding_no_ptwise, self).__init__(global_params, block_params)
+        self.full_emb = Noop()
 
 
 embedding_factory = {
     "rf2aa": RF2_embedding,
     "rf2aa_noptwise": RF2_embedding_no_ptwise,
+    "rf2aa_noptwise_no_full": RF2_embedding_no_ptwise_no_full,
     "rf2aa_nostate": RF2_embedding_nostate
 }

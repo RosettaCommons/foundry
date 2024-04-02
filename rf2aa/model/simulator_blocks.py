@@ -23,7 +23,7 @@ class RF2_block(nn.Module):
         - the "is_bonded" boolean feature is no longer embedded with the edge features of the SE3 transformer
     """
     
-    def __init__(self, global_config, block_params, is_full, **kwargs):
+    def __init__(self, global_config, block_params, is_full, xyz_grads=False, **kwargs):
         super(RF2_block, self).__init__()
         d_msa, d_msa_full, d_pair, d_state = (
             global_config.d_msa, 
@@ -32,6 +32,7 @@ class RF2_block(nn.Module):
             global_config.d_state
         )
         self.is_full = is_full
+        self.xyz_grads = xyz_grads
         
         if self.is_full:
             d_msa = d_msa_full
@@ -125,7 +126,7 @@ class RF2_block(nn.Module):
         bond_feats, dist_matrix, idx = latent_feats["bond_feats"], latent_feats["dist_matrix"], latent_feats["idx"]
         return msa, pair, state, xyz[..., :3, :], is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx
 
-    def _pack_outputs(self, msa, pair, state, xyz, alpha, latent_feats):
+    def _pack_outputs(self, msa, pair, state, xyz, alpha, quat_update, latent_feats):
         if self.is_full:
             latent_feats["msa_full"] = msa
         else:
@@ -144,6 +145,11 @@ class RF2_block(nn.Module):
             latent_feats["alpha_intermediate"] = [alpha]
         else:
             latent_feats["alpha_intermediate"].append(alpha)
+
+        if "quat_update" not in latent_feats:
+            latent_feats["quat_update"] = [quat_update]
+        else:
+            latent_feats["quat_update"].append(quat_update)
         return latent_feats
 
     def _1d_update(self, msa, pair, state, xyz, drop_layer=False):
@@ -177,10 +183,12 @@ class RF2_block(nn.Module):
         return pair
 
     def _3d_update(self, msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, drop_layer=False):
+        if not self.xyz_grads:
+            xyz = xyz.detach()
         block_outputs = self.structure_attn(
-            msa, pair, state, xyz.detach(), is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix, drop_layer=drop_layer
+            msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix, drop_layer=drop_layer
         )
-        return block_outputs["state"], block_outputs["xyz"], block_outputs["alpha"]
+        return block_outputs["state"], block_outputs["xyz"], block_outputs["alpha"], block_outputs["quat_update"]
 
     def forward(self, latent_feats, use_checkpoint, use_amp):
         msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx = self._unpack_inputs(latent_feats)
@@ -192,7 +200,7 @@ class RF2_block(nn.Module):
             # 3D track cannot use re-entrant = False because of chiral features call to autograd
             #TODO: allow this to happen since new versions of Pytorch will be using reentrant=False
             msa, pair = msa.float(), pair.float()
-            state, xyz, alpha = checkpoint.checkpoint(
+            state, xyz, alpha, quat_update = checkpoint.checkpoint(
                 create_custom_forward(self._3d_update, drop_layer=drop_layer),
                 msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx,
                 use_reentrant=True
@@ -202,9 +210,9 @@ class RF2_block(nn.Module):
               msa= self._1d_update(msa, pair, state, xyz, drop_layer=drop_layer)
               pair = self._2d_update(msa, pair, state, xyz, drop_layer=drop_layer)
             msa, pair = msa.float(), pair.float()
-            state, xyz, alpha = self._3d_update(msa, pair, state, xyz, is_atom, atom_frames, chirals,bond_feats, dist_matrix, idx, drop_layer=drop_layer)
+            state, xyz, alpha, quat_update = self._3d_update(msa, pair, state, xyz, is_atom, atom_frames, chirals,bond_feats, dist_matrix, idx, drop_layer=drop_layer)
 
-        latent_feats = self._pack_outputs(msa, pair, state, xyz, alpha, latent_feats)
+        latent_feats = self._pack_outputs(msa, pair, state, xyz, alpha, quat_update, latent_feats)
         return latent_feats
 
 class RF2_withgradients(RF2_block):
@@ -237,9 +245,9 @@ class RF2_withgradients(RF2_block):
             msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix, drop_layer=drop_layer
         )
         block_outputs["alpha"] = None
-        return block_outputs["state"], block_outputs["xyz"], block_outputs["alpha"]
+        return block_outputs["state"], block_outputs["xyz"], block_outputs["alpha"], None
 
-    def _pack_outputs(self, msa, pair, state, xyz, alpha, latent_feats):
+    def _pack_outputs(self, msa, pair, state, xyz, alpha, quat_update, latent_feats):
         if self.is_full:
             latent_feats["msa_full"] = msa
         else:
@@ -275,6 +283,6 @@ block_factory = {
     "untied_p2p":               partial(RF2_untied, is_full=False),
     "untied_p2p_full":          partial(RF2_untied, is_full=True),
     "RF2_withgradients":       partial(RF2_withgradients, is_full=False),
-    "RF2_withgradients_full":  partial(RF2_withgradients, is_full=True)
-
+    "RF2_withgradients_full":  partial(RF2_withgradients, is_full=True),
+    "RF2_withgradients_R":       partial(RF2_block, is_full=False, xyz_grads=True),
 }

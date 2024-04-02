@@ -201,7 +201,7 @@ class FullyConnectedSE3_noR(nn.Module):
         T = offset / 10.0
         xyz_update = xyz.clone()
         xyz_update[...,1:2, :] = xyz[..., 1:2, :] + weight*T[..., None, :]
-        return state, xyz_update
+        return state, xyz_update, None
 
     def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False):
         #TODO: allow these functions to accept kwargs so we can pass 
@@ -212,12 +212,13 @@ class FullyConnectedSE3_noR(nn.Module):
         G, edge_feats = self.construct_graph(xyz, edge)
         #TODO: get extra l1 feats automatically and populate the extra l1 dimension
         l1_feats = self.construct_l1_feats(xyz, is_atom, atom_frames, chirals)
-        state, xyz_update = self.compute_structure_update(
+        state, xyz_update, quat_update = self.compute_structure_update(
             G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer
         )
         return {
             "state": state, 
-            "xyz": xyz_update
+            "xyz": xyz_update,
+            "quat_update": quat_update,
         }
 
 
@@ -235,12 +236,14 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         )
         self.embed_node = nn.Linear(d_msa+l0_out_features, l0_in_features)
         self.norm_state = nn.LayerNorm(l0_out_features)        
-        self.sc_predictor = SCPred(
-            d_msa=d_msa,
-            d_state=l0_out_features,
-            d_hidden=sc_pred_d_hidden,
-            p_drop=sc_pred_p_drop
-        )
+        self.sc_predictor = None
+        if sc_pred_d_hidden:
+            self.sc_predictor = SCPred(
+                d_msa=d_msa,
+                d_state=l0_out_features,
+                d_hidden=sc_pred_d_hidden,
+                p_drop=sc_pred_p_drop
+            )
         self.reset_parameter() 
 
     def reset_parameter(self):
@@ -305,19 +308,22 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
             Rout = (1-weight)*I + weight*Rout
 
         xyz = torch.einsum('blij,blaj->blai', Rout,v)+xyz[:,:,1:2,:] + weight*T[:,:,None,:]
+        quat_update = torch.stack([qA, qB, qC, qD], dim=2)
 
-        return state, xyz    
-
+        return state, xyz, quat_update
     def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False):
 
         block_outputs = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix)
         state, xyz = block_outputs["state"], block_outputs["xyz"]
         
-        alpha = self.sc_predictor(msa[:, 0], state)
+        alpha=None
+        if self.sc_predictor:
+            alpha = self.sc_predictor(msa[:, 0], state)
         return {
             "state": state,
             "xyz": xyz,
-            "alpha": alpha
+            "alpha": alpha,
+            "quat_update": block_outputs["quat_update"],
         }
 
 def get_backbone_offset_vectors(xyz, is_atom, atom_frames):
