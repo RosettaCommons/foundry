@@ -187,7 +187,7 @@ class FullyConnectedSE3_noR(nn.Module):
         l1_feats = get_chiral_vectors(xyz[...,:3,:], chirals)[..., 1:2, :] # only pass features from Calpha
         return l1_feats
 
-    def compute_structure_update(self, G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer=False):
+    def compute_structure_update(self, G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer=False, is_motif=None):
         weight = 0. if drop_layer else 1.
         B, L = xyz.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
@@ -198,12 +198,14 @@ class FullyConnectedSE3_noR(nn.Module):
             state = shift["0"].reshape(B, L, -1)
 
         offset = shift["1"].reshape(B, L, 3)
+        if is_motif is not None:
+            offset[is_motif,...] = 0 # Frozen motif
         T = offset / 10.0
         xyz_update = xyz.clone()
         xyz_update[...,1:2, :] = xyz[..., 1:2, :] + weight*T[..., None, :]
-        return state, xyz_update
+        return state, xyz_update, None
 
-    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False):
+    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False, is_motif=None):
         #TODO: allow these functions to accept kwargs so we can pass 
         # different inputs when iterating
         B, N, L = msa.shape[:3]
@@ -212,12 +214,13 @@ class FullyConnectedSE3_noR(nn.Module):
         G, edge_feats = self.construct_graph(xyz, edge)
         #TODO: get extra l1 feats automatically and populate the extra l1 dimension
         l1_feats = self.construct_l1_feats(xyz, is_atom, atom_frames, chirals)
-        state, xyz_update = self.compute_structure_update(
-            G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer
+        state, xyz_update, quat_update = self.compute_structure_update(
+            G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer, is_motif=is_motif
         )
         return {
             "state": state, 
-            "xyz": xyz_update
+            "xyz": xyz_update,
+            "quat_update": quat_update,
         }
 
 
@@ -227,6 +230,11 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features, 
         sc_pred_d_hidden, sc_pred_p_drop, residual_state, compute_gradients
     ):
+        """
+        Params:
+            sc_pred_d_hidden: Hidden dimension of the sidechain predictor.
+                Set to 0 to omit sidechain prediction.
+        """
         super().__init__(
             d_msa, d_pair, d_rbf, num_layers, num_channels, num_degrees, n_heads, div, 
             l0_in_features, l0_out_features, l1_in_features, l1_out_features, num_edge_features,
@@ -235,12 +243,14 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         )
         self.embed_node = nn.Linear(d_msa+l0_out_features, l0_in_features)
         self.norm_state = nn.LayerNorm(l0_out_features)        
-        self.sc_predictor = SCPred(
-            d_msa=d_msa,
-            d_state=l0_out_features,
-            d_hidden=sc_pred_d_hidden,
-            p_drop=sc_pred_p_drop
-        )
+        self.sc_predictor = None
+        if sc_pred_d_hidden:
+            self.sc_predictor = SCPred(
+                d_msa=d_msa,
+                d_state=l0_out_features,
+                d_hidden=sc_pred_d_hidden,
+                p_drop=sc_pred_p_drop
+            )
         self.reset_parameter() 
 
     def reset_parameter(self):
@@ -270,7 +280,7 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         )
         return l1_feats
 
-    def compute_structure_update(self, G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer=False):
+    def compute_structure_update(self, G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer=False, is_motif=None):
         weight = 0. if drop_layer else 1.
 
         B, L = node.shape[:2]
@@ -282,6 +292,8 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
             state = shift["0"].reshape(B, L, -1) #fd change
 
         offset = shift["1"].reshape(B, L, 2, 3)
+        if is_motif is not None:
+            offset[is_motif,...] = 0 # Frozen motif
         T = offset[:,:,0,:] / 10
         R = offset[:,:,1,:] / 100.0
 
@@ -305,19 +317,22 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
             Rout = (1-weight)*I + weight*Rout
 
         xyz = torch.einsum('blij,blaj->blai', Rout,v)+xyz[:,:,1:2,:] + weight*T[:,:,None,:]
+        quat_update = torch.stack([qA, qB, qC, qD], dim=2)
 
-        return state, xyz    
+        return state, xyz, quat_update
+    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False, is_motif=None):
 
-    def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False):
-
-        block_outputs = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix)
+        block_outputs = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, is_motif=is_motif)
         state, xyz = block_outputs["state"], block_outputs["xyz"]
         
-        alpha = self.sc_predictor(msa[:, 0], state)
+        alpha=None
+        if self.sc_predictor:
+            alpha = self.sc_predictor(msa[:, 0], state)
         return {
             "state": state,
             "xyz": xyz,
-            "alpha": alpha
+            "alpha": alpha,
+            "quat_update": block_outputs["quat_update"],
         }
 
 def get_backbone_offset_vectors(xyz, is_atom, atom_frames):
