@@ -42,16 +42,16 @@ from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein
 assert "rf2aa" in os.path.abspath(cifutils.__file__)
 
 
-#fd NA structures are in a different order internally than they are stored
-#fd on disk.  This function remaps the loaded order->model order
-#old:
-#       0      1      2      3      4      5      6      7      8      9      10  
+# fd NA structures are in a different order internally than they are stored
+# fd on disk.  This function remaps the loaded order->model order
+# old:
+#       0      1      2      3      4      5      6      7      8      9      10
 #    (" OP1"," P  "," OP2"," O5'"," C5'"," C4'"," O4'"," C3'"," O3'"," C1'"," C2'", ... #   A
 #    (" OP1"," P  "," OP2"," O5'"," C5'"," C4'"," O4'"," C3'"," O3'"," C1'"," C2'", ... #   C
 #    (" OP1"," P  "," OP2"," O5'"," C5'"," C4'"," O4'"," C3'"," O3'"," C1'"," C2'", ... #   G
 #    (" OP1"," P  "," OP2"," O5'"," C5'"," C4'"," O4'"," C3'"," O3'"," C1'"," C2'", ... #   U
 
-#new:
+# new:
 #    (" O4'"," C1'"," C2'"," OP1"," P  "," OP2"," O5'"," C5'"," C4'"," C3'"," O3'", ... #27   A
 #    (" O4'"," C1'"," C2'"," OP1"," P  "," OP2"," O5'"," C5'"," C4'"," C3'"," O3'", ... #28   C
 #    (" O4'"," C1'"," C2'"," OP1"," P  "," OP2"," O5'"," C5'"," C4'"," C3'"," O3'", ... #29   G
@@ -1289,24 +1289,6 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
         homo, chid2hash, chid2taxid, chid2smpartners
 
 
-
-def adjust_samples_for_num_replicas(num_per_epoch_dict, num_replicas):
-    """
-    Modifies the number of examples per epoch for each dataset to be divisible by num_replicas.
-    Args:
-        num_per_epoch_dict (dict): Mapping from dataset name to number of examples to sample from that dataset per epoch
-        num_replicas (int): The number of nodes/GPUs in the distributed training setup.
-
-    Returns:
-        dict: The modified num_per_epoch_dict where the number of examples per epoch for each dataset is divisible by num_replicas.
-    """
-    adjusted_dict = {}
-    for dataset, num_per_epoch in num_per_epoch_dict.items():
-        # Round down to nearest multiple of num_replicas
-        adjusted_num = num_per_epoch // num_replicas * num_replicas
-        adjusted_dict[dataset] = adjusted_num
-    return adjusted_dict
-
 def find_msa_hashes(protein_chain_info, params):
     """
     given a list of protein chains, this function searches through all the pregenerated MSAs and identifies the correct MSA hashes/metadata to load for each protein chain
@@ -1931,7 +1913,7 @@ def choose_multimsa_clusters(msa_seq_is_paired, params):
         return msa_seed_clus
 
 
-#fd 
+# fd
 def get_bond_distances(bond_feats):
     atom_bonds = (bond_feats > 0)*(bond_feats<5)
     dist_matrix = scipy.sparse.csgraph.shortest_path(atom_bonds.long().numpy(), directed=False)
@@ -2273,7 +2255,7 @@ def loader_pdb(item, params, homo, unclamp=False, pick_top=True, p_homo_cut=0.5,
     )
     return feats + ("monomer",item,)
 
-    
+
 def loader_fb(item, params, unclamp=False, p_short_crop=0.0, p_dslf_crop=0.0, fixbb=False):
     # loads sequence/structure/plddt information
     pdb_chain, hashstr = item['CHAINID'], item['HASH']
@@ -4702,7 +4684,7 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
 
     item = tmp_df.sample(1).to_dict(orient='records')[0] # choose 1 random row
     return copy.deepcopy(item) # prevents dataframe from being modified by downstream changes
-    
+
 
 class Dataset(data.Dataset):
     def __init__(
@@ -4984,8 +4966,31 @@ class DistilledDataset(data.Dataset):
         ])
         self.ligand_dictionary = ligand_dictionary
 
-        correct_dataset_ordering = ["pdb", "fb", "compl", "neg_compl", "na_compl", "neg_na_compl", "distil_tf","tf","neg_tf","rna","dna", "sm_compl", "metal_compl", "sm_compl_multi", "sm_compl_covale", "sm_compl_asmb", "sm", "sm_compl_docked_neg", "sm_compl_permuted_neg", "sm_compl_furthest_neg", "atomize_pdb", "atomize_complex"]
-        for index, (key, dataset_name) in enumerate(zip(self.index_dict.keys(), correct_dataset_ordering)):
+        self.correct_dataset_ordering = [
+            "pdb",
+            "fb",
+            "compl",
+            "neg_compl",
+            "na_compl",
+            "neg_na_compl",
+            "distil_tf",
+            "tf",
+            "neg_tf",
+            "rna",
+            "dna",
+            "sm_compl",
+            "metal_compl",
+            "sm_compl_multi",
+            "sm_compl_covale",
+            "sm_compl_asmb",
+            "sm",
+            "sm_compl_docked_neg",
+            "sm_compl_permuted_neg",
+            "sm_compl_furthest_neg",
+            "atomize_pdb",
+            "atomize_complex",
+        ]
+        for index, (key, dataset_name) in enumerate(zip(self.index_dict.keys(), self.correct_dataset_ordering)):
             error_message = f"Expected dataset {dataset_name} at index {index}, but you provided dataset {key}. "
             error_message += "See DistilledDataset for the correct dataset names and ordering."
             assert key == dataset_name, error_message
@@ -4996,7 +5001,7 @@ class DistilledDataset(data.Dataset):
     def __getitem__(self, index):
         p_unclamp = np.random.rand()
 
-        #try:
+        # try:
         if True:
             # order of datasets here must match key order in self.dataset_dict
             offset = 0
@@ -5133,7 +5138,7 @@ class DistilledDataset(data.Dataset):
                 if self.ligand_dictionary is None:
                     raise ValueError("You cannot load negative examples for protein small molecule complexes from " + \
                                      " the distilled dataset if you haven't provided a ligand_dictionary at __init__.")
-                    
+
                 task = 'sm_compl_docked_neg'
                 ID = self.ID_dict['sm_compl_docked_neg'][index - offset]
                 item = sample_item_sm_compl(self.dataset_dict['sm_compl_docked_neg'], ID)
@@ -5157,11 +5162,11 @@ class DistilledDataset(data.Dataset):
                 nonbinding_ligand_id = np.random.choice(nonbinding_ligands)
                 nonbinding_ligand = self.ligand_dictionary[nonbinding_ligand_id]
                 ligand_string_tuple = ("sdf", nonbinding_ligand)
-                
+
                 out = self.loader_dict['sm_compl_permuted_neg'](item, self.params, self.chid2hash, 
                 self.chid2taxid, task=task, num_protein_chains=1, num_ligand_chains=1, ligand_string_tuple=ligand_string_tuple, is_negative=True)
             offset += len(self.index_dict['sm_compl_permuted_neg'])
-            
+
             if index >= offset and index < offset + len(self.index_dict['sm_compl_furthest_neg']):
                 task = 'sm_compl_furthest_neg'
                 ID = self.ID_dict['sm_compl_furthest_neg'][index - offset]
@@ -5194,206 +5199,7 @@ class DistilledDataset(data.Dataset):
                     unclamp=(p_unclamp > self.unclamp_cut))
             offset += len(self.index_dict['atomize_complex'])
 
-        #except Exception as e:
+        # except Exception as e:
         #    print('error loading',item, '\n',repr(e), task)
         #    raise e
         return out
-
-
-
-class DistributedWeightedSampler(data.Sampler):
-    def __init__(
-        self,
-        dataset,
-        weights_dict,
-        num_example_per_epoch=25600,
-        fractions = OrderedDict(
-            pdb=1.,
-            fb=0,
-            compl=0,
-            neg_compl=0,
-            na_compl=0,
-            neg_na_compl=0,
-            distil_tf=0,
-            tf=0,
-            neg_tf=0,
-            rna=0,
-            dna=0,
-            sm_compl=0,
-            metal_compl=0,
-            sm_compl_multi=0,
-            sm_compl_covale=0,
-            sm_compl_asmb=0,
-            sm=0,
-            atomize_pdb=0,
-            atomize_complex=0,
-            sm_compl_furthest_neg=0,
-            sm_compl_permuted_neg=0,
-            sm_compl_docked_neg=0,
-        ),
-        num_replicas=None,
-        rank=None,
-        datasets_with_replacement=["pdb", "fb", "compl", "neg_compl", "na_compl", "neg_na_compl", "distil_tf", "tf", "neg_tf", "rna", "dna"],
-        lengths=None,
-        batch_by_dataset=False,
-        batch_by_length=False,
-    ):
-        if num_replicas is None:
-            if not torch.distributed.is_available():
-                raise RuntimeError("Requires distributed package to be available")
-            num_replicas = torch.distributed.get_world_size()
-        if rank is None:
-            if not torch.distributed.is_available():
-                raise RuntimeError("Requires distributed package to be available")
-            rank = torch.distributed.get_rank()
-
-        assert (num_example_per_epoch % num_replicas) == 0, "Please ensure that the number of examples per epoch is evenly divisible by the number of nodes"
-        assert (np.allclose(sum([v for k,v in fractions.items()]), 1.0)), \
-            f"Fractions of datasets add up to {sum([v for k,v in fractions.items()])}, should add up to 1.0"
-            
-        # Load lengths into a tensor, if file exists
-        if lengths is not None and os.path.isfile(lengths):
-            lengths = torch.load(lengths)
-        else:
-            if lengths is not None:
-                warnings.warn(f"Lengths file {lengths} does not exist. Ignoring lengths file.")
-            lengths = None
-        
-        if batch_by_length:
-            assert lengths is not None, "If batching by length, must pass a valid lengths tensor."
-        
-        if not batch_by_dataset:
-            assert not batch_by_length, "Cannot batch by length without also batching by dataset."
-            
-        self.dataset = dataset
-        self.weights_dict = weights_dict
-        self.num_replicas = num_replicas
-        self.lengths = lengths
-        self.batch_by_length = batch_by_length
-        self.batch_by_dataset = batch_by_dataset
-        
-        if batch_by_dataset:
-            # Ensure that all GPU's can process an example from the same dataset at once
-            self.num_per_epoch_dict = adjust_samples_for_num_replicas(
-                OrderedDict([
-                    (dataset_name, int(round(num_example_per_epoch * fractions[dataset_name]))) 
-                    for dataset_name in self.dataset.dataset_dict.keys()
-                ]),
-                num_replicas
-            )
-        else:
-            self.num_per_epoch_dict = OrderedDict([
-                (dataset_name, int(round(num_example_per_epoch * fractions[dataset_name]))) 
-                for dataset_name in self.dataset.dataset_dict.keys()
-            ])
-
-        # Account for rounding error
-        dataset_names = list(self.dataset.dataset_dict.keys())
-        nonzero_dataset_names = [name for name in dataset_names if self.num_per_epoch_dict[name] > 0]
-        
-        # Calculate the actual number of examples that will be sampled (will be a multiple of num_replicas)
-        num_per_epoch_actual = sum([self.num_per_epoch_dict[name] for name in nonzero_dataset_names])
-        
-        # Handle remainders by rounding down to the nearest multiple of num_replicas and sampling from `pdb`
-        remainder = num_example_per_epoch - num_per_epoch_actual
-        remainder = remainder - (remainder % num_replicas)
-        self.num_per_epoch_dict[nonzero_dataset_names[0]] += remainder # The first dataset is the pdb
-
-        self.total_size = num_per_epoch_actual + remainder
-        self.num_samples = self.total_size // self.num_replicas
-        self.rank = rank
-        self.epoch = 0
-        # Sample the protein datasets with replacement to account for length weighting
-        # Other datasets (e.g., small molecule datasets) will be sampled WITHOUT replacement (since LEN_EXIST is not the appropriate weighting)
-        self.datasets_with_replacement = datasets_with_replacement
-        if (rank==0):
-            print(f"Total examples:")
-            for k,v in self.dataset.ID_dict.items():
-                print('  '+k, ':', len(v))
-            print(f"Training examples per epoch ({self.total_size} total):")
-            for k,v in self.num_per_epoch_dict.items():
-                print('  '+k, ':', v)
-    
-    def _sample_from_dataset(self, dataset_name, g):
-        """
-        Samples a specified number of sequences from the given dataset.
-        Samples with replacement based on the dataset type, forcing replacement if sampling more than dataset length.
-        Parameters:
-            dataset_name (str): The name of the dataset to sample from.
-            g (torch.Generator): A pre-seeded generator to ensure consistency across nodes.
-
-        Returns:
-            Tensor: A tensor of sampled indices from the dataset.
-        """
-        # Throw warning if the number of sequences to be sampled is not more than the number of sequences in the dataset
-        if self.num_per_epoch_dict[dataset_name] > len(self.dataset.ID_dict[dataset_name]):
-            warnings.warn(f"Number of sequences to be sampled in one epoch is greater than the number of " \
-            f"sequences in the dataset. Must sample with replacement. Ensure that this is the desired behavior. Dataset: {dataset_name}, " \
-            f"Dataset length: {len(self.dataset.ID_dict[dataset_name])}, " \
-            f"# to be sampled: {self.num_per_epoch_dict[dataset_name]}")    
-        
-        # Determine if sampling with replacement based on the dataset type, forcing replacement if sampling more than dataset length
-        replacement = dataset_name in self.datasets_with_replacement or self.num_per_epoch_dict[dataset_name] > len(self.dataset.ID_dict[dataset_name])
-    
-        # Sample indices from the dataset based on the weights (prefer longer sequences)
-        return torch.multinomial(self.weights_dict[dataset_name], 
-            self.num_per_epoch_dict[dataset_name], 
-            generator=g,
-            replacement=replacement)
-
-    def __iter__(self):
-        # deterministically shuffle based on epoch
-        g = torch.Generator()
-        g.manual_seed(self.epoch)
-
-        # get indices (all models)
-        indices = torch.arange(len(self.dataset))
-
-        # weighted subsampling
-        # order of datasets in this loop should match order in DistilledDataset.__getitem__()
-        offset = 0
-        sel_indices = torch.tensor((),dtype=int)
-        
-        if self.batch_by_dataset:
-            for dataset_name in self.dataset.dataset_dict.keys():
-                if (self.num_per_epoch_dict[dataset_name]> 0):
-                    # Sample and adjust for offset; _sample_from_dataset handles replacement
-                    sampled_idx = self._sample_from_dataset(dataset_name, g) + offset
-                    
-                    # Divide sampled_idx into num_replicas chunks and assign each chunk to a node
-                    sampled_idx_split = torch.split(sampled_idx, len(sampled_idx) // self.num_replicas)
-                    assert all([len(x) == len(sampled_idx_split[0]) for x in sampled_idx_split])
-                    
-                    # If also batching by sequence length, sort the indices by length
-                    if self.batch_by_length and self.lengths is not None:
-                        sampled_idx_split = [x[torch.argsort(self.lengths[x])] for x in sampled_idx_split]
-                        
-                    # Add the sampled indices to the running tensor based on the node rank
-                    sel_indices = torch.cat((sel_indices, indices[sampled_idx_split[self.rank]]))
-                offset += len(self.dataset.ID_dict[dataset_name])
-            
-            # For each node, the indices are shuffled with the same seed, and so will draw from the same datasets in the same order
-            indices = sel_indices[torch.randperm(len(sel_indices), generator=g)]
-        else:
-            # Standard implementation of WeightedDistributedSampler without batching by dataset or length
-            for dataset_name in self.dataset.dataset_dict.keys():
-                if (self.num_per_epoch_dict[dataset_name]> 0):
-                    sampled_idx = self._sample_from_dataset(dataset_name, g)
-                    sel_indices = torch.cat((sel_indices, indices[sampled_idx + offset]))
-            offset += len(self.dataset.ID_dict[dataset_name])
-
-            # shuffle indices
-            indices = sel_indices[torch.randperm(len(sel_indices), generator=g)]
-
-            # per each gpu
-            indices = indices[self.rank:self.total_size:self.num_replicas]
-
-        #print('rank',self.rank,': expecting',self.num_samples,'examples, drew',len(indices),'examples')
-        assert len(indices) == self.num_samples # more stringent, switch with line above during debugging  
-        return iter(indices.tolist())
-
-    def __len__(self):
-        return self.num_samples
-
-    def set_epoch(self, epoch):
-        self.epoch = epoch

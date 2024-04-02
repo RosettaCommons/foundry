@@ -89,6 +89,7 @@ loader_params:
   ligands_to_remove: []
   min_metal_contacts: 0
   min_metal_contact_dist: 2.6
+  sampler_class: DistributedWeightedSampler
   dataloader_kwargs:
     shuffle: False
     num_workers: 0

@@ -7,8 +7,10 @@ import os
 from rf2aa.data.data_loader import get_train_valid_set, loader_pdb, loader_complex, loader_na_complex, \
     loader_distil_tf, loader_tf_complex, loader_fb, loader_dna_rna, loader_sm_compl_assembly_single, \
     loader_sm_compl_assembly, loader_sm, loader_atomize_pdb, loader_atomize_complex, DistilledDataset, \
-    DistributedWeightedSampler, Dataset, DatasetRNA, DatasetNAComplex, DatasetNAComplex, \
+    Dataset, DatasetRNA, DatasetNAComplex, DatasetNAComplex, \
     DatasetSMComplexAssembly, DatasetSM, _load_df
+
+from rf2aa.data.sampler import sampler_factory
 
 #### handle defaults 
 #TODO: shouldn't have to do this in the future, should all be handled in config
@@ -22,7 +24,6 @@ mol_dir = "/projects/ml/RF2_allatom/rcsb/pkl" # for phase 3 dataloaders
 # mol_dir = "/projects/ml/RF2_allatom/isdf" # for legacy datasets
 tf_dir = "/projects/ml/prot_dna"
 csd_dir = "/databases/csd543"
-sample_lengths_dir = "/projects/ml/RF2_allatom"
 
 #fd store the pickle file in rf2aa directory
 #   rf2aa is parent dir to this one
@@ -62,7 +63,7 @@ default_dataloader_params = {
         "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)
         "DUDE_MSAS"        : "/home/dnan/projects/gald_distil_set/DUDE/fastas", # on digs (dnan)
         "DUDE_PDB_DIR"     : "/home/dnan/projects/gald_distil_set/DUDE/pdbs_all",
-        "EXAMPLE_LENGTHS"  : "%s/all_sample_lengths_crop_1K.pt"%sample_lengths_dir,
+        "EXAMPLE_LENGTHS"  : "/projects/ml/RF2_allatom/all_sample_lengths_crop_1K.pt",
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -121,79 +122,126 @@ def set_data_loader_params(loader_params):
             default_dataloader_params[param] = value
     return default_dataloader_params
 
+
+def get_distilled_dataset(dataset_params, loader_params):
+    (
+        train_ID_dict,
+        valid_ID_dict,
+        weights_dict,
+        train_dict,
+        valid_dict,
+        homo,
+        chid2hash,
+        chid2taxid,
+        chid2smpartners,
+    ) = get_train_valid_set(loader_params)
+
+    # define atomize_pdb train/valid sets, which use the same examples as pdb set
+    train_ID_dict["atomize_pdb"] = train_ID_dict["pdb"]
+    valid_ID_dict["atomize_pdb"] = valid_ID_dict["pdb"]
+    weights_dict["atomize_pdb"] = weights_dict["pdb"]
+    train_dict["atomize_pdb"] = train_dict["pdb"]
+    valid_dict["atomize_pdb"] = valid_dict["pdb"]
+
+    # define atomize_pdb train/valid sets, which use the same examples as pdb set
+    train_ID_dict["atomize_complex"] = train_ID_dict["compl"]
+    valid_ID_dict["atomize_complex"] = valid_ID_dict["compl"]
+    weights_dict["atomize_complex"] = weights_dict["compl"]
+    train_dict["atomize_complex"] = train_dict["compl"]
+    valid_dict["atomize_complex"] = valid_dict["compl"]
+
+    # reweight fb examples containing disulfide loops
+    to_reweight_ex = train_dict["fb"]["HAS_DSLF_LOOP"]
+    to_reweight_cluster = train_dict["fb"][to_reweight_ex].CLUSTER.unique()
+    reweight_mask = np.in1d(train_ID_dict["fb"], to_reweight_cluster)
+    weights_dict["fb"][reweight_mask] *= dataset_params["dslf_fb_upsample"]
+
+    # set number of validation examples being used
+    for k in valid_dict:
+        if dataset_params["n_valid_" + k] is None:
+            dataset_params["n_valid_" + k] = len(valid_dict[k])
+
+    loader_dict = dict(
+        pdb=loader_pdb,
+        peptide=loader_pdb,
+        compl=loader_complex,
+        neg_compl=loader_complex,
+        na_compl=loader_na_complex,
+        neg_na_compl=loader_na_complex,
+        distil_tf=loader_distil_tf,
+        tf=loader_tf_complex,
+        neg_tf=loader_tf_complex,
+        fb=loader_fb,
+        rna=loader_dna_rna,
+        dna=loader_dna_rna,
+        sm_compl=loader_sm_compl_assembly_single,
+        metal_compl=loader_sm_compl_assembly_single,
+        sm_compl_multi=loader_sm_compl_assembly_single,
+        sm_compl_covale=loader_sm_compl_assembly_single,
+        sm_compl_asmb=loader_sm_compl_assembly,
+        sm=loader_sm,
+        atomize_pdb=loader_atomize_pdb,
+        atomize_complex=loader_atomize_complex,
+        sm_compl_furthest_neg=loader_sm_compl_assembly,
+        sm_compl_permuted_neg=loader_sm_compl_assembly,
+        sm_compl_docked_neg=loader_sm_compl_assembly,
+    )
+
+    train_set = DistilledDataset(
+        train_ID_dict,
+        train_dict,
+        loader_dict,
+        homo,
+        chid2hash,
+        chid2taxid,
+        chid2smpartners,
+        loader_params,
+        native_NA_frac=0.25,
+        p_homo_cut=dataset_params["p_homo_cut"],
+        p_short_crop=dataset_params["p_short_crop"],
+        p_dslf_crop=dataset_params["p_dslf_crop"],
+    )
+    return (
+        train_set,
+        train_ID_dict,
+        valid_ID_dict,
+        weights_dict,
+        train_dict,
+        valid_dict,
+        homo,
+        chid2hash,
+        chid2taxid,
+        chid2smpartners,
+    )
+
+
 def compose_dataset(loader_fn, dataset_params, loader_params, rank, world_size):
     # define dataset & data loader
     # this function overrides the default dataloader params with those in the config
     #TODO: cache this in checkpoints so checkpoints use the same dataloder params as training
-    loader_params = set_data_loader_params(loader_params=loader_params) 
-    train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid, chid2smpartners = \
-        get_train_valid_set(loader_params)
+    loader_params = set_data_loader_params(loader_params=loader_params)
 
-    # define atomize_pdb train/valid sets, which use the same examples as pdb set
-    train_ID_dict['atomize_pdb'] = train_ID_dict['pdb']
-    valid_ID_dict['atomize_pdb'] = valid_ID_dict['pdb']
-    weights_dict['atomize_pdb'] = weights_dict['pdb']
-    train_dict['atomize_pdb'] = train_dict['pdb']
-    valid_dict['atomize_pdb'] = valid_dict['pdb']
-
-    # define atomize_pdb train/valid sets, which use the same examples as pdb set
-    train_ID_dict['atomize_complex'] = train_ID_dict['compl']
-    valid_ID_dict['atomize_complex'] = valid_ID_dict['compl']
-    weights_dict['atomize_complex'] = weights_dict['compl']
-    train_dict['atomize_complex'] = train_dict['compl']
-    valid_dict['atomize_complex'] = valid_dict['compl']
-
-    # reweight fb examples containing disulfide loops
-    to_reweight_ex = train_dict['fb']['HAS_DSLF_LOOP']
-    to_reweight_cluster = train_dict['fb'][to_reweight_ex].CLUSTER.unique()
-    reweight_mask = np.in1d(train_ID_dict['fb'],to_reweight_cluster)
-    weights_dict['fb'][ reweight_mask ] *= dataset_params['dslf_fb_upsample']
-
-    # set number of validation examples being used
-    for k in valid_dict:
-        if dataset_params['n_valid_'+k] is None: 
-            dataset_params["n_valid_"+k] = len(valid_dict[k]) 
-
-    loader_dict = dict(
-        pdb = loader_pdb,
-        peptide = loader_pdb,
-        compl = loader_complex,
-        neg_compl = loader_complex,
-        na_compl = loader_na_complex,
-        neg_na_compl = loader_na_complex,
-        distil_tf = loader_distil_tf,
-        tf = loader_tf_complex,
-        neg_tf = loader_tf_complex,
-        fb = loader_fb,
-        rna = loader_dna_rna,
-        dna = loader_dna_rna,
-        sm_compl = loader_sm_compl_assembly_single,
-        metal_compl = loader_sm_compl_assembly_single,
-        sm_compl_multi = loader_sm_compl_assembly_single,
-        sm_compl_covale = loader_sm_compl_assembly_single,
-        sm_compl_asmb = loader_sm_compl_assembly,
-        sm = loader_sm,
-        atomize_pdb = loader_atomize_pdb,
-        atomize_complex = loader_atomize_complex,
-        sm_compl_furthest_neg = loader_sm_compl_assembly,
-        sm_compl_permuted_neg = loader_sm_compl_assembly,
-        sm_compl_docked_neg = loader_sm_compl_assembly,
-    )
-
-    train_set = DistilledDataset(
-        train_ID_dict, train_dict, loader_dict, homo, chid2hash, chid2taxid, chid2smpartners,
-        loader_params, native_NA_frac=0.25, 
-        p_homo_cut=dataset_params['p_homo_cut'], 
-        p_short_crop=dataset_params['p_short_crop'], 
-        p_dslf_crop=dataset_params['p_dslf_crop'])
-
-    train_sampler = DistributedWeightedSampler(
-        train_set, 
+    (
+        train_set,
+        train_ID_dict,
+        valid_ID_dict,
         weights_dict,
+        train_dict,
+        valid_dict,
+        homo,
+        chid2hash,
+        chid2taxid,
+        chid2smpartners,
+    ) = get_distilled_dataset(dataset_params, loader_params)
+
+    sampler_class = sampler_factory[loader_params.get("sampler_class", "DistributedWeightedSampler")]
+    train_sampler = sampler_class(
+        dataset=train_set, 
+        weights_dict=weights_dict,
         num_example_per_epoch=dataset_params['n_train'],
         fractions=OrderedDict([(k, dataset_params['fraction_'+k]) for k in train_dict]),
         num_replicas=world_size, 
-        rank=rank, 
+        rank=rank,
         lengths=loader_params["EXAMPLE_LENGTHS"],
         batch_by_dataset=loader_params["BATCH_BY_DATASET"],
         batch_by_length=loader_params["BATCH_BY_LENGTH"],
