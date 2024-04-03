@@ -769,124 +769,6 @@ def generate_xyz_prev(xyz_t, mask_t, params):
         xyz_t, _, mask_t = blank_template(1, L)
     return xyz_t[0].clone(), mask_t[0].clone()
 
-def _compute_name_of_row(row: pd.Series) -> str:
-    """
-    Computes a unique identifier for single chain protein ligand complexes.
-    """
-    ligand = row["LIGAND"][0]
-    lig_str = ligand[0] + ligand[1] + '-' + ligand[2]
-    name = row['CHAINID'] + '_asm' + str(int(row['ASSEMBLY'])) + '_' + lig_str
-    return name
-
-
-def add_negative_sets(
-    train_ID_dict: Dict[str, np.ndarray],
-    valid_ID_dict: Dict[str, np.ndarray],
-    weights_dict: Dict[str, np.ndarray],
-    train_dict: Dict[str, pd.DataFrame],
-    valid_dict: Dict[str, pd.DataFrame],
-    base_path: Path = Path("/projects/ml/RF2_allatom"),
-    farthest_len_min: int = 356,
-):
-    """add_negative_sets This function adds three types of 
-    negative examples for protein small molecule complexes:
-        - Farthest ball crops: crops large proteins around the residue
-        farthest from the ligand, assuming that the ligand won't bind there.
-        - Docked negatives: ligands that AutoDock Vina think are
-        unlikely to bind to the true binding site of a different ligand
-        for a given protein.
-        - Permuted negatives: property matched ligands with low fingerprint
-        similarity to the original ligand, following the DUD-e protocol
-        for negative decoy generation.
-
-    The function basically just reads in the precomputed data and matches
-    it to the phase 3 datasets. The actual computation is done
-    in the branch psturm_negatives.
-
-    Args:
-        train_ID_dict (Dict[str, np.ndarray]): See get_train_valid_set.
-        valid_ID_dict (Dict[str, np.ndarray]): See get_train_valid_set.
-        weights_dict (Dict[str, np.ndarray]): See get_train_valid_set.
-        train_dict (Dict[str, pd.DataFrame]): See get_train_valid_set.
-        valid_dict (Dict[str, pd.DataFrame]): See get_train_valid_set.
-        base_path (Path, optional): Where the negative datasets are precomputed.
-            Defaults to Path("/projects/ml/RF2_allatom").
-        farthest_len_min (int, optional): The minimum size for proteins that are
-            going to be in the farthest ball crop negative set. Defaults to 356.
-
-    Returns:
-        _type_: A tuple, (train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict),
-        with the negative sets added.
-    """
-    sm_compl_train = train_dict["sm_compl"]
-    sm_compl_valid = valid_dict["sm_compl"]
-
-    autodocked_train = pd.read_pickle(base_path / "autodocked_decoys_train.pkl")
-    autodocked_valid = pd.read_pickle(base_path / "autodocked_decoys_valid.pkl")
-    property_matched_train = pd.read_pickle(base_path / "property_matched_decoys_train.pkl")
-    property_matched_valid = pd.read_pickle(base_path / "property_matched_decoys_valid.pkl")
-
-    sm_compl_train["name"] = [_compute_name_of_row(row) for _, row in sm_compl_train.iterrows()]
-    sm_compl_valid["name"] = [_compute_name_of_row(row) for _, row in sm_compl_valid.iterrows()]
-    autodocked_train["name"] = [_compute_name_of_row(row) for _, row in autodocked_train.iterrows()]
-    autodocked_valid["name"] = [_compute_name_of_row(row) for _, row in autodocked_valid.iterrows()]
-    property_matched_train["name"] = [_compute_name_of_row(row) for _, row in property_matched_train.iterrows()]
-    property_matched_valid["name"] = [_compute_name_of_row(row) for _, row in property_matched_valid.iterrows()]
-
-    sm_compl_names_train = set(sm_compl_train["name"].unique())
-    sm_compl_names_valid = set(sm_compl_valid["name"].unique())
-
-    autodocked_train_filtered = autodocked_train[(autodocked_train["name"].isin(sm_compl_names_train))]
-    autodocked_valid_filtered = autodocked_valid[autodocked_valid["name"].isin(sm_compl_names_valid)]
-    property_matched_train_filtered = property_matched_train[property_matched_train["name"].isin(sm_compl_names_train)]
-    property_matched_valid_filtered = property_matched_valid[property_matched_valid["name"].isin(sm_compl_names_valid)]
-
-    furthest_negative_train = sm_compl_train[sm_compl_train["LEN_EXIST"] > farthest_len_min].copy()
-    furthest_negative_valid = sm_compl_valid[sm_compl_valid["LEN_EXIST"] > farthest_len_min].copy()
-
-    train_cluster_to_weight = dict(zip(train_ID_dict["sm_compl"], weights_dict["sm_compl"])) 
-
-    autocked_ids_train = autodocked_train_filtered.dropna(subset="NONBINDING_LIGANDS")["CLUSTER"].unique()
-    autocked_ids_valid = autodocked_valid_filtered.dropna(subset="NONBINDING_LIGANDS")["CLUSTER"].unique()
-    property_matched_ids_train = property_matched_train_filtered.dropna(subset="NONBINDING_LIGANDS")["CLUSTER"].unique()
-    property_matched_ids_valid = property_matched_valid_filtered.dropna(subset="NONBINDING_LIGANDS")["CLUSTER"].unique()
-    furthest_negative_ids_train = furthest_negative_train["CLUSTER"].unique()
-    furthest_negative_ids_valid = furthest_negative_valid["CLUSTER"].unique()
-
-    autodocked_train_weights = torch.stack([train_cluster_to_weight[cluster_id] for cluster_id in autocked_ids_train])
-    property_matched_train_weights = torch.stack([train_cluster_to_weight[cluster_id] for cluster_id in property_matched_ids_train])
-    furthest_negative_train_weights = torch.stack([train_cluster_to_weight[cluster_id] for cluster_id in furthest_negative_ids_train])
-
-    train_ID_dict["sm_compl_docked_neg"] = autocked_ids_train
-    valid_ID_dict["sm_compl_docked_neg"] = autocked_ids_valid
-    weights_dict["sm_compl_docked_neg"] = autodocked_train_weights
-    train_dict["sm_compl_docked_neg"] = autodocked_train
-    valid_dict["sm_compl_docked_neg"] = autodocked_valid
-
-    train_ID_dict["sm_compl_permuted_neg"] = property_matched_ids_train
-    valid_ID_dict["sm_compl_permuted_neg"] = property_matched_ids_valid
-    weights_dict["sm_compl_permuted_neg"] = property_matched_train_weights
-    train_dict["sm_compl_permuted_neg"] = property_matched_train
-    valid_dict["sm_compl_permuted_neg"] = property_matched_valid
-
-    train_ID_dict["sm_compl_furthest_neg"] = furthest_negative_ids_train
-    valid_ID_dict["sm_compl_furthest_neg"] = furthest_negative_ids_valid
-    weights_dict["sm_compl_furthest_neg"] = furthest_negative_train_weights
-    train_dict["sm_compl_furthest_neg"] = furthest_negative_train
-    valid_dict["sm_compl_furthest_neg"] = furthest_negative_valid
-
-    # These next two are only validation sets, so they don't get added
-    # to the training data. Important to note: the structures
-    # here are not defined, so one should not use them for structural loss comparisons.
-    # They are only meant to be data for the binder/non-binder prediction task.
-    dude_actives_df = pd.read_pickle(base_path / "dude_valid_actives.pkl")
-    valid_dict["dude_actives"] = dude_actives_df
-    valid_ID_dict["dude_actives"] = dude_actives_df["CLUSTER"].unique()
-    
-    dude_inactives_df = pd.read_pickle(base_path / "dude_valid_inactives.pkl")
-    valid_dict["dude_inactives"] = dude_inactives_df
-    valid_ID_dict["dude_inactives"] = dude_inactives_df["CLUSTER"].unique()
-    return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict
 
 def _load_df(filename, pad_hash=True, eval_cols=[]):
         """load dataframe, zero-pad hash string, parse columns as python objects"""
@@ -898,7 +780,7 @@ def _load_df(filename, pad_hash=True, eval_cols=[]):
         return df
 
 
-def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, diffusion_training=False, add_negatives: bool = True):
+def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, diffusion_training=False):
     """Loads training/validation sets as pandas DataFrames and returns them in
     dictionaries keyed by their dataset names.
 
@@ -1259,11 +1141,6 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     train_ID_dict['sm'] = train_dict['sm'].CLUSTER.values
     valid_ID_dict['sm'] = valid_dict['sm'].CLUSTER.values
     weights_dict['sm'] = torch.ones(len(valid_ID_dict['sm']))
-
-    if add_negatives:
-        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict = \
-            add_negative_sets(train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict,
-                              base_path = Path(loader_params['SM_COMPL_DIR']))
 
     print(f'Done loading datasets in {time.time()-t0} seconds')
 
@@ -3942,8 +3819,7 @@ def loader_sm_compl_assembly_single(*args, **kwargs):
 
 
 def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid2smpartners=None, task='sm_compl_asmb', 
-    num_protein_chains=None, num_ligand_chains=None, pick_top=True, random_noise=5.0, fixbb=False,
-    select_farthest_residues: bool = False, ligand_string_tuple: Optional[Tuple[str, str]] = None, is_negative: bool = False, max_msa_seqs: Optional[int] = None,
+    num_protein_chains=None, num_ligand_chains=None, pick_top=True, random_noise=5.0, fixbb=False, max_msa_seqs: Optional[int] = None,
     remove_residue=True):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
@@ -4013,37 +3889,25 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
         ] #fd remove exclusion list
         return lig_partners
 
-    tag=False
+    lig_partners = _prune_lig_partners(item['PARTNERS'], params)
+    lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + lig_partners
+    xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
+        load_ligands_from_partners(
+            lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, 
+            num_ligand_chains=num_ligand_chains,
+            check_for_nonpartner_duplicates=False
+        )
 
-    if ligand_string_tuple is not None:
-        xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, _ = featurize_ligand_from_string(
-            ligand_string=ligand_string_tuple[1], format=ligand_string_tuple[0])
-        residues_to_atomize = mod_residues_to_atomize
-    else:
-        import time
-        b0 = time.time()
-
-        lig_partners = _prune_lig_partners(item['PARTNERS'], params)
-        b1 = time.time()
-        lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + lig_partners
-        b2 = time.time()
+    #fd remove unsupported metals (param dependent)
+    #fd this needs all ligand coords loaded, so unfortunately we potentially call load_ligands_from_partners twice
+    if params['min_metal_contacts'] > 0:
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
-            load_ligands_from_partners(
-                lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, 
-                num_ligand_chains=num_ligand_chains,
-                check_for_nonpartner_duplicates=False
+            remove_unsupported_metals(
+                lig_partners, xyz_prot, mask_prot, xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, 
+                Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize,
+                prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains,
+                params['min_metal_contacts'], params['min_metal_contact_dist']
             )
-
-        #fd remove unsupported metals (param dependent)
-        #fd this needs all ligand coords loaded, so unfortunately we potentially call load_ligands_from_partners twice
-        if params['min_metal_contacts'] > 0:
-            xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
-                remove_unsupported_metals(
-                    lig_partners, xyz_prot, mask_prot, xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, 
-                    Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize,
-                    prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains,
-                    params['min_metal_contacts'], params['min_metal_contact_dist']
-                )
 
     # combine protein & ligand coordinates
     N_symm_prot = xyz_prot.shape[0]
@@ -4150,41 +4014,35 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     
     # crop around query ligand (1st sm chain)
     # always need to run cropping function to remove erroneous ligand partners 
-    if select_farthest_residues or ligand_string_tuple is not None:
-        assert(len(Ls_prot)==1 and len(Ls_sm)==1), \
-            'crop_sm_compl() should only be called on examples with 1 protein and 1 ligand chain'
-        sel = crop_sm_compl(xyz_prot, xyz_sm[0], Ls_prot + Ls_sm, params['CROP'], mask_prot, 
-                            seq_prot, select_farthest_residues=select_farthest_residues)
+    if sum(Ls_sm)==0:
+        sel = get_crop(len(idx), mask[0], msa.device, params['CROP'])
     else:
-        if sum(Ls_sm)==0:
-            sel = get_crop(len(idx), mask[0], msa.device, params['CROP'])
+        if params['RADIAL_CROP']:
+            sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
         else:
-            if params['RADIAL_CROP']:
-                sel = crop_sm_compl_assembly(xyz[0], mask[0], Ls_prot, Ls_sm, params['CROP'])
-            else:
-                sel = crop_sm_compl_asmb_contig(xyz[0], mask[0], Ls_prot, Ls_sm, bond_feats, params['CROP'], use_partial_ligands=False)
-        mask = reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item)
+            sel = crop_sm_compl_asmb_contig(xyz[0], mask[0], Ls_prot, Ls_sm, bond_feats, params['CROP'], use_partial_ligands=False)
+    mask = reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item)
 
-        msa = msa[:, sel]
-        ins = ins[:, sel]
-        xyz = xyz[:,sel]
-        mask = mask[:,sel]
-        xyz_t = xyz_t[:,sel]
-        f1d_t = f1d_t[:,sel]
-        mask_t = mask_t[:,sel]
-        xyz_prev = xyz_prev[sel]
-        mask_prev = mask_prev[sel]
-        idx = idx[sel]
-        same_chain = same_chain[sel][:,sel]
-        bond_feats = bond_feats[sel][:,sel]
-        ch_label = ch_label[sel]
-        is_prot = is_prot[sel]
-        term_info = term_info[sel]
+    msa = msa[:, sel]
+    ins = ins[:, sel]
+    xyz = xyz[:,sel]
+    mask = mask[:,sel]
+    xyz_t = xyz_t[:,sel]
+    f1d_t = f1d_t[:,sel]
+    mask_t = mask_t[:,sel]
+    xyz_prev = xyz_prev[sel]
+    mask_prev = mask_prev[sel]
+    idx = idx[sel]
+    same_chain = same_chain[sel][:,sel]
+    bond_feats = bond_feats[sel][:,sel]
+    ch_label = ch_label[sel]
+    is_prot = is_prot[sel]
+    term_info = term_info[sel]
 
-        # crop small molecule features, assumes all sm chains are after all protein chains
-        atom_sel = sel[sel>=sum(Ls_prot)] - sum(Ls_prot) # 0 index all the selected atoms
-        frames = frames[atom_sel]
-        chirals = crop_chirals(chirals, atom_sel)
+    # crop small molecule features, assumes all sm chains are after all protein chains
+    atom_sel = sel[sel>=sum(Ls_prot)] - sum(Ls_prot) # 0 index all the selected atoms
+    frames = frames[atom_sel]
+    chirals = crop_chirals(chirals, atom_sel)
         
     # reindex chiral atom positions - assumes all sm chains are after all protein chains
     if chirals.shape[0]>0:
@@ -4205,7 +4063,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
            xyz.float(), mask, idx.long(), \
            xyz_t.float(), f1d_t.float(), mask_t, \
            xyz_prev.float(), mask_prev, \
-           same_chain, False, is_negative, frames, bond_feats, dist_matrix, chirals, ch_label, 'C1', task, item
+           same_chain, False, False, frames, bond_feats, dist_matrix, chirals, ch_label, 'C1', task, item
 
 def loader_atomize_pdb(item, params, homo, n_res_atomize, flank, unclamp=False, 
     pick_top=True, p_homo_cut=0.5, random_noise=5.0):
@@ -4966,30 +4824,7 @@ class DistilledDataset(data.Dataset):
         ])
         self.ligand_dictionary = ligand_dictionary
 
-        self.correct_dataset_ordering = [
-            "pdb",
-            "fb",
-            "compl",
-            "neg_compl",
-            "na_compl",
-            "neg_na_compl",
-            "distil_tf",
-            "tf",
-            "neg_tf",
-            "rna",
-            "dna",
-            "sm_compl",
-            "metal_compl",
-            "sm_compl_multi",
-            "sm_compl_covale",
-            "sm_compl_asmb",
-            "sm",
-            "sm_compl_docked_neg",
-            "sm_compl_permuted_neg",
-            "sm_compl_furthest_neg",
-            "atomize_pdb",
-            "atomize_complex",
-        ]
+        self.correct_dataset_ordering = ["pdb", "fb", "compl", "neg_compl", "na_compl", "neg_na_compl", "distil_tf","tf","neg_tf","rna","dna", "sm_compl", "metal_compl", "sm_compl_multi", "sm_compl_covale", "sm_compl_asmb", "sm", "atomize_pdb", "atomize_complex"]
         for index, (key, dataset_name) in enumerate(zip(self.index_dict.keys(), self.correct_dataset_ordering)):
             error_message = f"Expected dataset {dataset_name} at index {index}, but you provided dataset {key}. "
             error_message += "See DistilledDataset for the correct dataset names and ordering."
@@ -5134,51 +4969,6 @@ class DistilledDataset(data.Dataset):
                 out = self.loader_dict['sm'](item, self.params)
             offset += len(self.index_dict['sm'])
 
-            if index >= offset and index < offset + len(self.index_dict['sm_compl_docked_neg']):
-                if self.ligand_dictionary is None:
-                    raise ValueError("You cannot load negative examples for protein small molecule complexes from " + \
-                                     " the distilled dataset if you haven't provided a ligand_dictionary at __init__.")
-
-                task = 'sm_compl_docked_neg'
-                ID = self.ID_dict['sm_compl_docked_neg'][index - offset]
-                item = sample_item_sm_compl(self.dataset_dict['sm_compl_docked_neg'], ID)
-                nonbinding_ligands = item["NONBINDING_LIGANDS"]
-                nonbinding_ligand_id = np.random.choice(nonbinding_ligands)
-                nonbinding_ligand = self.ligand_dictionary[nonbinding_ligand_id]
-                ligand_string_tuple = ("sdf", nonbinding_ligand)
-
-                out = self.loader_dict['sm_compl_docked_neg'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task=task, num_protein_chains=1, num_ligand_chains=1, ligand_string_tuple=ligand_string_tuple, is_negative=True)
-            offset += len(self.index_dict['sm_compl_docked_neg'])
-
-            if index >= offset and index < offset + len(self.index_dict['sm_compl_permuted_neg']):
-                if self.ligand_dictionary is None:
-                    raise ValueError("You cannot load negative examples for protein small molecule complexes from " + \
-                                     " the distilled dataset if you haven't provided a ligand_dictionary at __init__.")
-                task = 'sm_compl_permuted_neg'
-                ID = self.ID_dict['sm_compl_permuted_neg'][index - offset]
-                item = sample_item_sm_compl(self.dataset_dict['sm_compl_permuted_neg'], ID)
-                nonbinding_ligands = item["NONBINDING_LIGANDS"]
-                nonbinding_ligand_id = np.random.choice(nonbinding_ligands)
-                nonbinding_ligand = self.ligand_dictionary[nonbinding_ligand_id]
-                ligand_string_tuple = ("sdf", nonbinding_ligand)
-
-                out = self.loader_dict['sm_compl_permuted_neg'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task=task, num_protein_chains=1, num_ligand_chains=1, ligand_string_tuple=ligand_string_tuple, is_negative=True)
-            offset += len(self.index_dict['sm_compl_permuted_neg'])
-
-            if index >= offset and index < offset + len(self.index_dict['sm_compl_furthest_neg']):
-                task = 'sm_compl_furthest_neg'
-                ID = self.ID_dict['sm_compl_furthest_neg'][index - offset]
-                item = sample_item_sm_compl(self.dataset_dict['sm_compl_furthest_neg'], ID)
-                out = self.loader_dict['sm_compl_furthest_neg'](item, self.params, self.chid2hash, 
-                self.chid2taxid, task=task, num_protein_chains=1, num_ligand_chains=1, select_farthest_residues=True, is_negative=True)
-                # Note the extra argument to loader_sm_compl_assembly when we load the furthest residues from the ligand
-            offset += len(self.index_dict['sm_compl_furthest_neg'])
-
-            # NOTE: THE DATASETS HAVE TO BE IN ORDER OF INDEX DICT
-            # SINCE THE NEGATIVES ARE LOADED BEFORE atomize_pdb,
-            # THEY HAVE TO GO FIRST
             if index >= offset and index < offset + len(self.index_dict['atomize_pdb']):
                 task = "atomize_pdb"
                 ID = self.ID_dict['atomize_pdb'][index-offset]

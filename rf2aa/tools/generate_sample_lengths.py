@@ -99,9 +99,6 @@ def build_dataset(crop_size, msa_limit):
             sm = loader_sm,
             atomize_pdb = loader_atomize_pdb,
             atomize_complex = loader_atomize_complex,
-            sm_compl_furthest_neg = loader_sm_compl_assembly,
-            sm_compl_permuted_neg = loader_sm_compl_assembly,
-            sm_compl_docked_neg = loader_sm_compl_assembly,
         )
     
     # Get ligand dictionary. This is used for loading negative examples.
@@ -132,7 +129,7 @@ def main(crop_size, msa_limit, output_file, num_samples, num_workers):
     fixed_length_datasets = ['pdb', 'fb']
     
     # Datasets where we pass the sample through the DataLoader to measure the length
-    variable_length_datasets = ["compl", "neg_compl", "na_compl", "neg_na_compl", "distil_tf","tf","neg_tf","rna","dna", "sm_compl", "metal_compl", "sm_compl_multi", "sm_compl_covale", "sm_compl_asmb", "sm", "sm_compl_docked_neg", "sm_compl_permuted_neg", "sm_compl_furthest_neg", "atomize_pdb", "atomize_complex"]
+    variable_length_datasets = ["compl", "neg_compl", "na_compl", "neg_na_compl", "distil_tf","tf","neg_tf","rna","dna", "sm_compl", "metal_compl", "sm_compl_multi", "sm_compl_covale", "sm_compl_asmb", "sm", "atomize_pdb", "atomize_complex"]
 
     # Assert that the monomer and variable dataset lists do not overlap
     assert len(set(fixed_length_datasets) & set(variable_length_datasets)) == 0, "Monomer and variable datasets should not overlap"

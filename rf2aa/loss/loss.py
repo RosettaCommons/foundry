@@ -1670,37 +1670,3 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
 
     return lddt_loss, lddt
 
-
-def compute_binder_nonbinder_metrics(
-    loss_df: pd.DataFrame,
-    binder_nonbinder_tasks: List[str] = ["sm_compl", "sm_compl_permuted_neg", "sm_compl_furthest_neg", "sm_compl_docked_neg", "dude_actives", "dude_inactives"]
-) -> Dict[str, float]:
-    """compute_binder_nonbinder_metrics 
-    Computes binary classification metrics for the binder/non-binder prediction task.
-
-    Args:
-        loss_df (pd.DataFrame): The dataframe of records from valid_pdb_cycle.
-        binder_nonbinder_tasks (List[str], optional): Which tasks to evaluate the prediction on. 
-        Defaults to ["sm_compl", "sm_compl_permuted_neg", "sm_compl_furthest_neg", "sm_compl_docked_neg"].
-
-    Returns:
-        Dict[str, float]: A dictionary of metrics
-    """
-
-    #fd  Not called from training workflow.  Not clear add'l package needed to compute these.
-    from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
-
-    binder_nonbinder_df = loss_df[loss_df["task"].isin(binder_nonbinder_tasks)]
-    true_binder_labels = binder_nonbinder_df["is_binder_label"].to_numpy()
-    binding_probabilities = binder_nonbinder_df["binding_probability"].to_numpy()
-    binding_predictions = (binding_probabilities > 0.5).astype(int)
-
-    binding_auc = roc_auc_score(true_binder_labels, binding_probabilities)
-    binding_f1 = f1_score(true_binder_labels, binding_predictions)
-    binding_accuracy = accuracy_score(true_binder_labels, binding_predictions)
-    binding_metrics_dictionary = {
-        "binding_auc": binding_auc,
-        "binding_f1": binding_f1,
-        "binding_accuracy": binding_accuracy
-    }
-    return binding_metrics_dictionary

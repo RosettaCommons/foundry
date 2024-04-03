@@ -57,13 +57,14 @@ default_dataloader_params = {
         "VAL_TF"           : "%s/tf_valid_clusters_v4.txt"%tf_dir,
         "VAL_SM_STRICT"    : "%s/sm_compl_valid_strict_20230418.csv"%sm_compl_dir, 
         "TEST_SM"          : "%s/sm_test_heldout_test_clusters.txt"%sm_compl_dir,
-        "DATAPKL"          : "%s/dataset_20240318.pkl"%rf2aa_file_path, # cache for faster loading 
+        "DATAPKL"          : "%s/dataset_20240328.pkl"%rf2aa_file_path, # cache for faster loading 
         "DSLF_LIST"        : "%s/list.dslf.csv"%na_dir,
         "DSLF_FB_LIST"     : "%s/list.dslf_fb.csv"%na_dir,
         "DUDE_LIST"        : "/home/dnan/projects/gald_distil_set/nbs/dude_dataset_cutoff_-5.csv", # on digs (dnan)
         "DUDE_MSAS"        : "/home/dnan/projects/gald_distil_set/DUDE/fastas", # on digs (dnan)
         "DUDE_PDB_DIR"     : "/home/dnan/projects/gald_distil_set/DUDE/pdbs_all",
-        "EXAMPLE_LENGTHS"  : "/projects/ml/RF2_allatom/all_sample_lengths_crop_1K.pt",
+        # See rf2aa/tools/generate_sample_lengths.py and rf2aa/tools/edit_lengths_for_removed_datasets.py for how this "EXAMPLE_LENGTHS" is generated
+        "EXAMPLE_LENGTHS"  : "/projects/ml/RF2_allatom/all_sample_lengths_crop_1K_no_negatives.pt",
         "PDB_DIR"          : base_dir,
         "FB_DIR"           : fb_dir,
         "COMPL_DIR"        : compl_dir,
@@ -182,9 +183,6 @@ def get_distilled_dataset(dataset_params, loader_params):
         sm=loader_sm,
         atomize_pdb=loader_atomize_pdb,
         atomize_complex=loader_atomize_complex,
-        sm_compl_furthest_neg=loader_sm_compl_assembly,
-        sm_compl_permuted_neg=loader_sm_compl_assembly,
-        sm_compl_docked_neg=loader_sm_compl_assembly,
     )
 
     train_set = DistilledDataset(

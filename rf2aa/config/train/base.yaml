@@ -31,9 +31,6 @@ dataset_params:
   fraction_atomize_pdb: 0 
   fraction_atomize_complex: 0 
   fraction_sm_compl_asmb: 0
-  fraction_sm_compl_furthest_neg: 0
-  fraction_sm_compl_permuted_neg: 0 
-  fraction_sm_compl_docked_neg: 0 
   n_train: 25600
   n_valid_pdb: 0
   n_valid_homo: 0
@@ -56,11 +53,6 @@ dataset_params:
   n_valid_atomize_pdb: 0 
   n_valid_atomize_complex: 0 
   n_valid_sm_compl_asmb: 0
-  n_valid_sm_compl_furthest_neg: 0 
-  n_valid_sm_compl_permuted_neg: 0 
-  n_valid_sm_compl_docked_neg: 0 
-  n_valid_dude_actives: 0 
-  n_valid_dude_inactives: 0 
   p_homo_cut: 0
   p_short_crop: 0 
   p_dslf_crop: 0 
