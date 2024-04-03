@@ -771,13 +771,43 @@ def generate_xyz_prev(xyz_t, mask_t, params):
 
 
 def _load_df(filename, pad_hash=True, eval_cols=[]):
-        """load dataframe, zero-pad hash string, parse columns as python objects"""
-        df = pd.read_csv(filename, na_filter=False) # prevents chain "NA" loading as NaN
-        if pad_hash: # restore leading zeros, make into string
-            df['HASH'] = df['HASH'].apply(lambda x: f'{x:06d}') 
-        for col in eval_cols:
-            df[col] = df[col].apply(lambda x: ast.literal_eval(x)) # interpret as list of strings
-        return df
+    """load dataframe, zero-pad hash string, parse columns as python objects"""
+    df = pd.read_csv(filename, na_filter=False)  # prevents chain "NA" loading as NaN
+    if pad_hash:  # restore leading zeros, make into string
+        df["HASH"] = df["HASH"].apply(lambda x: f"{x:06d}")
+    for col in eval_cols:
+        df[col] = df[col].apply(
+            lambda x: ast.literal_eval(x)
+        )  # interpret as list of strings
+    return df
+
+
+def params_match_pickle(
+    loader_params: Dict[str, Any],
+    data: Dict[str, Any],
+    match_keys: List[str] = ["ligands_to_remove", "cluster_sm_compl_by_seq_len"],
+) -> bool:
+    """
+    Check if the parameters used to generate the data in the pickle file match the
+    parameters in the current run. This is useful for checking if the data in the pickle
+    file is still valid for the current run.
+
+    Args:
+        loader_params (Dict[str, Any]): The parameters used to load the data.
+        data (Dict[str, Any]): The data loaded from the pickle file.
+        match_keys (List[str], optional): The keys to check for matching. Defaults to ["ligands_to_remove"].
+
+    Returns:
+        bool: True if the parameters match, False otherwise.
+    """
+    for key in match_keys:
+        if key not in data and key not in loader_params:
+            continue
+        elif key not in data or key not in loader_params:
+            return False
+        elif data[key] != loader_params[key]:
+            return False
+    return True
 
 
 def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=False, diffusion_training=False):
@@ -815,42 +845,44 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     ignore = ['DATASETS', 'DATASET_PROB', 'DIFF_MASK_PROBS']
     loader_params = {k:v for k,v in loader_params.items() if k not in ignore}
 
-    # try to load cached datasets 
-    if os.path.exists(loader_params['DATAPKL']):
-        with open(loader_params['DATAPKL'], "rb") as f:
-            if "SLURM_PROCID" in os.environ and int(os.environ["SLURM_PROCID"])==0:
-                print ('Loading',loader_params['DATAPKL'],'...')
+    # try to load cached datasets
+    if os.path.exists(loader_params["DATAPKL"]):
+        with open(loader_params["DATAPKL"], "rb") as f:
+            if "SLURM_PROCID" in os.environ and int(os.environ["SLURM_PROCID"]) == 0:
+                print(f"Loading cached dataset from {loader_params['DATAPKL']}...")
             data = pickle.load(f)
-            if isinstance(data, tuple):
-                train_ID_dict, valid_ID_dict, weights_dict, \
-                    train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra = data
-                return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra
-            if type(data) is dict and data['ligands_to_remove'] == loader_params['ligands_to_remove']:
-                return (
-                    data['train_ID_dict'],
-                    data['valid_ID_dict'],
-                    data['weights_dict'],
-                    data['train_dict'],
-                    data['valid_dict'],
-                    data['homo'],
-                    data['chid2hash'],
-                    data['chid2taxid'],
-                    data['chid2smpartners'],
-                )
+            if type(data) is dict:
+                if no_match_okay or params_match_pickle(loader_params, data):
+                    return (
+                        data["train_ID_dict"],
+                        data["valid_ID_dict"],
+                        data["weights_dict"],
+                        data["train_dict"],
+                        data["valid_dict"],
+                        data["homo"],
+                        data["chid2hash"],
+                        data["chid2taxid"],
+                        data["chid2smpartners"],
+                    )
+                else:
+                    print("Stored dataset does not match config. Regenerating...")
             else:
-                print ('Stored dataset has mismatch in ligand exclusion set! Regenerating...')
-                print ('Specified:',loader_params['ligands_to_remove'])
+                print(
+                    "Stored dataset is not a dictionary, which means you are probably working with an outdated version of the dataset. Regenerating..."
+                )
+    else:
+        print(
+            f"Cached train/valid datasets {loader_params['DATAPKL']} not found. Re-parsing train/valid metadata..."
+        )
 
     t0 = time.time()
-    print(f"cached train/valid datasets {loader_params['DATAPKL']} not found. "\
-          f"re-parsing train/valid metadata...")
-    
+
     # helper functions
     def _apply_date_res_cutoffs(df):
         """filter dataframe by date and resolution cutoffs"""
         return df[(df.RESOLUTION <= loader_params['RESCUT']) & 
                   (df.DEPOSITION.apply(lambda x: parser.parse(x)) <= parser.parse(loader_params['DATCUT']))]
-    
+
     def _get_IDs_weights(df):
         """return unique cluster IDs and AF2-style sampling weights based on seq length"""
         tmp_df = df.drop_duplicates('CLUSTER')
@@ -858,7 +890,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
         weights = (1/512.)*np.clip(tmp_df.LEN_EXIST.values, 256, 512)
         return IDs, torch.tensor(weights)
 
-    #fd remove "bad" ligands from the training/validation sets
+    # fd remove "bad" ligands from the training/validation sets
     def _apply_lig_exclusions(df, excl):
         """filter dataframe by residue exclusions.  if ANY res in multires is excluded, all is."""
         ids=[tuple(y[-1] for y in x) for x in df['LIGAND'].tolist()]
@@ -868,7 +900,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     # containers for returning the training data/metadata
     train_dict, valid_dict, train_ID_dict, valid_ID_dict, weights_dict = \
         OrderedDict(), OrderedDict(), OrderedDict(), OrderedDict(), OrderedDict()
-    
+
     # validation IDs for PDB set
     val_pdb_ids = set([int(l) for l in open(loader_params['VAL_PDB']).readlines()])
     val_compl_ids = set([int(l) for l in open(loader_params['VAL_COMPL']).readlines()])
@@ -936,7 +968,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     compl['HASH_B'] = compl.HASH.apply(lambda x: x.split('_')[1])
     compl['LEN'] = compl['LENA:B'].apply(lambda x: [int(y) for y in x.split(':')])
     compl['LEN_EXIST'] = compl['LEN'].apply(lambda x: sum(x)) # total length, for computing weights
-    
+
     valid_dict['compl'] = compl[compl.CLUSTER.isin(val_compl_ids)]
     train_dict['compl'] = compl[(~compl.CLUSTER.isin(val_compl_ids)) &
                                 (~compl.HASH_A.isin(val_hash)) &
@@ -984,7 +1016,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     valid_dict['neg_na_compl'] = na_neg[na_neg.CLUSTER.isin(val_neg_ids)]
     train_ID_dict['neg_na_compl'], weights_dict['neg_na_compl'] = _get_IDs_weights(train_dict['neg_na_compl'])
     valid_ID_dict['neg_na_compl'] = valid_dict['neg_na_compl'].CLUSTER.drop_duplicates().values
-    
+
     # dna-protein distillation (from TF data) (RM)
     distil_tf = _load_df(loader_params['TF_DISTIL_LIST'])
     distil_tf['CLUSTER'] = distil_tf['cluster_id']
@@ -994,7 +1026,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
             for _, row in distil_tf.iterrows() 
             ]
     distil_tf['LEN_EXIST'] = distil_tf['LEN'].apply(lambda x: sum(x))
-    
+
     train_dict['distil_tf'] = distil_tf[~distil_tf.CLUSTER.isin(val_tf_ids)]
     valid_dict['distil_tf'] = distil_tf[distil_tf.CLUSTER.isin(val_tf_ids)]
     train_ID_dict['distil_tf'], weights_dict['distil_tf'] = _get_IDs_weights(train_dict['distil_tf']) 
@@ -1044,7 +1076,6 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     train_ID_dict['dna'], weights_dict['dna'] = _get_IDs_weights(train_dict['dna'])
     valid_ID_dict['dna'] = valid_dict['dna'].CLUSTER.drop_duplicates().values #fd
 
-
     # protein-small molecule complexes
     def _prep_sm_compl_data(df):
         """repeated operations for protein / small molecule datasets"""
@@ -1055,14 +1086,18 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
         train_df = df[~df.CLUSTER.isin(val_pdb_ids)]
         valid_df = df[df.CLUSTER.isin(val_pdb_ids)]
 
-        seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # standard seq length weighting
-        df.loc[:,'WEIGHT'] = seq_len_factor # can potentially include other factors (ligand cluster size, etc)
+        if loader_params.get("cluster_sm_compl_by_seq_len", True):
+            seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # standard seq length weighting
+            df.loc[:,'WEIGHT'] = seq_len_factor # can potentially include other factors (ligand cluster size, etc)
+        else:
+            df["WEIGHT"] = 1.0
+
         df_clus = df[['CLUSTER','WEIGHT']].groupby('CLUSTER').mean().reset_index()
         clus2weight = dict(zip(df_clus.CLUSTER, df_clus.WEIGHT))
 
         train_IDs = train_df.CLUSTER.drop_duplicates().values
         weights = [clus2weight[i] for i in train_IDs]
-        
+
         valid_IDs = valid_df.CLUSTER.drop_duplicates().values
 
         return train_df, valid_df, train_IDs, valid_IDs, torch.tensor(weights)
@@ -1071,7 +1106,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     df_sm = _load_df(loader_params['SM_LIST'], eval_cols=['COVALENT','LIGAND','LIGXF','PARTNERS'])
     df_sm = _apply_date_res_cutoffs(df_sm)
     df_sm = _apply_lig_exclusions(df_sm, loader_params['ligands_to_remove'])
-    # remove very big things 
+    # remove very big things
     #  (fd: only 80 examples are larger than 196 atoms, the majority are "not useful cases")
     df_sm = df_sm[df_sm['LIGATOMS']<=196] 
 
@@ -1083,7 +1118,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     df = df_sm[df_sm['SUBSET']=='metal']
     train_dict['metal_compl'], valid_dict['metal_compl'], train_ID_dict['metal_compl'], \
         valid_ID_dict['metal_compl'], weights_dict['metal_compl'] = _prep_sm_compl_data(df)
-    
+
     # protein / multi-residue ligand complexes
     df = df_sm[df_sm['SUBSET']=='multi']
     train_dict['sm_compl_multi'], valid_dict['sm_compl_multi'], train_ID_dict['sm_compl_multi'], \
@@ -1105,7 +1140,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     valid_dict['sm_compl_strict'] = val_df
     valid_ID_dict['sm_compl_strict'] = val_df.CLUSTER.drop_duplicates().values
 
-    # rk want to provide ligand context in templates 
+    # rk want to provide ligand context in templates
     # for each unique protein chain map to all the query ligand partners in the dataset
     chid2smpartners = df_sm.groupby("CHAINID").agg(lambda x: [val for val in x])["LIGAND"].to_dict()
 
@@ -1157,8 +1192,8 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
             'chid2hash':chid2hash, 
             'chid2taxid':chid2taxid, 
             'chid2smpartners':chid2smpartners,
-            'ligands_to_remove': loader_params['ligands_to_remove']
         }
+        data.update(loader_params)
         pickle.dump(data, f)
         print ('...done')
 

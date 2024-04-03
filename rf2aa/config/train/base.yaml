@@ -79,6 +79,7 @@ loader_params:
   batch_by_dataset: True
   batch_by_length: True
   ligands_to_remove: []
+  cluster_sm_compl_by_seq_len: True
   min_metal_contacts: 0
   min_metal_contact_dist: 2.6
   sampler_class: DistributedWeightedSampler
