@@ -3549,7 +3549,6 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
         G = get_nxgraph(mol_)
         frames_ = get_atom_frames(msa_, G, omit_permutation=params['OMIT_PERMUTATE'])
         chirals_ = get_chirals(mol_, xyz_[0])
-
         # if ligand has too many masked atoms, remove all masked atoms
         # this avoids wasting compute on ligands missing entire chemical fragments
         # while keeping (most) masked atoms that are isolated and integral to a given fragment
@@ -3598,7 +3597,6 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
             frames_lig.append(frames_)
             chirals_lig.append(chirals_)
             resname_lig.append('_'.join([res[2] for res in ligand]))
-    
     return xyz_lig, mask_lig, msa_lig, bond_feats_lig, akeys_lig, Ls_lig, frames_lig, \
            chirals_lig, resname_lig
 
@@ -3707,6 +3705,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
     xyz_out = torch.full((N_symm,sum(Ls_sm),3), np.nan)
     mask_out = torch.full((N_symm,sum(Ls_sm)), False)
     i_res = 0
+
     for xyz_, mask_ in zip(xyz_sm, mask_sm):
         N_symm_, L_ = xyz_.shape[:2]
         xyz_out[:N_symm_, i_res:i_res+L_] = xyz_

@@ -1011,7 +1011,6 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
         xf = torch.tensor(asmb_xfs[ch2xf[i_ch]][1]).float()
         u,r = xf[:3,:3], xf[:3,3]
         xyz[idx] = torch.einsum('ij,aj->ai', u, xyz[idx]) + r[None,None]
-
     return xyz, occ, seq, chid, akeys
 
 def remove_unresolved_substructures(akeys, lig_bonds, mask_sm):
@@ -1154,7 +1153,8 @@ def get_automorphs(mol, xyz_sm, mask_sm, max_symm=1000):
 
         automorphs = torch.tensor(automorphs)
         n_symmetry = automorphs.shape[0]
-
+        if n_symmetry == 0:
+            raise(ValueError("finding automorphs failed"))
         xyz_sm = xyz_sm[None].repeat(n_symmetry,1,1)
         mask_sm = mask_sm[None].repeat(n_symmetry,1)
 
@@ -1168,6 +1168,7 @@ def get_automorphs(mol, xyz_sm, mask_sm, max_symm=1000):
     if xyz_sm.shape[0] > max_symm:
         xyz_sm = xyz_sm[:max_symm]
         mask_sm = mask_sm[:max_symm]
+    
     return xyz_sm, mask_sm
 
 def expand_xyz_sm_to_ntotal(xyz_sm, mask_sm, N_symmetry=None):

@@ -4,7 +4,7 @@ import torch
 from rf2aa.chemical import ChemicalData as ChemData 
 
 from rf2aa.data.compose_dataset import compose_single_item_dataset, set_data_loader_params
-from rf2aa.data.data_loader import loader_atomize_pdb
+from rf2aa.data.data_loader import loader_atomize_pdb, loader_sm_compl_assembly
 from rf2aa.data.dataloader_adaptor import prepare_input
 from rf2aa.util import is_atom, writepdb
 from rf2aa.tensor_util import assert_shape
@@ -18,46 +18,7 @@ import pdb
 
 #ITEM = \
 #{'Unnamed: 0': 262672, 'CHAINID': '6ywe_UB', 'DEPOSITION': '2020-04-29', 'RESOLUTION': 2.9900, 'HASH': '072380', 'CLUSTER': 9905, 'SEQUENCE': 'MPNKPIRLPPLKQLRVRQANKAEENPCIAVMSSVLACWASAGYNSAGCATVENALRACMDAPKPAPKPNNTINYHLSRFQERLTQGKSKK', 'LEN_EXIST': 88, 'TAXID': '5141'}
-ITEM = \
-{   'ASSEMBLY': 1,
-                    'CHAINID': '2fyf_B',
-                    'CLUSTER': 27356,
-                    'COVALENT': [],
-                    'DEPOSITION': '2006-02-07',
-                    'HASH': '082089',
-                    'LEN_EXIST': 368,
-                    'LIGAND': [('N', '2378', 'PC4')],
-                    'LIGATOMS': 5,
-                    'LIGATOMS_RESOLVED': 5,
-                    'LIGXF': [('N', 13)],
-                    'PARTNERS': [   (   'B',
-                                        1,
-                                        74,
-                                        2.4624111652374268,
-                                        'polypeptide(L)'),
-                                    (   [('K', '2386', 'PC4')],
-                                        [('K', 10)],
-                                        0,
-                                        8.171211242675781,
-                                        'nonpoly'),
-                                    (   'A',
-                                        0,
-                                        0,
-                                        11.453709602355957,
-                                        'polypeptide(L)'),
-                                    (   [('M', '2377', 'PLP')],
-                                        [('M', 12)],
-                                        0,
-                                        21.256412506103516,
-                                        'nonpoly'),
-                                    (   [('D', '1382', 'PC4')],
-                                        [('D', 3)],
-                                        0,
-                                        27.114994049072266,
-                                        'nonpoly')],
-                    'RESOLUTION': 1.5,
-                    'SEQUENCE': 'MSYYHHHHHHLESTSLYKKAGFMADQLTPHLEIPTAIKPRDGRFGSGPSKVRLEQLQTLTTTAAALFGTSHRQAPVKNLVGRVRSGLAELFSLPDGYEVILGNGGATAFWDAAAFGLIDKRSLHLTYGEFSAKFASAVSKNPFVGEPIIITSDPGSAPEPQTDPSVDVIAWAHNETSTGVAVAVRRPEGSDDALVVIDATSGAGGLPVDIAETDAYYFAPQKNFASDGGLWLAIMSPAALSRIEAIAATGRWVPDFLSLPIAVENSLKNQTYNTPAIATLALLAEQIDWLVGNGGLDWAVKRTADSSQRLYSWAQERPYTTPFVTDPGLRSQVVGTIDFVDDVDAGTVAKILRANGIVDTEPYRKLGRNQLRVAMFPAVEPDDVSALTECVDWVVERL'}
-
+ITEM = {'CHAINID': '3p55_A', 'DEPOSITION': '2010-10-07', 'RESOLUTION': 2.0, 'HASH': '078142', 'CLUSTER': 8667, 'SEQUENCE': 'MSHHWGYGKHNGPEHWHKDFPIAKGERQSPVDIDTHTAKYDPSLKPLSVSYDQATSLRILNNGHAFNVEFDDSQDKAVLKGGPLDGTYRLIQFHFHWGSLDGQGSEHTVDKKKYAAELHLVHWNTKYGDFGKAVQQPDGLAVLGIFLKVGSAKPGLQKVVDVLDSIKTKGKSADFTNFDPRGLLPESLDYWTYPGSLTTPPLLECVTWIVLKEPISVSSEQVLKFRKLNFNGEGEPEELMVDNWRPAQPLKNRQIKASFK', 'LEN_EXIST': 257, 'LIGAND': [('B', '300', '670')], 'ASSEMBLY': 1, 'COVALENT': '[]', 'PROT_CHAIN': 'A', 'LIGXF': [('B', 1)], 'PARTNERS': [('A', 0, 194, 2.612750291824341, 'polypeptide(L)'), ([('E', '261', 'ZN')], [('E', 4)], 6, 2.0762431621551514, 'nonpoly')], 'LIGATOMS': 26, 'LIGATOMS_RESOLVED': 26, 'SUBSET': 'organic'}
 
 class DotDict:
     def __init__(self, dictionary):
@@ -74,11 +35,11 @@ cd_params = DotDict({'use_phospate_frames_for_NA':False})
 ChemData(cd_params)
 
 CONFIG = "legacy_train"
-LOADER_FN = loader_atomize_pdb
+LOADER_FN = loader_sm_compl_assembly
 LOADER_KWARGS = {
-            "homo": None,
-            "n_res_atomize": 5,
-            "flank": 0
+            #"homo": None,
+            #"n_res_atomize": 5,
+            #"flank": 0
         }
 
 
@@ -177,8 +138,8 @@ class DebugTestCase(unittest.TestCase):
         trainer.construct_model(device=DEVICE)
         trainer.model.device = DEVICE
         trainer.move_constants_to_device(gpu=DEVICE)
-        #checkpoint_path = "/home/rohith/rf2a-fd3/models/rf2a_fd3_20221125_714.pt"
-        checkpoint_path='/home/davidcj/software/clean_rf2aa/RF2-allatom/ckpts/rf2a_fd3_20221125_714.pt'
+        checkpoint_path = "/home/rohith/rf2a-fd3/models/rf2a_fd3_20221125_714.pt"
+        #checkpoint_path='/home/davidcj/software/clean_rf2aa/RF2-allatom/ckpts/rf2a_fd3_20221125_714.pt'
         trainer.checkpoint = torch.load(checkpoint_path, map_location=DEVICE)
         trainer.model.model.load_state_dict(trainer.checkpoint["final_state_dict"])
         trainer.model.shadow.load_state_dict(trainer.checkpoint["model_state_dict"])
