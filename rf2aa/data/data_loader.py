@@ -39,6 +39,7 @@ from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein
     reindex_protein_feats_after_atomize, get_residue_contacts, atomize_discontiguous_residues, pop_protein_feats, \
     is_atom, get_atom_template_indices, reassign_symmetry_after_cropping, expand_xyz_sm_to_ntotal, Ls_from_same_chain_2d, \
     is_protein, is_nucleic, is_RNA, is_DNA, is_atom
+from rf2aa.data.cluster_dataset import cluster_factory
 assert "rf2aa" in os.path.abspath(cifutils.__file__)
 
 
@@ -781,11 +782,10 @@ def _load_df(filename, pad_hash=True, eval_cols=[]):
         )  # interpret as list of strings
     return df
 
-
 def params_match_pickle(
     loader_params: Dict[str, Any],
     data: Dict[str, Any],
-    match_keys: List[str] = ["ligands_to_remove", "cluster_sm_compl_by_seq_len"],
+    match_keys: List[str] = ["ligands_to_remove", "weight_sm_compl_by_seq_len", "sm_compl_cluster_method"],
 ) -> bool:
     """
     Check if the parameters used to generate the data in the pickle file match the
@@ -1086,7 +1086,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
         train_df = df[~df.CLUSTER.isin(val_pdb_ids)]
         valid_df = df[df.CLUSTER.isin(val_pdb_ids)]
 
-        if loader_params.get("cluster_sm_compl_by_seq_len", True):
+        if loader_params.get("weight_sm_compl_by_seq_len", True):
             seq_len_factor = (1/512.)*np.clip(df.LEN_EXIST, 256, 512) # standard seq length weighting
             df.loc[:,'WEIGHT'] = seq_len_factor # can potentially include other factors (ligand cluster size, etc)
         else:
@@ -1111,6 +1111,12 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
     df_sm = df_sm[df_sm['LIGATOMS']<=196] 
 
     df = df_sm[df_sm['SUBSET']=='organic']
+    # optionally recluster the protein/small molecule complex examples
+
+    cluster_type = loader_params.get("sm_compl_cluster_method", "by_protein_sequence")
+    cluster_fn = cluster_factory[cluster_type]
+    df = cluster_fn(df)
+
     train_dict['sm_compl'], valid_dict['sm_compl'], train_ID_dict['sm_compl'], \
         valid_ID_dict['sm_compl'], weights_dict['sm_compl'] = _prep_sm_compl_data(df)
 
