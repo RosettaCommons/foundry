@@ -866,9 +866,13 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
                     )
                 else:
                     print("Stored dataset does not match config. Regenerating...")
+            elif isinstance(data, tuple):
+                train_ID_dict, valid_ID_dict, weights_dict, \
+                    train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra = data
+                return train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid, *extra
             else:
                 print(
-                    "Stored dataset is not a dictionary, which means you are probably working with an outdated version of the dataset. Regenerating..."
+                    "Stored dataset is not a dictionary or tuple, which means you are probably working with an outdated version of the dataset. Regenerating..."
                 )
     else:
         print(
