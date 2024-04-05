@@ -898,7 +898,7 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
 
     xyz = torch.zeros(L, ChemData().NTOTAL, 3)
     mask = torch.zeros(L, ChemData().NTOTAL).bool()
-    seq = torch.full((L,), np.nan)
+    seq = torch.full((L,), ChemData().UNKINDEX)
     chid = ['-']*L
     resi = ['-']*L
 
