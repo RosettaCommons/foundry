@@ -4806,7 +4806,6 @@ class DatasetSMComplexAssembly(data.Dataset):
 
             if self.ligand_dictionary is not None and chosen_ligand in self.ligand_dictionary:
                 chosen_ligand = self.ligand_dictionary[chosen_ligand]
-            ligand_string_tuple = (self.ligand_column_string_format, chosen_ligand)
 
         try:
             out = self.loader(
@@ -4817,9 +4816,6 @@ class DatasetSMComplexAssembly(data.Dataset):
                 task=self.task,
                 num_protein_chains=self.num_protein_chains,
                 num_ligand_chains=self.num_ligand_chains,
-                select_farthest_residues=self.select_farthest_residues,
-                ligand_string_tuple=ligand_string_tuple,
-                is_negative=self.is_negative
             )
         except Exception as e:
             print('error in DatasetSMComplexAssembly',item)
