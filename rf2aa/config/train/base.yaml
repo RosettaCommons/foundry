@@ -95,7 +95,8 @@ ddp_params:
   port: 12435
 
 training_params: 
-  resume_train: False
+  resume_from_checkpoint_path: null
+  reset_optimizer_params: False
   EMA: 0.99
   weight_decay: 0.01
   learning_rate: .001
@@ -131,7 +132,8 @@ log_params:
   use_wandb: False
   wandb_project: 'rf2aa'
 
-eval_params: null
+eval_params: 
+  checkpoint_path: null
 
 chem_params:
   use_phospate_frames_for_NA: True

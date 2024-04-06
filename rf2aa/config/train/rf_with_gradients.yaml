@@ -152,6 +152,4 @@ dataset_params:
   n_valid_sm_compl: 256
   n_valid_sm_compl_strict: 256
 
-training_params:
-  resume_train: False
 

@@ -158,7 +158,6 @@ dataset_params:
   n_valid_sm_compl: 256
   n_valid_sm_compl_strict: 256
 training_params:
-  resume_train: True
   EMA: 0.99
   weight_decay: 0.01
   learning_rate: .001

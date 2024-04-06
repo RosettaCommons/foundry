@@ -12,6 +12,7 @@ import omegaconf
 from contextlib import nullcontext
 import datetime
 import certifi
+import warnings
 
 from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
 from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items
@@ -71,36 +72,33 @@ class Trainer:
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.training_params.use_amp)
     
     def load_checkpoint(self, rank):
-        if self.config.training_params.resume_train:
-            checkpoint_path = f"{self.output_dir}/{self.config.experiment.name}_last.pt"
+        checkpoint_path = f"{self.output_dir}/{self.config.experiment.name}_last.pt"
+        if self.config.training_params.resume_from_checkpoint_path:
+            checkpoint_path = self.config.training_params.resume_from_checkpoint_path
         elif self.config.eval_params.checkpoint_path:
             checkpoint_path = self.config.eval_params.checkpoint_path
+        # check if checkpoint path is real
+        if not os.path.exists(checkpoint_path):
+            warnings.warn(f"{checkpoint_path} not found, continuing with random parameters")
+            return False
         map_location = {"cuda:0": f"cuda:{rank}"}
         self.checkpoint = torch.load(checkpoint_path, map_location=map_location)
         print(f"Loading checkpoint from {checkpoint_path} on rank:{rank}")
+        return True
 
     def load_model(self):
         torch.cuda.empty_cache()
-        if self.config.training_params.resume_train is None:
-            raise ValueError("Should not load model when resume_train is True")
-        #TODO: check if model should load the final state dict and not the EMA
         self.model.module.model.load_state_dict(self.checkpoint["final_state_dict"], strict=True)
         self.model.module.shadow.load_state_dict(self.checkpoint["model_state_dict"], strict=False)
         print("Checkpoint loaded into model")
 
     def load_optimizer(self):
-        if self.config.training_params.resume_train is None:
-            raise ValueError("Should not load optimizer when resume_train is True") 
         self.optimizer.load_state_dict(self.checkpoint['optimizer_state_dict'])
 
     def load_scheduler(self):
-        if self.config.training_params.resume_train is None:
-            raise ValueError("Should not load scheduler when resume_train is True") 
         self.scheduler.load_state_dict(self.checkpoint['scheduler_state_dict'])
        
     def load_scaler(self):
-        if self.config.training_params.resume_train is None:
-            raise ValueError("Should not load scaler when resume_train is True") 
         self.scaler.load_state_dict(self.checkpoint['scaler_state_dict'])
 
     def construct_dataset(self, init_db, rank, world_size):
@@ -223,23 +221,23 @@ class Trainer:
             self.construct_optimizer()
             self.construct_scheduler()
             self.construct_scaler()
-            if self.config.training_params.resume_train:
-                self.load_checkpoint(gpu)
+            start_epoch = 0
+            loaded_checkpoint = self.load_checkpoint(gpu)
+            if loaded_checkpoint:
+                start_epoch = self.checkpoint["epoch"]
                 self.load_model()
-                try:
+                if not self.config.training_params.reset_optimizer_params:
                     self.load_optimizer()
                     self.load_scheduler()
                     self.load_scaler()
-                except Exception as ex:
-                    print ('Error in loading optimizer parameters:',ex)
-                    print ('Continuing...')
+                else:
+                    warnings.warn(f"User specified reset_optimizer_params=False. Did not load optimizer values from checkpoint")
 
             self.recycle_schedule = recycle_sampling["by_batch"](self.config.loader_params.maxcycle, 
                                                                 self.config.experiment.n_epoch,
                                                                 self.config.dataset_params.n_train,
                                                                 world_size)
-
-            for epoch in range(self.config.experiment.n_epoch):
+            for epoch in range(start_epoch,self.config.experiment.n_epoch):
                 train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
                 self.train_epoch(epoch, rank, world_size)
                 for _, valid_sampler in valid_samplers.items():

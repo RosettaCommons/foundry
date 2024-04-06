@@ -87,7 +87,6 @@ ddp_params:
   port: 12435
 
 training_params: 
-  resume_train: False
   EMA: 0.99
   weight_decay: 0.01
   learning_rate: .001

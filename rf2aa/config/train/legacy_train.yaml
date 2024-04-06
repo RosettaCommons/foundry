@@ -57,5 +57,3 @@ loader_params:
   maxcycle: 10
   maxlat: 256
 
-eval_params:
-  checkpoint_path: "/home/dimaio/RF2-allatom/rf2aa/models/RF2_26a_last.pt"
