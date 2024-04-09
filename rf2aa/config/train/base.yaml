@@ -137,3 +137,5 @@ eval_params:
 
 chem_params:
   use_phospate_frames_for_NA: True
+
+metrics: ["mean_pae", "mean_plddt"]
