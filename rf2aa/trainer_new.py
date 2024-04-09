@@ -73,10 +73,13 @@ class Trainer:
     
     def load_checkpoint(self, rank):
         checkpoint_path = f"{self.output_dir}/{self.config.experiment.name}_last.pt"
-        if self.config.training_params.resume_from_checkpoint_path:
-            checkpoint_path = self.config.training_params.resume_from_checkpoint_path
-        elif self.config.eval_params.checkpoint_path:
+        # 'checkpoint_path' takes priority ... 
+        if self.config.eval_params.checkpoint_path: 
             checkpoint_path = self.config.eval_params.checkpoint_path
+        # ... followed by 'resume_from_checkpoint_path'
+        elif self.config.training_params.resume_from_checkpoint_path:
+            checkpoint_path = self.config.training_params.resume_from_checkpoint_path
+
         # check if checkpoint path is real
         if not os.path.exists(checkpoint_path):
             warnings.warn(f"{checkpoint_path} not found, continuing with random parameters")
@@ -426,7 +429,9 @@ class ComposedTrainer(Trainer):
             atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
             = prepare_input(inputs, self.xyz_converter, gpu)
 
-        output_i = recycle_step_packed(self.model, network_input, n_cycle, self.config.training_params.use_amp, nograds=nograds) 
+        output_i = recycle_step_packed(
+            self.model, network_input, n_cycle, self.config.training_params.use_amp, nograds=nograds
+        )
         seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames = get_loss_calc_items(inputs, device=gpu)
 
         #HACK: indexing into msa and mask msa recycle dimension in arguments of this function

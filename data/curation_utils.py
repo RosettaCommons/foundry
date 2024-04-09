@@ -3,12 +3,17 @@ import numpy as np
 import pandas as pd
 import torch
 from collections import Counter
+import types
 
 script_dir = os.path.dirname(os.path.abspath(__file__)) 
 sys.path.insert(0,script_dir+'/../')
 sys.path.insert(0,script_dir+'/../rf2aa/')
-import rf2aa.chemical as chemical
-from rf2aa.chemical import aa2num, aa2long, NTOTAL, NHEAVY
+#import rf2aa.chemical as chemical
+#from rf2aa.chemical import aa2num, aa2long, NTOTAL, NHEAVY
+from rf2aa.chemical import ChemicalData as ChemData
+
+aa2long = ChemData(types.SimpleNamespace(use_phospate_frames_for_NA=True)).aa2long
+aa2num = ChemData().aa2num
 
 aa2long_ = [[x.strip() if x is not None else None for x in y] for y in aa2long]
 aa2num_ = {k.strip():v for k,v in aa2num.items()}
@@ -148,8 +153,8 @@ def chain_to_xyz(ch, residue_set=None):
         atoms_no_H = {k:v for k,v in ch.atoms.items() if v.element != 1} # exclude hydrogens
         L = len(atoms_no_H)
 
-    xyz = torch.zeros(L, NTOTAL, 3)
-    mask = torch.zeros(L, NTOTAL).bool()
+    xyz = torch.zeros(L, ChemData().NTOTAL, 3)
+    mask = torch.zeros(L, ChemData().NTOTAL).bool()
     seq = torch.full((L,), np.nan)
     chid = ['-']*L
     resi = ['-']*L
@@ -185,11 +190,11 @@ def chain_to_xyz(ch, residue_set=None):
                 continue
             xyz[i, 1, :] = torch.tensor(v.xyz)
             mask[i, 1] = v.occ # fractional occupancies cast to True
-            if v.element not in chemical.atomnum2atomtype:
+            if v.element not in ChemData().atomnum2atomtype:
                 seq[i] = aa2num_['ATM']
                 unrec_elements.add(v.element)
             else:
-                seq[i] = aa2num_[chemical.atomnum2atomtype[v.element]]
+                seq[i] = aa2num_[ChemData().atomnum2atomtype[v.element]]
             chid[i] = k[0]
             resi[i] = k[1]
 
@@ -325,12 +330,12 @@ def get_contacting_chains(asmb_chains, asmb_xforms, lig_xyz_xf, lig_i_ch_xf):
             u,r = xf[:3,:3], xf[:3,3]
             xyz_xf = torch.einsum('ij,raj->rai', u, xyz) + r[None,None]
 
-            atom_xyz = xyz_xf[:,:NHEAVY][mask[:,:NHEAVY].numpy(),:]
+            atom_xyz = xyz_xf[:,:ChemData().NHEAVY][mask[:,:ChemData().NHEAVY].numpy(),:]
             dist = torch.cdist(lig_xyz_xf, atom_xyz, compute_mode='donot_use_mm_for_euclid_dist')
 
-            ca_mask = torch.zeros_like(mask[:,:NHEAVY]).bool()
+            ca_mask = torch.zeros_like(mask[:,:ChemData().NHEAVY]).bool()
             ca_mask[:,1] = True
-            ca_mask = ca_mask[mask[:,:NHEAVY]]
+            ca_mask = ca_mask[mask[:,:ChemData().NHEAVY]]
 
             num_close = (dist[:,ca_mask]<30).any(dim=0).sum() # num C-alphas within 30A
             num_contacts = (dist<5).sum()

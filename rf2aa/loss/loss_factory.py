@@ -369,6 +369,7 @@ def calc_loss(trainer, logit_s, label_s,
         xs_mask_prot, xs_mask_lig = xs_mask.clone(), xs_mask.clone()
         xs_mask_prot[:,~prot_mask_BB] = False
         xs_mask_lig[:,~not_prot_mask_BB] = False
+
         if torch.any(prot_mask_BB) and torch.any(mask_BB[0]):
             rmsd_prot_prot = calc_crd_rmsd(
                 pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
@@ -383,18 +384,39 @@ def calc_loss(trainer, logit_s, label_s,
             )
         else:
             rmsd_lig_lig = torch.tensor([0], device=pred.device)
+
         if torch.any(prot_mask_BB) and torch.any(not_prot_mask_BB) and torch.any(mask_BB[0]):
             rmsd_prot_lig = calc_crd_rmsd(
                 pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
                 atom_mask=xs_mask_prot[:,mask_BB[0]], rmsd_mask=xs_mask_lig[:,mask_BB[0]],
                 alignment_radius=10.0
             )
+
+            # fd rms of target ligand only
+            #fd get target ligand mask
+            #fd this is more difficult than expected with only the data we have
+            #fd   a) target ligand is 1st one
+            #fd   b) examples are all protein followed by ligand
+            sm_mask = not_prot_mask_BB
+            Ls_prot = Ls_from_same_chain_2d(same_chain[:,~sm_mask][:,:,~sm_mask])
+            Ls_sm = Ls_from_same_chain_2d(same_chain[:,sm_mask][:,:,sm_mask])
+            xs_mask_tgt = xs_mask.clone()
+            xs_mask_tgt[:,:sum(Ls_prot)] = False
+            xs_mask_tgt[:,(sum(Ls_prot)+Ls_sm[0]):]= False
+
+            rmsd_prot_tgt = calc_crd_rmsd(
+                pred=pred_allatom[:,mask_BB[0],:,:3], true=nat_symm[None,mask_BB[0],:,:3],
+                atom_mask=xs_mask_prot[:,mask_BB[0]], rmsd_mask=xs_mask_tgt[:,mask_BB[0]],
+                alignment_radius=10.0
+            )
         else:
             rmsd_prot_lig = torch.tensor([0], device=pred.device)
+            rmsd_prot_tgt = torch.tensor([0], device=pred.device)
  
         loss_dict["rmsd_prot_prot"]= rmsd_prot_prot[0].detach()
         loss_dict["rmsd_lig_lig"]= rmsd_lig_lig[0].detach()
         loss_dict["rmsd_prot_lig"]= rmsd_prot_lig[0].detach()
+        loss_dict["rmsd_prot_tgt"]= rmsd_prot_tgt[0].detach()
 
         # cart bonded (bond geometry)
         bond_loss = calc_BB_bond_geom(seq[0], pred_allatom[0:1], idx)

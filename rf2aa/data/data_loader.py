@@ -3817,7 +3817,12 @@ def remove_unsupported_metals(
     i_start = 0
     lig_partners_new = []
     rebuild = False
-    for i,res in enumerate(resnames):
+
+    assert (len(lig_partners) <= len(resnames))
+
+    nligands = len(lig_partners)
+    for i in range(nligands):
+        res = resnames[i]
         i_stop = i_start+Ls_sm[i]
         if res in ChemData().METAL_RES_NAMES:
             assert Ls_sm[i]==1
@@ -3945,9 +3950,10 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     #fd remove unsupported metals (param dependent)
     #fd this needs all ligand coords loaded, so unfortunately we potentially call load_ligands_from_partners twice
     if params['min_metal_contacts'] > 0:
+        lig_partners_trim = lig_partners[:params['MAXLIGCHAINS']]
         xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
             remove_unsupported_metals(
-                lig_partners, xyz_prot, mask_prot, xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, 
+                lig_partners_trim, xyz_prot, mask_prot, xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, 
                 Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize,
                 prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains,
                 params['min_metal_contacts'], params['min_metal_contact_dist']

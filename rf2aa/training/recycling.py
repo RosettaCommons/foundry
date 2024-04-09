@@ -51,6 +51,7 @@ def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False, force
             input_i = add_recycle_inputs(input, output_i, i_cycle, gpu, return_raw=return_raw, use_checkpoint=use_checkpoint)
             rf_outputs, rf_latents = ddp_model(input_i, use_checkpoint=use_checkpoint, use_amp=use_amp)
             output_i = unpack_outputs(rf_outputs, rf_latents, return_raw)
+
     return output_i
 
 def run_model_forward(model, network_input, device="cpu"):

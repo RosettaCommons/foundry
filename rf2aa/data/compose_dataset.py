@@ -31,7 +31,8 @@ rf2aa_file_path = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), os.pardir
 )
 
-posebusters_csv = os.path.join(rf2aa_file_path,"posebusters_benchmark.csv")
+#posebusters_csv = os.path.join(rf2aa_file_path,"posebusters_benchmark.csv")
+posebusters_csv = os.path.join(rf2aa_file_path,"valid_sets/posebusters_clean.csv")
 
 default_dataloader_params = {
         "COMPL_LIST"       : "%s/list.hetero.csv"%compl_dir,
@@ -403,7 +404,7 @@ def compose_posebusters(loader_fn, loader_params, rank, world_size):
             loader_params,
             task='sm_compl',
             num_protein_chains=1,
-            num_ligand_chains=9,
+            num_ligand_chains=999,  # all ligands
         )
     sampler = data.distributed.DistributedSampler(benchmark, rank=rank, num_replicas=world_size)
     loader = data.DataLoader(

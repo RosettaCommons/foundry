@@ -1,6 +1,7 @@
 import torch
 import os
 import hydra
+from omegaconf import OmegaConf
 import pandas as pd
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
@@ -15,7 +16,21 @@ from functools import partial
 
 class PoseBustersBenchmark:
     def __init__(self, config):
-        self.config = config
+        # config file logic for validation, low->high prio:
+        # 1) use default parameters in config/train/base.yml
+        # 2) use parameters saved in model
+        # 3) use specific params in config/inference
+        default_config_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'config/train/base.yaml'
+        )
+        base_config = OmegaConf.load(default_config_path)
+        tmp_data = torch.load(config.eval_params.checkpoint_path, mmap=True)
+        if ('training_config' in tmp_data):
+            train_config = tmp_data['training_config']
+            self.config = OmegaConf.merge(base_config, train_config, config)
+        else:
+            self.config = OmegaConf.merge(base_config, config)
+        tmp_data = None
 
         assert self.config.ddp_params.batch_size == 1, "batch size is assumed to be 1"
         if self.config.experiment.output_dir is not None:
@@ -25,7 +40,7 @@ class PoseBustersBenchmark:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-        self.trainer = trainer_factory[config.experiment.trainer](config=config)
+        self.trainer = trainer_factory[self.config.experiment.trainer](config=self.config)
 
     def construct_dataset(self, rank, world_size):
         #fd initialize chemical data based on input arguments
@@ -88,7 +103,6 @@ class PoseBustersBenchmark:
             pred_crds, alphas, pred_lddts = outputs[5], outputs[6], outputs[8]
             _, pred_allatom = self.trainer.xyz_converter.compute_all_atom(seq[:,0], pred_crds[-1], alphas[-1])
 
-            print (pred_allatom.shape)
             writepdb(f"{self.output_dir}/{item['CHAINID'][0]}_nat.pdb", true_crds[:,0], seq[:,0].long(), bond_feats=bond_feats)
             writepdb(f"{self.output_dir}/{item['CHAINID'][0]}_pred.pdb", pred_allatom[0], seq[:,0].long(), bond_feats=bond_feats)
 
