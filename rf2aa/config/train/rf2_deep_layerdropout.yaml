@@ -69,8 +69,8 @@ loader_params:
   seqid: 150.0
   p_msa_mask: 0.15
   maxcycle: 4
-  nres_atomize_min: 3
-  nres_atomize_max: 5
+  nres_atomize_min: 5
+  nres_atomize_max: 15
   atomize_flank: 0
   p_metal: 1
   p_atomize_modres: 1

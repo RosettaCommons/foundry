@@ -9,6 +9,7 @@ loader_params:
   maxlat: 256
   crop: 1500
   p_msa_mask: 0.0
+  maxcycle: 10
 
 model: 
   embedding:
