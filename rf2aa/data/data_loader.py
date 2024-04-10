@@ -3530,6 +3530,9 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
     xyz_lig, mask_lig, msa_lig, bond_feats_lig, akeys_lig, Ls_lig = [], [], [], [], [], []
     frames_lig, chirals_lig, resname_lig = [], [], [] 
 
+    #fd keep track of the ligands that are added along length dimension (as opposed to conformation)
+    unique_lig = []
+
     for lig_xf in lig_xf_s: # all possible locations for this ligand
         ch2xf = dict(lig_xf)
         xyz_, occ_, msa_, chid_, akeys_ = cif_ligand_to_xyz(lig_atoms, asmb_xfs, ch2xf)
@@ -3572,7 +3575,6 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
             #if not ((occ_<1) & (occ_>0)).all():
             #    print('WARNING: Partial occupancy for a subset of atoms in ligand', ligand)
             #    print('         Adding to permutation dimension as alternate coordinates.')
-
             if len(xyz_lig) == 0:
                 xyz_lig = [xyz_]
                 mask_lig = [mask_]
@@ -3583,9 +3585,11 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
                 frames_lig = [frames_]
                 chirals_lig = [chirals_]
                 resname_lig = ['_'.join([res[2] for res in ligand])]
+                unique_lig = [True]
             else:
                 xyz_lig[0] = torch.cat([xyz_lig[0], xyz_],dim=0)
                 mask_lig[0] = torch.cat([mask_lig[0], mask_],dim=0)
+                unique_lig.append(False)
         else: 
             # full occupancy, add as new chain
             xyz_lig.append(xyz_)
@@ -3597,8 +3601,10 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
             frames_lig.append(frames_)
             chirals_lig.append(chirals_)
             resname_lig.append('_'.join([res[2] for res in ligand]))
+            unique_lig.append(True)
+
     return xyz_lig, mask_lig, msa_lig, bond_feats_lig, akeys_lig, Ls_lig, frames_lig, \
-           chirals_lig, resname_lig
+           chirals_lig, resname_lig, unique_lig
 
 def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
     """Loads multiple ligands chains from parsed CIF assembly into tensors.
@@ -3671,12 +3677,16 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
     # load all ligands
     xyz_sm, mask_sm, = [], []
     msa_sm, bond_feats_sm, akeys_sm, Ls_sm, frames, chirals, resnames = [], [], [], [], [], [], []
+
+    #fd keep track of the ligands that are added along length dimension (as opposed to conformation)
+    uniques = []
+
     for ligkey, lig_xf_s in lig2xf.items():
 
         ligand = ast.literal_eval(ligkey)
 
         xyz_lig, mask_lig, msa_lig, bond_feats_lig, akeys_lig, Ls_lig, frames_lig, \
-        chirals_lig, resname_lig = \
+        chirals_lig, resname_lig, unique_lig = \
             featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params)
 
 
@@ -3694,6 +3704,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
         frames.extend(frames_lig)
         chirals.extend(chirals_lig)
         resnames.extend(resname_lig)
+        uniques.extend(unique_lig)
 
     # concatenate features
     msa_sm = torch.cat(msa_sm, dim=0)
@@ -3733,7 +3744,7 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
     ch_label_sm = torch.cat(ch_label_sm, dim=0)
 
     return xyz_sm, mask_sm, msa_sm[None], bond_feats_sm, frames, chirals, Ls_sm, \
-           ch_label_sm, akeys_sm, resnames
+           ch_label_sm, akeys_sm, resnames, uniques
 
 
 def featurize_ligand_from_string(ligand_string: str, format: str = "smiles"):
@@ -3792,7 +3803,7 @@ def load_ligands_from_partners(
     residues_to_atomize.update(set(mod_residues_to_atomize))
 
     # load ligands
-    xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names = \
+    xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, uniques = \
         featurize_asmb_ligands(lig_partners, params, chains, asmb_xfs, covale)
 
     if (check_for_nonpartner_duplicates):
@@ -3805,27 +3816,35 @@ def load_ligands_from_partners(
             print(f"The error was: {e}.")
             pass
 
-    return xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, list(residues_to_atomize)
+    return xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, lig_names, list(residues_to_atomize), uniques
 
 def remove_unsupported_metals(
-    lig_partners, 
-    xyz_prot, mask_prot, xyz_sm, mask_sm, 
+    lig_partners, xyz_prot, mask_prot, xyz_sm, mask_sm, 
     msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize,
-    prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains,
+    prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains, uniques,
     min_metal_contacts, min_metal_contact_dist
 ):
     i_start = 0
     lig_partners_new = []
     rebuild = False
 
-    assert (len(lig_partners) <= len(resnames))
-
     nligands = len(lig_partners)
-    for i in range(nligands):
-        res = resnames[i]
-        i_stop = i_start+Ls_sm[i]
+    assert (len(uniques) == nligands)
+
+    i_unique = -1
+    for i_lig in range(nligands):
+        if (not uniques[i_lig]):
+            res = resnames[i_unique]
+            if res not in ChemData().METAL_RES_NAMES:
+                lig_partners_new.append(lig_partners[i_lig]) # alternate conf of a non-metal, keep
+            continue
+
+        i_unique += 1
+        res = resnames[i_unique]
+        i_stop = i_start+Ls_sm[i_unique]
+
         if res in ChemData().METAL_RES_NAMES:
-            assert Ls_sm[i]==1
+            assert Ls_sm[i_unique]==1
 
             # 1) get ligand contacts
             ds = torch.linalg.norm(xyz_sm[0] - xyz_sm[0,i_start], dim=-1)
@@ -3838,12 +3857,12 @@ def remove_unsupported_metals(
             ds = torch.linalg.norm(xyz_prot[0,resmask,:] - xyz_sm[0,i_start], dim=-1)
             nprot = sum( ds[mask_prot[0,resmask]]<min_metal_contact_dist )
             if nprot+nself >= min_metal_contacts:
-                lig_partners_new.append(lig_partners[i])
+                lig_partners_new.append(lig_partners[i_lig])
             else:
                 rebuild = True
         else:
             # nonmetal, keep
-            lig_partners_new.append(lig_partners[i])
+            lig_partners_new.append(lig_partners[i_lig])
 
         i_start = i_stop
 
@@ -3851,7 +3870,7 @@ def remove_unsupported_metals(
         if len(lig_partners_new) == 0: # no ligands left after trimming
             return (
                 torch.tensor([]), torch.tensor([],dtype=torch.bool), torch.tensor([]), [], torch.tensor([],dtype=torch.long), \
-                torch.tensor([]),  [], torch.tensor([],dtype=torch.long), [], [], []
+                torch.tensor([]),  [], torch.tensor([],dtype=torch.long), [], [], [], []
             )
         else:
             return load_ligands_from_partners(
@@ -3860,7 +3879,7 @@ def remove_unsupported_metals(
                     check_for_nonpartner_duplicates=False
                 )
     else:
-        return xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize
+        return xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize, uniques
 
 def loader_sm_compl_assembly_single(*args, **kwargs): 
     kwargs['num_protein_chains'] = 1
@@ -3940,7 +3959,7 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
 
     lig_partners = _prune_lig_partners(item['PARTNERS'], params)
     lig_partners = [(item['LIGAND'], item['LIGXF'], -1, -1, 'nonpoly')] + lig_partners
-    xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
+    xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize, uniques = \
         load_ligands_from_partners(
             lig_partners, prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, 
             num_ligand_chains=num_ligand_chains,
@@ -3951,11 +3970,11 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     #fd this needs all ligand coords loaded, so unfortunately we potentially call load_ligands_from_partners twice
     if params['min_metal_contacts'] > 0:
         lig_partners_trim = lig_partners[:params['MAXLIGCHAINS']]
-        xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize = \
+        xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize, uniques = \
             remove_unsupported_metals(
-                lig_partners_trim, xyz_prot, mask_prot, xyz_sm, mask_sm, msa_sm, bond_feats_sm, frames, chirals, 
-                Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize,
-                prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains,
+                lig_partners_trim, xyz_prot, mask_prot, xyz_sm, mask_sm, 
+                msa_sm, bond_feats_sm, frames, chirals, Ls_sm, ch_label_sm, akeys_sm, resnames, residues_to_atomize,
+                prot_partners, asmb_xfs, chains, covale, params, mod_residues_to_atomize, num_ligand_chains, uniques,
                 params['min_metal_contacts'], params['min_metal_contact_dist']
             )
 
