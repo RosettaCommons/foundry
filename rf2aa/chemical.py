@@ -3,7 +3,9 @@ import torch
 import numpy as np
 from pathlib import Path
 from typing import Optional
+from hydra import compose, initialize
 import threading
+import warnings
 
 import scipy.sparse
 import scipy.sparse.csgraph
@@ -56,8 +58,13 @@ def th_dih(a,b,c,d):
     return th_dih_v(a-b,b-c,c-d)
 
 # helper function to load chemical database with specified config
-def initialize_chemdata(config, worker_id=None):
-    ChemicalData(config)
+def initialize_chemdata(config=None, worker_id=None):
+    if config is None:
+        with initialize(config_path='config/train'):
+            config = compose(config_name="base")
+            warnings.warn("No config provided, using default config for chemical params")
+        
+    ChemicalData(config.chem_params)
 
 # A singleton class that stores chemical data
 class ChemicalData:
