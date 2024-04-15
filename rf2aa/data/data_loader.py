@@ -3689,7 +3689,6 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
         chirals_lig, resname_lig, unique_lig = \
             featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params)
 
-
         # residue numbering offset for chirals
         for i in range(len(chirals_lig)):
             if chirals_lig[i].shape[0]>0:
@@ -3829,7 +3828,7 @@ def remove_unsupported_metals(
     rebuild = False
 
     nligands = len(lig_partners)
-    assert (len(uniques) == nligands)
+    assert (len(uniques) >= nligands) #fd this is > since atomized residues may implicitly get added
 
     i_unique = -1
     for i_lig in range(nligands):

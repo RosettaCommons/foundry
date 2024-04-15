@@ -45,7 +45,7 @@ class PoseBustersBenchmark:
     def construct_dataset(self, rank, world_size):
         #fd initialize chemical data based on input arguments
         #   this needs to be initialized first
-        init = partial(initialize_chemdata,self.config.chem_params)
+        init = partial(initialize_chemdata,self.config)
         init()
 
         return compose_posebusters(init, self.config.loader_params, rank, world_size)
