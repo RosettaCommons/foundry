@@ -187,7 +187,7 @@ class Trainer:
 
         #fd initialize chemical data based on input arguments
         #   this needs to be initialized first
-        init = partial(initialize_chemdata, self.config.chem_params)
+        init = partial(initialize_chemdata, self.config)
         init()
 
         # Define context manager for training run (either nullcontext or W&B)

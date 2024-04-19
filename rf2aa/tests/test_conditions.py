@@ -62,7 +62,7 @@ def setup_data(config=None, overrides=None):
     with initialize(version_base=None, config_path="../config/train"):
         cfg = compose(config_name=config, overrides=cfg_overrides)
  
-    chem_params = cfg.chem_params
+    cfgs = cfg
     loader_params = set_data_loader_params(loader_params=cfg.loader_params) 
     names = list(datasets.keys())
     loaders = [ datasets[i][0] for i in names]
@@ -70,8 +70,8 @@ def setup_data(config=None, overrides=None):
     loader_kwargs = [ datasets[i][2] for i in names]
 
     loader_params_list  = [loader_params] * len(datasets)
-    chem_params_list  = [chem_params] * len(datasets)
-    return dict(zip(names, zip(names, items, loader_params_list, chem_params_list, loaders, loader_kwargs)))
+    cfgs_list  = [cfgs] * len(datasets)
+    return dict(zip(names, zip(names, items, loader_params_list, cfgs_list, loaders, loader_kwargs)))
 
 # set up models for regression tests
 def setup_models(device="cpu"):

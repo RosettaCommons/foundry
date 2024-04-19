@@ -21,7 +21,7 @@ def get_sampler(config_name: str = "base", rank: int = 0, world_size: int = 1):
     with hydra.initialize(version_base=None, config_path="../config/train"):
         config = hydra.compose(config_name=config_name, overrides=overrides)
 
-    init_fn = partial(initialize_chemdata, config.chem_params)
+    init_fn = partial(initialize_chemdata, config)
     init_fn()
 
     train_loader, train_sampler, _, _ = compose_dataset(

@@ -1129,6 +1129,7 @@ class LJLoss(torch.autograd.Function):
         sd6 = sd2 * sd2 * sd2
         sd12 = sd6 * sd6
         ljE = epsilon * (sd12 - 2 * sd6)
+
         ljE[linpart] += epsilon.repeat(N,1)[linpart] * (
             -12 * sd12[linpart]/deff[linpart] + 12 * sd6[linpart]/deff[linpart]
         ) * (dist[linpart]-deff[linpart])
@@ -1237,7 +1238,8 @@ class LJLoss(torch.autograd.Function):
 
             ljss = torch.sqrt( ljparams[seqi,ai,1] * ljparams[seqj,aj,1] + eps )
             ljss [potential_disulf] = 0.0
-            
+
+
             ljval_batch,dljEdd_i = LJLoss.ljVdV(deltas,ljrs,ljss,lj_lin,eps)
 
             if not normNviolations:
@@ -1249,12 +1251,14 @@ class LJLoss(torch.autograd.Function):
                 dljEdd_i = dljEdd_i / natoms
             else: # mean over "clashing" atoms
                 dist = torch.sqrt( torch.sum ( torch.square( deltas ), dim=-1 ) + eps )
-                clashes  = ljrs-dist
-                
-                clashing_pairs = torch.where(clashes < 0, 0, clashes)
-                natoms = torch.sum(clashing_pairs) + 0.1
-                ljval_batch = ljval_batch / natoms
-                dljEdd_i = dljEdd_i / natoms
+
+                # count clashes (2 atoms closer than 90% of vdw radii)
+                # normalize by (#clashes)+1
+                # +1 ensures LJ is never "over-weighted"
+                nclash = torch.sum(dist < 0.9*ljrs) + 1.0
+
+                ljval_batch = ljval_batch / nclash
+                dljEdd_i = dljEdd_i / nclash
 
             ljval += ljval_batch 
 
@@ -1262,8 +1266,8 @@ class LJLoss(torch.autograd.Function):
             # note this is stochastic op on GPU
             idxI,idxJ = rii[ridx]*A + ai, rjj[ridx]*A + aj
 
-            dljEdx.view(N,-1,3).index_add_(1, idxI, dljEdd_i[...,None]*deltas, alpha=1.0/natoms)
-            dljEdx.view(N,-1,3).index_add_(1, idxJ, dljEdd_i[...,None]*deltas, alpha=-1.0/natoms)
+            dljEdx.view(N,-1,3).index_add_(1, idxI, dljEdd_i[...,None]*deltas)
+            dljEdx.view(N,-1,3).index_add_(1, idxJ, dljEdd_i[...,None]*deltas)
 
         ctx.save_for_backward(dljEdx)
 

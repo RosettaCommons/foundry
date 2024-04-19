@@ -2409,21 +2409,12 @@ class ChemicalData:
                     self.idx2aatype.append(y)
         self.aatype2idx = {x:i for i,x in enumerate(self.idx2aatype)}
 
-        # element indices
-        self.idx2elt = []
-        for x in self.aa2elt:
-            for y in x:
-                if y and y not in self.idx2elt:
-                    self.idx2elt.append(y)
-        self.elt2idx = {x:i for i,x in enumerate(self.idx2elt)}
-
         # LJ/LK scoring parameters
         self.atom_type_index = torch.zeros((self.NAATOKENS,self.NTOTAL), dtype=torch.long)
-        self.element_index = torch.zeros((self.NAATOKENS,self.NTOTAL), dtype=torch.long)
 
         self.ljlk_parameters = torch.zeros((self.NAATOKENS,self.NTOTAL,5), dtype=torch.float)
         self.lj_correction_parameters = torch.zeros((self.NAATOKENS,self.NTOTAL,4), dtype=bool) # donor/acceptor/hpol/disulf
-        for i in range(self.NNAPROTAAS):
+        for i in range(self.NAATOKENS):
             for j,a in enumerate(self.aa2type[i]):
                 if (a is not None):
                     self.atom_type_index[i,j] = self.aatype2idx[a]
@@ -2432,10 +2423,6 @@ class ChemicalData:
                     self.lj_correction_parameters[i,j,1] = (type2hb[a]==HbAtom.AC)+(type2hb[a]==HbAtom.DA)
                     self.lj_correction_parameters[i,j,2] = (type2hb[a]==HbAtom.HP)
                     self.lj_correction_parameters[i,j,3] = (a=="SH1" or a=="HS")
-            for j,a in enumerate(self.aa2elt[i]):
-                if (a is not None):
-                    self.element_index[i,j] = self.elt2idx[a]
-
 
         self.hbtypes = torch.full((self.NAATOKENS,self.NTOTAL,3),-1, dtype=torch.long) # (donortype, acceptortype, acchybtype)
         self.hbbaseatoms = torch.full((self.NAATOKENS,self.NTOTAL,2),-1, dtype=torch.long) # (B,B0) for acc; (D,-1) for don

@@ -115,7 +115,7 @@ def setup_test(example, model):
 
     # initialize chemical database.  Force a reload
     ChemData.reset()
-    init = partial(initialize_chemdata,config.chem_params)
+    init = partial(initialize_chemdata,config)
     init()
     
     model = random_param_init(model)
