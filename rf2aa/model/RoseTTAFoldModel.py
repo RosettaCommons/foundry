@@ -53,6 +53,7 @@ class LegacyRoseTTAFoldModule(nn.Module):
         d_t1d=0,
         p_drop=0.15,
         additional_dt1d=0,
+        additional_dt2d=0,
         recycling_type="msa_pair",
         SE3_param={}, SE3_ref_param={},
         atom_type_index=None, 
@@ -107,7 +108,8 @@ class LegacyRoseTTAFoldModule(nn.Module):
                                    sym_method=sym_method, 
                                    main_block=main_block, 
                                    copy_main_block=copy_main_block_template,
-                                   additional_dt1d=additional_dt1d)
+                                   additional_dt1d=additional_dt1d,
+                                   additional_dt2d=additional_dt2d)
 
         # Update inputs with outputs from previous round
 
