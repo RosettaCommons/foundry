@@ -249,13 +249,15 @@ class Templ_emb(nn.Module):
     #   - tiled AA sequence (20 standard aa + gap)
     #   - confidence (1)
     #   
-    def __init__(self, d_t1d=0, d_t2d=67+1, d_tor=0, d_pair=128, d_state=32, 
+    def __init__(self, d_t1d=0, d_t2d=0, d_tor=0, d_pair=128, d_state=32, 
                  n_block=2, d_templ=64,
                  n_head=4, d_hidden=16, p_drop=0.25,
                  symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='mean', 
-                 main_block=None, copy_main_block=None, additional_dt1d=0, additional_dt2d=0):
+                 main_block=None, copy_main_block=None, additional_dt1d=0):
         if d_t1d==0:
             d_t1d=(ChemData().NAATOKENS-1)+1
+        if d_t2d==0:
+            d_t2d=67+1
         if d_tor==0:
             d_tor=3*ChemData().NTOTALDOFS
 
@@ -264,7 +266,6 @@ class Templ_emb(nn.Module):
         self.copy_main_block = copy_main_block
         self.repeat_length = repeat_length
         d_t1d += additional_dt1d
-        d_t2d += additional_dt2d
 
         super(Templ_emb, self).__init__()
         # process 2D features
