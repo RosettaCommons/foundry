@@ -36,6 +36,9 @@ for fn in filenames[args.istart:args.istart+args.num]:
                 if not ligand_chids.issubset(set([x[0] for x in asmb[i_a]])):
                     continue
 
+                if has_non_biological_bonds(lig_covale):
+                    continue
+
                 records.append(dict(
                     PDBID=pdbid,
                     LIGAND=lig,

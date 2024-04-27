@@ -16,3 +16,8 @@ ruff.toml
 */scratch/
 */wandb/
 rf2aa/dataset_20240318.pkl
+*.csv
+*.err
+*.log
+*.json
+data/run.sh

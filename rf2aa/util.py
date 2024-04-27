@@ -923,7 +923,9 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
         chid[i_res] = ch_letter
         resi[i_res] = res_num
 
-    xf = torch.tensor(ch_xf[1]).float()
+    xf = ch_xf[1]
+    if not isinstance(xf, torch.Tensor):
+        xf = torch.tensor(xf).float()
     u,r = xf[:3,:3], xf[:3,3]
     xyz_xf = torch.einsum('ij,raj->rai', u, xyz) + r[None,None]
 
@@ -1008,7 +1010,9 @@ def cif_ligand_to_xyz(atoms, asmb_xfs, ch2xf, input_akeys=None):
     for i_ch in np.unique(chid):
         if i_ch not in ch2xf: continue # indicates ligand chains with zero occupied atoms
         idx = chid==i_ch
-        xf = torch.tensor(asmb_xfs[ch2xf[i_ch]][1]).float()
+        xf = asmb_xfs[ch2xf[i_ch]][1]
+        if not isinstance(xf, torch.Tensor):
+            xf = torch.tensor(xf).float()
         u,r = xf[:3,:3], xf[:3,3]
         xyz[idx] = torch.einsum('ij,aj->ai', u, xyz[idx]) + r[None,None]
     return xyz, occ, seq, chid, akeys

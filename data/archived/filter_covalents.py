@@ -12,7 +12,7 @@ parser.add_argument("-num", type=int)
 parser.add_argument("-outdir", default='results_filter_covalents/')
 args = parser.parse_args()
 
-def is_weird(covalents):
+def has_non_biological_bonds(covalents):
     """Detects non-biological bonds"""
     has_oxygen_oxygen_bond = any([a1[3][0]=='O' and a2[3][0]=='O' for (a1,a2) in covalents])
     has_fluorine_fluorine_bond = any([a1[3][0]=='F' and a2[3][0]=='F' for (a1,a2) in covalents])
@@ -57,7 +57,7 @@ for i,row in df.iterrows():
 
     # remove covalent examples with non-biological bonds
     if len(row['COVALENT'])>0:
-        if is_weird(row['COVALENT']):
+        if has_non_biological_bonds(row['COVALENT']):
             print('non-biological protein-ligand bond',row['CHAINID'],row['LIGAND'])
             continue
 
@@ -98,7 +98,7 @@ for i,row in df.iterrows():
                 if any([bond.a[:3]==res or bond.b[:3]==res for res in p[0]]):
                     bonds.append((bond.a, bond.b))
             if len(bonds)>0:
-                if is_weird(bonds):
+                if has_non_biological_bonds(bonds):
                     print('non-biological protein-ligand bond in partner',row['CHAINID'],p)
                     continue
             

@@ -331,6 +331,7 @@ def MSAFeaturize(
             f"Truncating MSA to {params['MSA_LIMIT']} sequences. Only to be used for length pre-computation, NOT training."
         )
         msa = msa[: params["MSA_LIMIT"]]
+        seed_msa_clus = None
 
     if fixbb:
         p_mask = 0
@@ -4122,8 +4123,6 @@ def loader_sm_compl_assembly(item, params, chid2hash=None, chid2taxid=None, chid
     # create MSA features from cropped msa and insertions
     # if len(msa) > params['BLOCKCUT']:
     #     msa, ins = MSABlockDeletion(msa.long(), ins.long())
-    if max_msa_seqs is not None:
-        msa = msa[:max_msa_seqs]
     seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = \
         MSAFeaturize(msa.long(), ins.long(), params, p_mask=params["p_msa_mask"], term_info=term_info, fixbb=fixbb, seed_msa_clus=seed_msa_clus)
 

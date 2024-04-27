@@ -680,13 +680,14 @@ def parse_templates_raw(ffdb, hhr_fn, atab_fn, max_templ=20):
 
     xyz = np.vstack(xyz).astype(np.float32)
     mask = np.vstack(mask).astype(bool)
-    qmap = np.vstack(qmap).astype(np.long)
+    qmap = np.vstack(qmap).astype(np.int_)
+    f0d = np.vstack(f0d).astype(np.float32)
     f1d = np.vstack(f1d).astype(np.float32)
-    seq = np.hstack(seq).astype(np.long)
+    seq = np.hstack(seq).astype(np.int_)
     ids = ids
 
     return torch.from_numpy(xyz), torch.from_numpy(mask), torch.from_numpy(qmap), \
-           torch.from_numpy(f1d), torch.from_numpy(seq), ids
+           torch.from_numpy(f0d), torch.from_numpy(f1d), torch.from_numpy(seq), ids
 
 def read_templates(qlen, ffdb, hhr_fn, atab_fn, n_templ=10):
     xyz_t, mask_t, qmap, t1d, seq, ids = parse_templates_raw(ffdb, hhr_fn, atab_fn, max_templ=max(n_templ, 20))

@@ -25,7 +25,7 @@ export PYTHONPATH=".../RF2-allatom"
 
 First, run the test suite:
 ```
-apptainer exec --nv /software/containers/versions/SE3nv/SE3nv-20240301.sif pytest tests/
+apptainer exec --nv /software/containers/versions/SE3nv/SE3nv-20240415.sif pytest tests/
 ```
 If all the tests pass, you have a stable version of the code.
 
@@ -33,7 +33,7 @@ If all the tests pass, you have a stable version of the code.
 
 We use a package called hydra to configure different training runs of the model. Config files for different training runs can be found in `rf2aa/config/train`. The base trainable version is `rf2aa/config/train/rf2aa.yaml`, to run training with this version, run:
 ```
-/software/containers/versions/SE3nv/SE3nv-20240301.sif trainer_new.py --config-name rf2aa
+/software/containers/versions/SE3nv/SE3nv-20240415.sif trainer_new.py --config-name rf2aa
 ```
 These tests are most often run on a4000s on digs. If you have a separate installation of cifutils in your home directory, this can potentially break the tests.
 

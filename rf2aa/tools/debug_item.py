@@ -67,6 +67,43 @@ def transfer_tensors_to_device(obj_list, device):
                     obj_list[i][key] = transfer_tensors_to_device(value, device)
         return obj_list
 
+
+def check_inputs(inputs):
+    (
+        seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
+        xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, 
+        atom_frames, bond_feats, dist_matrix, chirals, ch_label, symmgp, task, item
+    ) = inputs
+    B, recycles, N, L = msa.shape[:4]
+    num_atoms = (is_atom(seq[0,0]).sum()).item()
+    assert_shape(seq, (B, recycles, L))
+    assert_shape(msa, (B, recycles, N, L))
+    assert_shape(msa_masked, (B, recycles, N, L, 164)) #Hack: hardcoded for current featurization
+    N_full = msa_full.shape[2]
+    assert_shape(msa_full, (B, recycles, N_full, L, 83)) #HACK:: hardcoded for current features
+    assert_shape(mask_msa, (B, recycles, N, L)) 
+    N_symm = true_crds.shape[1]
+    assert_shape(true_crds, (B, N_symm, L, ChemData().NTOTAL, 3))
+    assert_shape(mask_crds, (B, N_symm, L, ChemData().NTOTAL))
+    assert_shape(idx_pdb, (B, L))
+    N_templ = xyz_t.shape[1]
+    assert_shape(xyz_t, (B, N_templ, L, ChemData().NTOTAL, 3))
+    assert_shape(t1d, (B, N_templ, L, 80)) # hack hard coded dimension
+    assert_shape(mask_t, (B, N_templ, L, ChemData().NTOTAL))
+    assert_shape(xyz_prev, (B, L, ChemData().NTOTAL, 3))
+    assert_shape(mask_prev, (B, L, ChemData().NTOTAL))
+    assert_shape(same_chain, (B, L, L))
+    assert type(unclamp.item()) == bool
+    assert type(negative.item()) == bool
+    assert_shape(atom_frames, (B, num_atoms, 3,2))
+    assert_shape(bond_feats, (B, L, L))
+    assert_shape(dist_matrix, (B, L, L))
+    n_chirals = chirals.shape[1]
+    assert_shape(chirals, (B, n_chirals, 5))
+    assert_shape(ch_label, (B, L))
+    assert symmgp[0] == "C1", f"{symmgp}"
+
+
 # class Debug():
 class DebugTestCase(unittest.TestCase):
     
@@ -86,39 +123,7 @@ class DebugTestCase(unittest.TestCase):
     def test_correct_shapes(self):
         """ test shapes are all consistent with each other """
         for inputs in self.loader:
-            (
-            seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
-            xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, 
-            atom_frames, bond_feats, dist_matrix, chirals, ch_label, symmgp, task, item
-        ) = inputs
-        B, recycles, N, L = msa.shape[:4]
-        num_atoms = (is_atom(seq[0,0]).sum()).item()
-        assert_shape(seq, (B, recycles, L))
-        assert_shape(msa, (B, recycles, N, L))
-        assert_shape(msa_masked, (B, recycles, N, L, 164)) #Hack: hardcoded for current featurization
-        N_full = msa_full.shape[2]
-        assert_shape(msa_full, (B, recycles, N_full, L, 83)) #HACK:: hardcoded for current features
-        assert_shape(mask_msa, (B, recycles, N, L)) 
-        N_symm = true_crds.shape[1]
-        assert_shape(true_crds, (B, N_symm, L, ChemData().NTOTAL, 3))
-        assert_shape(mask_crds, (B, N_symm, L, ChemData().NTOTAL))
-        assert_shape(idx_pdb, (B, L))
-        N_templ = xyz_t.shape[1]
-        assert_shape(xyz_t, (B, N_templ, L, ChemData().NTOTAL, 3))
-        assert_shape(t1d, (B, N_templ, L, 80)) # hack hard coded dimension
-        assert_shape(mask_t, (B, N_templ, L, ChemData().NTOTAL))
-        assert_shape(xyz_prev, (B, L, ChemData().NTOTAL, 3))
-        assert_shape(mask_prev, (B, L, ChemData().NTOTAL))
-        assert_shape(same_chain, (B, L, L))
-        assert type(unclamp.item()) == bool
-        assert type(negative.item()) == bool
-        assert_shape(atom_frames, (B, num_atoms, 3,2))
-        assert_shape(bond_feats, (B, L, L))
-        assert_shape(dist_matrix, (B, L, L))
-        n_chirals = chirals.shape[1]
-        assert_shape(chirals, (B, n_chirals, 5))
-        assert_shape(ch_label, (B, L))
-        assert symmgp[0] == "C1", f"{symmgp}"
+            check_inputs(inputs)
 
         print('Done with test_correct_shapes ')
 

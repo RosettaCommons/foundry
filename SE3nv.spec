@@ -9,7 +9,7 @@ rsync -a --no-g --no-o /home/dimaio/RoseTTAFold2/SE3Transformer/ $APPTAINER_ROOT
 /etc/localtime
 /etc/hosts
 /etc/apt/sources.list
-./Miniconda3-latest-Linux-x86_64.sh /opt/miniconda.sh
+/archive/software/Miniconda3-latest-Linux-x86_64.sh /opt/miniconda.sh
 
 %post
 ## Switch shell to bash
@@ -56,7 +56,7 @@ conda install \
    jupyterlab \
    pyrosetta \
    pyg \
-   dgl \
+   dgl==2.0.0.cu121 \
    pytorch==2.2 \
    pytorch-cuda==12.1 \
    cuda
@@ -75,7 +75,8 @@ pip install e3nn \
    assertpy \
    pytest \
    pytest-benchmark \
-   einops
+   einops \
+   submitit 
 
 # deepspeed
 pip install deepspeed
