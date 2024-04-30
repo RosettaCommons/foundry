@@ -1458,6 +1458,97 @@ def remove_all_gap_seqs(a3m):
     a3m['ins'] = a3m['ins'][idx_seq_keep]
     return a3m
 
+
+def get_matched_indices(a3m, taxids_shared):
+    """
+    Given an msa with taxids, finds the indices of the sequences in the MSA that have the taxids
+    in taxids_shared. Returns the indices in sorted lexicographic order first by taxid and then by
+    how well the sequence matches the query.
+    """
+    mask = np.isin(a3m["taxid"], taxids_shared)
+    msa_indices = np.where(mask)[0]
+    
+    taxids = a3m["taxid"][mask]
+    num_matches = (a3m["msa"][mask] == a3m["msa"][0:1]).sum(dim=1)
+    sort_indices = np.lexsort((num_matches, taxids))[::-1]
+    
+    matched_indices = msa_indices[sort_indices]
+    return torch.from_numpy(matched_indices.copy())
+
+def dfill(a):
+    n = a.size
+    b = np.concatenate([[0], np.where(a[:-1] != a[1:])[0] + 1, [n]])
+    return np.arange(n)[b[:-1]].repeat(np.diff(b))
+
+def argunsort(s):
+    n = s.size
+    u = np.empty(n, dtype=np.int64)
+    u[s] = np.arange(n)
+    return u
+
+def cumcount(a):
+    """
+    https://stackoverflow.com/questions/40602269/how-to-use-numpy-to-get-the-cumulative-count-by-unique-values-in-linear-time
+    """
+    n = a.size
+    s = a.argsort(kind='mergesort')
+    i = argunsort(s)
+    b = a[s]
+    return (np.arange(n) - dfill(b))[i]
+
+
+def remove_extraneous_taxid_copies(a3m_a, a3m_b, i_paired_a, i_paired_b):
+    """
+    For index sets i_paired_a and i_paired_b, this function removes indices
+    in i_paired_a and i_paired_b until the taxids in both match not only in taxid
+    but also in repeat number. For example, if:
+
+    i_paired_a = [0, 1, 2, 3, 4]
+    i_paired_b = [0, 1, 2, 3, 4]
+    taxids_a = ["a", "a", "a", "b", "b"]
+    taxids_b = ["a", "a", "b", "b", "b"]
+
+    then this function returns:
+    ([0, 1, 3, 4], [0, 1, 2, 3])
+    """
+    taxids_a = a3m_a["taxid"][i_paired_a.numpy()]
+    taxids_b = a3m_b["taxid"][i_paired_b.numpy()]
+    
+    counts_a = np.char.add("_", cumcount(taxids_a).astype(str))
+    counts_b = np.char.add("_", cumcount(taxids_b).astype(str))
+
+    taxids_a_with_counts = np.char.add(taxids_a, counts_a)
+    taxids_b_with_counts = np.char.add(taxids_b, counts_b)
+
+    discard_mask_a = np.isin(taxids_a_with_counts, taxids_b_with_counts)
+    discard_mask_b = np.isin(taxids_b_with_counts, taxids_a_with_counts)
+    i_paired_a = i_paired_a[discard_mask_a]
+    i_paired_b = i_paired_b[discard_mask_b]
+    return i_paired_a, i_paired_b
+
+
+def get_paired(a3mA, a3mB, taxids_shared):
+    """
+    Fully vectorized implementation of the following.
+    Given a set of taxids that are shared between two MSAs, this
+    function:
+        1. Finds the indices of the sequences in the MSAs that 
+            have those taxids, and returns them in sorted lexicographic order
+            first by taxid and then by how well the sequence matches the query.
+        3. Removes extraneous copies of taxids in the indices found in step 1, such that
+            both index sets have the same taxids with the same multiplicity.
+
+    Note that all of the operations done are stable, so the order of the sequences in the final
+    indices will be paired, first by taxid and then by how well the sequence matches the query.
+    """
+    i_pairedA = get_matched_indices(a3mA, taxids_shared)
+    i_pairedB = get_matched_indices(a3mB, taxids_shared)
+
+    i_pairedA, i_pairedB = remove_extraneous_taxid_copies(a3mA, a3mB, i_pairedA, i_pairedB)
+
+    return i_pairedA, i_pairedB
+
+
 def join_msas_by_taxid(a3mA, a3mB, idx_overlap=None):
     """Joins (or "pairs") 2 MSAs by matching sequences with the same
     taxonomic ID. If more than 1 sequence exists in both MSAs with the same tax
@@ -1502,16 +1593,7 @@ def join_msas_by_taxid(a3mA, a3mB, idx_overlap=None):
         
     # pair sequences
     taxids_shared = a3mA['taxid'][np.isin(a3mA['taxid'],a3mB['taxid'])]
-    i_pairedA, i_pairedB = [], []
-    
-    for taxid in taxids_shared:
-        i_match = np.where(a3mA['taxid']==taxid)[0]
-        i_match_best = torch.argmin(torch.sum(a3mA['msa'][i_match]==a3mA['msa'][0], axis=1))
-        i_pairedA.append(i_match[i_match_best])
-
-        i_match = np.where(a3mB['taxid']==taxid)[0]
-        i_match_best = torch.argmin(torch.sum(a3mB['msa'][i_match]==a3mB['msa'][0], axis=1))
-        i_pairedB.append(i_match[i_match_best])
+    i_pairedA, i_pairedB = get_paired(a3mA, a3mB, taxids_shared)
 
     # unpaired sequences
     i_unpairedA = np.setdiff1d(np.arange(a3mA['msa'].shape[0]), i_pairedA)
