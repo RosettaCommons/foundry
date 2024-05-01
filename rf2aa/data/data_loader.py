@@ -1473,7 +1473,7 @@ def get_matched_indices(a3m, taxids_shared):
     sort_indices = np.lexsort((num_matches, taxids))[::-1]
     
     matched_indices = msa_indices[sort_indices]
-    return torch.from_numpy(matched_indices.copy())
+    return matched_indices
 
 def dfill(a):
     n = a.size
@@ -1511,8 +1511,8 @@ def remove_extraneous_taxid_copies(a3m_a, a3m_b, i_paired_a, i_paired_b):
     then this function returns:
     ([0, 1, 3, 4], [0, 1, 2, 3])
     """
-    taxids_a = a3m_a["taxid"][i_paired_a.numpy()]
-    taxids_b = a3m_b["taxid"][i_paired_b.numpy()]
+    taxids_a = a3m_a["taxid"][i_paired_a]
+    taxids_b = a3m_b["taxid"][i_paired_b]
     
     counts_a = np.char.add("_", cumcount(taxids_a).astype(str))
     counts_b = np.char.add("_", cumcount(taxids_b).astype(str))
