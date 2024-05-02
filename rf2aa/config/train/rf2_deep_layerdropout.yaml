@@ -245,3 +245,5 @@ model:
    
 chem_params:
   use_phospate_frames_for_NA: False
+  use_lj_params_for_atoms: True
+

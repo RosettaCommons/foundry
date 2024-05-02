@@ -110,7 +110,7 @@ def get_seqsep(idx):
     neigh = sign * neigh
     return neigh.unsqueeze(-1)
 
-def get_seqsep_protein_sm(idx, bond_feats, dist_matrix, sm_mask):
+def get_seqsep_protein_sm(idx, bond_feats, dist_matrix, sm_mask, cyclize=None):
     '''
     Sequence separation features for protein-SM complex
 
@@ -127,7 +127,7 @@ def get_seqsep_protein_sm(idx, bond_feats, dist_matrix, sm_mask):
             0 elsewhere
     '''
     sm_mask = sm_mask[0] # assume batch = 1
-    res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask)
+    res_dist, atom_dist = get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask, cyclize=cyclize)
 
     sm_mask_2d = sm_mask[None,:]*sm_mask[:,None]
     prot_mask_2d = (~sm_mask[None,:]) * (~sm_mask[:,None])
@@ -141,7 +141,7 @@ def get_seqsep_protein_sm(idx, bond_feats, dist_matrix, sm_mask):
     return seqsep.unsqueeze(-1)
 
 
-def get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask, minpos_res=-32, maxpos_res=32, maxpos_atom=8):
+def get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask, minpos_res=-32, maxpos_res=32, maxpos_atom=8, cyclize=None):
     '''
     Calculates residue and atom bond distances of protein/SM complex. Used for positional
     embedding and structure module. 2nd version (2022-9-19); handles atomized proteins.
@@ -167,9 +167,14 @@ def get_res_atom_dist(idx, bond_feats, dist_matrix, sm_mask, minpos_res=-32, max
     prot_mask_2d = (~sm_mask[None,:]) * (~sm_mask[:,None])
     inter_mask_2d = (~sm_mask[None,:]) * (sm_mask[:,None]) + (sm_mask[None,:]) * (~sm_mask[:,None])
 
-    # protein residue distances
-    res_dist_prot = torch.clamp(idx[0,None,:] - idx[0,:,None],
-                               min=minpos_res, max=maxpos_res) # (L, L) intra-protein
+    seqsep = idx[0,None,:] - idx[0,:,None] # (L, L)
+    if cyclize is not None:
+        mask = cyclize[:,None]*cyclize[None,:]
+        ncyc = torch.sum(cyclize)
+        seqsep[mask*(seqsep>ncyc//2)] -= ncyc
+        seqsep[mask*(seqsep<-ncyc//2)] += ncyc
+
+    res_dist_prot = torch.clamp(seqsep, min=minpos_res, max=maxpos_res) # (L, L) intra-protein
     res_dist_sm = torch.full((L,L), maxpos_res+1, device=device) # (L, L) with "unknown" res. dist. token
 
     # small molecule atom bond graph

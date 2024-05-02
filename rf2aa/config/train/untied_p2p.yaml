@@ -169,4 +169,5 @@ training_params:
   use_amp: True
 
 chem_params:
+  use_lj_params_for_atoms: True
   use_phospate_frames_for_NA: False

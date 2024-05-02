@@ -852,6 +852,7 @@ def get_train_valid_set(loader_params, NEG_CLUSID_OFFSET=1000000, no_match_okay=
             if "SLURM_PROCID" in os.environ and int(os.environ["SLURM_PROCID"]) == 0:
                 print(f"Loading cached dataset from {loader_params['DATAPKL']}...")
             data = pickle.load(f)
+            
             if type(data) is dict:
                 if no_match_okay or params_match_pickle(loader_params, data):
                     return (

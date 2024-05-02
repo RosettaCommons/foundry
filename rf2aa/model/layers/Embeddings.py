@@ -48,18 +48,18 @@ class MSA_emb(nn.Module):
 
         return msa
 
-    def _pair_emb(self, seq, idx, bond_feats, dist_matrix, same_chain=None):
+    def _pair_emb(self, seq, idx, bond_feats, dist_matrix, same_chain=None,cyclize=None):
         left = self.emb_left(seq)[:,None] # (B, 1, L, d_pair)
         right = self.emb_right(seq)[:,:,None] # (B, L, 1, d_pair)
         pair = left + right # (B, L, L, d_pair)
-        pair = pair + self.pos(seq, idx, bond_feats, dist_matrix, same_chain=same_chain) # add relative position
+        pair = pair + self.pos(seq, idx, bond_feats, dist_matrix, same_chain=same_chain, cyclize=cyclize)# add relative position
 
         return pair
 
     def _state_emb(self, seq):
         return self.emb_state(seq)
 
-    def forward(self, msa, seq, idx, bond_feats, dist_matrix, same_chain=None):
+    def forward(self, msa, seq, idx, bond_feats, dist_matrix, same_chain=None, cyclize=None):
         # Inputs:
         #   - msa: Input MSA (B, N, L, d_init)
         #   - seq: Input Sequence (B, L)
@@ -75,7 +75,7 @@ class MSA_emb(nn.Module):
         msa = self._msa_emb(msa, seq)
 
         # pair embedding 
-        pair = self._pair_emb(seq, idx, bond_feats, dist_matrix, same_chain=same_chain)
+        pair = self._pair_emb(seq, idx, bond_feats, dist_matrix, same_chain=same_chain,cyclize=cyclize)
         # state embedding
         state = self._state_emb(seq)
         return msa, pair, state
@@ -144,7 +144,8 @@ class Bond_emb(nn.Module):
 
 class TemplatePairStack(nn.Module):
     def __init__(self, n_block=2, d_templ=64, n_head=4, d_hidden=32, d_t1d=22, d_state=32, p_drop=0.25,
-                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method=None):
+                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method=None,
+                 pseudo_cycle=False):
 
         super(TemplatePairStack, self).__init__()
         self.n_block = n_block
@@ -158,7 +159,8 @@ class TemplatePairStack(nn.Module):
                                symmetrize_repeats=symmetrize_repeats,
                                repeat_length=repeat_length,
                                symmsub_k=symmsub_k,
-                               sym_method=sym_method) for i in range(n_block)]
+                               sym_method=sym_method,
+                               pseudo_cycle=pseudo_cycle) for i in range(n_block)]
 
         self.block = nn.ModuleList(proc_s)
         self.norm = nn.LayerNorm(d_templ)
@@ -168,7 +170,7 @@ class TemplatePairStack(nn.Module):
         self.proj_t1d = init_lecun_normal(self.proj_t1d)
         nn.init.zeros_(self.proj_t1d.bias)
 
-    def forward(self, templ, rbf_feat, t1d, use_checkpoint=False, p2p_crop=-1):
+    def forward(self, templ, rbf_feat, t1d, use_checkpoint=False, p2p_crop=-1, is_prot=None):
         B, T, L = templ.shape[:3]
         templ = templ.reshape(B*T, L, L, -1)
         t1d = t1d.reshape(B*T, L, -1)
@@ -179,10 +181,10 @@ class TemplatePairStack(nn.Module):
                 templ = checkpoint.checkpoint(
                     create_custom_forward(self.block[i_block]), 
                     templ, rbf_feat, state, p2p_crop,
-                    use_reentrant=True
+                    use_reentrant=True, is_prot=is_prot
                 )
             else:
-                templ = self.block[i_block](templ, rbf_feat, state)
+                templ = self.block[i_block](templ, rbf_feat, state,is_prot=is_prot)
         return self.norm(templ).reshape(B, T, L, L, -1)
 
 
@@ -224,7 +226,6 @@ def copy_main_1d(single, Leff, idx):
 
     # grab main block 
     main = torch.clone(single[..., main_start:main_end, :])
-
     # copy it around
     L = single.shape[-2]
     assert L%Leff == 0
@@ -252,8 +253,10 @@ class Templ_emb(nn.Module):
     def __init__(self, d_t1d=0, d_t2d=0, d_tor=0, d_pair=128, d_state=32, 
                  n_block=2, d_templ=64,
                  n_head=4, d_hidden=16, p_drop=0.25,
-                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='mean', 
-                 main_block=None, copy_main_block=None, additional_dt1d=0):
+                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='max', 
+                 main_block=None, copy_main_block=None, additional_dt1d=0,
+                 pseudo_cycle=False):
+        
         if d_t1d==0:
             d_t1d=(ChemData().NAATOKENS-1)+1
         if d_t2d==0:
@@ -274,7 +277,8 @@ class Templ_emb(nn.Module):
         self.templ_stack = TemplatePairStack(n_block=n_block, d_templ=d_templ, n_head=n_head,
                                              d_hidden=d_hidden, d_t1d=d_t1d, d_state=d_state, p_drop=p_drop,
                                              symmetrize_repeats=symmetrize_repeats, repeat_length=repeat_length,
-                                             symmsub_k=symmsub_k, sym_method=sym_method)
+                                             symmsub_k=symmsub_k, sym_method=sym_method,
+                                             pseudo_cycle=pseudo_cycle)
         
         self.attn = Attention(d_pair, d_templ, n_head, d_hidden, d_pair, p_drop=p_drop)
         
@@ -314,7 +318,7 @@ class Templ_emb(nn.Module):
         rbf_feat = rbf(torch.cdist(xyz_t, xyz_t)) * mask_t[...,None] # (B*T, L, L, d_rbf)
         return rbf_feat
 
-    def forward(self, t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=False, p2p_crop=-1):
+    def forward(self, t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=False, p2p_crop=-1, is_prot=None):
         # Input
         #   - t1d: 1D template info (B, T, L, 30)
         #   - t2d: 2D template info (B, T, L, L, 44)
@@ -332,14 +336,27 @@ class Templ_emb(nn.Module):
         rbf_feat = self._get_templ_rbf(xyz_t, mask_t) 
 
         # process each template pair feature
-        templ = self.templ_stack(templ, rbf_feat, t1d, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop) # (B, T, L,L, d_templ)
+        templ = self.templ_stack(templ, rbf_feat, t1d, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop, is_prot=is_prot) # (B, T, L,L, d_templ)
+        # symmetry and pseudocycle diffusion for singular/non-repeat applications does not need to process is_sm
+        # but include it for generality and future-proofing
 
         # DJ - repeat protein symmetrization (2D)
         if self.copy_main_block:
             assert not (self.main_block is None)
             assert self.symmetrize_repeats
             # copy the main repeat unit internally down the pair representation diagonal 
-            templ = copy_main_2d(templ, self.repeat_length, self.main_block)
+            nf = templ.shape[-1]
+            #not_sm = ~is_sm
+            not_sm = is_prot
+            Lprot = is_prot.sum()
+            not_sm_2d = not_sm[None,None,:,None,None] * not_sm[None,None,None,:,None]
+            not_sm_2d = not_sm_2d.expand(B,T,L,L,nf)
+            
+            templ_to_copy = templ[not_sm_2d].reshape(B, T, Lprot, Lprot, -1)
+            templ_copy_out = copy_main_2d(templ_to_copy, self.repeat_length, self.main_block)
+
+            # copy back into the full representation
+            templ[:,:,:Lprot,:Lprot,:] = templ_copy_out
 
         # Prepare 1D template torsion angle features
         t1d = torch.cat((t1d, alpha_t), dim=-1) # (B, T, L, 30+3*17)
@@ -350,8 +367,11 @@ class Templ_emb(nn.Module):
         if self.copy_main_block:
             # already made assertions above 
             # copy main unit down single rep 
-            t1d = copy_main_1d(t1d, self.repeat_length, self.main_block)
-        
+            t1d_to_copy = t1d[:,:,not_sm,:]
+            t1d_copied = copy_main_1d(t1d_to_copy, self.repeat_length, self.main_block)
+            # copy back into the full representation
+            t1d[:,:,not_sm,:] = t1d_copied
+
         # mixing query state features to template state features
         state = state.reshape(B*L, 1, -1)
         t1d = t1d.permute(0,2,1,3).reshape(B*L, T, -1)
@@ -395,7 +415,7 @@ class Templ_emb_NoPtwise(nn.Module):
     def __init__(self, d_t1d=0, d_t2d=67+1, d_tor=0, d_pair=128, d_state=32, 
                  n_block=2, d_templ=64,
                  n_head=4, d_hidden=16, p_drop=0.25,
-                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='mean', 
+                 symmetrize_repeats=False, repeat_length=None, symmsub_k=1, sym_method='max', 
                  main_block=None, copy_main_block=None, additional_dt1d=0):
         super(Templ_emb_NoPtwise, self).__init__()
 

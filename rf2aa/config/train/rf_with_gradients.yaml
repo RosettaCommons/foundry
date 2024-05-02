@@ -153,3 +153,6 @@ dataset_params:
   n_valid_sm_compl_strict: 256
 
 
+chem_params:
+  use_lj_params_for_atoms: True
+

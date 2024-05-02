@@ -128,4 +128,8 @@ model:
     plddt: 
       n_feat: 64
       input_feature: "state"
+
+chem_params:
+  use_lj_params_for_atoms: True
+
    

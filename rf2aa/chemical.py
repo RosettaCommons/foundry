@@ -2414,7 +2414,11 @@ class ChemicalData:
 
         self.ljlk_parameters = torch.zeros((self.NAATOKENS,self.NTOTAL,5), dtype=torch.float)
         self.lj_correction_parameters = torch.zeros((self.NAATOKENS,self.NTOTAL,4), dtype=bool) # donor/acceptor/hpol/disulf
-        for i in range(self.NAATOKENS):
+        if (params.use_lj_params_for_atoms):
+            num_tokens = self.NAATOKENS
+        else:
+            num_tokens = self.NNAPROTAAS
+        for i in range(num_tokens):
             for j,a in enumerate(self.aa2type[i]):
                 if (a is not None):
                     self.atom_type_index[i,j] = self.aatype2idx[a]
@@ -2754,10 +2758,6 @@ class ChemicalData:
                     self.frame_indices[i,j,0] = torch.tensor((0, i_l.index(x[0])))
                     self.frame_indices[i,j,1] = torch.tensor((0, i_l.index(x[1])))
                     self.frame_indices[i,j,2] = torch.tensor((0, i_l.index(x[2])))
-
-    def seq2chars(seq):
-        out = ''.join([self.aa_321[self.num2aa[a]] for a in seq])
-        return out
 
     # hbond scoring parameters
     def donorHs(self, D,bonds,atoms):

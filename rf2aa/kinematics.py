@@ -14,6 +14,61 @@ PARAMS = {
     'ABINS':36,
     'USE_CB':False
 }
+# ============================================================
+def normQ(Q):
+    """normalize a quaternions
+    """
+    return Q / torch.linalg.norm(Q, keepdim=True, dim=-1)
+
+# ============================================================
+def avgQ(Qs):
+    """average a set of quaternions
+    input dims:
+    Qs - (B,N,R,4)
+    averages across 'N' dimension
+    """
+    def areClose(q1,q2):
+        return ((q1*q2).sum(dim=-1)>=0.0)
+
+    N = Qs.shape[1]
+    Qsum = Qs[:,0]/N
+
+    for i in range(1,N):
+        mask = areClose(Qs[:,0],Qs[:,i])
+        Qsum[mask] += Qs[:,i][mask]/N
+        Qsum[~mask] -= Qs[:,i][~mask]/N
+
+    return normQ(Qsum)
+
+def Rs2Qs(Rs):
+    Qs = torch.zeros((*Rs.shape[:-2],4), device=Rs.device)
+
+    Qs[...,0] = 1.0 + Rs[...,0,0] + Rs[...,1,1] + Rs[...,2,2]
+    Qs[...,1] = 1.0 + Rs[...,0,0] - Rs[...,1,1] - Rs[...,2,2]
+    Qs[...,2] = 1.0 - Rs[...,0,0] + Rs[...,1,1] - Rs[...,2,2]
+    Qs[...,3] = 1.0 - Rs[...,0,0] - Rs[...,1,1] + Rs[...,2,2]
+    Qs[Qs<0.0] = 0.0
+    Qs = torch.sqrt(Qs) / 2.0
+    Qs[...,1] *= torch.sign( Rs[...,2,1] - Rs[...,1,2] )
+    Qs[...,2] *= torch.sign( Rs[...,0,2] - Rs[...,2,0] )
+    Qs[...,3] *= torch.sign( Rs[...,1,0] - Rs[...,0,1] )
+
+    return Qs
+
+def Qs2Rs(Qs):
+    Rs = torch.zeros((*Qs.shape[:-1],3,3), device=Qs.device)
+
+    Rs[...,0,0] = Qs[...,0]*Qs[...,0]+Qs[...,1]*Qs[...,1]-Qs[...,2]*Qs[...,2]-Qs[...,3]*Qs[...,3]
+    Rs[...,0,1] = 2*Qs[...,1]*Qs[...,2] - 2*Qs[...,0]*Qs[...,3]
+    Rs[...,0,2] = 2*Qs[...,1]*Qs[...,3] + 2*Qs[...,0]*Qs[...,2]
+    Rs[...,1,0] = 2*Qs[...,1]*Qs[...,2] + 2*Qs[...,0]*Qs[...,3]
+    Rs[...,1,1] = Qs[...,0]*Qs[...,0]-Qs[...,1]*Qs[...,1]+Qs[...,2]*Qs[...,2]-Qs[...,3]*Qs[...,3]
+    Rs[...,1,2] = 2*Qs[...,2]*Qs[...,3] - 2*Qs[...,0]*Qs[...,1]
+    Rs[...,2,0] = 2*Qs[...,1]*Qs[...,3] - 2*Qs[...,0]*Qs[...,2]
+    Rs[...,2,1] = 2*Qs[...,2]*Qs[...,3] + 2*Qs[...,0]*Qs[...,1]
+    Rs[...,2,2] = Qs[...,0]*Qs[...,0]-Qs[...,1]*Qs[...,1]-Qs[...,2]*Qs[...,2]+Qs[...,3]*Qs[...,3]
+
+    return Rs
 
 # ============================================================
 def get_pair_dist(a, b):

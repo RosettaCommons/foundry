@@ -21,6 +21,10 @@ from rf2aa.kinematics import get_atomize_protein_chirals, generate_Cbeta
 from rf2aa.scoring import *
 
 
+def seq2chars(seq): # LT move seq2chars from chemical to utils due to ChemData init
+    out = ''.join([ChemData().aa_321[ChemData().num2aa[a]] for a in seq])
+    return out
+
 def random_rot_trans(xyz, random_noise=20.0):
     # xyz: (N, L, 27, 3)
     N, L = xyz.shape[:2]
@@ -273,7 +277,7 @@ def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
 def get_tips(xyz, seq):
     B,L = xyz.shape[:2]
 
-    xyz_tips = torch.gather(xyz, 2, tip_indices.to(xyz.device)[seq][:,:,None,None].expand(-1,-1,-1,3)).reshape(B, L, 3)
+    xyz_tips = torch.gather(xyz, 2, ChemData().tip_indices.to(xyz.device)[seq][:,:,None,None].expand(-1,-1,-1,3)).reshape(B, L, 3)
     if torch.isnan(xyz_tips).any(): # replace NaN tip atom with virtual Cb atom
         # three anchor atoms
         N  = xyz[:,:,0]
@@ -1182,10 +1186,10 @@ def expand_xyz_sm_to_ntotal(xyz_sm, mask_sm, N_symmetry=None):
     N_symm_sm, L =  xyz_sm.shape[:2]
     if N_symmetry is None:
         N_symmetry = N_symm_sm
-    xyz = torch.full((N_symmetry, L, NTOTAL, 3), np.nan).float()
+    xyz = torch.full((N_symmetry, L, ChemData().NTOTAL, 3), np.nan).float()
     xyz[:N_symm_sm, :, 1, :] = xyz_sm
 
-    mask = torch.full((N_symmetry, L, NTOTAL), False).bool()
+    mask = torch.full((N_symmetry, L, ChemData().NTOTAL), False).bool()
     mask[:N_symm_sm, :, 1] = mask_sm
     return xyz, mask
 

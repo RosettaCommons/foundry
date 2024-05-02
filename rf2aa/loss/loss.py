@@ -1143,7 +1143,9 @@ class LJLoss(torch.autograd.Function):
     def forward(
         ctx, xs, seq, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds, 
         lj_lin=0.75, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
-        eps=1e-8, normNviolations=True, useH=False, training=True
+        eps=1e-8, normNviolations=True, useH=False, 
+        norm_by_atoms_twice=False, # this exists purely for backwards compatibility 
+        training=True
     ):
         N, L, A = xs.shape[:3]
         assert (N==1) # see comment below
@@ -1241,7 +1243,7 @@ class LJLoss(torch.autograd.Function):
 
 
             ljval_batch,dljEdd_i = LJLoss.ljVdV(deltas,ljrs,ljss,lj_lin,eps)
-
+            natoms = 1.0 # LT resolve test_benchmark referenced before assignment - intialize natoms before alpha = 1.0/natoms
             if not normNviolations:
                 if not useH:
                     natoms = torch.sum(aamask[seq,:14])
@@ -1265,9 +1267,13 @@ class LJLoss(torch.autograd.Function):
             # sum per-atom-pair grads into per-atom grads
             # note this is stochastic op on GPU
             idxI,idxJ = rii[ridx]*A + ai, rjj[ridx]*A + aj
-
-            dljEdx.view(N,-1,3).index_add_(1, idxI, dljEdd_i[...,None]*deltas)
-            dljEdx.view(N,-1,3).index_add_(1, idxJ, dljEdd_i[...,None]*deltas)
+            
+            if norm_by_atoms_twice:
+                alpha = 1.0/natoms
+            else:
+                alpha = 1.0
+            dljEdx.view(N,-1,3).index_add_(1, idxI, dljEdd_i[...,None]*deltas, alpha=alpha)
+            dljEdx.view(N,-1,3).index_add_(1, idxJ, dljEdd_i[...,None]*deltas, alpha=-alpha)
 
         ctx.save_for_backward(dljEdx)
 
@@ -1451,8 +1457,8 @@ def calc_lj_grads(
     seq, xyz, alpha, toaa, bond_feats, dist_matrix, 
     aamask, ljparams, ljcorr, num_bonds, 
     lj_lin=0.85, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
-    lj_maxrad=-1.0, eps=1e-8
-):
+    lj_maxrad=-1.0, eps=1e-8, norm_by_atoms_twice=False
+): #LT norm_by_atoms_twice = False for backward compatibility inference
     # hardcoded
     normNviolations=False
     useH=True
