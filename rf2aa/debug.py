@@ -28,3 +28,7 @@ def debug_grads(model):
     for name, param in model.named_parameters():
         if param.grad is not None:
             print(f"{name}: {param.grad.norm().item()}")
+
+def debug_nan_params(model):
+    for name, param in model.named_parameters():
+        print(f"{name}: {torch.sum(param.isnan())}")

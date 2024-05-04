@@ -1469,7 +1469,8 @@ def get_residue_contacts(xyz, idx, seq_dist_greater_than=10, n_contacts=5):
                 kk = k
         for j in nodes:
             ds[j,kk] = ds[kk,j] = 999.
-        nodes.append(kk)
+        if kk>=0:
+            nodes.append(kk)
     nodes,_ = torch.sort(torch.stack(nodes))
 
     return idx[nodes]

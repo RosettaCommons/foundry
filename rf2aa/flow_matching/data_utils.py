@@ -8,14 +8,9 @@ import pickle
 import os
 import torch
 from typing import List, Dict, Any
-#import tree
 from rf2aa.flow_matching import rigid_utils as ru
-from torch_scatter import scatter_add, scatter
-#from Bio.PDB.Chain import Chain
-#from Bio import PDB
-#from cogen.data import protein, residue_constants, parsers
+from torch_geometric.utils import scatter
 from glob import glob
-#from pytorch_lightning.utilities import rank_zero_only
 
 Rigid = ru.Rigid
 #Protein = protein.Protein
@@ -140,19 +135,19 @@ def adjust_oxygen_pos(
 
     # Calpha to carbonyl both in the current frame.
     calpha_to_carbonyl: torch.Tensor = (atom_37[:-1, 2, :] - atom_37[:-1, 1, :]) / (
-        torch.norm(atom_37[:-1, 2, :] - atom_37[:-1, 1, :], keepdim=True, dim=1) + 1e-7
+        torch.norm(atom_37[:-1, 2, :] - atom_37[:-1, 1, :], keepdim=True, dim=1) + 1e-4
     )
-    # For masked positions, they are all 0 and so we add 1e-7 to avoid division by 0.
-    # The positions are in Angstroms and so are on the order ~1 so 1e-7 is an insignificant change.
+    # For masked positions, they are all 0 and so we add 1e-4 to avoid division by 0.
+    # The positions are in Angstroms and so are on the order ~1 so 1e-4 is an insignificant change.
 
     # Nitrogen of the next frame to carbonyl of the current frame.
     nitrogen_to_carbonyl: torch.Tensor = (atom_37[:-1, 2, :] - atom_37[1:, 0, :]) / (
-        torch.norm(atom_37[:-1, 2, :] - atom_37[1:, 0, :], keepdim=True, dim=1) + 1e-7
+        torch.norm(atom_37[:-1, 2, :] - atom_37[1:, 0, :], keepdim=True, dim=1) + 1e-4
     )
 
     carbonyl_to_oxygen: torch.Tensor = calpha_to_carbonyl + nitrogen_to_carbonyl  # (N-1, 3)
     carbonyl_to_oxygen = carbonyl_to_oxygen / (
-        torch.norm(carbonyl_to_oxygen, dim=1, keepdim=True) + 1e-7
+        torch.norm(carbonyl_to_oxygen, dim=1, keepdim=True) + 1e-4
     )
 
     atom_37[:-1, 4, :] = atom_37[:-1, 2, :] + carbonyl_to_oxygen * 1.23
@@ -161,17 +156,17 @@ def adjust_oxygen_pos(
 
     # Calpha to carbonyl both in the current frame. (N, 3)
     calpha_to_carbonyl_term: torch.Tensor = (atom_37[:, 2, :] - atom_37[:, 1, :]) / (
-        torch.norm(atom_37[:, 2, :] - atom_37[:, 1, :], keepdim=True, dim=1) + 1e-7
+        torch.norm(atom_37[:, 2, :] - atom_37[:, 1, :], keepdim=True, dim=1) + 1e-4
     )
     # Calpha to nitrogen both in the current frame. (N, 3)
     calpha_to_nitrogen_term: torch.Tensor = (atom_37[:, 0, :] - atom_37[:, 1, :]) / (
-        torch.norm(atom_37[:, 0, :] - atom_37[:, 1, :], keepdim=True, dim=1) + 1e-7
+        torch.norm(atom_37[:, 0, :] - atom_37[:, 1, :], keepdim=True, dim=1) + 1e-4
     )
     carbonyl_to_oxygen_term: torch.Tensor = (
         calpha_to_carbonyl_term + calpha_to_nitrogen_term
     )  # (N, 3)
     carbonyl_to_oxygen_term = carbonyl_to_oxygen_term / (
-        torch.norm(carbonyl_to_oxygen_term, dim=1, keepdim=True) + 1e-7
+        torch.norm(carbonyl_to_oxygen_term, dim=1, keepdim=True) + 1e-4
     )
 
     # Create a mask that is 1 when the next residue is not available either
@@ -236,7 +231,7 @@ def chain_str_to_int(chain_str: str):
     #chain_feats['bb_mask'] = chain_feats['atom_mask'][:, CA_IDX]
     #bb_pos = chain_feats['atom_positions'][:, CA_IDX]
     #if center:
-        #bb_center = np.sum(bb_pos, axis=0) / (np.sum(chain_feats['bb_mask']) + 1e-5)
+        #bb_center = np.sum(bb_pos, axis=0) / (np.sum(chain_feats['bb_mask']) + 1e-4)
         #centered_pos = chain_feats['atom_positions'] - bb_center[None, None, :]
         #scaled_pos = centered_pos / scale_factor
     #else:
@@ -341,8 +336,8 @@ def align_structures(
     reference_positions = center_zero(reference_positions, batch_indices)
 
     # Compute covariance matrix for optimal rotation (Q.T @ P) -> [B x 3 x 3].
-    cov = scatter_add(
-        batch_positions[:, None, :] * reference_positions[:, :, None], batch_indices, dim=0
+    cov = scatter(
+        batch_positions[:, None, :] * reference_positions[:, :, None], batch_indices, dim=0, reduce="sum"
     )
 
     # Perform singular value decomposition. (all [B x 3 x 3])

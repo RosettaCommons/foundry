@@ -381,6 +381,54 @@ class ChemicalData:
                 ("O" ,"C" ,"C" ,"O" ,"P" ,"O" ,"O" ,"C" ,"C" ,"C" ,"O" ,"O" ,"N" ,"C" ,"N" ,"N" ,"C" ,"C" ,"C" ,"O" ,"N" ,"C" ,"N" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,None,None),#G
                 ("O" ,"C" ,"C" ,"O" ,"P" ,"O" ,"O" ,"C" ,"C" ,"C" ,"O" ,"O" ,"N" ,"C" ,"O" ,"N" ,"C" ,"O" ,"C" ,"C" ,None,None,None,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,None,None,None),#U
                 ("O" ,"C" ,"C" ,"O" ,"P" ,"O" ,"O" ,"C" ,"C" ,"C" ,"O" ,"O" ,None,None,None,None,None,None,None,None,None,None,None,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,"H" ,None,None,None,None,None),#RX
+                ("N", "C","C"  ,"O", "C", "C", "N" ,"C" ,"C" ,"N" ,None,None,None,None,None,None,None,None,None,None,None,None,None,"H","H","H","H","H","H","H",None,None,None,None,None,None),# HIS-D NOT CORRECT!!!!!!!!!!
+                (None,"Al",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Al
+                (None,"As",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# As
+                (None,"Au",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Au
+                (None,"B",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# B
+                (None,"Be",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Be
+                (None,"Br",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Br
+                (None,"C",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# C
+                (None,"Ca",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Ca
+                (None,"Cl",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Cl
+                (None,"Co",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Co
+                (None,"Cr",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Cr
+                (None,"Cu",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Cu
+                (None,"F",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# F
+                (None,"Fe",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Fe
+                (None,"Hg",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Hg
+                (None,"I",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# I
+                (None,"Ir",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Ir
+                (None,"K",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# K
+                (None,"Li",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Li
+                (None,"Mg",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Mg
+                (None,"Mn",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Mn
+                (None,"Mo",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Mo
+                (None,"N",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# N
+                (None,"Ni",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Ni
+                (None,"O",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# O
+                (None,"Os",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Os
+                (None,"P",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# P
+                (None,"Pb",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Pb
+                (None,"Pd",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Pd
+                (None,"Pr",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Pr
+                (None,"Pt",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Pt
+                (None,"Re",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Re
+                (None,"Rh",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Rh
+                (None,"Ru",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Ru
+                (None,"S",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# S
+                (None,"Sb",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Sb
+                (None,"Se",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Se
+                (None,"Si",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Si
+                (None,"Sn",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Sn
+                (None,"Tb",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Tb
+                (None,"Te",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Te
+                (None,"U",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# U
+                (None,"W",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# W   
+                (None,"V",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# V
+                (None,"Y",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Y
+                (None,"Zn",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Zn
+                (None,"ATM",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# ATM            ]
             ]
 
             # frames for generic FAPE
@@ -1171,6 +1219,9 @@ class ChemicalData:
                 ],
             ]
 
+            # atom ids forming polymer connections
+            self.protein_connect = (0,2) # N, C
+            self.na_connect = (4,10) # P, O3'
         else:
             # USE PHOSPHATE FRAME
             self.aa2long=[
@@ -1363,6 +1414,54 @@ class ChemicalData:
                 ("O","P","O","O","C","C","O","C","O","C","C","O","N","C","N","N","C","C","C","O","N","C","N","H","H","H","H","H","H","H","H","H","H","H",None,None),#G
                 ("O","P","O","O","C","C","O","C","O","C","C","O","N","C","O","N","C","O","C","C",None,None,None,"H","H","H","H","H","H","H","H","H","H",None,None,None),#U
                 ("O","P","O","O","C","C","O","C","O","C","C","O",None,None,None,None,None,None,None,None,None,None,None,"H","H","H","H","H","H","H","H",None,None,None,None,None),#RX
+                ("N", "C","C"  ,"O", "C", "C", "N" ,"C" ,"C" ,"N" ,None,None,None,None,None,None,None,None,None,None,None,None,None,"H","H","H","H","H","H","H",None,None,None,None,None,None),# HIS-D NOT CORRECT!!!!!!!!!!
+                (None,"Al",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Al
+                (None,"As",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# As
+                (None,"Au",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Au
+                (None,"B",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# B
+                (None,"Be",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Be
+                (None,"Br",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Br
+                (None,"C",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# C
+                (None,"Ca",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Ca
+                (None,"Cl",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Cl
+                (None,"Co",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Co
+                (None,"Cr",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Cr
+                (None,"Cu",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Cu
+                (None,"F",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# F
+                (None,"Fe",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Fe
+                (None,"Hg",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Hg
+                (None,"I",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# I
+                (None,"Ir",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Ir
+                (None,"K",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# K
+                (None,"Li",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Li
+                (None,"Mg",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Mg
+                (None,"Mn",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Mn
+                (None,"Mo",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Mo
+                (None,"N",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# N
+                (None,"Ni",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Ni
+                (None,"O",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# O
+                (None,"Os",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Os
+                (None,"P",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# P
+                (None,"Pb",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Pb
+                (None,"Pd",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Pd
+                (None,"Pr",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Pr
+                (None,"Pt",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Pt
+                (None,"Re",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Re
+                (None,"Rh",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Rh
+                (None,"Ru",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Ru
+                (None,"S",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# S
+                (None,"Sb",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Sb
+                (None,"Se",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Se
+                (None,"Si",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Si
+                (None,"Sn",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Sn
+                (None,"Tb",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Tb
+                (None,"Te",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Te
+                (None,"U",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# U
+                (None,"W",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# W   
+                (None,"V",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# V
+                (None,"Y",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Y
+                (None,"Zn",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# Zn
+                (None,"ATM",None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None),# ATM            ]
             ]
 
             # frames for generic FAPE
@@ -2151,6 +2250,12 @@ class ChemicalData:
                 ],
             ]
 
+            # atom ids forming polymer connections
+            self.protein_connect = (0,2) # N, C
+            self.na_connect = (1,8) # P, O3'
+
+        # general case
+
         self.aabonds=[
             #       0               1               2                3               4              5               6               7               8               9              10              11              12              13              14              15              16              17              18              19              20              21              22               23             24
             ((" N  "," CA "),(" N  "," H  "),(" CA "," C  "),(" CA "," CB "),(" CA "," HA "),(" C  "," O  "),(" CB ","1HB "),(" CB ","2HB "),(" CB ","3HB ")) , # ala
@@ -2444,6 +2549,8 @@ class ChemicalData:
             for j,a in enumerate(i_l):
                 if (a is None):
                     self.long2alt[i,j] = j
+                elif ("H" in a):
+                    self.long2alt[i,j] = i_l.index(a)
                 else:
                     self.long2alt[i,j] = i_lalt.index(a)
                     self.allatom_mask[i,j] = True
@@ -2453,14 +2560,18 @@ class ChemicalData:
         self.allatom_mask[self.NNAPROTAAS:,1] = True
 
         # bond graph traversal
-        self.num_bonds = torch.zeros((self.NAATOKENS,self.NTOTAL,self.NTOTAL), dtype=torch.long)
+        self.MAX_BOND_DIST = 9 # largest bond separation we consider
+        self.num_bonds = torch.full((self.NAATOKENS,self.NTOTAL,self.NTOTAL), self.MAX_BOND_DIST, dtype=torch.long)
+        self.num_bonds[:,torch.arange(self.NTOTAL),torch.arange(self.NTOTAL)] = 0 # atom self-interaction
+
+        # compute for all protein & na using csgraph.shortest_path
         for i in range(self.NNAPROTAAS):
             num_bonds_i = np.zeros((self.NTOTAL,self.NTOTAL))
             for (bnamei,bnamej) in self.aabonds[i]:
                 bi,bj = self.aa2long[i].index(bnamei),self.aa2long[i].index(bnamej)
                 num_bonds_i[bi,bj] = 1
             num_bonds_i = scipy.sparse.csgraph.shortest_path (num_bonds_i,directed=False)
-            num_bonds_i[num_bonds_i>=4] = 4
+            num_bonds_i[num_bonds_i>=self.MAX_BOND_DIST] = self.MAX_BOND_DIST
             self.num_bonds[i,...] = torch.tensor(num_bonds_i)
 
 
@@ -2471,6 +2582,21 @@ class ChemicalData:
                 if y and y not in self.idx2aatype:
                     self.idx2aatype.append(y)
         self.aatype2idx = {x:i for i,x in enumerate(self.idx2aatype)}
+
+        # element indices
+        self.idx2elt = []
+        for x in self.aa2elt:
+            for y in x:
+                if y and y not in self.idx2elt:
+                    self.idx2elt.append(y)
+        self.elt2idx = {x:i for i,x in enumerate(self.idx2elt)}
+
+        self.aa2eltidx = torch.zeros((self.NAATOKENS,self.NTOTAL), dtype=torch.long)
+        for i in range(self.NAATOKENS):
+            for j in range(self.NTOTAL):
+                if self.aa2elt[i][j] is not None:
+                    self.aa2eltidx[i,j] = self.elt2idx[ self.aa2elt[i][j] ]
+        self.NELTTYPES = len(self.elt2idx)
 
         # LJ/LK scoring parameters
         self.atom_type_index = torch.zeros((self.NAATOKENS,self.NTOTAL), dtype=torch.long)

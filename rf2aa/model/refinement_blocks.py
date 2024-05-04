@@ -2,11 +2,13 @@ import torch
 import torch.nn as nn
 
 from rf2aa.debug import debug_nans
-from rf2aa.model.layers.SE3_network import FullyConnectedSE3, get_backbone_offset_vectors, get_chiral_vectors
+from rf2aa.model.layers.SE3_network import FullyConnectedSE3, get_backbone_offset_vectors, get_chiral_vectors, SE3TransformerWrapper
 from rf2aa.model.Track_module import Str2Str
-from rf2aa.util_module import rbf, make_topk_graph, init_lecun_normal
+from rf2aa.util_module import rbf, make_topk_graph, make_full_graph, init_lecun_normal
+from rf2aa.util import is_atom,is_nucleic,is_protein
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.loss.loss import calc_chiral_grads
+from rf2aa.model.generative_refinement import GenerativeRefinement
 
 class LocalRefinementSE3(FullyConnectedSE3):
 
@@ -58,7 +60,11 @@ class LocalRefinementSE3(FullyConnectedSE3):
     def construct_graph(self, xyz, edge):
         L = xyz.shape[1]
         idx = torch.arange(L, device=edge.device)[None]
-        G, edge_feats = make_topk_graph(xyz[:,:,1,:], edge, idx, top_k=self.top_k)
+        if self.top_k>0:
+            G, edge_feats = make_topk_graph(xyz[:,:,1,:], edge, idx, top_k=self.top_k)
+        else:
+            G, edge_feats = make_full_graph(xyz[:,:,1,:], edge, idx) # top_k=1 -> fully connected
+
         return  G, edge_feats
 
 class RecurrentLocalRefinement(nn.Module):
@@ -75,7 +81,7 @@ class RecurrentLocalRefinement(nn.Module):
             latent_feats["state"], latent_feats["xyz"], latent_feats["is_atom"], \
                 latent_feats["atom_frames"], latent_feats["chirals"]
         idx, bond_feats, dist_matrix = latent_feats["idx"], latent_feats["bond_feats"], latent_feats["dist_matrix"]
-        return msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix
+        return msa, pair, state, xyz[..., :3, :], is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix
 
     def forward(self, latent_feats):
         B, N, L = latent_feats["msa"].shape[:3]
@@ -110,7 +116,7 @@ class RecurrentLocalRefinement_w_Adaptor(nn.Module):
             latent_feats["state"], latent_feats["xyz"], latent_feats["is_atom"], \
                 latent_feats["atom_frames"], latent_feats["chirals"]
         idx, bond_feats, dist_matrix = latent_feats["idx"], latent_feats["bond_feats"], latent_feats["dist_matrix"]
-        return msa, pair, state, xyz, is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix
+        return msa, pair, state, xyz[..., :3, :], is_atom, atom_frames, chirals, idx, bond_feats, dist_matrix
 
     def forward(self, latent_feats):
         B, N, L = latent_feats["msa"].shape[:3]
@@ -199,5 +205,6 @@ class LegacyRefiner(nn.Module):
 refinement_factory ={
     "local": RecurrentLocalRefinement,
     "local_adaptor": RecurrentLocalRefinement_w_Adaptor,
-    "legacy": LegacyRefiner
+    "legacy": LegacyRefiner,
+    "generative": GenerativeRefinement
 }

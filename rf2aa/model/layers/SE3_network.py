@@ -27,7 +27,7 @@ class SE3TransformerWrapper(nn.Module):
                  l0_in_features=32, l0_out_features=32,
                  l1_in_features=3, l1_out_features=2,
                  num_edge_features=32,
-                 compute_gradients=False):
+                 compute_gradients=False, **kwargs):
         super().__init__()
         # Build the network
         self.l1_in = l1_in_features
@@ -63,36 +63,16 @@ class SE3TransformerWrapper(nn.Module):
                                   populate_edge="arcsin",
                                   final_layer="lin",
                                   use_layer_norm=True,
-                                  compute_gradients=compute_gradients
+                                  compute_gradients=compute_gradients,
                                   )
 
         self.reset_parameter()
 
     def reset_parameter(self):
-
-        # make sure linear layer before ReLu are initialized with kaiming_normal_
-        for n, p in self.se3.named_parameters():
-            if "bias" in n:
-                nn.init.zeros_(p)
-            elif len(p.shape) == 1:
-                continue
-            else:
-                if "radial_func" not in n:
-                    p = init_lecun_normal_param(p) 
-                else:
-                    if "net.6" in n:
-                        nn.init.zeros_(p)
-                    else:
-                        nn.init.kaiming_normal_(p, nonlinearity='relu')
-        
-        # make last layers to be zero-initialized
-        #self.se3.graph_modules[-1].to_kernel_self['0'] = init_lecun_normal_param(self.se3.graph_modules[-1].to_kernel_self['0'])
-        #self.se3.graph_modules[-1].to_kernel_self['1'] = init_lecun_normal_param(self.se3.graph_modules[-1].to_kernel_self['1'])
-        #nn.init.zeros_(self.se3.graph_modules[-1].to_kernel_self['0'])
-        #nn.init.zeros_(self.se3.graph_modules[-1].to_kernel_self['1'])
-        nn.init.zeros_(self.se3.graph_modules[-1].weights['0'])
-        if self.l1_out > 0:
-            nn.init.zeros_(self.se3.graph_modules[-1].weights['1'])
+        pass
+        #nn.init.zeros_(self.se3.graph_modules[-1].weights['0'])
+        #if self.l1_out > 0:
+        #    nn.init.zeros_(self.se3.graph_modules[-1].weights['1'])
 
     def forward(self, G, type_0_features, type_1_features=None, edge_features=None):
         if self.l1_in > 0:
@@ -282,7 +262,6 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
 
     def compute_structure_update(self, G, node, l1_feats, edge_feats, xyz, state, is_atom, drop_layer=False, is_motif=None):
         weight = 0. if drop_layer else 1.
-
         B, L = node.shape[:2]
         shift = self.se3(G, node.reshape(B*L, -1, 1), l1_feats, edge_feats)
 
@@ -320,6 +299,8 @@ class FullyConnectedSE3(FullyConnectedSE3_noR):
         quat_update = torch.stack([qA, qB, qC, qD], dim=2)
 
         return state, xyz, quat_update
+
+
     def forward(self, msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, drop_layer=False, is_motif=None):
 
         block_outputs = super().forward(msa, pair, state, xyz, is_atom, atom_frames, chirals,idx, bond_feats, dist_matrix, is_motif=is_motif)

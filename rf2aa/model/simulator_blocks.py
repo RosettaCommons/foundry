@@ -5,6 +5,7 @@ from functools import partial
 import numpy as np
 
 from rf2aa.debug import debug_nans
+from rf2aa.model.AF3_blocks import AF3_block,AF3_full_block
 from rf2aa.model.layers.SE3_network import FullyConnectedSE3, FullyConnectedSE3_noR
 from rf2aa.model.layers.structure_bias import structure_bias_factory
 from rf2aa.model.layers.Attention_module import BiasedAxialAttention, FeedForwardLayer, MSAColAttention, \
@@ -287,11 +288,13 @@ class RF2_untied(RF2_block):
 
  
 block_factory = {
-    "RF2aa":                    partial(RF2_block, is_full=False),
-    "RF2aa_full":               partial(RF2_block, is_full=True),
-    "untied_p2p":               partial(RF2_untied, is_full=False),
-    "untied_p2p_full":          partial(RF2_untied, is_full=True),
+    "AF3":                     AF3_block,
+    "AF3_full":                AF3_full_block,
+    "RF2aa":                   partial(RF2_block, is_full=False),
+    "RF2aa_full":              partial(RF2_block, is_full=True),
+    "untied_p2p":              partial(RF2_untied, is_full=False),
+    "untied_p2p_full":         partial(RF2_untied, is_full=True),
     "RF2_withgradients":       partial(RF2_withgradients, is_full=False),
     "RF2_withgradients_full":  partial(RF2_withgradients, is_full=True),
-    "RF2_withgradients_R":       partial(RF2_block, is_full=False, backprop_through_xyz=True),
+    "RF2_withgradients_R":     partial(RF2_block, is_full=False, backprop_through_xyz=True),
 }

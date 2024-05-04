@@ -268,7 +268,7 @@ def make_full_graph(xyz, pair, idx):
     src = b*L+i
     tgt = b*L+j
     G = dgl.graph((src, tgt), num_nodes=B*L).to(device)
-    G.edata['rel_pos'] = (xyz[b,j,:] - xyz[b,i,:]) #.detach() # no gradient through basis function
+    G.edata['rel_pos'] = (xyz[b,j,:] - xyz[b,i,:]).detach() # no gradient through basis function
     return G, pair[b,i,j][...,None]
 
 def make_topk_graph(xyz, pair, idx, top_k=128, nlocal=33, topk_incl_local=True, eps=1e-4):
@@ -323,48 +323,8 @@ def make_topk_graph(xyz, pair, idx, top_k=128, nlocal=33, topk_incl_local=True, 
 
     return G, pair[b,i,j][...,None]
 
-def make_atom_graph( xyz, mask, num_bonds, top_k=16, maxbonds=4 ):
-    B,L,A = xyz.shape[:3]
-    device = xyz.device
 
-    D = torch.norm(
-        xyz[:,None,None,:,:] - xyz[:,:,:,None,None], dim=-1
-    )
-    mask2d = mask[:,:,:,None,None]*mask[:,None,None,:,:]
-    D[~mask2d] = 9999.
-    D[D==0] = 9999.
 
-    # select top K neighbors for each atom
-    # keep indices as batch/res/atm indices
-    D_neigh, E_idx = torch.topk(D.reshape(B,L,A,-1), top_k, largest=False) # shape of E_idx: (B, L, top_k)
-    Eres, Eatm = torch.div(E_idx,A,rounding_mode='trunc'), E_idx%A
-    bi,ri,ai = mask.nonzero(as_tuple=True)
-    bi = bi[:,None].repeat(1,top_k).reshape(-1)
-    ri = ri[:,None].repeat(1,top_k).reshape(-1)
-    ai = ai[:,None].repeat(1,top_k).reshape(-1)
-    rj,aj = Eres[mask].reshape(-1), Eatm[mask].reshape(-1)
-
-    # on each edge, 1-hot encode the number of bonds (up to maxbonds) seperating each atom
-    edge = torch.full(ri.shape, maxbonds, device=device)
-    resmask = ri==rj
-    edge[resmask] = num_bonds[bi[resmask],ri[resmask],ai[resmask],aj[resmask]]-1
-    resmask = ri+1==rj
-    edge[resmask] = num_bonds[bi[resmask],ri[resmask],ai[resmask],2]+num_bonds[bi[resmask],rj[resmask],0,aj[resmask]]
-    resmask = ri-1==rj
-    edge[resmask] = num_bonds[bi[resmask],ri[resmask],ai[resmask],0]+num_bonds[bi[resmask],rj[resmask],2,aj[resmask]]
-    edge = edge.clamp(0,maxbonds-1)
-    edge = F.one_hot(edge)[...,None]
-
-    natm = torch.sum(mask)
-    index = torch.zeros_like(mask, dtype=torch.long, device=device)
-    index[mask] = torch.arange(natm, device=device)
-    src=index[bi,ri,ai]
-    tgt=index[bi,rj,aj]
-    
-    G = dgl.graph((src, tgt), num_nodes=natm).to(device)
-    G.edata['rel_pos'] = (xyz[bi,ri,ai] - xyz[bi,rj,aj]).detach() # no gradient through basis function
-
-    return G, edge
 
 
 # rotate about the x axis

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def scale_rotmat(
-    rotation_matrix: torch.Tensor, scalar: torch.Tensor, tol: float = 1e-7
+    rotation_matrix: torch.Tensor, scalar: torch.Tensor, tol: float = 1e-4
 ) -> torch.Tensor:
     """
     Scale rotation matrix. This is done by converting it to vector representation,
@@ -83,7 +83,7 @@ def skew_matrix_exponential_map_axis_angle(
 
 
 def skew_matrix_exponential_map(
-    angles: torch.Tensor, skew_matrices: torch.Tensor, tol=1e-7
+    angles: torch.Tensor, skew_matrices: torch.Tensor, tol=1e-4
 ) -> torch.Tensor:
     """
     Compute the matrix exponential of a rotation vector in skew matrix representation. Maps the
@@ -137,7 +137,7 @@ def skew_matrix_exponential_map(
     return exp_skew
 
 
-def rotvec_to_rotmat(rotation_vectors: torch.Tensor, tol: float = 1e-7) -> torch.Tensor:
+def rotvec_to_rotmat(rotation_vectors: torch.Tensor, tol: float = 1e-4) -> torch.Tensor:
     """
     Convert rotation vectors to rotation matrix representation. The length of the rotation vector
     is the angle of rotation, the unit vector the rotation axis.
@@ -232,7 +232,7 @@ def rotmat_to_rotvec(rotation_matrices: torch.Tensor) -> torch.Tensor:
     skew_outer = skew_outer + (torch.relu(skew_outer) - skew_outer) * id3
 
     # Get basic rotation vector as sqrt of diagonal (is unit vector).
-    vector_pi = torch.sqrt(torch.diagonal(torch.clamp(skew_outer, min=1e-8), dim1=-2, dim2=-1))
+    vector_pi = torch.sqrt(torch.diagonal(torch.clamp(skew_outer, min=1e-4), dim1=-2, dim2=-1))
 
     # Compute the signs of vector elements (up to a global phase).
     # Fist select indices for outer product slices with the largest norm.
@@ -326,7 +326,7 @@ def skew_matrix_to_vector(skew_matrices: torch.Tensor) -> torch.Tensor:
 
 
 def _rotquat_to_axis_angle(
-    rotation_quaternions: torch.Tensor, tol: float = 1e-7
+    rotation_quaternions: torch.Tensor, tol: float = 1e-4
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Auxiliary routine for computing rotation angle and rotation axis from unit quaternions. To avoid
@@ -334,7 +334,7 @@ def _rotquat_to_axis_angle(
 
     Args:
         rotation_quaternions (torch.Tensor): Rotation quaternions in [r, i, j, k] format.
-        tol (float, optional): Threshold for small rotations. Defaults to 1e-7.
+        tol (float, optional): Threshold for small rotations. Defaults to 1e-4.
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor]: Rotation angles and axes.
@@ -385,7 +385,7 @@ def rotquat_to_rotmat(rotation_quaternions: torch.Tensor) -> torch.Tensor:
 def apply_rotvec_to_rotmat(
     rotation_matrices: torch.Tensor,
     rotation_vectors: torch.Tensor,
-    tol: float = 1e-7,
+    tol: float = 1e-4,
 ) -> torch.Tensor:
     """
     Update a rotation encoded in a rotation matrix with a rotation vector.
@@ -602,7 +602,7 @@ class BaseSampleSO3(nn.Module):
         num_omega: int,
         sigma_grid: torch.Tensor,
         omega_exponent: int = 3,
-        tol: float = 1e-7,
+        tol: float = 1e-4,
         interpolate: bool = True,
         cache_dir: Optional[str] = None,
         overwrite_cache: bool = False,
@@ -625,7 +625,7 @@ class BaseSampleSO3(nn.Module):
             sigma_grid (torch.Tensor): Grid of IGSO3 std devs.
             omega_exponent (int, optional): Make the angle grid denser for smaller angles by taking
               its power with the provided number. Defaults to 3.
-            tol (float, optional): Small value for numerical stability. Defaults to 1e-7.
+            tol (float, optional): Small value for numerical stability. Defaults to 1e-4.
             interpolate (bool, optional): If enables, perform linear interpolation of the angle CDF
               to sample angles. Otherwise the closest tabulated point is returned. Defaults to True.
             cache_dir: Path to an optional cache directory. If set to None, lookup tables are
@@ -907,7 +907,7 @@ class SampleIGSO3(BaseSampleSO3):
         num_omega: int,
         sigma_grid: torch.Tensor,
         omega_exponent: int = 3,
-        tol: float = 1e-7,
+        tol: float = 1e-4,
         interpolate: bool = True,
         l_max: int = 1000,
         cache_dir: Optional[str] = None,
@@ -931,7 +931,7 @@ class SampleIGSO3(BaseSampleSO3):
             sigma_grid (torch.Tensor): Grid of IGSO3 std devs.
             omega_exponent (int, optional): Make the angle grid denser for smaller angles by taking
               its power with the provided number. Defaults to 3.
-            tol (float, optional): Small value for numerical stability. Defaults to 1e-7.
+            tol (float, optional): Small value for numerical stability. Defaults to 1e-4.
             interpolate (bool, optional): If enables, perform linear interpolation of the angle CDF
               to sample angles. Otherwise the closest tabulated point is returned. Defaults to True.
             l_max (int, optional): Maximum number of terms used in the series expansion.
@@ -1022,7 +1022,7 @@ class SampleUSO3(BaseSampleSO3):
         num_omega: int,
         sigma_grid: torch.Tensor,
         omega_exponent: int = 3,
-        tol: float = 1e-7,
+        tol: float = 1e-4,
         interpolate: bool = True,
         cache_dir: Optional[str] = None,
         overwrite_cache: bool = False,
@@ -1044,7 +1044,7 @@ class SampleUSO3(BaseSampleSO3):
             sigma_grid (torch.Tensor): Grid of IGSO3 std devs.
             omega_exponent (int, optional): Make the angle grid denser for smaller angles by taking
               its power with the provided number. Defaults to 3.
-            tol (float, optional): Small value for numerical stability. Defaults to 1e-7.
+            tol (float, optional): Small value for numerical stability. Defaults to 1e-4.
             interpolate (bool, optional): If enables, perform linear interpolation of the angle CDF
               to sample angles. Otherwise the closest tabulated point is returned. Defaults to True.
             cache_dir: Path to an optional cache directory. If set to None, lookup tables are
@@ -1122,7 +1122,7 @@ class ScoreSO3(nn.Module):
         sigma_grid: torch.Tensor,
         omega_exponent: int = 3,
         l_max: int = 1000,
-        tol: float = 1e-7,
+        tol: float = 1e-4,
         cache_dir: Optional[str] = None,
         overwrite_cache: bool = False,
     ) -> None:
@@ -1359,7 +1359,7 @@ def uniform_so3_density(omega: torch.Tensor) -> torch.Tensor:
 
 
 def igso3_expansion(
-    omega: torch.Tensor, sigma: torch.Tensor, l_grid: torch.Tensor, tol=1e-7
+    omega: torch.Tensor, sigma: torch.Tensor, l_grid: torch.Tensor, tol=1e-4
 ) -> torch.Tensor:
     """
     Compute the IGSO(3) angle probability distribution function for pairs of angles and std dev
@@ -1418,7 +1418,7 @@ def igso3_expansion(
 
 
 def digso3_expansion(
-    omega: torch.Tensor, sigma: torch.Tensor, l_grid: torch.Tensor, tol=1e-7
+    omega: torch.Tensor, sigma: torch.Tensor, l_grid: torch.Tensor, tol=1e-4
 ) -> torch.Tensor:
     """
     Compute the derivative of the IGSO(3) angle probability distribution function with respect to
@@ -1477,7 +1477,7 @@ def digso3_expansion(
 
 
 def dlog_igso3_expansion(
-    omega: torch.Tensor, sigma: torch.Tensor, l_grid: torch.Tensor, tol=1e-7
+    omega: torch.Tensor, sigma: torch.Tensor, l_grid: torch.Tensor, tol=1e-4
 ) -> torch.Tensor:
     """
     Compute the derivative of the logarithm of the IGSO(3) angle distribution function for pairs of
@@ -1509,7 +1509,7 @@ def generate_lookup_table(
     omega_grid: torch.Tensor,
     sigma_grid: torch.Tensor,
     l_max: int = 1000,
-    tol: float = 1e-7,
+    tol: float = 1e-4,
 ):
     """
     Auxiliary function for generating a lookup table from IGSO(3) expansions and their derivatives.
@@ -1550,7 +1550,7 @@ def generate_igso3_lookup_table(
     omega_grid: torch.Tensor,
     sigma_grid: torch.Tensor,
     l_max: int = 1000,
-    tol: float = 1e-7,
+    tol: float = 1e-4,
 ) -> torch.Tensor:
     """
     Generate a lookup table for the IGSO(3) probability distribution function of angles.
@@ -1579,7 +1579,7 @@ def generate_dlog_igso3_lookup_table(
     omega_grid: torch.Tensor,
     sigma_grid: torch.Tensor,
     l_max: int = 1000,
-    tol: float = 1e-7,
+    tol: float = 1e-4,
 ) -> torch.Tensor:
     """
     Generate a lookup table for the derivative of the logarithm of the angular IGSO(3) probability
@@ -1650,7 +1650,7 @@ def Exp(A): return exp(hat(A))
 
 
 # Angle of rotation SO(3) to R^+, this is the norm in our chosen orthonormal basis
-def Omega(R, eps=1e-6):
+def Omega(R, eps=1e-4):
     # multiplying by (1-epsilon) prevents instability of arccos when provided with -1 or 1 as input.
     R_ = R.to(torch.float64)
     assert not torch.any(torch.abs(R) > 1.1)

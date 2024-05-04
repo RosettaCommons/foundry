@@ -299,7 +299,7 @@ def MSAFeaturize(
     ins,
     params,
     p_mask=0.15,
-    eps=1e-6,
+    eps=1e-4,
     nmer=1,
     L_s=[],
     term_info=None,

@@ -18,7 +18,6 @@ def recycle_step_legacy(ddp_model, input, n_cycle, use_amp, nograds=False, force
     output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
     for i_cycle in range(n_cycle):
         with ExitStack() as stack:
-            #stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
             if i_cycle < n_cycle -1 or nograds is True:
                 stack.enter_context(torch.no_grad())
                 stack.enter_context(ddp_model.no_sync())
@@ -41,7 +40,6 @@ def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False, force
     output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
     for i_cycle in range(n_cycle):
         with ExitStack() as stack:
-            #stack.enter_context(torch.cuda.amp.autocast(enabled=use_amp))
             if i_cycle < n_cycle -1 or nograds is True:
                 stack.enter_context(torch.no_grad())
                 stack.enter_context(ddp_model.no_sync())
@@ -53,6 +51,30 @@ def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False, force
             output_i = unpack_outputs(rf_outputs, rf_latents, return_raw)
 
     return output_i
+
+def recycle_step_gen(ddp_model, input, n_cycle, use_amp, nograds=False, force_device=None):
+    """ exactly same logic as legacy recycling, except inputs and outputs are dictionaries"""
+    if force_device is not None:
+        gpu = force_device
+    else:
+        gpu = ddp_model.device
+
+    xyz_prev, alpha_prev, mask_recycle = \
+        input["xyz_prev"], input["alpha_prev"], input["mask_recycle"]
+    output_i = (None, None, xyz_prev, alpha_prev, mask_recycle)
+    for i_cycle in range(n_cycle):
+        with ExitStack() as stack:
+            if i_cycle < n_cycle -1 or nograds is True:
+                stack.enter_context(torch.no_grad())
+                stack.enter_context(ddp_model.no_sync())
+            return_raw = (i_cycle < n_cycle -1)
+            use_checkpoint = not nograds and  (i_cycle == n_cycle -1)
+
+            input_i = add_recycle_inputs(input, output_i, i_cycle, gpu, return_raw=return_raw, use_checkpoint=use_checkpoint)
+            rf_outputs, rf_latents = ddp_model(input_i, use_checkpoint=use_checkpoint, use_amp=use_amp, skip_refinement=return_raw)
+            output_i = unpack_outputs(rf_outputs, rf_latents, return_raw)
+    return output_i
+
 
 def run_model_forward(model, network_input, use_checkpoint=False, device="cpu"):
     """ run model forward pass, no recycling, no ddp (for tests) """
@@ -90,16 +112,38 @@ def unpack_outputs(rf_outputs, rf_latents, return_raw):
     msa, pair, state = rf_latents["msa"], rf_latents["pair"], rf_latents["state"]
 
     if return_raw:
-        xyz_prev = rf_outputs["xyzs"][-1][None]
-        alpha_prev = rf_outputs["alphas"][-1]
+        xyz_prev, alpha_prev = None, None
+        if "xyzs" in rf_outputs:
+            xyz_prev = rf_outputs["xyzs"][-1][None]
+        if "alphas" in rf_outputs:
+            alpha_prev = rf_outputs["alphas"][-1]
         return msa[:, 0], pair, xyz_prev, alpha_prev, None # mask_recycle is always None
 
     else:
-        c6d_logits, mlm_logits, pae_logits, plddt_logits = rf_outputs["c6d"], rf_outputs["mlm"], \
-            rf_outputs["pae"], rf_outputs["plddt"]
+        c6d_logits, mlm_logits, pae_logits, plddt_logits = None,None,None,None
+        if "c6d" in rf_outputs:
+            c6d_logits = rf_outputs["c6d"]
+        if "mlm" in rf_outputs:
+            mlm_logits = rf_outputs["mlm"]
+        if "pae" in rf_outputs:
+            pae_logits = rf_outputs["pae"]
+        if "plddt" in rf_outputs:
+            plddt_logits = rf_outputs["plddt"]
         pde_logits = None
         p_bind = None
-        xyz, alphas = rf_outputs["xyzs"], rf_outputs["alphas"]
+
+        if "xyzs" in rf_outputs:
+            xyz = rf_outputs["xyzs"]
+        else:
+            xyz = rf_outputs["xyz"][..., :3, :][None]
+        if "state" in rf_outputs:
+            state = rf_outputs["state"]
+        B = 1
+        L = xyz.shape[2]
+        if "alphas" in rf_outputs:
+            alphas = rf_outputs["alphas"]
+        else:
+            alphas = torch.zeros((1, B, L, ChemData().NTOTALDOFS, 2), device=xyz.device)
         if "xyz_intermediate" in rf_latents:
             intermediate_xyzs = torch.stack(rf_latents["xyz_intermediate"], dim=0)
             xyz = torch.cat((intermediate_xyzs, xyz), dim=0)
@@ -107,8 +151,8 @@ def unpack_outputs(rf_outputs, rf_latents, return_raw):
         if "alpha_intermediate" in rf_latents:
             alpha_intermediate = torch.stack(rf_latents["alpha_intermediate"], dim=0)
             alphas = torch.cat((alpha_intermediate, alphas), dim=0)
-
-        xyz_allatom = None
+        # HACK: breaking change for all atom flow matching
+        xyz_allatom = rf_outputs["xyz"]
         return (c6d_logits, mlm_logits, pae_logits, pde_logits, p_bind, 
                 xyz, alphas, xyz_allatom, plddt_logits, msa[:, 0], pair, state)
 

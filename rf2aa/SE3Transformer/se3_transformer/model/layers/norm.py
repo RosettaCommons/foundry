@@ -50,7 +50,10 @@ class NormSE3(nn.Module):
                  └──> feature_phase ────────────────────────────┘
     """
 
-    NORM_CLAMP = 2 ** -24  # Minimum positive subnormal for FP16
+    #NORM_CLAMP = 2 ** -24  # Minimum positive subnormal for FP16
+
+    #fd w/o disconnected gradients this value still causes exploding grads
+    NORM_CLAMP = 2 ** -16
 
     def __init__(self, fiber: Fiber, nonlinearity: nn.Module = nn.ReLU()):
         super().__init__()

@@ -1,5 +1,6 @@
 import os
 import torch
+import hydra
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 import pytest
@@ -16,10 +17,10 @@ from rf2aa.data.compose_dataset import compose_single_item_dataset
 # goal is to test all the configs on a broad set of datasets
 gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-test_conditions, test_ids = setup_benchmark_array(["pdb256"], ["rf_with_gradients"], device=gpu)
+#test_conditions, test_ids = setup_benchmark_array(["pdb256"], ["rf_with_gradients"], device=gpu)
 
 def setup_test(example, trainer):
-    model = trainer.model
+    #model = trainer.model
     config = trainer.config.chem_params
 
     # initialize chemical database
@@ -28,14 +29,16 @@ def setup_test(example, trainer):
 
     # to GPU
     trainer.move_constants_to_device(gpu)
-    model = model.to(gpu)
+
+    trainer.construct_model(device=gpu)
+    #model = model.to(gpu)
 
     dataset_name = example[0]
     item, loader_params, _, loader, loader_kwargs = example[1:]
     #HACK: reduce crop size
 
-    loader_params["CROP"] = 200
-    loader_params["MAXCYCLE"] = 10
+    loader_params["CROP"] = 100
+    loader_params["MAXCYCLE"] = 4
     # read from disk, move to device
     dataloader = compose_single_item_dataset( None, item, loader_params, loader, loader_kwargs)
     return dataloader
@@ -49,7 +52,7 @@ def test_minimize_example(example, trainer):
 
     dataloader = setup_test(example, trainer)
     trainer.train_loader = dataloader
-    trainer.model = DDP(trainer.model, device_ids=[gpu], find_unused_parameters=False, broadcast_buffers=False)
+    #trainer.model = DDP(trainer.model, device_ids=[gpu], find_unused_parameters=False, broadcast_buffers=False)
 
     trainer.construct_optimizer()
     trainer.construct_scheduler()
@@ -64,9 +67,18 @@ def test_minimize_example(example, trainer):
         for file in glob("models/*"):
             os.remove(file)
 
-if __name__ == "__main__":
-    example, trainer = test_conditions[0]
+@hydra.main(config_path="../config/train", config_name="base")
+def main(config):
+    from rf2aa.trainer_new import trainer_factory
+    trainer = trainer_factory[config.experiment.trainer](config)
+    example = data["pdb"]
     os.environ['MASTER_ADDR'] = '127.0.0.1' # multinode requires this set in submit script
     os.environ['MASTER_PORT'] = '%d'%trainer.config.ddp_params.port
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
     test_minimize_example(example, trainer) 
+
+if __name__ == "__main__":
+
+    from rf2aa.tests.test_conditions import setup_data
+    data = setup_data()
+    main()

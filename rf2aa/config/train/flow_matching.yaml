@@ -20,7 +20,7 @@ interpolant:
   rots:
     corrupt: True
     train_schedule: linear
-    sample_schedule: exp
+    sample_schedule: linear
     exp_rate: 10
 
   trans:
@@ -52,5 +52,3 @@ interpolant:
     num_timesteps: 100
     do_sde: False
   self_condition: False
-training_params:
-  resume_from_checkpoint_path: /net/tukwila/rohith/assorted_weights/models/rf2aa-baseline-noinplace_134.pt

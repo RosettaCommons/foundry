@@ -24,7 +24,7 @@ sm_compl_asmb_item = {'CHAINID': '4i7z_D', 'DEPOSITION': '2012-12-01', 'RESOLUTI
 benchmark196_item = {'Unnamed: 0': 489, 'CHAINID': '4y7y_BA', 'DEPOSITION': '2015-02-16', 'RESOLUTION': 2.4, 'HASH': '105747', 'CLUSTER': 10756, 'SEQUENCE': 'TSIMAVTFKDGVILGADSRTTTGAYIANRVTDKLTRVHDKIWCCRSGSAADTQAIADIVQYHLELYTSQYGTPSTETAASVFKELCYENKDNLTAGIIVAGYDDKNKGEVYTIPLGGSVHKLPYAIAGSGSTFIYGYCDKNFRENMSKEETVDFIKHSLSQAIKWDGSSGGVIRMVVLTAAGVERLIFYPDEYEQL', 'LEN_EXIST': 196, 'TAXID': ''}
 
 # configurations to test
-configs = ["rf2aa", "rf2_deep_layerdropout", "legacy_train", "rf2aa_legacy_refinement", "rf_with_gradients", "untied_p2p"]
+configs = ["rf2aa", "rf2_deep_layerdropout", "legacy_train", "rf2aa_legacy_refinement", "rf_with_gradients", "untied_p2p", "af3"]
 datasets = {
   "pdb"            : (loader_pdb,                      pdb_item,             {"homo": {"CHAIN_A": pd.Series(dtype=np.float32)}}),
   "compl"          : (loader_complex,                  compl_item,           {}),

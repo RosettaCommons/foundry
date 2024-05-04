@@ -77,6 +77,7 @@ class MSA_emb(nn.Module):
         # pair embedding 
         pair = self._pair_emb(seq, idx, bond_feats, dist_matrix, same_chain=same_chain,cyclize=cyclize)
         # state embedding
+
         state = self._state_emb(seq)
         return msa, pair, state
 
@@ -522,6 +523,21 @@ class Templ_emb_NoPtwise(nn.Module):
         return pair, state
 
 
+class RecyclingMSAPairOnly(nn.Module):
+    def __init__(self, d_msa=256, d_pair=128, d_state=0):
+        super(RecyclingMSAPairOnly, self).__init__()
+        self.norm_pair = nn.LayerNorm(d_pair)
+        self.proj_pair = nn.Linear(d_pair, d_pair, bias=False)
+        self.norm_msa = nn.LayerNorm(d_msa)
+        self.proj_msa = nn.Linear(d_msa, d_msa, bias=False)
+
+    def forward(self, msa, pair, xyz, state, sctors, mask_recycle=None):
+        B, L = msa.shape[:2]
+        msa = msa + self.proj_msa(self.norm_msa(msa))
+        pair = pair + self.proj_pair(self.norm_pair(pair))
+
+        return msa, pair, state # state is dummy
+
 class Recycling(nn.Module):
     def __init__(self, d_msa=256, d_pair=128, d_state=32, d_rbf=64):
         super(Recycling, self).__init__()
@@ -593,6 +609,7 @@ class RecyclingAllFeatures(nn.Module):
         return msa, pair, state
 
 recycling_factory = {
+    "msa_pair_only": RecyclingMSAPairOnly,
     "msa_pair": Recycling,
     "all": RecyclingAllFeatures
 }

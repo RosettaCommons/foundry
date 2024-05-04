@@ -36,7 +36,7 @@ class RosettaFold(nn.Module):
         self.simulator = nn.ModuleList(blocks)
         
         n_refinement_blocks = len(model_params.refinement.keys())
-        assert n_refinement_blocks <= 1, "only can have one refinment block"
+        assert n_refinement_blocks <= 1, "only can have one refinement block"
         self.refinement = None
         if n_refinement_blocks == 1:
             refinement_type = next(iter(model_params.refinement.keys()))
@@ -60,7 +60,7 @@ class RosettaFold(nn.Module):
             for aux_task in model_params.auxiliary_predictors.keys()
         }
 
-    def forward(self, rf_inputs, use_checkpoint, use_amp):
+    def forward(self, rf_inputs, use_checkpoint, use_amp, skip_refinement=False):
         latent_feats = self.embedding(rf_inputs)
         #load useful primitives into latent_features
         latent_feats.update(
@@ -73,20 +73,24 @@ class RosettaFold(nn.Module):
                 "bond_feats": rf_inputs["bond_feats"],
                 "dist_matrix": rf_inputs["dist_matrix"],
                 "is_motif": rf_inputs.get("is_motif", None),
+                "seq_unmasked": rf_inputs["seq_unmasked"],
+                "trans_t": rf_inputs.get("trans_t", None),
+                "t": rf_inputs.get("t", None),
             }
         )
         for block in self.simulator:
             latent_feats = block(latent_feats, use_checkpoint, use_amp)
 
         rf_outputs = {}
-        if self.refinement:
-            rf_outputs = self.refinement(latent_feats)
 
-        for aux_task, aux_predictor in self.auxiliary_predictors.items():
-            input_feature = self.auxiliary_predictor_input_feats[aux_task]
-            auxiliary_predictions = aux_predictor(latent_feats[input_feature])
-            rf_outputs.update({aux_task: auxiliary_predictions})
+        if not skip_refinement:
+            if self.refinement:
+                rf_outputs = self.refinement(latent_feats)
 
+            for aux_task, aux_predictor in self.auxiliary_predictors.items():
+                input_feature = self.auxiliary_predictor_input_feats[aux_task]
+                auxiliary_predictions = aux_predictor(latent_feats[input_feature])
+                rf_outputs.update({aux_task: auxiliary_predictions})
 
         return rf_outputs, latent_feats
 

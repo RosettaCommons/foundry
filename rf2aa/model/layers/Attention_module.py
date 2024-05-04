@@ -7,23 +7,24 @@ from einops import rearrange
 from rf2aa.util_module import init_lecun_normal
 
 class FeedForwardLayer(nn.Module):
-    def __init__(self, d_model, r_ff, p_drop=0.1):
+    def __init__(self, d_model, r_ff, p_drop=0.1, zero_init=True):
         super(FeedForwardLayer, self).__init__()
         self.norm = nn.LayerNorm(d_model)
         self.linear1 = nn.Linear(d_model, d_model*r_ff)
         self.dropout = nn.Dropout(p_drop)
         self.linear2 = nn.Linear(d_model*r_ff, d_model)
 
-        self.reset_parameter()
+        self.reset_parameter(zero_init)
 
-    def reset_parameter(self):
+    def reset_parameter(self,zero_init):
         # initialize linear layer right before ReLu: He initializer (kaiming normal)
         nn.init.kaiming_normal_(self.linear1.weight, nonlinearity='relu')
         nn.init.zeros_(self.linear1.bias)
 
         # initialize linear layer right before residual connection: zero initialize
-        nn.init.zeros_(self.linear2.weight)
-        nn.init.zeros_(self.linear2.bias)
+        if zero_init:
+            nn.init.zeros_(self.linear2.weight)
+            nn.init.zeros_(self.linear2.bias)
     
     def forward(self, src):
         src = self.norm(src)

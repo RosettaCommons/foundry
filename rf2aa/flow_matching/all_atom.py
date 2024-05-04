@@ -191,7 +191,7 @@ def calculate_neighbor_angles(R_ac, R_ab):
     # sin(alpha) = |u x v| / (|u|*|v|)
     y = torch.cross(R_ac, R_ab).norm(dim=-1)  # shape = (N,)
     # avoid that for y == (0,0,0) the gradient wrt. y becomes NaN
-    y = torch.max(y, torch.tensor(1e-9))
+    y = torch.max(y, torch.tensor(1e-4))
     angle = torch.atan2(y, x)
     return angle
 

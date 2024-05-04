@@ -41,7 +41,7 @@ class RF2_embedding(nn.Module):
         ## Update inputs with outputs from previous forward pass
         self.recycle = recycling_factory[block_params.recycling_type](d_msa=d_msa, d_pair=d_pair, d_state=d_state)
         self.recycling_type = block_params.recycling_type
-        assert self.recycling_type == "msa_pair", "no backward compatibility to recycling state"
+        assert self.recycling_type != "all", "no backward compatibility to recycling state"
 
     def _unpack_inputs(self, rf_inputs):
         msa_latent, msa_full, seq, idx, bond_feats, dist_matrix = \
@@ -90,9 +90,7 @@ class RF2_embedding(nn.Module):
 
         msa_latent[:,0] = msa_latent[:,0] + msa_recycle.reshape(B,L,-1)
         pair = pair + pair_recycle
-        # No support for recycling state
-        #state = state + state_recycle # if state is not recycled these will be zeros
-        # add template embedding
+
         pair, state = self._add_templ_features(rf_inputs, pair, state)
         return {
             "msa": msa_latent,

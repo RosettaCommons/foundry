@@ -105,14 +105,28 @@ class Interpolant:
         aligned_nm_0, aligned_nm_1, _ = du.batch_align_structures(
             batch_nm_0, batch_nm_1, mask=batch_mask
         ) 
+
+        # fd shortcut with batch 1
+        if num_batch == 1:
+            return aligned_nm_0
+
         aligned_nm_0 = aligned_nm_0.reshape(num_batch, num_batch, num_res, 3)
         aligned_nm_1 = aligned_nm_1.reshape(num_batch, num_batch, num_res, 3)
-        
+
         # Compute cost matrix of aligned noise to ground truth
         batch_mask = batch_mask.reshape(num_batch, num_batch, num_res)
+
+        #fd ensure masked positions are zeroed out
         cost_matrix = torch.sum(
-            torch.linalg.norm(aligned_nm_0 - aligned_nm_1, dim=-1), dim=-1
+            torch.linalg.norm(
+                batch_mask[...,None] * (
+                    aligned_nm_0.nan_to_num() - 
+                    aligned_nm_1.nan_to_num()
+                ), dim=-1
+            ), dim=-1
         ) / torch.sum(batch_mask, dim=-1)
+
+        #fd gpu->cpu slowdown
         noise_perm, gt_perm = linear_sum_assignment(du.to_numpy(cost_matrix))
         return aligned_nm_0[(tuple(gt_perm), tuple(noise_perm))]
     

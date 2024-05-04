@@ -16,7 +16,6 @@ def prepare_input(inputs, xyz_converter, gpu):
             xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, 
             atom_frames, bond_feats, dist_matrix, chirals, ch_label, symmgp, task, item
         ) = inputs
-
         # transfer inputs to device
         B, _, N, L = msa.shape
 
@@ -141,6 +140,7 @@ def get_loss_calc_items(inputs,device="cpu"):
     return seq.to(device), same_chain.to(device), idx_pdb.to(device), bond_feats.to(device), \
         dist_matrix.to(device), atom_frames.to(device), true_crds.to(device), mask_crds.to(device) 
 
+# prepate inputs for flow matching
 def prepare_input_fm(inputs, interpolant, xyz_converter, device="cpu"):
     (
         seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
@@ -158,7 +158,7 @@ def prepare_input_fm(inputs, interpolant, xyz_converter, device="cpu"):
     msa = msa.to(device, non_blocking=True)
     atom_frames = atom_frames.to(device, non_blocking=True)
 
-    interpolant.set_device(device)
+    #interpolant.set_device(device)
     batch = data_transforms.convert_dataloader_inputs_to_rigids(inputs, interpolant._device)
     noisy_batch = interpolant.corrupt_batch(batch)
     rotmats, trans = noisy_batch["rotmats_t"], noisy_batch["trans_t"]
@@ -213,6 +213,62 @@ def prepare_input_fm(inputs, interpolant, xyz_converter, device="cpu"):
     symmRs = None
     return task, item, network_input, true_crds, mask_crds, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label
 
+def prepare_input_fm_allatom(inputs, interpolant, xyz_converter, device="cpu"):
+    task, item, network_input, true_crds, \
+            atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
+            = prepare_input(inputs, xyz_converter, device)
+    (
+        seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
+        xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, 
+        atom_frames, bond_feats, dist_matrix, chirals, ch_label, symmgp, task, item
+    ) = inputs
+    B, _, N, L = msa.shape
+
+    idx_pdb = idx_pdb.to(device, non_blocking=True) # (B, L)
+    true_crds = true_crds.to(device, non_blocking=True) # (B, L, 27, 3)
+    mask_crds = mask_crds.to(device, non_blocking=True) # (B, L, 27)
+    same_chain = same_chain.to(device, non_blocking=True)
+    t1d = t1d.to(device, non_blocking=True)
+    seq = seq.to(device, non_blocking=True)
+    msa = msa.to(device, non_blocking=True)
+    atom_frames = atom_frames.to(device, non_blocking=True)
+
+    interpolant.set_device(device)
+    allatom_mask = ChemData().allatom_mask.to(device, non_blocking=True)
+
+    # remove symmetry dimension
+    if len(true_crds.shape) == 5:
+        true_crds = true_crds[:, 0:1]
+        mask_crds = mask_crds[:, 0:1]
+    else:
+        true_crds = true_crds[None]
+        mask_crds = mask_crds[None]
+
+    # want to unroll the coordinate tensors to get the full coordinates in (atoms, 3)
+    is_real_atom = allatom_mask[msa[:,0,0]][None].bool()
+    atom_coords = true_crds[is_real_atom]
+    atom_mask = mask_crds[is_real_atom]
+    t = interpolant.sample_t(B)[:, None]
+    #t = torch.tensor([[0.95]], device=t.device)
+
+    trans_1 = center_allatom_chain(atom_coords, atom_mask)
+
+    #fd what to do with "real" atoms that do not have a native position?
+    #fd  -> lets try the origin
+    trans_1 = trans_1.nan_to_num()
+
+    diffuse_mask = torch.ones_like(atom_mask).long()
+    trans_t = interpolant._corrupt_trans(trans_1[None], t, atom_mask[None], diffuse_mask[None])
+    xyz_noised_t = torch.zeros((1, B, L, ChemData().NTOTAL, 3), device=device)
+    xyz_noised_t[is_real_atom] = trans_t
+
+    # add trans_t (and t) to network input
+    network_input["trans_t"] = xyz_noised_t
+    network_input["t"] = t
+
+    return task, item, network_input, true_crds, mask_crds, msa, mask_msa, \
+        unclamp, negative, symmRs, Lasu, ch_label, t, trans_1, atom_mask
+
 
 def construct_template_feats(xyz_t, mask_t, t1d, seq, atom_frames, xyz_converter, use_atom_frames=False):
     B, T, Lasu, _, _ = xyz_t.shape 
@@ -243,3 +299,16 @@ def construct_template_feats(xyz_t, mask_t, t1d, seq, atom_frames, xyz_converter
     alpha_t = torch.cat((alpha, alpha_mask), dim=-1).reshape(B, -1, Lasu*Osub, 3*ChemData().NTOTALDOFS)
     alpha_prev = torch.zeros((B,Lasu*Osub,ChemData().NTOTALDOFS,2))
     return t2d, mask_t_2d, alpha_t, alpha_prev 
+
+def center_allatom_chain(atom_coords, atom_mask):
+    """
+    center allatom coordinates at origin
+    """
+    assert len(atom_coords.shape) == 2
+    assert len(atom_mask.shape) == 1
+    assert atom_coords.shape[-1] == 3
+
+    atom_coords_allatom = atom_coords[atom_mask]
+    atom_coords_allatom = atom_coords_allatom - atom_coords_allatom.mean(dim=0)
+    atom_coords[atom_mask] = atom_coords_allatom
+    return atom_coords

@@ -222,6 +222,7 @@ class ConvSE3(nn.Module):
             max_degree: int = 4,
             fuse_level: ConvSE3FuseLevel = ConvSE3FuseLevel.FULL,
             allow_fused_output: bool = False,
+            sum_over_edge: bool = True,
             low_memory: bool = False
     ):
         """
@@ -242,6 +243,7 @@ class ConvSE3(nn.Module):
         self.self_interaction = self_interaction
         self.max_degree = max_degree
         self.allow_fused_output = allow_fused_output
+        self.sum_over_edge = sum_over_edge
         self.conv_checkpoint = torch.utils.checkpoint.checkpoint if low_memory else lambda m, *x: m(*x)
 
         # channels_in: account for the concatenation of edge features

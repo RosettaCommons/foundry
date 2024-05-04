@@ -17,6 +17,8 @@ from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.kinematics import get_dih, get_ang
 from rf2aa.scoring import HbHybType
 
+from rf2aa.flow_matching import data_utils as du 
+
 from typing import List, Dict, Optional
 import logging
 logger = logging.getLogger(__name__)
@@ -1655,28 +1657,70 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
 
     lddt = torch.cat(lddt_s, dim=1) # (N, L, Natm)
 
+    # per-res
     final_lddt_by_res = torch.clamp(
         (lddt[-1]*atm_mask[0]).sum(-1)
         / (atm_mask.sum(-1) + eps), min=0.0, max=1.0)
 
-    # calculate lddt prediction loss
-    nbin = pred_lddt.shape[1]
-    bin_step = 1.0 / nbin
-    lddt_bins = torch.linspace(bin_step, 1.0, nbin, dtype=pred_lddt.dtype, device=pred_lddt.device)
-    true_lddt_label = torch.bucketize(final_lddt_by_res[None,...], lddt_bins).long()
-    lddt_loss = torch.nn.CrossEntropyLoss(reduction='none')(
-        pred_lddt, true_lddt_label[-1])
-
-    res_mask = atm_mask.any(dim=-1)
-    lddt_loss = (lddt_loss * res_mask).sum() / (res_mask.sum() + eps)
-   
-    # method 1: average per-residue
-    #lddt = lddt.sum(dim=-1) / (atm_mask.sum(dim=-1)+1e-4) # L
-    #lddt = (res_mask*lddt).sum() / (res_mask.sum() + 1e-4)
-
-    # method 2: average per-atom
+    # per-struct
     atm_mask = atm_mask * (pair_mask_accum != 0)
     lddt = (lddt * atm_mask).sum(dim=(1,2)) / (atm_mask.sum() + eps)
 
+    # calculate lddt prediction loss
+    if pred_lddt is not None:
+        nbin = pred_lddt.shape[1]
+        bin_step = 1.0 / nbin
+        lddt_bins = torch.linspace(bin_step, 1.0, nbin, dtype=pred_lddt.dtype, device=pred_lddt.device)
+        true_lddt_label = torch.bucketize(final_lddt_by_res[None,...], lddt_bins).long()
+        lddt_loss = torch.nn.CrossEntropyLoss(reduction='none')(
+            pred_lddt, true_lddt_label[-1])
+
+        res_mask = atm_mask.any(dim=-1)
+        lddt_loss = (lddt_loss * res_mask).sum() / (res_mask.sum() + eps)
+    else:
+        lddt_loss = None # no pred lddt provided
+
+
     return lddt_loss, lddt
+
+def rms_aln_tgt(predin, true, mask):
+    def centroid(X):
+        return X.mean(dim=-2, keepdim=True)
+
+    pred = predin[mask]
+    true = true[mask]
+    pred = pred - centroid(pred)
+    cT = centroid(true)
+    true = true - cT
+    C = torch.einsum('ji,jk->ik', pred, true)
+    V, S, W = torch.svd(C)
+    d = torch.ones([3,3], device=pred.device)
+    d[:,-1] = torch.sign(torch.det(V)*torch.det(W)).unsqueeze(0)
+    U = torch.matmul(d*V, W.permute(1,0)) # (3, 3)
+
+    rpred = torch.matmul(predin, U) + cT
+    return rpred
+
+
+def translation_vector_field(pred_trans_1, noaln_gt_trans_1, mask, r3_t, params):
+    gt_trans_1 = rms_aln_tgt(noaln_gt_trans_1, pred_trans_1.detach(), mask)
+
+    return translation_vector_field_noaln(pred_trans_1, gt_trans_1, mask, r3_t, params)
+
+
+def translation_vector_field_noaln(pred_trans_1, gt_trans_1, mask, r3_t, params):
+    t_normalize_clip = params.t_normalize_clip
+    trans_scale = params.trans_scale # global scale
+
+    t_dep_scale = 1 - torch.min(  # t-dependant scale
+            r3_t[..., None], torch.tensor(t_normalize_clip)
+    ) # (B, 1, 1)
+    trans_error = trans_scale / t_dep_scale  * (gt_trans_1 - pred_trans_1) 
+
+    loss_denom = 3 * torch.sum(mask)
+    trans_loss = torch.sum(
+        trans_error*trans_error*mask[...,None], dim=(-1,-2)
+    ) / loss_denom
+
+    return trans_loss
 

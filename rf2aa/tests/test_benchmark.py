@@ -21,7 +21,7 @@ from functools import partial
 # goal is to test all the configs on a broad set of datasets
 gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-test_conditions, test_ids = setup_benchmark_array(["pdb196"], ["rf2aa","rf2_deep_layerdropout"])
+test_conditions, test_ids = setup_benchmark_array(["pdb196"], ["rf2aa","rf2_deep_layerdropout","af3"])
 
 def setup_test(example, trainer):
     model = trainer.model
@@ -76,7 +76,7 @@ def test_benchmark_fw_bw(benchmark, example, trainer):
 
     def run():
         output_i = recycle_step_packed(trainer.model, network_input, 1, trainer.config.training_params.use_amp, nograds=False, force_device=gpu) 
-        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames = get_loss_calc_items(dataloader_inputs, device=gpu)
+        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames, _, _ = get_loss_calc_items(dataloader_inputs, device=gpu)
 
         loss, loss_dict = get_loss_and_misc(
             trainer,

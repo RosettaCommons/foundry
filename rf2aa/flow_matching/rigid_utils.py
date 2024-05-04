@@ -564,7 +564,7 @@ class Rotation:
         else:
             raise ValueError("Both rotations are None")
 
-    def get_rotvec(self, eps=1e-6) -> torch.Tensor:
+    def get_rotvec(self, eps=1e-4) -> torch.Tensor:
         """
             Return the underlying axis-angle rotation vector.
 
@@ -1265,7 +1265,7 @@ class Rigid:
         p_neg_x_axis: torch.Tensor, 
         origin: torch.Tensor, 
         p_xy_plane: torch.Tensor, 
-        eps: float = 1e-8
+        eps: float = 1e-4
     ):
         """
             Implements algorithm 21. Constructs transformations from sets of 3 

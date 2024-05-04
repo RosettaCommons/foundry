@@ -7,7 +7,7 @@ experiment:
 model: 
   embedding: null
   blocks: null
-  refinment: null
+  refinement: null
   auxiliary_predictors: {}
 legacy_model: null
 dataset_params: 
@@ -130,6 +130,7 @@ loss_param:
   w_hb: 0.0
   w_pae: 0.05
   w_pde: 0.05
+  w_trans: 0.0
   lj_lin: 0.75
 
 log_params:

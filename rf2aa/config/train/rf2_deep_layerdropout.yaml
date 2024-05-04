@@ -30,6 +30,7 @@ model:
         n_se3_edge_features: 32
         residual_state: True
         norm_msa_row: True
+        bias_in_attn_norm: True
         use_flash_attn: True
 
     RF2aa:
@@ -41,6 +42,7 @@ model:
         n_se3_edge_features: 32
         residual_state: True
         norm_msa_row: True
+        bias_in_attn_norm: True
         use_flash_attn: True
 
   refinement:

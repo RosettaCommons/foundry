@@ -10,19 +10,20 @@ import time
 import omegaconf
 from contextlib import nullcontext
 import datetime
-
+from datetime import timedelta
 import certifi
 import warnings
 
 from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
-from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items, prepare_input_fm
+from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items, prepare_input_fm_allatom
 from rf2aa.flow_matching.interpolant import Interpolant
-from rf2aa.flow_matching.sampler import Sampler
+from rf2aa.flow_matching.sampler import Sampler, AllAtomSampler
 from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads
 from rf2aa.training.EMA import EMA, count_parameters
+from rf2aa.loss.loss import translation_vector_field
 from rf2aa.loss.loss_factory import get_loss_and_misc
 from rf2aa.training.optimizer import add_weight_decay
-from rf2aa.training.recycling import recycle_step_legacy, recycle_step_packed, recycle_sampling, run_model_forward
+from rf2aa.training.recycling import recycle_step_legacy, recycle_step_packed, recycle_step_gen, recycle_sampling, run_model_forward
 from rf2aa.model.network import RosettaFold
 from rf2aa.model.RoseTTAFoldModel import LegacyRoseTTAFoldModule
 from rf2aa.training.scheduler import get_stepwise_decay_schedule_with_warmup
@@ -93,8 +94,24 @@ class Trainer:
 
     def load_model(self):
         torch.cuda.empty_cache()
-        self.model.module.model.load_state_dict(self.checkpoint["final_state_dict"], strict=True)
-        self.model.module.shadow.load_state_dict(self.checkpoint["model_state_dict"], strict=False)
+
+        new_model_state = {}
+        new_shadow_state = {}
+        state_dict = self.model.module.model.state_dict()
+        for param in state_dict:
+            if param not in self.checkpoint['model_state_dict']:
+                print ('missing',param)
+            elif (self.checkpoint['model_state_dict'][param].shape == state_dict[param].shape):
+                new_model_state[param] = self.checkpoint['final_state_dict'][param]
+                new_shadow_state[param] = self.checkpoint['model_state_dict'][param]
+            else:
+                print (
+                    'wrong size',param,
+                    self.checkpoint['model_state_dict'][param].shape,
+                    state_dict[param].shape )
+
+        self.model.module.model.load_state_dict(new_model_state, strict=False)
+        self.model.module.shadow.load_state_dict(new_shadow_state, strict=False)
         print("Checkpoint loaded into model")
 
     def load_optimizer(self):
@@ -179,7 +196,7 @@ class Trainer:
 
     def init_process_group(self, rank, world_size):
         gpu = rank % torch.cuda.device_count()
-        dist.init_process_group(backend=self.config.training_params.ddp_backend, world_size=world_size, rank=rank)
+        dist.init_process_group(backend=self.config.training_params.ddp_backend, timeout=timedelta(seconds=1800), world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
         return gpu
     
@@ -226,7 +243,6 @@ class Trainer:
             self.move_constants_to_device(gpu)
 
             self.construct_model(device=gpu)
-            self.model = DDP(self.model, device_ids=[gpu], find_unused_parameters=False, broadcast_buffers=False)
             if rank == 0:
                 print(f"Loading model with {count_parameters(self.model)} parameters")
 
@@ -249,6 +265,11 @@ class Trainer:
                                                                 self.config.experiment.n_epoch,
                                                                 self.config.dataset_params.n_train,
                                                                 world_size)
+
+            #for d, valid_sampler in valid_samplers.items():
+            #    valid_sampler.set_epoch(start_epoch-1)
+            #self.valid_epoch(start_epoch-1, rank, world_size)
+
             for epoch in range(start_epoch,self.config.experiment.n_epoch):
                 train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
                 self.train_epoch(epoch, rank, world_size)
@@ -279,7 +300,26 @@ class Trainer:
             
             # aggregate loss and update parameters
             loss = loss / self.config.ddp_params.accum
+
+            if (torch.any(torch.isnan(loss))):
+                print ('NAN in loss',inputs[-1])
+                print ('NAN in loss',loss_dict)
+                exit(1)
+
             self.scaler.scale(loss).backward()
+
+            hasnans=False
+            for n,p in self.model.named_parameters():
+                if (p.grad is not None and torch.any(torch.isnan(p.grad))):
+                    hasnans = True
+            if hasnans:
+                print ('NAN in grad')
+                for n,p in self.model.named_parameters():
+                    if (p.grad is not None):
+                        print (n, torch.max( torch.abs(p.flatten()) ), torch.max( torch.abs(p.grad.flatten()) ))
+                exit(1)
+
+            train_time = time.time() - start_time
 
             if train_idx%self.config.ddp_params.accum == 0:  
                 self.update_parameters()
@@ -345,6 +385,7 @@ class Trainer:
     def update_parameters(self):
         """ scale, clip gradients and update parameters """
         # gradient clipping
+        #debug_grads(self.model)
         self.scaler.unscale_(self.optimizer)
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.training_params.grad_clip)
         self.scaler.step(self.optimizer)
@@ -390,6 +431,8 @@ class LegacyTrainer(Trainer):
         ).to(device)
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
+        self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
+
 
     def train_step(self, inputs, n_cycle, nograds=False, return_outputs=False):
         """ take an input from dataloader, run the model and compute a loss """
@@ -401,7 +444,7 @@ class LegacyTrainer(Trainer):
             = prepare_input(inputs, self.xyz_converter, gpu)
 
         output_i = recycle_step_legacy(self.model, network_input, n_cycle, self.config.training_params.use_amp, nograds=nograds) 
-        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames = get_loss_calc_items(inputs, device=gpu)
+        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames, _, _ = get_loss_calc_items(inputs, device=gpu)
 
         #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
         #HACK: need to promote some inputs to gpu for loss calculation, all promotions should happen together
@@ -410,7 +453,8 @@ class LegacyTrainer(Trainer):
         loss, loss_dict = get_loss_and_misc(
             self, # avoid reloading constants to device 
             output_i, true_crds, atom_mask, same_chain,
-            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
+            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, None, None,
+            unclamp, negative, task, item, symmRs, Lasu, ch_label, 
             self.config.loss_param
         )
         if return_outputs:
@@ -429,6 +473,7 @@ class ComposedTrainer(Trainer):
         self.model = RosettaFold(self.config).to(device)
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
+        self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
 
     def train_step(self, inputs, n_cycle, nograds=False, return_outputs=False):
         """ take an input from dataloader, run the model and compute a loss """
@@ -452,7 +497,8 @@ class ComposedTrainer(Trainer):
         loss, loss_dict = get_loss_and_misc(
             self, # avoid reloading constants to device 
             output_i, true_crds, atom_mask, same_chain,
-            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
+            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, None, None, 
+            unclamp, negative, task, item, symmRs, Lasu, ch_label, 
             self.config.loss_param
         )
 
@@ -468,7 +514,8 @@ class FlowMatchingTrainer(Trainer):
         self.model = RosettaFold(self.config).to(device)
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
-        self.sampler = Sampler(self.model, 
+        self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
+        self.sampler = AllAtomSampler(self.model, 
                                self.config.interpolant.sampling.num_timesteps,
                                self.config.interpolant.min_t,
                                self.interpolant,
@@ -482,11 +529,47 @@ class FlowMatchingTrainer(Trainer):
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
+        #try:
         task, item, network_input, true_crds, \
-            atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
-            = prepare_input_fm(inputs, self.interpolant, self.xyz_converter, gpu)
+            atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label, \
+            r3_t, trans_1, mask_allatom \
+        = prepare_input_fm_allatom(inputs, self.interpolant, self.xyz_converter, gpu)
 
-        output_i = recycle_step_packed(self.model, network_input, 1, self.config.training_params.use_amp, nograds=no_grads)
+        output_i = recycle_step_gen(self.model, network_input, n_cycle, self.config.training_params.use_amp, nograds=no_grads)
+        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames, true_crds, atom_mask = get_loss_calc_items(inputs, device=gpu)
+        logit_s, logit_aa_s, logit_pae, logit_pde, p_bind, pred_crds, alphas, pred_allatom, pred_lddts, _, _, _ = output_i
+        #loss = (pred_allatom - true_crds).mean()
+        #loss_dict = {"loss": loss.mean()}
+
+        #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
+        #HACK: need to promote some inputs to gpu for loss calculation, all promotions should happen together
+        msa = msa.to(gpu)
+        mask_msa = mask_msa.to(gpu)
+
+        loss, loss_dict = get_loss_and_misc(
+            self, # avoid reloading constants to device 
+            output_i, true_crds, atom_mask, same_chain,
+            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, trans_1, r3_t,
+            unclamp, negative, task, item, symmRs, Lasu, ch_label, 
+            self.config.loss_param
+        )
+
+        if return_outputs:
+            return loss, loss_dict, output_i
+        else:
+            return loss, loss_dict
+
+    def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
+        gpu = self.model.device
+        #try:
+        task, item, network_input, true_crds, \
+            atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label, \
+            r3_t, trans_1, mask_allatom \
+        = prepare_input_fm_allatom(inputs, self.interpolant, self.xyz_converter, gpu)
+
+        #output_i = recycle_step_gen(self.model, network_input, n_cycle, self.config.training_params.use_amp, nograds=no_grads)
+        with torch.no_grad():
+            output_i = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
         seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames, true_crds, atom_mask = get_loss_calc_items(inputs, device=gpu)
 
         #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
@@ -497,37 +580,14 @@ class FlowMatchingTrainer(Trainer):
         loss, loss_dict = get_loss_and_misc(
             self, # avoid reloading constants to device 
             output_i, true_crds, atom_mask, same_chain,
-            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
+            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, trans_1, r3_t,
+            unclamp, negative, task, item, symmRs, Lasu, ch_label, 
             self.config.loss_param
         )
 
-        if return_outputs:
-            return loss, loss_dict, output_i
-        else:
-            return loss, loss_dict
-
-    def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
-        gpu = self.interpolant._device
-        self.sampler.model = self.model
-        task, item, network_input, true_crds, \
-            atom_mask, msa, mask_msa, unclamp, negative, symmRs, Lasu, ch_label \
-            = prepare_input_fm(inputs, self.interpolant, self.xyz_converter, gpu)
-
-        output_i = self.sampler.sample(inputs)
-        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames, true_crds, atom_mask \
-              = get_loss_calc_items(inputs, device=gpu)
-
-        #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
-        #HACK: need to promote some inputs to gpu for loss calculation, all promotions should happen together
-        msa = msa.to(gpu)
-        mask_msa = mask_msa.to(gpu)
-
-        loss, loss_dict = get_loss_and_misc(
-            self, # avoid reloading constants to device 
-            output_i, true_crds, atom_mask, same_chain,
-            seq, msa[:, n_cycle-1], mask_msa[:, n_cycle-1], idx_pdb, bond_feats, dist_matrix, atom_frames, unclamp, negative, task, item, symmRs, Lasu, ch_label, 
-            self.config.loss_param
-        )
+        #fd last layer l0 are unused in grads
+        #fd to do: fix this in refinement module
+        loss += 0.0*output_i[-1].sum()
 
         if return_outputs:
             return loss, loss_dict, output_i
@@ -543,7 +603,8 @@ class FlowMatchingTrainer(Trainer):
             for valid_idx, inputs in enumerate(valid_loader):
                 n_cycle = self.config.loader_params.maxcycle
 
-                loss, loss_dict = self.valid_step(inputs, n_cycle)  
+                loss, loss_dict = self.valid_step(inputs, n_cycle)
+                #print (loss_dict)
 
                 if valid_loss_dict is None:
                     valid_loss_dict = torch.zeros_like(torch.stack(list(loss_dict.values())))
