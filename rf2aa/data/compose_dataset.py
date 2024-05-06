@@ -109,6 +109,8 @@ default_dataloader_params = {
         "SHOW_SM_TEMPLATES" : False,
         "BATCH_BY_DATASET"  : False,
         "BATCH_BY_LENGTH"   : False,
+        "ligands_to_remove" : [],
+        "min_metal_contacts": 0,
     }
 
 def set_data_loader_params(loader_params):
