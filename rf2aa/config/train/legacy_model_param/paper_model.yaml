@@ -1,0 +1,41 @@
+n_extra_block: 4
+n_main_block: 32
+n_ref_block: 4
+n_finetune_block: 0
+d_msa: 256
+d_msa_full: 64
+d_pair: 192
+d_templ: 64
+n_head_msa: 8
+n_head_pair: 6
+n_head_templ: 4
+d_hidden_templ: 64
+p_drop: 0.0
+use_chiral_l1: True
+use_lj_l1: True
+use_atom_frames: True
+recycling_type: "all"
+use_same_chain: True
+lj_lin: 0.75
+SE3_param: 
+  num_layers: 1
+  num_channels: 32
+  num_degrees: 2
+  l0_in_features: 64
+  l0_out_features: 64
+  l1_in_features: 3
+  l1_out_features: 2
+  num_edge_features: 64
+  n_heads: 4
+  div: 4
+SE3_ref_param:
+  num_layers: 2
+  num_channels: 32
+  num_degrees: 2
+  l0_in_features: 64
+  l0_out_features: 64
+  l1_in_features: 3
+  l1_out_features: 2
+  num_edge_features: 64
+  n_heads: 4
+  div: 4

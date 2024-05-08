@@ -164,3 +164,6 @@ def model_pickle_path(dataset_name, model_name):
 
 def loss_pickle_path(dataset_name, model_name, loss_name):
     return f"test_pickles/loss/{loss_name}_{model_name}_{dataset_name}_regression.pt"
+
+def config_pickle_path(config_name):
+    return f"test_pickles/config/{config_name}_regression.pt"

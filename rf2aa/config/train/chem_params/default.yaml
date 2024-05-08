@@ -1,0 +1,2 @@
+use_phospate_frames_for_NA: True
+use_lj_params_for_atoms: False

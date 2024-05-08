@@ -1,0 +1,9 @@
+EMA: 0.99
+weight_decay: 0.01
+learning_rate: .001
+learning_rate_schedule:
+  num_warmup_steps: 0
+  num_steps_decay: 5000
+  decay_rate: 0.95
+grad_clip: 0.2
+use_amp: True

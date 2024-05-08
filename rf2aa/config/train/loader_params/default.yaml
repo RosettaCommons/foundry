@@ -1,0 +1,23 @@
+RADIAL_CROP: False
+OMIT_PERMUTATE: True
+maxseq: 1024
+maxtoken: 1024
+maxlat: 128
+crop: 256
+rescut: 4.5
+mintplt: 1
+maxtplt: 4
+seqid: 150.0
+p_msa_mask: 0.15
+maxcycle: 4
+nres_atomize_min: 5
+nres_atomize_max: 15
+atomize_flank: 0
+p_metal: 1
+p_atomize_modres: 1
+batch_by_dataset: True
+batch_by_length: True
+dataloader_kwargs:
+  shuffle: False
+  num_workers: 4
+  pin_memory: True
