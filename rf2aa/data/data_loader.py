@@ -2538,7 +2538,7 @@ def loader_complex(item, params, negative=False, pick_top=True, random_noise=5.0
            xyz_prev.float(), mask_prev, \
            same_chain, False, negative, torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', "compl", item
 
-def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_top=True, random_noise=5.0):
+def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_top=True, random_noise=5.0, fixbb=False):
     pdb_set = item['CHAINID']
     msa_id = item['HASH']
     #Ls = item['LEN']  #fd this is not reported correctly....
@@ -2780,7 +2780,7 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     ins = a3m['ins'].long()
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls, fixbb=fixbb)
 
     # build native from components
     xyz = torch.full((NMDLS, sum(Ls), ChemData().NTOTAL, 3), np.nan)
@@ -2823,7 +2823,8 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     ch_label = torch.cat([torch.full((L_,), i) for i,L_ in enumerate(Ls)]).long()
 
     # Do cropping
-    if sum(Ls) > params['CROP']:
+    CROP = params['CROP'] if not 'CROP_NA_COMPL' in params else params['CROP_NA_COMPL']
+    if sum(Ls) > CROP:
         cropref = np.random.randint(xyz.shape[0])
         sel = get_na_crop(seq[0], xyz[cropref], mask[cropref], torch.arange(sum(Ls)), Ls, params, negative)
 
@@ -2859,7 +2860,7 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
            xyz_prev.float(), mask_prev, \
            same_chain, False, negative, atom_frames, bond_feats, dist_matrix, chirals, ch_label, 'C1', "na_compl", item
 
-def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=5.0):
+def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=5.0, fixbb=False):
 #    ic(item, negative)
 
     gene_id = item["gene_id"]
@@ -2971,7 +2972,7 @@ def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=
     ins = a3m['ins'].long()
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls, fixbb=fixbb)
 
     # build dummy "native" in case a loss function expects it 
     xyz = torch.full((1, L, ChemData().NTOTAL, 3), np.nan)
@@ -3003,7 +3004,8 @@ def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=
         ch_label[sum(Ls[:i]):sum(Ls[:i+1])] = i
 
     # Do cropping
-    if sum(Ls) > params['CROP']:
+    CROP = params['CROP'] if not 'CROP_NA_COMPL' in params else params['CROP_NA_COMPL']
+    if sum(Ls) > CROP:
 #        print (f'started cropping ({item["gene_id"]})')
 
         sel = torch.full((L,), False)
@@ -3062,7 +3064,7 @@ def loader_tf_complex(item, params, negative=False, pick_top=True, random_noise=
            chain_idx, False, negative, \
            torch.zeros(seq.shape), bond_feats, dist_matrix, chirals, ch_label, 'C1', task, item
 
-def loader_distil_tf(item, params, random_noise=5.0, pick_top=True, native_NA_frac=0.0, negative=False):
+def loader_distil_tf(item, params, random_noise=5.0, pick_top=True, native_NA_frac=0.0, negative=False, fixbb=False):
     # collect info
     gene_id = item['gene_id']
     Ls = item['LEN']
@@ -3113,7 +3115,7 @@ def loader_distil_tf(item, params, random_noise=5.0, pick_top=True, native_NA_fr
     ins = a3m['ins'].long()
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls, fixbb=fixbb)
 
     ###################################
     # Load and prepare structure data #
@@ -3147,8 +3149,8 @@ def loader_distil_tf(item, params, random_noise=5.0, pick_top=True, native_NA_fr
     ###############
     # Do cropping #
     ###############
-    
-    if sum(Ls) > params['CROP']:
+    CROP = params['CROP'] if not 'CROP_NA_COMPL' in params else params['CROP_NA_COMPL']
+    if sum(Ls) > CROP:
         sel = get_na_crop(seq[0], xyz, mask, torch.arange(sum(Ls)), Ls, params, negative=False)
 
         seq = seq[:,sel]
@@ -3258,7 +3260,7 @@ def choose_matching_seq(seqs, pos_seq):
         return None, nrep
 
 
-def loader_dna_rna(item, params, random_noise=5.0):
+def loader_dna_rna(item, params, random_noise=5.0, fixbb=False):
     # read PDBs
     pdb_ids = item['CHAINID'].split(':')
 
@@ -3297,7 +3299,7 @@ def loader_dna_rna(item, params, random_noise=5.0):
     # get MSA features
     msa = a3m['msa'].long()
     ins = a3m['ins'].long()
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls, fixbb=fixbb)
 
     xyz = torch.full((NMDLS, L, ChemData().NTOTAL, 3), np.nan).float()
     mask = torch.full((NMDLS, L, ChemData().NTOTAL), False)
@@ -3324,7 +3326,8 @@ def loader_dna_rna(item, params, random_noise=5.0):
     bond_feats = bond_feats_from_Ls(Ls).long()
 
     # Do cropping
-    if sum(Ls) > params['CROP']:
+    CROP = params['CROP'] if not 'CROP_NA_COMPL' in params else params['CROP_NA_COMPL']
+    if sum(Ls) > CROP:
         cropref = np.random.randint(xyz.shape[0])
         sel = get_na_crop(seq[0], xyz[cropref], mask[cropref], torch.arange(L), Ls, params, incl_protein=False)
 

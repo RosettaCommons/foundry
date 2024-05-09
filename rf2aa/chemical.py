@@ -91,6 +91,8 @@ class ChemicalData:
         self.NAATOKENS = 20+2+10+1+47 # 20 AAs, UNK, MASK, 8 NAs,HIS_D, 47 atoms
         self.UNKINDEX = 20  # residue unknown
         self.MASKINDEX = 21  # protein mask
+        self.MASKINDEXDNA = 26 # Needs to change in the future 
+        self.MASKINDEXRNA = 31 # Needs to change in the future
 
         self.NHEAVYPROT = 14
         self.NHEAVY = 23
@@ -413,6 +415,42 @@ class ChemicalData:
                 [ [" O4'"," C1'"," C2'"], [" OP1"," P  "," O5'"], [" P  "," O5'"," C5'"], [" O5'"," C5'"," C4'"], [" C5'"," C4'"," C3'"], [" C5'"," C4'"," O4'"], [" C4'"," O4'"," C1'"], [" C2'"," C1'"," N1 "], [" C4'"," C3'"," O3'"] ], #U
                 [ [" O4'"," C1'"," C2'"], [" OP1"," P  "," O5'"], [" P  "," O5'"," C5'"], [" O5'"," C5'"," C4'"], [" C5'"," C4'"," C3'"], [" C5'"," C4'"," O4'"], [" C4'"," O4'"," C1'"], [" C4'"," C3'"," O3'"] ], #RX
             ]
+
+            self.aachirals = [
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #ala
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #arg
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #asn
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #asp
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #cys
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #gln
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #glu
+                (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #gly
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #his
+                (0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #ileu
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #leu
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #lys
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #met
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #phe
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #pro
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #ser
+                (0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #thr
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #trp
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #tyr
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #val
+                (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #unk
+                (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #mas
+                (0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DA DNA, C1', C3', C4'
+                (0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DC
+                (0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DG
+                (0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DT
+                (0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DX
+                (0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RA RNA< C1', C2', C3', C4'
+                (0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RC
+                (0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RG
+                (0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RT
+                (0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RX
+            ]    
+            self.aachirals = torch.tensor(self.aachirals)        
 
             #fd Rosetta ideal coords
             #fd   - uses same "frame-building" as AF2
@@ -1360,6 +1398,42 @@ class ChemicalData:
                 [ [" OP1"," P  "," OP2"], [" OP1"," P  "," O5'"], [" P  "," O5'"," C5'"], [" O5'"," C5'"," C4'"], [" C5'"," C4'"," C3'"], [" C5'"," C4'"," O4'"], [" C4'"," O4'"," C1'"], [" C4'"," C3'"," O3'"] ], #RX
             ]
 
+            self.aachirals = [
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #ala
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #arg
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #asn
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #asp
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #cys
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #gln
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #glu
+                (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #gly
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #his
+                (0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #ileu
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #leu
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #lys
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #met
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #phe
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #pro
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #ser
+                (0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #thr
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #trp
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #tyr
+                (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #val
+                (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #unk
+                (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #mas
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DA DNA, C1', C3', C4'
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DC
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DG
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DT
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #DX
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RA RNA< C1', C2', C3', C4'
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RC
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RG
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RT
+                (0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #RX
+            ]   
+            self.aachirals = torch.tensor(self.aachirals)
+
             #fd Rosetta ideal coords
             #fd   - uses same "frame-building" as AF2
             # FRAMES:
@@ -2117,7 +2191,7 @@ class ChemicalData:
         self.RESIDUE_BB_BOND = 5
         self.RESIDUE_ATOM_BOND = 6
 
-        # BTYPES ONLY DEFINED FOR CANONICAL 20 amino acids + UNK, MAS treated as glycines
+        # BTYPES ONLY DEFINED FOR CANONICAL 20 amino acids + UNK, MAS treated as glycines and now RNA/DNA
         SINGLE_BOND = self.SINGLE_BOND
         DOUBLE_BOND = self.DOUBLE_BOND
         AROMATIC_BOND = self.AROMATIC_BOND
@@ -2144,33 +2218,18 @@ class ChemicalData:
             (SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND,   AROMATIC_BOND, SINGLE_BOND,   AROMATIC_BOND,   SINGLE_BOND,   AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND,   SINGLE_BOND,   SINGLE_BOND, SINGLE_BOND), # tyr
             (SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND,   SINGLE_BOND,     SINGLE_BOND,   SINGLE_BOND,   SINGLE_BOND,     SINGLE_BOND), # val
             (SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, DOUBLE_BOND), # unk (treated as gly)
-            (SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, DOUBLE_BOND) # mask (treated as gly)
+            (SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, DOUBLE_BOND), # mask (treated as gly)
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND),  # DA
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND),  # DC
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND),  # DG
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, DOUBLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, DOUBLE_BOND, AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND), # DT
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND),  #DX
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND),  #RA
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND),  #RC
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND),  #RG
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, AROMATIC_BOND, AROMATIC_BOND, DOUBLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, DOUBLE_BOND, AROMATIC_BOND, AROMATIC_BOND, SINGLE_BOND, SINGLE_BOND),  #RT
+            (DOUBLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND, SINGLE_BOND),  # RX            
         ]
-        self.aachirals = [
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #ala
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #arg
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #asn
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #asp
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #cys
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #gln
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #glu
-            (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #gly
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #his
-            (0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #ileu
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #leu
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #lys
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #met
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #phe
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #pro
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #ser
-            (0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #thr
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #trp
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #tyr
-            (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #val
-            (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #unk
-            (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), #mas
-        ]
-        self.aachirals = torch.tensor(self.aachirals)
 
         # tip atom
         self.aa2tip = [
