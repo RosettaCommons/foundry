@@ -75,6 +75,26 @@ def recycle_step_gen(ddp_model, input, n_cycle, use_amp, nograds=False, force_de
             output_i = unpack_outputs(rf_outputs, rf_latents, return_raw)
     return output_i
 
+def recycle_step_generic(model, input, n_cycle, use_amp, nograds=False, force_device=None):
+    '''
+    Runs recycling with gradients only on final recycle.
+
+    Assums model has methods:
+        pre_recycle: input --> recycling_input
+        recycle: recycling_input --> recycling_input
+        post_recycle: recycling_input --> output
+    '''
+    assert not nograds, 'not implemented'
+    assert not use_amp, 'not implemented'
+    recycling_input = model.pre_recycle(**input)
+    for i_cycle in range(n_cycle):
+            with ExitStack() as stack:
+                if i_cycle < n_cycle -1:
+                    stack.enter_context(torch.no_grad())
+                    stack.enter_context(model.no_sync())
+                recycling_input = model.recycle(**recycling_input)
+    return model.post_recycle(**recycling_input)
+
 
 def run_model_forward(model, network_input, use_checkpoint=False, device="cpu"):
     """ run model forward pass, no recycling, no ddp (for tests) """

@@ -1,7 +1,9 @@
+import re
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
+from icecream import ic
 import numpy as np
 from functools import partial
 import hydra
@@ -13,17 +15,21 @@ import datetime
 from datetime import timedelta
 import certifi
 import warnings
+import wandb
+import logging
+import tree
 
 from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
 from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items, prepare_input_fm_allatom
+from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3
 from rf2aa.flow_matching.interpolant import Interpolant
 from rf2aa.flow_matching.sampler import Sampler, AllAtomSampler
-from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads
+from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads, pretty_describe_dict
 from rf2aa.training.EMA import EMA, count_parameters
 from rf2aa.loss.loss import translation_vector_field
 from rf2aa.loss.loss_factory import get_loss_and_misc
 from rf2aa.training.optimizer import add_weight_decay
-from rf2aa.training.recycling import recycle_step_legacy, recycle_step_packed, recycle_step_gen, recycle_sampling, run_model_forward
+from rf2aa.training.recycling import recycle_step_legacy, recycle_step_packed, recycle_step_gen, recycle_sampling, run_model_forward, recycle_step_generic
 from rf2aa.model.network import RosettaFold
 from rf2aa.model.RoseTTAFoldModel import LegacyRoseTTAFoldModule
 from rf2aa.training.scheduler import get_stepwise_decay_schedule_with_warmup
@@ -32,6 +38,9 @@ from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.chemical import initialize_chemdata
 from rf2aa.set_seed import seed_all
+from rf2aa.model import AF3_structure
+
+logger = logging.getLogger(__name__)
 
 #TODO: control environment variables from config
 # limit thread counts
@@ -75,6 +84,8 @@ class Trainer:
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.training_params.use_amp)
     
     def load_checkpoint(self, rank):
+        if self.config.training_params.from_scratch:
+            return False
         checkpoint_path = f"{self.output_dir}/{self.config.experiment.name}_last.pt"
         # 'checkpoint_path' takes priority ... 
         if self.config.eval_params.checkpoint_path: 
@@ -178,13 +189,18 @@ class Trainer:
 
         if ("SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
             world_size = int(os.environ["SLURM_NTASKS"])
+            self.world_size = world_size
             rank = int (os.environ["SLURM_PROCID"])
             print ("Launched from slurm", rank, world_size)
             self.train_model(rank, world_size)
 
         else:
             print ("Launched from interactive")
-            world_size = torch.cuda.device_count()
+            world_size = max(torch.cuda.device_count(), 1)
+            if self.config.cpu_training:
+                world_size = 1
+            
+            self.world_size = world_size
 
             if world_size == 0:
                 print ("Error! No GPUs found!")
@@ -195,10 +211,13 @@ class Trainer:
                 mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
 
     def init_process_group(self, rank, world_size):
-        gpu = rank % torch.cuda.device_count()
+        gpu = rank % self.world_size
         dist.init_process_group(backend=self.config.training_params.ddp_backend, timeout=timedelta(seconds=1800), world_size=world_size, rank=rank)
-        torch.cuda.set_device("cuda:%d"%gpu)
-        return gpu
+        device = 'cpu'
+        if torch.cuda.device_count():
+            device = "cuda:%d"%gpu
+            torch.cuda.set_device(device)
+        return device
     
     def cleanup(self):
         if dist.is_initialized():
@@ -240,6 +259,7 @@ class Trainer:
             self.valid_loaders = valid_loaders
 
             # move global information to device
+            # if torch.cuda.device_count():
             self.move_constants_to_device(gpu)
 
             self.construct_model(device=gpu)
@@ -251,6 +271,7 @@ class Trainer:
             self.construct_scaler()
             start_epoch = 0
             loaded_checkpoint = self.load_checkpoint(gpu)
+            logger.info(f'Loaded checkpoint: {loaded_checkpoint}')
             if loaded_checkpoint:
                 start_epoch = self.checkpoint["epoch"]
                 self.load_model()
@@ -279,6 +300,7 @@ class Trainer:
                 if (
                     self.config.dataset_params.validate_every_n_epochs > 0 
                     and epoch % self.config.dataset_params.validate_every_n_epochs==0
+                    and (epoch!=start_epoch or self.config.dataset_params.validate_after_first_epoch)
                 ):
                     self.valid_epoch(epoch, rank, world_size)
 
@@ -318,6 +340,20 @@ class Trainer:
                     if (p.grad is not None):
                         print (n, torch.max( torch.abs(p.flatten()) ), torch.max( torch.abs(p.grad.flatten()) ))
                 exit(1)
+            
+            find_no_grad_parameters = False
+            if find_no_grad_parameters:
+                no_grad_parameters = []
+                for n,p in self.model.module.model.named_parameters():
+                    if p.grad is None:
+                        no_grad_parameters.append(n)
+                
+                if no_grad_parameters:
+                    print('Parameters with grad == None:')
+                    for n in no_grad_parameters:
+                        print(n)
+                    print(f'Fraction with grad == None: {len(no_grad_parameters)}/{len(list(self.model.module.model.named_parameters()))}')
+            
 
             train_time = time.time() - start_time
 
@@ -400,11 +436,12 @@ class Trainer:
     def log_intermediate_losses(self, inputs, loss_dict, n_cycle, Nex, Nepoch, runtime):
         item = inputs[-1]
         max_mem = torch.cuda.max_memory_allocated()/1e9
-        print(f"Models: {Nex} of: {Nepoch} Max_Memory: {max_mem:.4f} Runtime: {runtime:.4f}")
+        print(f"Models: {Nex} of: {Nepoch} Max_Memory: {max_mem:.4f}Gb Runtime: {runtime:.4f}")
         print(f"Example: {item} Recycle:{n_cycle}\n"+
               "\t".join([f"{k}: {v:.4f}" for k,v in loss_dict.items()]))
-        #print(f"Models: {Nex} Example: {item['CHAINID']} "+" ".join([f"{k}: {v:.4f}" for k,v in loss_dict.items()]))
-        torch.cuda.reset_peak_memory_stats()
+        #print(f"Models: {Nex} Example: {item['CHAINID']}"+" ".join([f"{k}: {v:.4f}" for k,v in loss_dict.items()]))
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
 
     def log_validation_losses(self, dataset_name, loss_dict):
         print(f"Dataset: {dataset_name} "+
@@ -429,9 +466,12 @@ class LegacyTrainer(Trainer):
             cb_tor = ChemData().cb_torsion_t.to(device),
 
         ).to(device)
+        device_ids = [device]
+        if device == 'cpu':
+            device_ids = None
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
-        self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
+        self.model = DDP(self.model, device_ids=device_ids, find_unused_parameters=False, broadcast_buffers=False)
 
 
     def train_step(self, inputs, n_cycle, nograds=False, return_outputs=False):
@@ -627,11 +667,115 @@ class FlowMatchingTrainer(Trainer):
                 # If using W&B, log the validation losses (note: this is only done for rank = 0)
                 if self.config.log_params.use_wandb:
                     wandb.log(valid_loss_dict)
+def get_n_params(model):
+    pp=0
+    for p in list(model.parameters()):
+        nn=1
+        for s in list(p.size()):
+            nn = nn*s
+        pp += nn
+    return pp
 
+def get_param_sizes(model):
+    o = {}
+    for k, p in model.named_parameters():
+        o[k] = (np.array(p.size()).prod(), p.size())
+    return o
+
+class AF3Trainer(FlowMatchingTrainer):
+
+    def construct_model(self, device="cpu"):
+        # self.model = torch.nn.Linear(2, 3).to(device)
+        self.model = AF3_structure.Model(**self.config.model).to(device)
+        print_n_params = False
+        if print_n_params:
+            logger.info(f'{get_n_params(self.model)=}')
+            for k, v in sorted(get_param_sizes(self.model).items(), key=lambda item: item[1]):
+                n_param, size = v
+                # n_param = np.array(p.size()).prod()
+                logger.info(f'{n_param=} {k=} {size=}')
+
+        if self.config.training_params.EMA is not None:
+            self.model = EMA(self.model, self.config.training_params.EMA)
+
+        def should_ignore(param_name):
+            ignore_regexes = [
+                re.compile(r'model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_s_trunk\..*'),
+                re.compile(r'model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_z\..*'),
+                re.compile(r'model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_r\..*'),
+                re.compile(r'model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias.ln_1\..*'),
+                re.compile(r'model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.linear_output_project\..*'),
+                re.compile(r'model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
+                re.compile(r'model\.diffusion_module\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
+                re.compile(r'model\.diffusion_module\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
+                re.compile(r'model\.diffusion_module\.atom_attention_decoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
+            ]
+            return any(regex.match(param_name) for regex in ignore_regexes)
+        params_to_ignore = []
+        for param_name, param in self.model.named_parameters():
+            if should_ignore(param_name):
+                params_to_ignore.append(param_name)
+        torch.nn.parallel.DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
+            self.model,
+            params_to_ignore
+        )
+        assert len(params_to_ignore)
+
+        device_ids = [device]
+        if device == 'cpu':
+            device_ids = None
+        self.model = DDP(self.model, device_ids=device_ids, find_unused_parameters=False, broadcast_buffers=False)
+        self.sampler = AllAtomSampler(self.model, 
+                               self.config.interpolant.sampling.num_timesteps,
+                               self.config.interpolant.min_t,
+                               self.interpolant,
+                               self.xyz_converter,
+                               is_training=True)
+        self.loss = AF3_structure.Loss(**self.config.loss)
+
+    def move_constants_to_device(self, gpu):
+        self.interpolant = Interpolant(self.config.interpolant)
+        self.interpolant.set_device(gpu)
+        super().move_constants_to_device(gpu) 
+
+    def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
+        gpu = self.model.device
+
+        D = 12
+        network_input, loss_input = prepare_input_af3(
+            inputs,
+            self.config.interpolant,
+            D,
+        )
+        network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
+        logger.debug('network_input:\n' + pretty_describe_dict(network_input))
+        logger.debug('loss_input:\n' + pretty_describe_dict(loss_input))
+
+        output_i = self.model(
+            network_input,
+            n_cycle,
+            no_sync=self.model.no_sync,
+        )
+        
+        loss, loss_dict, loss_dict_batched = self.loss(
+            f=network_input['f'],
+            t=network_input['t'],
+            X_L=output_i,
+            X_gt_L=loss_input['X_gt_L'].tile((D,1,1)).to(gpu)
+        )
+        return loss, loss_dict
+
+    def construct_optimizer(self):
+        self.optimizer = getattr(torch.optim, self.config.optimizer.type)(
+            self.model.parameters(),
+            **self.config.optimizer.params,
+        )
 
 
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
+    if config.autograd_detect_anomaly:
+        torch.autograd.set_detect_anomaly(True)
     seed_all()
     trainer = trainer_factory[config.experiment.trainer](config=config)
 
@@ -650,7 +794,8 @@ def main(config):
 trainer_factory = {
     "legacy": LegacyTrainer,
     "composed": ComposedTrainer,
-    "flow_matching": FlowMatchingTrainer
+    "flow_matching": FlowMatchingTrainer,
+    "af3_repro": AF3Trainer
 }
 
 if __name__ == "__main__":

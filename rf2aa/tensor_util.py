@@ -167,3 +167,8 @@ def cmp(got, want, **kwargs):
     if dd:
         return dd
     return ''
+
+def assert_cmp(got, want, **kwargs):
+    diff = cmp(got, want, **kwargs)
+    if diff:
+        raise AssertionError(diff)

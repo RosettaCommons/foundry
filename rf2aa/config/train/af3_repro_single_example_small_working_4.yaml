@@ -1,0 +1,12 @@
+# Status: unvetted
+
+defaults:
+  - af3_repro_single_example_small
+  - _self_
+
+af3_data_prep:
+  D: 12
+
+lightning:
+  trainer:
+    accumulate_grad_batches: 1

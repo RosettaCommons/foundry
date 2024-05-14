@@ -1,8 +1,12 @@
 import numpy as np
+from icecream import ic
 import pickle
 import torch.utils.data as data
 from collections import OrderedDict
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from rf2aa.data.data_loader import get_train_valid_set, loader_pdb, loader_complex, loader_na_complex, \
     loader_distil_tf, loader_tf_complex, loader_fb, loader_dna_rna, \
@@ -138,7 +142,7 @@ def get_distilled_dataset(dataset_params, loader_params):
         chid2hash,
         chid2taxid,
         chid2smpartners,
-    ) = get_train_valid_set(loader_params)
+    ) = get_train_valid_set(loader_params, no_match_okay=loader_params['no_match_okay'])
 
     # define atomize_pdb train/valid sets, which use the same examples as pdb set
     train_ID_dict["atomize_pdb"] = train_ID_dict["pdb"]

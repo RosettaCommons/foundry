@@ -1,0 +1,193 @@
+defaults:
+  # - af3
+  - rf2aa
+  - _self_
+
+experiment:
+  name: rf2aa-af3-repro
+  trainer: af3_repro
+  output_dir: null
+
+loss:
+  sigma_data: ${model.diffusion_module.sigma_data}
+  alpha_dna: 5
+  alpha_rna: 5
+  alpha_ligand: 10
+  edm_lambda: False
+  se3_invariant_loss: True
+
+ddp_params:
+  batch_size: 1
+
+loader_params:
+  p_msa_mask: 0.0
+
+interpolant:
+  sigma_data: 16
+
+  min_t: 1e-2
+  separate_t: False
+  provide_kappa: False
+  hierarchical_t: False
+  codesign_separate_t: False
+  codesign_forward_fold_prop: 0.0
+  codesign_inverse_fold_prop: 0.0
+
+  twisting:
+    use: False
+
+  rots:
+    corrupt: True
+    train_schedule: linear
+    sample_schedule: linear
+    exp_rate: 10
+
+  trans:
+    corrupt: True
+    batch_ot: True
+    train_schedule: linear
+    sample_schedule: linear
+    sample_temp: 1.0
+    vpsde_bmin: 0.1
+    vpsde_bmax: 20.0
+    potential: null
+    potential_t_scaling: False
+    rog:
+      weight: 10.0
+      cutoff: 5.0
+
+  aatypes:
+    corrupt: False
+    schedule: linear
+    schedule_exp_rate: 10
+    temp: 1.0
+    noise: 0.0
+    do_purity: False
+    train_extra_mask: 0.0
+    interpolant_type: masking
+    num_tokens: 80
+
+  sampling:
+    num_timesteps: 20
+    do_sde: False
+  self_condition: False
+
+model_globals:
+  l_max: 1000
+model:
+  c_s: 384
+  c_z: 128
+  c_atom: 128
+  c_atompair: 16
+  c_s_inputs: 449
+  feature_initializer:
+    c_s_inputs: ${model.c_s_inputs}
+    input_feature_embedder:
+      features:
+        - restype
+        - profile
+        - deletion_mean
+      atom_attention_encoder:
+        c_token: 384
+        c_atom_1d_features: 389
+        c_tokenpair: ${model.c_z}
+        atom_1d_features:
+          - ref_pos
+          - ref_charge
+          - ref_mask
+          - ref_element
+          - ref_atom_name_chars
+        atom_transformer:
+          n_queries: 32
+          n_keys: 128
+          l_max: ${model_globals.l_max}
+          diffusion_transformer:
+            n_block: 3
+            diffusion_transformer_block:
+              n_head: 4
+    relative_position_encoding:
+      r_max: 32
+      s_max: 2
+  recycler:
+    n_pairformer_blocks: 48
+    pairformer_block:
+      p_drop: 0.25
+      c: 128
+      attention_pair_bias:
+        n_head: 16
+    template_embedder:
+      n_block: 2
+      c: 64
+    msa_module:
+      n_block: 4
+      c_m: 64
+  diffusion_module:
+    sigma_data: ${interpolant.sigma_data}
+    c_token: 768
+    f_pred: edm
+    diffusion_conditioning:
+      c_s_inputs: ${model.c_s_inputs}
+      c_t_embed: 256
+      relative_position_encoding:
+        r_max: 32
+        s_max: 2
+    atom_attention_encoder:
+      c_tokenpair: ${model.c_z}
+      c_atom_1d_features: 389
+      atom_1d_features:
+          - ref_pos
+          - ref_charge
+          - ref_mask
+          - ref_element
+          - ref_atom_name_chars
+      atom_transformer:
+        n_queries: 32
+        n_keys: 128
+        l_max: ${model_globals.l_max}
+        diffusion_transformer:
+          n_block: 3
+          diffusion_transformer_block:
+            n_head: 4
+    diffusion_transformer:
+      n_block: 24
+      diffusion_transformer_block:
+        n_head: 16
+    atom_attention_decoder:
+      atom_transformer:
+        n_queries: 32
+        n_keys: 128
+        l_max: ${model_globals.l_max}
+        diffusion_transformer:
+          n_block: 3
+          diffusion_transformer_block:
+            n_head: 4
+
+optimizer:
+  type: Adam
+  params:
+    lr: 1.8e-3
+    betas: [0.9, 0.95]
+    eps: 1.0e-8
+
+logger:
+  save_dir: csv_logs
+  use_wandb: False
+  sublogger:
+    project: af3-debug
+
+callbacks:
+  log_metrics: {}
+
+af3_data_prep:
+  D: 12
+  sigma_data: ${model.diffusion_module.sigma_data}
+  s_trans: 1
+  random_augmentation: True
+  only_ca: False
+
+recycling:
+  max_cycle: 4
+
+lightning:
+  trainer:
+    accumulate_grad_batches: 25

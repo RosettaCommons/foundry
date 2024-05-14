@@ -12,6 +12,7 @@ model:
 legacy_model: null
 dataset_params: 
   validate_every_n_epochs: 0
+  validate_after_first_epoch: False
   fraction_pdb: 0
   fraction_fb: 0
   fraction_compl: 0
@@ -89,6 +90,7 @@ loader_params:
   min_metal_contacts: 0
   min_metal_contact_dist: 2.6
   sampler_class: DistributedWeightedSampler
+  no_match_okay: False # If False, asserts that the dataset params in the cached dataset pickle match the config dataset params
   dataloader_kwargs:
     shuffle: False
     num_workers: 0
@@ -146,3 +148,12 @@ chem_params:
   use_lj_params_for_atoms: False
 
 metrics: ["mean_pae", "mean_plddt"]
+
+hydra:
+  job_logging:
+    formatters:
+      simple:
+        format: '[%(asctime)s][%(filename)25s:%(lineno)4s][%(name)30s:%(funcName)30s()][%(levelname)s] %(message)s'
+
+cpu_training: false
+autograd_detect_anomaly: false

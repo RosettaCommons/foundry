@@ -10,6 +10,8 @@ from itertools import permutations
 from typing import Dict, Optional, Tuple, List, Set, Any
 from pathlib import Path
 from os.path import exists
+import logging
+import traceback
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
@@ -39,7 +41,14 @@ from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein
     reindex_protein_feats_after_atomize, get_residue_contacts, atomize_discontiguous_residues, pop_protein_feats, \
     is_atom, get_atom_template_indices, reassign_symmetry_after_cropping, expand_xyz_sm_to_ntotal, Ls_from_same_chain_2d, \
     is_protein, is_nucleic, is_RNA, is_DNA, is_atom
-from rf2aa.data.cluster_dataset import cluster_factory
+
+logger = logging.getLogger(__name__)
+
+try:
+    from rf2aa.data.cluster_dataset import cluster_factory
+except Exception as e:
+    logger.warning(f'Failed to import cluster_factory from rf2aa.data.cluster_dataset: if you are rebuilding the dataset .pkl expect failure: ' + repr(e))
+
 assert "rf2aa" in os.path.abspath(cifutils.__file__)
 
 
