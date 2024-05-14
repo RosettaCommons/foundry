@@ -111,6 +111,7 @@ default_dataloader_params = {
         "BATCH_BY_LENGTH"   : False,
         "ligands_to_remove" : [],
         "min_metal_contacts": 0,
+        "crop_params": {},
     }
 
 def set_data_loader_params(loader_params):
@@ -118,7 +119,6 @@ def set_data_loader_params(loader_params):
     for param in default_dataloader_params:
         if hasattr(loader_params, param.lower()):
             default_dataloader_params[param] = getattr(loader_params, param.lower())
-    
     # cursed but add things in the param but not the default params back
     loader_params_dict = dict(loader_params)
     for param, value in loader_params_dict.items():

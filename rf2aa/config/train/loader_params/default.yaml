@@ -1,4 +1,9 @@
-RADIAL_CROP: False
+crop_params:
+  crop_probabilities:
+    radial_crop: 0.0
+    contig_crop: 1.0
+  use_sm_crop_for_sm_compl_examples: True
+  interface_selection_cutoff: 15.0
 OMIT_PERMUTATE: True
 maxseq: 1024
 maxtoken: 1024

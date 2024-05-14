@@ -21,6 +21,31 @@ from rf2aa.kinematics import get_atomize_protein_chirals, generate_Cbeta
 from rf2aa.scoring import *
 
 
+def replace_missing_with_nearest_neighbors(
+    x: torch.Tensor, mask: torch.Tensor
+) -> torch.Tensor:
+    """
+    Given a 1D tensor x with floating point values and a 1D mask tensor with boolean values,
+    this function replaces the missing values in x with the nearest non-missing value from the left.
+
+    If there are no non-missing values to the left, the missing value is replaced with the
+    nearest non-missing value from the right. If there are no non-missing values to the right,
+    the tensor is returned unchanged.
+    """
+    if not torch.any(mask):
+        return x
+
+    non_missing_index = torch.where(mask)[0][0]
+    non_missing_value = x[non_missing_index]
+
+    for i in range(len(x)):
+        if not mask[i]:
+            x[i] = non_missing_value
+        else:
+            non_missing_value = x[i]
+    return x
+
+
 def seq2chars(seq): # LT move seq2chars from chemical to utils due to ChemData init
     out = ''.join([ChemData().aa_321[ChemData().num2aa[a]] for a in seq])
     return out

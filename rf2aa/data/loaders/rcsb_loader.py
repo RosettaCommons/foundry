@@ -1,6 +1,7 @@
 import torch
 import pickle
 import gzip
+import warnings
 from typing import Dict, Optional, Any
 
 import numpy as np
@@ -31,6 +32,7 @@ from rf2aa.data.loaders.small_molecule_partners import (
     load_small_molecule_partners,
     prune_lig_partners,
 )
+from rf2aa.data.loaders.crop import universal_crop_factory, sm_compl_crop_factory
 
 
 def get_cif_metadata(
@@ -66,7 +68,6 @@ def get_partner_lists(
 ):
     # list of proteins and ligands to featurize
     polymer_types = ["polypeptide(L)", "polydeoxyribonucleotide", "polyribonucleotide"]
-
     polymer_partners = [p for p in item["PARTNERS"] if p[-1] in polymer_types]
     polymer_partners = polymer_partners[: params["MAXPROTCHAINS"]]
     if num_protein_chains is not None:
@@ -170,6 +171,7 @@ def merge_outs(polymer_outs, small_molecule_outs, params, random_noise: float = 
         "Ls_poly": polymer_outs["Ls_poly"],
         "Ls_sm": small_molecule_outs["Ls_sm"],
         "residues_to_atomize": small_molecule_outs["residues_to_atomize"],
+        "ch_letters_poly": polymer_outs["ch_letters"],
         "akeys_sm": small_molecule_outs["akeys_sm"],
         "frames": small_molecule_outs["frames"],
         "chirals": small_molecule_outs["chirals"],
@@ -269,34 +271,41 @@ def get_prev_and_term_info(merged_outs, params):
     return merged_outs
 
 
-def get_crop_sel(merged_outs, params):
+def get_crop_sel(merged_outs, item, params):
     # crop around query ligand (1st sm chain)
     # always need to run cropping function to remove erroneous ligand partners
     idx = merged_outs["idx"]
     mask = merged_outs["mask"]
     msa = merged_outs["msa"]
-    xyz = merged_outs["xyz"]
     Ls_poly = merged_outs["Ls_poly"]
     Ls_sm = merged_outs["Ls_sm"]
-    bond_feats = merged_outs["bond_feats"]
+    
+    crop_params = params["crop_params"]
+    crop_probabilities = crop_params["crop_probabilities"]
 
-    if sum(merged_outs["Ls_sm"]) == 0:
+    crop_factory = universal_crop_factory
+    if len(Ls_sm) > 0 and len(Ls_poly) > 0 and crop_params["use_sm_crop_for_sm_compl_examples"]:
+        crop_factory = sm_compl_crop_factory
+
+    crop_type_selection = np.random.uniform()
+    crop_probability_offset = 0.0
+    crop_fn = None
+    for crop_type, crop_prob in crop_probabilities.items():
+        if crop_type_selection < crop_prob + crop_probability_offset:
+            crop_fn = crop_factory[crop_type]
+            break
+        crop_probability_offset += crop_prob
+
+    if crop_fn is None:
+        warnings.warn(f"Given crop probabilities {crop_probabilities} do not sum to 1.0. Defaulting to a linear crop.")
         sel = get_crop(len(idx), mask[0], msa.device, params["CROP"])
     else:
-        if params["RADIAL_CROP"]:
-            sel = crop_sm_compl_assembly(
-                xyz[0], mask[0], Ls_poly, Ls_sm, params["CROP"]
-            )
-        else:
-            sel = crop_sm_compl_asmb_contig(
-                xyz[0],
-                mask[0],
-                Ls_poly,
-                Ls_sm,
-                bond_feats,
-                params["CROP"],
-                use_partial_ligands=False,
-            )
+        sel = crop_fn(
+            merged_outs,
+            item,
+            crop_size=params["CROP"],
+            interface_selection_cutoff=crop_params["interface_selection_cutoff"],
+        )
     return sel
 
 
@@ -452,7 +461,7 @@ def loader_sm_compl_assembly(
     )
     merged_outs = get_prev_and_term_info(merged_outs, params)
 
-    sel = get_crop_sel(merged_outs, params)
+    sel = get_crop_sel(merged_outs, item, params)
     merged_outs = apply_crop_sel(merged_outs, sel, item)
     merged_outs = apply_featurize_msa(merged_outs, params, fixbb=fixbb)
 
