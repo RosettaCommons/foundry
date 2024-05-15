@@ -1,7 +1,7 @@
 import torch
 import pytest
 import numpy as np
-from rf2aa.data.loaders.protein_partners import join_msas_by_taxid
+from rf2aa.data.loaders.polymer_partners import join_msas_by_taxid
 from rf2aa.chemical import initialize_chemdata
 
 initialize_chemdata()

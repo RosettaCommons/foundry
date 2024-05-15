@@ -1223,7 +1223,7 @@ def Ls_from_same_chain_2d(same_chain):
         i_curr = idx[-1]+1
     return Ls
 
-def get_prot_seqstring(ch, modres):
+def get_poly_seqstring(ch, modres):
     """Return string representing amino acid sequence of a parsed CIF chain."""
     idx = [int(k[1]) for k in ch.atoms]
     i_min, i_max = np.min(idx), np.max(idx)
@@ -1241,7 +1241,7 @@ def get_prot_seqstring(ch, modres):
         seq[i_res] = aa
     return ''.join(seq)
 
-def map_identical_prot_chains(partners, chains, modres):
+def map_identical_poly_chains(partners, chains, modres):
     """Identifies which chain letters represent unique protein sequences,
     assigns a number to each unique sequence, and returns dicts mapping sequence
     numbers to chain letters and vice versa.
@@ -1270,9 +1270,8 @@ def map_identical_prot_chains(partners, chains, modres):
     """
     chlet2seq = OrderedDict()
     for p in partners:
-        if p[-1] != 'polypeptide(L)': continue
         if p[0] not in chlet2seq:
-            chlet2seq[p[0]] = get_prot_seqstring(chains[p[0]], modres)
+            chlet2seq[p[0]] = get_poly_seqstring(chains[p[0]], modres)
 
     seq2chlet = OrderedDict()
     for chlet, seq in chlet2seq.items():

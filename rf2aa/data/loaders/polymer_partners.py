@@ -4,18 +4,18 @@ import numpy as np
 import warnings
 from typing import Any, Dict, List, Tuple
 from itertools import permutations
-from rf2aa.util import (
-    random_rot_trans,
-    cif_poly_to_xyz,
-    map_identical_prot_chains,
-    cartprodcat,
-)
 from rf2aa.data.parsers import parse_a3m
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.data.data_loader import (
     TemplFeaturize,
     blank_template,
     merge_hetero_templates,
+)
+from rf2aa.util import (
+    random_rot_trans,
+    cif_poly_to_xyz,
+    map_identical_poly_chains,
+    cartprodcat,
 )
 
 
@@ -660,8 +660,7 @@ def load_multi_msa(chain_ids, Ls, seq_prot, chid2hash, chid2taxid, params):
 
     return a3m_prot
 
-
-def featurize_asmb_prot(
+def featurize_asmb_poly(
     pdb_id,
     partners,
     params,
@@ -672,7 +671,7 @@ def featurize_asmb_prot(
     pick_top=True,
     random_noise=5.0,
 ):
-    """Loads multiple protein chains from parsed CIF assembly into tensors.
+    """Loads multiple polymer chains from parsed CIF assembly into tensors.
     Outputs will contain chains roughly in the order that they appear in
     `partners` (decreasing number of contacts to query ligand), except that
     chains with different letters but the same sequence (homo-oligomers) are
@@ -689,8 +688,9 @@ def featurize_asmb_prot(
     pdb_id : string
         PDB accession of example. Used to load the pre-parsed CIF data.
     partners : list of 5-tuples (partner, transform_index, num_contacts, min_dist, partner_type)
-        Protein chains to featurize. All elements should have `partner_type =
-        'polypeptide(L)'`. `partner` contains the chain letter.
+        Polymer chains to featurize. All elements should have one of the following
+        partner types: "polypeptide(L)", "polydeoxyribonucleotide", "polyribonucleotide".
+        `partner` contains the chain letter.
         `transform_index` is an integer index of the coordinate transform for
         each partner chain.
     params : dict
@@ -707,16 +707,16 @@ def featurize_asmb_prot(
     chid2hash : dict
         Maps chain ids (<pdbid>_<chain_letter>) to hash strings used to name homology
         template and MSA files. If None, no templates are loaded.
-    num_protein_chains : number of protein chains to include in the assembly, if set to None
-                        all neighboring protein chains will be loaded
+    num_polymer_chains : number of polymer chains to include in the assembly, if set to None
+                        all neighboring polymer chains will be loaded
     Returns
     -------
     xyz_prot : tensor (N_chain_permutation, L_total, N_atoms, 3)
-        Atom coordinates of all the protein chains
+        Atom coordinates of all the polymer chains
     mask_prot : tensor (N_chain_permutation, L_total, N_atoms)
         Boolean mask for whether an atom exists in `xyz_prot`
     seq_prot : tensor (L_total,)
-        Integer-coded sequence of the protein chains
+        Integer-coded sequence of the polymer chains
     ch_label_prot : tensor (L_total,)
         Integer-coded chain identity for each residue. Differs from chain letter
         in that different-lettered chains with the same sequence will have the
@@ -728,7 +728,7 @@ def featurize_asmb_prot(
     mask_t_prot : tensor (N_templates, L_total, N_atoms)
         Boolean mask for whether template atoms exist
     Ls_prot : list (N_chains,)
-        Length of each protein chain
+        Length of each polymer chain
     ch_letters : list (N_chains,)
         Chain letter for each chain
     mod_residues_to_atomize : list
@@ -736,18 +736,24 @@ def featurize_asmb_prot(
         (chain_letter, xform_index))` representing chemically modified residues
         that should be atomized.
     """
-    # assign number to each unique protein sequence, irrespective of chain letter
-    chnum2chlet = map_identical_prot_chains(partners, chains, modres)
+    # assign number to each unique polymer sequence, irrespective of chain letter
+    chnum2chlet = map_identical_poly_chains(partners, chains, modres)
+    valid_partner_types = ["polypeptide(L)", "polydeoxyribonucleotide", "polyribonucleotide"]
+    valid_partners = [
+        p for p in partners if p[-1] in valid_partner_types
+    ]
 
-    # protein true coords
+    # polymer true coords
     xyz_prot, mask_prot, ch_label_prot, seq_prot = [], [], [], []
     xyz_t_prot, f1d_t_prot, mask_t_prot, tplt_ids = [], [], [], []
     ch_letters, Ls_prot = [], []
     for chnum, chlet_set in chnum2chlet.items():
         # every location of this chain
         partners_ch = [
-            p for p in partners if (p[-1] == "polypeptide(L)") and (p[0] in chlet_set)
+            p for p in valid_partners if p[0] in chlet_set
         ]
+        chain_type = partners_ch[0][-1]
+
         N_mer = len(partners_ch)
         xyz_chxf, mask_chxf, seq_chxf, mod_residues_to_atomize = [], [], [], []
         for p in partners_ch:
@@ -781,11 +787,12 @@ def featurize_asmb_prot(
         ch_label_prot.append(torch.full((xyz_ch.shape[1],), chnum))
         chnum += 1
 
-        ## protein templates
+        # Load templates. 
+        # 
         ntempl = np.random.randint(params["MINTPLT"], params["MAXTPLT"] + 1)
         chain_id = pdb_id + "_" + list(chlet_set)[0] # chlet_set all have same hash
         
-        if ntempl < 1 or chain_id not in chid2hash:
+        if ntempl < 1 or chain_type != "polypeptide(L)" or chain_id not in chid2hash:
             xyz_t_ch, f1d_t_ch, mask_t_ch, tplt_ids_ch = blank_template(
                 n_tmpl=1, L=xyz_ch.shape[1], random_noise=random_noise
             )
@@ -878,7 +885,7 @@ def load_protein_partners(
         ch_letters,
         mod_residues_to_atomize,
         tplt_ids,
-    ) = featurize_asmb_prot(
+    ) = featurize_asmb_poly(
         pdb_id,
         prot_partners,
         params,

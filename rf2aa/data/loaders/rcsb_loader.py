@@ -26,7 +26,7 @@ from rf2aa.data.data_loader import (
     get_term_feats,
     MSAFeaturize,
 )
-from rf2aa.data.loaders.protein_partners import load_protein_partners
+from rf2aa.data.loaders.polymer_partners import load_protein_partners
 from rf2aa.data.loaders.small_molecule_partners import (
     load_small_molecule_partners,
     prune_lig_partners,
