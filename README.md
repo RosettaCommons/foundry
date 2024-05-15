@@ -20,7 +20,7 @@ cd RF2-allatom
 If you are on digs, the S3nv.sif apptainer has all the relevant packages. To get started coding:
 
 ```
-export PYTHONPATH=".../RF2-allatom"
+export PYTHONPATH="../RF2-allatom"
 ```
 
 First, run the test suite:
