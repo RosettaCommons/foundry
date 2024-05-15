@@ -48,7 +48,7 @@ for i,item in df.iloc[args.istart:args.istart+args.num].iterrows():
 
     # load coords
     ch = chains[i_ch_prot]
-    xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot, _ = cif_prot_to_xyz(ch, ch_xf, modres)
+    xyz_prot, mask_prot, seq_prot, chid_prot, resi_prot, _ = cif_poly_to_xyz(ch, ch_xf, modres)
     protein_L, nprotatoms, _ = xyz_prot.shape
 
     # load msa

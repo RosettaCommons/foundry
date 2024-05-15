@@ -13,7 +13,7 @@ from rf2aa.util import (
     cif_ligand_to_obmol,
     cif_ligand_to_xyz,
     get_ligand_atoms_bonds,
-    cif_prot_to_xyz,
+    cif_poly_to_xyz,
 )
 
 
@@ -310,7 +310,7 @@ def get_criterion(
             "QLIG_IS_METAL": is_metal,
         }
 
-    xyz_prot, mask_prot, seq_prot, _, _, _ = cif_prot_to_xyz(
+    xyz_prot, mask_prot, seq_prot, _, _, _ = cif_poly_to_xyz(
         chains[primary_protein_chain], prot_chain_xf
     )
     mask_sm = mask_sm.bool()

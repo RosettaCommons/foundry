@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple
 from itertools import permutations
 from rf2aa.util import (
     random_rot_trans,
-    cif_prot_to_xyz,
+    cif_poly_to_xyz,
     map_identical_prot_chains,
     cartprodcat,
 )
@@ -751,7 +751,7 @@ def featurize_asmb_prot(
         N_mer = len(partners_ch)
         xyz_chxf, mask_chxf, seq_chxf, mod_residues_to_atomize = [], [], [], []
         for p in partners_ch:
-            xyz_, mask_, seq_, _, _, residues_to_atomize = cif_prot_to_xyz(
+            xyz_, mask_, seq_, _, _, residues_to_atomize = cif_poly_to_xyz(
                 chains[p[0]], asmb_xfs[p[1]], modres
             )
             residues_to_atomize = [

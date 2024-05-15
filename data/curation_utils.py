@@ -4,7 +4,7 @@ import torch
 from typing import List, Tuple, Dict, Any, Optional, Set
 from rf2aa.cifutils import Chain, Bond
 from rf2aa.chemical import ChemicalData
-from rf2aa.util import cif_ligand_to_xyz, cif_prot_to_xyz, get_ligand_atoms_bonds
+from rf2aa.util import cif_ligand_to_xyz, cif_poly_to_xyz, get_ligand_atoms_bonds
 from rf2aa.data.data_loader import get_msa
 from criterion_utils import get_ligand_name_from_query_ligand
 

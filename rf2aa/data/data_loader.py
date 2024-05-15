@@ -33,7 +33,7 @@ from rf2aa.symmetry import get_symmetry
 from rf2aa.set_seed import seed_all
 from rf2aa.data.identical_ligands import get_extra_identical_copies_from_chains
 from rf2aa.util import get_nxgraph, get_atom_frames, get_bond_feats, get_protein_bond_feats, \
-    center_and_realign_missing, random_rot_trans, cif_prot_to_xyz, \
+    center_and_realign_missing, random_rot_trans, cif_poly_to_xyz, \
     cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs, get_ligand_atoms_bonds, \
     map_identical_prot_chains, cartprodcat, idx_from_Ls, same_chain_2d_from_Ls, bond_feats_from_Ls, \
     reindex_protein_feats_after_atomize, get_residue_contacts, atomize_discontiguous_residues, pop_protein_feats, \

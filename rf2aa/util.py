@@ -862,7 +862,7 @@ def pop_protein_feats(residue_indices, msa, ins, xyz, mask, bond_feats, idx, xyz
 
     return msa, ins, xyz, mask, bond_feats, idx, xyz_t, f1d_t, mask_t, same_chain, ch_label
 
-def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
+def cif_poly_to_xyz(ch, ch_xf, modres=dict()):
     """Given a protein chain and coordinate transform parsed from CIF file,
     return tensors with coordinates and masks
 
@@ -890,11 +890,22 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
     resi : list of str (L,)
         Residue numbers for each residue
     """ 
-    assert(ch.type == 'polypeptide(L)')
-    assert(ch.id == ch_xf[0])
+    assert ch.type in ["polypeptide(L)", "polydeoxyribonucleotide", "polyribonucleotide"]
+    assert ch.id == ch_xf[0]
 
     # atom names from cif don't have whitespace
     aa2long_ = [[x.strip() if x is not None else None for x in y] for y in ChemData().aa2long]
+
+    # residue names in cif for NA don't have whitespace either - PS
+    aa2num_ = {
+        residue.strip(): index for residue, index in ChemData().aa2num.items()
+    }
+
+    unknown_token = aa2num_["UNK"]
+    if ch.type == "polydeoxyribonucleotide":
+        unknown_token = aa2num_["DX"]
+    if ch.type == "polyribonucleotide":
+        unknown_token = aa2num_["RX"]
 
     idx = [int(k[1]) for k in ch.atoms]
     i_min, i_max = np.min(idx), np.max(idx)
@@ -910,15 +921,13 @@ def cif_prot_to_xyz(ch, ch_xf, modres=dict()):
     residues_to_atomize = set()
     for (ch_letter, res_num, res_name, atom_name), atom_val in ch.atoms.items():
         i_res = int(res_num)-i_min
-        if res_name in ChemData().aa2num: # standard AA
-            aa = ChemData().aa2num[res_name]
-        elif res_name in modres and modres[res_name] in ChemData().aa2num: # nonstandard AA, map to standard
-            #print('nonstandard AA',k,modres[k[2]])
-            aa = ChemData().aa2num[modres[res_name]]
+        if res_name in aa2num_: # standard AA
+            aa = aa2num_[res_name]
+        elif res_name in modres and modres[res_name] in aa2num_: # nonstandard AA, map to standard
+            aa = aa2num_[modres[res_name]]
             residues_to_atomize.add((ch_letter, res_num, res_name))
         else: # unknown AA, still try to store BB atoms
-            #print('unknown AA',k)
-            aa = 20
+            aa = unknown_token
         if atom_name in aa2long_[aa]: # atom name exists in RF nomenclature
             i_atom = aa2long_[aa].index(atom_name) # atom index
             xyz[i_res, i_atom, :] = torch.tensor(atom_val.xyz)
