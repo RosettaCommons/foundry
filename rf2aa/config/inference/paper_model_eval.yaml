@@ -1,0 +1,118 @@
+defaults:
+  - ligand_exclusions
+
+experiment:
+  name: paper_model
+  trainer: legacy
+  n_epoch: 800
+  output_dir: paper_model_posebusters
+
+legacy_model_param:
+  n_extra_block: 4
+  n_main_block: 32
+  n_ref_block: 4
+  n_finetune_block: 0
+  d_msa: 256
+  d_msa_full: 64
+  d_pair: 192
+  d_templ: 64
+  n_head_msa: 8
+  n_head_pair: 6
+  n_head_templ: 4
+  d_hidden_templ: 64
+  p_drop: 0.0
+  use_chiral_l1: True
+  use_lj_l1: True
+  use_atom_frames: True
+  recycling_type: "all"
+  use_same_chain: True
+  lj_lin: 0.75
+  SE3_param: 
+    num_layers: 1
+    num_channels: 32
+    num_degrees: 2
+    l0_in_features: 64
+    l0_out_features: 64
+    l1_in_features: 3
+    l1_out_features: 2
+    num_edge_features: 64
+    n_heads: 4
+    div: 4
+  SE3_ref_param:
+    num_layers: 2
+    num_channels: 32
+    num_degrees: 2
+    l0_in_features: 64
+    l0_out_features: 64
+    l1_in_features: 3
+    l1_out_features: 2
+    num_edge_features: 64
+    n_heads: 4
+    div: 4
+model: 
+  auxiliary_predictors: {}
+ddp_params:
+  port: 12375
+  batch_size: 1
+
+loader_params: 
+  RADIAL_CROP: False
+  OMIT_PERMUTATE: True
+  maxseq: 2048
+  maxlat: 256
+  crop: 1500
+  rescut: 4.5
+  mintplt: 1
+  maxtplt: 4
+  seqid: 150.0
+  p_msa_mask: 0.0
+  maxcycle: 10
+  nres_atomize_min: 3
+  nres_atomize_max: 5
+  atomize_flank: 0
+  p_metal: 1
+  p_atomize_modres: 1
+  batch_by_dataset: True
+  batch_by_length: True
+  dataloader_kwargs:
+    shuffle: False
+    num_workers: 4
+    pin_memory: True
+
+training_params: 
+  resume_train: False
+  EMA: 0.99
+  weight_decay: 0.01
+  learning_rate: .001
+  learning_rate_schedule:
+    num_warmup_steps: 0
+    num_steps_decay: 5000
+    decay_rate: 0.95
+  grad_clip: 0.2
+  use_amp: True
+  ddp_backend: nccl
+
+chem_params:
+  use_phospate_frames_for_NA: True
+
+loss_param:
+  w_dist: 1.0
+  w_str: 10.0
+  w_inter_fape: 0.0
+  w_lig_fape: 0.0
+  w_lddt: 0.1
+  w_aa: 3.0
+  w_bond: 0.0
+  w_bind: 0.0
+  binder_loss_label_smoothing: 0.0
+  w_clash: 0.0
+  w_atom_bond: 0.0
+  w_skip_bond: 0.0
+  w_rigid: 0.0
+  w_hb: 0.0
+  w_pae: 0.1
+  w_pde: 0.0
+  lj_lin: 0.75
+
+eval_params:
+  checkpoint_path: "/home/rohith/rf2a-fd3/models/rf2a_fd3_20221125_714.pt"
