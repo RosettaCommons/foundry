@@ -4,7 +4,8 @@ import torch
 from rf2aa.chemical import ChemicalData as ChemData 
 
 from rf2aa.data.compose_dataset import compose_single_item_dataset, set_data_loader_params
-from rf2aa.data.data_loader import loader_atomize_pdb, loader_sm_compl_assembly
+from rf2aa.data.data_loader import loader_atomize_pdb
+from rf2aa.data.loaders.rcsb_loader import loader_sm_compl_assembly
 from rf2aa.data.dataloader_adaptor import prepare_input
 from rf2aa.util import is_atom, writepdb
 from rf2aa.tensor_util import assert_shape

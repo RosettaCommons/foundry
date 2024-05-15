@@ -5,11 +5,11 @@ from collections import OrderedDict
 import os
 
 from rf2aa.data.data_loader import get_train_valid_set, loader_pdb, loader_complex, loader_na_complex, \
-    loader_distil_tf, loader_tf_complex, loader_fb, loader_dna_rna, loader_sm_compl_assembly_single, \
-    loader_sm_compl_assembly, loader_sm, loader_atomize_pdb, loader_atomize_complex, DistilledDataset, \
+    loader_distil_tf, loader_tf_complex, loader_fb, loader_dna_rna, \
+    loader_sm, loader_atomize_pdb, loader_atomize_complex, DistilledDataset, \
     Dataset, DatasetRNA, DatasetNAComplex, DatasetNAComplex, \
     DatasetSMComplexAssembly, DatasetSM, _load_df
-
+from rf2aa.data.loaders.rcsb_loader import loader_sm_compl_assembly_single, loader_sm_compl_assembly
 from rf2aa.data.sampler import sampler_factory
 
 #### handle defaults 
