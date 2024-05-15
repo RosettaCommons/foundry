@@ -110,10 +110,10 @@ class SequenceWeight(nn.Module):
         return self.dropout(attn)
 
 class MSARowAttentionWithBias(nn.Module):
-    def __init__(self, d_msa=256, d_pair=128, n_head=8, d_hidden=32, nseq_normalization=False):
+    def __init__(self, d_msa=256, d_pair=128, n_head=8, d_hidden=32, nseq_normalization=False, bias=True):
         super(MSARowAttentionWithBias, self).__init__()
-        self.norm_msa = nn.LayerNorm(d_msa)
-        self.norm_pair = nn.LayerNorm(d_pair)
+        self.norm_msa = nn.LayerNorm(d_msa, bias=bias)
+        self.norm_pair = nn.LayerNorm(d_pair, bias=bias)
         #
         self.seq_weight = SequenceWeight(d_msa, n_head, d_hidden, p_drop=0.1)
         self.to_q = nn.Linear(d_msa, n_head*d_hidden, bias=False)
@@ -180,7 +180,7 @@ class MSAColAttention(nn.Module):
     """
     Efficient implementation of MSA gated column attention using FlashAttention, when available.
     """
-    def __init__(self, d_msa=256, n_head=8, d_hidden=32):
+    def __init__(self, d_msa=256, n_head=8, d_hidden=32, bias=True):
         """
         args:
             d_msa: latent dimension of MSA embedding
@@ -190,7 +190,7 @@ class MSAColAttention(nn.Module):
         super(MSAColAttention, self).__init__()
         
         # Initilialize linear layers (Q, K, V) and layer normalization
-        self.norm_msa = nn.LayerNorm(d_msa)
+        self.norm_msa = nn.LayerNorm(d_msa, bias=bias)
         self.to_q = nn.Linear(d_msa, n_head * d_hidden, bias=False)
         self.to_k = nn.Linear(d_msa, n_head * d_hidden, bias=False)
         self.to_v = nn.Linear(d_msa, n_head * d_hidden, bias=False)
@@ -317,11 +317,11 @@ class MSAColGlobalAttention(nn.Module):
     """
     Efficient implementation of MSA gated global column attention using FlashAttention, when available.
     """
-    def __init__(self, d_msa=64, n_head=8, d_hidden=8):
+    def __init__(self, d_msa=64, n_head=8, d_hidden=8, bias=True):
         super(MSAColGlobalAttention, self).__init__()
         
         # Initilialize linear layers (Q, K, V) and layer normalization
-        self.norm_msa = nn.LayerNorm(d_msa)
+        self.norm_msa = nn.LayerNorm(d_msa, bias=bias)
         self.to_q = nn.Linear(d_msa, n_head*d_hidden, bias=False)
         self.to_k = nn.Linear(d_msa, d_hidden, bias=False) # Note that the key is not multi-headed
         self.to_v = nn.Linear(d_msa, d_hidden, bias=False) # Note that the value is not multi-headed
@@ -513,16 +513,16 @@ class TriangleAttention(nn.Module):
         return out
 
 class TriangleMultiplication(nn.Module):
-    def __init__(self, d_pair, d_hidden=128, outgoing=True):
+    def __init__(self, d_pair, d_hidden=128, outgoing=True, bias=True):
         super(TriangleMultiplication, self).__init__()
-        self.norm = nn.LayerNorm(d_pair)
+        self.norm = nn.LayerNorm(d_pair, bias=bias)
         self.left_proj = nn.Linear(d_pair, d_hidden)
         self.right_proj = nn.Linear(d_pair, d_hidden)
         self.left_gate = nn.Linear(d_pair, d_hidden)
         self.right_gate = nn.Linear(d_pair, d_hidden)
         #
         self.gate = nn.Linear(d_pair, d_pair)
-        self.norm_out = nn.LayerNorm(d_hidden)
+        self.norm_out = nn.LayerNorm(d_hidden, bias=bias)
         self.out_proj = nn.Linear(d_hidden, d_pair)
 
         self.outgoing = outgoing
@@ -533,7 +533,7 @@ class TriangleMultiplication(nn.Module):
         # normal distribution for regular linear weights
         self.left_proj = init_lecun_normal(self.left_proj)
         self.right_proj = init_lecun_normal(self.right_proj)
-        
+
         # Set Bias of Linear layers to zeros
         nn.init.zeros_(self.left_proj.bias)
         nn.init.zeros_(self.right_proj.bias)
@@ -577,12 +577,12 @@ class TriangleMultiplication(nn.Module):
 
 # Instead of triangle attention, use Tied axail attention with bias from coordinates..?
 class BiasedAxialAttention(nn.Module):
-    def __init__(self, d_pair, d_bias, n_head, d_hidden, p_drop=0.1, is_row=True):
+    def __init__(self, d_pair, d_bias, n_head, d_hidden, p_drop=0.1, is_row=True, bias=True):
         super(BiasedAxialAttention, self).__init__()
         #
         self.is_row = is_row
-        self.norm_pair = nn.LayerNorm(d_pair)
-        self.norm_bias = nn.LayerNorm(d_bias)
+        self.norm_pair = nn.LayerNorm(d_pair, bias=bias)
+        self.norm_bias = nn.LayerNorm(d_bias, bias=bias)
 
         self.to_q = nn.Linear(d_pair, n_head*d_hidden, bias=False)
         self.to_k = nn.Linear(d_pair, n_head*d_hidden, bias=False)

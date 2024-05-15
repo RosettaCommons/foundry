@@ -39,8 +39,8 @@ class RF2_block(nn.Module):
 
         self.layer_dropout = block_params.p_drop_layer #fd layer dropout
 
-        self.norm_pair_bias = nn.LayerNorm(d_pair)
-        self.norm_state_bias = nn.LayerNorm(d_state)
+        self.norm_pair_bias = nn.LayerNorm(d_pair, bias=block_params.bias_in_attn_norm)
+        self.norm_state_bias = nn.LayerNorm(d_state, bias=block_params.bias_in_attn_norm)
         self.proj_state_bias = nn.Linear(d_state, d_msa)
         self.msa_str_bias = structure_bias_factory["ungated"](block_params.d_rbf, d_pair)
 
@@ -52,14 +52,16 @@ class RF2_block(nn.Module):
             d_pair=d_pair, 
             n_head=block_params.n_msa_head, 
             d_hidden=block_params.n_msa_channels,
-            nseq_normalization=block_params.norm_msa_row
+            nseq_normalization=block_params.norm_msa_row,
+            bias=block_params.bias_in_attn_norm
         )
         if self.is_full:
             if block_params.use_flash_attn:
                 self.msa_col_attn = MSAColGlobalAttention(
                     d_msa=d_msa,
                     n_head=block_params.n_msa_head,
-                    d_hidden=block_params.n_msa_channels
+                    d_hidden=block_params.n_msa_channels,
+                    bias=block_params.bias_in_attn_norm
                 )
             else:
                 self.msa_col_attn = OldMSAColGlobalAttention(
@@ -72,7 +74,8 @@ class RF2_block(nn.Module):
                 self.msa_col_attn = MSAColAttention(
                     d_msa=d_msa, 
                     n_head=block_params.n_msa_head, 
-                    d_hidden=block_params.n_msa_channels
+                    d_hidden=block_params.n_msa_channels,
+                    bias=block_params.bias_in_attn_norm
                 )
             else:
                 self.msa_col_attn = OldMSAColAttention(
@@ -88,10 +91,16 @@ class RF2_block(nn.Module):
         
         
         self.structure_bias = structure_bias_factory["gated"](block_params.d_rbf, d_state, d_pair, block_params.structure_bias_gate_channels)
-        self.tri_mul_outgoing = TriangleMultiplication(d_pair, d_hidden=block_params.n_pair_channels, outgoing=True)
-        self.tri_mul_incoming = TriangleMultiplication(d_pair, d_hidden=block_params.n_pair_channels, outgoing=False)
-        self.pair_row_attn = BiasedAxialAttention(d_pair, d_pair, block_params.n_pair_head, block_params.n_pair_channels, p_drop=block_params.p_drop_pair, is_row=True)
-        self.pair_col_attn = BiasedAxialAttention(d_pair, d_pair, block_params.n_pair_head, block_params.n_pair_channels, p_drop=block_params.p_drop_pair, is_row=False)
+        self.tri_mul_outgoing = TriangleMultiplication(
+            d_pair, d_hidden=block_params.n_pair_channels, outgoing=True, bias=block_params.bias_in_attn_norm)
+        self.tri_mul_incoming = TriangleMultiplication(
+            d_pair, d_hidden=block_params.n_pair_channels, outgoing=False, bias=block_params.bias_in_attn_norm)
+        self.pair_row_attn = BiasedAxialAttention(
+            d_pair, d_pair, block_params.n_pair_head, block_params.n_pair_channels, p_drop=block_params.p_drop_pair, is_row=True, bias=block_params.bias_in_attn_norm
+        )
+        self.pair_col_attn = BiasedAxialAttention(
+            d_pair, d_pair, block_params.n_pair_head, block_params.n_pair_channels, p_drop=block_params.p_drop_pair, is_row=False, bias=block_params.bias_in_attn_norm
+        )
         self.pair_transition = FeedForwardLayer(d_pair, 2) # HACK: hardcoded value for transition
 
         self.structure_attn = FullyConnectedSE3(d_msa, 
@@ -194,7 +203,7 @@ class RF2_block(nn.Module):
         msa, pair, state, xyz, is_atom, atom_frames, chirals, bond_feats, dist_matrix, idx, is_motif = self._unpack_inputs(latent_feats)
         drop_layer = 0
         if use_checkpoint:
-            with torch.cuda.amp.autocast(enabled=use_amp):
+            with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
                 msa  = checkpoint.checkpoint(create_custom_forward(self._1d_update, drop_layer=drop_layer), msa, pair, state, xyz, use_reentrant=True)
                 pair = checkpoint.checkpoint(create_custom_forward(self._2d_update, drop_layer=drop_layer), msa, pair, state, xyz, use_reentrant=True)
             # 3D track cannot use re-entrant = False because of chiral features call to autograd
@@ -206,7 +215,7 @@ class RF2_block(nn.Module):
                 use_reentrant=True
             )
         else:
-            with torch.cuda.amp.autocast(enabled=use_amp):
+            with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
               msa= self._1d_update(msa, pair, state, xyz, drop_layer=drop_layer)
               pair = self._2d_update(msa, pair, state, xyz, drop_layer=drop_layer)
             msa, pair = msa.float(), pair.float()

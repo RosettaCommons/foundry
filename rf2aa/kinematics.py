@@ -88,7 +88,7 @@ def get_pair_dist(a, b):
     return dist
 
 # ============================================================
-def get_ang(a, b, c, eps=1e-6):
+def get_ang(a, b, c, eps=1e-4):
     """calculate planar angles for all consecutive triples (a[i],b[i],c[i])
     from Cartesian coordinates of three sets of atoms a,b,c 
 
@@ -110,7 +110,7 @@ def get_ang(a, b, c, eps=1e-6):
     return torch.acos(torch.clamp(vw,-0.999,0.999))
 
 # ============================================================
-def get_dih(a, b, c, d, eps=1e-6):
+def get_dih(a, b, c, d, eps=1e-4):
     """calculate dihedral angles for all consecutive quadruples (a[i],b[i],c[i],d[i])
     given Cartesian coordinates of four sets of atoms a,b,c,d
 

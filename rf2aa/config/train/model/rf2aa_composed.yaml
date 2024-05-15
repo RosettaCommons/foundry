@@ -53,6 +53,7 @@ blocks:
       residual_state: False
       norm_msa_row: False
       use_flash_attn: False
+      bias_in_attn_norm: True
       compute_gradients: False
   RF2aa:
     num_blocks: 32
@@ -85,6 +86,7 @@ blocks:
       residual_state: False
       norm_msa_row: False
       use_flash_attn: False
+      bias_in_attn_norm: True
       compute_gradients: False
 auxiliary_predictors:
   c6d:

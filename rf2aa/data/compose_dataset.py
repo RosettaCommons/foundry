@@ -449,8 +449,8 @@ def compose_similar_posebusters(loader_params, rank, world_size):
         "/projects/ml/RF2_allatom/posebusters/posebusters_chid2taxid_081723.pkl", "rb"
     ) as f:
         chid2taxid = pickle.load(f)
-    loader_params["MINTPLT"] = 0
-    loader_params["MAXTPLT"] = 0
+    loader_params["MINTPLT"] = 1
+    loader_params["MAXTPLT"] = 4
     loader_params["PDB_DIR"] = "/projects/ml/RF2_allatom/benchmark"
 
     benchmark = DatasetSMComplexAssembly(

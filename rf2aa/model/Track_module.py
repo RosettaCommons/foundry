@@ -546,7 +546,7 @@ class Str2Str(nn.Module):
     
     @torch.cuda.amp.autocast(enabled=False)
     def forward(self, msa, pair, xyz, state, idx, rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, 
-                extra_l0=None, extra_l1=None, use_atom_frames=True, top_k=128, eps=1e-5,
+                extra_l0=None, extra_l1=None, use_atom_frames=True, top_k=128, eps=1e-4,
                 cyclic_reses=None):
         # process msa & pair features
         B, N, L = msa.shape[:3]
@@ -628,7 +628,7 @@ class Allatom2Allatom(nn.Module):
         self.se3 = SE3TransformerWrapper(**SE3_param)
 
     @torch.cuda.amp.autocast(enabled=False)
-    def forward(self, seq, xyz, aamask, num_bonds, state, grads, top_k=24, eps=1e-5):
+    def forward(self, seq, xyz, aamask, num_bonds, state, grads, top_k=24, eps=1e-4):
         raise Exception('not implemented for diffusion')
         # seq  (B,L)
         # xyz  (B,L,27,3)

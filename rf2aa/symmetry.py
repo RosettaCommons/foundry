@@ -4,7 +4,7 @@ import torch
 
 SYMA = 1.0
 
-def generateC(angs, eps=1e-6):
+def generateC(angs, eps=1e-4):
     L = angs.shape[0]
     Rs = torch.eye(3,  device=angs.device).repeat(L,1,1)
     Rs[:,1,1] = torch.cos(angs)
@@ -13,7 +13,7 @@ def generateC(angs, eps=1e-6):
     Rs[:,2,2] = torch.cos(angs)
     return Rs
 
-def generateD(angs, eps=1e-6):
+def generateD(angs, eps=1e-4):
     L = angs.shape[0]
     Rs = torch.eye(3,  device=angs.device).repeat(2*L,1,1)
     Rs[:L,1,1] = torch.cos(angs)
@@ -75,7 +75,7 @@ def rotation_from_matrix(R, eps=1e-4):
     return angle, axis
 
 def kabsch(pred, true):
-    def rmsd(V, W, eps=1e-6):
+    def rmsd(V, W, eps=1e-4):
         L = V.shape[0]
         return torch.sqrt(torch.sum((V-W)*(V-W)) / L + eps)
     def centroid(X):

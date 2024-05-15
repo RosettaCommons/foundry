@@ -24,8 +24,8 @@ def make_frame(X, Y):
     return torch.stack((Xn,Yn,Zn), dim=-1)
 
 # ang between vectors
-def th_ang_v(ab,bc,eps:float=1e-8):
-    def th_norm(x,eps:float=1e-8):
+def th_ang_v(ab,bc,eps:float=1e-4):
+    def th_norm(x,eps:float=1e-4):
         return x.square().sum(-1,keepdim=True).add(eps).sqrt()
     def th_N(x,alpha:float=0):
         return x/th_norm(x).add(alpha)
@@ -40,7 +40,7 @@ def th_dih_v(ab,bc,cd):
     def th_cross(a,b):
         a,b = torch.broadcast_tensors(a,b)
         return torch.cross(a,b, dim=-1)
-    def th_norm(x,eps:float=1e-8):
+    def th_norm(x,eps:float=1e-4):
         return x.square().sum(-1,keepdim=True).add(eps).sqrt()
     def th_N(x,alpha:float=0):
         return x/th_norm(x).add(alpha)

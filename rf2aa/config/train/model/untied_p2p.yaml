@@ -53,6 +53,7 @@ blocks:
       residual_state: True
       norm_msa_row: False
       use_flash_attn: True
+      bias_in_attn_norm: True
       compute_gradients: False
   untied_p2p:
     num_blocks: 32
@@ -85,6 +86,7 @@ blocks:
       residual_state: True
       norm_msa_row: False
       use_flash_attn: True
+      bias_in_attn_norm: True
       compute_gradients: False
 refinement:
   local:

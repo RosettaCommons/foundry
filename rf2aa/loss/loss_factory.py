@@ -112,7 +112,7 @@ def calc_loss(trainer, logit_s, label_s,
                   negative=False, interface=False,
                   w_dist=1.0, w_aa=1.0, w_str=1.0, w_inter_fape=0.0, w_lig_fape=1.0, w_lddt=1.0, 
                   w_bond=1.0, w_clash=0.0, w_atom_bond=0.0, w_skip_bond=0.0, w_rigid=0.0, w_hb=0.0, w_bind=0.0,
-                  w_pae=0.0, w_pde=0.0, lj_lin=0.85, eps=1e-6, binder_loss_label_smoothing = 0.0, item=None, task=None, out_dir='./'
+                  w_pae=0.0, w_pde=0.0, lj_lin=0.85, eps=1e-4, binder_loss_label_smoothing = 0.0, item=None, task=None, out_dir='./'
     ):
         gpu = pred.device
 
@@ -160,7 +160,7 @@ def calc_loss(trainer, logit_s, label_s,
         # masked token prediction loss
         loss = cce_loss(logit_aa_s, label_aa_s.reshape(B, -1))
         loss = loss * mask_aa_s.reshape(B, -1)
-        loss = loss.float().sum() / (mask_aa_s.sum() + 1e-8)
+        loss = loss.float().sum() / (mask_aa_s.sum() + 1e-4)
         tot_loss += w_aa*loss
         loss_dict['aa_cce'] = loss.detach()
 
@@ -306,7 +306,7 @@ def calc_loss(trainer, logit_s, label_s,
             true_tors_alt,
             tors_mask,
             tors_planar,
-            eps = 1e-10)
+            eps = 1e-4)
         tot_loss += w_str*l_tors
         loss_dict['torsion'] = l_tors.detach()
 

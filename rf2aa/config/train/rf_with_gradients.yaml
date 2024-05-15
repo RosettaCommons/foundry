@@ -62,6 +62,7 @@ model:
         residual_state: False
         norm_msa_row: False
         use_flash_attn: False
+        bias_in_attn_norm: True
         compute_gradients: True
     RF2_withgradients:
       num_blocks: 36
@@ -94,6 +95,7 @@ model:
         residual_state: False
         norm_msa_row: False
         use_flash_attn: False
+        bias_in_attn_norm: True
         compute_gradients: True
   refinement:
     local:
@@ -115,7 +117,7 @@ model:
         sc_pred_p_drop: 0.15
         residual_state: False
         compute_gradients: False
-  
+
   auxiliary_predictors:
     c6d:
       n_feat: 192

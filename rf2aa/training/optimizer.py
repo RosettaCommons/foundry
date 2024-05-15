@@ -4,7 +4,8 @@ def add_weight_decay(model, l2_coeff):
         if not param.requires_grad:
             continue
         #if len(param.shape) == 1 or name.endswith(".bias"):
-        if "norm" in name or name.endswith(".bias"):
+        #if "norm" in name or name.endswith(".bias"):
+        if "norm" in name: #fd let biases decay
             no_decay.append(param)
         else:
             decay.append(param)

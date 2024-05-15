@@ -1,0 +1,77 @@
+defaults:
+  - base
+  - dataset_params/dataset_params_distillation
+  - model/rf2aa_composed
+  - loader_params/default
+  - loader_params/ligand_exclusions 
+  - training_params/default_amp
+  - loss_param/pretraining
+  - ddp_params/default
+
+experiment:
+  name: rf2_60layers
+  trainer: "composed"
+  n_epoch: 800
+  output_dir: null
+
+ddp_params:
+  accum: 2
+
+model:
+  global_params:
+    d_state: 32
+  blocks:
+    RF2aa_full:
+      num_blocks: 4
+      params:
+        n_se3_channels: 48
+        l0_in_features: 32
+        l0_out_features: 32
+        n_se3_edge_features: 32
+        residual_state: True
+        norm_msa_row: True
+        bias_in_attn_norm: False
+        use_flash_attn: True
+
+    RF2aa:
+      num_blocks: 60
+      params:
+        n_se3_channels: 48
+        l0_in_features: 32
+        l0_out_features: 32
+        n_se3_edge_features: 32
+        residual_state: True
+        norm_msa_row: True
+        bias_in_attn_norm: False
+        use_flash_attn: True
+
+  refinement:
+    local_adaptor:
+      params:
+        num_iterations: 4
+        d_rbf: 64
+        n_se3_layers: 1
+        n_se3_channels: 128
+        n_se3_degrees: 2
+        n_se3_head: 4
+        n_div: 4
+        adaptor_features: 32
+        l0_in_features: 64
+        l0_out_features: 64
+        l1_in_features: 6
+        l1_out_features: 2
+        n_se3_edge_features: 64
+        top_k: 64
+        sc_pred_d_hidden: 128
+        sc_pred_p_drop: 0.15
+        residual_state: False
+        compute_gradients: False
+  auxiliary_predictors:
+    plddt:
+      n_feat: 32
+      input_feature: "state"
+     
+chem_params:
+  use_phospate_frames_for_NA: False
+  use_lj_params_for_atoms: True
+

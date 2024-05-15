@@ -74,7 +74,7 @@ def get_complex_crop(len_s, mask, device, params):
         offset += len_s[k]
     return torch.cat(sel_s)
 
-def get_spatial_crop(xyz, mask, sel, len_s, params, label, cutoff=10.0, eps=1e-6):
+def get_spatial_crop(xyz, mask, sel, len_s, params, label, cutoff=10.0, eps=1e-4):
     device = xyz.device
 
     # get interface residues
@@ -98,7 +98,7 @@ def get_spatial_crop(xyz, mask, sel, len_s, params, label, cutoff=10.0, eps=1e-6
 
 
 # this is a bit of a mess...
-def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein=True, cutoff=12.0, bp_cutoff=4.0, eps=1e-6):
+def get_na_crop(seq, xyz, mask, sel, len_s, params, negative=False, incl_protein=True, cutoff=12.0, bp_cutoff=4.0, eps=1e-4):
     device = xyz.device
 
     # get base pairing NA bases

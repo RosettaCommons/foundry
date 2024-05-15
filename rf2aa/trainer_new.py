@@ -11,6 +11,7 @@ import wandb
 import omegaconf
 from contextlib import nullcontext
 import datetime
+
 import certifi
 import warnings
 
@@ -84,7 +85,7 @@ class Trainer:
         if not os.path.exists(checkpoint_path):
             warnings.warn(f"{checkpoint_path} not found, continuing with random parameters")
             return False
-        map_location = {"cuda:0": f"cuda:{rank}"}
+        map_location = f"cuda:{rank}"
         self.checkpoint = torch.load(checkpoint_path, map_location=map_location)
         print(f"Loading checkpoint from {checkpoint_path} on rank:{rank}")
         return True
@@ -141,9 +142,13 @@ class Trainer:
                     'training_config'     : dict(self.config),
                     }
         checkpoint_data.update(metadata)
-        torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_last.pt")
-        if epoch%10==0:
-            torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
+
+        if epoch<0:
+            torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_error.pt")
+        else:
+            torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_last.pt")
+            if epoch%10==0:
+                torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
 
     
     def launch_distributed_training(self):
@@ -353,6 +358,7 @@ class Trainer:
         print(f"Models: {Nex} of: {Nepoch} Max_Memory: {max_mem:.4f} Runtime: {runtime:.4f}")
         print(f"Example: {item} Recycle:{n_cycle}\n"+
               "\t".join([f"{k}: {v:.4f}" for k,v in loss_dict.items()]))
+        #print(f"Models: {Nex} Example: {item['CHAINID']} "+" ".join([f"{k}: {v:.4f}" for k,v in loss_dict.items()]))
         torch.cuda.reset_peak_memory_stats()
 
     def log_validation_losses(self, dataset_name, loss_dict):

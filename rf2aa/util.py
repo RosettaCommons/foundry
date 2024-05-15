@@ -1368,7 +1368,7 @@ def same_chain_from_bond_feats(bond_feats):
     return same_chain
 
 
-def kabsch(xyz1, xyz2, eps=1e-6):
+def kabsch(xyz1, xyz2, eps=1e-4):
     """Superimposes `xyz2` coordinates onto `xyz1`, returns RMSD and rotation matrix."""
     # center to CA centroid
     xyz1 = xyz1 - xyz1.mean(0)

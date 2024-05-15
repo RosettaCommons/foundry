@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # 4. predicted lddt loss
 
 #fd use improved coordinate frame generation
-def get_t(N, Ca, C, eps=1e-5):
+def get_t(N, Ca, C, eps=1e-4):
     I,B,L=N.shape[:3]
     Rs,Ts = rigid_from_3_points(N.view(I*B,L,3), Ca.view(I*B,L,3), C.view(I*B,L,3), eps=eps)
     Rs = Rs.view(I,B,L,3,3)
@@ -36,7 +36,7 @@ def get_t(N, Ca, C, eps=1e-5):
     t = Ts.unsqueeze(-2) - Ts.unsqueeze(-3)
     return torch.einsum('iblkj, iblmk -> iblmj', Rs, t) # (I,B,L,L,3) **fixed
 
-def calc_str_loss(pred, true, mask_2d, same_chain, negative=False, d_clamp_intra=10.0, d_clamp_inter=30.0, A=10.0, gamma=0.99, eps=1e-6):
+def calc_str_loss(pred, true, mask_2d, same_chain, negative=False, d_clamp_intra=10.0, d_clamp_inter=30.0, A=10.0, gamma=0.99, eps=1e-4):
     '''
     Calculate Backbone FAPE loss
     Input:
@@ -441,7 +441,7 @@ def calc_rmsd(pred, true, mask):
     # pred (N,B,Lasu,natom,3)
     # true (B,Lasu,natom,3)
     # mask (B,Lasu,natom)
-    def rmsd(V, W, eps=1e-6):
+    def rmsd(V, W, eps=1e-4):
         L = V.shape[1]
         return torch.sqrt(torch.sum((V-W)*(V-W), dim=(1,2)) / L + eps)
     def centroid(X):
@@ -518,7 +518,7 @@ def resolve_symmetry_predictions(pred, true, mask, Lasu):
 
 
 #torsion angle predictor loss
-def torsionAngleLoss( alpha, alphanat, alphanat_alt, tors_mask, tors_planar, eps=1e-8 ):
+def torsionAngleLoss( alpha, alphanat, alphanat_alt, tors_mask, tors_planar, eps=1e-4 ):
     I = alpha.shape[0]
     alpha = alpha.float()
     lnat = torch.sqrt( torch.sum( torch.square(alpha), dim=-1 ) + eps )
@@ -729,7 +729,7 @@ def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None, alignment_radius=None):
         - alignment_radius: radius around the rmsd mask that will be used for alignment (float)
     Output: RMSD after superposition
     '''
-    def rmsd(V, W, eps=1e-6):
+    def rmsd(V, W, eps=1e-4):
         L = V.shape[1]
         return torch.sqrt(torch.sum((V-W)*(V-W), dim=(1,2)) / L + eps)
     def centroid(X):
@@ -778,7 +778,7 @@ def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None, alignment_radius=None):
     rms = rmsd(rP, true_rms).reshape(B)
     return rms
     
-def angle(a, b, c, eps=1e-6):
+def angle(a, b, c, eps=1e-4):
     '''
     Calculate cos/sin angle between ab and cb
     a,b,c have shape of (B, L, 3)
@@ -807,7 +807,7 @@ def angle(a, b, c, eps=1e-6):
 def length(a, b):
     return torch.norm(a-b, dim=-1)
 
-def torsion(a,b,c,d, eps=1e-6):
+def torsion(a,b,c,d, eps=1e-4):
     #A function that takes in 4 atom coordinates:
     # a - [B,L,3]
     # b - [B,L,3]
@@ -833,7 +833,7 @@ def torsion(a,b,c,d, eps=1e-6):
     cos_sin = torch.cat([cos_angle, sin_angle], axis=-1)/(t1_norm*t2_norm+eps) #[B,L,2]
     return cos_sin
 
-def cosangle( A,B,C, eps=1e-6 ):
+def cosangle( A,B,C, eps=1e-4 ):
     AB = A-B
     BC = C-B
     ABn = torch.sqrt( torch.sum(torch.square(AB),dim=-1) + eps)
@@ -844,7 +844,7 @@ def cosangle( A,B,C, eps=1e-6 ):
 # ideal N-C distance, ideal cos(CA-C-N angle), ideal cos(C-N-CA angle)
 # for NA, we do not compute this as it is not computable from the stubs alone
 def calc_BB_bond_geom(
-    seq, pred, idx, eps=1e-6, 
+    seq, pred, idx, eps=1e-4, 
     ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, 
     ideal_OP=1.607, ideal_OPO=-0.3106, ideal_OPC=-0.4970, 
     sig_len=0.02, sig_ang=0.05):
@@ -899,7 +899,7 @@ def calc_BB_bond_geom(
     return blen_loss + bang_loss
 
 def calc_atom_bond_loss(
-    pred, true, bond_feats, seq, beta=0.2, eps=1e-6,
+    pred, true, bond_feats, seq, beta=0.2, eps=1e-4,
     ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, 
     sig_len=0.02, sig_ang=0.05
 ):
@@ -976,7 +976,7 @@ def calc_atom_bond_loss(
 
     return bond_dist_loss, skip_bond_dist_loss, rigid_group_dist_loss
 
-def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-6):
+def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-4):
     # pred: N x L x 27 x 3
     # idx: 1 x L
     # seq: 1 x L
@@ -1102,7 +1102,7 @@ def calc_clash(xs, mask):
     DISTCUT=2.0 # (d_lit - tau) from AF2 MS
     L = xs.shape[0]
     dij = torch.sqrt(
-        torch.sum( torch.square( xs[:,:,None,None,:]-xs[None,None,:,:,:] ), dim=-1 ) + 1e-8
+        torch.sum( torch.square( xs[:,:,None,None,:]-xs[None,None,:,:,:] ), dim=-1 ) + 1e-4
     )
 
     allmask = mask[:,:,None,None]*mask[None,None,:,:]
@@ -1143,7 +1143,7 @@ class LJLoss(torch.autograd.Function):
     def forward(
         ctx, xs, seq, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds, 
         lj_lin=0.75, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
-        eps=1e-8, normNviolations=True, useH=False, 
+        eps=1e-4, normNviolations=True, useH=False, 
         norm_by_atoms_twice=False, # this exists purely for backwards compatibility 
         training=True
     ):
@@ -1299,7 +1299,7 @@ class LJLoss(torch.autograd.Function):
 def calc_lj(
     seq, xs, aamask, bond_feats, dist_matrix, ljparams, ljcorr, num_bonds,  
     lj_lin=0.75, lj_hb_dis=3.0, lj_OHdon_dis=2.6, lj_hbond_hdis=1.75, 
-    lj_maxrad=-1.0, eps=1e-8,
+    lj_maxrad=-1.0, eps=1e-4,
     normNviolations=True, useH=False, training=True
 ):
     lj = LJLoss.apply
@@ -1316,7 +1316,7 @@ def calc_lj(
 def calc_hb(
     seq, xs, aamask, hbtypes, hbbaseatoms, hbpolys,
     hb_sp2_range_span=1.6, hb_sp2_BAH180_rise=0.75, hb_sp2_outer_width=0.357, 
-    hb_sp3_softmax_fade=2.5, threshold_distance=6.0, eps=1e-8, normalize=True
+    hb_sp3_softmax_fade=2.5, threshold_distance=6.0, eps=1e-4, normalize=True
 ):
     def evalpoly( ds, xrange, yrange, coeffs ):
         v = coeffs[...,0]
@@ -1434,7 +1434,7 @@ def calc_chiral_loss(pred, chirals):
 
 @torch.enable_grad()
 def calc_BB_bond_geom_grads(
-    seq, idx, xyz, alpha, toaa, eps=1e-6,
+    seq, idx, xyz, alpha, toaa, eps=1e-4,
     ideal_NC=1.329, ideal_CACN=-0.4415, ideal_CNCA=-0.5255, 
     ideal_OP=1.607, ideal_POP=-0.3106, ideal_OPC=-0.4970, 
     sig_len=0.02, sig_ang=0.05
@@ -1444,12 +1444,12 @@ def calc_BB_bond_geom_grads(
     return torch.autograd.grad(Ebond, pred)
 
 @torch.enable_grad()
-def calc_cart_bonded_grads(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-6):
+def calc_cart_bonded_grads(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-4):
     pred.requires_grad_(True)
     Ecb = calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps)
     return torch.autograd.grad(Ecb, pred)
 
-#FD note different defaults in normNviolations and useH compared to 'calc_lj'
+#FD note different defaults in normNviolations, useH, and eps compared to 'calc_lj'
 #FD  - this fn is not used in loss but as network inputs
 #FD  - only used in legacy model
 @torch.enable_grad()
@@ -1496,7 +1496,7 @@ def calc_hb_grads(
     seq, xyz, alpha, toaa, 
     aamask, hbtypes, hbbaseatoms, hbpolys,
     hb_sp2_range_span=1.6, hb_sp2_BAH180_rise=0.75, hb_sp2_outer_width=0.357, 
-    hb_sp3_softmax_fade=2.5, threshold_distance=6.0, eps=1e-8, normalize=True
+    hb_sp3_softmax_fade=2.5, threshold_distance=6.0, eps=1e-4, normalize=True
 ):
     xyz.requires_grad_(True)
     alpha.requires_grad_(True)
@@ -1525,7 +1525,7 @@ def calc_chiral_grads(xyz, chirals):
         return (torch.zeros(xyz.shape, device=xyz.device),) # autograd returns a tuple..
     return torch.autograd.grad(l, xyz)
 
-def calc_pseudo_dih(pred, true, eps=1e-6):
+def calc_pseudo_dih(pred, true, eps=1e-4):
     '''
     calculate pseudo CA dihedral angle and put loss on them
     Input:
@@ -1542,7 +1542,7 @@ def calc_pseudo_dih(pred, true, eps=1e-6):
     dih_loss = torch.sqrt(dih_loss + eps)
     return dih_loss
 
-def calc_lddt(pred_ca, true_ca, mask_crds, mask_2d, same_chain, negative=False, interface=False, eps=1e-6):
+def calc_lddt(pred_ca, true_ca, mask_crds, mask_2d, same_chain, negative=False, interface=False, eps=1e-4):
     # Input
     # pred_ca: predicted CA coordinates (I, B, L, 3)
     # true_ca: true CA coordinates (B, L, 3)
@@ -1576,7 +1576,7 @@ def calc_lddt(pred_ca, true_ca, mask_crds, mask_2d, same_chain, negative=False, 
 
 
 #fd allatom lddt
-def calc_allatom_lddt(P, Q, idx, atm_mask, eps=1e-6):
+def calc_allatom_lddt(P, Q, idx, atm_mask, eps=1e-4):
     # P - N x L x 27 x 3
     # Q - L x 27 x 3
     N, L = P.shape[:2]
@@ -1600,14 +1600,14 @@ def calc_allatom_lddt(P, Q, idx, atm_mask, eps=1e-6):
     lddt = torch.zeros( (N,L,27), device=P.device ) # (N, L, 27)
     for distbin in (0.5,1.0,2.0,4.0):
         lddt += 0.25 * torch.sum( (delta_PQ<=distbin)*pair_mask, dim=(2,4)
-            ) / ( torch.sum( pair_mask, dim=(2,4) ) + 1e-8)
+            ) / ( torch.sum( pair_mask, dim=(2,4) ) + 1e-4)
 
     lddt = (lddt * atm_mask).sum(dim=(1,2)) / (atm_mask.sum() + eps)
     return lddt
 
 
 def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, negative=False, 
-    interface=False, bin_scaling=1, N_stripe=1, eps=1e-6):
+    interface=False, bin_scaling=1, N_stripe=1, eps=1e-4):
     # P - N x L x natoms x 3
     # Q - L x natoms x 3
     # pred_lddt - 1 x nbucket x L
@@ -1671,8 +1671,8 @@ def calc_allatom_lddt_loss(P, Q, pred_lddt, idx, atm_mask, mask_2d, same_chain, 
     lddt_loss = (lddt_loss * res_mask).sum() / (res_mask.sum() + eps)
    
     # method 1: average per-residue
-    #lddt = lddt.sum(dim=-1) / (atm_mask.sum(dim=-1)+1e-8) # L
-    #lddt = (res_mask*lddt).sum() / (res_mask.sum() + 1e-8)
+    #lddt = lddt.sum(dim=-1) / (atm_mask.sum(dim=-1)+1e-4) # L
+    #lddt = (res_mask*lddt).sum() / (res_mask.sum() + 1e-4)
 
     # method 2: average per-atom
     atm_mask = atm_mask * (pair_mask_accum != 0)

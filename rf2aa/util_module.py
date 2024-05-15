@@ -271,7 +271,7 @@ def make_full_graph(xyz, pair, idx):
     G.edata['rel_pos'] = (xyz[b,j,:] - xyz[b,i,:]) #.detach() # no gradient through basis function
     return G, pair[b,i,j][...,None]
 
-def make_topk_graph(xyz, pair, idx, top_k=128, nlocal=33, topk_incl_local=True, eps=1e-6):
+def make_topk_graph(xyz, pair, idx, top_k=128, nlocal=33, topk_incl_local=True, eps=1e-4):
     '''
     Input:
         - xyz: current backbone cooordinates (B, L, 3, 3)
@@ -490,13 +490,13 @@ class XYZConverter(nn.Module):
         CAr = (basexyzs[:,:,1,:3])
         CBr = (basexyzs[:,:,4,:3])
         CBrotaxis1 = (CBr-CAr).cross(NCr-CAr, dim=-1)
-        CBrotaxis1 /= torch.linalg.norm(CBrotaxis1, dim=-1, keepdim=True)+1e-8
+        CBrotaxis1 /= torch.linalg.norm(CBrotaxis1, dim=-1, keepdim=True)+1e-4
 
         # CB twist
         NCp = basexyzs[:,:,2,:3] - basexyzs[:,:,0,:3]
         NCpp = NCp - torch.sum(NCp*NCr, dim=-1, keepdim=True)/ torch.sum(NCr*NCr, dim=-1, keepdim=True) * NCr
         CBrotaxis2 = (CBr-CAr).cross(NCpp, dim=-1)
-        CBrotaxis2 /= torch.linalg.norm(CBrotaxis2, dim=-1, keepdim=True)+1e-8
+        CBrotaxis2 /= torch.linalg.norm(CBrotaxis2, dim=-1, keepdim=True)+1e-4
         
         CBrot1 = make_rot_axis(alphas[:,:,7,:], CBrotaxis1 )
         CBrot2 = make_rot_axis(alphas[:,:,8,:], CBrotaxis2 )
