@@ -631,7 +631,8 @@ def load_multi_msa(chain_ids, Ls, seq_prot, chid2hash, chid2taxid, params):
     taxids_unique = []
     Ls_unique = []
     seqs_unique = []
-    
+    chid2hash  = chid2hash or dict()
+    chid2taxid = chid2taxid or dict()    
     offset = 0
     for chid, L_ in zip(chain_ids, Ls):
         # The "default" value here just needs to be a uniquely identifying string
@@ -742,6 +743,7 @@ def featurize_asmb_poly(
     valid_partners = [
         p for p in partners if p[-1] in valid_partner_types
     ]
+    chid2hash = chid2hash or dict()
 
     # polymer true coords
     xyz_prot, mask_prot, ch_label_prot, seq_prot = [], [], [], []

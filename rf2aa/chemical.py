@@ -75,7 +75,11 @@ class ChemicalData:
         #print ('__new__', cls._ChemicalDataStore)
         if not cls._ChemicalDataStore:
            cls._ChemicalDataStore = super().__new__(cls)
-           cls._ChemicalDataStore.init(*args, **kwds)
+           try:
+               cls._ChemicalDataStore.init(*args, **kwds)
+           except Exception as e:
+                cls.reset()
+                raise e
         return cls._ChemicalDataStore
 
     @classmethod
