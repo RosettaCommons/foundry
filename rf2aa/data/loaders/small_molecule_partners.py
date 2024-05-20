@@ -4,7 +4,7 @@ import numpy as np
 import networkx as nx
 
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from rf2aa.data.parsers import parse_mol
 from rf2aa.data.chain_crop import crop_chirals
@@ -601,6 +601,23 @@ def remove_unsupported_metals(
             uniques,
         )
 
+def get_empty_small_molecule_partners() -> Dict[str, Any]:
+    lig_outs = {
+        "xyz_sm": torch.zeros((1, 0, 3), dtype=torch.float32),
+        "mask_sm": torch.zeros((1, 0), dtype=torch.bool),
+        "msa_sm": torch.zeros((1, 0), dtype=torch.long),
+        "bond_feats_sm": [],
+        "frames": torch.zeros((0, 3, 2), dtype=torch.long),
+        "chirals": torch.zeros((0, 5), dtype=torch.float32),
+        "Ls_sm": [],
+        "ch_label_sm": torch.zeros((0,), dtype=torch.long),
+        "akeys_sm": [],
+        "lig_names": [],
+        "residues_to_atomize": [],
+        "uniques": [],
+    }
+    return lig_outs
+
 
 def load_small_molecule_partners(
     lig_partners,
@@ -609,7 +626,7 @@ def load_small_molecule_partners(
     params,
     mod_residues_to_atomize,
     check_for_nonpartner_duplicates: Optional[bool] = False,
-):
+) -> Dict[str, Any]:
     # update ligand partners to atomize residues that are covalently linked to proteins
     lig_partners, residues_to_atomize = find_residues_to_atomize_covale(
         lig_partners, prot_partners, cif_outs["covale"]
@@ -635,6 +652,9 @@ def load_small_molecule_partners(
         ]
     )
     residues_to_atomize.update(set(mod_residues_to_atomize))
+
+    if len(lig_partners) == 0:
+        return get_empty_small_molecule_partners()
 
     # load ligands
     (

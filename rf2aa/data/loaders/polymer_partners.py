@@ -4,7 +4,7 @@ import numpy as np
 import warnings
 from typing import Any, Dict, List, Tuple
 from itertools import permutations
-from rf2aa.data.parsers import parse_a3m
+from rf2aa.data.parsers import parse_a3m, parse_mixed_fasta, parse_fasta
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.data.data_loader import (
     TemplFeaturize,
@@ -19,8 +19,8 @@ from rf2aa.util import (
 )
 
 
-def sequence_to_msa(seq_prot: torch.Tensor) -> Dict[str, Any]:
-    msa = seq_prot[None]
+def sequence_to_msa(seq_poly: torch.Tensor) -> Dict[str, Any]:
+    msa = seq_poly[None]
     ins = torch.zeros_like(msa)
     taxid = np.array(["query"])
     is_paired = torch.ones(msa.shape[0]).bool()
@@ -315,7 +315,7 @@ def choose_multimsa_clusters(msa_seq_is_paired, params):
         return msa_seed_clus
 
 
-def load_minimal_multi_msa(hash_list, taxid_list, Ls, seqs_unique, params):
+def load_minimal_multi_msa(hash_list, taxid_list, Ls, seqs_unique, types_unique, hash2chid, params):
     """Load a multi-MSA, which is a MSA that is paired across more than 2
     chains. This loads the MSA for unique chains. Use 'expand_multi_msa` to
     duplicate portions of the MSA for homo-oligomer repeated chains.
@@ -334,9 +334,11 @@ def load_minimal_multi_msa(hash_list, taxid_list, Ls, seqs_unique, params):
     Ls : list of int
         Lengths of the chains corresponding to the hashes.
     seqs_unique: list of tensors
-        Tensors representing protein sequences. Used as a fall back if the MSA cannot be loaded
+        Tensors representing polymer sequences. Used as a fall back if the MSA cannot be loaded
         or if the MSA is somehow corrupt.
-
+    types_unique: list of str
+        The type of the given chain. One of "polypeptide(L)", "polydeoxyribonucleotide", "polyribonucleotide".
+    
     Returns
     -------
     a3m_out : dict
@@ -390,81 +392,101 @@ def load_minimal_multi_msa(hash_list, taxid_list, Ls, seqs_unique, params):
         length_1 = Ls[i1]
         length_2 = Ls[i2]
 
-        # a paired MSA exists
-        if taxid_list[i1] == taxid_list[i2]:
-            fn = (
-                params["COMPL_DIR"]
-                + "/pMSA/"
-                + h1[:3]
-                + "/"
-                + h2[:3]
-                + "/"
-                + h1
-                + "_"
-                + h2
-                + ".a3m.gz"
-            )
+        types_1 = types_unique[i1]
+        types_2 = types_unique[i2]
 
-            if os.path.exists(fn):
-                msa, ins, taxid = parse_a3m(fn, paired=True)
+        paired_msa = None
+        paired_msa_file = None
 
-                # Skip MSAs that are not the correct length
-                # This usually occurs because the sequence was processed differently
-                # in the CIF file and the sequence file used to generate the MSA.
-                # In particular, it can happen because of modified residues being duplicated
-                # in the sequence file.
-                if msa.shape[1] != length_1 + length_2:
-                    warnings.warn(
-                        f"Paired MSA {fn} has length {msa.shape[1]} but expected length {length_1 + length_2}. Skipping."
-                    )
-                    continue
-                
-                a3m_new = dict(
-                    msa=torch.tensor(msa),
-                    ins=torch.tensor(ins),
-                    taxid=taxid,
-                    is_paired=torch.ones(msa.shape[0]).bool(),
+        if types_1 == "polypeptide(L)" and types_2 == "polypeptide(L)" and taxid_list[i1] == taxid_list[i2]:
+            paired_msa_file = f"{params['COMPL_DIR']}/pMSA/{h1[:3]}/{h2[:3]}/{h1}_{h2}.a3m.gz"
+            if os.path.exists(paired_msa_file):
+                msa, ins, taxid = parse_a3m(paired_msa_file, paired=True)
+                paired_msa = {
+                    "msa": msa,
+                    "ins": ins,
+                    "taxid": taxid,
+                }
+        elif types_1 == "polypeptide(L)" and types_2 == "polyribonucleotide":
+            for chid_1 in hash2chid[h1]:
+                # Nucleic acids have unique hash -> chid mappings
+                chid_2 = hash2chid[h2][0]
+                na_chain = chid_2.split("_")[1]
+
+                paired_msa_file = f"{params['NA_DIR']}/msas/{chid_1[1:3]}/{chid_1[:4]}/{chid_1}_{na_chain}_paired.a3m"
+                if os.path.exists(paired_msa_file):
+                    msa, ins = parse_mixed_fasta(paired_msa_file)
+                    taxid = ["query"] + ["0"] * (msa.shape[0] - 1)
+                    taxid = np.array(taxid)
+                    paired_msa = {
+                        "msa": msa,
+                        "ins": ins,
+                        "taxid": taxid,
+                    }
+                    break
+
+        if paired_msa is not None:
+            msa = paired_msa["msa"]
+            ins = paired_msa["ins"]
+            taxid = paired_msa["taxid"]
+
+            # Skip MSAs that are not the correct length
+            # This usually occurs because the sequence was processed differently
+            # in the CIF file and the sequence file used to generate the MSA.
+            # In particular, it can happen because of modified residues being duplicated
+            # in the sequence file.
+            if msa.shape[1] != length_1 + length_2:
+                warnings.warn(
+                    f"Paired MSA {paired_msa_file} has length {msa.shape[1]} but expected length {length_1 + length_2}. Skipping."
                 )
-                res_range1 = (0, Ls[i1])
-                res_range2 = (Ls[i1], msa.shape[1])
+                continue
+            
+            a3m_new = dict(
+                msa=torch.tensor(msa),
+                ins=torch.tensor(ins),
+                taxid=taxid,
+                is_paired=torch.ones(msa.shape[0]).bool(),
+            )
+            res_range1 = (0, Ls[i1])
+            res_range2 = (Ls[i1], msa.shape[1])
 
-                # both hashes are new, add paired MSA to list
-                if i1 not in idx_list and i2 not in idx_list:
-                    a3m_list.append(a3m_new)
-                    idx_list_groups.append([i1, i2])
-                    res_range_groups.append([res_range1, res_range2])
+            # both hashes are new, add paired MSA to list
+            if i1 not in idx_list and i2 not in idx_list:
+                a3m_list.append(a3m_new)
+                idx_list_groups.append([i1, i2])
+                res_range_groups.append([res_range1, res_range2])
 
-                # one of the hashes is already in a multi-MSA
-                # find that multi-MSA and join the new pMSA to it
-                elif i1 in idx_list:
-                    # which multi-MSA & sub-MSA has the hash with index `i1`?
-                    i_a3m = np.where([i1 in group for group in idx_list_groups])[0][0]
-                    i_submsa = np.where(np.array(idx_list_groups[i_a3m]) == i1)[0][0]
+            # one of the hashes is already in a multi-MSA
+            # find that multi-MSA and join the new pMSA to it
+            elif i1 in idx_list:
+                # which multi-MSA & sub-MSA has the hash with index `i1`?
+                i_a3m = np.where([i1 in group for group in idx_list_groups])[0][0]
+                i_submsa = np.where(np.array(idx_list_groups[i_a3m]) == i1)[0][0]
 
-                    idx_overlap = res_range_groups[i_a3m][i_submsa] + res_range1
-                    a3m_list[i_a3m] = join_msas_by_taxid(
-                        a3m_list[i_a3m], a3m_new, idx_overlap
-                    )
+                idx_overlap = res_range_groups[i_a3m][i_submsa] + res_range1
+                a3m_list[i_a3m] = join_msas_by_taxid(
+                    a3m_list[i_a3m], a3m_new, idx_overlap
+                )
 
-                    idx_list_groups[i_a3m].append(i2)
-                    L = res_range_groups[i_a3m][-1][1]  # length of current multi-MSA
-                    L_new = res_range2[1] - res_range2[0]
-                    res_range_groups[i_a3m].append((L, L + L_new))
+                idx_list_groups[i_a3m].append(i2)
+                L = res_range_groups[i_a3m][-1][1]  # length of current multi-MSA
+                L_new = res_range2[1] - res_range2[0]
+                res_range_groups[i_a3m].append((L, L + L_new))
 
-                elif i2 in idx_list:
-                    # which multi-MSA & sub-MSA has the hash with index `i2`?
-                    i_a3m = np.where([i2 in group for group in idx_list_groups])[0][0]
-                    i_submsa = np.where(np.array(idx_list_groups[i_a3m]) == i2)[0][0]
+            elif i2 in idx_list:
+                # which multi-MSA & sub-MSA has the hash with index `i2`?
+                i_a3m = np.where([i2 in group for group in idx_list_groups])[0][0]
+                i_submsa = np.where(np.array(idx_list_groups[i_a3m]) == i2)[0][0]
 
-                    idx_overlap = res_range_groups[i_a3m][i_submsa] + res_range2
-                    a3m_list[i_a3m] = join_msas_by_taxid(
-                        a3m_list[i_a3m], a3m_new, idx_overlap
-                    )
+                idx_overlap = res_range_groups[i_a3m][i_submsa] + res_range2
+                a3m_list[i_a3m] = join_msas_by_taxid(
+                    a3m_list[i_a3m], a3m_new, idx_overlap
+                )
 
-                    idx_list_groups[i_a3m].append(i1)
-                    L = res_range_groups[i_a3m][-1][1]  # length of current multi-MSA
-                    L_new = res_range1[1] - res_range1[0]
-                    res_range_groups[i_a3m].append((L, L + L_new))
+                idx_list_groups[i_a3m].append(i1)
+                L = res_range_groups[i_a3m][-1][1]  # length of current multi-MSA
+                L_new = res_range1[1] - res_range1[0]
+                res_range_groups[i_a3m].append((L, L + L_new))
 
     # add unpaired MSAs
     # ungroup hash indices now, since we're done making multi-MSAs
@@ -474,18 +496,12 @@ def load_minimal_multi_msa(hash_list, taxid_list, Ls, seqs_unique, params):
             a3m_new = None
             hash_i = hash_list[i]
             length_i = Ls[i]
-            
-            if hash_i is not None:
-                fn = (
-                    params["PDB_DIR"]
-                    + "/a3m/"
-                    + hash_list[i][:3]
-                    + "/"
-                    + hash_list[i]
-                    + ".a3m.gz"
-                )
-                if os.path.exists(fn):
-                    msa, ins, taxid = parse_a3m(fn)
+            type_i = types_unique[i]
+
+            if type_i == "polypeptide(L)":
+                msa_file = f"{params['PDB_DIR']}/a3m/{hash_i[:3]}/{hash_i}.a3m.gz"
+                if os.path.exists(msa_file):
+                    msa, ins, taxid = parse_a3m(msa_file)
 
                     # Another length check, see above for explanation.
                     # If the length is not correct, we use simply load
@@ -499,11 +515,30 @@ def load_minimal_multi_msa(hash_list, taxid_list, Ls, seqs_unique, params):
                         )
                     else:
                         warnings.warn(
-                            f"MSA {fn} has length {msa.shape[1]} but expected length {length_i}. Loading single sequence instead."
+                            f"MSA {msa_file} has length {msa.shape[1]} but expected length {length_i}. Loading single sequence instead."
                         )
                 else:
-                    warnings.warn(f"MSA {fn} not found. Loading single sequence instead.")
-                        
+                    warnings.warn(f"MSA {msa_file} not found. Loading single sequence instead.")
+            elif type_i == "polyribonucleotide":
+                msa_file = f"{params['NA_DIR']}/torch/{hash_i[1:3]}/{hash_i}_0.afa"
+                if os.path.exists(msa_file):
+                    msa, ins = parse_fasta(msa_file, rmsa_alphabet=True)
+
+                    if msa.shape[1] == length_i:
+                        taxid = ["query"] + ["0"] * (msa.shape[0] - 1)
+                        taxid = np.array(taxid)
+                        a3m_new = dict(
+                            msa=torch.tensor(msa),
+                            ins=torch.tensor(ins),
+                            taxid=taxid,
+                            is_paired=torch.ones(msa.shape[0]).bool(),
+                        )
+                    else:
+                        warnings.warn(
+                            f"MSA {msa_file} has length {msa.shape[1]} but expected length {length_i}. Loading single sequence instead."
+                        )
+                else:
+                    warnings.warn(f"MSA {msa_file} not found. Loading single sequence instead.")
 
             if a3m_new is None:
                 a3m_new = sequence_to_msa(seqs_unique[i])
@@ -620,8 +655,8 @@ def expand_multi_msa(a3m, hashes_in, hashes_out, Ls_in, Ls_out, params):
     return a3m_out
 
 
-def load_multi_msa(chain_ids, Ls, seq_prot, chid2hash, chid2taxid, params):
-    """Loads multi-MSA for an arbitrary number of protein chains. Tries to
+def load_multi_msa(chain_ids, chain_types, Ls, seq_poly, chid2hash, chid2taxid, params):
+    """Loads multi-MSA for an arbitrary number of polymer chains. Tries to
     locate paired MSAs and pair sequences across all chains by taxonomic ID.
     Unpaired sequences are padded and stacked on the bottom.
     """
@@ -631,35 +666,46 @@ def load_multi_msa(chain_ids, Ls, seq_prot, chid2hash, chid2taxid, params):
     taxids_unique = []
     Ls_unique = []
     seqs_unique = []
-    chid2hash  = chid2hash or dict()
-    chid2taxid = chid2taxid or dict()    
+    types_unique = []
+    hash2chid = {}
+
     offset = 0
-    for chid, L_ in zip(chain_ids, Ls):
+    for chid, chain_type, L_ in zip(chain_ids, chain_types, Ls):
         # The "default" value here just needs to be a uniquely identifying string
         # that has no associated MSA so that the MSA loading code will fall back
         # to loading the sequence in single sequence mode.
-        hash = chid2hash.get(chid, f"{chid}_single_sequence")
-        taxid = chid2taxid.get(chid, f"{chid}_single_sequence")
+        if chain_type == "polypeptide(L)":
+            hash = chid2hash.get(chid, f"{chid}_single_sequence")
+            taxid = chid2taxid.get(chid, f"{chid}_single_sequence")
+        else:
+            # Nucleic acids have unique hash -> chid mappings
+            hash = chid
+            taxid = chid
+
         hashes.append(hash)
-        seq = seq_prot[offset : offset + L_]
+        seq = seq_poly[offset : offset + L_]
         offset += L_
+
+        if hash not in hash2chid:
+            hash2chid[hash] = []
+        hash2chid[hash].append(chid)
         
         if hash not in hashes_unique:
             hashes_unique.append(hash)
             taxids_unique.append(taxid)
             Ls_unique.append(L_)
             seqs_unique.append(seq)
-            
-
+            types_unique.append(chain_type)
+    
     # loads multi-MSA for unique chains
-    a3m_prot, hashes_unique, Ls_unique = load_minimal_multi_msa(
-        hashes_unique, taxids_unique, Ls_unique, seqs_unique, params
+    a3m_poly, hashes_unique, Ls_unique = load_minimal_multi_msa(
+        hashes_unique, taxids_unique, Ls_unique, seqs_unique, types_unique, hash2chid, params
     )
 
     # expands multi-MSA to repeat chains of homo-oligomers
-    a3m_prot = expand_multi_msa(a3m_prot, hashes_unique, hashes, Ls_unique, Ls, params)
+    a3m_poly = expand_multi_msa(a3m_poly, hashes_unique, hashes, Ls_unique, Ls, params)
 
-    return a3m_prot
+    return a3m_poly
 
 def featurize_asmb_poly(
     pdb_id,
@@ -712,23 +758,23 @@ def featurize_asmb_poly(
                         all neighboring polymer chains will be loaded
     Returns
     -------
-    xyz_prot : tensor (N_chain_permutation, L_total, N_atoms, 3)
+    xyz_poly : tensor (N_chain_permutation, L_total, N_atoms, 3)
         Atom coordinates of all the polymer chains
-    mask_prot : tensor (N_chain_permutation, L_total, N_atoms)
-        Boolean mask for whether an atom exists in `xyz_prot`
-    seq_prot : tensor (L_total,)
+    mask_poly : tensor (N_chain_permutation, L_total, N_atoms)
+        Boolean mask for whether an atom exists in `xyz_poly`
+    seq_poly : tensor (L_total,)
         Integer-coded sequence of the polymer chains
-    ch_label_prot : tensor (L_total,)
+    ch_label_poly : tensor (L_total,)
         Integer-coded chain identity for each residue. Differs from chain letter
         in that different-lettered chains with the same sequence will have the
         same integer code
-    xyz_t_prot : tensor (N_templates, L_total, N_atoms, 3)
+    xyz_t_poly : tensor (N_templates, L_total, N_atoms, 3)
         Atom coordinates of the templates
-    f1d_t_prot : tensor (N_templates, L_total, N_t1d_features)
+    f1d_t_poly : tensor (N_templates, L_total, N_t1d_features)
         1D template features
-    mask_t_prot : tensor (N_templates, L_total, N_atoms)
+    mask_t_poly : tensor (N_templates, L_total, N_atoms)
         Boolean mask for whether template atoms exist
-    Ls_prot : list (N_chains,)
+    Ls_poly : list (N_chains,)
         Length of each polymer chain
     ch_letters : list (N_chains,)
         Chain letter for each chain
@@ -746,9 +792,10 @@ def featurize_asmb_poly(
     chid2hash = chid2hash or dict()
 
     # polymer true coords
-    xyz_prot, mask_prot, ch_label_prot, seq_prot = [], [], [], []
-    xyz_t_prot, f1d_t_prot, mask_t_prot, tplt_ids = [], [], [], []
-    ch_letters, Ls_prot = [], []
+    xyz_poly, mask_poly, ch_label_poly, seq_poly = [], [], [], []
+    xyz_t_poly, f1d_t_poly, mask_t_poly, tplt_ids = [], [], [], []
+    ch_letters, Ls_poly = [], []
+    chain_types = []
     for chnum, chlet_set in chnum2chlet.items():
         # every location of this chain
         partners_ch = [
@@ -769,8 +816,9 @@ def featurize_asmb_poly(
             mask_chxf.append(mask_)
             seq_chxf.append(seq_)
             mod_residues_to_atomize.extend(residues_to_atomize)
-            Ls_prot.append(xyz_.shape[0])
+            Ls_poly.append(xyz_.shape[0])
             ch_letters.append(p[0])
+            chain_types.append(chain_type)
 
         # concatenate all locations, repeat for every permutation of locations
         xyz_ch, mask_ch, seq_ch = [], [], []
@@ -783,10 +831,10 @@ def featurize_asmb_poly(
         seq_ch = torch.cat(seq_chxf, dim=0)
 
         # save results for each chain
-        xyz_prot.append(xyz_ch)
-        mask_prot.append(mask_ch)
-        seq_prot.append(seq_ch)
-        ch_label_prot.append(torch.full((xyz_ch.shape[1],), chnum))
+        xyz_poly.append(xyz_ch)
+        mask_poly.append(mask_ch)
+        seq_poly.append(seq_ch)
+        ch_label_poly.append(torch.full((xyz_ch.shape[1],), chnum))
         chnum += 1
 
         # Load templates. 
@@ -810,7 +858,7 @@ def featurize_asmb_poly(
             )
             xyz_t_, f1d_t_, mask_t_, tplt_ids_ = TemplFeaturize(
                 tplt,
-                Ls_prot[-1],
+                Ls_poly[-1],
                 params,
                 npick=ntempl,
                 offset=0,
@@ -829,43 +877,68 @@ def featurize_asmb_poly(
                 axis=0,
             )  # (ntempl) -- don't need to concatenate on the length dimension
 
-        xyz_t_prot.append(xyz_t_ch)
-        f1d_t_prot.append(f1d_t_ch)
-        mask_t_prot.append(mask_t_ch)
+        xyz_t_poly.append(xyz_t_ch)
+        f1d_t_poly.append(f1d_t_ch)
+        mask_t_poly.append(mask_t_ch)
         tplt_ids.append(tplt_ids_ch)
 
     # cartesian product over each chain's location permutations
-    xyz_prot = cartprodcat(
-        xyz_prot
+    xyz_poly = cartprodcat(
+        xyz_poly
     )  # (prod_i(N_perm_i), sum_i(L_i*N_mer_i), N_atoms, 3)
-    mask_prot = cartprodcat(
-        mask_prot
+    mask_poly = cartprodcat(
+        mask_poly
     )  # (prod_i(N_perm_i), sum_i(L_i*N_mer_i), N_atoms)
 
-    xyz_t_prot, f1d_t_prot, mask_t_prot, tplt_ids = merge_hetero_templates(
-        xyz_t_prot, f1d_t_prot, mask_t_prot, tplt_ids, Ls_prot
+    xyz_t_poly, f1d_t_poly, mask_t_poly, tplt_ids = merge_hetero_templates(
+        xyz_t_poly, f1d_t_poly, mask_t_poly, tplt_ids, Ls_poly
     )
 
-    ch_label_prot = torch.cat(ch_label_prot, dim=0)
-    seq_prot = torch.cat(seq_prot, dim=0)
+    ch_label_poly = torch.cat(ch_label_poly, dim=0)
+    seq_poly = torch.cat(seq_poly, dim=0)
 
     return (
-        xyz_prot,
-        mask_prot.bool(),
-        seq_prot,
-        ch_label_prot,
-        xyz_t_prot,
-        f1d_t_prot,
-        mask_t_prot,
-        Ls_prot,
+        xyz_poly,
+        mask_poly.bool(),
+        seq_poly,
+        ch_label_poly,
+        xyz_t_poly,
+        f1d_t_poly,
+        mask_t_poly,
+        Ls_poly,
         ch_letters,
+        chain_types,
         mod_residues_to_atomize,
         tplt_ids,
     )
 
 
-def load_protein_partners(
-    prot_partners: List[Tuple[Any, ...]],
+def get_empty_polymer_partners() -> Dict[str, Any]:
+    a3m_poly = {
+        "msa": torch.zeros((0, 0), dtype=torch.long),
+        "ins": torch.zeros((0, 0), dtype=torch.long),
+        "is_paired": torch.zeros((0, ), dtype=torch.bool),
+    }
+    poly_outs = {
+        "xyz_poly": torch.zeros((1, 0, ChemData().NTOTAL, 3), dtype=torch.float32),
+        "mask_poly": torch.zeros((1, 0, ChemData().NTOTAL), dtype=torch.bool),
+        "seq_poly": torch.zeros((0, ), dtype=torch.long),
+        "ch_label_poly": torch.zeros((0, ), dtype=torch.long),
+        "xyz_t_poly": torch.zeros((1, 0, ChemData().NTOTAL, 3), dtype=torch.float32),
+        "f1d_t_poly": torch.zeros((1, 0, ChemData().NAATOKENS), dtype=torch.float32),
+        "mask_t_poly": torch.zeros((1, 0, ChemData().NTOTAL), dtype=torch.bool),
+        "Ls_poly": [],
+        "ch_letters": [],
+        "mod_residues_to_atomize": [],
+        "tplt_ids": [],
+        "a3m_poly": a3m_poly,
+        "seed_msa_clus": None,
+    }
+    return poly_outs
+
+
+def load_polymer_partners(
+    poly_partners: List[Tuple[Any, ...]],
     params: Dict[str, Any],
     pdb_id: str,
     cif_outs: Dict[str, Any],
@@ -874,22 +947,26 @@ def load_protein_partners(
     pick_top: bool = True,
     random_noise: float = 5.0,
 ) -> Dict[str, Any]:
-    # load protein chains
+    if len(poly_partners) == 0:
+        return get_empty_polymer_partners()
+    
+    # load polymer chains
     (
-        xyz_prot,
-        mask_prot,
-        seq_prot,
-        ch_label_prot,
-        xyz_t_prot,
-        f1d_t_prot,
-        mask_t_prot,
-        Ls_prot,
+        xyz_poly,
+        mask_poly,
+        seq_poly,
+        ch_label_poly,
+        xyz_t_poly,
+        f1d_t_poly,
+        mask_t_poly,
+        Ls_poly,
         ch_letters,
+        chain_types,
         mod_residues_to_atomize,
         tplt_ids,
     ) = featurize_asmb_poly(
         pdb_id,
-        prot_partners,
+        poly_partners,
         params,
         cif_outs["chains"],
         cif_outs["asmb_xfs"],
@@ -899,34 +976,34 @@ def load_protein_partners(
         random_noise=random_noise,
     )
     # keep 1st template and random sample of others for params['MAXTPLT'] total
-    if xyz_t_prot.shape[0] > params["MAXTPLT"]:
+    if xyz_t_poly.shape[0] > params["MAXTPLT"]:
         sel = np.concatenate(
             [
                 [0],
-                np.random.permutation(xyz_t_prot.shape[0] - 1)[: params["MAXTPLT"] - 1]
+                np.random.permutation(xyz_t_poly.shape[0] - 1)[: params["MAXTPLT"] - 1]
                 + 1,
             ]
         )
-        xyz_t_prot = xyz_t_prot[sel]
-        mask_t_prot = mask_t_prot[sel]
-        f1d_t_prot = f1d_t_prot[sel]
+        xyz_t_poly = xyz_t_poly[sel]
+        mask_t_poly = mask_t_poly[sel]
+        f1d_t_poly = f1d_t_poly[sel]
 
     chain_ids = [pdb_id + "_" + chlet for chlet in ch_letters]
-    a3m_prot = load_multi_msa(chain_ids, Ls_prot, seq_prot, chid2hash, chid2taxid, params)
-    seed_msa_clus = choose_multimsa_clusters(a3m_prot["is_paired"][1:], params)
-    prot_outs = {
-        "xyz_prot": xyz_prot,
-        "mask_prot": mask_prot,
-        "seq_prot": seq_prot,
-        "ch_label_prot": ch_label_prot,
-        "xyz_t_prot": xyz_t_prot,
-        "f1d_t_prot": f1d_t_prot,
-        "mask_t_prot": mask_t_prot,
-        "Ls_prot": Ls_prot,
+    a3m_poly = load_multi_msa(chain_ids, chain_types, Ls_poly, seq_poly, chid2hash, chid2taxid, params)
+    seed_msa_clus = choose_multimsa_clusters(a3m_poly["is_paired"][1:], params)
+    poly_outs = {
+        "xyz_poly": xyz_poly,
+        "mask_poly": mask_poly,
+        "seq_poly": seq_poly,
+        "ch_label_poly": ch_label_poly,
+        "xyz_t_poly": xyz_t_poly,
+        "f1d_t_poly": f1d_t_poly,
+        "mask_t_poly": mask_t_poly,
+        "Ls_poly": Ls_poly,
         "ch_letters": ch_letters,
         "mod_residues_to_atomize": mod_residues_to_atomize,
         "tplt_ids": tplt_ids,
-        "a3m_prot": a3m_prot,
+        "a3m_poly": a3m_poly,
         "seed_msa_clus": seed_msa_clus,
     }
-    return prot_outs
+    return poly_outs

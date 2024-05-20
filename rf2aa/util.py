@@ -896,7 +896,9 @@ def cif_poly_to_xyz(ch, ch_xf, modres=dict()):
     # atom names from cif don't have whitespace
     aa2long_ = [[x.strip() if x is not None else None for x in y] for y in ChemData().aa2long]
 
-    # residue names in cif for NA don't have whitespace either - PS
+    # residue names in cif for NA don't have whitespace either
+    # also, while DNA atoms are named DA, DC, DG, DT, RNA atoms are named A, C, G, U
+    # which is kind of annoying, at least for the few examples I saw.
     aa2num_ = {
         residue.strip(): index for residue, index in ChemData().aa2num.items()
     }
@@ -906,6 +908,13 @@ def cif_poly_to_xyz(ch, ch_xf, modres=dict()):
         unknown_token = aa2num_["DX"]
     if ch.type == "polyribonucleotide":
         unknown_token = aa2num_["RX"]
+
+        # I'm sure there is a better way of coding this but it's been a long day
+        # and I'm blanking so here's what you get
+        aa2num_["A"] = aa2num_["RA"]
+        aa2num_["C"] = aa2num_["RC"]
+        aa2num_["G"] = aa2num_["RG"]
+        aa2num_["U"] = aa2num_["RU"]
 
     idx = [int(k[1]) for k in ch.atoms]
     i_min, i_max = np.min(idx), np.max(idx)
@@ -920,6 +929,7 @@ def cif_poly_to_xyz(ch, ch_xf, modres=dict()):
     unrec_elements = set()
     residues_to_atomize = set()
     for (ch_letter, res_num, res_name, atom_name), atom_val in ch.atoms.items():
+        
         i_res = int(res_num)-i_min
         if res_name in aa2num_: # standard AA
             aa = aa2num_[res_name]

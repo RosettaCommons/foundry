@@ -26,16 +26,14 @@ from rf2aa.data.data_loader import (
     get_term_feats,
     MSAFeaturize,
 )
-from rf2aa.data.loaders.polymer_partners import load_protein_partners
+from rf2aa.data.loaders.polymer_partners import load_polymer_partners
 from rf2aa.data.loaders.small_molecule_partners import (
     load_small_molecule_partners,
     prune_lig_partners,
 )
 
 
-def get_cif_metadata(item: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Any]:
-    pdb_chain = item["CHAINID"]
-    pdb_id = pdb_chain.split("_")[0]
+def get_cif_metadata(pdb_id: str, assembly: str, params: Dict[str, Any]) -> Dict[str, Any]:
     out = pickle.load(gzip.open(params["MOL_DIR"] + f"/{pdb_id[1:3]}/{pdb_id}.pkl.gz"))
     if len(out) == 4:
         chains, asmb, covale, modres = out
@@ -44,8 +42,7 @@ def get_cif_metadata(item: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, 
     else:
         raise ValueError(f"cif parser returns {len(out)} values")
 
-    i_a = str(item["ASSEMBLY"])
-    asmb_xfs = asmb[i_a]
+    asmb_xfs = asmb[assembly]
 
     cif_outs = {
         "chains": chains,
@@ -54,7 +51,7 @@ def get_cif_metadata(item: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, 
         "modres": modres,
         "asmb_xfs": asmb_xfs,
         "pdb_id": pdb_id,
-        "pdb_chain": pdb_chain,
+        "assembly": assembly,
     }
     return cif_outs
 
@@ -66,21 +63,25 @@ def get_partner_lists(
     num_ligand_chains: Optional[int] = None,
 ):
     # list of proteins and ligands to featurize
-    prot_partners = [p for p in item["PARTNERS"] if p[-1] == "polypeptide(L)"]
-    prot_partners = prot_partners[: params["MAXPROTCHAINS"]]
+    polymer_types = ["polypeptide(L)", "polydeoxyribonucleotide", "polyribonucleotide"]
+    
+    polymer_partners = [p for p in item["PARTNERS"] if p[-1] in polymer_types]
+    polymer_partners = polymer_partners[: params["MAXPROTCHAINS"]]
     if num_protein_chains is not None:
-        prot_partners = prot_partners[
+        polymer_partners = polymer_partners[
             : min(num_protein_chains, params["MAXPROTCHAINS"])
         ]
 
     lig_partners = lig_partners = [p for p in item["PARTNERS"] if p[-1] == "nonpoly"]
     lig_partners = prune_lig_partners(lig_partners, params)
-    lig_partners = [(item["LIGAND"], item["LIGXF"], -1, -1, "nonpoly")] + lig_partners
+
+    if "LIGAND" in item and "LIGXF" in item:
+        lig_partners = [(item["LIGAND"], item["LIGXF"], -1, -1, "nonpoly")] + lig_partners
 
     lig_partners = lig_partners[: params["MAXLIGCHAINS"]]
     if num_ligand_chains is not None:
         lig_partners = lig_partners[: min(num_ligand_chains, params["MAXLIGCHAINS"])]
-    return prot_partners, lig_partners
+    return polymer_partners, lig_partners
 
 
 def pad_merge_protein_small_molecule_tensors(
@@ -102,38 +103,38 @@ def pad_merge_protein_small_molecule_tensors(
 def merge_outs(protein_outs, small_molecule_outs, params, random_noise: float = 5.0):
     # Combine protein and ligand true coordinates
     xyz = pad_merge_protein_small_molecule_tensors(
-        protein_outs["xyz_prot"], small_molecule_outs["xyz_sm"], np.nan
+        protein_outs["xyz_poly"], small_molecule_outs["xyz_sm"], np.nan
     )
     mask = pad_merge_protein_small_molecule_tensors(
-        protein_outs["mask_prot"], small_molecule_outs["mask_sm"], False
+        protein_outs["mask_poly"], small_molecule_outs["mask_sm"], False
     )
 
     # combine protein & ligand templates
-    N_tmpl = protein_outs["xyz_t_prot"].shape[0]
+    N_tmpl = protein_outs["xyz_t_poly"].shape[0]
     xyz_t_sm, f1d_t_sm, mask_t_sm, _ = blank_template(
         N_tmpl, sum(small_molecule_outs["Ls_sm"]), random_noise
     )
-    xyz_t = torch.cat([protein_outs["xyz_t_prot"], xyz_t_sm], dim=1)
-    f1d_t = torch.cat([protein_outs["f1d_t_prot"], f1d_t_sm], dim=1)
-    mask_t = torch.cat([protein_outs["mask_t_prot"], mask_t_sm], dim=1)
+    xyz_t = torch.cat([protein_outs["xyz_t_poly"], xyz_t_sm], dim=1)
+    f1d_t = torch.cat([protein_outs["f1d_t_poly"], f1d_t_sm], dim=1)
+    mask_t = torch.cat([protein_outs["mask_t_poly"], mask_t_sm], dim=1)
 
     # bond features
-    bond_feats_prot = [get_protein_bond_feats(L) for L in protein_outs["Ls_prot"]]
-    bond_feats_list = bond_feats_prot + small_molecule_outs["bond_feats_sm"]
+    bond_feats_poly = [get_protein_bond_feats(L) for L in protein_outs["Ls_poly"]]
+    bond_feats_list = bond_feats_poly + small_molecule_outs["bond_feats_sm"]
     bond_feats = torch.block_diag(
         *bond_feats_list
     ).long()
 
     # other features
-    idx = idx_from_Ls(protein_outs["Ls_prot"] + small_molecule_outs["Ls_sm"])
+    idx = idx_from_Ls(protein_outs["Ls_poly"] + small_molecule_outs["Ls_sm"])
     same_chain = same_chain_2d_from_Ls(
-        protein_outs["Ls_prot"] + small_molecule_outs["Ls_sm"]
+        protein_outs["Ls_poly"] + small_molecule_outs["Ls_sm"]
     )
     ch_label = torch.cat(
         [
-            protein_outs["ch_label_prot"],
+            protein_outs["ch_label_poly"],
             small_molecule_outs["ch_label_sm"]
-            + protein_outs["ch_label_prot"].max()
+            + protein_outs["ch_label_poly"].max()
             + 1,
         ]
     )
@@ -144,9 +145,9 @@ def merge_outs(protein_outs, small_molecule_outs, params, random_noise: float = 
         "ins": torch.zeros_like(small_molecule_outs["msa_sm"]),
     }
     a3m = merge_a3m_hetero(
-        protein_outs["a3m_prot"],
+        protein_outs["a3m_poly"],
         a3m_sm,
-        [sum(protein_outs["Ls_prot"]), sum(small_molecule_outs["Ls_sm"])],
+        [sum(protein_outs["Ls_poly"]), sum(small_molecule_outs["Ls_sm"])],
     )
     msa = a3m["msa"].long()
     ins = a3m["ins"].long()
@@ -202,15 +203,19 @@ def loader_sm_compl_assembly(
     `min_dist` is the minimum distance in angstroms between a heavy atom and
     the ligand.
     """
-    cif_outs = get_cif_metadata(item, params)
-    pdb_id = cif_outs["pdb_id"]
+    chain_id = item["CHAINID"]
+    pdb_id = chain_id.split("_")[0]
+    assembly = str(item["ASSEMBLY"])
+    cif_outs = get_cif_metadata(pdb_id, assembly, params)
 
-    prot_partners, lig_partners = get_partner_lists(
+    # changing num_protein_chains -> num_polymer_chains
+    # will be a separate PR because that requires some config changes
+    polymer_partners, lig_partners = get_partner_lists(
         item, params, num_protein_chains, num_ligand_chains
     )
 
-    protein_outs = load_protein_partners(
-        prot_partners,
+    polymer_outs = load_polymer_partners(
+        polymer_partners,
         params,
         pdb_id,
         cif_outs,
@@ -222,16 +227,16 @@ def loader_sm_compl_assembly(
 
     small_molecule_outs = load_small_molecule_partners(
         lig_partners,
-        prot_partners,
+        polymer_partners,
         cif_outs,
         params,
-        mod_residues_to_atomize=protein_outs["mod_residues_to_atomize"],
+        mod_residues_to_atomize=polymer_outs["mod_residues_to_atomize"],
     )
-    Ls_prot = protein_outs["Ls_prot"]
+    Ls_poly = polymer_outs["Ls_poly"]
     Ls_sm = small_molecule_outs["Ls_sm"]
 
     merged_outs = merge_outs(
-        protein_outs, small_molecule_outs, params, random_noise=random_noise
+        polymer_outs, small_molecule_outs, params, random_noise=random_noise
     )
 
     xyz = merged_outs["xyz"]
@@ -259,11 +264,11 @@ def loader_sm_compl_assembly(
             mask_t,
             same_chain,
             ch_label,
-            Ls_prot,
+            Ls_poly,
             Ls_sm,
         ) = reindex_protein_feats_after_atomize(
             small_molecule_outs["residues_to_atomize"],
-            prot_partners,
+            polymer_partners,
             msa,
             ins,
             xyz,
@@ -275,7 +280,7 @@ def loader_sm_compl_assembly(
             mask_t,
             same_chain,
             ch_label,
-            Ls_prot,
+            Ls_poly,
             Ls_sm,
             small_molecule_outs["akeys_sm"],
             remove_residue=remove_residue,
@@ -296,13 +301,13 @@ def loader_sm_compl_assembly(
     xyz_t = torch.nan_to_num(xyz_t)
 
     # keep track of protein positions for reindexing chirals after crop
-    L_total = sum(protein_outs["Ls_prot"]) + sum(small_molecule_outs["Ls_sm"])
-    is_prot = torch.zeros(L_total)
-    is_prot[: sum(protein_outs["Ls_prot"])] = 1
+    L_total = sum(polymer_outs["Ls_poly"]) + sum(small_molecule_outs["Ls_sm"])
+    is_poly = torch.zeros(L_total)
+    is_poly[: sum(polymer_outs["Ls_poly"])] = 1
 
     # N/C-terminus features for MSA features (need to generate before cropping)
-    term_info = get_term_feats(protein_outs["Ls_prot"] + small_molecule_outs["Ls_sm"])
-    term_info[sum(protein_outs["Ls_prot"]) :, :] = (
+    term_info = get_term_feats(polymer_outs["Ls_poly"] + small_molecule_outs["Ls_sm"])
+    term_info[sum(polymer_outs["Ls_poly"]) :, :] = (
         0  # ligand chains don't get termini features
     )
 
@@ -313,20 +318,20 @@ def loader_sm_compl_assembly(
     else:
         if params["RADIAL_CROP"]:
             sel = crop_sm_compl_assembly(
-                xyz[0], mask[0], Ls_prot, Ls_sm, params["CROP"]
+                xyz[0], mask[0], Ls_poly, Ls_sm, params["CROP"]
             )
         else:
             sel = crop_sm_compl_asmb_contig(
                 xyz[0],
                 mask[0],
-                Ls_prot,
+                Ls_poly,
                 Ls_sm,
                 bond_feats,
                 params["CROP"],
                 use_partial_ligands=False,
             )
     mask = reassign_symmetry_after_cropping(
-        sel, protein_outs["Ls_prot"], ch_label, mask, item
+        sel, polymer_outs["Ls_poly"], ch_label, mask, item
     )
 
     msa = msa[:, sel]
@@ -342,12 +347,12 @@ def loader_sm_compl_assembly(
     same_chain = same_chain[sel][:, sel]
     bond_feats = bond_feats[sel][:, sel]
     ch_label = ch_label[sel]
-    is_prot = is_prot[sel]
+    is_poly = is_poly[sel]
     term_info = term_info[sel]
 
     # crop small molecule features, assumes all sm chains are after all protein chains
-    atom_sel = sel[sel >= sum(protein_outs["Ls_prot"])] - sum(
-        protein_outs["Ls_prot"]
+    atom_sel = sel[sel >= sum(polymer_outs["Ls_poly"])] - sum(
+        polymer_outs["Ls_poly"]
     )  # 0 index all the selected atoms
     frames = small_molecule_outs["frames"]
     chirals = small_molecule_outs["chirals"]
@@ -357,7 +362,7 @@ def loader_sm_compl_assembly(
 
     # reindex chiral atom positions - assumes all sm chains are after all protein chains
     if chirals.shape[0] > 0:
-        L1 = is_prot.sum()
+        L1 = is_poly.sum()
         chirals[:, :-1] = chirals[:, :-1] + L1
 
     dist_matrix = get_bond_distances(bond_feats)
@@ -370,7 +375,7 @@ def loader_sm_compl_assembly(
         p_mask=params["p_msa_mask"],
         term_info=term_info,
         fixbb=fixbb,
-        seed_msa_clus=protein_outs["seed_msa_clus"],
+        seed_msa_clus=polymer_outs["seed_msa_clus"],
     )
 
     return (
