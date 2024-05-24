@@ -54,10 +54,9 @@ def recycle_step_packed(ddp_model, input, n_cycle, use_amp, nograds=False, force
 
     return output_i
 
-def run_model_forward(model, network_input, device="cpu"):
+def run_model_forward(model, network_input, use_checkpoint=False, device="cpu"):
     """ run model forward pass, no recycling, no ddp (for tests) """
     gpu = device
-    use_checkpoint = False
     use_amp = False
     xyz_prev, alpha_prev, mask_recycle = \
         network_input["xyz_prev"], network_input["alpha_prev"], network_input["mask_recycle"]
@@ -69,7 +68,7 @@ def run_model_forward(model, network_input, device="cpu"):
         rf_outputs, rf_latents = model(input_i, use_checkpoint, use_amp)
     return rf_outputs, rf_latents
 
-def run_model_forward_legacy(model, network_input, device="cpu"):
+def run_model_forward_legacy(model, network_input, use_checkpoint=False, device="cpu"):
     """ run model forward pass, no recycling or ddp with legacy model (for tests)"""
     gpu = device
     xyz_prev, alpha_prev, mask_recycle = \
@@ -78,6 +77,7 @@ def run_model_forward_legacy(model, network_input, device="cpu"):
     input_i = add_recycle_inputs(network_input, output_i, 0, gpu, return_raw=False, use_checkpoint=False)
     input_i["seq_unmasked"] = input_i["seq_unmasked"].to(gpu)
     input_i["sctors"] = input_i["sctors"].to(gpu)
+    input_i["use_checkpoint"] = use_checkpoint
     model.eval()
     with torch.no_grad():
         output_i = model(**input_i)

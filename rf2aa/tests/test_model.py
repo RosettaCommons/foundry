@@ -27,59 +27,57 @@ legacy_test_conditions = setup_array(["pdb", "na_compl", "rna", "sm_compl", "sm_
 def test_regression(example, model):
     dataset_name, dataset_inputs, model_name, model = setup_test(example, model)
     make_deterministic()
-    rf_outputs, rf_latents = run_model_forward(model, dataset_inputs, gpu)
+    rf_outputs, rf_latents = run_model_forward(model, dataset_inputs, use_checkpoint=False, device=gpu)
     output_test = {
         "outputs": rf_outputs,
         "latents": rf_latents
     }
     model_pickle = model_pickle_path(dataset_name, model_name)
-    if not os.path.exists(model_pickle):
-        torch.save(output_test, model_pickle)
-        print(f"Saved model pickle at {model_pickle}")
-    else:
-        output_regression = torch.load(model_pickle, map_location=gpu)
-        for output_type in output_regression.keys():
-            for output_name, output in output_regression[output_type].items():
-                if torch.is_tensor(output):
-                    got = output_test[output_type][output_name]
-                    want = output
-                    try:
-                        assert torch.allclose(got, want, atol=1e-2)
-                    except Exception as e:
-                        raise ValueError(f"{output_name} does not match for model: {model_name} on dataset: {dataset_name}") from e
+    match_values(output_test, model_pickle, model_name, dataset_name, output_test.keys())    
+
+@pytest.mark.gpu
+@pytest.mark.xfail
+@pytest.mark.parametrize("example,model", test_conditions)
+def test_regression_checkpoint(example, model):
+    """
+    run the model with checkpointing enabled
+    """
+    dataset_name, dataset_inputs, model_name, model = setup_test(example, model)
+    make_deterministic()
+    rf_outputs, rf_latents = run_model_forward(model, dataset_inputs, use_checkpoint=True, device=gpu)
+    output_test = {
+        "outputs": rf_outputs,
+        "latents": rf_latents
+    }
+    model_pickle = model_pickle_path(dataset_name, model_name)
+    match_values(output_test, model_pickle, model_name, dataset_name, output_test.keys())    
+   
 
 @pytest.mark.gpu
 @pytest.mark.parametrize("example,model", legacy_test_conditions)
 def test_regression_legacy(example, model):
     dataset_name, dataset_inputs, model_name, model = setup_test(example, model)
     make_deterministic()
-    output_i = run_model_forward_legacy(model, dataset_inputs, gpu)
+    output_i = run_model_forward_legacy(model, dataset_inputs, use_checkpoint=False, device=gpu)
     model_pickle = model_pickle_path(dataset_name, model_name)
     output_names = ("logits_c6d", "logits_aa", "logits_pae", \
                         "logits_pde", "p_bind", "xyz", "alpha", "xyz_allatom", \
                         "lddt", "seq", "pair", "state")
     
-    if not os.path.exists(model_pickle):
-        torch.save(output_i, model_pickle)
-    else:
-        output_regression = torch.load(model_pickle, map_location=gpu)
-        for idx, output in enumerate(output_i):
-            got = output
-            want = output_regression[idx]
-            if output_names[idx] == "logits_c6d":
-                for i in range(len(want)):
-                    
-                    got_i = got[i]
-                    want_i = want[i]
-                    try:
-                        torch.allclose(got_i, want_i, atol=1e-2)
-                    except Exception as e:
-                        raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
-            else:
-                try:
-                    assert torch.allclose(got, want, atol=1e-2)
-                except Exception as e:
-                    raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
+    match_values_legacy(output_i, model_pickle, model_name, dataset_name, output_names)
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("example,model", legacy_test_conditions)
+def test_regression_legacy_checkpoint(example, model):
+    dataset_name, dataset_inputs, model_name, model = setup_test(example, model)
+    make_deterministic()
+    output_i = run_model_forward_legacy(model, dataset_inputs, use_checkpoint=True, device=gpu)
+    model_pickle = model_pickle_path(dataset_name, model_name)
+    output_names = ("logits_c6d", "logits_aa", "logits_pae", \
+                        "logits_pde", "p_bind", "xyz", "alpha", "xyz_allatom", \
+                        "lddt", "seq", "pair", "state")
+    
+    match_values_legacy(output_i, model_pickle, model_name, dataset_name, output_names)
 
 def setup_test(example, model):
     model_name, model, config = model
@@ -142,3 +140,43 @@ def downsample_network_inputs(network_input, chosen_nodes):
     network_input["chirals"][..., :-1] = network_input["chirals"][..., :-1] - num_deleted_residues
 
     return network_input
+
+
+def match_values_legacy(output_i, model_pickle, model_name, dataset_name, output_names):
+    if not os.path.exists(model_pickle):
+        torch.save(output_i, model_pickle)
+    else:
+        output_regression = torch.load(model_pickle, map_location=gpu)
+        for idx, output in enumerate(output_i):
+            got = output
+            want = output_regression[idx]
+            if output_names[idx] == "logits_c6d":
+                for i in range(len(want)):
+                    
+                    got_i = got[i]
+                    want_i = want[i]
+                    try:
+                        torch.allclose(got_i, want_i, atol=1e-2)
+                    except Exception as e:
+                        raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
+            else:
+                try:
+                    assert torch.allclose(got, want, atol=1e-2)
+                except Exception as e:
+                    raise ValueError(f"{output_names[idx]} not same for model: {model_name} on dataset: {dataset_name}") from e
+
+
+def match_values(output_test, model_pickle, model_name, dataset_name, output_names):
+    if not os.path.exists(model_pickle):
+        torch.save(output_test, model_pickle)
+    else:
+        output_regression = torch.load(model_pickle, map_location=gpu)
+        for output_type in output_regression.keys():
+            for output_name, output in output_regression[output_type].items():
+                if torch.is_tensor(output):
+                    got = output_test[output_type][output_name]
+                    want = output
+                    try:
+                        assert torch.allclose(got, want, atol=1e-2)
+                    except Exception as e:
+                        raise ValueError(f"{output_name} does not match for model: {model_name} on dataset: {dataset_name}") from e

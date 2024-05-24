@@ -1019,21 +1019,20 @@ class IterBlock(nn.Module):
             msa = checkpoint.checkpoint(create_custom_forward(self.msa2msa), msa, pair, rbf_feat, state, use_reentrant=True)
             pair = checkpoint.checkpoint(create_custom_forward(self.msa2pair), msa, pair, use_reentrant=True)
 
-            pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair), 
-                                         pair, 
-                                         rbf_feat, 
-                                         state, 
-                                         crop, 
-                                         is_prot=is_prot,
-                                         pair_symm_ok=pair_symm_ok,
-                                         pre_symm_permutation=pre_symm_permutation,
+            pair = checkpoint.checkpoint(create_custom_forward(self.pair2pair, is_prot=is_prot,
+                                                                               pair_symm_ok=pair_symm_ok,
+                                                                               pre_symm_permutation=pre_symm_permutation,
+                                                              ),
+                                         pair,
+                                         rbf_feat,
+                                         state,
+                                         crop,
                                          use_reentrant=True
                                          )
 
-            xyz, state, alpha, quat = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k), 
-                msa.float(), pair.float(), xyz.float(), state.float(), idx, 
+            xyz, state, alpha, quat = checkpoint.checkpoint(create_custom_forward(self.str2str, top_k=top_k, cyclic_reses=cyclic_reses,),
+                msa.float(), pair.float(), xyz.float(), state.float(), idx,
                 rotation_mask, bond_feats, dist_matrix, atom_frames, is_motif, extra_l0, extra_l1, use_atom_frames,
-                cyclic_reses=cyclic_reses,
                 use_reentrant=True
             )
             

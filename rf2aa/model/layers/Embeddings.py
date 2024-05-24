@@ -179,12 +179,12 @@ class TemplatePairStack(nn.Module):
         for i_block in range(self.n_block):
             if use_checkpoint:
                 templ = checkpoint.checkpoint(
-                    create_custom_forward(self.block[i_block]), 
+                    create_custom_forward(self.block[i_block], is_prot=is_prot),
                     templ, rbf_feat, state, p2p_crop,
-                    use_reentrant=True, is_prot=is_prot
+                    use_reentrant=True,
                 )
             else:
-                templ = self.block[i_block](templ, rbf_feat, state,is_prot=is_prot)
+                templ = self.block[i_block](templ, rbf_feat, state, is_prot=is_prot)
         return self.norm(templ).reshape(B, T, L, L, -1)
 
 
