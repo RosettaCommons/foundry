@@ -49,9 +49,9 @@ def test_fake_NC_position_noise(example, model):
 
     model_name, model, network_input = setup_test(example, model)
     make_deterministic() 
-    rf_outputs, rf_latents = run_model_forward(model, network_input, gpu)
+    rf_outputs, rf_latents = run_model_forward(model, network_input, device=gpu)
     make_deterministic()
-    rf_outputs_noise, rf_latents_noise = run_model_forward_noise(model, network_input, gpu)
+    rf_outputs_noise, rf_latents_noise = run_model_forward_noise(model, network_input, device=gpu)
     check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise)
 
 @pytest.mark.gpu   
@@ -63,7 +63,7 @@ def test_fake_sm_idx(example, model):
     """
     model_name, model, network_input = setup_test(example, model) 
     make_deterministic() 
-    rf_outputs, rf_latents = run_model_forward(model, network_input, gpu)
+    rf_outputs, rf_latents = run_model_forward(model, network_input, device=gpu)
     network_input_noise = copy.deepcopy(network_input)
     is_atom_node = is_atom(network_input_noise["seq_unmasked"])
     network_input_noise["idx"][is_atom_node] += 200
@@ -71,7 +71,7 @@ def test_fake_sm_idx(example, model):
         "bug in test setup xyz_t should be different for base and noise case"
 
     make_deterministic()
-    rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, gpu)
+    rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, device=gpu)
     check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise, exclude=["idx"])
 
 @pytest.mark.gpu
@@ -84,13 +84,13 @@ def test_mask_t(example, model):
     model_name, model, network_input = setup_test(example, model) 
     network_input["mask_t"] = torch.full_like(network_input["mask_t"], False)
     make_deterministic() 
-    rf_outputs, rf_latents = run_model_forward(model, network_input, gpu)
+    rf_outputs, rf_latents = run_model_forward(model, network_input, device=gpu)
     network_input_noise = copy.deepcopy(network_input)
     network_input_noise["xyz_t"] = torch.ones_like(network_input_noise["xyz_t"])
     assert torch.sum(~torch.eq(network_input["xyz_t"], network_input_noise["xyz_t"])) > 0, \
         "bug in test setup xyz_t should be different for base and noise case"
     make_deterministic()
-    rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, gpu)
+    rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, device=gpu)
     check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise)
 
 @pytest.mark.gpu
@@ -101,13 +101,13 @@ def test_same_chain(example, model):
     """
     model_name, model, network_input = setup_test(example, model) 
     make_deterministic() 
-    rf_outputs, rf_latents = run_model_forward(model, network_input, gpu)
+    rf_outputs, rf_latents = run_model_forward(model, network_input, device=gpu)
     network_input_noise = copy.deepcopy(network_input)
     network_input_noise["same_chain"] = torch.zeros_like(network_input_noise["same_chain"])
     assert torch.sum(~torch.eq(network_input["same_chain"], network_input_noise["same_chain"])) > 0, \
         "bug in test setup same_chain should be different for base and noise case"
     make_deterministic()
-    rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, gpu)
+    rf_outputs_noise, rf_latents_noise = run_model_forward(model, network_input_noise, device=gpu)
     check_output(model_name, network_input, rf_outputs, rf_latents, rf_outputs_noise, rf_latents_noise)
 
 def setup_test(example, model):
