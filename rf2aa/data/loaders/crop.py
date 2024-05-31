@@ -267,6 +267,10 @@ def radial_crop(
     epsilon: float = 1e-8,
     rng: Optional[np.random.Generator] = None,
 ) -> torch.Tensor:
+    xyz = merged_outs["xyz"]
+    if xyz.shape[1] < crop_size:
+        return torch.arange(xyz.shape[1])
+
     if rng is None:
         rng = np.random.default_rng()
 
@@ -298,6 +302,10 @@ def contiguous_crop(
     epsilon: float = 1e-8,
     rng: Optional[np.random.Generator] = None,
 ) -> torch.Tensor:
+    xyz = merged_outs["xyz"]
+    if xyz.shape[1] < crop_size:
+        return torch.arange(xyz.shape[1])
+
     if rng is None:
         rng = np.random.default_rng()
 
@@ -331,6 +339,10 @@ def radial_crop_sm_compl(
     mask = merged_outs["mask"]
     Ls_poly = merged_outs["Ls_poly"]
     Ls_sm = merged_outs["Ls_sm"]
+
+    if xyz.shape[1] < crop_size:
+        return torch.arange(xyz.shape[1])
+
     return crop_sm_compl_assembly(xyz[0], mask[0], Ls_poly, Ls_sm, crop_size)
 
 
@@ -345,6 +357,10 @@ def contiguous_crop_sm_compl(
     Ls_poly = merged_outs["Ls_poly"]
     Ls_sm = merged_outs["Ls_sm"]
     bond_feats = merged_outs["bond_feats"]
+
+    if xyz.shape[1] < crop_size:
+        return torch.arange(xyz.shape[1])
+
     return crop_sm_compl_asmb_contig(
         xyz[0],
         mask[0],

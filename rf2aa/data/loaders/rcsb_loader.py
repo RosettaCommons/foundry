@@ -401,6 +401,7 @@ def loader_sm_compl_assembly(
     random_noise=5.0,
     fixbb=False,
     remove_residue=True,
+    cif_outs=None,
 ):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
@@ -425,7 +426,8 @@ def loader_sm_compl_assembly(
     chain_id = item["CHAINID"]
     pdb_id = chain_id.split("_")[0]
     assembly = str(item["ASSEMBLY"])
-    cif_outs = get_cif_metadata(pdb_id, assembly, params)
+    if cif_outs is None:
+        cif_outs = get_cif_metadata(pdb_id, assembly, params)
 
     # changing num_protein_chains -> num_polymer_chains
     # will be a separate PR because that requires some config changes
