@@ -123,7 +123,7 @@ aa_coarse_from_fine = {
     'B':'UNK',
     'Be':'UNK',
     'Br':'UNK',
-    'C':'C',
+    'C':'UNK',
     'Ca':'UNK',
     'Cl':'UNK',
     'Co':'UNK',
@@ -163,7 +163,7 @@ aa_coarse_from_fine = {
     'V':'UNK',
     'Y':'UNK',
     'Zn':'UNK',
-    'ATM':'ATM'
+    'ATM':'UNK'
 }
 from enum import Enum
 
@@ -280,14 +280,12 @@ element_code_to_num =  {x:i for i,x in enumerate(element_codes)}
 def discretize_distance_matrix(distance_matrix, num_bins=38, min_distance=3.25, max_distance=50.75):
     # Calculate the bin width
     bin_width = (max_distance - min_distance) / num_bins
+    bins = torch.arange(num_bins, device=distance_matrix.device) * bin_width + min_distance
+
+    # Discretize distances into bins (bucketize automatically places out-of-range values in the last bin)
+    binned_distances = torch.bucketize(distance_matrix, bins)
     
-    # Discretize distances into bins
-    bins = torch.floor((distance_matrix - min_distance) / bin_width).clamp_max(num_bins)
-    
-    # Assign larger distances to the last bin
-    bins = torch.where(bins < num_bins, bins, torch.tensor(num_bins))
-    
-    return bins
+    return binned_distances
 
 def torch_vectorize(pyfunc):
     def f(*args, **kwargs):
@@ -331,7 +329,6 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
         task=task,
         item=item,
     )))
-
     NUM_TEMPLATE_DISTOGRAM_BINS = 38
 
     # Strip batch dimension
@@ -456,15 +453,18 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     template_pseudo_beta = torch.gather(xyz_t, dim=2, index=index_tensor_expanded).squeeze(-2) #.squeeze(-1)
     template_pseudo_beta_distogram = torch.cdist(template_pseudo_beta, template_pseudo_beta)
     template_pseudo_beta_distogram *= f['template_pseudo_beta_mask'].unsqueeze(-1) * f['template_pseudo_beta_mask'].unsqueeze(-2)
-    f['template_distogram'] = discretize_distance_matrix(
+    f['template_distogram'] = F.one_hot(discretize_distance_matrix(
         template_pseudo_beta_distogram,
         num_bins=NUM_TEMPLATE_DISTOGRAM_BINS,
-    )
+    ), num_classes=NUM_TEMPLATE_DISTOGRAM_BINS + 1) # +1 for out-of-range values
 
     CA_IDX = 1
     template_ca = xyz_t[..., CA_IDX, :]
     template_ca_disp = template_ca.unsqueeze(-2) - template_ca.unsqueeze(-3)
-    template_ca_disp_unit = template_ca_disp / torch.linalg.norm(template_ca_disp, dim=-1, keepdim=True)
+    
+    # add epsilon to avoid division by zero
+    eps = 1e-4
+    template_ca_disp_unit = template_ca_disp / (torch.linalg.norm(template_ca_disp, dim=-1, keepdim=True) + eps)
     template_R, _ = rigid_from_3_points(
         xyz_t[:,:,0],
         xyz_t[:,:,1],
@@ -475,6 +475,7 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     both_have_ca = has_ca[..., None, :] * has_ca[..., None]
     template_unit_vector = rot_vec_mul(template_R[:,:, None], template_ca_disp_unit)
     template_unit_vector[both_have_ca] = 0
+    assert template_unit_vector.isnan().sum() == 0
     f['template_unit_vector'] = template_unit_vector
     
     has_ligand_2d = (f['is_ligand'].unsqueeze(-2) + f['is_ligand'].unsqueeze(-1)).bool()

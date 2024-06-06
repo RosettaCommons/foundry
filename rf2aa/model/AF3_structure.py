@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.nn.functional import one_hot, sigmoid, silu
+from torch.nn.functional import one_hot, sigmoid, silu, relu
 import torch.utils.checkpoint as checkpoint
 from functools import partial
 import numpy as np
@@ -16,7 +16,8 @@ from rf2aa.model.layers.structure_bias import structure_bias_factory
 from rf2aa.model.layers.Attention_module import BiasedAxialAttention, FeedForwardLayer, MSAColAttention, \
     MSARowAttentionWithBias, TriangleMultiplication, MSAColGlobalAttention, \
     OldMSAColAttention, OldMSAColGlobalAttention, BiasedUntiedAxialAttention, TriangleAttention
-from rf2aa.model.layers.outer_product import OuterProductMean # need to code this correctly
+from rf2aa.model.layers.outer_product import OuterProductMean_AF3 # need to code this correctly
+from rf2aa.model.AF3_blocks import MsaPairWeightedAverage, MsaSubsampleEmbedder
 from rf2aa.training.checkpoint import create_custom_forward
 from rf2aa.util_module import Dropout
 from rf2aa.alignment import weighted_rigid_align
@@ -680,7 +681,7 @@ class Recycler(nn.Module):
                 ):
         Z_II = Z_init_II + self.process_zh(Z_II)
         Z_II = Z_II + self.template_embedder(f, Z_II)
-        Z_II = Z_II + self.msa_module(f['msa'], Z_II, S_inputs_I)
+        Z_II = Z_II + self.msa_module(f, Z_II, S_inputs_I)
         S_I = S_init_I + self.process_sh(S_I)
         for block in self.pairformer_stack:
             S_I, Z_II = block(S_I, Z_II)
@@ -737,9 +738,11 @@ class PairformerBlock(nn.Module):
             c_z, d_hidden=c, start_node=False)
 
         self.z_transition = Transition(c=c_z, n=n_transition)
-        self.s_transition = Transition(c=c_s, n=n_transition)
+        
+        if c_s > 0:
+            self.s_transition = Transition(c=c_s, n=n_transition)
 
-        self.attention_pair_bias = AttentionPairBias(c_a=c_s, c_s=0, c_pair=c_z, **attention_pair_bias)
+            self.attention_pair_bias = AttentionPairBias(c_a=c_s, c_s=0, c_pair=c_z, **attention_pair_bias)
         triangle_operations_expected_dim = 4 # B, L, L, C
         self.maybe_make_batched = create_batch_dimension_if_not_present(triangle_operations_expected_dim)
 
@@ -751,8 +754,9 @@ class PairformerBlock(nn.Module):
         Z_II = Z_II + self.drop_row(self.maybe_make_batched(self.tri_attn_start)(Z_II))
         Z_II = Z_II + self.drop_col(self.maybe_make_batched(self.tri_attn_end)(Z_II))
         Z_II = Z_II + self.z_transition(Z_II)
-        S_I = S_I + self.attention_pair_bias(S_I, None, Z_II, Beta_II=torch.tensor([0.], device=Z_II.device))
-        S_I = S_I + self.s_transition(S_I)
+        if S_I is not None:
+            S_I = S_I + self.attention_pair_bias(S_I, None, Z_II, Beta_II=torch.tensor([0.], device=Z_II.device))
+            S_I = S_I + self.s_transition(S_I)
         return S_I, Z_II
 
 
@@ -840,34 +844,114 @@ class RelativePositionEncoding(nn.Module):
         A_relchain_II = one_hot(d_chain_II, 2*self.s_max+2)
         return self.linear(torch.cat([A_relpos_II, A_reltoken_II, b_same_entity_II.unsqueeze(-1), A_relchain_II], dim=-1).to(torch.float))
 
-# Mock for testing.
+
 class MSAModule(nn.Module):
-    def __init__(self, n_block, c_m):
+    def __init__(self, n_block, 
+                 c_m,
+                 p_drop_msa,
+                 p_drop_pair,
+                 msa_subsample_embedder,
+                 outer_product,
+                 msa_pair_weighted_averaging,
+                 msa_transition,
+                 triangle_multiplication_outgoing,
+                 triangle_multiplication_incoming,
+                 triangle_attention_starting,
+                 triangle_attention_ending,
+                 pair_transition,
+                 ):
         super().__init__()
-    
+        self.n_block = n_block
+        self.msa_subsampler = MsaSubsampleEmbedder(**msa_subsample_embedder)
+        self.outer_product = OuterProductMean_AF3(**outer_product)
+        self.msa_pair_weighted_averaging = MsaPairWeightedAverage(**msa_pair_weighted_averaging)
+        self.msa_transition = Transition(**msa_transition)
+
+        self.drop_row_msa = Dropout(broadcast_dim=-2, p_drop=p_drop_msa)
+        self.drop_row_pair = Dropout(broadcast_dim=-2, p_drop=p_drop_pair)
+        self.drop_col_pair = Dropout(broadcast_dim=-3, p_drop=p_drop_pair)        
+        
+        self.tri_mult_outgoing = TriangleMultiplication(**triangle_multiplication_outgoing, outgoing=True)
+        self.tri_mult_incoming = TriangleMultiplication(**triangle_multiplication_incoming, outgoing=False)
+        self.tri_attn_start = TriangleAttention(**triangle_attention_starting, start_node=True)
+        self.tri_attn_end = TriangleAttention(**triangle_attention_ending, start_node=False)
+        self.pair_transition = Transition(**pair_transition)
+
+        outer_product_expected_dim = 4 # B, S, I, C
+        self.maybe_make_batched_outer_product = create_batch_dimension_if_not_present(outer_product_expected_dim)
+        
+        triangle_ops_expected_dim = 4 # B, I, I, C
+        self.maybe_make_batched_triangle_ops = create_batch_dimension_if_not_present(triangle_ops_expected_dim)
+
     def forward(self,
                 f,
                 Z_II,
                 S_inputs_I,
                 ):
+        msa = torch.cat([f["msa"], f["has_deletion"][...,None], f["deletion_value"][...,None]], dim=-1)
+        msa_SI = self.msa_subsampler(msa, S_inputs_I)
+        for i in range(self.n_block):
+            # update MSA features
+            Z_II = Z_II + self.maybe_make_batched_outer_product(self.outer_product)(msa_SI)
+            msa_SI = msa_SI + self.drop_row_msa(self.msa_pair_weighted_averaging(msa_SI, Z_II))
+            msa_SI = msa_SI + self.msa_transition(msa_SI)
+
+            # update pair features
+            Z_II = Z_II + self.drop_row_pair(self.maybe_make_batched_triangle_ops(self.tri_mult_outgoing)(Z_II))
+            Z_II = Z_II + self.drop_row_pair(self.maybe_make_batched_triangle_ops(self.tri_mult_incoming)(Z_II))
+            Z_II = Z_II + self.drop_row_pair(self.maybe_make_batched_triangle_ops(self.tri_attn_start)(Z_II))
+            Z_II = Z_II + self.drop_col_pair(self.maybe_make_batched_triangle_ops(self.tri_attn_end)(Z_II))
+            Z_II = Z_II + self.pair_transition(Z_II)
         return Z_II
 
-# Mock for testing.
 class TemplateEmbedder(nn.Module):
     def __init__(self,
                  n_block,
+                 raw_template_dim,
                  c_z,
-                 c):
+                 c
+                 ):
         super().__init__()
         self.c =c
-        self.linear = linearNoBias(c_z, c)
-        self.linear_2 = linearNoBias(c, c_z)
+        self.emb_pair = nn.Linear(c_z, c, bias=False)
+        self.norm_pair_before_pairformer = nn.LayerNorm(c_z)
+        self.norm_after_pairformer = nn.LayerNorm(c)
+        self.emb_templ = nn.Linear(raw_template_dim, c, bias=False)
+
+        # template pairformer does not operate on sequence representation
+        self.pairformer = nn.ModuleList(
+            [
+                PairformerBlock(c_s=0, c_z=c, p_drop=0.0, c=c, attention_pair_bias={}, n_transition=4)
+                for _ in range(n_block)
+             ])
+
+        # NOTE: this is not consistent with AF3 paper which outputs this tensor in the template_channel dimension
+        # In Algorithm 1, line 9, the outputs of this function are added to the Z_II tensor which has dimensions [B, I, I, C_z]
+        # so we make the outputs of this module also has those dimensions 
+        self.agg_emb = nn.Linear(c, c_z, bias=False)
+
 
     def forward(self,
                 f,
                 Z_II,
                 ):
-        return self.linear_2(self.linear(Z_II))
+        I = Z_II.shape[0]
+        template_frame_mask = f["template_backbone_frame_mask"][:, None] * f["template_backbone_frame_mask"][:, :, None]   
+        template_pseudo_beta_mask = f["template_pseudo_beta_mask"][:, None, :] * f["template_pseudo_beta_mask"][:, :, None]
+
+        template_feats = torch.cat([f["template_distogram"], template_frame_mask[..., None], f["template_unit_vector"], template_pseudo_beta_mask[...,None]], dim=-1)
+        template_feats = template_feats * (f["asym_id"][None, :] == f["asym_id"][:, None])[..., None]
+        template_feats = torch.cat([template_feats, f["template_restype"][:, None, :, :].repeat(1, I, 1,1)], dim=-1)
+        T = template_feats.shape[0]
+        u_II = torch.zeros(I, I, self.c, device=Z_II.device)
+        for i in range(T):
+            v_II = self.emb_pair(self.norm_pair_before_pairformer(Z_II)) + self.emb_templ(template_feats[i])
+            for block in self.pairformer:
+                _, v_II = block(None, v_II)
+            u_II = u_II + self.norm_after_pairformer(v_II)
+        u_II = u_II / T
+
+        return self.agg_emb(relu(u_II))
 
 class Loss:
     def __init__(self,

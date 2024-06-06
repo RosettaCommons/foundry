@@ -199,105 +199,70 @@ class AF3_block(nn.Module):
         latent_feats = self._pack_outputs(singleseq, pair, latent_feats)
         return latent_feats
 
-class MsaModule(nn.Module):
-    def __init__(self,
-                n_blocks,
-                 subsampled_embedding,
-                 outer_product,
-                 msa_pair_weighted_averaging,
-                 msa_transition,
-                 triangle_multiplication_incoming,
-                 triangle_multiplication_outgoing,
-                 triangle_attention_starting,
-                 triangle_attention_ending,
-                 pair_transition,
-                 ):
-        super(MsaModule, self).__init__()
-        self.n_blocks = n_blocks
-        self.msa_subsampler = MsaSubsampleEmbedder(subsampled_embedding)
-        self.outer_product = OuterProductMean(outer_product)
-        self.msa_pair_weighted_averaging = MsaPairWeightedAverage(msa_pair_weighted_averaging)
-        self.msa_transition = FeedForwardLayer(msa_transition)
-
-        #TODO: check if row and col dropout are right
-        self.drop_row = Dropout(broadcast_dim=1, p_drop=0.25)
-        self.drop_col = Dropout(broadcast_dim=2, p_drop=0.25)        
-        
-        self.tri_mult_outgoing = TriangleMultiplication(triangle_multiplication_outgoing)
-        self.tri_mult_incoming = TriangleMultiplication(triangle_multiplication_incoming)
-        self.tri_attn_start = TriangleAttention(triangle_attention_starting)
-        self.tri_attn_end = TriangleAttention(triangle_attention_ending)
-        self.pair_transition = FeedForwardLayer(pair_transition)
-
-    def forward(self, 
-                f_dict, 
-                pair_II,
-                S_inputs
-                ):
-        msa_SI = f_dict["msa_SI"]
-        msa_SI = self.msa_subsampler(msa_SI, S_inputs)
-        for i in range(self.n_blocks):
-            pair_II = pair_II + self.outer_product(msa_SI)
-            msa_SI = msa_SI + self.drop_row(self.msa_pair_weighted_averaging(msa_SI, pair_II))
-            msa_SI = msa_SI + self.msa_transition(msa_SI)
-
-            pair_II = pair_II + self.drop_row(self.tri_mult_outgoing(pair_II))
-            pair_II = pair_II + self.drop_row(self.tri_mult_incoming(pair_II))
-            pair_II = pair_II + self.drop_row(self.tri_attn_start(pair_II))
-            pair_II = pair_II + self.drop_row(self.tri_attn_end(pair_II))
-            pair_II = pair_II + self.pair_transition(pair_II)
-        return pair_II
-
 class MsaSubsampleEmbedder(nn.Module):
-    def __init__(self, params):
+    def __init__(self, num_sequences, dim_raw_msa, c_msa_embed, c_s_inputs):
         super(MsaSubsampleEmbedder, self).__init__()
-        self.num_sequences = params["num_sequences"]
-        self.emb_msa = nn.Linear(params["msa_dim"], params["msa_channels"], bias=False)
-        self.emb_S_inputs = nn.Linear(params["S_dim"], params["msa_channels"], bias=False)
+        self.num_sequences = num_sequences
+        self.emb_msa = nn.Linear(dim_raw_msa, c_msa_embed, bias=False)
+        self.emb_S_inputs = nn.Linear(c_s_inputs, c_msa_embed, bias=False)
     
     def forward(self, 
-                msa_SI,
-                S_inputs # (B, L, S_dim)
+                msa_SI, # (S, I, 34) (32 tokens + has_deletion + deletion value)
+                S_inputs # (L, S_dim)
                 ):
-        B, S, I = msa_SI.shape[:3]
+        S, I = msa_SI.shape[:2]
+        # choose sequences to sample
         num_samples = torch.min(torch.tensor([self.num_sequences, S]))
         weights = torch.ones(num_samples.item(), device=msa_SI.device)
         samples = torch.multinomial(weights, num_samples, replacement=False)
-        msa_SI = msa_SI[:, samples]
-        msa_SI = self.emb_msa(msa_SI)
+        msa_SI = msa_SI[samples]
 
+        # embed the subsampled MSA
+        msa_SI = self.emb_msa(msa_SI)
         msa_SI = msa_SI + self.emb_S_inputs(S_inputs)
         return msa_SI
 
 
 class MsaPairWeightedAverage(nn.Module):
     """ implements Algorithm 10 from AF3 paper"""
-    def __init__(self, params):
+    def __init__(self, c_weighted_average, n_heads, c_msa_embed, c_z):
         super(MsaPairWeightedAverage, self).__init__()
-        self.weighted_average_channels = params["weighted_average_channels"]
-        self.n_heads = params["n_heads"]
-        self.msa_channels = params["msa_channels"]
-        self.pair_channels = params["pair_channels"]
+        self.weighted_average_channels = c_weighted_average
+        self.n_heads = n_heads
+        self.msa_channels = c_msa_embed
+        self.pair_channels = c_z
         self.norm_msa = nn.LayerNorm(self.msa_channels)
         self.to_v = nn.Linear(self.msa_channels, self.n_heads*self.weighted_average_channels, bias=False)
         self.norm_pair = nn.LayerNorm(self.pair_channels)
-        self.to_bias = nn.Linear(self.msa_channels, self.n_heads, bias=False)
+        self.to_bias = nn.Linear(self.pair_channels, self.n_heads, bias=False)
         self.to_gate = nn.Linear(self.msa_channels, self.n_heads, bias=False)
-        self.to_out = nn.Linear(self.weighted_average_channels, self.msa_channels, bias=False)
+        self.to_out = nn.Linear(self.weighted_average_channels*self.n_heads, self.msa_channels, bias=False)
 
     def forward(self, 
                 msa_SI,
                 pair_II
                 ):
-        B, S, I = msa_SI.shape[:3]
+        S, I = msa_SI.shape[:2]
+        
+        # normalize inputs
         msa_SI = self.norm_msa(msa_SI)
-        v_SIH = self.to_v(msa_SI).reshape(B, S, I, self.n_heads, self.d_head)
+
+        # construct values, bias and weights
+        v_SIH = self.to_v(msa_SI).reshape(S, I, self.n_heads, self.weighted_average_channels)
         bias_IIH = self.to_bias(self.norm_pair(pair_II))
-        gate_SIH = torch.sigmoid(self.to_gate(msa_SI))
         w_IIH = F.softmax(bias_IIH, dim=-2)
-        weights = torch.einsum( "bijh,bsjhc->bsihc", w_IIH, v_SIH) 
-        o_SIH = gate_SIH * weights
-        msa_update_SI = self.to_out(o_SIH.reshape(B, S, I, -1))
+        
+        # construct gate
+        gate_SIH = torch.sigmoid(self.to_gate(msa_SI))
+
+        # compute weighted average
+        weights = torch.einsum( "ijh,sjhc->sihc", w_IIH, v_SIH) 
+        
+        # apply gate
+        o_SIH = gate_SIH[..., None] * weights
+
+        # concatenate heads and project
+        msa_update_SI = self.to_out(o_SIH.reshape(S, I, -1))
         return msa_update_SI
 
 class BiasedSequenceAttention(nn.Module):
@@ -359,37 +324,6 @@ class BiasedSequenceAttention(nn.Module):
         out = state + self.transition(out)
 
         return out
-class TemplateEmbedding(nn.Module):
-    def __init__(self, params):
-        super(TemplateEmbedding, self).__init__()
-        self.template_channels = params["template_channels"]
-        self.emb_pair = nn.Linear(params["pair_dim"], params["template_channels"], bias=False)
-        self.norm_pair_before_pairformer = nn.LayerNorm(params["pair_dim"])
-        self.norm_after_pairformer = nn.LayerNorm(params["template_channels"])
-        # HACK: need the actual pairformer block
-        self.pairformer = AF3_block(params["pair_dim"], params["template_channels"], params["pairformer_channels"], params["n_pairformer_layers"])
-        # NOTE: this is not consistent with AF3 paper which outputs this tensor in the template_channel dimension
-        self.agg_emb = nn.Linear(params["template_channels"], params["pair_dim"], bias=False)
-    def forward(self,
-                f_dict,
-                pair_II,
-                ):
-        B, I = pair_II.shape[:2]
-        template_frame_mask = f_dict["template_frame_mask"][None, :] * f_dict["template_frame_mask"][:, None]   
-        template_pseudo_beta_mask = f_dict["template_pseudo_beta_mask"][None, :] * f_dict["template_pseudo_beta_mask"][:, None]
-        template_feats = torch.cat([f_dict["template_distogram"], template_frame_mask, f_dict["template_unit_vector"], template_pseudo_beta_mask])
-        template_feats = template_feats * (f_dict["asym_id"][None, :] == f_dict["asym_id"][:, None])
-        T = template_feats.shape[1]
-        u_II = torch.zeros(B, I, I, self.template_channels, device=pair_II.device)
-        for i in range(T):
-            v_II = self.emb_pair(self.norm_pair_before_pairformer(pair_II)) + template_feats[:, i]
-            v_II = self.pairformer(v_II)
-            u_II = u_II + self.norm_after_pairformer(v_II)
-        
-        u_II = u_II / T
-
-        return self.agg_emb(F.relu(u_II))
-    
 
 class BiasedSequenceAttention(nn.Module):
     def __init__(self, global_params, block_params):

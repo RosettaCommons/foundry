@@ -84,8 +84,8 @@ class Trainer:
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.training_params.use_amp)
     
     def load_checkpoint(self, rank):
-        if self.config.training_params.from_scratch:
-            return False
+        #if self.config.training_params.from_scratch:
+        #    return False
         checkpoint_path = f"{self.output_dir}/{self.config.experiment.name}_last.pt"
         # 'checkpoint_path' takes priority ... 
         if self.config.eval_params.checkpoint_path: 
@@ -744,8 +744,7 @@ class AF3Trainer(FlowMatchingTrainer):
         D = 12
         network_input, loss_input = prepare_input_af3(
             inputs,
-            self.config.interpolant,
-            D,
+            **self.config.af3_data_prep,
         )
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         logger.debug('network_input:\n' + pretty_describe_dict(network_input))

@@ -35,3 +35,23 @@ class OuterProductMean(nn.Module):
         out = self.proj_out(out)
         
         return out
+
+
+class OuterProductMean_AF3(nn.Module):
+    def __init__(self, c_msa_embed, c_outer_product, c_out):
+        super(OuterProductMean_AF3, self).__init__()
+        self.norm = nn.LayerNorm(c_msa_embed)
+        self.proj_left = nn.Linear(c_msa_embed, c_outer_product)
+        self.proj_right = nn.Linear(c_msa_embed, c_outer_product)
+        self.proj_out = nn.Linear(c_outer_product*c_outer_product, c_out)
+
+    def forward(self, msa):
+        B, N, L = msa.shape[:3]
+        msa = self.norm(msa)
+        left = self.proj_left(msa)
+        right = self.proj_right(msa)
+        right = right / float(N)
+        out = torch.einsum('bsli,bsmj->blmij', left, right).reshape(B, L, L, -1)
+        out = self.proj_out(out)
+        
+        return out

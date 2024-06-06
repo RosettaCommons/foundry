@@ -73,7 +73,7 @@ interpolant:
   self_condition: False
 
 model_globals:
-  l_max: 1000
+  l_max: 2000
 model:
   c_s: 384
   c_z: 128
@@ -117,10 +117,52 @@ model:
         n_head: 16
     template_embedder:
       n_block: 2
+      raw_template_dim: 76
       c: 64
     msa_module:
       n_block: 4
       c_m: 64
+      p_drop_msa: 0.15
+      p_drop_pair: 0.25
+      msa_subsample_embedder:
+        num_sequences: 1024
+        dim_raw_msa: 34
+        c_s_inputs: ${model.c_s_inputs}
+        c_msa_embed: ${model.recycler.msa_module.c_m}
+      outer_product: 
+        c_msa_embed: ${model.recycler.msa_module.c_m}
+        c_outer_product: 32
+        c_out: ${model.c_z}
+      msa_pair_weighted_averaging: 
+        n_heads: 8
+        c_weighted_average: 32
+        c_msa_embed: ${model.recycler.msa_module.c_m}
+        c_z: ${model.c_z}
+      msa_transition: 
+        n: 4  
+        c: ${model.recycler.msa_module.c_m}
+      triangle_multiplication_outgoing: 
+        d_pair: ${model.c_z}
+        d_hidden: 128
+        bias: True
+      triangle_multiplication_incoming: 
+        d_pair: ${model.c_z}
+        d_hidden: 128
+        bias: True
+      triangle_attention_starting: 
+        d_pair: ${model.c_z}
+        n_head: 4
+        d_hidden: 32
+        p_drop: 0.0
+      triangle_attention_ending: 
+        d_pair: ${model.c_z}
+        n_head: 4
+        d_hidden: 32
+        p_drop: 0.0
+      pair_transition: 
+        n: 4
+        c: ${model.c_z}
+
   diffusion_module:
     sigma_data: ${interpolant.sigma_data}
     c_token: 768
