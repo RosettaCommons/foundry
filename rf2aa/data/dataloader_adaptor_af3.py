@@ -528,9 +528,13 @@ def get_random_augmentation(X_L, s_trans):
             element in the batch
     '''
     D, L, _ = X_L.shape
-    R = uniform_random_rotation((D,))
-    noise = s_trans * torch.normal(mean=0, std=1, size=(D,1,3))
+    R = uniform_random_rotation((D,)).to(X_L.device)
+    noise = s_trans * torch.normal(mean=0, std=1, size=(D,1,3)).to(X_L.device)
     return rot_vec_mul(R[:,None], X_L) + noise
+
+def centre_random_augmentation(X_L, X_exists_L, s_trans):
+    X_L = centre(X_L, X_exists_L)
+    return get_random_augmentation(X_L, s_trans)
 
 def uniform_random_rotation(size):
     # Sample random angles for rotations around X, Y, and Z axes

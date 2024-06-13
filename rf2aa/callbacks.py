@@ -20,6 +20,8 @@ from lightning_fabric.loggers.csv_logs import _ExperimentWriter
 from rf2aa.tensor_util import apply_to_tensors
 from rf2aa.debug import pretty_describe_dict
 from rf2aa.model.AF3_structure import Loss
+from rf2aa import pymol
+from rf2aa.pymol import cmd
 from rf2aa import pymol_tools
 
 logger = logging.getLogger(__name__)
@@ -150,12 +152,6 @@ class MonitorActivations(Callback):
     def make_hook(self, label):
         def hook(module, args, kwargs, output):
             activation_metrics = {
-
-                f'{label}:inter_batch_cosine_similarity': F.cosine_similarity(
-                    torch.flatten(output[0]),
-                    torch.flatten(output[1]),
-                    dim=0,
-                ),
                 f'{label}:inter_batch_cosine_similarity': F.cosine_similarity(
                     torch.flatten(output[0]),
                     torch.flatten(output[1]),
@@ -198,3 +194,72 @@ class FindUnusedParameters(Callback):
         logging.info(f'global_step={pl_module.global_step}: parameters with no gradient: {json.dumps(unused_params, indent=4)}')
         if unused_params:
             raise Exception('storp')
+
+class WriteToPymol(Callback):
+    def __init__(self, only_once=True, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.only_once = only_once
+        self.called = False
+        pymol.init('http://chesaw.dhcp.ipd:9123')
+
+    def on_train_batch_end(self, trainer: Trainer, pl_module: LightningModule, outputs, batch, batch_idx: int) -> None:
+
+        if self.called and self.only_once:
+            return
+        self.called=True
+
+        pymol_tools.clear()
+        predicted = outputs
+
+        logger.info('predicted:\n' + pretty_describe_dict(predicted))
+        ic(
+            predicted['loss']
+        )
+
+        D = predicted['X_L'].shape[0]
+
+        max_to_show = 16
+        grid_slot = 1
+        cmd.set('grid_mode', 1)
+        for i in range(min(D, max_to_show)):
+
+            X_gt_L = predicted['X_gt_L'][i]
+            X_L = predicted['X_L'][i]
+            X_noisy_L = predicted['X_noisy_L'][i]
+            t = predicted['t'][i]
+
+            label=pymol_tools.show_pymol(
+                pymol_tools.to_atom37(X_noisy_L, predicted['crd_mask_I']),
+                predicted['seq'],
+                predicted['bond_feats'],
+                label=f'input_{i}_t_{t.item():.2f}'
+            )
+            cmd.set('grid_slot', grid_slot, label)
+            cmd.color('yellow', label)
+
+            label=pymol_tools.show_pymol(
+                pymol_tools.to_atom37(X_L, predicted['crd_mask_I']),
+                predicted['seq'],
+                predicted['bond_feats'],
+                label=f'pred_{i}_t_{t.item():.2f}'
+            )
+            cmd.set('grid_slot', grid_slot, label)
+            cmd.color('green', label)
+
+            label = pymol_tools.show_pymol(
+                pymol_tools.to_atom37(X_gt_L, predicted['crd_mask_I']),
+                predicted['seq'],
+                predicted['bond_feats'],
+                label=f'gt_{i}'
+            )
+            cmd.set('grid_slot', grid_slot, label)
+            cmd.color('blue', label)
+            grid_slot += 1
+        
+        cmd.show_as('licorice', 'all')
+        cmd.alter('name CA', 'vdw=2.0')
+        # cmd.set('sphere_transparency', 0.0)
+        cmd.show('spheres', 'name CA')
+
+
+        return super().on_train_batch_end(trainer, pl_module, outputs, batch, batch_idx)

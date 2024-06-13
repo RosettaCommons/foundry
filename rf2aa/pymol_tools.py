@@ -54,12 +54,13 @@ def show_pymol(
     )
     cmd.load(os.path.abspath(pdb_path), label)
     show_origin()
+    return label
 
 
 def to_atom37(X_L, atom_mask):
     assert X_L.shape[-1] == 3
     assert X_L.numel() / 3 == atom_mask.sum(), f'{X_L.numel()/3=} != {atom_mask.sum()=}.  {X_L.shape=} {atom_mask.shape=}'
     L, _ = atom_mask.shape[-2:]
-    X_I = torch.zeros(atom_mask.shape + (3,), dtype=torch.float) - 10
+    X_I = torch.zeros(atom_mask.shape + (3,), dtype=torch.float, device=atom_mask.device) - 10
     X_I[atom_mask] = X_L
     return X_I

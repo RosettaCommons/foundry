@@ -1,5 +1,6 @@
 import re
 import random
+import itertools
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -25,7 +26,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
 from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items, prepare_input_fm_allatom
-from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3
+from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3, centre_random_augmentation
 from rf2aa.flow_matching.interpolant import Interpolant
 from rf2aa.flow_matching.sampler import Sampler, AllAtomSampler
 from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads, pretty_describe_dict
@@ -43,12 +44,14 @@ from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.chemical import initialize_chemdata
 from rf2aa.set_seed import seed_all
 from rf2aa.model import AF3_structure
-from rf2aa.callbacks import LogMetrics, FindUnusedParameters, NetworkOutputGradSanityCheck, MonitorActivations
+from rf2aa.callbacks import LogMetrics, FindUnusedParameters, NetworkOutputGradSanityCheck, MonitorActivations, WriteToPymol
 from rf2aa.loggers import LitLogger
   
 ic.configureOutput(includeContext=True)
 
 logger = logging.getLogger(__name__)
+
+T = 200
 
 #TODO: control environment variables from config
 # limit thread counts
@@ -75,6 +78,14 @@ def get_param_sizes(model):
     for k, p in model.named_parameters():
         o[k] = (np.array(p.size()).prod(), p.size())
     return o
+
+def pairwise(iterable):
+    # pairwise('ABCDEFG') → AB BC CD DE EF FG
+    iterator = iter(iterable)
+    a = next(iterator, None)
+    for b in iterator:
+        yield a, b
+        a = b
 
 # define the LightningModule
 class LitAF3Repro(L.LightningModule):
@@ -157,6 +168,65 @@ class LitAF3Repro(L.LightningModule):
             loss=loss,
             X_L=X_L,
         ) | loss_dict_batched | network_input | loss_input
+    
+
+    def forward(self, batch):
+        # TODO: move data processing to dataset
+        batch = tree.map_structure(lambda x: x.detach().cpu() if hasattr(x, 'cpu') else x, batch)
+        network_input, loss_input = prepare_input_af3(
+            batch,
+            **self.config.af3_data_prep,
+        )
+        # TODO: move data processing to dataset
+        network_input = tree.map_structure(lambda x: x.to(self.device), network_input)
+        loss_input = tree.map_structure(lambda x: x.to(self.device), loss_input)
+        # return self.main_inference_loop(network_input['f'], n_cycle=1, D=2)
+        X_L = self.main_inference_loop(network_input['f'], n_cycle=1, D=2)
+        return dict(
+            X_L=X_L,
+        ) | loss_input
+    
+    def main_inference_loop(self,f,n_cycle, D=1):
+
+        recycling_input = self.model.model.pre_recycle(f, None, None)
+        for i_cycle in range(n_cycle):
+            if i_cycle < n_cycle - 1:
+                recycling_input = self.model.model.recycle(**recycling_input)
+
+        return self.sample_diffusion(recycling_input['f'], recycling_input['S_inputs_I'], recycling_input['S_I'], recycling_input['Z_II'],
+                                     D=D, noise_schedule=self.get_default_noise_schedule())
+    
+    def get_default_noise_schedule(self):
+        t_norm = torch.arange(0, 1 + 1/T, 1/T)
+        s_max = 160
+        s_min = 4e-4
+        p = 7
+        return self.config.interpolant.sigma_data * (s_max**(1/p) + t_norm * (s_min ** (1/p) - s_max ** (1/p))) ** p
+    
+    def sample_diffusion(self, f, S_inputs_I, S_trunk_I, Z_trunk_II,
+                         D,
+                         noise_schedule, gamma_0=0.8, gamma_min=1.0, noise_scale=1.003, step_scale=1.5):
+        L = f['ref_pos'].shape[0]
+        X_L = noise_schedule[0] * torch.normal(mean=0, std=1, size=((D, L, 3))).to(self.device)
+        for c_t_minus_1, c_t in pairwise(noise_schedule):
+
+            max_mem = torch.cuda.max_memory_allocated()/1e9
+            logger.info(f"Max_Memory: {max_mem:.4f}Gb")
+            ic(c_t)
+            X_exists_L = torch.ones(X_L.shape[:-1]).bool().to(self.device)
+            X_L = centre_random_augmentation(X_L, X_exists_L, s_trans=self.config.af3_data_prep.s_trans)
+            gamma = gamma_0 if c_t > gamma_min else 0
+            t_hat = c_t_minus_1 * (gamma + 1)
+            xi_L = noise_scale * torch.sqrt(t_hat**2 - c_t_minus_1**2) * torch.normal(mean=0, std=1, size=((D,L,3))).to(self.device)
+            X_noisy_L = X_L + xi_L
+
+            X_denoised_L = self.model.model.diffusion_module(X_noisy_L, t_hat.tile((D,)).to(self.device), f, S_inputs_I, S_trunk_I, Z_trunk_II)
+            return X_denoised_L
+            delta_L = (X_L - X_denoised_L) / t_hat
+            dt = c_t - t_hat
+            X_L = X_noisy_L + step_scale * dt * delta_L
+        return X_L
+
 
     def configure_optimizers(self):
         optimizer = getattr(torch.optim, self.config.optimizer.type)(
@@ -177,6 +247,7 @@ class LitAF3Repro(L.LightningModule):
             NetworkOutputGradSanityCheck(),
             MonitorActivations(),
             LearningRateMonitor(logging_interval='step'),
+            # WriteToPymol(),
         ]
 
 class LitDataModule(L.LightningDataModule):
@@ -195,6 +266,11 @@ class LitDataModule(L.LightningDataModule):
             num_replicas or 1,
         )
         return train_loader
+    
+    def valid_dataloader(self, rank=None, num_replicas=None):
+        return self.train_dataloader(rank=rank, num_replicas=num_replicas)
+    def predict_dataloader(self, rank=None, num_replicas=None):
+        return self.train_dataloader(rank=rank, num_replicas=num_replicas)
 
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
@@ -202,11 +278,13 @@ def main(config):
         torch.autograd.set_detect_anomaly(True)
     model = LitAF3Repro(config)
     datamodule = LitDataModule(config)
+    if config.resume:
+        ic("-----------RESUMING FROM CHECKPOINT----------------------")
+        model = LitAF3Repro.load_from_checkpoint(config.resume.module_checkpoint, config=config)
     trainer_logger = LitLogger(**config.logger)
 
     model_checkpoint = ModelCheckpoint(
-        every_n_train_steps=1000,
-        dirpath='checkpoints',
+        **config.model_checkpoint
     )
 
     trainer = L.Trainer(

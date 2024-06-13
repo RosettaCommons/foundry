@@ -191,3 +191,12 @@ recycling:
 lightning:
   trainer:
     accumulate_grad_batches: 25
+
+inference:
+  checkpoint: /net/scratch/ahern/af3-repro-debug/tmp_checkpoints/working_5/epoch=49-step=5000.ckpt
+
+model_checkpoint:
+  dirpath: /net/scratch/ahern/af3-repro-debug/tmp_checkpoints/default_${now:%Y-%m-%d}_${now:%H-%M-%S}
+
+resume:
+  False

@@ -1,0 +1,16 @@
+# Status: unvetted
+
+defaults:
+  - af3_repro_single_example_small
+  - _self_
+
+af3_data_prep:
+  D: 12
+
+lightning:
+  trainer:
+    accumulate_grad_batches: 1
+
+resume:
+  module_checkpoint:
+    /net/scratch/ahern/af3-repro-debug/tmp_checkpoints/working_7_2024-06-09_22-33-22/epoch=42-step=21200.ckpt

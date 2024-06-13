@@ -48,7 +48,7 @@ os.environ['OMP_NUM_THREADS'] = '4'
 os.environ['OPENBLAS_NUM_THREADS'] = '4'
 #os.environ['PYTORCH_CUDA_ALLOC_CONF'] = "max_split_size_mb:512"
 # Update environment variable with correct path (needed for W&B upload)
-os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+# os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 ## To reproduce errors
 
 torch.set_num_threads(4)
