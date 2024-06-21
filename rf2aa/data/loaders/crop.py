@@ -80,12 +80,12 @@ def get_preferred_chain_or_interface(
             )
     elif "preferred_interface" in item:
         preferred_interface = item["preferred_interface"]
-        preferred_ineterface_type = item["preferred_interface_type"]
+        preferred_interface_type = item["preferred_interface_type"]
 
         preferred_chain_a = preferred_interface[0]
         preferred_chain_b = preferred_interface[1]
-        preferred_chain_type_a = preferred_ineterface_type[0]
-        preferred_chain_type_b = preferred_ineterface_type[1]
+        preferred_chain_type_a = preferred_interface_type[0]
+        preferred_chain_type_b = preferred_interface_type[1]
 
         if preferred_chain_type_a in polymer_types:
             index_a = get_polymer_chain_index(merged_outs, preferred_chain_a, rng=rng)

@@ -1,6 +1,7 @@
 defaults:
   - af3_repro_single_example_small
   - _self_
+  - dataset_params/dataset_params_no_distillation
 
 cpu_training: true
 training_params:
@@ -8,25 +9,25 @@ training_params:
 
 model:
   recycler:
-    n_pairformer_blocks: 2
+    n_pairformer_blocks: 1
     template_embedder:
-      n_block: 2
+      n_block: 1
     msa_module:
-      n_block: 2
+      n_block: 1
   diffusion_module:
     atom_attention_encoder:
       atom_transformer:
         diffusion_transformer:
-          n_block: 2
+          n_block: 1
     diffusion_transformer:
-      n_block: 2
+      n_block: 1
     atom_attention_decoder:
       atom_transformer:
         diffusion_transformer:
-          n_block: 2
+          n_block: 1
 
 logger:
   sublogger:
-    project: af3-debug-cpu
+    save_dir: af3-debug-cpu
 
 autograd_detect_anomaly: true

@@ -14,6 +14,7 @@ from rf2aa.data.data_loader import get_train_valid_set, loader_pdb, loader_compl
     Dataset, DatasetRNA, DatasetNAComplex, DatasetNAComplex, \
     DatasetSMComplexAssembly, DatasetSM, _load_df
 from rf2aa.data.loaders.rcsb_loader import loader_sm_compl_assembly_single, loader_sm_compl_assembly
+from rf2aa.data.loaders.spoofing import spoofed_loader
 from rf2aa.data.sampler import sampler_factory
 
 #### handle defaults 
@@ -170,7 +171,7 @@ def get_distilled_dataset(dataset_params, loader_params):
             dataset_params["n_valid_" + k] = len(valid_dict[k])
 
     loader_dict = dict(
-        pdb=loader_pdb,
+        pdb=spoofed_loader,
         peptide=loader_pdb,
         compl=loader_complex,
         neg_compl=loader_complex,

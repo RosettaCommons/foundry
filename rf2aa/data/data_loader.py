@@ -3693,7 +3693,7 @@ class DistilledDataset(data.Dataset):
                 ID = self.ID_dict['pdb'][index-offset]
                 item = sample_item(self.dataset_dict['pdb'], ID)
                 out = self.loader_dict['pdb'](
-                    item, self.params, self.homo, 
+                    item, self.params, chid2hash=self.chid2hash, homo=self.homo, 
                     p_homo_cut=self.p_homo_cut, p_short_crop=self.p_short_crop, p_dslf_crop=self.p_dslf_crop, 
                     unclamp=(p_unclamp > self.unclamp_cut)
                 )

@@ -256,7 +256,7 @@ class LitDataModule(L.LightningDataModule):
         super().__init__()
         self.config = config
 
-        self.init = partial(initialize_chemdata, config.chem_params)
+        self.init = partial(initialize_chemdata, config)
         self.init()
 
     def train_dataloader(self, rank=None, num_replicas=None):

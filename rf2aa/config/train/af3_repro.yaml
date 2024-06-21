@@ -73,7 +73,7 @@ interpolant:
   self_condition: False
 
 model_globals:
-  l_max: 2000
+  l_max: 5000
 model:
   c_s: 384
   c_z: 128

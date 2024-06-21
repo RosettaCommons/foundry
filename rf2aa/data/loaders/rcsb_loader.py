@@ -402,6 +402,7 @@ def loader_sm_compl_assembly(
     fixbb=False,
     remove_residue=True,
     cif_outs=None,
+    **kwargs,
 ):
     """Load protein/ligand assembly from pre-parsed CIF files. Outputs can
     represent multiple chains, which are ordered from most to least contacts
