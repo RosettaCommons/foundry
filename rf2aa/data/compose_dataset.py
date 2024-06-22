@@ -173,7 +173,7 @@ def get_distilled_dataset(dataset_params, loader_params):
     loader_dict = dict(
         pdb=spoofed_loader,
         peptide=loader_pdb,
-        compl=loader_complex,
+        compl=spoofed_loader,
         neg_compl=loader_complex,
         na_compl=loader_na_complex,
         neg_na_compl=loader_na_complex,

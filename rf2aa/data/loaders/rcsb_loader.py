@@ -501,3 +501,4 @@ def loader_sm_compl_assembly(
 def loader_sm_compl_assembly_single(*args, **kwargs):
     kwargs["num_protein_chains"] = 1
     return loader_sm_compl_assembly(*args, **kwargs)
+

@@ -410,7 +410,7 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     f['ref_mask'] = torch.arange(N_atom)
 
     element = [ChemData().aa2elt[seq[tok]][within_tok] for tok, within_tok in zip(tok_idx, within_tok_idx)]
-    f['ref_element'] = F.one_hot(torch.tensor([element_code_to_num[e] for e in element]), len(element_codes))
+    f['ref_element'] = F.one_hot(torch.tensor([element_code_to_num[e] if e in element_code_to_num else 128 for e in element]), len(element_codes))
 
     # Hacked:
     f['ref_charge'] = torch.zeros((N_atom))

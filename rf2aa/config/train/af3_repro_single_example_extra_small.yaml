@@ -25,7 +25,8 @@ model:
       atom_transformer:
         diffusion_transformer:
           n_block: 1
-
+loader_params:
+  p_msa_mask: 0 
 logger:
   sublogger:
     save_dir: af3-debug-cpu

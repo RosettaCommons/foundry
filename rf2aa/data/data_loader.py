@@ -181,6 +181,7 @@ def get_masked_msa(
     mask_sample = sampler.sample()
 
     mask_pos = torch.rand(msa_clust.shape, device=msa_clust.device) < p_mask
+    ic(p_mask, mask_pos.sum().item(), mask_pos.shape, mask_sample.shape, mask_sample.sum().item())
     # mask_pos[msa_clust>MASKINDEX]=False # no masking on NAs
     use_seq = msa_clust
     msa_masked = torch.where(mask_pos, mask_sample, use_seq)
@@ -2333,7 +2334,7 @@ def loader_na_complex(item, params, native_NA_frac=0.05, negative=False, pick_to
     ins = a3m['ins'].long()
     if len(msa) > params['BLOCKCUT']:
         msa, ins = MSABlockDeletion(msa, ins)
-    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, L_s=Ls, fixbb=fixbb)
+    seq, msa_seed_orig, msa_seed, msa_extra, mask_msa = MSAFeaturize(msa, ins, params, p_mask=params["p_msa_mask"], L_s=Ls, fixbb=fixbb)
 
     # build native from components
     xyz = torch.full((NMDLS, sum(Ls), ChemData().NTOTAL, 3), np.nan)
@@ -3374,6 +3375,7 @@ def sample_item(df, ID, rng=None):
     represented by DataFrame `df`"""
     clus_df = df[df['CLUSTER']==ID]
     item = clus_df.sample(1, random_state=rng).to_dict(orient='records')[0]
+    ic(item)
     return copy.deepcopy(item) # prevents dataframe from being modified by downstream changes
 
 def sample_item_sm_compl(df, ID, dedup_ligand=True):
@@ -3393,6 +3395,7 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
         tmp_df = tmp_df[tmp_df['LIGAND'].apply(lambda x: x[0][2]==chosen_lig)]
 
     item = tmp_df.sample(1).to_dict(orient='records')[0] # choose 1 random row
+    ic(item)
     return copy.deepcopy(item) # prevents dataframe from being modified by downstream changes
 
 
@@ -3711,7 +3714,7 @@ class DistilledDataset(data.Dataset):
                 task = 'compl'
                 ID = self.ID_dict['compl'][index-offset]
                 item = sample_item(self.dataset_dict['compl'], ID)
-                out = self.loader_dict['compl'](item, self.params, negative=False)
+                out = self.loader_dict['compl'](item, self.params,chid2hash=self.chid2hash, chid2taxid=self.chid2taxid, negative=False)
             offset += len(self.index_dict['compl'])
 
             if index >= offset and index < offset + len(self.index_dict['neg_compl']):

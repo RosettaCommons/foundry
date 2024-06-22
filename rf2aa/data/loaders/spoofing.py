@@ -33,6 +33,7 @@ def spoofed_loader(
         pdb_id = ids_list[0].split("_")[0]
         cif_outs = get_cif_metadata(pdb_id, "1", params)
         asmb = choose_assembly(cif_outs, ids_list)
+        cif_outs["asmb_xfs"] = cif_outs["asmb"][asmb]
         assembly_transform_index_dictionary = {
             k: i for i, (k, _) in enumerate(cif_outs["asmb"][asmb])
         }
@@ -44,20 +45,36 @@ def spoofed_loader(
             )
             for chid in ids_list
         ]
-
+        crop_params = {}
+        if len(partners) == 1:
+            crop_params = {
+                "preferred_chain": partners[0][0],
+                "preferred_chain_type" : partners[0][-1],
+            }
+        else:
+            crop_params = {
+                "preferred_interface": (partners[0][0], partners[1][0]),
+                "preferred_interface_type": (partners[0][-1], partners[1][-1]),
+            }
+        ic(partners)
         spoofed_sm_compl_item = {
             "CHAINID": ids_list[0],
             "ASSEMBLY": asmb,
             "COVALENT": [],
             "PARTNERS": partners,
         }
+        spoofed_sm_compl_item.update(crop_params)
     except Exception as e:
         # print exception so that whole traceback is visible    
         print(f"Error in spoofed_loader: {repr(e)}")
         ic(f"{item}")
         from rf2aa.tests.test_conditions import sm_compl_item
         spoofed_sm_compl_item = sm_compl_item
-    import pdb; pdb.set_trace()
+        crop_params = {
+            "preferred_interface": (sm_compl_item["LIGAND"][0], sm_compl_item["PARTNERS"][0][0]),
+            "preferred_interface_type": (sm_compl_item["LIGAND"][-1], sm_compl_item["PARTNERS"][0][-1]),
+        }
+        spoofed_sm_compl_item.update(crop_params)
     return loader_sm_compl_assembly(
         spoofed_sm_compl_item,
         params,

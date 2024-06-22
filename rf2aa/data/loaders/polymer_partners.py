@@ -714,7 +714,7 @@ def featurize_asmb_poly(
     chains,
     asmb_xfs,
     modres,
-    chid2hash={},
+    chid2hash,
     pick_top=True,
     random_noise=5.0,
 ):
@@ -789,7 +789,8 @@ def featurize_asmb_poly(
     valid_partners = [
         p for p in partners if p[-1] in valid_partner_types
     ]
-    chid2hash = chid2hash or dict()
+    if not isinstance(chid2hash, dict):
+        raise ValueError("chid2hash must be provided to load polymer partners.")
 
     # polymer true coords
     xyz_poly, mask_poly, ch_label_poly, seq_poly = [], [], [], []
@@ -951,30 +952,33 @@ def load_polymer_partners(
         return get_empty_polymer_partners()
     
     # load polymer chains
-    (
-        xyz_poly,
-        mask_poly,
-        seq_poly,
-        ch_label_poly,
-        xyz_t_poly,
-        f1d_t_poly,
-        mask_t_poly,
-        Ls_poly,
-        ch_letters,
-        chain_types,
-        mod_residues_to_atomize,
-        tplt_ids,
-    ) = featurize_asmb_poly(
-        pdb_id,
-        poly_partners,
-        params,
-        cif_outs["chains"],
-        cif_outs["asmb_xfs"],
-        cif_outs["modres"],
-        chid2hash,
-        pick_top=pick_top,
-        random_noise=random_noise,
-    )
+    try:
+        (
+            xyz_poly,
+            mask_poly,
+            seq_poly,
+            ch_label_poly,
+            xyz_t_poly,
+            f1d_t_poly,
+            mask_t_poly,
+            Ls_poly,
+            ch_letters,
+            chain_types,
+            mod_residues_to_atomize,
+            tplt_ids,
+        ) = featurize_asmb_poly(
+            pdb_id,
+            poly_partners,
+            params,
+            cif_outs["chains"],
+            cif_outs["asmb_xfs"],
+            cif_outs["modres"],
+            chid2hash,
+            pick_top=pick_top,
+            random_noise=random_noise,
+        )
+    except Exception as e:
+        import pdb; pdb.set_trace()
     # keep 1st template and random sample of others for params['MAXTPLT'] total
     if xyz_t_poly.shape[0] > params["MAXTPLT"]:
         sel = np.concatenate(
