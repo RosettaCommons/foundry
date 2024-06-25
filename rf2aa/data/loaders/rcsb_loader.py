@@ -33,6 +33,7 @@ from rf2aa.data.loaders.small_molecule_partners import (
     prune_lig_partners,
 )
 from rf2aa.data.loaders.crop import universal_crop_factory, sm_compl_crop_factory
+from rf2aa.data_new.transforms.base import Transform, Compose
 
 
 def get_cif_metadata(
@@ -105,52 +106,52 @@ def pad_merge_protein_small_molecule_tensors(
     return x_total
 
 
-def merge_outs(polymer_outs, small_molecule_outs, params, random_noise: float = 5.0):
+def merge_outs(combined_outs, random_noise: float = 5.0):
     # Combine protein and ligand true coordinates
     xyz = pad_merge_protein_small_molecule_tensors(
-        polymer_outs["xyz_poly"], small_molecule_outs["xyz_sm"], np.nan
+        combined_outs["xyz_poly"], combined_outs["xyz_sm"], np.nan
     )
     mask = pad_merge_protein_small_molecule_tensors(
-        polymer_outs["mask_poly"], small_molecule_outs["mask_sm"], False
+        combined_outs["mask_poly"], combined_outs["mask_sm"], False
     )
 
     # combine protein & ligand templates
-    N_tmpl = polymer_outs["xyz_t_poly"].shape[0]
+    N_tmpl = combined_outs["xyz_t_poly"].shape[0]
     xyz_t_sm, f1d_t_sm, mask_t_sm, _ = blank_template(
-        N_tmpl, sum(small_molecule_outs["Ls_sm"]), random_noise
+        N_tmpl, sum(combined_outs["Ls_sm"]), random_noise
     )
-    xyz_t = torch.cat([polymer_outs["xyz_t_poly"], xyz_t_sm], dim=1)
-    f1d_t = torch.cat([polymer_outs["f1d_t_poly"], f1d_t_sm], dim=1)
-    mask_t = torch.cat([polymer_outs["mask_t_poly"], mask_t_sm], dim=1)
+    xyz_t = torch.cat([combined_outs["xyz_t_poly"], xyz_t_sm], dim=1)
+    f1d_t = torch.cat([combined_outs["f1d_t_poly"], f1d_t_sm], dim=1)
+    mask_t = torch.cat([combined_outs["mask_t_poly"], mask_t_sm], dim=1)
 
     # bond features
-    bond_feats_poly = [get_protein_bond_feats(L) for L in polymer_outs["Ls_poly"]]
-    bond_feats_list = bond_feats_poly + small_molecule_outs["bond_feats_sm"]
+    bond_feats_poly = [get_protein_bond_feats(L) for L in combined_outs["Ls_poly"]]
+    bond_feats_list = bond_feats_poly + combined_outs["bond_feats_sm"]
     bond_feats = torch.block_diag(*bond_feats_list).long()
 
     # other features
-    idx = idx_from_Ls(polymer_outs["Ls_poly"] + small_molecule_outs["Ls_sm"])
+    idx = idx_from_Ls(combined_outs["Ls_poly"] + combined_outs["Ls_sm"])
     same_chain = same_chain_2d_from_Ls(
-        polymer_outs["Ls_poly"] + small_molecule_outs["Ls_sm"]
+        combined_outs["Ls_poly"] + combined_outs["Ls_sm"]
     )
     ch_label = torch.cat(
         [
-            polymer_outs["ch_label_poly"],
-            small_molecule_outs["ch_label_sm"]
-            + polymer_outs["ch_label_poly"].max()
+            combined_outs["ch_label_poly"],
+            combined_outs["ch_label_sm"]
+            + combined_outs["ch_label_poly"].max()
             + 1,
         ]
     )
 
     # load msa
     a3m_sm = {
-        "msa": small_molecule_outs["msa_sm"],
-        "ins": torch.zeros_like(small_molecule_outs["msa_sm"]),
+        "msa": combined_outs["msa_sm"],
+        "ins": torch.zeros_like(combined_outs["msa_sm"]),
     }
     a3m = merge_a3m_hetero(
-        polymer_outs["a3m_poly"],
+        combined_outs["a3m_poly"],
         a3m_sm,
-        [sum(polymer_outs["Ls_poly"]), sum(small_molecule_outs["Ls_sm"])],
+        [sum(combined_outs["Ls_poly"]), sum(combined_outs["Ls_sm"])],
     )
     msa = a3m["msa"].long()
     ins = a3m["ins"].long()
@@ -168,14 +169,14 @@ def merge_outs(polymer_outs, small_molecule_outs, params, random_noise: float = 
         "ch_label": ch_label,
         "msa": msa,
         "ins": ins,
-        "Ls_poly": polymer_outs["Ls_poly"],
-        "Ls_sm": small_molecule_outs["Ls_sm"],
-        "residues_to_atomize": small_molecule_outs["residues_to_atomize"],
-        "ch_letters_poly": polymer_outs["ch_letters"],
-        "akeys_sm": small_molecule_outs["akeys_sm"],
-        "frames": small_molecule_outs["frames"],
-        "chirals": small_molecule_outs["chirals"],
-        "seed_msa_clus": polymer_outs["seed_msa_clus"],
+        "Ls_poly": combined_outs["Ls_poly"],
+        "Ls_sm": combined_outs["Ls_sm"],
+        "residues_to_atomize": combined_outs["residues_to_atomize"],
+        "ch_letters_poly": combined_outs["ch_letters"],
+        "akeys_sm": combined_outs["akeys_sm"],
+        "frames": combined_outs["frames"],
+        "chirals": combined_outs["chirals"],
+        "seed_msa_clus": combined_outs["seed_msa_clus"],
     }
     return merged_outs
 
@@ -454,9 +455,17 @@ def loader_sm_compl_assembly(
         params,
         mod_residues_to_atomize=polymer_outs["mod_residues_to_atomize"],
     )
+    polymer_keys = set(polymer_outs.keys())
+    small_molecule_keys = set(small_molecule_outs.keys())
 
+    # make sure no common keys before combining
+    common_keys = polymer_keys.intersection(small_molecule_keys)
+    assert len(common_keys) == 0, f"Keys {common_keys} are present in both polymer and small molecule outputs"
+    combined_outs = {**polymer_outs, **small_molecule_outs}
+    from rf2aa.data.loaders.data_transforms import pipeline
+    combined_outs = pipeline(combined_outs) 
     merged_outs = merge_outs(
-        polymer_outs, small_molecule_outs, params, random_noise=random_noise
+        combined_outs, random_noise=random_noise
     )
 
     merged_outs = reindex_atomize_wrapper(
