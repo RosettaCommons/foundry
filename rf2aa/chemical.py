@@ -2549,8 +2549,6 @@ class ChemicalData:
             for j,a in enumerate(i_l):
                 if (a is None):
                     self.long2alt[i,j] = j
-                elif ("H" in a):
-                    self.long2alt[i,j] = i_l.index(a)
                 else:
                     self.long2alt[i,j] = i_lalt.index(a)
                     self.allatom_mask[i,j] = True
@@ -2558,7 +2556,9 @@ class ChemicalData:
             for j in range(self.NTOTAL):
                 self.long2alt[i, j] = j
         self.allatom_mask[self.NNAPROTAAS:,1] = True
-
+        self.allatom_mask[:,1] = True
+        self.heavyatom_mask = self.allatom_mask.clone()
+        self.heavyatom_mask[:,self.NHEAVY:]=False
         # bond graph traversal
         self.MAX_BOND_DIST = 9 # largest bond separation we consider
         self.num_bonds = torch.full((self.NAATOKENS,self.NTOTAL,self.NTOTAL), self.MAX_BOND_DIST, dtype=torch.long)

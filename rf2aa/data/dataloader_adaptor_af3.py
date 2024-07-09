@@ -295,52 +295,53 @@ def torch_vectorize(pyfunc):
 
 def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_ca, device="cpu",):
     logger.debug('prepare_input_af3 input:\n' + pretty_describe_dict(inputs))
-    (
-        seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
-        xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, 
-        atom_frames, bond_feats, dist_matrix, chirals, ch_label, symmgp, task, item
-    ) = inputs
-    # transfer inputs to device
-    B, _, N, I = msa.shape
-    logger.debug('\n\n\n\n\n')
-    logger.debug('prepare_input_af3 input:\n' + pretty_describe_dict(dict(
-        seq=seq,
-        msa=msa,
-        msa_masked=msa_masked,
-        msa_full=msa_full,
-        mask_msa=mask_msa,
-        true_crds=true_crds,
-        mask_crds=mask_crds,
-        idx_pdb=idx_pdb, 
-        xyz_t=xyz_t,
-        t1d=t1d,
-        mask_t=mask_t,
-        xyz_prev=xyz_prev,
-        mask_prev=mask_prev, 
-        same_chain=same_chain,
-        unclamp=unclamp,
-        negative=negative,
-        atom_frames=atom_frames,
-        bond_feats=bond_feats,
-        dist_matrix=dist_matrix,
-        chirals=chirals,
-        ch_label=ch_label,
-        symmgp=symmgp,
-        task=task,
-        item=item,
-    )))
+    #(
+        #seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
+        #xyz_t, t1d, mask_t, xyz_prev, mask_prev, same_chain, unclamp, negative, 
+        #atom_frames, bond_feats, dist_matrix, chirals, ch_label, symmgp, task, item
+    #) = inputs
+    ## transfer inputs to device
+    #B, _, N, I = msa.shape
+    ##logger.debug('\n\n\n\n\n')
+    #logger.debug('prepare_input_af3 input:\n' + pretty_describe_dict(dict(
+        #seq=seq,
+        #msa=msa,
+        #msa_masked=msa_masked,
+        #msa_full=msa_full,
+        #mask_msa=mask_msa,
+        #true_crds=true_crds,
+        #mask_crds=mask_crds,
+        #idx_pdb=idx_pdb, 
+        #xyz_t=xyz_t,
+        #t1d=t1d,
+        #mask_t=mask_t,
+        #xyz_prev=xyz_prev,
+        #mask_prev=mask_prev, 
+        #same_chain=same_chain,
+        #unclamp=unclamp,
+        #negative=negative,
+        #atom_frames=atom_frames,
+        #bond_feats=bond_feats,
+        #dist_matrix=dist_matrix,
+        #chirals=chirals,
+        #ch_label=ch_label,
+        #symmgp=symmgp,
+        #task=task,
+        #item=item,
+    #)))
     NUM_TEMPLATE_DISTOGRAM_BINS = 38
-
     # Strip batch dimension
-    msa = msa[0,0]
-    idx_pdb = idx_pdb[0]
-    ch_label = ch_label[0]
-    true_crds = true_crds[0,0]
-    seq = seq[0,0]
-    xyz_t = xyz_t[0]
-    mask_t = mask_t[0]
-    mask_crds = mask_crds[0,0]
-    bond_feats = bond_feats[0]
+    
+    msa = inputs["msa_extra"][0,0,..., :ChemData().NAATOKENS].argmax(dim=-1)
+    idx_pdb = inputs["idx"][0]
+    ch_label = inputs["ch_label"][0]
+    true_crds = inputs["xyz"][0,0]
+    seq = inputs["seq"][0,0]
+    xyz_t = inputs["xyz_t"][0]
+    mask_t = inputs["mask_t"][0]
+    mask_crds = inputs["mask"][0,0]
+    bond_feats = inputs["bond_feats"][0]
+    t1d = inputs["f1d_t"]
 
     N_token = seq.shape[0]
 
@@ -383,7 +384,7 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
 
 
     ### Atom level ###
-    allatom_mask = ChemData().allatom_mask.to(device, non_blocking=True)
+    allatom_mask = ChemData().heavyatom_mask.to(device, non_blocking=True)
 
     # remove symmetry dimension
     # if len(true_crds.shape) == 4:
@@ -405,22 +406,20 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     # atom_mask = mask_crds[is_real_atom]
     # t = interpolant.sample_t(D)
 
-    # Hacked:
-    f['ref_pos'] = torch.rand((N_atom, 3))
-    f['ref_mask'] = torch.arange(N_atom)
+    f['ref_pos'] = inputs["ref_pos_atom36"][0][is_real_atom]
+    f['ref_mask'] = inputs["ref_mask"][0][is_real_atom]
 
     element = [ChemData().aa2elt[seq[tok]][within_tok] for tok, within_tok in zip(tok_idx, within_tok_idx)]
-    f['ref_element'] = F.one_hot(torch.tensor([element_code_to_num[e] if e in element_code_to_num else 128 for e in element]), len(element_codes))
+    f['ref_element'] = F.one_hot(torch.tensor([element_code_to_num[e] if e in element_code_to_num else len(element_codes) - 1 for e in element]), len(element_codes))
 
     # Hacked:
     f['ref_charge'] = torch.zeros((N_atom))
-    f['ref_atom_name_chars'] = torch.zeros((N_atom, 4, 64))
-    f['ref_atom_name_chars'][:,0,0] = torch.arange(N_atom)
-
+    f['ref_atom_name_chars'] = F.one_hot(inputs["ref_atom_name_chars"][0][is_real_atom].long(), num_classes=64)
     f['ref_space_uid'] = integer_tokenize(list(zip(f['asym_id'], f['residue_index'])))[tok_idx]
 
     ### MSA ###
     f['msa'] = F.one_hot(af3num_from_num(msa), len(af3_num2aa))
+
     # Hacked
     N_msa = msa.shape[0]
     f['has_deletion'] = torch.zeros((N_msa, N_token))

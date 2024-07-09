@@ -18,6 +18,7 @@ from lightning import Trainer, LightningModule
 from lightning_fabric.loggers.csv_logs import _ExperimentWriter
 
 from rf2aa.tensor_util import apply_to_tensors
+from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.debug import pretty_describe_dict
 from rf2aa.model.AF3_structure import Loss
 from rf2aa import pymol
@@ -49,7 +50,7 @@ class LogMetrics(Callback):
         outputs = tree.map_structure(lambda x: x.detach().cpu(), outputs)
         o = {}
         stratifications = defaultdict(list)
-        for metric in [diffusion_losses]:
+        for metric in [diffusion_losses, lddt_metrics]:
             metric_d, stratification_keys = metric(self.config, outputs)
             stratifications[stratification_keys].extend(metric_d.keys())
             o.update(metric_d)
@@ -67,6 +68,64 @@ class LogMetrics(Callback):
 
         return super().on_train_batch_end(trainer, pl_module, outputs, batch, batch_idx)
 
+def lddt_metrics(config, outputs):
+    # compute distances between ground truth atoms
+    ground_truth_distances = torch.cdist(outputs['X_gt_L'], outputs['X_gt_L'])
+    # compute distances between predicted atoms
+    predicted_distances = torch.cdist(outputs['X_L'], outputs['X_L'])
+    # compute LDDT score for each pair of distances
+    difference_distances = torch.abs(ground_truth_distances - predicted_distances)
+    lddt_matrix = torch.zeros_like(difference_distances)
+    lddt_matrix = 0.25 * (difference_distances < 4.0) + \
+                    0.25 * (difference_distances < 2.0) + \
+                    0.25 * (difference_distances < 1.0) + \
+                    0.25 * (difference_distances < 0.5) 
+    # remove unresolved atoms, atoms within same residue
+    is_real_atom = ChemData().heavyatom_mask[outputs['seq']]
+    is_resolved_atom_L = outputs["crd_mask_I"][is_real_atom]
+    is_unresolved_distance_LL = is_resolved_atom_L[...,None] & is_resolved_atom_L[None,...]
+    in_same_residue_LL = outputs["f"]["tok_idx"][:,None] == outputs["f"]["tok_idx"][None,:]
+
+    lddt_values = {}
+    for mask, mask_type in get_lddt_masks(outputs):
+        mask = mask & is_unresolved_distance_LL & ~in_same_residue_LL
+        lddt = lddt_matrix[mask].sum() / mask.sum()
+        lddt_values[f"lddt_{mask_type}"] = lddt.item()
+    return lddt_values, ('t_quantile_4',)
+
+def get_lddt_masks(outputs):
+    D, L = outputs['X_L'].shape[:2]
+    
+    tok_idx = outputs["f"]["tok_idx"]
+    is_protein_L = outputs["f"]["is_protein"][tok_idx]
+    is_dna_L = outputs["f"]["is_dna"][tok_idx]
+    is_rna_L = outputs["f"]["is_rna"][tok_idx]
+    is_ligand_L = outputs["f"]["is_ligand"][tok_idx]
+    asym_id_L = outputs["f"]["asym_id"][tok_idx]
+    same_chain_LL = asym_id_L[:,None] == asym_id_L[None,:]
+    for mask_type in ['all', 'protein_intra', 'protein_inter', 'ligand_intra', 'ligand_inter']:
+        if mask_type == 'all':
+            mask = torch.ones((D, L, L), dtype=torch.bool)
+        elif mask_type == 'protein_intra':
+            mask = is_protein_L[:,None] & is_protein_L[None,:] 
+            mask *= same_chain_LL
+            mask = mask.repeat(D, 1, 1)
+        elif mask_type == 'protein_inter':
+            mask = is_protein_L[:,None] & is_protein_L[None,:]
+            mask *= ~same_chain_LL
+            mask = mask.repeat(D, 1, 1)
+        elif mask_type == 'ligand_intra':
+            mask = is_ligand_L[:,None] & is_ligand_L[None,:]
+            mask *= same_chain_LL
+            mask = mask.repeat(D, 1, 1)
+        elif mask_type == 'ligand_inter':
+            mask = is_ligand_L[:,None] & is_ligand_L[None,:]
+            mask *= ~same_chain_LL
+            mask = mask.repeat(D, 1, 1)
+        elif mask_type == 'protein_ligand_inter':
+            mask = is_protein_L[:,None] & is_ligand_L[None,:]
+            mask = mask.repeat(D, 1, 1)
+        yield (mask, mask_type)
 
 def diffusion_losses(config, outputs):
 
@@ -107,7 +166,6 @@ def diffusion_losses(config, outputs):
         loss_dict_batched_edm_gt_corr = {k: edm_corr * v / expected_loss_gt for k,v in loss_dict_batched.items()}
         loss_dict_batched_prefixed_edm = {f'{k}_edm_gt_corr.{input_type}':v for k,v in loss_dict_batched_edm_gt_corr.items()}
         loss_dict_by_type.update(loss_dict_batched_prefixed_edm)
-
     
     o = flatten_dictionary(loss_dict_by_type)
     o['pred_over_null_pred'] = o['diffusion_loss.pred'] / o['diffusion_loss.null_pred']

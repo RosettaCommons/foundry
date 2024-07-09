@@ -33,7 +33,6 @@ from rf2aa.data.loaders.small_molecule_partners import (
     prune_lig_partners,
 )
 from rf2aa.data.loaders.crop import universal_crop_factory, sm_compl_crop_factory
-from rf2aa.data_new.transforms.base import Transform, Compose
 
 
 def get_cif_metadata(
@@ -177,6 +176,9 @@ def merge_outs(combined_outs, random_noise: float = 5.0):
         "frames": combined_outs["frames"],
         "chirals": combined_outs["chirals"],
         "seed_msa_clus": combined_outs["seed_msa_clus"],
+        "ref_pos_atom36": combined_outs["ref_pos_atom36"],
+        "ref_mask": combined_outs["ref_mask"],
+        "ref_atom_name_chars": combined_outs["ref_atom_name_chars"],
     }
     return merged_outs
 
@@ -332,6 +334,9 @@ def apply_crop_sel(merged_outs, sel, item):
     merged_outs["ch_label"] = merged_outs["ch_label"][sel]
     merged_outs["is_poly"] = merged_outs["is_poly"][sel]
     merged_outs["term_info"] = merged_outs["term_info"][sel]
+    merged_outs["ref_pos_atom36"] = merged_outs["ref_pos_atom36"][sel]
+    merged_outs["ref_mask"] = merged_outs["ref_mask"][sel]
+    merged_outs["ref_atom_name_chars"] = merged_outs["ref_atom_name_chars"][sel]
 
     # crop small molecule features, assumes all sm chains are after all protein chains
     atom_sel = sel[sel >= sum(merged_outs["Ls_poly"])] - sum(
@@ -478,7 +483,14 @@ def loader_sm_compl_assembly(
     merged_outs = apply_featurize_msa(merged_outs, params, fixbb=fixbb)
 
     merged_outs = add_metadata(merged_outs)
+    remove_keys = []
+    for k, v in merged_outs.items():
+        if not isinstance(v, torch.Tensor) and not isinstance(v, bool):
+           remove_keys.append(k)
+    merged_outs = {k: v for k, v in merged_outs.items() if k not in remove_keys} 
+            
 
+    return merged_outs
     return (
         merged_outs["seq"].long(),
         merged_outs["msa_seed_orig"].long(),

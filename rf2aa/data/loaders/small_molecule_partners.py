@@ -192,19 +192,19 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
         # if ligand has too many masked atoms, remove all masked atoms
         # this avoids wasting compute on ligands missing entire chemical fragments
         # while keeping (most) masked atoms that are isolated and integral to a given fragment
-        if (~mask_[0]).sum() > params["MAXMASKEDLIGATOMS"]:
-            xyz_ = xyz_[:, mask_[0]]
-            occ_ = occ_[mask_[0]]
-            msa_ = msa_[mask_[0]]
-            chid_ = chid_[mask_[0]]
-            akeys_ = [k for m, k in zip(mask_[0], akeys_) if m]
-            bond_feats_ = bond_feats_[mask_[0]][:, mask_[0]]
-            G = nx.Graph(bond_feats_.cpu().numpy())
-            frames_ = get_atom_frames(
-                msa_, G, omit_permutation=params["OMIT_PERMUTATE"]
-            )
-            chirals_ = crop_chirals(chirals_, torch.where(mask_[0])[0])
-            mask_ = mask_[:, mask_[0]]
+        #if (~mask_[0]).sum() > params["MAXMASKEDLIGATOMS"]:
+            #xyz_ = xyz_[:, mask_[0]]
+            #occ_ = occ_[mask_[0]]
+            #msa_ = msa_[mask_[0]]
+            #chid_ = chid_[mask_[0]]
+            #akeys_ = [k for m, k in zip(mask_[0], akeys_) if m]
+            #bond_feats_ = bond_feats_[mask_[0]][:, mask_[0]]
+            #G = nx.Graph(bond_feats_.cpu().numpy())
+            #frames_ = get_atom_frames(
+                #msa_, G, omit_permutation=params["OMIT_PERMUTATE"]
+            #)
+            #chirals_ = crop_chirals(chirals_, torch.where(mask_[0])[0])
+            #mask_ = mask_[:, mask_[0]]
 
         if chirals_.numel() > 0:
             chirals_[:, :-1] = chirals_[:, :-1] + sum(Ls_lig)

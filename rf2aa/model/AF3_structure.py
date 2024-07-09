@@ -10,6 +10,7 @@ from icecream import ic
 from contextlib import ExitStack
 import logging
 
+from rf2aa.training.checkpoint import activation_checkpointing
 from rf2aa.debug import debug_nans
 from rf2aa.model.layers.SE3_network import FullyConnectedSE3, FullyConnectedSE3_noR
 from rf2aa.model.layers.structure_bias import structure_bias_factory
@@ -248,6 +249,7 @@ class DiffusionTransformerBlock(nn.Module):
         self.attention_pair_bias = AttentionPairBias(c_a=c_token, c_s=c_s, c_pair=c_tokenpair, n_head=n_head)
         self.conditioned_transition_block = ConditionedTransitionBlock(c_token=c_token, c_s=c_s)
 
+    @activation_checkpointing
     def forward(
             self,
             A_I,    # [..., I, C_token]
@@ -746,6 +748,7 @@ class PairformerBlock(nn.Module):
         triangle_operations_expected_dim = 4 # B, L, L, C
         self.maybe_make_batched = create_batch_dimension_if_not_present(triangle_operations_expected_dim)
 
+    @activation_checkpointing
     def forward(self,
                 S_I,
                 Z_II):
@@ -883,6 +886,7 @@ class MSAModule(nn.Module):
         triangle_ops_expected_dim = 4 # B, I, I, C
         self.maybe_make_batched_triangle_ops = create_batch_dimension_if_not_present(triangle_ops_expected_dim)
 
+    @activation_checkpointing
     def forward(self,
                 f,
                 Z_II,

@@ -181,7 +181,6 @@ def get_masked_msa(
     mask_sample = sampler.sample()
 
     mask_pos = torch.rand(msa_clust.shape, device=msa_clust.device) < p_mask
-    ic(p_mask, mask_pos.sum().item(), mask_pos.shape, mask_sample.shape, mask_sample.sum().item())
     # mask_pos[msa_clust>MASKINDEX]=False # no masking on NAs
     use_seq = msa_clust
     msa_masked = torch.where(mask_pos, mask_sample, use_seq)
