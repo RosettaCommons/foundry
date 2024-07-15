@@ -65,7 +65,6 @@ class LogMetrics(Callback):
         df['data_idx'] = np.arange(D)
         df['global_step'] = trainer.global_step
         trainer.logger.log_df(df, stratifications=stratifications)
-
         return super().on_train_batch_end(trainer, pl_module, outputs, batch, batch_idx)
 
 def lddt_metrics(config, outputs):
@@ -89,8 +88,8 @@ def lddt_metrics(config, outputs):
     lddt_values = {}
     for mask, mask_type in get_lddt_masks(outputs):
         mask = mask & is_unresolved_distance_LL & ~in_same_residue_LL
-        lddt = lddt_matrix[mask].sum() / mask.sum()
-        lddt_values[f"lddt_{mask_type}"] = lddt.item()
+        lddt = torch.div(lddt_matrix[:, mask].sum(dim=(-1)), mask.sum(dim=(-1,-2)))
+        lddt_values[f"lddt_{mask_type}"] = lddt
     return lddt_values, ('t_quantile_4',)
 
 def get_lddt_masks(outputs):
@@ -105,26 +104,21 @@ def get_lddt_masks(outputs):
     same_chain_LL = asym_id_L[:,None] == asym_id_L[None,:]
     for mask_type in ['all', 'protein_intra', 'protein_inter', 'ligand_intra', 'ligand_inter']:
         if mask_type == 'all':
-            mask = torch.ones((D, L, L), dtype=torch.bool)
+            mask = torch.ones((L, L), dtype=torch.bool)
         elif mask_type == 'protein_intra':
             mask = is_protein_L[:,None] & is_protein_L[None,:] 
             mask *= same_chain_LL
-            mask = mask.repeat(D, 1, 1)
         elif mask_type == 'protein_inter':
             mask = is_protein_L[:,None] & is_protein_L[None,:]
             mask *= ~same_chain_LL
-            mask = mask.repeat(D, 1, 1)
         elif mask_type == 'ligand_intra':
             mask = is_ligand_L[:,None] & is_ligand_L[None,:]
             mask *= same_chain_LL
-            mask = mask.repeat(D, 1, 1)
         elif mask_type == 'ligand_inter':
             mask = is_ligand_L[:,None] & is_ligand_L[None,:]
             mask *= ~same_chain_LL
-            mask = mask.repeat(D, 1, 1)
         elif mask_type == 'protein_ligand_inter':
             mask = is_protein_L[:,None] & is_ligand_L[None,:]
-            mask = mask.repeat(D, 1, 1)
         yield (mask, mask_type)
 
 def diffusion_losses(config, outputs):

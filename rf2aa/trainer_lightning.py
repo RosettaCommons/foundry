@@ -169,6 +169,9 @@ class LitAF3Repro(L.LightningModule):
             X_L=X_L,
         ) | loss_dict_batched | network_input | loss_input
     
+    def validation_step(self, batch, batch_idx):
+        import pdb; pdb.set_trace()
+        self.forward(batch)
 
     def forward(self, batch):
         # TODO: move data processing to dataset
@@ -221,7 +224,6 @@ class LitAF3Repro(L.LightningModule):
             X_noisy_L = X_L + xi_L
 
             X_denoised_L = self.model.model.diffusion_module(X_noisy_L, t_hat.tile((D,)).to(self.device), f, S_inputs_I, S_trunk_I, Z_trunk_II)
-            return X_denoised_L
             delta_L = (X_L - X_denoised_L) / t_hat
             dt = c_t - t_hat
             X_L = X_noisy_L + step_scale * dt * delta_L
@@ -259,16 +261,23 @@ class LitDataModule(L.LightningDataModule):
         self.init = partial(initialize_chemdata, config)
         self.init()
 
-    def train_dataloader(self, rank=None, num_replicas=None):
+    def setup(self, stage=None):
+        rank = None
+        num_replicas = None 
         train_loader, train_sampler, valid_loaders, valid_samplers = compose_dataset(
             self.init, self.config.dataset_params, self.config.loader_params,
             rank or 0,
             num_replicas or 1,
         )
-        return train_loader
+        self.train_loader = train_loader
+        self.valid_loaders = valid_loaders
+
+    def train_dataloader(self, rank=None, num_replicas=None):
+        return self.train_loader
     
     def valid_dataloader(self, rank=None, num_replicas=None):
         return self.train_dataloader(rank=rank, num_replicas=num_replicas)
+
     def predict_dataloader(self, rank=None, num_replicas=None):
         return self.train_dataloader(rank=rank, num_replicas=num_replicas)
 
@@ -280,7 +289,7 @@ def main(config):
     datamodule = LitDataModule(config)
     if config.resume:
         ic("-----------RESUMING FROM CHECKPOINT----------------------")
-        model = LitAF3Repro.load_from_checkpoint(config.resume.module_checkpoint, config=config)
+        model = LitAF3Repro.load_from_checkpoint(config.inference.checkpoint, config=config)
     trainer_logger = LitLogger(**config.logger)
 
     model_checkpoint = ModelCheckpoint(

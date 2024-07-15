@@ -978,7 +978,8 @@ def load_polymer_partners(
             random_noise=random_noise,
         )
     except Exception as e:
-        pass
+        print(f"Error loading polymer partners for pdb id {pdb_id}: {e}")
+        raise e 
     # keep 1st template and random sample of others for params['MAXTPLT'] total
     if xyz_t_poly.shape[0] > params["MAXTPLT"]:
         sel = np.concatenate(
