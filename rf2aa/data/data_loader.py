@@ -3401,7 +3401,8 @@ def sample_item_sm_compl(df, ID, dedup_ligand=True):
 class Dataset(data.Dataset):
     def __init__(
         self, IDs, loader, data_df, params, homo, unclamp_cut=0.9, pick_top=True, 
-        p_short_crop=-1.0, p_dslf_crop=-1.0, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None
+        p_short_crop=-1.0, p_dslf_crop=-1.0, p_homo_cut=-1.0, n_res_atomize=0, flank=0, seed=None,
+        **kwargs
     ):
         self.IDs = IDs
         self.data_df = data_df
@@ -3416,6 +3417,7 @@ class Dataset(data.Dataset):
         self.n_res_atomize = n_res_atomize
         self.flank = flank
         self.rng = np.random.RandomState(seed)
+        self.kwargs = kwargs
 
     def __len__(self):
         return len(self.IDs)
@@ -3424,15 +3426,14 @@ class Dataset(data.Dataset):
         ID = self.IDs[index]
         #print (index, ID, self.data_df)
         item = sample_item(self.data_df, ID, self.rng)
-        kwargs = dict()
+        kwargs = copy.deepcopy(self.kwargs)
         if self.n_res_atomize > 0:
             kwargs['n_res_atomize'] = self.n_res_atomize
             kwargs['flank'] = self.flank
         else:
             kwargs['p_short_crop'] = self.p_short_crop
             kwargs['p_dslf_crop'] = self.p_dslf_crop
-
-        out = self.loader(item, self.params, self.homo,
+        out = self.loader(item, self.params, homo=self.homo,
                           unclamp = (self.rng.rand() > self.unclamp_cut),
                           pick_top = self.pick_top, 
                           p_homo_cut = self.p_homo_cut,

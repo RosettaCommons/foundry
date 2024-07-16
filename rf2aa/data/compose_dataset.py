@@ -270,8 +270,10 @@ def compose_dataset(loader_fn, dataset_params, loader_params, rank, world_size):
         ),
         pdb = Dataset(
             valid_ID_dict['pdb'][:dataset_params['n_valid_pdb']],
-            loader_pdb, valid_dict['pdb'], 
-            loader_params, homo, p_homo_cut=-1.0, p_short_crop=-1.0, p_dslf_crop=-1.0
+            spoofed_loader, valid_dict['pdb'], 
+            loader_params, homo, p_homo_cut=-1.0, p_short_crop=-1.0, p_dslf_crop=-1.0, 
+            chid2hash=chid2hash,
+            chid2taxid=chid2taxid,
         ),
         dslf = Dataset(
             valid_ID_dict['dslf'][:dataset_params['n_valid_dslf']],

@@ -169,9 +169,9 @@ class LitAF3Repro(L.LightningModule):
             X_L=X_L,
         ) | loss_dict_batched | network_input | loss_input
     
-    def validation_step(self, batch, batch_idx):
-        import pdb; pdb.set_trace()
-        self.forward(batch)
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        out = self.forward(batch)
+        return out
 
     def forward(self, batch):
         # TODO: move data processing to dataset
@@ -184,10 +184,10 @@ class LitAF3Repro(L.LightningModule):
         network_input = tree.map_structure(lambda x: x.to(self.device), network_input)
         loss_input = tree.map_structure(lambda x: x.to(self.device), loss_input)
         # return self.main_inference_loop(network_input['f'], n_cycle=1, D=2)
-        X_L = self.main_inference_loop(network_input['f'], n_cycle=1, D=2)
+        X_L = self.main_inference_loop(network_input['f'], n_cycle=1, D=self.config.af3_data_prep.D)
         return dict(
             X_L=X_L,
-        ) | loss_input
+        ) | loss_input | network_input
     
     def main_inference_loop(self,f,n_cycle, D=1):
 
@@ -275,8 +275,8 @@ class LitDataModule(L.LightningDataModule):
     def train_dataloader(self, rank=None, num_replicas=None):
         return self.train_loader
     
-    def valid_dataloader(self, rank=None, num_replicas=None):
-        return self.train_dataloader(rank=rank, num_replicas=num_replicas)
+    def val_dataloader(self, rank=None, num_replicas=None):
+        return self.valid_loaders 
 
     def predict_dataloader(self, rank=None, num_replicas=None):
         return self.train_dataloader(rank=rank, num_replicas=num_replicas)

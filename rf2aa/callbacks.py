@@ -66,6 +66,22 @@ class LogMetrics(Callback):
         df['global_step'] = trainer.global_step
         trainer.logger.log_df(df, stratifications=stratifications)
         return super().on_train_batch_end(trainer, pl_module, outputs, batch, batch_idx)
+      
+    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):   
+        
+        outputs = tree.map_structure(lambda x: x.detach().cpu(), outputs)
+        o = {}
+        for metric in [lddt_metrics]:
+            metric_d, stratification_keys = metric(self.config, outputs)
+            o.update(metric_d)
+        df = pd.DataFrame.from_dict(o)
+        df = df.reindex(sorted(df.columns), axis=1)
+        ic(o)
+        df['batch_idx'] = batch_idx
+        df['global_step'] = trainer.global_step
+
+        trainer.logger.log_df(df, stratifications={})
+        return super().on_validation_batch_end(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx) 
 
 def lddt_metrics(config, outputs):
     # compute distances between ground truth atoms
