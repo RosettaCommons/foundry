@@ -11,6 +11,7 @@ from contextlib import ExitStack
 import logging
 
 from rf2aa.training.checkpoint import activation_checkpointing
+from rf2aa.chemical import ChemicalData as ChemData 
 from rf2aa.debug import debug_nans
 from rf2aa.model.layers.SE3_network import FullyConnectedSE3, FullyConnectedSE3_noR
 from rf2aa.model.layers.structure_bias import structure_bias_factory
@@ -36,6 +37,16 @@ Glossary:
     D: # diffusion structure batch dim
 '''
 
+
+class ProteinLinear(nn.Linear):
+    def __init__(self, in_features, out_features, **kwargs):
+        super().__init__(in_features, out_features, **kwargs)
+    
+    def reset_parameters(self, **kwargs) -> None:
+        pass
+
+    def forward(self, x):
+        return super().forward(x)
 linearNoBias = partial(torch.nn.Linear, bias=False)
 def collapse(x, L):
     return x.reshape((L,x.numel()//L))
@@ -267,6 +278,10 @@ class MultiDimLinear(nn.Linear):
         out_features = np.prod(out_shape)
         super().__init__(in_features, out_features, **kwargs)
 
+    def reset_parameters(self, **kwargs) -> None:
+        super().reset_parameters()
+        nn.init.xavier_uniform_(self.weight)
+
     def forward(self, x):
         out = super().forward(x)
         return out.reshape(x.shape[:-1] + self.out_shape)
@@ -304,7 +319,10 @@ class AttentionPairBias(nn.Module):
         )
         self.ada_ln_1 = AdaLN(c_a=c_a, c_s=c_s)
         self.ln_1 = nn.LayerNorm((c_a,))
-    
+
+    def reset_parameters(self) -> None:
+        super().reset_parameters()
+
     def forward(
             self,
             A_I,      # [B, I, C_a]
@@ -670,7 +688,7 @@ class Recycler(nn.Module):
             linearNoBias(c_s, c_s),
         )
         self.pairformer_stack = nn.ModuleList([
-            PairformerBlock(c_s=c_s, c_z=c_z, **pairformer_block) for _ in range(n_pairformer_blocks)
+            PairformerBlock_batched(c_s=c_s, c_z=c_z, **pairformer_block) for _ in range(n_pairformer_blocks)
         ])
 
     def forward(self,
@@ -756,6 +774,60 @@ class PairformerBlock(nn.Module):
         Z_II = Z_II + self.drop_row(self.maybe_make_batched(self.tri_mul_incoming)(Z_II))
         Z_II = Z_II + self.drop_row(self.maybe_make_batched(self.tri_attn_start)(Z_II))
         Z_II = Z_II + self.drop_col(self.maybe_make_batched(self.tri_attn_end)(Z_II))
+        Z_II = Z_II + self.z_transition(Z_II)
+        if S_I is not None:
+            S_I = S_I + self.attention_pair_bias(S_I, None, Z_II, Beta_II=torch.tensor([0.], device=Z_II.device))
+            S_I = S_I + self.s_transition(S_I)
+        return S_I, Z_II
+
+class PairformerBlock_batched(nn.Module):
+    """ 
+    Attempt to replicate AF3 architecture from scratch.
+    """
+    def __init__(self,
+                 c_s,
+                 c_z,
+                 p_drop,
+                 c,
+                 attention_pair_bias,
+                 n_transition=4,
+    ):
+        super().__init__()
+
+        self.drop_row = Dropout(broadcast_dim=-2, p_drop=p_drop)
+        self.drop_col = Dropout(broadcast_dim=-3, p_drop=p_drop)
+
+        self.tri_mul_outgoing = TriangleMultiplication(
+            c_z, d_hidden=c, outgoing=True, bias=False)
+        self.tri_mul_incoming = TriangleMultiplication(
+            c_z, d_hidden=c, outgoing=False, bias=False)
+        self.tri_attn_start = TriangleAttention(
+            c_z, d_hidden=c, start_node=True)
+        self.tri_attn_end = TriangleAttention(
+            c_z, d_hidden=c, start_node=False)
+
+        self.z_transition = Transition(c=c_z, n=n_transition)
+        
+        if c_s > 0:
+            self.s_transition = Transition(c=c_s, n=n_transition)
+            self.attention_pair_bias = AttentionPairBias(c_a=c_s, c_s=0, c_pair=c_z, **attention_pair_bias)
+        triangle_operations_expected_dim = 4 # B, L, L, C
+        self.maybe_make_batched = create_batch_dimension_if_not_present(triangle_operations_expected_dim)
+
+    @activation_checkpointing
+    def forward(self,
+                S_I,
+                Z_II):
+        if len(Z_II.shape) == 3:
+            Z_II = Z_II[None]
+        Z_II = Z_II + self.drop_row(self.tri_mul_outgoing(Z_II))
+        Z_II = Z_II + self.drop_row(self.tri_mul_incoming(Z_II))
+        Z_II = Z_II + self.drop_row(self.tri_attn_start(Z_II))
+        Z_II = Z_II + self.drop_col(self.tri_attn_end(Z_II))
+
+        if len(Z_II.shape) == 4:
+            Z_II = Z_II[0]
+
         Z_II = Z_II + self.z_transition(Z_II)
         if S_I is not None:
             S_I = S_I + self.attention_pair_bias(S_I, None, Z_II, Beta_II=torch.tensor([0.], device=Z_II.device))
@@ -957,6 +1029,33 @@ class TemplateEmbedder(nn.Module):
 
         return self.agg_emb(relu(u_II))
 
+def calc_smoothed_lddt_loss(X_gt_L, X_L, crd_mask_I, seq, tok_idx, is_dna, is_rna):
+    """
+    compute smoothed lddt loss from AF3 paper
+    """
+    # compute distances between ground truth atoms
+    ground_truth_distances = torch.cdist(X_gt_L,X_gt_L)
+    # compute distances between predicted atoms
+    predicted_distances = torch.cdist(X_L, X_L)
+    # compute LDDT score for each pair of distances
+    difference_distances = torch.abs(ground_truth_distances - predicted_distances)
+    lddt_matrix = torch.zeros_like(difference_distances)
+    lddt_matrix = 0.25 * torch.sigmoid(4.0 - difference_distances) + \
+                    0.25 * torch.sigmoid(2.0 - difference_distances) + \
+                    0.25 * torch.sigmoid(1.0 - difference_distances) + \
+                    0.25 * torch.sigmoid(0.5 - difference_distances) 
+    # remove unresolved atoms, atoms within same residue
+    is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]
+    is_resolved_atom_L = crd_mask_I[is_real_atom]
+    is_unresolved_distance_LL = is_resolved_atom_L[...,None] & is_resolved_atom_L[None,...]
+    in_same_residue_LL = tok_idx[:,None] == tok_idx[None,:]
+
+    is_na_L = is_dna[tok_idx] | is_rna[tok_idx]
+    is_close_distance = (ground_truth_distances < 30) * is_na_L + (ground_truth_distances < 10) * ~is_na_L
+    mask = is_unresolved_distance_LL & ~in_same_residue_LL & is_close_distance[0]
+    lddt = torch.div(lddt_matrix[:, mask].sum(dim=(-1)), mask.sum(dim=(-1,-2)))
+    return 1 - lddt
+
 class Loss:
     def __init__(self,
                  sigma_data,
@@ -983,6 +1082,8 @@ class Loss:
                  X_L, # [D, L, 3]
                  X_gt_L, # [D, L, 3]
                  t, # [D]
+                 seq, # [I],
+                 crd_mask_I, # [I]  # Mask for resolved atoms
                  ):
         D = X_L.shape[0]
         w_L = 1 + (
@@ -990,19 +1091,23 @@ class Loss:
             f['is_rna'] * self.alpha_rna + 
             f['is_ligand'] * self.alpha_ligand
         )[f['tok_idx']].to(torch.float)
-        # TODO: missing residue mask?
-        # w_L *= f['res_mask?'] Not done in AF3
+        
+        is_resolved_atom_L = convert_residue_mask_to_allatom_mask(crd_mask_I, seq)
+        w_L = w_L * is_resolved_atom_L  
         # Align ground truth onto predictions.
         if self.se3_invariant_loss:
             X_gt_aligned_L = weighted_rigid_align(X_gt_L, X_L, w_L.tile(D, 1))
         else:
             X_gt_aligned_L = X_gt_L
-        l_mse = 1/3 * torch.mean(w_L * torch.sum((X_L-X_gt_aligned_L)**2, dim=-1), dim=-1) # [D]
+        l_mse = 1/3 * torch.div(torch.sum(w_L * torch.sum((X_L-X_gt_aligned_L)**2, dim=-1), dim=-1), torch.sum(is_resolved_atom_L)) # [D]
+
         assert l_mse.shape == (D,)
-        
         l_diffusion = self.get_lambda(t) * l_mse
+        
+        smoothed_lddt_loss = calc_smoothed_lddt_loss(X_gt_L, X_L, crd_mask_I, seq, f['tok_idx'], f['is_dna'], f['is_rna'])
         loss_dict_batched = {
-            'diffusion_loss': l_diffusion
+            'diffusion_loss': l_diffusion,
+            'smoothed_lddt_loss': smoothed_lddt_loss,
         }
 
         # TODO: implement auxiliary losses
@@ -1011,3 +1116,12 @@ class Loss:
         l_total = sum(loss_dict.values())
 
         return l_total, loss_dict, loss_dict_batched
+
+def convert_residue_mask_to_allatom_mask(crd_mask_I, seq):
+    """
+    Converts a residue mask to an atom mask. The atom mask is True if any atom in the residue is True.
+    """
+    is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]
+    is_resolved_atom_L = crd_mask_I[is_real_atom]
+    return is_resolved_atom_L
+

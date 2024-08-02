@@ -7,6 +7,7 @@ from hydra import initialize, compose
 from rf2aa.tests.test_conditions import configs
 from rf2aa.trainer_new import trainer_factory
 
+
 @pytest.mark.parametrize("config", configs)
 def test_load_checkpoint_from_scratch(config):
     with initialize(version_base=None, config_path="../config/train"):
@@ -49,3 +50,5 @@ def test_load_checkpoint_from_eval_params(config):
     mock_exists.assert_called_once_with(expected_file_path)
     mock_load.assert_called_once()
 
+def test_model_checkpoint_loading_lightning():
+    pass

@@ -1,5 +1,6 @@
 import pytest
 import os
+import rf2aa.data
 import torch
 import itertools
 from omegaconf import OmegaConf
@@ -65,3 +66,20 @@ def test_loss_functions(dataset, model):
                 assert torch.allclose(loss_dict[key], loss_dict_old["loss_dict"][key], atol=atol)
             except Exception as e:
                 raise AssertionError(f"Error in {dataset} {model} {key} {loss_dict[key]} {loss_dict_old['loss_dict'][key]}") from e
+
+@pytest.mark.parametrize("dataset", ["pdb", "na_compl", "rna", "sm_compl", "sm_compl_covale"])
+def test_smooth_lddt_loss(dataset):
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    
+    import rf2aa
+    from rf2aa.tests.test_conditions import pdb_item
+    dataset_inputs = rf2aa.data.loaders.spoofing.spoofed_loader(pdb_item, {})  
+
+    from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3
+    D = 1 # diffusion batch
+    s_trans = 1 # std dev of random translation
+    sigma_data = 16 # std dev of data noise
+    random_augmentation = True # whether to use random augmentation
+    only_ca = False 
+    network_input, loss_input = prepare_input_af3(dataset_inputs, D, s_trans, sigma_data, random_augmentation, only_ca, device)
+    import pdb; pdb.set_trace()

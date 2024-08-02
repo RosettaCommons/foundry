@@ -489,7 +489,7 @@ def loader_sm_compl_assembly(
            remove_keys.append(k)
     merged_outs = {k: v for k, v in merged_outs.items() if k not in remove_keys} 
             
-
+    merged_outs["item"] = item
     return merged_outs
     return (
         merged_outs["seq"].long(),

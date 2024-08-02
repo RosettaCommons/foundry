@@ -1,4 +1,5 @@
 import torch
+import tree
 import torch.nn.functional as F
 from typing import Any, Dict, Tuple
 from rf2aa.flow_matching.interpolant import _centered_gaussian, _uniform_so3
@@ -7,6 +8,7 @@ from rf2aa.flow_matching import data_transforms
 from rf2aa.training.recycling import recycle_step_packed, recycle_step_gen
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.data.dataloader_adaptor import prepare_input_fm, construct_template_feats, prepare_input_fm_allatom
+from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3, centre_random_augmentation
 from rf2aa.training.recycling import unpack_outputs
 from rf2aa.util import rigid_from_3_points, writepdb_file
 
@@ -200,3 +202,70 @@ class AllAtomSampler(Sampler):
         outputs = self.model.module.model.refinement(latent_feats)
         pred_trans_1 = outputs["xyz"]
         return pred_trans_1
+
+
+class AF3Sampler:
+
+    def __init__(self, config, model):
+        self.config = config
+        self.model = model
+        self.device = model.device
+
+
+    def sample(self, inputs: Tuple[str, Any], n_cycle=1, use_amp=False) -> Dict[str, Any]:
+        # first receive inputs from dataloader
+        # convert them into features
+        network_input = self._get_network_input(inputs)
+        # send network input to gpu
+        network_input=tree.map_structure(lambda x: x.to(self.device) if hasattr(x, 'cpu') else x, network_input)
+
+        # run model to get evoformer features
+        pre_recycle_outputs = self.model.module.shadow.pre_recycle(**network_input)
+        for i in range(n_cycle):
+            # run the model for n_steps
+            post_recycle_outputs = self.model.module.shadow.recycle(**pre_recycle_outputs)
+            pre_recycle_outputs = post_recycle_outputs
+        
+        noise_schedule = self.construct_noise_schedule(200, 0, 1)
+        noise_schedule = noise_schedule.to(self.device)
+        X_L = self.sample_diffusion(network_input["f"], post_recycle_outputs["S_inputs_I"], \
+                post_recycle_outputs["S_I"], post_recycle_outputs["Z_II"], \
+                noise_schedule
+                ) 
+
+
+        return X_L  
+
+    def construct_noise_schedule(self, num_timesteps, min_t, max_t):
+        t = torch.linspace(min_t, max_t, num_timesteps)
+        sigma_data = 16
+        s_min = 4e-4
+        s_max = 160
+        p = 7
+        t_hat = sigma_data * ((s_max)**(1/p) + t*(s_min**(1/p) - s_max**(1/p)))**p
+        return t_hat
+
+    def sample_diffusion(self, f, s_inputs_I, s_trunk_I, Z_trunk_II, noise_schedule, \
+                         gamma_0=0.8, gamma_min=1.0, noise_scale=1.003, step_scale=1.5):
+        D = self.config.af3_data_prep["D"]
+        L = f["ref_pos"].shape[0]
+        X_L = noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=s_inputs_I.device)
+        for c_t_minus_1, c_t in zip(noise_schedule, noise_schedule[1:]):
+            X_exists_L = torch.ones((D, L)).bool()
+            s_trans = 1.0
+            X_L = centre_random_augmentation(X_L, X_exists_L, s_trans)
+            gamma = gamma_0 if c_t > gamma_min else 0
+            t_hat = c_t_minus_1 * (gamma + 1)
+            epsilon_L = noise_scale * torch.sqrt(torch.square(t_hat) - torch.square(c_t_minus_1)) * torch.normal(mean=0.0, std=1.0, size=X_L.shape, device=X_L.device)
+            X_noisy_L = X_L + epsilon_L
+            X_denoised_L = self.model.module.shadow.diffusion_module(X_noisy_L, t_hat.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
+            delta_L =  (X_L - X_denoised_L) / t_hat
+            d_t = c_t - t_hat
+            X_L = X_noisy_L + step_scale * d_t * delta_L
+        return X_L
+
+    
+    def _get_network_input(self, inputs):
+        network_input, loss_input = prepare_input_af3(inputs, **self.config.af3_data_prep, device="cpu")
+        return network_input
+    

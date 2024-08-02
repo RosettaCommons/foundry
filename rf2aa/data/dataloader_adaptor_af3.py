@@ -405,7 +405,6 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     f['tok_idx'] = tok_idx
     # atom_mask = mask_crds[is_real_atom]
     # t = interpolant.sample_t(D)
-
     f['ref_pos'] = inputs["ref_pos_atom36"][0][is_real_atom]
     f['ref_mask'] = inputs["ref_mask"][0][is_real_atom]
 
@@ -486,7 +485,6 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     X_gt_L = true_crds[is_real_atom]
     atom_mask = mask_crds[is_real_atom]
     t = sigma_data * torch.exp(-1.2 + 1.5 * torch.normal(mean=0, std=1, size=(D,)))
-
     X_gt_L = centre(X_gt_L, atom_mask)
     X_gt_L = X_gt_L.tile(D,1,1)
 
@@ -567,3 +565,18 @@ def uniform_random_rotation(size):
     rotation_matrix = torch.matmul(rotation_z, torch.matmul(rotation_y, rotation_x))
     
     return rotation_matrix
+
+
+def get_default_noise_schedule(t_init=0):
+    T= 200
+    t_norm = torch.arange(t_init, 1 + 1/T, 1/T)
+    s_max = 160
+    s_min = 4e-4
+    p = 7
+    sigma_data = 16
+    return sigma_data * (s_max**(1/p) + t_norm * (s_min ** (1/p) - s_max ** (1/p))) ** p
+
+
+def get_starting_noise_level(t_init=0):
+    noise_schedule = get_default_noise_schedule(t_init)
+    return noise_schedule[0]

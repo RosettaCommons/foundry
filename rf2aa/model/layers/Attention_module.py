@@ -479,8 +479,7 @@ class TriangleAttention(nn.Module):
         nn.init.zeros_(self.to_g.weight)
         nn.init.ones_(self.to_g.bias)
 
-        # to_out: right before residual connection: zero initialize -- to make it sure residual operation is same to the Identity at the begining
-        nn.init.zeros_(self.to_out.weight)
+        nn.init.xavier_uniform_(self.to_out.weight)
         nn.init.zeros_(self.to_out.bias)
 
     def forward(self, pair):
@@ -550,7 +549,7 @@ class TriangleMultiplication(nn.Module):
         nn.init.ones_(self.gate.bias)
 
         # to_out: right before residual connection: zero initialize -- to make it sure residual operation is same to the Identity at the begining
-        nn.init.zeros_(self.out_proj.weight)
+        nn.init.xavier_uniform_(self.out_proj.weight)
         nn.init.zeros_(self.out_proj.bias)
     
     def forward(self, pair):

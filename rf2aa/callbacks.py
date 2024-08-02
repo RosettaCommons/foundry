@@ -17,6 +17,7 @@ from lightning.pytorch.callbacks import Callback
 from lightning import Trainer, LightningModule
 from lightning_fabric.loggers.csv_logs import _ExperimentWriter
 
+import rf2aa
 from rf2aa.tensor_util import apply_to_tensors
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.debug import pretty_describe_dict
@@ -24,6 +25,7 @@ from rf2aa.model.AF3_structure import Loss
 from rf2aa import pymol
 from rf2aa.pymol import cmd
 from rf2aa import pymol_tools
+from rf2aa.util import writepdb
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +61,7 @@ class LogMetrics(Callback):
         o['t_quantile_4'] = get_t_quantiles(outputs['t'], self.config.loss.sigma_data, 4)
         df = pd.DataFrame.from_dict(o)
         df = df.reindex(sorted(df.columns), axis=1)
-
+        ic(o)
         D, = outputs['t'].shape
         df['batch_idx'] = batch_idx
         df['data_idx'] = np.arange(D)
@@ -71,7 +73,7 @@ class LogMetrics(Callback):
         
         outputs = tree.map_structure(lambda x: x.detach().cpu(), outputs)
         o = {}
-        for metric in [lddt_metrics]:
+        for metric in [lddt_metrics, lddt_metrics_null, diffusion_losses]:
             metric_d, stratification_keys = metric(self.config, outputs)
             o.update(metric_d)
         df = pd.DataFrame.from_dict(o)
@@ -87,7 +89,38 @@ def lddt_metrics(config, outputs):
     # compute distances between ground truth atoms
     ground_truth_distances = torch.cdist(outputs['X_gt_L'], outputs['X_gt_L'])
     # compute distances between predicted atoms
-    predicted_distances = torch.cdist(outputs['X_L'], outputs['X_L'])
+    predicted_distances = torch.cdist(outputs["X_L"], outputs["X_L"])
+    # compute LDDT score for each pair of distances
+    difference_distances = torch.abs(ground_truth_distances - predicted_distances)
+    lddt_matrix = torch.zeros_like(difference_distances)
+    lddt_matrix = 0.25 * (difference_distances < 4.0) + \
+                    0.25 * (difference_distances < 2.0) + \
+                    0.25 * (difference_distances < 1.0) + \
+                    0.25 * (difference_distances < 0.5) 
+    # remove unresolved atoms, atoms within same residue
+    is_real_atom = ChemData().heavyatom_mask.to(outputs["seq"].device)[outputs['seq']]
+    is_resolved_atom_L = outputs["crd_mask_I"][is_real_atom]
+    is_unresolved_distance_LL = is_resolved_atom_L[...,None] & is_resolved_atom_L[None,...]
+    in_same_residue_LL = outputs["f"]["tok_idx"][:,None] == outputs["f"]["tok_idx"][None,:]
+
+    lddt_values = {}
+    for mask, mask_type in get_lddt_masks(outputs):
+        mask = mask & is_unresolved_distance_LL & ~in_same_residue_LL
+        lddt = torch.div(lddt_matrix[:, mask].sum(dim=(-1)), mask.sum(dim=(-1,-2)))
+        lddt_values[f"lddt_{mask_type}"] = lddt
+    return lddt_values, ('t_quantile_4',)
+
+def lddt_metrics_null(config, outputs):
+    # compute distances between ground truth atoms
+    ground_truth_distances = torch.cdist(outputs['X_gt_L'], outputs['X_gt_L'])
+    # compute distances between predicted atoms
+    t = outputs['t']
+    X_noisy_L = outputs['X_noisy_L']
+    sigma_data = 16
+
+    null_pred = (sigma_data**2 / (sigma_data**2 + t**2))[...,None,None] * X_noisy_L
+
+    predicted_distances = torch.cdist(null_pred, null_pred)
     # compute LDDT score for each pair of distances
     difference_distances = torch.abs(ground_truth_distances - predicted_distances)
     lddt_matrix = torch.zeros_like(difference_distances)
@@ -105,7 +138,7 @@ def lddt_metrics(config, outputs):
     for mask, mask_type in get_lddt_masks(outputs):
         mask = mask & is_unresolved_distance_LL & ~in_same_residue_LL
         lddt = torch.div(lddt_matrix[:, mask].sum(dim=(-1)), mask.sum(dim=(-1,-2)))
-        lddt_values[f"lddt_{mask_type}"] = lddt
+        lddt_values[f"lddt_{mask_type}_null"] = lddt
     return lddt_values, ('t_quantile_4',)
 
 def get_lddt_masks(outputs):
@@ -120,7 +153,7 @@ def get_lddt_masks(outputs):
     same_chain_LL = asym_id_L[:,None] == asym_id_L[None,:]
     for mask_type in ['all', 'protein_intra', 'protein_inter', 'ligand_intra', 'ligand_inter']:
         if mask_type == 'all':
-            mask = torch.ones((L, L), dtype=torch.bool)
+            mask = torch.ones((L, L), dtype=torch.bool, device=outputs['X_L'].device)
         elif mask_type == 'protein_intra':
             mask = is_protein_L[:,None] & is_protein_L[None,:] 
             mask *= same_chain_LL
@@ -160,6 +193,8 @@ def diffusion_losses(config, outputs):
             X_L,
             outputs['X_gt_L'],
             outputs['t'],
+            outputs['seq'],
+            outputs['crd_mask_I'],
         )
         # loss_dict_by_type[input_type] = loss_dict_batched
         loss_dict_batched_prefixed = {f'{k}.{input_type}':v for k,v in loss_dict_batched.items()}
@@ -331,3 +366,51 @@ class WriteToPymol(Callback):
 
 
         return super().on_train_batch_end(trainer, pl_module, outputs, batch, batch_idx)
+
+
+class WritePDB(Callback):
+
+    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):   
+        seq = batch["seq"][0][0]
+        is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]
+        X_L = outputs['X_L']
+        X_gt_L = outputs['X_gt_L']
+        atom_mask = outputs['crd_mask_I']
+        bond_feats = batch['bond_feats']
+
+        X_I = torch.full((X_L.shape[0], atom_mask.shape[0], ChemData().NTOTAL, 3), np.nan).to(X_L.device)
+        X_I[...,is_real_atom, :] = X_L
+
+        X_gt_I = torch.full((X_gt_L.shape[0], atom_mask.shape[0],ChemData().NTOTAL, 3), np.nan).to(X_gt_L.device)
+        X_gt_I[...,atom_mask, :] = X_gt_L
+        pdb_path = f"tmp/true_{batch_idx}.pdb"
+        writepdb(
+                pdb_path,
+                X_gt_I[0],
+                seq.long(),
+                bond_feats=bond_feats,
+            )
+        for i in range(X_L.shape[0]):
+            pdb_path = f"tmp/pred_{batch_idx}_{i}.pdb"
+            writepdb(
+                    pdb_path,
+                    X_I[i],
+                    seq.long(),
+                    bond_feats=bond_feats,
+                )
+
+        return super().on_validation_batch_end(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
+    
+
+class DebugGrads(Callback):
+    def on_after_backward(self, trainer, pl_module):
+        grad_dict = {}
+        for name, param in pl_module.named_parameters():
+            if param.grad is not None and "pairformer" in name:
+                grad_dict[name] = param.grad.clone().detach()
+                ic(
+                    name,
+                    torch.linalg.norm(param.grad),
+                    torch.linalg.norm(param),
+                )
+        torch.save(grad_dict, "grad_dict_unbatched.pt")

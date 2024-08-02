@@ -124,7 +124,7 @@ def calc_loss(
     assert (B==1) # fd - code assumes a batch size of 1
 
     tot_loss = 0.0
-    # set up frames
+    # set up frame
     frames, frame_mask = get_frames(
         pred_allatom[-1,None,...], mask_crds, seq, trainer.fi_dev, atom_frames)
 

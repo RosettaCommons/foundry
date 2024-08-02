@@ -59,3 +59,58 @@ def test_msa_weighting_einsum():
     weights = torch.einsum("bsihc, biih -> bsihc", v_SIH, w_IIH) 
     o_SIH = gate_SIH * weights
 
+def test_batching_pairformer():
+    from rf2aa.model.AF3_structure import PairformerBlock, PairformerBlock_batched
+
+    B, I, cs, cz = 1, 100, 128, 128
+    S_I = torch.randn(I, cs)
+    Z_II = torch.randn(I, I, cz)
+    from rf2aa.tests.test_conditions import seed_all, make_deterministic
+    seed_all()
+    pairformer = PairformerBlock(
+        c_s=cs,
+        c_z=cz,
+        p_drop=0.25,
+        c=8,
+        attention_pair_bias={
+            "n_head": 16
+        }
+    )
+    seed_all()
+    pairformer_batched = PairformerBlock_batched(
+        c_s=cs,
+        c_z=cz,
+        p_drop=0.25,
+        c=8,
+        attention_pair_bias={
+            "n_head": 16
+        }
+    )
+    with torch.enable_grad():
+        make_deterministic()
+        S_I_unbatched, Z_II_unbatched = pairformer(S_I, Z_II)
+    with torch.enable_grad():
+        make_deterministic()
+        S_I_batched, Z_II_batched = pairformer_batched(S_I, Z_II)
+
+    assert torch.allclose(S_I_unbatched, S_I_batched)
+    assert torch.allclose(Z_II_unbatched, Z_II_batched)
+
+    loss_unbatched = S_I_unbatched.sum()
+    loss_batched = S_I_batched.sum()
+    assert torch.allclose(loss_unbatched, loss_batched)
+
+    loss_batched.backward()
+    loss_unbatched.backward()
+
+    pairformer_unbatched_dict = {}
+    for name, param in pairformer.named_parameters():
+        pairformer_unbatched_dict[name] = param.detach().clone()
+
+    pairformer_batched_dict = {}
+    for name, param in pairformer_batched.named_parameters():
+        pairformer_batched_dict[name] = param.detach().clone()
+    
+    for name in pairformer_unbatched_dict.keys():
+        print(pairformer_unbatched_dict[name].grad)
+        assert torch.allclose(pairformer_unbatched_dict[name], pairformer_batched_dict[name])

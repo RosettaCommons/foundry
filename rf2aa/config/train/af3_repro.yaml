@@ -221,7 +221,7 @@ callbacks:
   log_metrics: {}
 
 af3_data_prep:
-  D: 8
+  D: 32
   sigma_data: ${model.diffusion_module.sigma_data}
   s_trans: 1
   random_augmentation: True
@@ -232,20 +232,20 @@ recycling:
 
 lightning:
   trainer:
-    accumulate_grad_batches: 25
+    accumulate_grad_batches: 2
     num_nodes: 4
     devices: 8
     accelerator: gpu
     strategy: "ddp_find_unused_parameters_true"
 
 inference:
-  checkpoint: /net/tukwila/rohith/af3-repro-debug/tmp_checkpoints/default_2024-07-11_20-37-14/epoch=43-step=484.ckpt
-
+  checkpoint: /net/tukwila/rohith/af3-repro-debug/tmp_checkpoints/epoch=23-step=264.ckpt
 model_checkpoint:
-  dirpath: /net/tukwila/rohith/af3-repro-debug/tmp_checkpoints/
+  dirpath: /net/tukwila/rohith/af3-repro-debug/tmp_checkpoints/restart
+  save_top_k: -1
 
 resume:
-  True
+  False
 
 dataset_params:
   fraction_pdb: 0.4

@@ -23,7 +23,7 @@ from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_data
 from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items, prepare_input_fm_allatom
 from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3
 from rf2aa.flow_matching.interpolant import Interpolant
-from rf2aa.flow_matching.sampler import Sampler, AllAtomSampler
+from rf2aa.flow_matching.sampler import Sampler, AllAtomSampler, AF3Sampler
 from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads, pretty_describe_dict
 from rf2aa.training.EMA import EMA, count_parameters
 from rf2aa.loss.loss import translation_vector_field
@@ -99,8 +99,9 @@ class Trainer:
             warnings.warn(f"{checkpoint_path} not found, continuing with random parameters")
             return False
         map_location = f"cuda:{rank}"
-        self.checkpoint = torch.load(checkpoint_path, map_location=map_location)
+
         print(f"Loading checkpoint from {checkpoint_path} on rank:{rank}")
+        self.checkpoint = torch.load(checkpoint_path, map_location=map_location)
         return True
 
     def load_model(self):
@@ -176,8 +177,8 @@ class Trainer:
             torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_error.pt")
         else:
             torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_last.pt")
-            if epoch%10==0:
-                torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
+            torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
+        
 
     
     def launch_distributed_training(self):
@@ -189,18 +190,13 @@ class Trainer:
 
         if ("SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
             world_size = int(os.environ["SLURM_NTASKS"])
-            self.world_size = world_size
             rank = int (os.environ["SLURM_PROCID"])
             print ("Launched from slurm", rank, world_size)
             self.train_model(rank, world_size)
 
         else:
             print ("Launched from interactive")
-            world_size = max(torch.cuda.device_count(), 1)
-            if self.config.cpu_training:
-                world_size = 1
-            
-            self.world_size = world_size
+            world_size = torch.cuda.device_count()
 
             if world_size == 0:
                 print ("Error! No GPUs found!")
@@ -210,14 +206,45 @@ class Trainer:
             else:
                 mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
 
+#    def launch_distributed_training(self):
+        #world_size = torch.cuda.device_count()
+        #if ('MASTER_ADDR' not in os.environ):
+            #os.environ['MASTER_ADDR'] = '127.0.0.1' # multinode requires this set in submit script
+        #if ('MASTER_PORT' not in os.environ):
+            #os.environ['MASTER_PORT'] = '%d'%self.config.ddp_params.port
+
+        #if ("SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
+            #world_size = int(os.environ["SLURM_NTASKS"])
+            #self.world_size = world_size
+            #rank = int (os.environ["SLURM_PROCID"])
+            #print ("Launched from slurm", rank, world_size)
+            #self.train_model(rank, world_size)
+
+        #else:
+            #print ("Launched from interactive")
+            #world_size = max(torch.cuda.device_count(), 1)
+            #if self.config.cpu_training:
+                #world_size = 1
+            
+            #self.world_size = world_size
+
+            #if world_size == 0:
+                #print ("Error! No GPUs found!")
+            #elif world_size == 1:
+                ## No need for multiple processes with 1 GPU
+                #self.train_model(0, world_size)
+            #else:
+                #mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
+
     def init_process_group(self, rank, world_size):
-        gpu = rank % self.world_size
+        gpu = rank % world_size
         dist.init_process_group(backend=self.config.training_params.ddp_backend, timeout=timedelta(seconds=1800), world_size=world_size, rank=rank)
-        device = 'cpu'
-        if torch.cuda.device_count():
-            device = "cuda:%d"%gpu
-            torch.cuda.set_device(device)
-        return device
+        torch.cuda.set_device("cuda:%d"%gpu)
+        #device = 'cpu'
+        #if torch.cuda.device_count():
+        #    device = "cuda:%d"%gpu
+        #    torch.cuda.set_device(device)
+        return gpu
     
     def cleanup(self):
         if dist.is_initialized():
@@ -226,6 +253,7 @@ class Trainer:
     def train_model(self, rank, world_size):
         """ runs model training on each gpu """ 
         gpu = self.init_process_group(rank, world_size) 
+        ic(rank, world_size, gpu)
 
         #fd initialize chemical data based on input arguments
         #   this needs to be initialized first
@@ -259,7 +287,6 @@ class Trainer:
             self.valid_loaders = valid_loaders
 
             # move global information to device
-            # if torch.cuda.device_count():
             self.move_constants_to_device(gpu)
 
             self.construct_model(device=gpu)
@@ -287,10 +314,6 @@ class Trainer:
                                                                 self.config.dataset_params.n_train,
                                                                 world_size)
 
-            #for d, valid_sampler in valid_samplers.items():
-            #    valid_sampler.set_epoch(start_epoch-1)
-            #self.valid_epoch(start_epoch-1, rank, world_size)
-
             for epoch in range(start_epoch,self.config.experiment.n_epoch):
                 train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
                 self.train_epoch(epoch, rank, world_size)
@@ -314,6 +337,9 @@ class Trainer:
         # clear gradients
         self.optimizer.zero_grad()
         start_time = time.time()
+        if len(self.train_loader) == 0:
+            return
+
         for train_idx, inputs in enumerate(self.train_loader):
             n_cycle = self.recycle_schedule[epoch, train_idx]  # number of recycling
 
@@ -434,7 +460,10 @@ class Trainer:
         self.model.module.update() # apply EMA
 
     def log_intermediate_losses(self, inputs, loss_dict, n_cycle, Nex, Nepoch, runtime):
-        item = inputs[-1]
+        if type(inputs) == tuple:
+            item = inputs[-1]
+        else:
+            item = inputs["item"]
         max_mem = torch.cuda.max_memory_allocated()/1e9
         print(f"Models: {Nex} of: {Nepoch} Max_Memory: {max_mem:.4f}Gb Runtime: {runtime:.4f}")
         print(f"Example: {item} Recycle:{n_cycle}\n"+
@@ -644,7 +673,6 @@ class FlowMatchingTrainer(Trainer):
                 n_cycle = self.config.loader_params.maxcycle
 
                 loss, loss_dict = self.valid_step(inputs, n_cycle)
-                #print (loss_dict)
 
                 if valid_loss_dict is None:
                     valid_loss_dict = torch.zeros_like(torch.stack(list(loss_dict.values())))
@@ -725,23 +753,17 @@ class AF3Trainer(FlowMatchingTrainer):
         if device == 'cpu':
             device_ids = None
         self.model = DDP(self.model, device_ids=device_ids, find_unused_parameters=False, broadcast_buffers=False)
-        self.sampler = AllAtomSampler(self.model, 
-                               self.config.interpolant.sampling.num_timesteps,
-                               self.config.interpolant.min_t,
-                               self.interpolant,
-                               self.xyz_converter,
-                               is_training=True)
+        self.sampler = AF3Sampler(self.config, self.model)
         self.loss = AF3_structure.Loss(**self.config.loss)
 
-    def move_constants_to_device(self, gpu):
-        self.interpolant = Interpolant(self.config.interpolant)
-        self.interpolant.set_device(gpu)
-        super().move_constants_to_device(gpu) 
+    #def move_constants_to_device(self, gpu):
+        #self.interpolant = Interpolant(self.config.interpolant)
+        #self.interpolant.set_device(gpu)
+        #super().move_constants_to_device(gpu) 
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
 
-        D = 12
         network_input, loss_input = prepare_input_af3(
             inputs,
             **self.config.af3_data_prep,
@@ -760,10 +782,55 @@ class AF3Trainer(FlowMatchingTrainer):
             f=network_input['f'],
             t=network_input['t'],
             X_L=output_i,
-            X_gt_L=loss_input['X_gt_L'].tile((D,1,1)).to(gpu)
+            X_gt_L=loss_input['X_gt_L'].to(gpu),
+            seq=loss_input['seq'].to(gpu),
+            crd_mask_I=loss_input['crd_mask_I'].to(gpu),
         )
+        loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
+        output = {"X_L": output_i} | network_input | loss_input
+        from rf2aa.callbacks import lddt_metrics
+        lddt, _ = lddt_metrics(None, output)
+
+        loss_dict_batched = loss_dict_batched | lddt 
+        loss_dict_batched["t"] = network_input['t']
+        loss_dict.update(self.unbatch_losses(loss_dict_batched))
+
         return loss, loss_dict
 
+    def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
+        gpu = self.model.device
+        X_L = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
+        
+
+        network_input, loss_input = prepare_input_af3(
+            inputs,
+            **self.config.af3_data_prep,
+        )
+        network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
+        loss_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
+        loss, loss_dict, loss_dict_batched = self.loss(
+            f=network_input['f'],
+            t=network_input['t'],
+            X_L=X_L,
+            X_gt_L=loss_input['X_gt_L'].to(gpu),
+            seq=loss_input['seq'].to(gpu),
+            crd_mask_I=loss_input['crd_mask_I'].to(gpu),
+        )
+        output = {"X_L": X_L} | network_input | loss_input
+        from rf2aa.callbacks import lddt_metrics
+        lddt, _ = lddt_metrics(None, output)
+
+        loss_dict_batched = loss_dict_batched | lddt 
+        loss_dict.update(self.unbatch_losses(loss_dict_batched))
+        return loss, loss_dict
+
+    def unbatch_losses(self, loss_dict_batched):
+        loss_dict = {}
+        for key, batched_loss in loss_dict_batched.items():
+            for i, loss in enumerate(batched_loss):
+                loss_dict[f"{key}.{i}"] = loss
+        return loss_dict
+    
     def construct_optimizer(self):
         self.optimizer = getattr(torch.optim, self.config.optimizer.type)(
             self.model.parameters(),
@@ -773,8 +840,6 @@ class AF3Trainer(FlowMatchingTrainer):
 
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
-    if config.autograd_detect_anomaly:
-        torch.autograd.set_detect_anomaly(True)
     seed_all()
     trainer = trainer_factory[config.experiment.trainer](config=config)
 

@@ -44,7 +44,7 @@ from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.chemical import initialize_chemdata
 from rf2aa.set_seed import seed_all
 from rf2aa.model import AF3_structure
-from rf2aa.callbacks import LogMetrics, FindUnusedParameters, NetworkOutputGradSanityCheck, MonitorActivations, WriteToPymol
+from rf2aa.callbacks import LogMetrics, FindUnusedParameters, NetworkOutputGradSanityCheck, MonitorActivations, WriteToPymol, WritePDB, DebugGrads
 from rf2aa.loggers import LitLogger
   
 ic.configureOutput(includeContext=True)
@@ -162,6 +162,8 @@ class LitAF3Repro(L.LightningModule):
             t=network_input['t'],
             X_L=X_L,
             X_gt_L=loss_input['X_gt_L'],
+            seq=loss_input['seq'],
+            crd_mask_I=loss_input['crd_mask_I'],
         )
         self.log('loss', loss, prog_bar=True)
         return dict(
@@ -184,23 +186,29 @@ class LitAF3Repro(L.LightningModule):
         network_input = tree.map_structure(lambda x: x.to(self.device), network_input)
         loss_input = tree.map_structure(lambda x: x.to(self.device), loss_input)
         # return self.main_inference_loop(network_input['f'], n_cycle=1, D=2)
-        X_L = self.main_inference_loop(network_input['f'], n_cycle=1, D=self.config.af3_data_prep.D)
+        X_L = self.main_inference_loop(network_input['f'], n_cycle=10, D=self.config.af3_data_prep.D, X_L_noisy=network_input['X_noisy_L'])
         return dict(
             X_L=X_L,
         ) | loss_input | network_input
     
-    def main_inference_loop(self,f,n_cycle, D=1):
+    def main_inference_loop(self,f,n_cycle, D=1, X_L_noisy=None):
 
         recycling_input = self.model.model.pre_recycle(f, None, None)
         for i_cycle in range(n_cycle):
             if i_cycle < n_cycle - 1:
                 recycling_input = self.model.model.recycle(**recycling_input)
-
-        return self.sample_diffusion(recycling_input['f'], recycling_input['S_inputs_I'], recycling_input['S_I'], recycling_input['Z_II'],
+        partial_inference = True
+        if partial_inference:
+            X_L = self.sample_partial_diffusion(recycling_input['f'], recycling_input['S_inputs_I'], recycling_input['S_I'], recycling_input['Z_II'],
+                                                D=self.config.af3_data_prep.D, noise_schedule=self.get_default_noise_schedule(0.5),
+                                                t_init=0, X_L_noisy=X_L_noisy)
+        else:
+            X_L = self.sample_diffusion(recycling_input['f'], recycling_input['S_inputs_I'], recycling_input['S_I'], recycling_input['Z_II'],
                                      D=D, noise_schedule=self.get_default_noise_schedule())
-    
-    def get_default_noise_schedule(self):
-        t_norm = torch.arange(0, 1 + 1/T, 1/T)
+        return X_L
+
+    def get_default_noise_schedule(self, t_init=0):
+        t_norm = torch.arange(t_init, 1 + 1/T, 1/T)
         s_max = 160
         s_min = 4e-4
         p = 7
@@ -215,7 +223,6 @@ class LitAF3Repro(L.LightningModule):
 
             max_mem = torch.cuda.max_memory_allocated()/1e9
             logger.info(f"Max_Memory: {max_mem:.4f}Gb")
-            ic(c_t)
             X_exists_L = torch.ones(X_L.shape[:-1]).bool().to(self.device)
             X_L = centre_random_augmentation(X_L, X_exists_L, s_trans=self.config.af3_data_prep.s_trans)
             gamma = gamma_0 if c_t > gamma_min else 0
@@ -229,6 +236,28 @@ class LitAF3Repro(L.LightningModule):
             X_L = X_noisy_L + step_scale * dt * delta_L
         return X_L
 
+    def sample_partial_diffusion(self, f, S_inputs_I, S_trunk_I, Z_trunk_II, D, noise_schedule, 
+                                 t_init, X_L_noisy,
+                                 gamma_0=0.8, gamma_min=1.0, noise_scale=1.003, step_scale=1.5):
+        L = f['ref_pos'].shape[0]
+        X_L = X_L_noisy.clone()
+        for c_t_minus_1, c_t in pairwise(noise_schedule):
+            ic(c_t_minus_1, c_t )
+            max_mem = torch.cuda.max_memory_allocated()/1e9
+            logger.info(f"Max_Memory: {max_mem:.4f}Gb")
+            X_exists_L = torch.ones(X_L.shape[:-1]).bool().to(self.device)
+            X_L = centre_random_augmentation(X_L, X_exists_L, s_trans=self.config.af3_data_prep.s_trans)
+            gamma = gamma_0 if c_t > gamma_min else 0
+            t_hat = c_t_minus_1 * (gamma + 1)
+            xi_L = noise_scale * torch.sqrt(t_hat**2 - c_t_minus_1**2) * torch.normal(mean=0, std=1, size=((D,L,3))).to(self.device)
+            X_noisy_L = X_L + xi_L
+
+            X_denoised_L = self.model.model.diffusion_module(X_noisy_L, t_hat.tile((D,)).to(self.device), f, S_inputs_I, S_trunk_I, Z_trunk_II)
+            delta_L = (X_L - X_denoised_L) / t_hat
+            dt = c_t - t_hat
+            X_L = X_noisy_L + step_scale * dt * delta_L
+
+        return X_L
 
     def configure_optimizers(self):
         optimizer = getattr(torch.optim, self.config.optimizer.type)(
@@ -246,9 +275,12 @@ class LitAF3Repro(L.LightningModule):
     def configure_callbacks(self):
         return [
             LogMetrics(self.config, **self.config.callbacks.log_metrics),
-            NetworkOutputGradSanityCheck(),
-            MonitorActivations(),
+            #DebugGrads(),
+            #NetworkOutputGradSanityCheck(),
+            #MonitorActivations(),
             LearningRateMonitor(logging_interval='step'),
+            ModelCheckpoint(**self.config.model_checkpoint),
+            #WritePDB(),
             # WriteToPymol(),
         ]
 
@@ -300,7 +332,7 @@ def main(config):
         logger=trainer_logger,
         log_every_n_steps=1,
         gradient_clip_val=10,
-        callbacks=[model_checkpoint],
+        #callbacks=[model_checkpoint],
         **config.lightning.trainer
     )
     trainer.fit(model=model, datamodule=datamodule)
