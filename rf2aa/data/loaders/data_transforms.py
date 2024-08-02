@@ -66,7 +66,10 @@ class AddReferencePositions(Transform):
                     coordinates = self.generate_conformer(molecule_3letter)
                     has_ref_pos = torch.ones(coordinates.size(0), dtype=torch.bool)
                 else:
-                    raise ValueError(f"Could not find ideal SDF for {molecule}")
+                    coordinates = torch.zeros((0, 3), dtype=torch.float32)
+                    has_ref_pos = torch.zeros(0, dtype=torch.bool)
+                    logger.debug(f"Could not find ideal SDF for {molecule}")
+                    #raise ValueError(f"Could not find ideal SDF for {molecule}")
                 positions.append(coordinates)
                 all_has_ref_pos.append(has_ref_pos)
 
