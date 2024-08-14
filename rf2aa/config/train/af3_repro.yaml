@@ -9,12 +9,16 @@ experiment:
   output_dir: null
 
 loss:
-  sigma_data: ${model.diffusion_module.sigma_data}
-  alpha_dna: 5
-  alpha_rna: 5
-  alpha_ligand: 10
-  edm_lambda: False
-  se3_invariant_loss: True
+  diffusion_loss:
+    weight: 4.0
+    sigma_data: ${model.diffusion_module.sigma_data}
+    alpha_dna: 5
+    alpha_rna: 5
+    alpha_ligand: 10
+    edm_lambda: False
+    se3_invariant_loss: True
+  distogram_loss:
+    weight: 3e-2
 
 ddp_params:
   batch_size: 1
@@ -203,6 +207,8 @@ model:
           n_block: 3
           diffusion_transformer_block:
             n_head: 4
+  distogram_head:
+    bins: 37  
 
 optimizer:
   type: Adam
@@ -226,6 +232,7 @@ af3_data_prep:
   s_trans: 1
   random_augmentation: True
   only_ca: False
+  t: null
 
 recycling:
   max_cycle: 4

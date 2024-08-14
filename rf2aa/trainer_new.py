@@ -192,6 +192,7 @@ class Trainer:
             world_size = int(os.environ["SLURM_NTASKS"])
             rank = int (os.environ["SLURM_PROCID"])
             print ("Launched from slurm", rank, world_size)
+
             self.train_model(rank, world_size)
 
         else:
@@ -237,7 +238,7 @@ class Trainer:
                 #mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
 
     def init_process_group(self, rank, world_size):
-        gpu = rank % world_size
+        gpu = rank % torch.cuda.device_count()
         dist.init_process_group(backend=self.config.training_params.ddp_backend, timeout=timedelta(seconds=1800), world_size=world_size, rank=rank)
         torch.cuda.set_device("cuda:%d"%gpu)
         #device = 'cpu'
@@ -253,6 +254,7 @@ class Trainer:
     def train_model(self, rank, world_size):
         """ runs model training on each gpu """ 
         gpu = self.init_process_group(rank, world_size) 
+        rank = gpu
         ic(rank, world_size, gpu)
 
         #fd initialize chemical data based on input arguments
@@ -350,7 +352,7 @@ class Trainer:
             loss = loss / self.config.ddp_params.accum
 
             if (torch.any(torch.isnan(loss))):
-                print ('NAN in loss',inputs[-1])
+                #print ('NAN in loss',inputs[-1])
                 print ('NAN in loss',loss_dict)
                 exit(1)
 
@@ -362,6 +364,7 @@ class Trainer:
                     hasnans = True
             if hasnans:
                 print ('NAN in grad')
+                print(inputs["item"])
                 for n,p in self.model.named_parameters():
                     if (p.grad is not None):
                         print (n, torch.max( torch.abs(p.flatten()) ), torch.max( torch.abs(p.grad.flatten()) ))
@@ -673,7 +676,6 @@ class FlowMatchingTrainer(Trainer):
                 n_cycle = self.config.loader_params.maxcycle
 
                 loss, loss_dict = self.valid_step(inputs, n_cycle)
-
                 if valid_loss_dict is None:
                     valid_loss_dict = torch.zeros_like(torch.stack(list(loss_dict.values())))
                 valid_loss_dict += torch.stack(list(loss_dict.values()))
@@ -769,6 +771,7 @@ class AF3Trainer(FlowMatchingTrainer):
             **self.config.af3_data_prep,
         )
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
+        loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
         logger.debug('network_input:\n' + pretty_describe_dict(network_input))
         logger.debug('loss_input:\n' + pretty_describe_dict(loss_input))
 
@@ -777,30 +780,43 @@ class AF3Trainer(FlowMatchingTrainer):
             n_cycle,
             no_sync=self.model.no_sync,
         )
-        
-        loss, loss_dict, loss_dict_batched = self.loss(
-            f=network_input['f'],
-            t=network_input['t'],
-            X_L=output_i,
-            X_gt_L=loss_input['X_gt_L'].to(gpu),
-            seq=loss_input['seq'].to(gpu),
-            crd_mask_I=loss_input['crd_mask_I'].to(gpu),
+        #loss, loss_dict, loss_dict_batched = self.loss(
+            #f=network_input['f'],
+            #t=network_input['t'],
+            #X_L=output_i,
+            #X_gt_L=loss_input['X_gt_L'].to(gpu),
+            #seq=loss_input['seq'].to(gpu),
+            #crd_mask_I=loss_input['crd_mask_I'].to(gpu),
+        #)
+        loss, loss_dict_batched = self.loss(
+            network_input,
+            output_i,
+            loss_input
         )
-        loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
-        output = {"X_L": output_i} | network_input | loss_input
+        loss_dict = {}
+        output = {"X_L": output_i["X_L"]} | network_input | loss_input
         from rf2aa.callbacks import lddt_metrics
-        lddt, _ = lddt_metrics(None, output)
 
+        lddt, _ = lddt_metrics(None, output)
+        sigma_data = 16
+        t = network_input['t']
+        X_noisy_L = network_input['X_noisy_L']
+        null_pred = (sigma_data**2 / (sigma_data**2 + t**2))[...,None,None] * X_noisy_L
+        lddt_null, _ = lddt_metrics(None, {"X_L": null_pred} | network_input | loss_input)
+        for key, val in lddt_null.items():
+            lddt[f"{key}_null_pred"] = val
+        loss_dict_batched["noise_std_dev"]  = torch.std(X_noisy_L, dim=(-1,-2))
         loss_dict_batched = loss_dict_batched | lddt 
         loss_dict_batched["t"] = network_input['t']
         loss_dict.update(self.unbatch_losses(loss_dict_batched))
-
         return loss, loss_dict
 
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
         gpu = self.model.device
-        X_L = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
+        outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
         
+        X_L = outputs['X_L']
+        X_L_traj = outputs['X_noisy_L_traj']
 
         network_input, loss_input = prepare_input_af3(
             inputs,
@@ -808,25 +824,47 @@ class AF3Trainer(FlowMatchingTrainer):
         )
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         loss_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
-        loss, loss_dict, loss_dict_batched = self.loss(
-            f=network_input['f'],
-            t=network_input['t'],
-            X_L=X_L,
-            X_gt_L=loss_input['X_gt_L'].to(gpu),
-            seq=loss_input['seq'].to(gpu),
-            crd_mask_I=loss_input['crd_mask_I'].to(gpu),
+        #loss, loss_dict, loss_dict_batched = self.loss(
+            #f=network_input['f'],
+            #t=network_input['t'],
+            #X_L=X_L,
+            #X_gt_L=loss_input['X_gt_L'].to(gpu),
+            #seq=loss_input['seq'].to(gpu),
+            #crd_mask_I=loss_input['crd_mask_I'].to(gpu),
+        #)
+        loss, loss_dict_batched = self.loss(
+            network_input,
+            outputs,
+            loss_input
         )
         output = {"X_L": X_L} | network_input | loss_input
         from rf2aa.callbacks import lddt_metrics
+        noise_schedule = outputs["t_hats"]
+        agg_lddt = {}
+        #for i, X_L in enumerate(X_L_traj):
+            #output["X_L"] = X_L
+            #lddt, _ = lddt_metrics(None, output)
+            #for key, val in lddt.items():
+                #agg_lddt[f"{key}.{i}"] = val
+            #agg_lddt[f"noise_std_dev.{i}"] = torch.std(X_L, dim=(-1,-2)) 
+            ##ic(i, lddt, torch.std(X_L, dim=(-1,-2)), noise_schedule[i])
+        
+        loss_dict = {}
         lddt, _ = lddt_metrics(None, output)
-
-        loss_dict_batched = loss_dict_batched | lddt 
+        agg_lddt = agg_lddt | lddt
+        loss_dict_batched = loss_dict_batched | agg_lddt 
         loss_dict.update(self.unbatch_losses(loss_dict_batched))
+        loss_dict = tree.map_structure(lambda x: torch.tensor(x) if not torch.is_tensor(x) else x, loss_dict)
+        loss_dict = tree.map_structure(lambda x: x.cpu(), loss_dict)
+        ic(loss_dict)
         return loss, loss_dict
 
     def unbatch_losses(self, loss_dict_batched):
         loss_dict = {}
         for key, batched_loss in loss_dict_batched.items():
+            if batched_loss.numel() == 1:   
+                loss_dict[key] = batched_loss.item()
+                continue
             for i, loss in enumerate(batched_loss):
                 loss_dict[f"{key}.{i}"] = loss
         return loss_dict
@@ -840,7 +878,7 @@ class AF3Trainer(FlowMatchingTrainer):
 
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
-    seed_all()
+    seed_all(42)
     trainer = trainer_factory[config.experiment.trainer](config=config)
 
     # Wrap the training in a try-except block to ensure SLURM cleanup post-interrupt (otherwise, we'd need to change the SLURM id each run)

@@ -232,9 +232,12 @@ class AF3Sampler:
                 post_recycle_outputs["S_I"], post_recycle_outputs["Z_II"], \
                 noise_schedule
                 ) 
-
-
-        return X_L  
+        # need to return the distogram outputs
+        outputs = self.model.module.shadow.post_recycle(
+            **pre_recycle_outputs
+        )
+        outputs.update(X_L)
+        return outputs
 
     def construct_noise_schedule(self, num_timesteps, min_t, max_t):
         t = torch.linspace(min_t, max_t, num_timesteps)
@@ -250,6 +253,9 @@ class AF3Sampler:
         D = self.config.af3_data_prep["D"]
         L = f["ref_pos"].shape[0]
         X_L = noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=s_inputs_I.device)
+        X_noisy_L_traj = []
+        X_denoised_L_traj = []  
+        t_hats = []
         for c_t_minus_1, c_t in zip(noise_schedule, noise_schedule[1:]):
             X_exists_L = torch.ones((D, L)).bool()
             s_trans = 1.0
@@ -262,7 +268,16 @@ class AF3Sampler:
             delta_L =  (X_L - X_denoised_L) / t_hat
             d_t = c_t - t_hat
             X_L = X_noisy_L + step_scale * d_t * delta_L
-        return X_L
+            X_noisy_L_traj.append(X_noisy_L)
+            X_denoised_L_traj.append(X_denoised_L)
+            t_hats.append(t_hat)
+
+        return {
+            "X_L": X_L,
+            "X_noisy_L_traj": X_noisy_L_traj,
+            "X_denoised_L_traj": X_denoised_L_traj,
+            "t_hats": t_hats
+        }
 
     
     def _get_network_input(self, inputs):

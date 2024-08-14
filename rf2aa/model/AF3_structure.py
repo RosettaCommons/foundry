@@ -317,6 +317,7 @@ class AttentionPairBias(nn.Module):
             LinearBiasInit(c_s, c_a, biasinit=-2.),
             nn.Sigmoid(),
         )
+        self.ln_0 = nn.LayerNorm((c_pair,))
         self.ada_ln_1 = AdaLN(c_a=c_a, c_s=c_s)
         self.ln_1 = nn.LayerNorm((c_a,))
 
@@ -339,7 +340,7 @@ class AttentionPairBias(nn.Module):
         Q_IH = self.to_q(A_I)
         K_IH = self.to_k(A_I)
         V_IH = self.to_v(A_I)
-        B_IIH = self.to_b(Z_II) + Beta_II[..., None]
+        B_IIH = self.to_b(self.ln_0(Z_II)) + Beta_II[..., None]
         G_IH = self.to_g(A_I)
 
         # Attention
@@ -572,12 +573,14 @@ class Model(nn.Module):
                  feature_initializer,
                  recycler,
                  diffusion_module,
+                 distogram_head,
                  **kwargs
                  ):
         super().__init__()
         self.feature_initializer = FeatureInitializer(c_s=c_s, c_z=c_z, c_atom=c_atom, c_atompair=c_atompair, **feature_initializer)
         self.recycler = Recycler(c_s=c_s, c_z=c_z, **recycler)
         self.diffusion_module = DiffusionModule(c_atom=c_atom, c_atompair=c_atompair, c_s=c_s, c_z=c_z, **diffusion_module)
+        self.distogram_head = DistogramHead(c_z=c_z, **distogram_head) 
 
     def forward(self, input, n_cycle, no_sync):
         '''
@@ -663,8 +666,32 @@ class Model(nn.Module):
             S_I,
             Z_II,
         )
-        return X_pred
+        distogram_pred = self.distogram_head(Z_II)
+        return {
+            "X_L": X_pred,
+            "distogram": distogram_pred,
+        }
         
+class DistogramHead(nn.Module):
+    def __init__(self,
+                 c_z,
+                 bins,
+                 ):
+        super().__init__()
+        self.predictor = nn.Linear(c_z, bins) 
+    
+    def reset_parameters(self):
+        # initialize linear layer for final logit prediction
+        nn.init.zeros_(self.predictor.weight)
+        nn.init.zeros_(self.predictor.bias)
+
+    def forward(self,
+                Z_II,
+                ):
+        return self.predictor(
+            Z_II+Z_II.transpose(-2,-3) # symmetrize pair features
+            )
+
 
 class Recycler(nn.Module):
     def __init__(self,
@@ -688,7 +715,7 @@ class Recycler(nn.Module):
             linearNoBias(c_s, c_s),
         )
         self.pairformer_stack = nn.ModuleList([
-            PairformerBlock_batched(c_s=c_s, c_z=c_z, **pairformer_block) for _ in range(n_pairformer_blocks)
+            PairformerBlock(c_s=c_s, c_z=c_z, **pairformer_block) for _ in range(n_pairformer_blocks)
         ])
 
     def forward(self,
@@ -1056,8 +1083,9 @@ def calc_smoothed_lddt_loss(X_gt_L, X_L, crd_mask_I, seq, tok_idx, is_dna, is_rn
     lddt = torch.div(lddt_matrix[:, mask].sum(dim=(-1)), mask.sum(dim=(-1,-2)))
     return 1 - lddt
 
-class Loss:
+class DiffusionLoss:
     def __init__(self,
+                 weight,
                  sigma_data,
                  alpha_dna,
                  alpha_rna,
@@ -1070,6 +1098,7 @@ class Loss:
         self.alpha_rna = alpha_rna
         self.alpha_ligand = alpha_ligand
         self.se3_invariant_loss = se3_invariant_loss
+        self.weight = weight
         
         # AF3-style loss weighting
         self.get_lambda = lambda sigma: (sigma**2 + self.sigma_data**2) / (sigma + self.sigma_data)**2
@@ -1114,8 +1143,92 @@ class Loss:
 
         loss_dict = {k:v.mean() for k,v in loss_dict_batched.items()}
         l_total = sum(loss_dict.values())
+        loss_dict_batched['total_diffusion_loss'] = l_total
+        loss_dict_batched = {k: v.detach() for k,v in loss_dict_batched.items()}
+        return self.weight*l_total, loss_dict_batched
 
-        return l_total, loss_dict, loss_dict_batched
+class DistogramLoss(nn.Module):
+    def __init__(self, weight):
+        super().__init__()
+        self.cce_loss = nn.CrossEntropyLoss(reduction='none')
+        self.weight = weight
+        self.eps = 1e-4
+
+    def __call__(
+        self,
+        distogram_pred, # [I, I, 37]
+        X_gt_L, # [D, L, 3]     
+        crd_mask_I, # [I]
+        seq,
+        f 
+    ):
+        # Convert to I, 36
+        I = seq.shape[0]
+        is_real_atom = ChemData().heavyatom_mask.to(X_gt_L.device)[seq]
+        X_gt_I = torch.zeros((seq.shape[0], ChemData().NTOTAL, 3), device=X_gt_L.device)
+        X_gt_I[is_real_atom] = X_gt_L[0]
+        #    cbeta for all protein residues except glycine
+        #    calpha for glycine
+        #    c4 for purines 
+        #   c2 for pyrimidines
+        seq_is_protein = f["is_protein"].to(torch.bool)
+        use_cbeta = seq_is_protein & (seq != ChemData().aa2num["GLY"])
+        use_calpha = seq_is_protein & (seq == ChemData().aa2num["GLY"])
+        use_c4 = (seq == ChemData().aa2num[" DA"]) | (seq == ChemData().aa2num[" DG"]) | (seq == ChemData().aa2num[" RA"]) | (seq == ChemData().aa2num[" RG"])
+        use_c2 = (seq == ChemData().aa2num[" DC"]) | (seq == ChemData().aa2num[" DT"]) | (seq == ChemData().aa2num[" RC"]) | (seq == ChemData().aa2num[" RU"])
+        idx_to_use = torch.ones_like(seq) 
+        idx_to_use[use_cbeta] = 5 # cbeta
+        idx_to_use[use_calpha] = 1 # calpha
+        idx_to_use[use_c4] = 8 # c4
+        idx_to_use[use_c2] = 2 # c2
+
+        dist_node = X_gt_I[torch.arange(seq.shape[0]), idx_to_use]
+        crd_mask_I = crd_mask_I[torch.arange(seq.shape[0]), idx_to_use]
+
+        crd_mask_II = crd_mask_I.unsqueeze(-1) * crd_mask_I.unsqueeze(-2)
+        dist = torch.cdist(dist_node, dist_node)
+        from rf2aa.data.dataloader_adaptor_af3 import discretize_distance_matrix
+        distogram_target = discretize_distance_matrix(dist, num_bins=36)
+        cce_loss =  self.cce_loss(distogram_pred.reshape(I*I, 37), distogram_target.reshape(I*I)).reshape(I, I)
+        cce_loss = torch.sum(cce_loss[crd_mask_II])/(torch.sum(crd_mask_II) + self.eps)
+        loss_dict = {"distogram_loss": cce_loss.detach()}
+        return self.weight * cce_loss, loss_dict
+
+class Loss(nn.Module):
+    def __init__(self,
+                 diffusion_loss,
+                 distogram_loss,
+                 ):
+        super().__init__()
+        self.diffusion_loss = DiffusionLoss(**diffusion_loss)
+        self.distogram_loss = DistogramLoss(**distogram_loss)
+
+    def forward(self,
+                network_input,
+                network_output,
+                loss_input,
+                ):
+        loss_dict = {}
+        diffusion_loss, diffusion_loss_dict = self.diffusion_loss(
+                                            network_input["f"], 
+                                             network_output["X_L"], 
+                                             loss_input["X_gt_L"], 
+                                             network_input["t"], 
+                                             loss_input["seq"], 
+                                             loss_input["crd_mask_I"]
+                                             )
+        
+        distogram_loss, distogram_loss_dict = self.distogram_loss(
+                                            network_output["distogram"], 
+                                             loss_input["X_gt_L"], 
+                                             loss_input["crd_mask_I"],
+                                             loss_input["seq"],
+                                             network_input["f"]
+                                             )
+        loss_dict.update(diffusion_loss_dict)
+        loss_dict.update(distogram_loss_dict)
+        return diffusion_loss + distogram_loss, loss_dict 
+                
 
 def convert_residue_mask_to_allatom_mask(crd_mask_I, seq):
     """

@@ -293,7 +293,7 @@ def torch_vectorize(pyfunc):
         return torch.tensor(out_np)
     return f
 
-def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_ca, device="cpu",):
+def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_ca, t=None, device="cpu",):
     logger.debug('prepare_input_af3 input:\n' + pretty_describe_dict(inputs))
     #(
         #seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
@@ -418,7 +418,6 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
 
     ### MSA ###
     f['msa'] = F.one_hot(af3num_from_num(msa), len(af3_num2aa))
-
     # Hacked
     N_msa = msa.shape[0]
     f['has_deletion'] = torch.zeros((N_msa, N_token))
@@ -484,7 +483,12 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
 
     X_gt_L = true_crds[is_real_atom]
     atom_mask = mask_crds[is_real_atom]
-    t = sigma_data * torch.exp(-1.2 + 1.5 * torch.normal(mean=0, std=1, size=(D,)))
+    if t is None:
+        t = sigma_data * torch.exp(-1.2 + 1.5 * torch.normal(mean=0, std=1, size=(D,)))
+    else:
+        t = torch.tensor(t).tile(D).to(device)
+        import warnings
+        warnings.warn(f"t is being set to {t} artificially; please make sure this is the desired behavior")
     X_gt_L = centre(X_gt_L, atom_mask)
     X_gt_L = X_gt_L.tile(D,1,1)
 
@@ -506,7 +510,7 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
         # loss input (trues)
         dict(
             X_gt_L=X_gt_L,
-            crd_mask_I = is_real_atom,
+            crd_mask_I = mask_crds,
             seq=seq,
             bond_feats=bond_feats,
         )

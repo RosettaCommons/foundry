@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from icecream import ic
 import pickle
@@ -437,7 +438,11 @@ def compose_single_item_dataset(loader_fn, item, loader_params, loader, loader_k
             return 1
 
     dataset = SpoofDataset(loader_params, loader, loader_kwargs)
-    loader = data.DataLoader(dataset, worker_init_fn = loader_fn, **loader_params["dataloader_kwargs"])
+    if False:
+        sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+    loader = data.DataLoader(dataset, 
+                             #sampler=sampler, 
+                             worker_init_fn = loader_fn, **loader_params["dataloader_kwargs"])
     return loader
 
 def compose_similar_posebusters(loader_params, rank, world_size):

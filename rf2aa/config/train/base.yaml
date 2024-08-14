@@ -68,7 +68,7 @@ loader_params:
     interface_selection_cutoff: 15.0
   OMIT_PERMUTATE: True
   maxseq: 1024
-  maxtoken: 1024
+  maxtoken: 1024  
   maxlat: 128
   crop: 256
   rescut: 4.5

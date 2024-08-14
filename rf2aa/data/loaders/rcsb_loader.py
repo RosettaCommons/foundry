@@ -490,33 +490,36 @@ def loader_sm_compl_assembly(
     merged_outs = {k: v for k, v in merged_outs.items() if k not in remove_keys} 
             
     merged_outs["item"] = item
+    if "symmetry_group" not in merged_outs:
+        merged_outs["symmetry_group"] = "C1"
+
     return merged_outs
-    return (
-        merged_outs["seq"].long(),
-        merged_outs["msa_seed_orig"].long(),
-        merged_outs["msa_seed"].float(),
-        merged_outs["msa_extra"].float(),
-        merged_outs["mask_msa"],
-        merged_outs["xyz"].float(),
-        merged_outs["mask"],
-        merged_outs["idx"].long(),
-        merged_outs["xyz_t"].float(),
-        merged_outs["f1d_t"].float(),
-        merged_outs["mask_t"],
-        merged_outs["xyz_prev"].float(),
-        merged_outs["mask_prev"],
-        merged_outs["same_chain"],
-        merged_outs["unclamp"],
-        merged_outs["negative"],
-        merged_outs["frames"],
-        merged_outs["bond_feats"],
-        merged_outs["dist_matrix"],
-        merged_outs["chirals"],
-        merged_outs["ch_label"],
-        merged_outs["symmetry_group"],
-        task,
-        item,
-    )
+    #return (
+        #merged_outs["seq"].long(),
+        #merged_outs["msa_seed_orig"].long(),
+        #merged_outs["msa_seed"].float(),
+        #merged_outs["msa_extra"].float(),
+        #merged_outs["mask_msa"],
+        #merged_outs["xyz"].float(),
+        #merged_outs["mask"],
+        #merged_outs["idx"].long(),
+        #merged_outs["xyz_t"].float(),
+        #merged_outs["f1d_t"].float(),
+        #merged_outs["mask_t"],
+        #merged_outs["xyz_prev"].float(),
+        #merged_outs["mask_prev"],
+        #merged_outs["same_chain"],
+        #merged_outs["unclamp"],
+        #merged_outs["negative"],
+        #merged_outs["frames"],
+        #merged_outs["bond_feats"],
+        #merged_outs["dist_matrix"],
+        #merged_outs["chirals"],
+        #merged_outs["ch_label"],
+        #merged_outs["symmetry_group"],
+        #task,
+        #item,
+    #)
 
 
 def loader_sm_compl_assembly_single(*args, **kwargs):

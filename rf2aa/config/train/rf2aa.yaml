@@ -1,6 +1,7 @@
 defaults:
   - base
   - model: rf2aa_composed 
+  - loader_params: default
 
 experiment:
   name: rf2aa-reproduction

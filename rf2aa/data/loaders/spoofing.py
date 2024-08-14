@@ -64,6 +64,14 @@ def spoofed_loader(
             "PARTNERS": partners,
         }
         spoofed_sm_compl_item.update(crop_params)
+        return loader_sm_compl_assembly(
+            spoofed_sm_compl_item,
+            params,
+            chid2hash,
+            chid2taxid,
+            cif_outs=cif_outs,
+            **kwargs,
+        )
     except Exception as e:
         # print exception so that whole traceback is visible    
         print(f"Error in spoofed_loader: {repr(e)}")
@@ -75,6 +83,8 @@ def spoofed_loader(
             "preferred_interface_type": (sm_compl_item["LIGAND"][-1], sm_compl_item["PARTNERS"][0][-1]),
         }
         spoofed_sm_compl_item.update(crop_params)
+        cif_outs = None
+
     return loader_sm_compl_assembly(
         spoofed_sm_compl_item,
         params,
