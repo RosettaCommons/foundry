@@ -73,6 +73,7 @@ def spoofed_loader(
             **kwargs,
         )
     except Exception as e:
+        #raise e
         # print exception so that whole traceback is visible    
         print(f"Error in spoofed_loader: {repr(e)}")
         ic(f"{item}")

@@ -5,6 +5,7 @@ import math
 from opt_einsum import contract as einsum
 from einops import rearrange
 from rf2aa.util_module import init_lecun_normal
+from rf2aa.training.checkpoint import activation_checkpointing
 
 class FeedForwardLayer(nn.Module):
     def __init__(self, d_model, r_ff, p_drop=0.1, zero_init=True):
@@ -482,6 +483,7 @@ class TriangleAttention(nn.Module):
         nn.init.xavier_uniform_(self.to_out.weight)
         nn.init.zeros_(self.to_out.bias)
 
+    @activation_checkpointing
     def forward(self, pair):
         B, L = pair.shape[:2]
 
@@ -552,6 +554,7 @@ class TriangleMultiplication(nn.Module):
         nn.init.xavier_uniform_(self.out_proj.weight)
         nn.init.zeros_(self.out_proj.bias)
     
+    @activation_checkpointing
     def forward(self, pair):
         B, L = pair.shape[:2]
         pair = self.norm(pair)

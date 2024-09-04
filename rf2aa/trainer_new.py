@@ -23,9 +23,10 @@ from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_data
 from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items, prepare_input_fm_allatom
 from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3
 from rf2aa.flow_matching.interpolant import Interpolant
-from rf2aa.flow_matching.sampler import Sampler, AllAtomSampler, AF3Sampler
+from rf2aa.flow_matching.sampler import Sampler, AllAtomSampler, AF3Sampler, AF3PartialSampler
 from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads, pretty_describe_dict
 from rf2aa.training.EMA import EMA, count_parameters
+from rf2aa.loss.af3_losses import Loss as AF3Loss
 from rf2aa.loss.loss import translation_vector_field
 from rf2aa.loss.loss_factory import get_loss_and_misc
 from rf2aa.training.optimizer import add_weight_decay
@@ -254,7 +255,7 @@ class Trainer:
     def train_model(self, rank, world_size):
         """ runs model training on each gpu """ 
         gpu = self.init_process_group(rank, world_size) 
-        rank = gpu
+        #rank = gpu
         ic(rank, world_size, gpu)
 
         #fd initialize chemical data based on input arguments
@@ -310,7 +311,7 @@ class Trainer:
                     self.load_scaler()
                 else:
                     warnings.warn(f"User specified reset_optimizer_params=False. Did not load optimizer values from checkpoint")
-
+            print(f"Starting training from epoch {start_epoch}")
             self.recycle_schedule = recycle_sampling["by_batch"](self.config.loader_params.maxcycle, 
                                                                 self.config.experiment.n_epoch,
                                                                 self.config.dataset_params.n_train,
@@ -328,7 +329,7 @@ class Trainer:
                     and (epoch!=start_epoch or self.config.dataset_params.validate_after_first_epoch)
                 ):
                     self.valid_epoch(epoch, rank, world_size)
-
+                break
         self.cleanup() 
 
     def train_epoch(self, epoch, rank, world_size):
@@ -450,7 +451,7 @@ class Trainer:
     def update_parameters(self):
         """ scale, clip gradients and update parameters """
         # gradient clipping
-        #debug_grads(self.model)
+        debug_grads(self.model)
         self.scaler.unscale_(self.optimizer)
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.training_params.grad_clip)
         self.scaler.step(self.optimizer)
@@ -559,7 +560,7 @@ class ComposedTrainer(Trainer):
         output_i = recycle_step_packed(
             self.model, network_input, n_cycle, self.config.training_params.use_amp, nograds=nograds
         )
-        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames = get_loss_calc_items(inputs, device=gpu)
+        seq, same_chain, idx_pdb, bond_feats, dist_matrix, atom_frames, true_crds, mask_crds = get_loss_calc_items(inputs, device=gpu)
 
         #HACK: indexing into msa and mask msa recycle dimension in arguments of this function
         #HACK: need to promote some inputs to gpu for loss calculation, all promotions should happen together
@@ -715,7 +716,6 @@ def get_param_sizes(model):
 class AF3Trainer(FlowMatchingTrainer):
 
     def construct_model(self, device="cpu"):
-        # self.model = torch.nn.Linear(2, 3).to(device)
         self.model = AF3_structure.Model(**self.config.model).to(device)
         print_n_params = False
         if print_n_params:
@@ -755,8 +755,11 @@ class AF3Trainer(FlowMatchingTrainer):
         if device == 'cpu':
             device_ids = None
         self.model = DDP(self.model, device_ids=device_ids, find_unused_parameters=False, broadcast_buffers=False)
-        self.sampler = AF3Sampler(self.config, self.model)
-        self.loss = AF3_structure.Loss(**self.config.loss)
+        if "partial_t" in self.config.af3_data_prep:
+            self.sampler = AF3PartialSampler(self.config, self.model)
+        else:
+            self.sampler = AF3Sampler(self.config, self.model)
+        self.loss = AF3Loss(**self.config.loss)
 
     #def move_constants_to_device(self, gpu):
         #self.interpolant = Interpolant(self.config.interpolant)
@@ -770,6 +773,7 @@ class AF3Trainer(FlowMatchingTrainer):
             inputs,
             **self.config.af3_data_prep,
         )
+
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
         logger.debug('network_input:\n' + pretty_describe_dict(network_input))
@@ -813,6 +817,8 @@ class AF3Trainer(FlowMatchingTrainer):
 
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
         gpu = self.model.device
+        n_cycle = 10
+        warnings.warn("n_cycle is hardcoded to 10 for validation")
         outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
         
         X_L = outputs['X_L']
@@ -855,8 +861,10 @@ class AF3Trainer(FlowMatchingTrainer):
         loss_dict_batched = loss_dict_batched | agg_lddt 
         loss_dict.update(self.unbatch_losses(loss_dict_batched))
         loss_dict = tree.map_structure(lambda x: torch.tensor(x) if not torch.is_tensor(x) else x, loss_dict)
-        loss_dict = tree.map_structure(lambda x: x.cpu(), loss_dict)
-        ic(loss_dict)
+        loss_dict = tree.map_structure(lambda x: x.to(gpu), loss_dict)
+        import sys
+        self.log_validation_losses(inputs["item"]["CHAINID"], loss_dict)
+        sys.stdout.flush()
         return loss, loss_dict
 
     def unbatch_losses(self, loss_dict_batched):
@@ -878,7 +886,7 @@ class AF3Trainer(FlowMatchingTrainer):
 
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
-    seed_all(42)
+    seed_all(446)
     trainer = trainer_factory[config.experiment.trainer](config=config)
 
     # Wrap the training in a try-except block to ensure SLURM cleanup post-interrupt (otherwise, we'd need to change the SLURM id each run)

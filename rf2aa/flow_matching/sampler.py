@@ -2,6 +2,7 @@ import torch
 import tree
 import torch.nn.functional as F
 from typing import Any, Dict, Tuple
+import warnings
 from rf2aa.flow_matching.interpolant import _centered_gaussian, _uniform_so3
 import rf2aa.flow_matching.data_utils as du
 from rf2aa.flow_matching import data_transforms
@@ -252,7 +253,7 @@ class AF3Sampler:
                          gamma_0=0.8, gamma_min=1.0, noise_scale=1.003, step_scale=1.5):
         D = self.config.af3_data_prep["D"]
         L = f["ref_pos"].shape[0]
-        X_L = noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=s_inputs_I.device)
+        X_L = self._get_initial_structure(f, noise_schedule, D, L, self.device)
         X_noisy_L_traj = []
         X_denoised_L_traj = []  
         t_hats = []
@@ -260,14 +261,20 @@ class AF3Sampler:
             X_exists_L = torch.ones((D, L)).bool()
             s_trans = 1.0
             X_L = centre_random_augmentation(X_L, X_exists_L, s_trans)
-            gamma = gamma_0 if c_t > gamma_min else 0
+            #gamma = gamma_0 if c_t > gamma_min else 0
+            gamma = 0
+            warnings.warn(f"gamma is set to 0")
             t_hat = c_t_minus_1 * (gamma + 1)
             epsilon_L = noise_scale * torch.sqrt(torch.square(t_hat) - torch.square(c_t_minus_1)) * torch.normal(mean=0.0, std=1.0, size=X_L.shape, device=X_L.device)
             X_noisy_L = X_L + epsilon_L
             X_denoised_L = self.model.module.shadow.diffusion_module(X_noisy_L, t_hat.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
-            delta_L =  (X_L - X_denoised_L) / t_hat
+
+            delta_L =  (X_noisy_L - X_denoised_L) / t_hat
             d_t = c_t - t_hat
             X_L = X_noisy_L + step_scale * d_t * delta_L
+            if self.config.af3_inference.second_order_solver:
+                pass
+
             X_noisy_L_traj.append(X_noisy_L)
             X_denoised_L_traj.append(X_denoised_L)
             t_hats.append(t_hat)
@@ -279,8 +286,37 @@ class AF3Sampler:
             "t_hats": t_hats
         }
 
-    
+
+    def _get_initial_structure(self, f, noise_schedule, D, L, device):
+        X_L = noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=device)
+        return X_L 
+
     def _get_network_input(self, inputs):
         network_input, loss_input = prepare_input_af3(inputs, **self.config.af3_data_prep, device="cpu")
         return network_input
     
+class AF3PartialSampler(AF3Sampler):
+
+    def __init__(self, config, model):
+        super().__init__(config, model)
+        self.partial_t = config.af3_data_prep["partial_t"]
+
+    def _get_initial_structure(self, f, noise_schedule, D, L, device):
+        from icecream import ic
+        ic(f"initial noise level: {noise_schedule[0]}")
+        X_L = f["xyz_guess"] + noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=device)
+
+        return X_L
+    
+    def construct_noise_schedule(self, num_timesteps, min_t, max_t):
+        full_schedule_min_t = 0
+        full_schedule_max_t = 1
+        full_noise_schedule = super().construct_noise_schedule(num_timesteps, full_schedule_min_t, full_schedule_max_t)
+        assert self.partial_t < num_timesteps
+        return full_noise_schedule[self.partial_t:]
+    
+    def _get_network_input(self, inputs):
+        network_input, loss_input = prepare_input_af3(inputs, **self.config.af3_data_prep, device="cpu")
+        network_input["f"]["xyz_guess"] = loss_input["X_gt_L"]
+        return network_input
+

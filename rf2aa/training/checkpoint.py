@@ -9,8 +9,8 @@ def create_custom_forward(module, **kwargs):
 
 
 def activation_checkpointing(function):
-    def wrapper(*args):
+    def wrapper(*args, **kwargs):
         if torch.is_grad_enabled():
-            return checkpoint(function, *args, use_reentrant=False)
-        return function(*args)
+            return checkpoint(create_custom_forward(function, **kwargs), *args, use_reentrant=False)
+        return function(*args, **kwargs)
     return wrapper

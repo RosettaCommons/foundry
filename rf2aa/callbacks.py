@@ -21,7 +21,7 @@ import rf2aa
 from rf2aa.tensor_util import apply_to_tensors
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.debug import pretty_describe_dict
-from rf2aa.model.AF3_structure import Loss
+from rf2aa.loss.af3_losses import Loss
 from rf2aa import pymol
 from rf2aa.pymol import cmd
 from rf2aa import pymol_tools

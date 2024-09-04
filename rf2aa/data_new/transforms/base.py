@@ -248,7 +248,7 @@ class Compose(Transform):
         ) as rng_state_dict:
             if self.track_rng_state and rng_state_dict is None:
                 # collect RNG states at the start of the pipeline and execute the transforms
-                rng_state_dict = _collect_rng_states()
+                rng_state_dict = _collect_rng_states(include_cuda=False)
 
             try:
                 # execute the transforms

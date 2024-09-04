@@ -179,6 +179,10 @@ def merge_outs(combined_outs, random_noise: float = 5.0):
         "ref_pos_atom36": combined_outs["ref_pos_atom36"],
         "ref_mask": combined_outs["ref_mask"],
         "ref_atom_name_chars": combined_outs["ref_atom_name_chars"],
+        "residue_idx": combined_outs["residue_idx"],
+        "asym_idx": combined_outs["asym_idx"],
+        "symm_idx": combined_outs["symm_idx"],
+        "ref_charge": combined_outs["ref_charge"],
     }
     return merged_outs
 
@@ -309,6 +313,7 @@ def get_crop_sel(merged_outs, item, params):
             crop_size=params["CROP"],
             interface_selection_cutoff=crop_params["interface_selection_cutoff"],
         )
+    sel = torch.sort(sel).values
     return sel
 
 
@@ -337,7 +342,10 @@ def apply_crop_sel(merged_outs, sel, item):
     merged_outs["ref_pos_atom36"] = merged_outs["ref_pos_atom36"][sel]
     merged_outs["ref_mask"] = merged_outs["ref_mask"][sel]
     merged_outs["ref_atom_name_chars"] = merged_outs["ref_atom_name_chars"][sel]
-
+    merged_outs["residue_idx"] = merged_outs["residue_idx"][sel]
+    merged_outs["asym_idx"] = merged_outs["asym_idx"][sel]
+    merged_outs["symm_idx"] = merged_outs["symm_idx"][sel]
+    merged_outs["ref_charge"] = merged_outs["ref_charge"][sel]
     # crop small molecule features, assumes all sm chains are after all protein chains
     atom_sel = sel[sel >= sum(merged_outs["Ls_poly"])] - sum(
         merged_outs["Ls_poly"]
@@ -494,7 +502,7 @@ def loader_sm_compl_assembly(
         merged_outs["symmetry_group"] = "C1"
 
     return merged_outs
-    #return (
+#    return (
         #merged_outs["seq"].long(),
         #merged_outs["msa_seed_orig"].long(),
         #merged_outs["msa_seed"].float(),

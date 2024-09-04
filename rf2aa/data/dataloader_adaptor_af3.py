@@ -293,7 +293,7 @@ def torch_vectorize(pyfunc):
         return torch.tensor(out_np)
     return f
 
-def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_ca, t=None, device="cpu",):
+def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_ca, t=None, device="cpu", **kwargs):
     logger.debug('prepare_input_af3 input:\n' + pretty_describe_dict(inputs))
     #(
         #seq, msa, msa_masked, msa_full, mask_msa, true_crds, mask_crds, idx_pdb, 
@@ -366,12 +366,14 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     f = {}
 
     ### Residue level ###
-    f['residue_index'] = idx_pdb
+    # need to update residue index to be identical across ligand atoms in the same chain
+    f['residue_index'] = inputs["residue_idx"][0]
     f['token_index'] = torch.arange(N_token)
-    f['asym_id'] = ch_label
-    # Hacked:
-    f['entity_id'] = torch.zeros(N_token)
-    f['sym_id'] = within_group_unique_ids(f['entity_id'], f['asym_id'])
+    # unique for each chain 
+    f['asym_id'] = inputs["asym_idx"][0] 
+    # break symm for identical chains
+    f['entity_id'] = inputs["ch_label"][0]
+    f['sym_id'] = inputs["symm_idx"][0]
     # f['restype'] = F.one_hot(torch.tensor([af3_aa2num[aa_af3]]), len(af3_num2aa))
     f['restype'] = F.one_hot(af3num_from_num(seq), len(af3_num2aa))
     # token_type = torch.tensor([aa_restype_from_fine[aa]])
@@ -411,18 +413,20 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     element = [ChemData().aa2elt[seq[tok]][within_tok] for tok, within_tok in zip(tok_idx, within_tok_idx)]
     f['ref_element'] = F.one_hot(torch.tensor([element_code_to_num[e] if e in element_code_to_num else len(element_codes) - 1 for e in element]), len(element_codes))
 
-    # Hacked:
-    f['ref_charge'] = torch.zeros((N_atom))
+    f['ref_charge'] = inputs["ref_charge"][0][is_real_atom]
     f['ref_atom_name_chars'] = F.one_hot(inputs["ref_atom_name_chars"][0][is_real_atom].long(), num_classes=64)
     f['ref_space_uid'] = integer_tokenize(list(zip(f['asym_id'], f['residue_index'])))[tok_idx]
 
     ### MSA ###
+    # need MSA to be larger since there is the subsampling step
     f['msa'] = F.one_hot(af3num_from_num(msa), len(af3_num2aa))
     # Hacked
     N_msa = msa.shape[0]
     f['has_deletion'] = torch.zeros((N_msa, N_token))
-    f['deletion_value'] = torch.zeros((N_msa, N_token))
-    f['profile'] = torch.zeros((N_token, 32))
+    f['deletion_value'] = inputs["msa_extra"][0,0,..., ChemData().NAATOKENS:ChemData().NAATOKENS+1].squeeze(-1)
+    # need to be profile of full MSA
+    
+    f['profile'] = f["msa"].sum(dim=0) / N_msa
     f['deletion_mean'] = torch.zeros((N_token))
 
     ### Templates ###
@@ -477,9 +481,10 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     
     has_ligand_2d = (f['is_ligand'].unsqueeze(-2) + f['is_ligand'].unsqueeze(-1)).bool()
     # is_ligand_ligand = f['is_ligand'].unsqueeze(-2) * f['is_ligand'].unsqueeze(-1)
+    is_protein_2d = (f['is_protein'].unsqueeze(-2) + f['is_protein'].unsqueeze(-1)).bool()
     
     # Hacked (as covalent bonds are not represented in bond_feats and 2.4A filter not applied)
-    f['token_bonds'] = has_ligand_2d * (bond_feats > 0)
+    f['token_bonds'] = ~is_protein_2d * (bond_feats > 0)
 
     X_gt_L = true_crds[is_real_atom]
     atom_mask = mask_crds[is_real_atom]

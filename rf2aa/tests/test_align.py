@@ -22,7 +22,9 @@ def test_align():
     w = torch.ones((B, L))
 
     rmsd_kabsch = pseudobatched_kabsch(x_from, x_to)
-    x_from_align = weighted_rigid_align(x_from, x_to, w)
+
+    is_resolved = torch.ones((L), dtype=torch.bool)
+    x_from_align = weighted_rigid_align(x_from, x_to, is_resolved, w)
     rmsd_weighted_rigid = get_rmsd(x_to, x_from_align)
     ic(rmsd_weighted_rigid, rmsd_kabsch)
     assert (torch.abs(rmsd_weighted_rigid - rmsd_kabsch) < 1e-5).all(), f'{rmsd_weighted_rigid} != {rmsd_kabsch}'    

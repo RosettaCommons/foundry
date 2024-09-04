@@ -145,7 +145,6 @@ def get_distilled_dataset(dataset_params, loader_params):
         chid2taxid,
         chid2smpartners,
     ) = get_train_valid_set(loader_params, no_match_okay=loader_params['no_match_okay'])
-
     # define atomize_pdb train/valid sets, which use the same examples as pdb set
     train_ID_dict["atomize_pdb"] = train_ID_dict["pdb"]
     valid_ID_dict["atomize_pdb"] = valid_ID_dict["pdb"]

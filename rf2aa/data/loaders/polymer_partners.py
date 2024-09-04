@@ -793,7 +793,7 @@ def featurize_asmb_poly(
         raise ValueError("chid2hash must be provided to load polymer partners.")
 
     # polymer true coords
-    xyz_poly, mask_poly, ch_label_poly, seq_poly = [], [], [], []
+    xyz_poly, mask_poly, ch_label_poly, seq_poly, res_idxs = [], [], [], [], []
     xyz_t_poly, f1d_t_poly, mask_t_poly, tplt_ids = [], [], [], []
     ch_letters, Ls_poly = [], []
     chain_types = []
@@ -807,7 +807,7 @@ def featurize_asmb_poly(
         N_mer = len(partners_ch)
         xyz_chxf, mask_chxf, seq_chxf, mod_residues_to_atomize = [], [], [], []
         for p in partners_ch:
-            xyz_, mask_, seq_, _, _, residues_to_atomize = cif_poly_to_xyz(
+            xyz_, mask_, seq_, _, res_idx, residues_to_atomize = cif_poly_to_xyz(
                 chains[p[0]], asmb_xfs[p[1]], modres
             )
             residues_to_atomize = [
@@ -820,6 +820,7 @@ def featurize_asmb_poly(
             Ls_poly.append(xyz_.shape[0])
             ch_letters.append(p[0])
             chain_types.append(chain_type)
+            res_idxs.append(res_idx)
 
         # concatenate all locations, repeat for every permutation of locations
         xyz_ch, mask_ch, seq_ch = [], [], []
@@ -897,7 +898,7 @@ def featurize_asmb_poly(
 
     ch_label_poly = torch.cat(ch_label_poly, dim=0)
     seq_poly = torch.cat(seq_poly, dim=0)
-
+    res_idxs = torch.cat(res_idxs, dim=0)
     return (
         xyz_poly,
         mask_poly.bool(),
@@ -911,6 +912,7 @@ def featurize_asmb_poly(
         chain_types,
         mod_residues_to_atomize,
         tplt_ids,
+        res_idxs
     )
 
 
@@ -966,6 +968,7 @@ def load_polymer_partners(
             chain_types,
             mod_residues_to_atomize,
             tplt_ids,
+            res_idxs,
         ) = featurize_asmb_poly(
             pdb_id,
             poly_partners,
@@ -1010,5 +1013,6 @@ def load_polymer_partners(
         "tplt_ids": tplt_ids,
         "a3m_poly": a3m_poly,
         "seed_msa_clus": seed_msa_clus,
+        "res_idxs": res_idxs
     }
     return poly_outs

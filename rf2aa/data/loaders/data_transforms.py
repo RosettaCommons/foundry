@@ -10,6 +10,71 @@ from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
+class ComputeResidueIndex(Transform):
+    
+    def check_input(self, data: dict):
+        check_contains_keys(data, ["res_idxs", "akeys_sm"])
+    
+    def forward(self, data: dict) -> dict:
+        res_idxs_poly = data["res_idxs"]
+        akeys_sm = data["akeys_sm"]
+        if len(akeys_sm) == 0:
+            data["residue_idx"] = res_idxs_poly
+            return data
+        res_idx_nonpoly = torch.cat([torch.tensor([int(akey[1]) for akey in akeys_per_chain]) for akeys_per_chain in akeys_sm], dim=0)
+        res_idxs = torch.cat([res_idxs_poly, res_idx_nonpoly], dim=0)
+        data["residue_idx"] = res_idxs
+        return data
+
+class ComputeEntityIndex(Transform):
+    """Each chain with a distinct sequence is assigned a unique index"""
+    def check_input(self, data: dict):
+        check_contains_keys(data, ["ch_label"])
+    
+    def forward(self, data: dict[str, Any], *args, **kwargs) -> dict[str, Any]:
+        data["entity_idx"] = data["ch_label"]
+        return data
+
+class ComputeAsymIndex(Transform):
+    """Each unique chain in the protein is assigned a unique index"""
+    def check_input(self, data: dict):
+        check_contains_keys(data, ["Ls_poly", "Ls_sm"])
+    
+    def forward(self, data: dict[str, Any], *args, **kwargs) -> dict[str, Any]:
+        Ls = data["Ls_poly"] + data["Ls_sm"]
+        asym_idx = torch.cat([torch.tensor(i).repeat(L) for i, L in enumerate(Ls)], dim=0)
+        data["asym_idx"] = asym_idx
+        return data
+
+class ComputeSymmIndex(Transform):
+    """Identical sequences get different indices"""
+    def check_input(self, data: dict[str, Any]) -> None:
+        return super().check_input(data)
+    
+    def forward(self, data: dict[str, Any], *args, **kwargs) -> dict[str, Any]:
+        symm_chain_idx_poly = self.find_symm_chains(data["ch_label_poly"], data["Ls_poly"])
+        symm_chain_idx_nonpoly = self.find_symm_chains(data["ch_label_sm"], data["Ls_sm"])
+        symm_chain_idx = torch.cat([symm_chain_idx_poly, symm_chain_idx_nonpoly], dim=0)
+        data["symm_idx"] = symm_chain_idx
+        
+        return data
+    
+    def find_symm_chains(self, ch_label, Ls):
+        num_occurrences = {}
+        offset = 0
+        symm_idx = torch.zeros_like(ch_label)
+        for i, L in enumerate(Ls):
+            key = ch_label[offset:offset+L].tolist()
+            key = tuple(key)
+            if key not in num_occurrences:
+                num_occurrences[key] = 0
+
+            symm_idx[offset:offset+L] = num_occurrences[key] 
+            
+            num_occurrences[key] += 1
+            offset += L
+        return symm_idx
+
 
 class AddReferencePositions(Transform):
     
@@ -63,7 +128,7 @@ class AddReferencePositions(Transform):
                     coordinates = torch.zeros((NUM_ATOMS_IN_UNK, 3), dtype=torch.float32)
                     has_ref_pos = torch.zeros(NUM_ATOMS_IN_UNK, dtype=torch.bool)
                 elif molecule_3letter in self.molname2sdf:
-                    coordinates = self.generate_conformer(molecule_3letter)
+                    coordinates, _ = self.generate_conformer(molecule_3letter)
                     has_ref_pos = torch.ones(coordinates.size(0), dtype=torch.bool)
                 else:
                     coordinates = torch.zeros((0, 3), dtype=torch.float32)
@@ -72,8 +137,6 @@ class AddReferencePositions(Transform):
                     #raise ValueError(f"Could not find ideal SDF for {molecule}")
                 positions.append(coordinates)
                 all_has_ref_pos.append(has_ref_pos)
-
-                
         return torch.cat(positions, dim=0), torch.cat(all_has_ref_pos, dim=0)
 
     def check_ligand_reference_conf_dims(self, data, ligand_ref_pos):
@@ -91,13 +154,13 @@ class AddReferencePositions(Transform):
         sdf = metadata["sdf"]
         kwargs = {"filetype": "sdf", "string": True, "find_automorphs": False, "generate_conformer": True, "remove_H":False}
         try:
-            _, _, _, atom_coords, _ = rf2aa.data.parsers.parse_mol(sdf, 
+            obmol, _, _, atom_coords, _ = rf2aa.data.parsers.parse_mol(sdf, 
                                                                     **kwargs 
                                                                 )
         except Exception as e:
             # fall back to using ideal coordinates in file
             kwargs["generate_conformer"] = False
-            _, _, _, atom_coords, _ = rf2aa.data.parsers.parse_mol(sdf, 
+            obmol, _, _, atom_coords, _ = rf2aa.data.parsers.parse_mol(sdf, 
                                                                     **kwargs 
             ) 
         # remove hydrogens and leaving atoms
@@ -106,7 +169,7 @@ class AddReferencePositions(Transform):
         is_h_or_leaving = is_h | is_leaving
         atom_coords = atom_coords[0]
         atom_coords = atom_coords[~is_h_or_leaving]
-        return atom_coords                                                   
+        return atom_coords, obmol
 
 
 class AddRefAtomNameChars(Transform):
@@ -152,8 +215,82 @@ class AddRefAtomNameChars(Transform):
                 atom_names.append(encoded_name[None])
         return torch.cat(atom_names, dim=0)
 
+class GetReferenceCharge(AddReferencePositions):
+
+    def check_input(self, data: dict):
+        check_contains_keys(data, ["seq_poly", "akeys_sm", "seq_combined"])
+
+    def forward(self, data: dict) -> dict:
+        self.molname2sdf = self._load_ligand_ideal_sdfs() 
+        seq_poly = data["seq_poly"]
+        seq_3letter = [ChemData().num2aa[aa] for aa in seq_poly]
+        Ls_per_poly_residue = [sum(ChemData().heavyatom_mask[aa]) for aa in seq_poly]
+        # get charges for protein and ligands
+        protein_charges = self.generate_reference_charge(seq_3letter, Ls_per_poly_residue)
+        ligand_charges = self.generate_reference_charge(data["lig_names"], data["Ls_sm"])
+        # combine them
+        if len(data["lig_names"]) == 0:
+            charges = protein_charges
+        else:
+            charges = torch.cat([protein_charges, ligand_charges], dim=0)
+
+        # reorient to token indexing to allow cropping down the line
+        is_real_atom = ChemData().heavyatom_mask[data["seq_combined"]]
+        charges_atom36 = torch.zeros(is_real_atom.shape, dtype=charges.dtype)
+        try:
+            charges_atom36[is_real_atom] = charges
+        except Exception as e:
+            print(f"Error in adding reference charges: {e}")
+
+        data["ref_charge"] = charges_atom36
+        return data 
+
+    def generate_reference_charge(self, molecule_names: list, Ls) -> dict:
+        if len(molecule_names) == 0:
+            return None
+        charges = []
+        for i, molecule in enumerate(molecule_names):
+            for molecule_3letter in molecule.split("_"):    
+                if molecule_3letter == "UNK":
+                    NUM_ATOMS_IN_UNK = 5
+                    charge = torch.zeros(NUM_ATOMS_IN_UNK, dtype=torch.float32)
+                elif molecule_3letter in self.molname2sdf:
+                    charge = self.generate_charge(molecule_3letter)
+                else:
+                    charge = torch.zeros(Ls[i], dtype=torch.float32)
+                    logger.debug(f"Could not find ideal SDF for {molecule}")
+                    #raise ValueError(f"Could not find ideal SDF for {molecule}")
+                if charge.shape[0] != Ls[i]:
+                    charge = torch.zeros(Ls[i], dtype=torch.float32)
+                charges.append(charge)
+        return torch.cat(charges, dim=0)
+    
+    def generate_charge(self, molecule, akeys=None) -> dict:
+        metadata = self.molname2sdf[molecule]
+        atom_coords, obmol = self.generate_conformer(molecule)
+        charges = []
+        atom_nums = []
+        for atom in range(obmol.NumAtoms()):
+            atom_idx = atom + 1
+            atom = obmol.GetAtom(atom_idx)
+            charges.append(atom.GetFormalCharge())
+            atom_nums.append(atom.GetAtomicNum())
+        atom_nums = torch.tensor(atom_nums)
+        is_h = atom_nums == 1
+        is_leaving = torch.tensor(metadata["leaving"])
+        is_h_or_leaving = is_h | is_leaving
+
+        charges = torch.tensor(charges)
+        charges = charges[~is_h_or_leaving]
+        
+        return charges
+    
 
 pipeline = Compose([
                     AddReferencePositions(),
-                    AddRefAtomNameChars()
+                    AddRefAtomNameChars(),
+                    GetReferenceCharge(),
+                    ComputeResidueIndex(),
+                    ComputeAsymIndex(),
+                    ComputeSymmIndex(),
                     ])

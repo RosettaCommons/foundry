@@ -976,7 +976,8 @@ def cif_poly_to_xyz(ch, ch_xf, modres=dict()):
         xf = torch.tensor(xf).float()
     u,r = xf[:3,:3], xf[:3,3]
     xyz_xf = torch.einsum('ij,raj->rai', u, xyz) + r[None,None]
-
+    import tree
+    resi = torch.tensor(tree.map_structure(lambda x: int(x) if x !="-" else 0, resi))
     return xyz_xf, mask, seq, chid, resi, residues_to_atomize
 
 

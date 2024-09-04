@@ -17,6 +17,7 @@ loss:
     alpha_ligand: 10
     edm_lambda: False
     se3_invariant_loss: True
+    clamp_diffusion_loss: True
   distogram_loss:
     weight: 3e-2
 
@@ -25,6 +26,7 @@ ddp_params:
 
 loader_params:
   p_msa_mask: 0.0
+  maxseq: 5132
 
 interpolant:
   sigma_data: 16
@@ -208,7 +210,7 @@ model:
           diffusion_transformer_block:
             n_head: 4
   distogram_head:
-    bins: 37  
+    bins: 65 
 
 optimizer:
   type: Adam
@@ -245,8 +247,10 @@ lightning:
     accelerator: gpu
     strategy: "ddp_find_unused_parameters_true"
 
-inference:
-  checkpoint: /net/tukwila/rohith/af3-repro-debug/tmp_checkpoints/epoch=23-step=264.ckpt
+af3_inference:
+  second_order_solver: False
+#inference:
+  #checkpoint: /net/tukwila/rohith/af3-repro-debug/tmp_checkpoints/epoch=23-step=264.ckpt
 model_checkpoint:
   dirpath: /net/tukwila/rohith/af3-repro-debug/tmp_checkpoints/restart
   save_top_k: -1

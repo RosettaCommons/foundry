@@ -172,7 +172,8 @@ def unpack_outputs(rf_outputs, rf_latents, return_raw):
             alpha_intermediate = torch.stack(rf_latents["alpha_intermediate"], dim=0)
             alphas = torch.cat((alpha_intermediate, alphas), dim=0)
         # HACK: breaking change for all atom flow matching
-        xyz_allatom = rf_outputs["xyz"]
+        #xyz_allatom = rf_outputs["xyz"]
+        xyz_allatom = None
         return (c6d_logits, mlm_logits, pae_logits, pde_logits, p_bind, 
                 xyz, alphas, xyz_allatom, plddt_logits, msa[:, 0], pair, state)
 
