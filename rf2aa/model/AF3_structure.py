@@ -458,18 +458,14 @@ class DiffusionModule(nn.Module):
             R_noisy_L = X_noisy_L
         else:
             raise Exception(f'{self.f_pred=} unrecognized')
-
         # Sequence-local Atom Attention and aggregation to coarse-grained tokens
         A_I, Q_skip_L, C_skip_L, P_skip_LL = self.atom_attention_encoder(f, R_noisy_L, S_trunk_I, Z_II)
-
         # Full self-attention on token level
         A_I = A_I + self.process_s(S_I)
         A_I = self.diffusion_transformer(A_I, S_I, Z_II, Beta_II=torch.tensor(0.0, device=Z_II.device))
         A_I = self.layer_norm_1(A_I)
-
         # Broadcast token activations to atoms and run Sequence-local Atom Attention
         R_update_L = self.atom_attention_decoder(f, A_I, Q_skip_L, C_skip_L, P_skip_LL)
-
         # Rescale updates to positions and combine with input positions
         if self.f_pred == 'edm':
             X_out_L = (
@@ -681,10 +677,13 @@ class Model(nn.Module):
             Z_II,
         )
         distogram_pred = self.distogram_head(Z_II)
-        return {
-            "X_L": X_pred,
-            "distogram": distogram_pred,
-        }
+        return dict(
+            X_L=X_pred,
+            distogram=distogram_pred,
+            S_inputs_I=S_inputs_I,
+            S_I=S_I,
+            Z_II=Z_II,
+        )
         
 class DistogramHead(nn.Module):
     def __init__(self,

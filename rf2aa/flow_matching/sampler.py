@@ -210,7 +210,7 @@ class AF3Sampler:
     def __init__(self, config, model):
         self.config = config
         self.model = model
-        self.device = model.device
+        self.device = next(model.parameters()).device
 
 
     def sample(self, inputs: Tuple[str, Any], n_cycle=1, use_amp=False) -> Dict[str, Any]:
@@ -221,23 +221,29 @@ class AF3Sampler:
         network_input=tree.map_structure(lambda x: x.to(self.device) if hasattr(x, 'cpu') else x, network_input)
 
         # run model to get evoformer features
-        pre_recycle_outputs = self.model.module.shadow.pre_recycle(**network_input)
+        #pre_recycle_outputs = self.model.module.shadow.pre_recycle(**network_input)
+        recycle_inputs = self.model.pre_recycle(**network_input)
         for i in range(n_cycle):
             # run the model for n_steps
-            post_recycle_outputs = self.model.module.shadow.recycle(**pre_recycle_outputs)
-            pre_recycle_outputs = post_recycle_outputs
+            #post_recycle_outputs = self.model.module.shadow.recycle(**pre_recycle_outputs)
+            recycle_inputs = self.model.recycle(**recycle_inputs)
         
         noise_schedule = self.construct_noise_schedule(200, 0, 1)
         noise_schedule = noise_schedule.to(self.device)
+        post_recycle_outputs = recycle_inputs
         X_L = self.sample_diffusion(network_input["f"], post_recycle_outputs["S_inputs_I"], \
                 post_recycle_outputs["S_I"], post_recycle_outputs["Z_II"], \
                 noise_schedule
                 ) 
         # need to return the distogram outputs
-        outputs = self.model.module.shadow.post_recycle(
-            **pre_recycle_outputs
+#        outputs = self.model.module.shadow.post_recycle(
+            #**pre_recycle_outputs
+        #)
+        outputs = self.model.post_recycle(
+            **recycle_inputs
         )
         outputs.update(X_L)
+        outputs["X_L"]  = X_L["X_denoised_L_traj"][-1]
         return outputs
 
     def construct_noise_schedule(self, num_timesteps, min_t, max_t):
@@ -261,14 +267,14 @@ class AF3Sampler:
             X_exists_L = torch.ones((D, L)).bool()
             s_trans = 1.0
             X_L = centre_random_augmentation(X_L, X_exists_L, s_trans)
-            #gamma = gamma_0 if c_t > gamma_min else 0
-            gamma = 0
-            warnings.warn(f"gamma is set to 0")
+            gamma = gamma_0 if c_t > gamma_min else 0
+            #gamma = 0
+            #warnings.warn(f"gamma is set to 0")
             t_hat = c_t_minus_1 * (gamma + 1)
             epsilon_L = noise_scale * torch.sqrt(torch.square(t_hat) - torch.square(c_t_minus_1)) * torch.normal(mean=0.0, std=1.0, size=X_L.shape, device=X_L.device)
             X_noisy_L = X_L + epsilon_L
-            X_denoised_L = self.model.module.shadow.diffusion_module(X_noisy_L, t_hat.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
-
+            #X_denoised_L = self.model.module.shadow.diffusion_module(X_noisy_L, t_hat.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
+            X_denoised_L = self.model.diffusion_module(X_noisy_L, t_hat.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
             delta_L =  (X_noisy_L - X_denoised_L) / t_hat
             d_t = c_t - t_hat
             X_L = X_noisy_L + step_scale * d_t * delta_L
@@ -278,7 +284,6 @@ class AF3Sampler:
             X_noisy_L_traj.append(X_noisy_L)
             X_denoised_L_traj.append(X_denoised_L)
             t_hats.append(t_hat)
-
         return {
             "X_L": X_L,
             "X_noisy_L_traj": X_noisy_L_traj,
@@ -291,7 +296,7 @@ class AF3Sampler:
         X_L = noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=device)
         return X_L 
 
-    def _get_network_input(self, inputs):
+    def _get_network_input(self, inputs, t=None):
         network_input, loss_input = prepare_input_af3(inputs, **self.config.af3_data_prep, device="cpu")
         return network_input
     
@@ -304,7 +309,9 @@ class AF3PartialSampler(AF3Sampler):
     def _get_initial_structure(self, f, noise_schedule, D, L, device):
         from icecream import ic
         ic(f"initial noise level: {noise_schedule[0]}")
-        X_L = f["xyz_guess"] + noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=device)
+        noise = torch.normal(mean=0.0, std=noise_schedule[0], size=(D, L, 3), device=device)
+        X_L = f["xyz_guess"] + noise 
+        #+ noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=device)
 
         return X_L
     

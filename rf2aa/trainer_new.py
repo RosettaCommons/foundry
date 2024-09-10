@@ -329,7 +329,6 @@ class Trainer:
                     and (epoch!=start_epoch or self.config.dataset_params.validate_after_first_epoch)
                 ):
                     self.valid_epoch(epoch, rank, world_size)
-                break
         self.cleanup() 
 
     def train_epoch(self, epoch, rank, world_size):
@@ -451,7 +450,8 @@ class Trainer:
     def update_parameters(self):
         """ scale, clip gradients and update parameters """
         # gradient clipping
-        debug_grads(self.model)
+        if self.config.debug_params.debug_grads:
+            debug_grads(self.model)
         self.scaler.unscale_(self.optimizer)
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.training_params.grad_clip)
         self.scaler.step(self.optimizer)
@@ -756,9 +756,9 @@ class AF3Trainer(FlowMatchingTrainer):
             device_ids = None
         self.model = DDP(self.model, device_ids=device_ids, find_unused_parameters=False, broadcast_buffers=False)
         if "partial_t" in self.config.af3_data_prep:
-            self.sampler = AF3PartialSampler(self.config, self.model)
+            self.sampler = AF3PartialSampler(self.config, self.model.module.shadow)
         else:
-            self.sampler = AF3Sampler(self.config, self.model)
+            self.sampler = AF3Sampler(self.config, self.model.module.shadow)
         self.loss = AF3Loss(**self.config.loss)
 
     #def move_constants_to_device(self, gpu):
@@ -817,17 +817,19 @@ class AF3Trainer(FlowMatchingTrainer):
 
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
         gpu = self.model.device
-        n_cycle = 10
+        n_cycle = 4
         warnings.warn("n_cycle is hardcoded to 10 for validation")
         outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
         
         X_L = outputs['X_L']
-        X_L_traj = outputs['X_noisy_L_traj']
+        #X_L_traj = outputs['X_noisy_L_traj']
 
         network_input, loss_input = prepare_input_af3(
             inputs,
             **self.config.af3_data_prep,
         )
+        t = self.sampler.construct_noise_schedule(200, 0, 1)[0] if "partial_t" not in self.config.af3_data_prep else self.config.af3_data_prep.partial_t
+        network_input['t'] = torch.tensor(t).tile(self.config.af3_data_prep.D).to(gpu)
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         loss_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
         #loss, loss_dict, loss_dict_batched = self.loss(
@@ -845,7 +847,7 @@ class AF3Trainer(FlowMatchingTrainer):
         )
         output = {"X_L": X_L} | network_input | loss_input
         from rf2aa.callbacks import lddt_metrics
-        noise_schedule = outputs["t_hats"]
+        #noise_schedule = outputs["t_hats"]
         agg_lddt = {}
         #for i, X_L in enumerate(X_L_traj):
             #output["X_L"] = X_L
@@ -883,6 +885,28 @@ class AF3Trainer(FlowMatchingTrainer):
             **self.config.optimizer.params,
         )
 
+class AF3TrainerRollout(AF3Trainer):
+
+    def construct_model(self, device="cpu"):
+        #super().construct_model(device)
+        model = AF3_structure.Model(**self.config.model).to(device)
+        model.device = device
+        from rf2aa.model.layers.af3_auxiliary_heads import ConfidenceHead
+        confidence = ConfidenceHead(**self.config.confidence_head).to(device)
+        from rf2aa.flow_matching.sampler import AF3Sampler
+        self.sampler = AF3Sampler(self.config, model)
+        from rf2aa.model.af3_with_rollout import AF3_with_rollout 
+        self.model = AF3_with_rollout(
+            model,
+            confidence,
+            self.sampler
+        )
+
+        if self.config.training_params.EMA is not None:
+            self.model = EMA(self.model, self.config.training_params.EMA)
+        self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
+        self.sampler.model = self.model.module.shadow.model
+        self.loss = AF3Loss(**self.config.loss)
 
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
@@ -905,7 +929,8 @@ trainer_factory = {
     "legacy": LegacyTrainer,
     "composed": ComposedTrainer,
     "flow_matching": FlowMatchingTrainer,
-    "af3_repro": AF3Trainer
+    "af3_repro": AF3Trainer,
+    "af3_rollout": AF3TrainerRollout,
 }
 
 if __name__ == "__main__":

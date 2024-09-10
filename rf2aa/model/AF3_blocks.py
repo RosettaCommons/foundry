@@ -215,7 +215,8 @@ class MsaSubsampleEmbedder(nn.Module):
         num_samples = torch.min(torch.tensor([self.num_sequences, S]))
         weights = torch.ones(num_samples.item(), device=msa_SI.device)
         samples = torch.multinomial(weights, num_samples, replacement=False)
-        msa_SI = msa_SI[samples]
+        msa_SI = torch.index_select(msa_SI, 0, samples)
+        #msa_SI = msa_SI[samples]
 
         # embed the subsampled MSA
         msa_SI = self.emb_msa(msa_SI)

@@ -211,6 +211,19 @@ model:
             n_head: 4
   distogram_head:
     bins: 65 
+confidence_head:
+  c_s: ${model.c_s}
+  c_z: ${model.c_z}
+  n_pairformer_layers: 4
+  pairformer:
+    p_drop: 0.25
+    c: 128
+    attention_pair_bias:
+      n_head: 16 
+  n_bins_pae: 64
+  n_bins_pde: 64
+  n_bins_plddt: 50
+  n_bins_exp_resolved: 2
 
 optimizer:
   type: Adam
