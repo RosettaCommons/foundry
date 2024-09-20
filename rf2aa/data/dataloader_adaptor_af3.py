@@ -332,7 +332,8 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     NUM_TEMPLATE_DISTOGRAM_BINS = 38
     # Strip batch dimension
     
-    msa = inputs["msa_extra"][0,0,..., :ChemData().NAATOKENS].argmax(dim=-1)
+    #msa = inputs["msa_extra"][0,0,..., :ChemData().NAATOKENS].argmax(dim=-1)
+    msa = inputs["msa"][0]
     idx_pdb = inputs["idx"][0]
     ch_label = inputs["ch_label"][0]
     true_crds = inputs["xyz"][0,0]
@@ -423,7 +424,8 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     # Hacked
     N_msa = msa.shape[0]
     f['has_deletion'] = torch.zeros((N_msa, N_token))
-    f['deletion_value'] = inputs["msa_extra"][0,0,..., ChemData().NAATOKENS:ChemData().NAATOKENS+1].squeeze(-1)
+    #f['deletion_value'] = inputs["msa_extra"][0,0,..., ChemData().NAATOKENS:ChemData().NAATOKENS+1].squeeze(-1)
+    f['deletion_value'] = torch.zeros((N_msa, N_token))
     # need to be profile of full MSA
     
     f['profile'] = f["msa"].sum(dim=0) / N_msa
@@ -515,6 +517,8 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
         # loss input (trues)
         dict(
             X_gt_L=X_gt_L,
+            X_gt_I_symm=inputs["xyz"],
+            crd_mask_I_symm=inputs["mask"],
             crd_mask_I = mask_crds,
             seq=seq,
             bond_feats=bond_feats,

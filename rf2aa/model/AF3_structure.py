@@ -601,6 +601,10 @@ class Model(nn.Module):
             recycle: recycling_input --> recycling_input
             post_recycle: recycling_input --> output
         '''
+        recycling_input = self.trunk_forward(input, n_cycle=n_cycle, no_sync=no_sync)
+        return self.post_recycle(**recycling_input)
+
+    def trunk_forward(self, input, n_cycle, no_sync): 
         recycling_input = self.pre_recycle(**input)
         for i_cycle in range(n_cycle):
                 with ExitStack() as stack:
@@ -608,9 +612,8 @@ class Model(nn.Module):
                         stack.enter_context(torch.no_grad())
                         stack.enter_context(no_sync())
                     recycling_input = self.recycle(**recycling_input)
-        return self.post_recycle(**recycling_input)
+        return recycling_input
 
-    
     def pre_recycle(self,
                     f,
                     X_noisy_L,

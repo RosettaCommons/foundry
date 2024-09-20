@@ -50,10 +50,11 @@ os.environ['OPENBLAS_NUM_THREADS'] = '4'
 #os.environ['PYTORCH_CUDA_ALLOC_CONF'] = "max_split_size_mb:512"
 # Update environment variable with correct path (needed for W&B upload)
 # os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 ## To reproduce errors
 
 torch.set_num_threads(4)
-#torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 
 class Trainer:
     def __init__(self, config) -> None:
@@ -813,6 +814,14 @@ class AF3Trainer(FlowMatchingTrainer):
         loss_dict_batched = loss_dict_batched | lddt 
         loss_dict_batched["t"] = network_input['t']
         loss_dict.update(self.unbatch_losses(loss_dict_batched))
+
+        #self.write_pdb(
+            #loss_input["X_gt_L"][0], 
+            #loss_input["crd_mask_I"], 
+            #loss_input["seq"],
+            #name=f"train_{inputs['item']['CHAINID']}.pdb"
+        #)
+
         return loss, loss_dict
 
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
@@ -868,6 +877,15 @@ class AF3Trainer(FlowMatchingTrainer):
         self.log_validation_losses(inputs["item"]["CHAINID"], loss_dict)
         sys.stdout.flush()
         return loss, loss_dict
+    
+    def write_pdb(self, X_gt_L, crd_mask_I, seq, name="valid.pdb"):
+        I = seq.shape[0]
+        
+        is_real_atom = ChemData().heavyatom_mask.to(self.model.device)[seq]
+        X_gt_I = torch.zeros(I, ChemData().NTOTAL, 3, device=self.model.device)
+        X_gt_I[is_real_atom] = X_gt_L
+        import rf2aa
+        rf2aa.util.writepdb(filename=name, atoms=X_gt_I, atom_mask=crd_mask_I, seq=seq)
 
     def unbatch_losses(self, loss_dict_batched):
         loss_dict = {}
@@ -896,17 +914,96 @@ class AF3TrainerRollout(AF3Trainer):
         from rf2aa.flow_matching.sampler import AF3Sampler
         self.sampler = AF3Sampler(self.config, model)
         from rf2aa.model.af3_with_rollout import AF3_with_rollout 
+        import copy
         self.model = AF3_with_rollout(
             model,
             confidence,
-            self.sampler
+            copy.deepcopy(self.sampler)
         )
 
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
+        def should_ignore(param_name):
+            ignore_regexes = [
+                re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_s_trunk\..*'),
+                re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_z\..*'),
+                re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_r\..*'),
+                re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias.ln_1\..*'),
+                re.compile(r'model\.model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.linear_output_project\..*'),
+                re.compile(r'model\.model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
+                re.compile(r'model\.model\.diffusion_module\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
+                re.compile(r'model\.model\.diffusion_module\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
+                re.compile(r'model\.model\.diffusion_module\.atom_attention_decoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
+                re.compile(r'model\.confidence\.pairformer\.\d+\.attention_pair_bias\.linear_output_project\..*'),
+                re.compile(r'model\.confidence\.pairformer\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
+
+            ]
+            return any(regex.match(param_name) for regex in ignore_regexes)
+        params_to_ignore = []
+        for param_name, param in self.model.named_parameters():
+            if should_ignore(param_name):
+                params_to_ignore.append(param_name)
+        torch.nn.parallel.DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
+            self.model,
+            params_to_ignore
+        )
+        assert len(params_to_ignore)
+
         self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
         self.sampler.model = self.model.module.shadow.model
         self.loss = AF3Loss(**self.config.loss)
+
+    def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
+        gpu = self.model.device
+
+        network_input, loss_input = prepare_input_af3(
+            inputs,
+            **self.config.af3_data_prep,
+        )
+
+        network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
+        loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
+        logger.debug('network_input:\n' + pretty_describe_dict(network_input))
+        logger.debug('loss_input:\n' + pretty_describe_dict(loss_input))
+        output_i = self.model(
+            network_input,
+            n_cycle,
+            loss_input["X_gt_I_symm"].to(gpu),
+            loss_input["crd_mask_I_symm"].to(gpu),
+            loss_input["seq"].to(gpu),
+            no_sync=self.model.no_sync,
+        )
+        #loss, loss_dict, loss_dict_batched = self.loss(
+            #f=network_input['f'],
+            #t=network_input['t'],
+            #X_L=output_i,
+            #X_gt_L=loss_input['X_gt_L'].to(gpu),
+            #seq=loss_input['seq'].to(gpu),
+            #crd_mask_I=loss_input['crd_mask_I'].to(gpu),
+        #)
+        loss, loss_dict_batched = self.loss(
+            network_input,
+            output_i,
+            loss_input
+        )
+        loss_dict = {}
+        output = {"X_L": output_i["X_L"]} | network_input | loss_input
+        from rf2aa.callbacks import lddt_metrics
+
+        lddt, _ = lddt_metrics(None, output)
+        sigma_data = 16
+        t = network_input['t']
+        X_noisy_L = network_input['X_noisy_L']
+        null_pred = (sigma_data**2 / (sigma_data**2 + t**2))[...,None,None] * X_noisy_L
+        lddt_null, _ = lddt_metrics(None, {"X_L": null_pred} | network_input | loss_input)
+        for key, val in lddt_null.items():
+            lddt[f"{key}_null_pred"] = val
+        loss_dict_batched["noise_std_dev"]  = torch.std(X_noisy_L, dim=(-1,-2))
+        loss_dict_batched = loss_dict_batched | lddt 
+        loss_dict_batched["t"] = network_input['t']
+        loss_dict.update(self.unbatch_losses(loss_dict_batched))
+        return loss, loss_dict
+    
 
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):

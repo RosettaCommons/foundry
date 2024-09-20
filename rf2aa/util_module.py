@@ -81,7 +81,7 @@ class Dropout(nn.Module):
             shape[self.broadcast_dim] = 1
         mask = self.sampler.sample(shape).to(x.device).view(shape)
 
-        x = mask * x / (1.0 - self.p_drop)
+        x = mask * x #/ (1.0 - self.p_drop)
         return x
 
 def rbf(D, D_min=0.0, D_count=64, D_sigma=0.5):

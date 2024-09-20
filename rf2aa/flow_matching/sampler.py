@@ -243,7 +243,7 @@ class AF3Sampler:
             **recycle_inputs
         )
         outputs.update(X_L)
-        outputs["X_L"]  = X_L["X_denoised_L_traj"][-1]
+        #outputs["X_L"]  = X_L["X_denoised_L_traj"][-1]
         return outputs
 
     def construct_noise_schedule(self, num_timesteps, min_t, max_t):
@@ -256,8 +256,8 @@ class AF3Sampler:
         return t_hat
 
     def sample_diffusion(self, f, s_inputs_I, s_trunk_I, Z_trunk_II, noise_schedule, \
-                         gamma_0=0.8, gamma_min=1.0, noise_scale=1.003, step_scale=1.5):
-        D = self.config.af3_data_prep["D"]
+                         gamma_0=0.8, gamma_min=1.0, noise_scale=1.003, step_scale=1.5, D=None):
+        D = D if D is not None else self.config.af3_data_prep["D"]
         L = f["ref_pos"].shape[0]
         X_L = self._get_initial_structure(f, noise_schedule, D, L, self.device)
         X_noisy_L_traj = []
@@ -284,12 +284,12 @@ class AF3Sampler:
             X_noisy_L_traj.append(X_noisy_L)
             X_denoised_L_traj.append(X_denoised_L)
             t_hats.append(t_hat)
-        return {
-            "X_L": X_L,
-            "X_noisy_L_traj": X_noisy_L_traj,
-            "X_denoised_L_traj": X_denoised_L_traj,
-            "t_hats": t_hats
-        }
+        return dict(
+            X_L= X_L,
+            X_noisy_L_traj= X_noisy_L_traj,
+            X_denoised_L_traj= X_denoised_L_traj,
+            t_hats= t_hats
+        )
 
 
     def _get_initial_structure(self, f, noise_schedule, D, L, device):

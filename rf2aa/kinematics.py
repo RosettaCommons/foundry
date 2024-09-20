@@ -81,7 +81,7 @@ def get_pair_dist(a, b):
     Returns
     -------
     dist : pytorch tensor of shape [batch,nres,nres]
-           stores paitwise distances between atoms in a and b
+           stores pairwise distances between atoms in a and b
     """
 
     dist = torch.cdist(a, b, p=2)

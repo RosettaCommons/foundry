@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.alignment import weighted_rigid_align
+from rf2aa.model.af3_with_rollout import ConfidenceLoss
 
 
 def calc_smoothed_lddt_loss(X_gt_L, X_L, crd_mask_I, seq, tok_idx, is_dna, is_rna):
@@ -28,7 +29,8 @@ def calc_smoothed_lddt_loss(X_gt_L, X_L, crd_mask_I, seq, tok_idx, is_dna, is_rn
     is_na_L = is_dna[tok_idx] | is_rna[tok_idx]
     is_close_distance = (ground_truth_distances < 30) * is_na_L + (ground_truth_distances < 15) * ~is_na_L
     mask = is_unresolved_distance_LL & ~in_same_residue_LL & is_close_distance[0]
-    lddt = torch.div(lddt_matrix[:, mask].sum(dim=(-1)), (mask.sum(dim=(-1,-2)) + 1e-6))
+    #lddt = torch.div(lddt_matrix[:, mask].sum(dim=(-1)), (mask.sum(dim=(-1,-2)) + 1e-6))
+    lddt = (lddt_matrix*mask[None]).sum(dim=(-1,-2)) / (mask.sum(dim=(-1,-2)) + 1e-6)
     return 1 - lddt
 
 class DiffusionLoss:
@@ -150,10 +152,12 @@ class Loss(nn.Module):
     def __init__(self,
                  diffusion_loss,
                  distogram_loss,
+                 confidence_loss,
                  ):
         super().__init__()
         self.diffusion_loss = DiffusionLoss(**diffusion_loss)
         self.distogram_loss = DistogramLoss(**distogram_loss)
+        self.confidence_loss = ConfidenceLoss(**confidence_loss)
 
     def forward(self,
                 network_input,
@@ -177,9 +181,15 @@ class Loss(nn.Module):
                                              loss_input["seq"],
                                              network_input["f"]
                                              )
+        confidence_loss, confidence_loss_dict = self.confidence_loss(
+                                            network_input, 
+                                             network_output,
+                                             loss_input
+                                             )
         loss_dict.update(diffusion_loss_dict)
         loss_dict.update(distogram_loss_dict)
-        return diffusion_loss + distogram_loss, loss_dict 
+        loss_dict.update(confidence_loss_dict)
+        return diffusion_loss + distogram_loss + confidence_loss, loss_dict 
                 
 
 def convert_residue_mask_to_allatom_mask(crd_mask_I, seq):

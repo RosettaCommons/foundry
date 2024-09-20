@@ -20,6 +20,24 @@ loss:
     clamp_diffusion_loss: True
   distogram_loss:
     weight: 3e-2
+  confidence_loss:
+    weight: 1e-4
+    plddt:
+      weight: 1.0
+      n_bins: 50
+      max_value: 1.0
+    pae:
+      weight: 1.0
+      n_bins: 64
+      max_value: 32
+    pde:  
+      weight: 1.0
+      n_bins: 64
+      max_value: 32
+    exp_resolved:
+      weight: 1.0
+      n_bins: 2
+      max_value: 1
 
 ddp_params:
   batch_size: 1

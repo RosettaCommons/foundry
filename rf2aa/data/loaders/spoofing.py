@@ -75,7 +75,7 @@ def spoofed_loader(
     except Exception as e:
         #raise e
         # print exception so that whole traceback is visible    
-        print(f"Error in spoofed_loader: {repr(e)}")
+        ic(f"Error in spoofed_loader: {repr(e)}")
         ic(f"{item}")
         from rf2aa.tests.test_conditions import sm_compl_item
         spoofed_sm_compl_item = sm_compl_item
