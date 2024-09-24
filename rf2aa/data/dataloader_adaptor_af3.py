@@ -332,8 +332,8 @@ def prepare_input_af3(inputs, D, s_trans, sigma_data, random_augmentation, only_
     NUM_TEMPLATE_DISTOGRAM_BINS = 38
     # Strip batch dimension
     
-    #msa = inputs["msa_extra"][0,0,..., :ChemData().NAATOKENS].argmax(dim=-1)
-    msa = inputs["msa"][0]
+    msa = inputs["msa_extra"][0,0,..., :ChemData().NAATOKENS].argmax(dim=-1)
+    #msa = inputs["msa"][0]
     idx_pdb = inputs["idx"][0]
     ch_label = inputs["ch_label"][0]
     true_crds = inputs["xyz"][0,0]
