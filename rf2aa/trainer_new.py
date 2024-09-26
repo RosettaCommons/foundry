@@ -7,6 +7,7 @@ from icecream import ic
 import numpy as np
 from functools import partial
 import hydra
+from hydra.utils import instantiate
 import os
 import time
 import omegaconf
@@ -18,6 +19,7 @@ import warnings
 import wandb
 import logging
 import tree
+import subprocess
 
 from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
 from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items, prepare_input_fm_allatom
@@ -40,6 +42,7 @@ from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.chemical import initialize_chemdata
 from rf2aa.set_seed import seed_all
 from rf2aa.model import AF3_structure
+from rf2aa.manual_dependency import append_package_path
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +70,12 @@ class Trainer:
             self.output_dir = "models/"
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
+        
+        commit, diff = self.record_git_commit()
+        self.commit, self.diff = commit, diff
+
+        self.dataset_constructor = instantiate(self.config.dataset_params.constructor)
+        print(f"Using dataset constructor: {self.dataset_constructor}")
 
     def construct_model(self, device):
         raise NotImplementedError()
@@ -138,9 +147,10 @@ class Trainer:
         self.scaler.load_state_dict(self.checkpoint['scaler_state_dict'])
 
     def construct_dataset(self, init_db, rank, world_size):
-        return compose_dataset(
-            init_db, self.config.dataset_params, self.config.loader_params, rank, world_size
-        )
+        return self.dataset_constructor(init_db, self.config.dataset_params, self.config.loader_params, rank, world_size)
+        #return compose_dataset(
+            #init_db, self.config.dataset_params, self.config.loader_params, rank, world_size
+        #)
     
     def construct_loss_function(self):
         raise NotImplementedError() 
@@ -172,6 +182,8 @@ class Trainer:
                     'scheduler_state_dict': self.scheduler.state_dict(),
                     'scaler_state_dict'   : self.scaler.state_dict(),
                     'training_config'     : dict(self.config),
+                    'commit'              : self.commit,
+                    'diff'                : self.diff,
                     }
         checkpoint_data.update(metadata)
 
@@ -181,8 +193,6 @@ class Trainer:
             torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_last.pt")
             torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
         
-
-    
     def launch_distributed_training(self):
         world_size = torch.cuda.device_count()
         if ('MASTER_ADDR' not in os.environ):
@@ -209,35 +219,22 @@ class Trainer:
             else:
                 mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
 
-#    def launch_distributed_training(self):
-        #world_size = torch.cuda.device_count()
-        #if ('MASTER_ADDR' not in os.environ):
-            #os.environ['MASTER_ADDR'] = '127.0.0.1' # multinode requires this set in submit script
-        #if ('MASTER_PORT' not in os.environ):
-            #os.environ['MASTER_PORT'] = '%d'%self.config.ddp_params.port
+    def record_git_commit(self, path=None):
 
-        #if ("SLURM_NTASKS" in os.environ and "SLURM_PROCID" in os.environ):
-            #world_size = int(os.environ["SLURM_NTASKS"])
-            #self.world_size = world_size
-            #rank = int (os.environ["SLURM_PROCID"])
-            #print ("Launched from slurm", rank, world_size)
-            #self.train_model(rank, world_size)
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # git hash of current commit
+        try:
+            commit = subprocess.check_output(f'git --git-dir {script_dir}/../.git rev-parse HEAD',
+                                                  shell=True).decode().strip()
+        except subprocess.CalledProcessError:
+            print('WARNING: Failed to determine git commit hash.')
+            commit = 'unknown'
 
-        #else:
-            #print ("Launched from interactive")
-            #world_size = max(torch.cuda.device_count(), 1)
-            #if self.config.cpu_training:
-                #world_size = 1
-            
-            #self.world_size = world_size
+        # save git diff from last commit
+        git_diff = subprocess.Popen(['git diff'], cwd = os.getcwd(), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+        out, err = git_diff.communicate()
 
-            #if world_size == 0:
-                #print ("Error! No GPUs found!")
-            #elif world_size == 1:
-                ## No need for multiple processes with 1 GPU
-                #self.train_model(0, world_size)
-            #else:
-                #mp.spawn(self.train_model, args=(world_size,), nprocs=world_size, join=True)
+        return commit, out
 
     def init_process_group(self, rank, world_size):
         gpu = rank % torch.cuda.device_count()
@@ -762,11 +759,6 @@ class AF3Trainer(FlowMatchingTrainer):
             self.sampler = AF3Sampler(self.config, self.model.module.shadow)
         self.loss = AF3Loss(**self.config.loss)
 
-    #def move_constants_to_device(self, gpu):
-        #self.interpolant = Interpolant(self.config.interpolant)
-        #self.interpolant.set_device(gpu)
-        #super().move_constants_to_device(gpu) 
-
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
 
@@ -785,14 +777,7 @@ class AF3Trainer(FlowMatchingTrainer):
             n_cycle,
             no_sync=self.model.no_sync,
         )
-        #loss, loss_dict, loss_dict_batched = self.loss(
-            #f=network_input['f'],
-            #t=network_input['t'],
-            #X_L=output_i,
-            #X_gt_L=loss_input['X_gt_L'].to(gpu),
-            #seq=loss_input['seq'].to(gpu),
-            #crd_mask_I=loss_input['crd_mask_I'].to(gpu),
-        #)
+
         loss, loss_dict_batched = self.loss(
             network_input,
             output_i,
@@ -827,11 +812,9 @@ class AF3Trainer(FlowMatchingTrainer):
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
         gpu = self.model.device
         n_cycle = 4
-        warnings.warn("n_cycle is hardcoded to 10 for validation")
         outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
         
         X_L = outputs['X_L']
-        #X_L_traj = outputs['X_noisy_L_traj']
 
         network_input, loss_input = prepare_input_af3(
             inputs,
@@ -841,14 +824,7 @@ class AF3Trainer(FlowMatchingTrainer):
         network_input['t'] = torch.tensor(t).tile(self.config.af3_data_prep.D).to(gpu)
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         loss_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
-        #loss, loss_dict, loss_dict_batched = self.loss(
-            #f=network_input['f'],
-            #t=network_input['t'],
-            #X_L=X_L,
-            #X_gt_L=loss_input['X_gt_L'].to(gpu),
-            #seq=loss_input['seq'].to(gpu),
-            #crd_mask_I=loss_input['crd_mask_I'].to(gpu),
-        #)
+
         loss, loss_dict_batched = self.loss(
             network_input,
             outputs,
@@ -906,7 +882,6 @@ class AF3Trainer(FlowMatchingTrainer):
 class AF3TrainerRollout(AF3Trainer):
 
     def construct_model(self, device="cpu"):
-        #super().construct_model(device)
         model = AF3_structure.Model(**self.config.model).to(device)
         model.device = device
         from rf2aa.model.layers.af3_auxiliary_heads import ConfidenceHead
@@ -973,14 +948,7 @@ class AF3TrainerRollout(AF3Trainer):
             loss_input["seq"].to(gpu),
             no_sync=self.model.no_sync,
         )
-        #loss, loss_dict, loss_dict_batched = self.loss(
-            #f=network_input['f'],
-            #t=network_input['t'],
-            #X_L=output_i,
-            #X_gt_L=loss_input['X_gt_L'].to(gpu),
-            #seq=loss_input['seq'].to(gpu),
-            #crd_mask_I=loss_input['crd_mask_I'].to(gpu),
-        #)
+
         loss, loss_dict_batched = self.loss(
             network_input,
             output_i,
@@ -1007,7 +975,7 @@ class AF3TrainerRollout(AF3Trainer):
 
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
-    seed_all(446)
+    seed_all(config.training_params.seed)
     trainer = trainer_factory[config.experiment.trainer](config=config)
 
     # Wrap the training in a try-except block to ensure SLURM cleanup post-interrupt (otherwise, we'd need to change the SLURM id each run)

@@ -9,7 +9,8 @@ import os
 import torch
 from typing import List, Dict, Any
 from rf2aa.flow_matching import rigid_utils as ru
-from torch_geometric.utils import scatter
+#from torch_geometric.utils import scatter
+from torch import scatter
 from glob import glob
 
 Rigid = ru.Rigid

@@ -23,7 +23,7 @@ import scipy
 from scipy.sparse.csgraph import shortest_path
 import networkx as nx
 
-import rf2aa.cifutils as cifutils
+import rf2aa.cifutils_legacy as cifutils
 from rf2aa.data.parsers import parse_a3m, parse_pdb, parse_fasta_if_exists, parse_mol, parse_mixed_fasta, get_dislf
 from rf2aa.data.chain_crop import get_complex_crop, get_crop, get_discontiguous_crop, get_na_crop, get_spatial_crop, \
     crop_sm_compl, crop_sm_compl_asmb_contig, crop_sm_compl_assembly, crop_chirals

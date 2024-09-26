@@ -476,3 +476,9 @@ def compose_similar_posebusters(loader_params, rank, world_size):
     sampler = data.distributed.DistributedSampler(benchmark, rank=rank, num_replicas=world_size)
     loader = data.DataLoader(benchmark, sampler=sampler, **loader_params["dataloader_kwargs"])
     return loader
+
+
+class LegacyDatasetConstructor:
+
+    def __call__(self, init_db, dataset_params, loader_params, rank, world_size):
+        return compose_dataset(loader_fn=init_db, dataset_params=dataset_params, loader_params=loader_params, rank=rank, world_size=world_size) 

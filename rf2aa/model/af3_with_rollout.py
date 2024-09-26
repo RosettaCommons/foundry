@@ -143,12 +143,6 @@ class ConfidenceLoss(nn.Module):
         pde_predicted = network_output["pde"].permute(0,3,1,2)
         #
         pde_loss = self.cce(pde_predicted, true_pde_binned) * is_valid_pair
-        #pde_loss = cross_entropy_loss(pde_predicted, true_pde_binned.squeeze(0)) #* is_valid_pair
-        print("pde_loss", pde_loss)
-        print("pde loss", (pde_loss > 0).sum())
-        print("is_valid_pair", (is_valid_pair > 0).sum())
-        print("pde_loss shape"  , pde_loss.shape)
-        print("is_valid_pair shape", is_valid_pair.shape)
 
         pde_loss = pde_loss.sum() / (is_valid_pair.sum() + self.eps)
 

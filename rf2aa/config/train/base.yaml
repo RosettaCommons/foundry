@@ -11,6 +11,8 @@ model:
   auxiliary_predictors: {}
 legacy_model: null
 dataset_params: 
+  constructor: 
+    _target_: "rf2aa.data.compose_dataset.LegacyDatasetConstructor"
   validate_every_n_epochs: 0
   validate_after_first_epoch: False
   fraction_pdb: 0
@@ -60,6 +62,7 @@ dataset_params:
   dslf_fb_upsample: 1
 
 loader_params: 
+  batch_size: 1
   crop_params:
     crop_probabilities:
       radial_crop: 0.0
@@ -114,6 +117,7 @@ training_params:
   grad_clip: 0.2
   use_amp: False
   ddp_backend: nccl
+  seed: 446
 
 loss_param:
   w_dist: 1.0

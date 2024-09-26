@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import networkx as nx
 from typing import Dict, Optional, Tuple, List, Set, Any
-import rf2aa.cifutils as cifutils
+import rf2aa.cifutils_legacy as cifutils
 from rf2aa.util import get_ligand_atoms_bonds, cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs
 
 
