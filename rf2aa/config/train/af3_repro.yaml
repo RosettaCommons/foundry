@@ -398,16 +398,13 @@ dataset_params:
                 - is_inter_molecule
             return_key: feats
             transform:
-              _target_: datahub.pipelines.rf2aa.build_rf2aa_transform_pipeline
+              _target_: datahub.pipelines.af3.build_af3_transform_pipeline
               protein_msa_dirs: ${paths.protein_msa_dirs}
               rna_msa_dirs: ${paths.rna_msa_dirs}
               n_recycles: ${loader_params.maxcycle}
               crop_size: ${loader_params.crop}
               crop_contiguous_probability: 0.0
               crop_spatial_probability: 1.0
-              msa_mask_probability: ${loader_params.p_msa_mask}
-              assert_rf2aa_assumptions: True
-              convert_feats_to_rf2aa_input_tuple: True
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5

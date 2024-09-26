@@ -66,6 +66,7 @@ class AF3Trainer(FlowMatchingTrainer):
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
+        import pdb; pdb.set_trace()
 
         network_input, loss_input = prepare_input_af3(
             inputs,
