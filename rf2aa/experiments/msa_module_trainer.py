@@ -22,19 +22,31 @@ class MsaModuleTrainer(ComposedTrainer):
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
-        network_input, loss_input = prepare_input_af3(
-            inputs,
-            **self.config.af3_data_prep,
-        )
+        #network_input, loss_input = prepare_input_af3(
+            #inputs,
+            #**self.config.af3_data_prep,
+        #)
+        example = inputs[0]
+        network_input = {
+            #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
+            "X_noisy_L": torch.nan_to_num(example["ground_truth"]["coord_atom_lvl"]) + example["noise"],
+            "t": example["t"],
+            "f": example["feats"],
+        } 
+
+        loss_input = {
+            "X_gt_L": example["ground_truth"]["coord_atom_lvl"],
+            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"],
+            "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
+            "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
+        }
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
         network_output = self.model(**network_input)
         loss, distogram_loss_dict = self.distogram_loss(
-                                            network_output["distogram"], 
-                                             loss_input["X_gt_L"], 
-                                             loss_input["crd_mask_I"],
-                                             loss_input["seq"],
-                                             network_input["f"]
+                                             network_input,
+                                             network_output,
+                                            loss_input,
                                              )
         
         return loss, distogram_loss_dict
@@ -69,9 +81,9 @@ class MsaModulewithDist(nn.Module):
                 c_atompair,
                 **feature_initializer)
         self.msa_module = MSAModule(**msa_module)
-        #self.pairformer_stack = nn.ModuleList([
-            #PairformerBlock(c_s=c_s, c_z=c_z, **pairformer_block) for _ in range(n_pairformer_blocks)
-        #])
+        self.pairformer_stack = nn.ModuleList([
+            PairformerBlock(c_s=c_s, c_z=c_z, **pairformer_block) for _ in range(n_pairformer_blocks)
+        ])
         self.dist_head = DistogramHead(c_z, **distogram_head)
 
     def forward(self, **network_input):
