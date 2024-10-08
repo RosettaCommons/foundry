@@ -73,7 +73,7 @@ class Trainer:
         
         commit, diff = self.record_git_commit()
         self.commit, self.diff = commit, diff
-
+        
         self.dataset_constructor = instantiate(self.config.dataset_params.constructor)
         print(f"Using dataset constructor: {self.dataset_constructor}")
 
@@ -352,6 +352,7 @@ class Trainer:
             if (torch.any(torch.isnan(loss))):
                 #print ('NAN in loss',inputs[-1])
                 print ('NAN in loss',loss_dict)
+                print( inputs[0]["example_id"])
                 exit(1)
 
             self.scaler.scale(loss).backward()
@@ -464,6 +465,8 @@ class Trainer:
     def log_intermediate_losses(self, inputs, loss_dict, n_cycle, Nex, Nepoch, runtime):
         if type(inputs) == tuple:
             item = inputs[-1]
+        elif type(inputs) == list:
+            item = inputs[0]["example_id"]
         else:
             item = inputs["item"]
         max_mem = torch.cuda.max_memory_allocated()/1e9

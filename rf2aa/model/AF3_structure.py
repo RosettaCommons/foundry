@@ -112,10 +112,11 @@ class AtomAttentionEncoder(nn.Module):
             S_trunk_I, # [B, I, C_S_trunk] [...,I,C_S_trunk]
             Z_II, # [B, I, I, C_Z] [...,I,I,C_Z]
     ):
-        tok_idx = f['tok_idx']
+        tok_idx = f['atom_to_token_map']
         L = len(tok_idx)
         I = tok_idx.max() + 1
 
+        f["ref_atom_name_chars"] = f["ref_atom_name_chars"].reshape(L, -1)
         # Create the atom single conditioning: Embed per-atom meta data
         C_L = self.process_input_features(torch.cat(tuple(collapse(f[feature_name], L) for feature_name in self.atom_1d_features), dim=-1))
 
@@ -160,7 +161,7 @@ class AtomAttentionEncoder(nn.Module):
         # Aggregate per-atom representation to per-token representation
         A_I = torch.zeros(A_I_shape, device=Q_L.device).index_reduce(
             -2,
-            f['tok_idx'],
+            f['atom_to_token_map'].long(),
             self.process_q(Q_L),
             'mean',
             include_self=False).clone()
@@ -187,7 +188,7 @@ class AtomAttentionDecoder(nn.Module):
         Cl_skip, # [L, C_atom]
         Plm_skip, # [L, L, C_atompair]
     ):
-        tok_idx = f['tok_idx']
+        tok_idx = f['atom_to_token_map']
         # Broadcast per-token activiations to per-atom activations and add the skip connection
         Ql = self.linear_1(Ai[...,tok_idx,:]) + Ql_skip
 
@@ -946,7 +947,7 @@ class RelativePositionEncoding(nn.Module):
             torch.clip(f['residue_index'].unsqueeze(-1) - f['residue_index'].unsqueeze(-2) + self.r_max, 0, 2*self.r_max),
             2 * self.r_max + 1
         )
-        A_relpos_II = one_hot(d_residue_II, 2*self.r_max+2)
+        A_relpos_II = one_hot(d_residue_II.long(), 2*self.r_max+2)
         d_token_II = torch.where(
             b_samechain_II * b_sameresidue_II,
             torch.clip(f['token_index'].unsqueeze(-1) - f['token_index'].unsqueeze(-2) + self.r_max, 0, 2*self.r_max),
@@ -958,7 +959,7 @@ class RelativePositionEncoding(nn.Module):
             torch.clip(f['sym_id'].unsqueeze(-1) - f['sym_id'].unsqueeze(-2) + self.s_max, 0, 2*self.s_max),
             2 * self.s_max + 1
         )
-        A_relchain_II = one_hot(d_chain_II, 2*self.s_max+2)
+        A_relchain_II = one_hot(d_chain_II.long(), 2*self.s_max+2)
         return self.linear(torch.cat([A_relpos_II, A_reltoken_II, b_same_entity_II.unsqueeze(-1), A_relchain_II], dim=-1).to(torch.float))
 
 
@@ -1059,7 +1060,10 @@ class TemplateEmbedder(nn.Module):
 
         template_feats = torch.cat([f["template_distogram"], template_frame_mask[..., None], f["template_unit_vector"], template_pseudo_beta_mask[...,None]], dim=-1)
         template_feats = template_feats * (f["asym_id"][None, :] == f["asym_id"][:, None])[..., None]
-        template_feats = torch.cat([template_feats, f["template_restype"][:, None, :, :].repeat(1, I, 1,1)], dim=-1)
+        template_restype_left = f["template_restype"][:, None, :, :].repeat(1, I, 1, 1)
+        template_restype_right = f["template_restype"][:, :, None, :].repeat(1, 1, I, 1)
+
+        template_feats = torch.cat([template_feats, template_restype_left, template_restype_right], dim=-1)
         T = template_feats.shape[0]
         u_II = torch.zeros(I, I, self.c, device=Z_II.device)
         for i in range(T):

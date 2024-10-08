@@ -66,13 +66,21 @@ class AF3Trainer(FlowMatchingTrainer):
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
-        import pdb; pdb.set_trace()
+        
+        example = inputs[0]
+        network_input = {
+            #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
+            "X_noisy_L": torch.nan_to_num(example["ground_truth"]["coord_atom_lvl"]) + example["noise"],
+            "t": example["t"],
+            "f": example["feats"],
+        } 
 
-        network_input, loss_input = prepare_input_af3(
-            inputs,
-            **self.config.af3_data_prep,
-        )
-
+        loss_input = {
+            "X_gt_L": example["ground_truth"]["coord_atom_lvl"],
+            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"],
+            "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
+            "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
+        }
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
         logger.debug('network_input:\n' + pretty_describe_dict(network_input))
@@ -89,22 +97,23 @@ class AF3Trainer(FlowMatchingTrainer):
             output_i,
             loss_input
         )
-        loss_dict = {}
-        output = {"X_L": output_i["X_L"]} | network_input | loss_input
-        from rf2aa.callbacks import lddt_metrics
+        
+        loss_dict = self.unbatch_losses(loss_dict_batched)
+        #output = {"X_L": output_i["X_L"]} | network_input | loss_input
+        #from rf2aa.callbacks import lddt_metrics
 
-        lddt, _ = lddt_metrics(None, output)
-        sigma_data = 16
-        t = network_input['t']
-        X_noisy_L = network_input['X_noisy_L']
-        null_pred = (sigma_data**2 / (sigma_data**2 + t**2))[...,None,None] * X_noisy_L
-        lddt_null, _ = lddt_metrics(None, {"X_L": null_pred} | network_input | loss_input)
-        for key, val in lddt_null.items():
-            lddt[f"{key}_null_pred"] = val
-        loss_dict_batched["noise_std_dev"]  = torch.std(X_noisy_L, dim=(-1,-2))
-        loss_dict_batched = loss_dict_batched | lddt 
-        loss_dict_batched["t"] = network_input['t']
-        loss_dict.update(self.unbatch_losses(loss_dict_batched))
+        #lddt, _ = lddt_metrics(None, output)
+        #sigma_data = 16
+        #t = network_input['t']
+        #X_noisy_L = network_input['X_noisy_L']
+        #null_pred = (sigma_data**2 / (sigma_data**2 + t**2))[...,None,None] * X_noisy_L
+        #lddt_null, _ = lddt_metrics(None, {"X_L": null_pred} | network_input | loss_input)
+        #for key, val in lddt_null.items():
+            #lddt[f"{key}_null_pred"] = val
+        #loss_dict_batched["noise_std_dev"]  = torch.std(X_noisy_L, dim=(-1,-2))
+        #loss_dict_batched = loss_dict_batched | lddt 
+        #loss_dict_batched["t"] = network_input['t']
+        #loss_dict.update(self.unbatch_losses(loss_dict_batched))
 
         #self.write_pdb(
             #loss_input["X_gt_L"][0], 

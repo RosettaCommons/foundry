@@ -132,8 +132,8 @@ class NewDatapipeTrainer:
             train_datasets,
             batch_size=loader_params.batch_size,
             sampler=train_sampler,
+            collate_fn=lambda x: x,  # No collation
             **loader_params.dataloader_kwargs,
-
         )
 
         # Validation

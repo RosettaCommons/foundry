@@ -10,34 +10,36 @@ experiment:
 
 loss:
   diffusion_loss:
+    _target_: rf2aa.loss.af3_losses.DiffusionLoss
     weight: 4.0
     sigma_data: ${model.diffusion_module.sigma_data}
     alpha_dna: 5
     alpha_rna: 5
     alpha_ligand: 10
-    edm_lambda: False
+    edm_lambda: True
     se3_invariant_loss: True
-    clamp_diffusion_loss: True
+    clamp_diffusion_loss: False
   distogram_loss:
+    _target_: rf2aa.loss.af3_losses.DistogramLoss
     weight: 3e-2
-  confidence_loss:
-    weight: 1e-4
-    plddt:
-      weight: 1.0
-      n_bins: 50
-      max_value: 1.0
-    pae:
-      weight: 1.0
-      n_bins: 64
-      max_value: 32
-    pde:  
-      weight: 1.0
-      n_bins: 64
-      max_value: 32
-    exp_resolved:
-      weight: 1.0
-      n_bins: 2
-      max_value: 1
+  #confidence_loss:
+    #weight: 1e-4
+    #plddt:
+      #weight: 1.0
+      #n_bins: 50
+      #max_value: 1.0
+    #pae:
+      #weight: 1.0
+      #n_bins: 64
+      #max_value: 32
+    #pde:  
+      #weight: 1.0
+      #n_bins: 64
+      #max_value: 32
+    #exp_resolved:
+      #weight: 1.0
+      #n_bins: 2
+      #max_value: 1
 
 ddp_params:
   batch_size: 1
@@ -141,7 +143,7 @@ model:
         n_head: 16
     template_embedder:
       n_block: 2
-      raw_template_dim: 76
+      raw_template_dim: 108
       c: 64
     msa_module:
       n_block: 4
@@ -294,6 +296,7 @@ cif_parser_caching_args:
 dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_dataset_datahub.NewDatapipeTrainer"
+  default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
   train:
     # ... train datasets
     pdb:
@@ -335,18 +338,15 @@ dataset_params:
                 # pn_unit specific columns
                 - q_pn_unit_iid
                 - q_pn_unit_non_polymer_res_names
-            return_key: feats
+            return_key: null
             transform:
-              _target_: datahub.pipelines.rf2aa.build_rf2aa_transform_pipeline
+              _target_: ${dataset_params.default_transform}
               protein_msa_dirs: ${paths.protein_msa_dirs}
               rna_msa_dirs: ${paths.rna_msa_dirs}
               n_recycles: ${loader_params.maxcycle}
               crop_size: ${loader_params.crop}
               crop_contiguous_probability: 0.3333333333333333
               crop_spatial_probability: 0.6666666666666667
-              msa_mask_probability: ${loader_params.p_msa_mask}
-              assert_rf2aa_assumptions: True
-              convert_feats_to_rf2aa_input_tuple: True
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -396,9 +396,9 @@ dataset_params:
                 - pn_unit_1_non_polymer_res_names
                 - pn_unit_2_non_polymer_res_names
                 - is_inter_molecule
-            return_key: feats
+            return_key: null
             transform:
-              _target_: datahub.pipelines.af3.build_af3_transform_pipeline
+              _target_: ${dataset_params.default_transform}
               protein_msa_dirs: ${paths.protein_msa_dirs}
               rna_msa_dirs: ${paths.rna_msa_dirs}
               n_recycles: ${loader_params.maxcycle}
@@ -443,18 +443,15 @@ dataset_params:
               columns_to_load:
                 - example_id
                 - sequence_hash
-            return_key: feats
+            return_key: null
             transform:
-              _target_: datahub.pipelines.rf2aa.build_rf2aa_transform_pipeline
+              _target_: ${dataset_params.default_transform}
               protein_msa_dirs: [{"dir": "/squash/af2_distillation_facebook/msa", "extension": ".a3m", "directory_depth": 2}]
               rna_msa_dirs: []
               n_recycles: ${loader_params.maxcycle}
               crop_size: ${loader_params.crop}
               crop_contiguous_probability: 0.25
               crop_spatial_probability: 0.75
-              msa_mask_probability: ${loader_params.p_msa_mask}
-              assert_rf2aa_assumptions: True
-              convert_feats_to_rf2aa_input_tuple: True
 
 
   val:
@@ -487,16 +484,15 @@ dataset_params:
             ## interface specific columns
             #- pn_unit_1_iid
             #- pn_unit_2_iid
-      return_key: feats
+      return_key: null
       transform:
-        _target_: datahub.pipelines.rf2aa.build_rf2aa_transform_pipeline
+        _target_: ${dataset_params.default_transform}
         protein_msa_dirs: ${paths.protein_msa_dirs}
         rna_msa_dirs: ${paths.rna_msa_dirs}
         n_recycles: ${loader_params.maxcycle}
         crop_size: ${loader_params.crop}
         crop_contiguous_probability: 0.0
         crop_spatial_probability: 0.0
-        msa_mask_probability: ${loader_params.p_msa_mask}
 
 
 dependencies:
