@@ -12,8 +12,8 @@ from rf2aa.manual_dependency import append_package_path
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
     seed_all(config.training_params.seed)
-    for package_path in config.dependencies.package_paths:
-        append_package_path(package_path)
+    #for package_path in config.dependencies.package_paths:
+    #    append_package_path(package_path)
     trainer = trainer_factory[config.experiment.trainer](config=config)
 
     # Wrap the training in a try-except block to ensure SLURM cleanup post-interrupt (otherwise, we'd need to change the SLURM id each run)
