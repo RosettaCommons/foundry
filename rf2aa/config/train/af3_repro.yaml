@@ -47,6 +47,7 @@ ddp_params:
 loader_params:
   p_msa_mask: 0.0
   maxseq: 5132
+  n_fallback_retries: 100
 
 interpolant:
   sigma_data: 16
@@ -99,7 +100,7 @@ interpolant:
   self_condition: False
 
 model_globals:
-  l_max: 5000
+  l_max: 10000
 model:
   c_s: 384
   c_z: 128
@@ -295,7 +296,7 @@ cif_parser_caching_args:
 
 dataset_params:
   constructor:
-    _target_: "rf2aa.data.compose_dataset_datahub.NewDatapipeTrainer"
+    _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   diffusion_batch_size: 32
   default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
   train:

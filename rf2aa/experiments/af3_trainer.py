@@ -7,7 +7,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from rf2aa.trainer_new import FlowMatchingTrainer
 from rf2aa.model import AF3_structure
 from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3
-from rf2aa.data.compose_dataset_datahub import NewDatapipeTrainer
+from rf2aa.data.compose_data_datahub_new import NewDatapipeTrainer
+
 from rf2aa.training.EMA import EMA
 from rf2aa.flow_matching.sampler import AF3Sampler, AF3PartialSampler
 from rf2aa.loss.af3_losses import Loss as AF3Loss
