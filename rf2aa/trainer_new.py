@@ -71,7 +71,8 @@ class Trainer:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
         
-        commit, diff = self.record_git_commit()
+        #commit, diff = self.record_git_commit()
+        commit, diff = None, None
         self.commit, self.diff = commit, diff
         
         self.dataset_constructor = instantiate(self.config.dataset_params.constructor)

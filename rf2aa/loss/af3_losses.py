@@ -308,6 +308,7 @@ def smoothed_lddt_loss(X_L, X_gt_L_aligned, crd_mask_L, is_dna, is_rna, tok_idx)
     """
     predicted_distances = torch.cdist(X_L, X_L)
     ground_truth_distances = torch.cdist(X_gt_L_aligned, X_gt_L_aligned)
+    ground_truth_distances[ground_truth_distances.isnan()] = 9999.0
     difference_distances = torch.abs(ground_truth_distances - predicted_distances)
     lddt_matrix = torch.zeros_like(difference_distances)
     lddt_matrix = 0.25 * torch.sigmoid(4.0 - difference_distances) + \

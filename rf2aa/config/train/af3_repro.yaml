@@ -296,6 +296,7 @@ cif_parser_caching_args:
 dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_dataset_datahub.NewDatapipeTrainer"
+  diffusion_batch_size: 32
   default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
   train:
     # ... train datasets
@@ -347,6 +348,7 @@ dataset_params:
               crop_size: ${loader_params.crop}
               crop_contiguous_probability: 0.3333333333333333
               crop_spatial_probability: 0.6666666666666667
+              diffusion_batch_size: ${dataset_params.diffusion_batch_size}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -405,6 +407,7 @@ dataset_params:
               crop_size: ${loader_params.crop}
               crop_contiguous_probability: 0.0
               crop_spatial_probability: 1.0
+              diffusion_batch_size: ${dataset_params.diffusion_batch_size}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -452,6 +455,7 @@ dataset_params:
               crop_size: ${loader_params.crop}
               crop_contiguous_probability: 0.25
               crop_spatial_probability: 0.75
+              diffusion_batch_size: ${dataset_params.diffusion_batch_size}
 
 
   val:
@@ -493,9 +497,5 @@ dataset_params:
         crop_size: ${loader_params.crop}
         crop_contiguous_probability: 0.0
         crop_spatial_probability: 0.0
+        diffusion_batch_size: ${dataset_params.diffusion_batch_size}
 
-
-dependencies:
-  package_paths:
-    - /home/rohith/datahub/
-    - /home/rohith/cifutils

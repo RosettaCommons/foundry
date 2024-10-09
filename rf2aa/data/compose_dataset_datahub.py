@@ -108,7 +108,7 @@ class NewDatapipeTrainer:
         datasets_info = []
         for train_name, train_cfg in dataset_params.train.items():
             logger.info(f"Loading dataset: {train_name}")
-            dataset, sampler = load_structural_datasets(train_cfg.sub_datasets, train_name, cif_parser)
+            dataset, sampler = load_structural_datasets(train_cfg.sub_datasets, train_name, cif_parser, n_fallback_retries=5)
             datasets_info.append(
                 dict(name=train_name, dataset=dataset, sampler=sampler, probability=train_cfg.probability)
             )
