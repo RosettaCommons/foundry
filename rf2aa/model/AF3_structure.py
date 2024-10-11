@@ -40,15 +40,6 @@ Glossary:
 '''
 
 
-class ProteinLinear(nn.Linear):
-    def __init__(self, in_features, out_features, **kwargs):
-        super().__init__(in_features, out_features, **kwargs)
-    
-    def reset_parameters(self, **kwargs) -> None:
-        pass
-
-    def forward(self, x):
-        return super().forward(x)
 linearNoBias = partial(torch.nn.Linear, bias=False)
 def collapse(x, L):
     return x.reshape((L,x.numel()//L))
@@ -104,7 +95,8 @@ class AtomAttentionEncoder(nn.Module):
         )
 
         self.atom_transformer = AtomTransformer(c_atom=c_atom, c_atompair=c_atompair, **atom_transformer)
-
+    
+    @activation_checkpointing
     def forward(
             self,
             f, # Dict (Input feature dictionary)
@@ -135,11 +127,7 @@ class AtomAttentionEncoder(nn.Module):
         # If provided, add trunk embeddings and noisy positions.
         if R_L is not None:
             # Broadcast the single and pair embedding from the trunk.
-            # S_trunk_L = S_trunk_I[..., tok_idx, :]
-            # S_trunk_embed_L_slow = self.process_s_trunk(S_trunk_L)
-            # S_trunk_embed_L_slow = self.process_s_trunk(S_trunk_I[..., tok_idx, :])
             S_trunk_embed_L = self.process_s_trunk(S_trunk_I)[..., tok_idx, :]
-            # assert_cmp(S_trunk_embed_L_slow, S_trunk_embed_L)
 
             C_L = C_L + S_trunk_embed_L
             assert not (C_L == Q_L).all()
@@ -180,6 +168,7 @@ class AtomAttentionDecoder(nn.Module):
             linearNoBias(c_atom, 3)
         )
 
+    @activation_checkpointing
     def forward(
         self,
         f,
@@ -810,6 +799,7 @@ class PairformerBlock(nn.Module):
         triangle_operations_expected_dim = 4 # B, L, L, C
         self.maybe_make_batched = create_batch_dimension_if_not_present(triangle_operations_expected_dim)
 
+    @activation_checkpointing
     def forward(self,
                 S_I,
                 Z_II):
@@ -1049,7 +1039,7 @@ class TemplateEmbedder(nn.Module):
         # so we make the outputs of this module also has those dimensions 
         self.agg_emb = nn.Linear(c, c_z, bias=False)
 
-
+    @activation_checkpointing
     def forward(self,
                 f,
                 Z_II,

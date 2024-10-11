@@ -69,6 +69,11 @@ class AF3Trainer(FlowMatchingTrainer):
         gpu = self.model.device
         
         example = inputs[0]
+        print(example["example_id"])
+        if example["feats"]["msa"].shape[0] > 10000:
+            example["feats"]["msa"] = example["feats"]["msa"][:10000]
+            example["feats"]["deletion_value"] = example["feats"]["deletion_value"][:10000]
+            example["feats"]["has_deletion"] = example["feats"]["has_deletion"][:10000]
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
             "X_noisy_L": torch.nan_to_num(example["ground_truth"]["coord_atom_lvl"]) + example["noise"],
@@ -92,6 +97,8 @@ class AF3Trainer(FlowMatchingTrainer):
             n_cycle,
             no_sync=self.model.no_sync,
         )
+        # clear big tensors
+        del network_input["f"]["msa"]
 
         loss, loss_dict_batched = self.loss(
             network_input,

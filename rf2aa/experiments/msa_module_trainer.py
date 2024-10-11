@@ -22,10 +22,6 @@ class MsaModuleTrainer(ComposedTrainer):
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
-        #network_input, loss_input = prepare_input_af3(
-            #inputs,
-            #**self.config.af3_data_prep,
-        #)
         example = inputs[0]
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh

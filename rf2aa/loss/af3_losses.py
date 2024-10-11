@@ -274,11 +274,15 @@ class DiffusionLoss(nn.Module):
             X_gt_aligned_L = weighted_rigid_align(X_L, X_gt_L, crd_mask_L[0], w_L)
         else:
             X_gt_aligned_L = X_gt_L
-        
+        #l_mse = 1/3 * torch.div(
+            #torch.sum(w_L.masked_select(crd_mask_L) * torch.sum((X_L.masked_select(crd_mask_L[...,None].expand(-1,-1,3)) - X_gt_aligned_L.masked_select(crd_mask_L[...,None].expand(-1,-1,3))) ** 2, dim=-1), dim=-1),
+            #(torch.sum(crd_mask_L[0]) + 1e-4)
+        #)
+        X_gt_aligned_L = torch.nan_to_num(X_gt_aligned_L)
         l_mse = 1/3 * torch.div(
-            torch.sum(w_L[:, crd_mask_L[0]] * torch.sum((X_L[:, crd_mask_L[0]] - X_gt_aligned_L[:, crd_mask_L[0]]) ** 2, dim=-1), dim=-1),
-            (torch.sum(crd_mask_L[0]) + 1e-4)
-        )
+            torch.sum(w_L * torch.sum((X_L - X_gt_aligned_L) ** 2, dim=-1), dim=-1),
+            torch.sum(crd_mask_L[0]) + 1e-4
+        ) # w_L is already updated by the mask
 
         assert l_mse.shape == (D,)
         l_diffusion = self.get_lambda(t) * l_mse
@@ -298,6 +302,7 @@ class DiffusionLoss(nn.Module):
         loss_dict = {
             "diffusion_loss": l_diffusion.detach(),
             "smoothed_lddt_loss": smoothed_lddt_loss_.detach(),
+            "t": t.detach(),
         }
     
         return self.weight*l_diffusion_total, loss_dict

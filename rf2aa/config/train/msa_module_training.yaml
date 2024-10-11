@@ -108,6 +108,7 @@ loss:
   distogram_loss:
     weight: 3e-2
 loader_params:
+  n_fallback_retries: 0 
   p_msa_mask: 0.0
   maxseq: 5132
 
@@ -127,9 +128,10 @@ cif_parser_caching_args:
 
 
 dataset_params:
+
+  diffusion_batch_size: 32
   constructor:
-    _target_: "rf2aa.data.compose_dataset_datahub.NewDatapipeTrainer"
-    diffusion_batch_size: 32
+    _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
   train:
     # ... train datasets
@@ -181,7 +183,7 @@ dataset_params:
               crop_size: ${loader_params.crop}
               crop_contiguous_probability: 0.3333333333333333
               crop_spatial_probability: 0.6666666666666667
-              diffusion_batch_size: ${dataset_params.constructor.diffusion_batch_size}
+              diffusion_batch_size: ${dataset_params.diffusion_batch_size}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -240,7 +242,7 @@ dataset_params:
               crop_size: ${loader_params.crop}
               crop_contiguous_probability: 0.0
               crop_spatial_probability: 1.0
-              diffusion_batch_size: ${dataset_params.constructor.diffusion_batch_size}
+              diffusion_batch_size: ${dataset_params.diffusion_batch_size}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -288,7 +290,7 @@ dataset_params:
               crop_size: ${loader_params.crop}
               crop_contiguous_probability: 0.25
               crop_spatial_probability: 0.75
-              diffusion_batch_size: ${dataset_params.constructor.diffusion_batch_size}
+              diffusion_batch_size: ${dataset_params.diffusion_batch_size}
 
   val:
     # ... val datasets
@@ -329,5 +331,5 @@ dataset_params:
         crop_size: ${loader_params.crop}
         crop_contiguous_probability: 0.0
         crop_spatial_probability: 0.0
-        diffusion_batch_size: ${dataset_params.constructor.diffusion_batch_size}
+        diffusion_batch_size: ${dataset_params.diffusion_batch_size}
 
