@@ -445,9 +445,78 @@ class OldMSAColGlobalAttention(nn.Module):
         out = self.to_out(out)
         return out
 
-# TriangleAttention & TriangleMultiplication from AlphaFold architecture
+## TriangleAttention & TriangleMultiplication from AlphaFold architecture
+#class TriangleAttention(nn.Module):
+    #def __init__(self, d_pair, n_head=4, d_hidden=32, p_drop=0.1, start_node=True):
+        #super(TriangleAttention, self).__init__()
+        #self.norm = nn.LayerNorm(d_pair)
+        #self.to_q = nn.Linear(d_pair, n_head*d_hidden, bias=False)
+        #self.to_k = nn.Linear(d_pair, n_head*d_hidden, bias=False)
+        #self.to_v = nn.Linear(d_pair, n_head*d_hidden, bias=False)
+        
+        #self.to_b = nn.Linear(d_pair, n_head, bias=False)
+        #self.to_g = nn.Linear(d_pair, n_head*d_hidden)
+
+        #self.to_out = nn.Linear(n_head*d_hidden, d_pair)
+
+        #self.scaling = 1/math.sqrt(d_hidden)
+        
+        #self.h = n_head
+        #self.dim = d_hidden
+        #self.start_node=start_node
+        
+        #self.reset_parameter()
+
+    #def reset_parameter(self):
+        ## query/key/value projection: Glorot uniform / Xavier uniform
+        #nn.init.xavier_uniform_(self.to_q.weight)
+        #nn.init.xavier_uniform_(self.to_k.weight)
+        #nn.init.xavier_uniform_(self.to_v.weight)
+        
+        ## bias: normal distribution
+        #self.to_b = init_lecun_normal(self.to_b)
+
+        ## gating: zero weights, one biases (mostly open gate at the begining)
+        #nn.init.zeros_(self.to_g.weight)
+        #nn.init.ones_(self.to_g.bias)
+
+        #nn.init.xavier_uniform_(self.to_out.weight)
+        #nn.init.zeros_(self.to_out.bias)
+
+    #@activation_checkpointing
+    #def forward(self, pair):
+        #B, L = pair.shape[:2]
+
+        #pair = self.norm(pair)
+        
+        ## input projection
+        #query = self.to_q(pair).reshape(B, L, L, self.h, -1)
+        #key = self.to_k(pair).reshape(B, L, L, self.h, -1)
+        #value = self.to_v(pair).reshape(B, L, L, self.h, -1)
+        #bias = self.to_b(pair) # (B, L, L, h)
+        #gate = torch.sigmoid(self.to_g(pair)) # (B, L, L, h*dim)
+        
+        ## attention
+        #query = query * self.scaling
+        #if self.start_node:
+            #attn = einsum('bijhd,bikhd->bijkh', query, key)
+        #else:
+            #attn = einsum('bijhd,bkjhd->bijkh', query, key)
+        #attn = attn + bias.unsqueeze(1).expand(-1,L,-1,-1,-1) # (bijkh)
+        #attn = F.softmax(attn, dim=-2)
+        #if self.start_node:
+            #out = einsum('bijkh,bikhd->bijhd', attn, value).reshape(B, L, L, -1)
+        #else:
+            #out = einsum('bijkh,bkjhd->bijhd', attn, value).reshape(B, L, L, -1)
+        #out = gate * out # gated attention
+        
+        ## output projection
+        #out = self.to_out(out)
+        #return out
+
+# triangle attention with deepspeed
 class TriangleAttention(nn.Module):
-    def __init__(self, d_pair, n_head=4, d_hidden=32, p_drop=0.1, start_node=True):
+    def __init__(self, d_pair, n_head=4, d_hidden=32, p_drop=0.1, start_node=True, use_deepspeed_evo=True):
         super(TriangleAttention, self).__init__()
         self.norm = nn.LayerNorm(d_pair)
         self.to_q = nn.Linear(d_pair, n_head*d_hidden, bias=False)
@@ -464,6 +533,8 @@ class TriangleAttention(nn.Module):
         self.h = n_head
         self.dim = d_hidden
         self.start_node=start_node
+
+        self.use_deepspeed_evo = use_deepspeed_evo
         
         self.reset_parameter()
 
@@ -480,7 +551,8 @@ class TriangleAttention(nn.Module):
         nn.init.zeros_(self.to_g.weight)
         nn.init.ones_(self.to_g.bias)
 
-        nn.init.xavier_uniform_(self.to_out.weight)
+        # to_out: right before residual connection: zero initialize -- to make it sure residual operation is same to the Identity at the begining
+        nn.init.zeros_(self.to_out.weight)
         nn.init.zeros_(self.to_out.bias)
 
     @activation_checkpointing
@@ -488,28 +560,43 @@ class TriangleAttention(nn.Module):
         B, L = pair.shape[:2]
 
         pair = self.norm(pair)
-        
+
+        if self.use_deepspeed_evo:
+            pair = pair.to(torch.bfloat16)
+
+        bias = self.to_b(pair) # (B, L, L, h)
+
+        if not self.start_node:
+            pair = rearrange(pair, 'b i j d -> b j i d')
+
         # input projection
         query = self.to_q(pair).reshape(B, L, L, self.h, -1)
         key = self.to_k(pair).reshape(B, L, L, self.h, -1)
         value = self.to_v(pair).reshape(B, L, L, self.h, -1)
-        bias = self.to_b(pair) # (B, L, L, h)
         gate = torch.sigmoid(self.to_g(pair)) # (B, L, L, h*dim)
-        
-        # attention
-        query = query * self.scaling
-        if self.start_node:
+
+        if not self.use_deepspeed_evo or L<=16:   # fd hack
+            query = query * self.scaling
             attn = einsum('bijhd,bikhd->bijkh', query, key)
-        else:
-            attn = einsum('bijhd,bkjhd->bijkh', query, key)
-        attn = attn + bias.unsqueeze(1).expand(-1,L,-1,-1,-1) # (bijkh)
-        attn = F.softmax(attn, dim=-2)
-        if self.start_node:
+            attn = attn + bias.unsqueeze(1).expand(-1,L,-1,-1,-1) # (bijkh)
+            attn = F.softmax(attn, dim=-2)
             out = einsum('bijkh,bikhd->bijhd', attn, value).reshape(B, L, L, -1)
+            out = gate * out # gated attention
         else:
-            out = einsum('bijkh,bkjhd->bijhd', attn, value).reshape(B, L, L, -1)
-        out = gate * out # gated attention
-        
+            # DS4Sci_EvoformerAttention
+            # Q, K, V: [Batch, N_res, N_res, Head, Dim]
+            # res_mask: [Batch, N_res, 1, 1, N_res]
+            # right_edges: [Batch, 1, Head, N_res, N_res]
+            from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
+            bias = bias.unsqueeze(1).repeat(B,1,1,1,1)
+            bias = bias.permute(0,1,4,2,3)
+            mask = torch.zeros([B,L,1,1,L], dtype=torch.bfloat16, device=bias.device)
+            out = DS4Sci_EvoformerAttention(query, key, value, [mask,bias]).reshape(B, L, L, -1)
+            out = gate * out
+
+        if not self.start_node:
+            out = rearrange(out, 'b i j d -> b j i d')
+
         # output projection
         out = self.to_out(out)
         return out

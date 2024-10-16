@@ -53,7 +53,7 @@ os.environ['OPENBLAS_NUM_THREADS'] = '4'
 #os.environ['PYTORCH_CUDA_ALLOC_CONF'] = "max_split_size_mb:512"
 # Update environment variable with correct path (needed for W&B upload)
 # os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+#os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 ## To reproduce errors
 
 torch.set_num_threads(4)
@@ -93,7 +93,7 @@ class Trainer:
                                 **self.config.training_params.learning_rate_schedule)    
 
     def construct_scaler(self):
-        self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.training_params.use_amp)
+        self.scaler = torch.cuda.amp.GradScaler("cuda", enabled=self.config.training_params.use_amp)
     
     def load_checkpoint(self, rank):
         #if self.config.training_params.from_scratch:

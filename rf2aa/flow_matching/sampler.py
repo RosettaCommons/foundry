@@ -240,7 +240,8 @@ class AF3Sampler:
             #**pre_recycle_outputs
         #)
         outputs = self.model.post_recycle(
-            **recycle_inputs
+            **recycle_inputs,
+            is_training=False,
         )
         outputs.update(X_L)
         #outputs["X_L"]  = X_L["X_denoised_L_traj"][-1]
@@ -297,7 +298,13 @@ class AF3Sampler:
         return X_L 
 
     def _get_network_input(self, inputs, t=None):
-        network_input, loss_input = prepare_input_af3(inputs, **self.config.af3_data_prep, device="cpu")
+        #network_input, loss_input = prepare_input_af3(inputs, **self.config.af3_data_prep, device="cpu")
+        example = inputs[0]
+        network_input = dict(
+            f = example["feats"],
+            X_noisy_L= None,
+            t = None,
+        )
         return network_input
     
 class AF3PartialSampler(AF3Sampler):

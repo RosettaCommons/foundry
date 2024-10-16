@@ -139,7 +139,11 @@ model:
     n_pairformer_blocks: 48
     pairformer_block:
       p_drop: 0.25
-      c: 128
+      triangle_multiplication:
+        d_hidden: 128
+      triangle_attention:
+        n_head: 4
+        d_hidden: 32
       attention_pair_bias:
         n_head: 16
     template_embedder:
@@ -473,22 +477,23 @@ dataset_params:
         #id_column: ${dataset_params.train.interface.dataset.dataset.id_column}
         id_column: example_id
         data: ${paths.pdb_data_dir}/entry_level_val_df.parquet
-        #columns_to_load:
+#        columns_to_load:
             ## columns required for identification, filtering & weighting
             #- example_id
             #- pdb_id
             #- assembly_id
             ##- deposition_date
             #- resolution
-            #- num_polymer_pn_units
+##            - num_polymer_pn_units
             #- method
-            #- cluster
-            #- n_prot
-            #- n_nuc
-            #- n_ligand
-            ## interface specific columns
-            #- pn_unit_1_iid
-            #- pn_unit_2_iid
+##            - cluster
+##            - n_prot
+            ##- n_nuc
+            ##- n_ligand
+            ### interface specific columns
+            ##- pn_unit_1_iid
+            ##- pn_unit_2_iid
+
       return_key: null
       transform:
         _target_: ${dataset_params.default_transform}
