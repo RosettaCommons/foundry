@@ -71,7 +71,6 @@ class AtomAttentionEncoderPairformer(nn.Module):
         self.atom_transformer = AtomTransformer(c_atom=c_atom, c_atompair=c_atompair, **atom_transformer)
     
 #    @unpack_args_for_checkpointing(['atom_to_token_map', ])
-    @activation_checkpointing
     def forward(
             self,
             f, # Dict (Input feature dictionary)
@@ -163,6 +162,7 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
         self.use_deepspeed_evo = True
         self.force_bfloat16 = True
 
+    @activation_checkpointing
     def forward(
             self,
             A_I,      # [I, C_a]
@@ -331,7 +331,7 @@ class InputFeatureEmbedder(nn.Module):
         A_I, _, _, _ = self.atom_attention_encoder(
             f, None, None, None
         )
-        S_I = torch.cat([A_I] + [f[feature].unsqueeze(-1) if feature in self.features_to_unsqueeze else f[feature] for feature in self.features], dim=-1)
+        S_I = torch.cat([A_I.squeeze(0)] + [f[feature].unsqueeze(-1) if feature in self.features_to_unsqueeze else f[feature] for feature in self.features], dim=-1)
         return S_I
 
 class RelativePositionEncoding(nn.Module):
@@ -409,7 +409,6 @@ class MSAModule(nn.Module):
         triangle_ops_expected_dim = 4 # B, I, I, C
         self.maybe_make_batched_triangle_ops = create_batch_dimension_if_not_present(triangle_ops_expected_dim)
 
-    @activation_checkpointing
     def forward(self,
                 f,
                 Z_II,
@@ -468,7 +467,6 @@ class TemplateEmbedder(nn.Module):
         # so we make the outputs of this module also has those dimensions 
         self.agg_emb = nn.Linear(c, c_z, bias=False)
 
-    @activation_checkpointing
     def forward(self,
                 f,
                 Z_II,

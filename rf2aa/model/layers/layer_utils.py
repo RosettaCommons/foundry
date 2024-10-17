@@ -16,6 +16,7 @@ class MultiDimLinear(nn.Linear):
         self.out_shape = out_shape
         out_features = np.prod(out_shape)
         super().__init__(in_features, out_features, **kwargs)
+        self.reset_parameters()
 
     def reset_parameters(self, **kwargs) -> None:
         super().reset_parameters()

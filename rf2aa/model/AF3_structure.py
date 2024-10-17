@@ -339,6 +339,7 @@ class DistogramHead(nn.Module):
                  ):
         super().__init__()
         self.predictor = nn.Linear(c_z, bins) 
+        self.reset_parameters()
     
     def reset_parameters(self):
         # initialize linear layer for final logit prediction
