@@ -154,7 +154,7 @@ chem_params:
 debug_params:
   debug_grads: False
 
-metrics: ["mean_pae", "mean_plddt"]
+#metrics: ["mean_pae", "mean_plddt"]
 
 hydra:
   job_logging:

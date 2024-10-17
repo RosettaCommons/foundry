@@ -41,6 +41,10 @@ loss:
       #n_bins: 2
       #max_value: 1
 
+metrics:
+  interface_lddt:
+    _target_: rf2aa.metrics.lddt_metrics.InterfaceLDDT
+
 ddp_params:
   batch_size: 1
 

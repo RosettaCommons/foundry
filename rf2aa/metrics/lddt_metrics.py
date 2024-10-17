@@ -1,3 +1,7 @@
+import torch
+import torch.nn as nn
+import numpy as np
+
 from rf2aa.metrics.metrics_base import Metric
 
 
@@ -30,10 +34,9 @@ def calc_lddt(X_L, X_gt_L, crd_mask_L, tok_idx, pairs_to_score=None):
 
     is_close_distance_LL = (ground_truth_distances < 15.0)
     in_same_residue_LL = tok_idx[None, :] == tok_idx[:, None]
+    to_score_LL = pairs_to_score[None] & is_close_distance_LL & ~in_same_residue_LL
 
-    to_score_LL = pairs_to_score & is_close_distance & in_same_residue
-
-    lddt = lddt_matrix * to_score[None] / (to_score.sum() + 1e-6) 
+    lddt = (lddt_matrix * to_score_LL[None]).sum(dim=(-1,-2)) / (to_score_LL.sum(dim=(-1,-2)) + 1e-6)
     return lddt
 
 
@@ -45,7 +48,35 @@ class InterfaceLDDT(Metric):
                 network_output, 
                 loss_input
         ):
-        # for each interface to score
-        # produce a mask for that interface
-        # calculate the lddt
-        pass
+        interface_lddt = {
+            "interface_lddt": []
+        }
+        chain_iid_token_lvl = loss_input["chain_iid_token_lvl"]
+        tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()
+        for chain_i, chain_j, interface_type in loss_input["interfaces_to_score"]:
+            
+            # get tokens in chain_i and chain_j
+            chain_i_tokens = chain_iid_token_lvl == chain_i
+            chain_j_tokens = chain_iid_token_lvl == chain_j
+            # convert the token level to the atom level
+            chain_i_atoms = chain_i_tokens[tok_idx]
+            chain_j_atoms = chain_j_tokens[tok_idx]
+            # compute the intersection of chain_i and chain_j
+
+            chain_ij_atoms = torch.einsum(
+                                "L, K -> LK", 
+                                torch.tensor(chain_i_atoms), 
+                                torch.tensor(chain_j_atoms)
+                                ).to(network_output["X_L"].device)
+
+            #compute lddt using the pairs_to_score from the intersection
+            lddt = calc_lddt(
+                network_output["X_L"],
+                loss_input["X_gt_L"],
+                loss_input["crd_mask_L"],
+                torch.tensor(tok_idx).to(network_output["X_L"].device),
+                pairs_to_score=chain_ij_atoms
+            )
+            interface_lddt["interface_lddt"].append(lddt)
+        return interface_lddt
+

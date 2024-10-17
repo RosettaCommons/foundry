@@ -33,33 +33,7 @@ class AF3Trainer(FlowMatchingTrainer):
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
 
-        #def should_ignore(param_name):
-            #ignore_regexes = [
-                #re.compile(r'model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_s_trunk\..*'),
-                #re.compile(r'model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_z\..*'),
-                #re.compile(r'model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_r\..*'),
-                #re.compile(r'model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias.ln_1\..*'),
-                ##re.compile(r'model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.linear_output_project\..*'),
-                ##re.compile(r'model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
-                ##re.compile(r'model\.diffusion_module\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
-                ##re.compile(r'model\.diffusion_module\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
-                ##re.compile(r'model\.diffusion_module\.atom_attention_decoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
-            #]
-            #return any(regex.match(param_name) for regex in ignore_regexes)
-        #params_to_ignore = []
-        #for param_name, param in self.model.named_parameters():
-            #if should_ignore(param_name):
-                #params_to_ignore.append(param_name)
-        #torch.nn.parallel.DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
-            #self.model,
-            #params_to_ignore
-        #)
-        #assert len(params_to_ignore)
-
-        device_ids = [device]
-        if device == 'cpu':
-            device_ids = None
-        self.model = DDP(self.model, device_ids=device_ids, find_unused_parameters=False, broadcast_buffers=False)
+        self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
         if "partial_t" in self.config.af3_data_prep:
             self.sampler = AF3PartialSampler(self.config, self.model.module.shadow)
         else:
@@ -125,36 +99,41 @@ class AF3Trainer(FlowMatchingTrainer):
             "crd_mask_L": example["ground_truth"]["mask_atom_lvl"],
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
+            "interfaces_to_score": example["ground_truth"]["interfaces_to_score"],
+            "pn_units_to_score": example["ground_truth"]["pn_units_to_score"],
+            "chain_iid_token_lvl": example["ground_truth"]["chain_iid_token_lvl"],
         }
-        network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
+        network_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
 
+        metrics_dict = self.metrics(network_input, outputs, loss_input)
+        print(metrics_dict)
+        return torch.tensor(0), None
+    
+    def valid_epoch(self, epoch, rank, world_size):
+        # turn off gradients
+        self.model.eval()
+        valid_loss_dict = []
 
+        for dataset_name, valid_loader in self.valid_loaders.items():
+            for valid_idx, inputs in enumerate(valid_loader):
+                n_cycle = self.config.loader_params.maxcycle
+                loss_dict = self.valid_step(inputs, n_cycle)
+                valid_loss_dict.extend(loss_dict)
+                for line in loss_dict:
+                    print (line)
 
-        #t = self.sampler.construct_noise_schedule(200, 0, 1)[0] if "partial_t" not in self.config.af3_data_prep else self.config.af3_data_prep.partial_t
-        
-        #network_input['t'] = torch.tensor(t).tile(self.config.af3_data_prep.D).to(gpu)
-        #network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
-        #loss_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
+            if len(valid_loader) == 0:
+                continue
 
-        #loss, loss_dict_batched = self.loss(
-            #network_input,
-            #outputs,
-            #loss_input
-        #)
-        #output = {"X_L": X_L} | network_input | loss_input
-        
-        #loss_dict = {}
-        #lddt, _ = lddt_metrics(None, output)
-        #agg_lddt = agg_lddt | lddt
-        #loss_dict_batched = loss_dict_batched | agg_lddt 
-        #loss_dict.update(self.unbatch_losses(loss_dict_batched))
-        #loss_dict = tree.map_structure(lambda x: torch.tensor(x) if not torch.is_tensor(x) else x, loss_dict)
-        #loss_dict = tree.map_structure(lambda x: x.to(gpu), loss_dict)
-        #import sys
-        #self.log_validation_losses(inputs["item"]["CHAINID"], loss_dict)
-        sys.stdout.flush()
-        return loss, loss_dict
+        # synchronize
+        all_valid_loss_dict = [None for i in range(world_size)]
+        dist.all_gather_object(all_valid_loss_dict, valid_loss_dict)
+        all_valid_loss_dict = sum(all_valid_loss_dict, []) # flatten
+
+        if rank==0:
+            self.log_validation_losses(epoch, all_valid_loss_dict)
+
     
     def write_pdb(self, X_gt_L, crd_mask_I, seq, name="valid.pdb"):
         I = seq.shape[0]
