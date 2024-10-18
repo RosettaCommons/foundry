@@ -383,10 +383,7 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
             B_IIH = B_IIH.permute(0,1,4,2,3).to(torch.bfloat16)
             mask = torch.ones([Q_IH.shape[0],1,1,1,B_IIH.shape[-1]], dtype=torch.bfloat16, device=B_IIH.device)
             print(Q_IH.shape, K_IH.shape, V_IH.shape, mask.shape, B_IIH.shape)
-            try:
-                assert Q_IH.shape == (batch, 1, n_res, n_head, c)
-            except:
-                import pdb; pdb.set_trace()
+            assert Q_IH.shape == (batch, 1, n_res, n_head, c)
             assert K_IH.shape == (batch, 1, n_res, n_head, c)
             assert V_IH.shape == (batch, 1, n_res, n_head, c)
             assert mask.shape == (batch, 1, 1, 1, n_res)
