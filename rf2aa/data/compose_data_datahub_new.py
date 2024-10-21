@@ -1,19 +1,19 @@
 
-
 # TODO: Integrate cifparser & biotite into rf2aa .sif
 import copy
 import sys
 
 import torch  # import torch before adding to python path to ensure apptainer's torch is used
-from datahub.datasets.base import ConcatDatasetWithID
 import os
+
+from datahub.datasets.datasets import ConcatDatasetWithID
 
 import certifi
 import hydra
 from cifutils import CIFParser
 from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler
 
-from datahub.datasets.base import (
+from datahub.datasets.datasets import (
     FallbackDatasetWrapper,
 )
 from datahub.samplers import (
