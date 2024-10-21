@@ -5,6 +5,7 @@ import numpy as np
 from rf2aa.training.checkpoint import activation_checkpointing
 #from rf2aa.model.layers.pairformer_layers import AttentionPairBias
 from rf2aa.model.layers.layer_utils import linearNoBias, LinearBiasInit, AdaLN, MultiDimLinear, collapse
+from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
 
 
 class AtomAttentionEncoderDiffusion(nn.Module):
@@ -340,7 +341,7 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         if self.use_deepspeed_evo or self.force_bfloat16:
             A_I = A_I.to(torch.bfloat16)
 
-        Q_IH = self.to_q(A_I) / np.sqrt(self.c)
+        Q_IH = self.to_q(A_I) #/ np.sqrt(self.c)
         K_IH = self.to_k(A_I)
         V_IH = self.to_v(A_I)
         B_IIH = self.to_b(self.ln_0(Z_II)) + Beta_II[..., None]
@@ -350,6 +351,8 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
 
         if not self.use_deepspeed_evo or L<=24: 
             # Attention
+            Q_IH = Q_IH / torch.sqrt(torch.tensor(self.c).to(Q_IH.device, torch.bfloat16))
+
             A_IIH = torch.softmax(torch.einsum("...ihd,...jhd->...ijh", Q_IH, K_IH) + B_IIH, dim=-2) # softmax over j
             ## G_IH: [I, H, C]
             ## A_IIH: [I, I, H]
@@ -362,8 +365,7 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
             # Q, K, V: [Batch, N_seq, N_res, Head, Dim]
             # res_mask: [Batch, N_seq, 1, 1, N_res]
             # pair_bias: [Batch, 1, Head, N_res, N_res]
-            from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
-            print(Q_IH.shape, K_IH.shape, V_IH.shape, B_IIH.shape)
+            #from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
             if len(Q_IH.shape) == 3:
                 Q_IH = Q_IH[None]
                 K_IH = K_IH[None]
@@ -381,8 +383,7 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
             B_IIH = B_IIH.repeat(Q_IH.shape[0],1,1,1)
             B_IIH = B_IIH[:,None]
             B_IIH = B_IIH.permute(0,1,4,2,3).to(torch.bfloat16)
-            mask = torch.ones([Q_IH.shape[0],1,1,1,B_IIH.shape[-1]], dtype=torch.bfloat16, device=B_IIH.device)
-            print(Q_IH.shape, K_IH.shape, V_IH.shape, mask.shape, B_IIH.shape)
+            mask = torch.zeros([Q_IH.shape[0],1,1,1,B_IIH.shape[-1]], dtype=torch.bfloat16, device=B_IIH.device)
             assert Q_IH.shape == (batch, 1, n_res, n_head, c)
             assert K_IH.shape == (batch, 1, n_res, n_head, c)
             assert V_IH.shape == (batch, 1, n_res, n_head, c)
@@ -392,9 +393,7 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
             A_I = DS4Sci_EvoformerAttention(Q_IH, K_IH, V_IH, [mask,B_IIH])
 
             assert A_I.shape == (batch, 1, n_res, n_head, c)
-            print(A_I.shape, G_IH.shape)
             A_I = A_I * G_IH[:,None]
-            print(A_I.shape)
             A_I = A_I.view(batch, n_res,-1)
 
         A_I = self.to_a(A_I)

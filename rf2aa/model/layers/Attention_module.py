@@ -6,6 +6,8 @@ from opt_einsum import contract as einsum
 from einops import rearrange
 from rf2aa.util_module import init_lecun_normal
 from rf2aa.training.checkpoint import activation_checkpointing
+from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
+
 
 class FeedForwardLayer(nn.Module):
     def __init__(self, d_model, r_ff, p_drop=0.1, zero_init=True):
@@ -587,7 +589,7 @@ class TriangleAttention(nn.Module):
             # Q, K, V: [Batch, N_res, N_res, Head, Dim]
             # res_mask: [Batch, N_res, 1, 1, N_res]
             # right_edges: [Batch, 1, Head, N_res, N_res]
-            from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
+            #from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
             bias = bias.unsqueeze(1).repeat(B,1,1,1,1)
             bias = bias.permute(0,1,4,2,3)
             mask = torch.zeros([B,L,1,1,L], dtype=torch.bfloat16, device=bias.device)

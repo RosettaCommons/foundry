@@ -189,7 +189,7 @@ class NewDatapipeTrainer:
             )
 
         # ...assemble the final train loader
-        assert loader_cfg.num_workers == 0, "num_workers must be 0 for distributed training"
+        #assert loader_cfg.num_workers == 0, "num_workers must be 0 for distributed training"
         train_loader = torch.utils.data.DataLoader(
             composed_train_dataset,
             batch_size=1, #cfg.ddp_params.batch_size,

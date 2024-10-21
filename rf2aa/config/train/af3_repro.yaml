@@ -53,6 +53,8 @@ loader_params:
   maxseq: 5132
   n_fallback_retries: 100
 
+training_params:
+  seed: 959
 interpolant:
   sigma_data: 16
 
@@ -298,7 +300,7 @@ paths:
   
 cif_parser_caching_args:
   cache_dir: /projects/ml/RF2_allatom/cache/cif
-  load_from_cache: True
+  load_from_cache: False
   save_to_cache: False
 
 

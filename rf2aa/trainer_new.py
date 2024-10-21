@@ -343,10 +343,12 @@ class Trainer:
 
         for train_idx, inputs in enumerate(self.train_loader):
             n_cycle = self.recycle_schedule[epoch, train_idx]  # number of recycling
-
+            if rank == 0:
+                print("starting fwd")
             # run forward pass and compute loss
             loss, loss_dict = self.train_step(inputs, n_cycle)
-            
+            if rank == 0:
+                print("done with fwd")
             # aggregate loss and update parameters
             loss = loss / self.config.ddp_params.accum
 
@@ -387,8 +389,11 @@ class Trainer:
             train_time = time.time() - start_time
 
             if train_idx%self.config.ddp_params.accum == 0:  
+                if rank == 0:
+                    print("about to update")
                 self.update_parameters()
-            
+                if rank == 0:
+                    print("updated")
                 if train_idx % self.config.log_params.log_every_n_examples == 0 and rank == 0:
                     train_time = time.time() - start_time
                     self.log_intermediate_losses(
@@ -474,6 +479,8 @@ class Trainer:
         print(f"Models: {Nex} of: {Nepoch} Max_Memory: {max_mem:.4f}Gb Runtime: {runtime:.4f}")
         print(f"Example: {item} Recycle:{n_cycle}\n"+
               "\t".join([f"{k}: {v:.4f}" for k,v in loss_dict.items()]))
+        import sys
+        sys.stdout.flush()
         #print(f"Models: {Nex} Example: {item['CHAINID']}"+" ".join([f"{k}: {v:.4f}" for k,v in loss_dict.items()]))
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
