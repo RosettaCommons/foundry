@@ -361,6 +361,7 @@ dataset_params:
               crop_contiguous_probability: 0.3333333333333333
               crop_spatial_probability: 0.6666666666666667
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
+              max_atoms_in_crop: 3000
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -421,6 +422,7 @@ dataset_params:
               crop_contiguous_probability: 0.0
               crop_spatial_probability: 1.0
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
+              max_atoms_in_crop: 3000
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -469,6 +471,7 @@ dataset_params:
               crop_contiguous_probability: 0.25
               crop_spatial_probability: 0.75
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
+              max_atoms_in_crop: 3000
 
 
   val:
