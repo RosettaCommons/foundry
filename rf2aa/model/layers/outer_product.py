@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from rf2aa.util_module import init_lecun_normal
+from rf2aa.training.checkpoint import activation_checkpointing
 
 
 class OuterProductMean(nn.Module):
@@ -45,6 +46,7 @@ class OuterProductMean_AF3(nn.Module):
         self.proj_right = nn.Linear(c_msa_embed, c_outer_product)
         self.proj_out = nn.Linear(c_outer_product*c_outer_product, c_out)
 
+    @activation_checkpointing
     def forward(self, msa):
         B, N, L = msa.shape[:3]
         msa = self.norm(msa)

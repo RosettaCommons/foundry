@@ -321,7 +321,7 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         self.ln_0 = nn.LayerNorm((c_pair,))
         self.ada_ln_1 = AdaLN(c_a=c_a, c_s=c_s)
         #self.ln_1 = nn.LayerNorm((c_a,))
-        self.use_deepspeed_evo = True
+        self.use_deepspeed_evo = False
         self.force_bfloat16 = True
 
     @activation_checkpointing

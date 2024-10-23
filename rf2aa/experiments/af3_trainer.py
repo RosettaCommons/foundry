@@ -54,8 +54,8 @@ class AF3Trainer(FlowMatchingTrainer):
         } 
 
         loss_input = {
-            "X_gt_L": example["ground_truth"]["coord_atom_lvl"],
-            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"],
+            "X_gt_L": example["ground_truth"]["coord_atom_lvl"][None].repeat(self.config.dataset_params.diffusion_batch_size, 1,1),
+            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"][None].repeat(self.config.dataset_params.diffusion_batch_size, 1),
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
         }
@@ -70,12 +70,18 @@ class AF3Trainer(FlowMatchingTrainer):
             no_sync=self.model.no_sync,
             use_amp=self.config.training_params.use_amp
         )
-
-        loss, loss_dict_batched = self.loss(
-            network_input,
-            output_i,
-            loss_input
-        )
+        bad_pdb = "6by7"
+        if bad_pdb in example["example_id"]:
+            print(f"Bad PDB: {example['example_id']}")
+            from rf2aa.loss.af3_losses import NullLoss
+            null_loss = NullLoss()
+            loss, loss_dict_batched = null_loss(network_input, output_i, loss_input)
+        else:
+            loss, loss_dict_batched = self.loss(
+                network_input,
+                output_i,
+                loss_input
+            )
         
         loss_dict = self.unbatch_losses(loss_dict_batched)
 
@@ -95,14 +101,15 @@ class AF3Trainer(FlowMatchingTrainer):
         } 
 
         loss_input = {
-            "X_gt_L": example["ground_truth"]["coord_atom_lvl"],
-            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"],
+            "X_gt_L": example["ground_truth"]["coord_atom_lvl"].tile(self.config.dataset_params.diffusion_batch_size),
+            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"].tile(self.config.dataset_params.diffusion_batch_size),
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
             "interfaces_to_score": example["ground_truth"]["interfaces_to_score"],
             "pn_units_to_score": example["ground_truth"]["pn_units_to_score"],
             "chain_iid_token_lvl": example["ground_truth"]["chain_iid_token_lvl"],
         }
+        
         network_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
 

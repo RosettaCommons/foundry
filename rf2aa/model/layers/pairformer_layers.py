@@ -71,7 +71,6 @@ class AtomAttentionEncoderPairformer(nn.Module):
 
         self.atom_transformer = AtomTransformer(c_atom=c_atom, c_atompair=c_atompair, **atom_transformer)
     
-#    @unpack_args_for_checkpointing(['atom_to_token_map', ])
     def forward(
             self,
             f, # Dict (Input feature dictionary)
@@ -93,46 +92,39 @@ class AtomAttentionEncoderPairformer(nn.Module):
         # Embed offsets between atom reference positions
         D_LL = f['ref_pos'].unsqueeze(-2) - f['ref_pos'].unsqueeze(-3)
         V_LL = (f['ref_space_uid'].unsqueeze(-1) == f['ref_space_uid'].unsqueeze(-2)).unsqueeze(-1)
-        P_LL = self.process_d(D_LL) * V_LL
-
-        # Embed pairwise inverse squared distances, and the valid mask
-        P_LL = P_LL + self.process_inverse_dist(1/(1+torch.linalg.norm(D_LL, dim=-1, keepdim=True))) * V_LL
-        P_LL = P_LL + self.process_valid_mask(V_LL.to(torch.float)) * V_LL
-
-        # Initialise the atom single representation as the single conditioning.
-        Q_L = C_L
-
-        # If provided, add trunk embeddings and noisy positions.
-        #if R_L is not None:
-            ## Broadcast the single and pair embedding from the trunk.
-            #S_trunk_embed_L = self.process_s_trunk(S_trunk_I)[..., tok_idx, :]
-
-            #C_L = C_L + S_trunk_embed_L
-            #assert not (C_L == Q_L).all()
-            #P_LL = P_LL + self.process_z(Z_II)[..., tok_idx, tok_idx, :]
-
-            ## Add the noisy positions.
-            #Q_L = self.process_r(R_L) + Q_L
-
-        # Add the combined single conditioning to the pair representation.
-        P_LL = P_LL + (self.process_single_l(C_L).unsqueeze(-2) + self.process_single_m(C_L).unsqueeze(-3))
-
-        # Run a small MLP on the pair activations
-        P_LL = P_LL + self.pair_mlp(P_LL)
-
-        # Cross attention transformer.
-        Q_L = self.atom_transformer(Q_L, C_L, P_LL)
-
-        A_I_shape = Q_L.shape[:-2] + (I, self.c_token,)
-        # Aggregate per-atom representation to per-token representation
-        A_I = torch.zeros(A_I_shape, device=Q_L.device).index_reduce(
-            -2,
-            f['atom_to_token_map'].long(),
-            self.process_q(Q_L),
-            'mean',
-            include_self=False).clone()
         
-        return A_I, Q_L, C_L, P_LL
+        @activation_checkpointing
+        def embed_features(C_L, D_LL, V_LL):
+
+            P_LL = self.process_d(D_LL) * V_LL
+            # Embed pairwise inverse squared distances, and the valid mask
+            P_LL = P_LL + self.process_inverse_dist(1/(1+torch.linalg.norm(D_LL, dim=-1, keepdim=True))) * V_LL
+            P_LL = P_LL + self.process_valid_mask(V_LL.to(torch.float)) * V_LL
+
+            # Initialise the atom single representation as the single conditioning.
+            Q_L = C_L
+
+            # Add the combined single conditioning to the pair representation.
+            P_LL = P_LL + (self.process_single_l(C_L).unsqueeze(-2) + self.process_single_m(C_L).unsqueeze(-3))
+
+            # Run a small MLP on the pair activations
+            P_LL = P_LL + self.pair_mlp(P_LL)
+
+            # Cross attention transformer.
+            Q_L = self.atom_transformer(Q_L, C_L, P_LL)
+
+            A_I_shape = Q_L.shape[:-2] + (I, self.c_token,)
+            # Aggregate per-atom representation to per-token representation
+            A_I = torch.zeros(A_I_shape, device=Q_L.device).index_reduce(
+                -2,
+                f['atom_to_token_map'].long(),
+                self.process_q(Q_L),
+                'mean',
+                include_self=False).clone()
+        
+            return A_I, Q_L, C_L, P_LL
+
+        return embed_features(C_L, D_LL, V_LL)
 
 
 class AttentionPairBiasPairformerDeepspeed(nn.Module):
@@ -160,7 +152,7 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
         self.ln_0 = nn.LayerNorm((c_pair,))
         #self.ada_ln_1 = AdaLN(c_a=c_a, c_s=c_s)
         self.ln_1 = nn.LayerNorm((c_a,))
-        self.use_deepspeed_evo = True
+        self.use_deepspeed_evo = False
         self.force_bfloat16 = True
 
     @activation_checkpointing

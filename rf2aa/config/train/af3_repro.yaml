@@ -308,7 +308,7 @@ dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   diffusion_batch_size: 32
-  default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
+  default_transform: datahub.load_pipelines.af3.build_af3_transform_pipeline
   train:
     # ... train datasets
     pdb:
@@ -331,7 +331,7 @@ dataset_params:
               filters:
                 - "deposition_date < '2021-09-30'"
                 - "resolution < 9.0"
-                - "num_polymer_pn_units <= 300" 
+                - "num_polymer_pn_units <= 20" 
                 - "cluster.notnull()"
                 - "~(q_pn_unit_non_polymer_res_names.notnull() and q_pn_unit_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants.AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
               columns_to_load:
@@ -387,7 +387,7 @@ dataset_params:
               filters:
                 - "deposition_date < '2021-09-30'"
                 - "resolution < 9.0"
-                - "num_polymer_pn_units <= 300" 
+                - "num_polymer_pn_units <= 20" 
                 - "cluster.notnull()"
                 - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants.AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
                 - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants.AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
