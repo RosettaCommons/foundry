@@ -244,7 +244,6 @@ class AF3Sampler:
             is_training=False,
         )
         outputs.update(X_L)
-        #outputs["X_L"]  = X_L["X_denoised_L_traj"][-1]
         return outputs
 
     def construct_noise_schedule(self, num_timesteps, min_t, max_t):
@@ -258,7 +257,7 @@ class AF3Sampler:
 
     def sample_diffusion(self, f, s_inputs_I, s_trunk_I, Z_trunk_II, noise_schedule, \
                          gamma_0=0.8, gamma_min=1.0, noise_scale=1.003, step_scale=1.5, D=None):
-        D = D if D is not None else self.config.af3_data_prep["D"]
+        D = D if D is not None else self.config.dataset_params["diffusion_batch_size"]
         L = f["ref_pos"].shape[0]
         X_L = self._get_initial_structure(f, noise_schedule, D, L, self.device)
         X_noisy_L_traj = []
@@ -269,8 +268,6 @@ class AF3Sampler:
             s_trans = 1.0
             X_L = centre_random_augmentation(X_L, X_exists_L, s_trans)
             gamma = gamma_0 if c_t > gamma_min else 0
-            #gamma = 0
-            #warnings.warn(f"gamma is set to 0")
             t_hat = c_t_minus_1 * (gamma + 1)
             epsilon_L = noise_scale * torch.sqrt(torch.square(t_hat) - torch.square(c_t_minus_1)) * torch.normal(mean=0.0, std=1.0, size=X_L.shape, device=X_L.device)
             X_noisy_L = X_L + epsilon_L
@@ -330,7 +327,12 @@ class AF3PartialSampler(AF3Sampler):
         return full_noise_schedule[self.partial_t:]
     
     def _get_network_input(self, inputs):
-        network_input, loss_input = prepare_input_af3(inputs, **self.config.af3_data_prep, device="cpu")
-        network_input["f"]["xyz_guess"] = loss_input["X_gt_L"]
+        #network_input, loss_input = prepare_input_af3(inputs, **self.config.af3_data_prep, device="cpu")
+        example = inputs[0]
+        network_input = dict(
+            f = example["feats"],
+            X_noisy_L= None,
+            t = None,
+        )
         return network_input
 

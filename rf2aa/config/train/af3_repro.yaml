@@ -44,9 +44,16 @@ loss:
 metrics:
   interface_lddt:
     _target_: rf2aa.metrics.lddt_metrics.InterfaceLDDT
+  chain_lddt:
+    _target_: rf2aa.metrics.lddt_metrics.ChainLDDT
+  example_id:
+    _target_: rf2aa.metrics.metrics_base.AddExampleID
+  distogram:
+    _target_: rf2aa.metrics.distogram_metrics.DistogramLoss
 
 ddp_params:
   batch_size: 1
+  accum: 3
 
 loader_params:
   p_msa_mask: 0.0
@@ -308,7 +315,8 @@ dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   diffusion_batch_size: 32
-  default_transform: datahub.load_pipelines.af3.build_af3_transform_pipeline
+  n_msa: 1024
+  default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
   train:
     # ... train datasets
     pdb:
@@ -354,6 +362,7 @@ dataset_params:
             return_key: null
             transform:
               _target_: ${dataset_params.default_transform}
+              is_inference: False
               protein_msa_dirs: ${paths.protein_msa_dirs}
               rna_msa_dirs: ${paths.rna_msa_dirs}
               n_recycles: ${loader_params.maxcycle}
@@ -362,6 +371,7 @@ dataset_params:
               crop_spatial_probability: 0.6666666666666667
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
               max_atoms_in_crop: 3000
+              n_msa: ${dataset_params.n_msa}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -415,6 +425,7 @@ dataset_params:
             return_key: null
             transform:
               _target_: ${dataset_params.default_transform}
+              is_inference: False
               protein_msa_dirs: ${paths.protein_msa_dirs}
               rna_msa_dirs: ${paths.rna_msa_dirs}
               n_recycles: ${loader_params.maxcycle}
@@ -423,6 +434,7 @@ dataset_params:
               crop_spatial_probability: 1.0
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
               max_atoms_in_crop: 3000
+              n_msa: ${dataset_params.n_msa}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -464,6 +476,7 @@ dataset_params:
             return_key: null
             transform:
               _target_: ${dataset_params.default_transform}
+              is_inference: False
               protein_msa_dirs: [{"dir": "/squash/af2_distillation_facebook/msa", "extension": ".a3m", "directory_depth": 2}]
               rna_msa_dirs: []
               n_recycles: ${loader_params.maxcycle}
@@ -472,6 +485,7 @@ dataset_params:
               crop_spatial_probability: 0.75
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
               max_atoms_in_crop: 3000
+              n_msa: ${dataset_params.n_msa}
 
 
   val:
@@ -508,6 +522,7 @@ dataset_params:
       return_key: null
       transform:
         _target_: ${dataset_params.default_transform}
+        is_inference: True
         protein_msa_dirs: ${paths.protein_msa_dirs}
         rna_msa_dirs: ${paths.rna_msa_dirs}
         n_recycles: ${loader_params.maxcycle}
@@ -515,4 +530,5 @@ dataset_params:
         crop_contiguous_probability: 0.0
         crop_spatial_probability: 0.0
         diffusion_batch_size: ${dataset_params.diffusion_batch_size}
-
+        n_msa: ${dataset_params.n_msa}
+        

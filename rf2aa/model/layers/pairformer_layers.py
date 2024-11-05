@@ -408,7 +408,7 @@ class MSAModule(nn.Module):
                 Z_II,
                 S_inputs_I,
                 ):
-        msa = torch.cat([f["msa"], f["has_deletion"][...,None], f["deletion_value"][...,None]], dim=-1)
+        msa = f['msa']
         msa_SI = self.msa_subsampler(msa, S_inputs_I)
 
         use_amp = True
@@ -465,23 +465,47 @@ class TemplateEmbedder(nn.Module):
                 f,
                 Z_II,
                 ):
-        I = Z_II.shape[0]
-        template_frame_mask = f["template_backbone_frame_mask"][:, None] * f["template_backbone_frame_mask"][:, :, None]   
-        template_pseudo_beta_mask = f["template_pseudo_beta_mask"][:, None, :] * f["template_pseudo_beta_mask"][:, :, None]
+        template_backbone_frame_mask = f["template_backbone_frame_mask"]
+        template_pseudo_beta_mask = f["template_pseudo_beta_mask"]
+        template_distogram = f["template_distogram"]
+        template_unit_vector = f["template_unit_vector"]
+        template_restype = f["template_restype"]
+        asym_id = f["asym_id"]
 
-        template_feats = torch.cat([f["template_distogram"], template_frame_mask[..., None], f["template_unit_vector"], template_pseudo_beta_mask[...,None]], dim=-1)
-        template_feats = template_feats * (f["asym_id"][None, :] == f["asym_id"][:, None])[..., None]
-        template_restype_left = f["template_restype"][:, None, :, :].repeat(1, I, 1, 1)
-        template_restype_right = f["template_restype"][:, :, None, :].repeat(1, 1, I, 1)
+        def embed_templates(
+            template_backbone_frame_mask,
+            template_pseudo_beta_mask,
+            template_distogram,
+            template_unit_vector,
+            template_restype,
+            asym_id,
+            ):
+        
+            I = Z_II.shape[0]
+            template_frame_mask = template_backbone_frame_mask[:, None] * f["template_backbone_frame_mask"][:, :, None]   
+            template_pseudo_beta_mask = f["template_pseudo_beta_mask"][:, None, :] * f["template_pseudo_beta_mask"][:, :, None]
 
-        template_feats = torch.cat([template_feats, template_restype_left, template_restype_right], dim=-1)
-        T = template_feats.shape[0]
-        u_II = torch.zeros(I, I, self.c, device=Z_II.device)
-        for i in range(T):
-            v_II = self.emb_pair(self.norm_pair_before_pairformer(Z_II)) + self.emb_templ(template_feats[i])
-            for block in self.pairformer:
-                _, v_II = block(None, v_II)
-            u_II = u_II + self.norm_after_pairformer(v_II)
-        u_II = u_II / T
+            template_feats = torch.cat([f["template_distogram"], template_frame_mask[..., None], f["template_unit_vector"], template_pseudo_beta_mask[...,None]], dim=-1)
+            template_feats = template_feats * (f["asym_id"][None, :] == f["asym_id"][:, None])[..., None]
+            template_restype_left = f["template_restype"][:, None, :, :].expand(-1, I, -1, -1)
+            template_restype_right = f["template_restype"][:, :, None, :].expand(-1, -1, I, -1)
 
-        return self.agg_emb(relu(u_II))
+            template_feats = torch.cat([template_feats, template_restype_left, template_restype_right], dim=-1)
+            T = template_feats.shape[0]
+            u_II = torch.zeros(I, I, self.c, device=Z_II.device)
+            for i in range(T):
+                v_II = self.emb_pair(self.norm_pair_before_pairformer(Z_II)) + self.emb_templ(template_feats[i])
+                for block in self.pairformer:
+                    _, v_II = block(None, v_II)
+                u_II = u_II + self.norm_after_pairformer(v_II)
+            u_II = u_II / T
+
+            return self.agg_emb(relu(u_II))
+        return embed_templates(
+            template_backbone_frame_mask,
+            template_pseudo_beta_mask,
+            template_distogram,
+            template_unit_vector,
+            template_restype,
+            asym_id,
+        )

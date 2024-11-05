@@ -81,7 +81,6 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         D_LL = f['ref_pos'].unsqueeze(-2) - f['ref_pos'].unsqueeze(-3)
         V_LL = (f['ref_space_uid'].unsqueeze(-1) == f['ref_space_uid'].unsqueeze(-2)).unsqueeze(-1)
         P_LL = self.process_d(D_LL) * V_LL
-
         # Embed pairwise inverse squared distances, and the valid mask
         P_LL = P_LL + self.process_inverse_dist(1/(1+torch.linalg.norm(D_LL, dim=-1, keepdim=True))) * V_LL
         P_LL = P_LL + self.process_valid_mask(V_LL.to(torch.float)) * V_LL
@@ -112,7 +111,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
 
         A_I_shape = Q_L.shape[:-2] + (I, self.c_token,)
         # Aggregate per-atom representation to per-token representation
-        A_I = torch.zeros(A_I_shape, device=Q_L.device).index_reduce(
+        A_I = torch.zeros(A_I_shape, device=Q_L.device, dtype=Q_L.dtype).index_reduce(
             -2,
             f['atom_to_token_map'].long(),
             self.process_q(Q_L),
@@ -340,7 +339,10 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         
         if self.use_deepspeed_evo or self.force_bfloat16:
             A_I = A_I.to(torch.bfloat16)
-
+        
+        if Beta_II is not None:
+            return self.atom_attention(A_I, S_I, Z_II)
+        
         Q_IH = self.to_q(A_I) #/ np.sqrt(self.c)
         K_IH = self.to_k(A_I)
         V_IH = self.to_v(A_I)
@@ -400,5 +402,49 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         # Output projection (from adaLN-Zero)
         if S_I is not None:
             A_I = self.linear_output_project(S_I) * A_I
+
+        return A_I
+    
+    def atom_attention(self, A_I, S_I, Z_II):
+        if len(A_I.shape) == 2:
+            A_I = A_I[None]
+        Z_II = Z_II[None]
+        D, L = A_I.shape[:2]
+        Q_IH = self.to_q(A_I)
+        K_IH = self.to_k(A_I)
+        V_IH = self.to_v(A_I)
+        B_IIH = self.to_b(self.ln_0(Z_II))
+        G_IH = self.to_g(A_I)
+
+        # Attention
+        chunk = 32
+
+        assert chunk % 2 == 0
+
+        subset_centers = torch.arange(0, L, chunk) + chunk / 2
+
+        values = []
+        for i, c in enumerate(subset_centers):
+            i_start = int(max(0, c - chunk / 2))
+            i_end = int(min(L, c + chunk / 2))
+            j_start = int(max(0, c - 64))
+            j_end = int(min(L, c + 64))
+            
+            query_subset = Q_IH[:, i_start:i_end]
+            key_subset = K_IH[:, j_start:j_end]
+            attn = torch.einsum("...ihd,...jhd->...ijh", query_subset, key_subset)
+            attn = attn / (self.c ** 0.5)
+            # add bias
+            attn += B_IIH[:, i_start:i_end, j_start:j_end]
+            attn = torch.softmax(attn, dim=-2)
+            value_subset = V_IH[:, j_start:j_end]
+            weighted_value = torch.einsum("...ijh,...jhc->...ihc", attn, value_subset)
+            values.append(weighted_value)
+        
+        atom_features = torch.cat(values, dim=1)
+        atom_features = G_IH * atom_features
+        atom_features = self.to_a(atom_features.view(D, L, -1))
+
+        A_I = self.linear_output_project(S_I) * atom_features
 
         return A_I

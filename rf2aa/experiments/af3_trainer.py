@@ -3,6 +3,7 @@ import torch
 import logging
 import tree
 
+import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from rf2aa.trainer_new import FlowMatchingTrainer
 from rf2aa.model import AF3_structure
@@ -54,8 +55,8 @@ class AF3Trainer(FlowMatchingTrainer):
         } 
 
         loss_input = {
-            "X_gt_L": example["ground_truth"]["coord_atom_lvl"][None].repeat(self.config.dataset_params.diffusion_batch_size, 1,1),
-            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"][None].repeat(self.config.dataset_params.diffusion_batch_size, 1),
+            "X_gt_L": example["ground_truth"]["coord_atom_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1, -1),
+            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1),
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
         }
@@ -63,6 +64,13 @@ class AF3Trainer(FlowMatchingTrainer):
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
         logger.debug('network_input:\n' + pretty_describe_dict(network_input))
         logger.debug('loss_input:\n' + pretty_describe_dict(loss_input))
+        #network_input["f"]["msa"] = network_input["f"]["msa"].to(torch.bfloat16)
+        #network_input["f"]["profile"] = network_input["f"]["profile"].to(torch.bfloat16)
+        #network_input["f"]["deletion_mean"] = network_input["f"]["deletion_mean"].to(torch.bfloat16)
+        #network_input["f"]["deletion_value"] = network_input["f"]["deletion_value"].to(torch.bfloat16)
+        #network_input["f"]["has_deletion"] = network_input["f"]["has_deletion"].to(torch.bfloat16)
+        #network_input["f"]["template_distogram"] = network_input["f"]["template_distogram"].to(torch.bfloat16)
+        #network_input["f"]["template_restype"] = network_input["f"]["template_restype"].to(torch.bfloat16)
 
         output_i = self.model(
             network_input,
@@ -89,7 +97,7 @@ class AF3Trainer(FlowMatchingTrainer):
 
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
         gpu = self.model.device
-        n_cycle = 4
+        n_cycle = 10
         outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
         
         example = inputs[0]
@@ -99,15 +107,15 @@ class AF3Trainer(FlowMatchingTrainer):
             "t": example["t"],
             "f": example["feats"],
         } 
-
         loss_input = {
-            "X_gt_L": example["ground_truth"]["coord_atom_lvl"].tile(self.config.dataset_params.diffusion_batch_size),
-            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"].tile(self.config.dataset_params.diffusion_batch_size),
+            "X_gt_L": example["ground_truth"]["coord_atom_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1,-1),
+            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1),
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
             "interfaces_to_score": example["ground_truth"]["interfaces_to_score"],
             "pn_units_to_score": example["ground_truth"]["pn_units_to_score"],
             "chain_iid_token_lvl": example["ground_truth"]["chain_iid_token_lvl"],
+            "example_id": example["example_id"],
         }
         
         network_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
@@ -115,7 +123,7 @@ class AF3Trainer(FlowMatchingTrainer):
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
         print(metrics_dict)
-        return torch.tensor(0), None
+        return torch.tensor(0), metrics_dict
     
     def valid_epoch(self, epoch, rank, world_size):
         # turn off gradients
@@ -140,6 +148,17 @@ class AF3Trainer(FlowMatchingTrainer):
 
         if rank==0:
             self.log_validation_losses(epoch, all_valid_loss_dict)
+
+    def log_validation_losses(self, epoch, loss_dict):
+        outfile = self.output_dir+'/'+'valid_'+str(epoch)+'.log'
+        with open (outfile,'w') as f:
+            for line in loss_dict:
+                f.write(line+'\n')
+
+        outfile = self.output_dir+'/'+'valid_last.log'
+        with open (outfile,'w') as f:
+            for line in loss_dict:
+                f.write(line+'\n')
 
     
     def write_pdb(self, X_gt_L, crd_mask_I, seq, name="valid.pdb"):

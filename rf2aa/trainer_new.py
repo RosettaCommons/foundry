@@ -343,12 +343,8 @@ class Trainer:
 
         for train_idx, inputs in enumerate(self.train_loader):
             n_cycle = self.recycle_schedule[epoch, train_idx]  # number of recycling
-            if rank == 0:
-                print("starting fwd")
             # run forward pass and compute loss
             loss, loss_dict = self.train_step(inputs, n_cycle)
-            if rank == 0:
-                print("done with fwd")
             # aggregate loss and update parameters
             loss = loss / self.config.ddp_params.accum
 
@@ -387,18 +383,15 @@ class Trainer:
             
 
             train_time = time.time() - start_time
-
-            if train_idx%self.config.ddp_params.accum == 0:  
-                if rank == 0:
-                    print("about to update")
+            print(train_idx, self.config.ddp_params.accum)
+            if (train_idx)%self.config.ddp_params.accum == 0:  
                 self.update_parameters()
-                if rank == 0:
-                    print("updated")
                 if train_idx % self.config.log_params.log_every_n_examples == 0 and rank == 0:
                     train_time = time.time() - start_time
                     self.log_intermediate_losses(
                         inputs, loss_dict, n_cycle, 
-                        (train_idx+1)*world_size, len(self.train_loader)*world_size, train_time
+                        (train_idx+1)*world_size*self.config.ddp_params.accum, 
+                        len(self.train_loader)*world_size, train_time
                     ) 
 
                     # If using W&B, log the intermediate losses (note: this is only done for rank = 0)

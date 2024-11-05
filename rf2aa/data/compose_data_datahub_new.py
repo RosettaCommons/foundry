@@ -207,6 +207,21 @@ class NewDatapipeTrainer:
             val_samplers[val_name] = torch.utils.data.distributed.DistributedSampler(
                 val_datasets[val_name], num_replicas=world_size, rank=rank
             )
+            fallback_sampler = LazyWeightedRandomSampler(
+                # NOTE: We instantiate a new sampler here to ensure different weights per
+                weights=torch.ones(len(val_datasets[val_name])),
+                num_samples=int(1e9),  # WARNING! Torch's WeightedRandomSampler scales as O(n_samples * n_weights). We use LazyWeightedRandomSampler to avoid this.
+                replacement=True,
+                generator=None,
+                prefetch_buffer_size=4,
+            )
+
+            val_datasets[val_name] = FallbackDatasetWrapper(val_datasets[val_name], fallback_dataset=val_datasets[val_name])
+            val_samplers[val_name] = FallbackSamplerWrapper(
+                val_samplers[val_name],
+                fallback_sampler=fallback_sampler,
+                n_fallback_retries=loader_params.n_fallback_retries,
+            )
             val_loaders[val_name] = torch.utils.data.DataLoader(
                 val_datasets[val_name],
                 batch_size=1, #cfg.ddp_params.batch_size,

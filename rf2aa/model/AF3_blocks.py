@@ -12,7 +12,7 @@ from rf2aa.model.layers.Attention_module import BiasedAxialAttention, FeedForwar
     MSARowAttentionWithBias, TriangleMultiplication, MSAColGlobalAttention, \
     OldMSAColAttention, OldMSAColGlobalAttention, BiasedUntiedAxialAttention, TriangleAttention
 from rf2aa.model.layers.outer_product import OuterProductMean # need to code this correctly
-from rf2aa.training.checkpoint import create_custom_forward
+from rf2aa.training.checkpoint import create_custom_forward, activation_checkpointing
 from rf2aa.util_module import Dropout, init_lecun_normal
 from opt_einsum import contract as einsum
 
@@ -206,17 +206,18 @@ class MsaSubsampleEmbedder(nn.Module):
         self.emb_msa = nn.Linear(dim_raw_msa, c_msa_embed, bias=False)
         self.emb_S_inputs = nn.Linear(c_s_inputs, c_msa_embed, bias=False)
     
+    @activation_checkpointing
     def forward(self, 
                 msa_SI, # (S, I, 34) (32 tokens + has_deletion + deletion value)
                 S_inputs # (L, S_dim)
                 ):
         S, I = msa_SI.shape[:2]
         # choose sequences to sample
-        num_samples = torch.min(torch.tensor([self.num_sequences, S]))
-        weights = torch.ones(num_samples.item(), device=msa_SI.device)
-        samples = torch.multinomial(weights, num_samples, replacement=False)
-        msa_SI = torch.index_select(msa_SI, 0, samples)
-        #msa_SI = msa_SI[samples]
+       # num_samples = torch.min(torch.tensor([self.num_sequences, S]))
+        #weights = torch.ones(num_samples.item(), device=msa_SI.device)
+        #samples = torch.multinomial(weights, num_samples, replacement=False)
+        #msa_SI = torch.index_select(msa_SI, 0, samples)
+        ##msa_SI = msa_SI[samples]
 
         # embed the subsampled MSA
         msa_SI = self.emb_msa(msa_SI)
@@ -239,6 +240,7 @@ class MsaPairWeightedAverage(nn.Module):
         self.to_gate = nn.Linear(self.msa_channels, self.n_heads, bias=False)
         self.to_out = nn.Linear(self.weighted_average_channels*self.n_heads, self.msa_channels, bias=False)
 
+    @activation_checkpointing
     def forward(self, 
                 msa_SI,
                 pair_II

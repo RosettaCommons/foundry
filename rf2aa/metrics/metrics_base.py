@@ -37,3 +37,9 @@ class Metric:
 
     def __call__(self, network_input, network_output, loss_input) -> float:
         raise NotImplementedError("base class")
+
+
+class AddExampleID(Metric):
+
+    def __call__(self, network_input, network_output, loss_input):
+        return {"example_id": loss_input["example_id"]}
