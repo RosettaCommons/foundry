@@ -73,7 +73,7 @@ class DiffusionLoss(nn.Module):
             network_input["f"]["is_rna"] * self.alpha_rna +
             network_input["f"]["is_ligand"] * self.alpha_ligand
         )[tok_idx].to(torch.float)
-        w_L = w_L[None].repeat(D,1) * crd_mask_L
+        w_L = w_L[None].expand(D,-1) * crd_mask_L
         
         if self.se3_invariant_loss:
             # check if this is correct

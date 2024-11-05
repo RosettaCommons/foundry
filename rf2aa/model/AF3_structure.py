@@ -57,7 +57,6 @@ class AtomAttentionDecoder(nn.Module):
             linearNoBias(c_atom, 3)
         )
 
-    @activation_checkpointing
     def forward(
         self,
         f,
@@ -67,16 +66,21 @@ class AtomAttentionDecoder(nn.Module):
         Plm_skip, # [L, L, C_atompair]
     ):
         tok_idx = f['atom_to_token_map']
-        # Broadcast per-token activiations to per-atom activations and add the skip connection
-        Ql = self.linear_1(Ai[...,tok_idx,:]) + Ql_skip
 
-        # Cross attention transformer.
-        Ql = self.atom_transformer(Ql, Cl_skip, Plm_skip)
+        @activation_checkpointing
+        def atom_decoder(Ai, Ql_skip, Cl_skip, Plm_skip, tok_idx):
+            # Broadcast per-token activiations to per-atom activations and add the skip connection
+            Ql = self.linear_1(Ai[...,tok_idx,:]) + Ql_skip
 
-        # Map to positions update
-        Rl_update = self.to_r_update(Ql)
+            # Cross attention transformer.
+            Ql = self.atom_transformer(Ql, Cl_skip, Plm_skip)
 
-        return Rl_update
+            # Map to positions update
+            Rl_update = self.to_r_update(Ql)
+
+            return Rl_update
+
+        return atom_decoder(Ai, Ql_skip, Cl_skip, Plm_skip, tok_idx)
     
         
 class DiffusionModule(nn.Module):

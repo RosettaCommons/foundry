@@ -155,7 +155,6 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
         self.use_deepspeed_evo = False
         self.force_bfloat16 = True
 
-    @activation_checkpointing
     def forward(
             self,
             A_I,      # [I, C_a]

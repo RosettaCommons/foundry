@@ -53,6 +53,8 @@ class AF3Trainer(FlowMatchingTrainer):
             "t": example["t"],
             "f": example["feats"],
         } 
+        del network_input["f"]["ref_automorphs"]
+        del network_input["f"]["ref_automorphs_mask"]
 
         loss_input = {
             "X_gt_L": example["ground_truth"]["coord_atom_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1, -1),
@@ -64,13 +66,8 @@ class AF3Trainer(FlowMatchingTrainer):
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
         logger.debug('network_input:\n' + pretty_describe_dict(network_input))
         logger.debug('loss_input:\n' + pretty_describe_dict(loss_input))
-        #network_input["f"]["msa"] = network_input["f"]["msa"].to(torch.bfloat16)
-        #network_input["f"]["profile"] = network_input["f"]["profile"].to(torch.bfloat16)
-        #network_input["f"]["deletion_mean"] = network_input["f"]["deletion_mean"].to(torch.bfloat16)
-        #network_input["f"]["deletion_value"] = network_input["f"]["deletion_value"].to(torch.bfloat16)
-        #network_input["f"]["has_deletion"] = network_input["f"]["has_deletion"].to(torch.bfloat16)
-        #network_input["f"]["template_distogram"] = network_input["f"]["template_distogram"].to(torch.bfloat16)
-        #network_input["f"]["template_restype"] = network_input["f"]["template_restype"].to(torch.bfloat16)
+        network_input["f"]["msa_stack"] = network_input["f"]["msa_stack"].to(torch.bfloat16)
+        network_input["f"]["profile"] = network_input["f"]["profile"].to(torch.bfloat16)
 
         output_i = self.model(
             network_input,
@@ -78,6 +75,8 @@ class AF3Trainer(FlowMatchingTrainer):
             no_sync=self.model.no_sync,
             use_amp=self.config.training_params.use_amp
         )
+        #from rf2aa.memory import mem_report
+        #print(mem_report())
         bad_pdb = "6by7"
         if bad_pdb in example["example_id"]:
             print(f"Bad PDB: {example['example_id']}")
