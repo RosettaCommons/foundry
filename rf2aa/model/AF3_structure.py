@@ -399,7 +399,9 @@ class Recycler(nn.Module):
         with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
             Z_II = Z_init_II + self.process_zh(Z_II)
             Z_II = Z_II + self.template_embedder(f, Z_II)
-            Z_II = Z_II + self.msa_module(f, Z_II, S_inputs_I)
+            # NOTE: Implementing bugfix from the Protenix Technical report, where residual-connecting the MSA module is redundant
+            # Reference: https://github.com/bytedance/Protenix/blob/main/Protenix_Technical_Report.pdf
+            Z_II = self.msa_module(f, Z_II, S_inputs_I)
             S_I = S_init_I + self.process_sh(S_I)
             for block in self.pairformer_stack:
                 S_I, Z_II = block(S_I, Z_II)

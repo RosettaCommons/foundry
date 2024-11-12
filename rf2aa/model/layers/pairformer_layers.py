@@ -81,46 +81,71 @@ class AtomAttentionEncoderPairformer(nn.Module):
         assert R_L is None
         assert S_trunk_I is None
         assert Z_II is None
-        tok_idx = f['atom_to_token_map']
-        L = len(tok_idx)
-        I = tok_idx.max() + 1
 
-        f["ref_atom_name_chars"] = f["ref_atom_name_chars"].reshape(L, -1)
-        # Create the atom single conditioning: Embed per-atom meta data
-        C_L = self.process_input_features(torch.cat(tuple(collapse(f[feature_name], L) for feature_name in self.atom_1d_features), dim=-1))
+        # ...get the number of atoms
+        tok_idx = f['atom_to_token_map']
+        L = len(tok_idx) # N_atom
+        I = tok_idx.max() + 1 # N_token # noqa
+
+        # ...flatten the last two dimensions (the letter dimension and the one-hot encoding of the unicode character dimension)
+        f["ref_atom_name_chars"] = f["ref_atom_name_chars"].reshape(L, -1) # [L, 4, 64] -> [L, 256], where L = N_atom
+
+        # Atom single conditioning: Embed per-atom meta data
+
+        # Now, we have the single conditioning (C_L) for each atom. We will:
+        # 1. Use C_L to initialize the pair atom representation
+        # 2. Pass C_L as a skip connection to the diffusion module
+        C_L = self.process_input_features(torch.cat(tuple(collapse(f[feature_name], L) for feature_name in self.atom_1d_features), dim=-1)) # [L, C_atom]
 
         # Embed offsets between atom reference positions
-        D_LL = f['ref_pos'].unsqueeze(-2) - f['ref_pos'].unsqueeze(-3)
-        V_LL = (f['ref_space_uid'].unsqueeze(-1) == f['ref_space_uid'].unsqueeze(-2)).unsqueeze(-1)
+        # ref_pos is of shape [L, 3], so ref_pos.unsqueeze(-2) is of shape [L, 1, 3] and ref_pos.unsqueeze(-3) is of shape [1, L, 3]
+        # We then take the outer difference between these two tensors to get a tensor of shape [L, L, 3] (via broadcasting both to shape [L, L, 3], and then taking the difference)
+        D_LL = f['ref_pos'].unsqueeze(-2) - f['ref_pos'].unsqueeze(-3) # [L, 1, 3] - [1, L, 3] -> [L, L, 3]
+
+        # Create a mask indicating if two atoms are on the same chain AND the same residue (e.g., the same ref_space_uid)
+        # (We add a singleton dimension to the mask to make it broadcastable with D_LL, which will be useful later)
+        V_LL = (f['ref_space_uid'].unsqueeze(-1) == f['ref_space_uid'].unsqueeze(-2)).unsqueeze(-1) # [L, 1] == [1, L] -> [L, L, 1]
         
         @activation_checkpointing
         def embed_features(C_L, D_LL, V_LL):
 
-            P_LL = self.process_d(D_LL) * V_LL
+            P_LL = self.process_d(D_LL) * V_LL # [L, L, 3] -> [L, L, C_atompair]
+
             # Embed pairwise inverse squared distances, and the valid mask
-            P_LL = P_LL + self.process_inverse_dist(1/(1+torch.linalg.norm(D_LL, dim=-1, keepdim=True))) * V_LL
+            P_LL = P_LL + self.process_inverse_dist(1/(1+torch.linalg.norm(D_LL, dim=-1, keepdim=True))) * V_LL # [L, L, 1] -> [L, L, C_atompair]
+
+            # TODO: Directly casting to `torch.float` hinders our ability to train with mixed precision; better to match the dtype of an existing tensor
             P_LL = P_LL + self.process_valid_mask(V_LL.to(torch.float)) * V_LL
 
             # Initialise the atom single representation as the single conditioning.
+            # NOTE: We create a new view on the tensor, so that the original tensor is not modified (unless we perform an in-place operation)
             Q_L = C_L
 
             # Add the combined single conditioning to the pair representation.
-            P_LL = P_LL + (self.process_single_l(C_L).unsqueeze(-2) + self.process_single_m(C_L).unsqueeze(-3))
+            # (With a residual connection)
+            P_LL = P_LL + (self.process_single_l(C_L).unsqueeze(-2) + self.process_single_m(C_L).unsqueeze(-3)) # [L, 1, C_atompair] + [1, L, C_atompair] -> [L, L, C_atompair]
 
             # Run a small MLP on the pair activations
-            P_LL = P_LL + self.pair_mlp(P_LL)
+            # (With a residual connection)
+            P_LL = P_LL + self.pair_mlp(P_LL) # [L, L, C_atompair] -> [L, L, C_atompair]
 
-            # Cross attention transformer.
-            Q_L = self.atom_transformer(Q_L, C_L, P_LL)
+            # Cross attention transformer
+            Q_L = self.atom_transformer(Q_L, C_L, P_LL) # [L, C_atom]
 
+            # ...get the desired shape of the per-token representation, which is [I, C_token]
             A_I_shape = Q_L.shape[:-2] + (I, self.c_token,)
+
             # Aggregate per-atom representation to per-token representation
+            # (Set the per-token representation to be the mean activation of all atoms in the token)
             A_I = torch.zeros(A_I_shape, device=Q_L.device).index_reduce(
-                -2,
-                f['atom_to_token_map'].long(),
-                self.process_q(Q_L),
+                -2, # Operate on the second-to-last dimension (the atom dimension)
+                # TODO: Use int32 instead of int64 for the atom_to_token_map tensor
+                f['atom_to_token_map'].long(), # [L], mapping from atom index to token index. Must be a torch.int64 or torch.int32 tensor.
+                self.process_q(Q_L), # [L, C_atom] -> [L, C_token]
                 'mean',
-                include_self=False).clone()
+                include_self=False # Do not use the original values in A_I (all zeros) when aggregating
+            # TODO: Why do we need to clone here?
+            ).clone() # [L, C_atom] -> [I, C_token]
         
             return A_I, Q_L, C_L, P_LL
 
@@ -356,7 +381,9 @@ class RelativePositionEncoding(nn.Module):
         )
         A_reltoken_II = one_hot(d_token_II, 2*self.r_max+2)
         d_chain_II = torch.where(
-            b_samechain_II,
+            # NOTE: Implementing bugfix from the Protenix Technical report, where we use `same_entity` instead of `not same_chain` (as in the AF-3 pseudocode)
+            # Reference: https://github.com/bytedance/Protenix/blob/main/Protenix_Technical_Report.pdf
+            b_same_entity_II,
             torch.clip(f['sym_id'].unsqueeze(-1) - f['sym_id'].unsqueeze(-2) + self.s_max, 0, 2*self.s_max),
             2 * self.s_max + 1
         )
