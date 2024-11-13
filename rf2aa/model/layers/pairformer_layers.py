@@ -137,16 +137,15 @@ class AtomAttentionEncoderPairformer(nn.Module):
 
             # Aggregate per-atom representation to per-token representation
             # (Set the per-token representation to be the mean activation of all atoms in the token)
-            A_I = torch.zeros(A_I_shape, device=Q_L.device).index_reduce(
+            A_I = torch.zeros(A_I_shape, device=Q_L.device, dtype=Q_L.dtype).index_reduce(
                 -2, # Operate on the second-to-last dimension (the atom dimension)
-                # TODO: Use int32 instead of int64 for the atom_to_token_map tensor
                 f['atom_to_token_map'].long(), # [L], mapping from atom index to token index. Must be a torch.int64 or torch.int32 tensor.
                 self.process_q(Q_L), # [L, C_atom] -> [L, C_token]
                 'mean',
                 include_self=False # Do not use the original values in A_I (all zeros) when aggregating
             # TODO: Why do we need to clone here?
-            ).clone() # [L, C_atom] -> [I, C_token]
-        
+            ) # [L, C_atom] -> [I, C_token]
+
             return A_I, Q_L, C_L, P_LL
 
         return embed_features(C_L, D_LL, V_LL)
@@ -217,7 +216,7 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
             # Q, K, V: [Batch, N_seq, N_res, Head, Dim]
             # res_mask: [Batch, N_seq, 1, 1, N_res]
             # pair_bias: [Batch, 1, Head, N_res, N_res]
-#            from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
+            #from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
             assert Q_IH.shape[0] != 1, "this code assumes your structure is not batched" 
             batch = 1
             n_res =  Q_IH.shape[0]
@@ -288,19 +287,15 @@ class PairformerBlock(nn.Module):
     def forward(self,
                 S_I,
                 Z_II):
-        Z_II = Z_II + self.drop_row(self.maybe_make_batched(self.tri_mul_outgoing)(Z_II))
-        Z_II = Z_II + self.drop_row(self.maybe_make_batched(self.tri_mul_incoming)(Z_II))
-
-        use_amp = True
-
-        with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
+        with torch.amp.autocast('cuda', enabled=True, dtype=torch.bfloat16):
+            Z_II = Z_II + self.drop_row(self.maybe_make_batched(self.tri_mul_outgoing)(Z_II))
+            Z_II = Z_II + self.drop_row(self.maybe_make_batched(self.tri_mul_incoming)(Z_II))
             Z_II = Z_II + self.drop_row(self.maybe_make_batched(self.tri_attn_start)(Z_II))
             Z_II = Z_II + self.drop_col(self.maybe_make_batched(self.tri_attn_end)(Z_II))
-        Z_II = Z_II + self.z_transition(Z_II)
-        if S_I is not None:
-            with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
+            Z_II = Z_II + self.z_transition(Z_II)
+            if S_I is not None:
                 S_I = S_I + self.attention_pair_bias(S_I, None, Z_II, Beta_II=torch.tensor([0.], device=Z_II.device))
-            S_I = S_I + self.s_transition(S_I)
+                S_I = S_I + self.s_transition(S_I)
         return S_I, Z_II
 
 
@@ -429,29 +424,29 @@ class MSAModule(nn.Module):
         triangle_ops_expected_dim = 4 # B, I, I, C
         self.maybe_make_batched_triangle_ops = create_batch_dimension_if_not_present(triangle_ops_expected_dim)
 
+    @activation_checkpointing
     def forward(self,
                 f,
                 Z_II,
                 S_inputs_I,
                 ):
         msa = f['msa']
-        msa_SI = self.msa_subsampler(msa, S_inputs_I)
+        with torch.amp.autocast('cuda',enabled=True, dtype=torch.bfloat16):
+            msa_SI = self.msa_subsampler(msa, S_inputs_I)
 
-        use_amp = True
-        for i in range(self.n_block):
-            # update MSA features
-            Z_II = Z_II + self.maybe_make_batched_outer_product(self.outer_product)(msa_SI)
-            msa_SI = msa_SI + self.drop_row_msa(self.msa_pair_weighted_averaging(msa_SI, Z_II))
-            msa_SI = msa_SI + self.msa_transition(msa_SI)
-
-            # update pair features
-            Z_II = Z_II + self.drop_row_pair(self.maybe_make_batched_triangle_ops(self.tri_mult_outgoing)(Z_II))
-            Z_II = Z_II + self.drop_row_pair(self.maybe_make_batched_triangle_ops(self.tri_mult_incoming)(Z_II))
-
-            with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
+            for i in range(self.n_block):
+                # update MSA features
+                Z_II = Z_II + self.maybe_make_batched_outer_product(self.outer_product)(msa_SI)
+                msa_SI = msa_SI + self.drop_row_msa(self.msa_pair_weighted_averaging(msa_SI, Z_II))
+                msa_SI = msa_SI + self.msa_transition(msa_SI)
+    
+                # update pair features
+                Z_II = Z_II + self.drop_row_pair(self.maybe_make_batched_triangle_ops(self.tri_mult_outgoing)(Z_II))
+                Z_II = Z_II + self.drop_row_pair(self.maybe_make_batched_triangle_ops(self.tri_mult_incoming)(Z_II))
+    
                 Z_II = Z_II + self.drop_row_pair(self.maybe_make_batched_triangle_ops(self.tri_attn_start)(Z_II))
                 Z_II = Z_II + self.drop_col_pair(self.maybe_make_batched_triangle_ops(self.tri_attn_end)(Z_II))
-            Z_II = Z_II + self.pair_transition(Z_II)
+                Z_II = Z_II + self.pair_transition(Z_II)
         return Z_II
 
 class TemplateEmbedder(nn.Module):
@@ -498,6 +493,7 @@ class TemplateEmbedder(nn.Module):
         template_restype = f["template_restype"]
         asym_id = f["asym_id"]
 
+        @activation_checkpointing
         def embed_templates(
             template_backbone_frame_mask,
             template_pseudo_beta_mask,
@@ -505,28 +501,34 @@ class TemplateEmbedder(nn.Module):
             template_unit_vector,
             template_restype,
             asym_id,
-            ):
-        
-            I = Z_II.shape[0]
-            template_frame_mask = template_backbone_frame_mask[:, None] * f["template_backbone_frame_mask"][:, :, None]   
-            template_pseudo_beta_mask = f["template_pseudo_beta_mask"][:, None, :] * f["template_pseudo_beta_mask"][:, :, None]
-
-            template_feats = torch.cat([f["template_distogram"], template_frame_mask[..., None], f["template_unit_vector"], template_pseudo_beta_mask[...,None]], dim=-1)
-            template_feats = template_feats * (f["asym_id"][None, :] == f["asym_id"][:, None])[..., None]
-            template_restype_left = f["template_restype"][:, None, :, :].expand(-1, I, -1, -1)
-            template_restype_right = f["template_restype"][:, :, None, :].expand(-1, -1, I, -1)
-
-            template_feats = torch.cat([template_feats, template_restype_left, template_restype_right], dim=-1)
-            T = template_feats.shape[0]
-            u_II = torch.zeros(I, I, self.c, device=Z_II.device)
-            for i in range(T):
-                v_II = self.emb_pair(self.norm_pair_before_pairformer(Z_II)) + self.emb_templ(template_feats[i])
-                for block in self.pairformer:
-                    _, v_II = block(None, v_II)
-                u_II = u_II + self.norm_after_pairformer(v_II)
-            u_II = u_II / T
+        ):
+            with torch.amp.autocast('cuda', enabled=True, dtype=torch.bfloat16):
+                I = Z_II.shape[0]
+                template_frame_mask = template_backbone_frame_mask[:, None] * template_backbone_frame_mask[:, :, None]   
+                template_pseudo_beta_mask = template_pseudo_beta_mask[:, None, :] * template_pseudo_beta_mask[:, :, None]
+    
+                template_feats = torch.cat([
+                    template_distogram,
+                    template_frame_mask[..., None],
+                    template_unit_vector,
+                    template_pseudo_beta_mask[...,None]
+                ], dim=-1)
+                template_feats = template_feats * (asym_id[None, :] == asym_id[:, None])[..., None]
+                template_restype_left = template_restype[:, None, :, :].expand(-1, I, -1, -1)
+                template_restype_right = template_restype[:, :, None, :].expand(-1, -1, I, -1)
+    
+                template_feats = torch.cat([template_feats, template_restype_left, template_restype_right], dim=-1)
+                T = template_feats.shape[0]
+                u_II = torch.zeros(I, I, self.c, device=Z_II.device)
+                for i in range(T):
+                    v_II = self.emb_pair(self.norm_pair_before_pairformer(Z_II)) + self.emb_templ(template_feats[i])
+                    for block in self.pairformer:
+                        _, v_II = block(None, v_II)
+                    u_II = u_II + self.norm_after_pairformer(v_II)
+                u_II = u_II / T
 
             return self.agg_emb(relu(u_II))
+
         return embed_templates(
             template_backbone_frame_mask,
             template_pseudo_beta_mask,

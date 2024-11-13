@@ -122,6 +122,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
                 include_self=False).clone()
             
             return A_I, Q_L, C_L, P_LL
+            
         return embed_atom_feats(C_L, D_LL, V_LL, P_LL, tok_idx)
 
 
@@ -144,10 +145,10 @@ class AtomTransformer(nn.Module):
         m = torch.arange(l_max).unsqueeze(0).unsqueeze(-1)    # [1, l_max, 1]
         c = subset_centers.unsqueeze(0).unsqueeze(0) # [1, 1, S]
 
-        Beta_lms_binary = (torch.abs(l - c) < n_queries / 2) * (torch.abs(m - c) < n_keys / 2)
-        Beta_lm_binary = Beta_lms_binary.sum(dim=-1, dtype=bool)
-        Beta_lm = torch.where(Beta_lm_binary, 0, -1e5) # is -1e10 in the paper but getting nans
-        self.register_buffer('Beta_lm', Beta_lm)
+        #Beta_lms_binary = (torch.abs(l - c) < n_queries / 2) * (torch.abs(m - c) < n_keys / 2)
+        #Beta_lm_binary = Beta_lms_binary.sum(dim=-1, dtype=bool)
+        #Beta_lm = torch.where(Beta_lm_binary, 0, -1e5) # is -1e10 in the paper but getting nans
+        #self.register_buffer('Beta_lm', Beta_lm)
         self.diffusion_transformer = DiffusionTransformer(c_token=c_atom, c_s=c_atom, c_tokenpair=c_atompair, **diffusion_transformer)
 
     def forward(
@@ -158,7 +159,8 @@ class AtomTransformer(nn.Module):
     ):
         L = Ql.shape[-2]
         assert L < self.l_max
-        Beta_lm = self.Beta_lm[:L, :L]
+        #Beta_lm = self.Beta_lm[:L, :L]
+        Beta_lm = True
         return self.diffusion_transformer(Ql, Cl, Plm, Beta_lm)
 
 
@@ -199,10 +201,9 @@ class DiffusionTransformerBlock(nn.Module):
             Z_II,   # [..., I, I, C_tokenpair]
             Beta_II,   # [I, I]
     ):
-        use_amp = True
-        with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
+        with torch.amp.autocast('cuda', enabled=True, dtype=torch.bfloat16):
             B_I = self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
-        A_I = B_I + self.conditioned_transition_block(A_I, S_I)
+            A_I = B_I + self.conditioned_transition_block(A_I, S_I)
         return A_I
 
 
@@ -339,12 +340,11 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         if S_I is not None:
             A_I = self.ada_ln_1(A_I, S_I)
  
-        
-        if self.use_deepspeed_evo or self.force_bfloat16:
-            A_I = A_I.to(torch.bfloat16)
-        
         if Beta_II is not None:
             return self.atom_attention(A_I, S_I, Z_II)
+
+        if self.use_deepspeed_evo or self.force_bfloat16:
+            A_I = A_I.to(torch.bfloat16)
         
         Q_IH = self.to_q(A_I) #/ np.sqrt(self.c)
         K_IH = self.to_k(A_I)
@@ -421,7 +421,6 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
 
         # Attention
         chunk = 32
-
         assert chunk % 2 == 0
 
         subset_centers = torch.arange(0, L, chunk) + chunk / 2
@@ -433,8 +432,8 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
             j_start = int(max(0, c - 64))
             j_end = int(min(L, c + 64))
             
-            query_subset = Q_IH[:, i_start:i_end]
-            key_subset = K_IH[:, j_start:j_end]
+            query_subset = Q_IH[:, i_start:i_end].float()
+            key_subset = K_IH[:, j_start:j_end].float()
             attn = torch.einsum("...ihd,...jhd->...ijh", query_subset, key_subset)
             attn = attn / (self.c ** 0.5)
             # add bias

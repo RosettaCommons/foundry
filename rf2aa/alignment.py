@@ -50,7 +50,9 @@ def weighted_rigid_align(
     X_gt_L = X_gt_L - u_X_gt.unsqueeze(-2)
     # NOTE: Implementing bugfix from the Protenix Technical report, where we should use the ground truth center of mass rather than the predicted center of mass for the alignment
     # Reference: https://github.com/bytedance/Protenix/blob/main/Protenix_Technical_Report.pdf
-    X_align_L = X_gt_L @ R + u_X_gt.unsqueeze(-2)
+    #X_align_L = X_gt_L @ R + u_X_gt.unsqueeze(-2)
+    #fd undo this
+    X_align_L = X_gt_L @ R + u_X.unsqueeze(-2)
 
     return X_align_L.detach()
 

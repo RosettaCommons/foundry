@@ -217,8 +217,15 @@ class AF3Sampler:
         # first receive inputs from dataloader
         # convert them into features
         network_input = self._get_network_input(inputs)
+
         # send network input to gpu
-        network_input=tree.map_structure(lambda x: x.to(self.device) if hasattr(x, 'cpu') else x, network_input)
+        #network_input=tree.map_structure(lambda x: x.to(self.device) if hasattr(x, 'cpu') else x, network_input)
+        def _inmap(path, x):
+            if hasattr(x, 'cpu') and path != ('f','msa_stack'):
+                return x.to(self.device) 
+            else:
+                return x
+        network_input = tree.map_structure_with_path(_inmap, network_input)
 
         # run model to get evoformer features
         #pre_recycle_outputs = self.model.module.shadow.pre_recycle(**network_input)
@@ -226,8 +233,9 @@ class AF3Sampler:
         for i in range(n_cycle):
             # run the model for n_steps
             #post_recycle_outputs = self.model.module.shadow.recycle(**pre_recycle_outputs)
+            recycle_inputs["f"]["msa"] = network_input["f"]["msa_stack"][i].to(self.device)
             recycle_inputs = self.model.recycle(**recycle_inputs)
-        
+
         noise_schedule = self.construct_noise_schedule(200, 0, 1)
         noise_schedule = noise_schedule.to(self.device)
         post_recycle_outputs = recycle_inputs
@@ -236,7 +244,7 @@ class AF3Sampler:
                 noise_schedule
                 ) 
         # need to return the distogram outputs
-#        outputs = self.model.module.shadow.post_recycle(
+        #outputs = self.model.module.shadow.post_recycle(
             #**pre_recycle_outputs
         #)
         outputs = self.model.post_recycle(

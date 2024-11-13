@@ -102,13 +102,11 @@ class AF3_full_block(nn.Module):
     def forward(self, latent_feats, use_checkpoint, use_amp):
         msa, pair = self._unpack_inputs(latent_feats)
         if use_checkpoint:
-            with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
-                msa  = checkpoint.checkpoint(self._1d_update, msa, pair, use_reentrant=True)
-                pair = checkpoint.checkpoint(self._2d_update, msa, pair, use_reentrant=True)
+            msa  = checkpoint.checkpoint(self._1d_update, msa, pair, use_reentrant=True)
+            pair = checkpoint.checkpoint(self._2d_update, msa, pair, use_reentrant=True)
         else:
-            with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
-                msa  = self._1d_update(msa, pair)
-                pair = self._2d_update(msa, pair)
+            msa  = self._1d_update(msa, pair)
+            pair = self._2d_update(msa, pair)
 
         latent_feats = self._pack_outputs(msa, pair, latent_feats)
         return latent_feats
@@ -186,15 +184,13 @@ class AF3_block(nn.Module):
         singleseq, pair = self._unpack_inputs(latent_feats)
         drop_layer = 0
         if use_checkpoint:
-            with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
-                # 2d then 1d update
-                pair = checkpoint.checkpoint(self._2d_update, singleseq, pair, use_reentrant=True)
-                singleseq  = checkpoint.checkpoint(self._1d_update, singleseq, pair, use_reentrant=True)
+            # 2d then 1d update
+            pair = checkpoint.checkpoint(self._2d_update, singleseq, pair, use_reentrant=True)
+            singleseq  = checkpoint.checkpoint(self._1d_update, singleseq, pair, use_reentrant=True)
         else:
-            with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
-                # 2d then 1d update
-                pair = self._2d_update(singleseq, pair)
-                singleseq = self._1d_update(singleseq, pair)
+            # 2d then 1d update
+            pair = self._2d_update(singleseq, pair)
+            singleseq = self._1d_update(singleseq, pair)
 
         latent_feats = self._pack_outputs(singleseq, pair, latent_feats)
         return latent_feats
@@ -213,7 +209,7 @@ class MsaSubsampleEmbedder(nn.Module):
                 ):
         S, I = msa_SI.shape[:2]
         # choose sequences to sample
-       # num_samples = torch.min(torch.tensor([self.num_sequences, S]))
+        # num_samples = torch.min(torch.tensor([self.num_sequences, S]))
         #weights = torch.ones(num_samples.item(), device=msa_SI.device)
         #samples = torch.multinomial(weights, num_samples, replacement=False)
         #msa_SI = torch.index_select(msa_SI, 0, samples)

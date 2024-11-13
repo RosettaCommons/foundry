@@ -112,43 +112,42 @@ class DiffusionModule(nn.Module):
                 S_trunk_I, # [B, I, C_S_trunk]
                 Z_trunk_II, # [B, I, I, C_Z]
     ):
-        use_amp = False
-        with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
+        # Conditioning
+        S_I, Z_II = self.diffusion_conditioning(t, f, S_inputs_I.float(), S_trunk_I.float(), Z_trunk_II.float())
 
-            # Conditioning
-            S_I, Z_II = self.diffusion_conditioning(t, f, S_inputs_I, S_trunk_I, Z_trunk_II)
+        # Scale positions to dimensionless vectors with approximately unit variance
+        if self.f_pred == 'edm':
+            R_noisy_L = X_noisy_L / torch.sqrt(t[...,None,None]**2 + self.sigma_data**2)
+        elif self.f_pred == 'unconditioned':
+            R_noisy_L = torch.zeros_like(X_noisy_L)
+        elif self.f_pred == 'noise_pred':
+            R_noisy_L = X_noisy_L
+        else:
+            raise Exception(f'{self.f_pred=} unrecognized')
+        # Sequence-local Atom Attention and aggregation to coarse-grained tokens
+        A_I, Q_skip_L, C_skip_L, P_skip_LL = self.atom_attention_encoder(f, R_noisy_L, S_trunk_I.float(), Z_II)
+        # Full self-attention on token level
 
-            # Scale positions to dimensionless vectors with approximately unit variance
-            if self.f_pred == 'edm':
-                R_noisy_L = X_noisy_L / torch.sqrt(t[...,None,None]**2 + self.sigma_data**2)
-            elif self.f_pred == 'unconditioned':
-                R_noisy_L = torch.zeros_like(X_noisy_L)
-            elif self.f_pred == 'noise_pred':
-                R_noisy_L = X_noisy_L
-            else:
-                raise Exception(f'{self.f_pred=} unrecognized')
-            # Sequence-local Atom Attention and aggregation to coarse-grained tokens
-            A_I, Q_skip_L, C_skip_L, P_skip_LL = self.atom_attention_encoder(f, R_noisy_L, S_trunk_I, Z_II)
-            # Full self-attention on token level
-            A_I = A_I + self.process_s(S_I)
-            A_I = self.diffusion_transformer(A_I, S_I, Z_II, Beta_II=torch.tensor(0.0, device=Z_II.device))
-            A_I = self.layer_norm_1(A_I)
-            # Broadcast token activations to atoms and run Sequence-local Atom Attention
-            R_update_L = self.atom_attention_decoder(f, A_I, Q_skip_L, C_skip_L, P_skip_LL)
-            # Rescale updates to positions and combine with input positions
-            if self.f_pred == 'edm':
-                X_out_L = (
-                    (self.sigma_data**2 / (self.sigma_data**2 + t**2))[...,None,None] * X_noisy_L +
-                    (self.sigma_data * t / (self.sigma_data**2 + t**2) ** 0.5)[...,None,None] * R_update_L
-                )
-            elif self.f_pred == 'unconditioned':
-                X_out_L = R_update_L
-            elif self.f_pred == 'noise_pred':
-                X_out_L = X_noisy_L + R_update_L
-            else:
-                raise Exception(f'{self.f_pred=} unrecognized')
+        A_I = A_I + self.process_s(S_I)
+        A_I = self.diffusion_transformer(A_I, S_I, Z_II, Beta_II=torch.tensor(0.0, device=Z_II.device))
+        A_I = self.layer_norm_1(A_I)
 
-            return X_out_L
+        # Broadcast token activations to atoms and run Sequence-local Atom Attention
+        R_update_L = self.atom_attention_decoder(f, A_I.float(), Q_skip_L, C_skip_L, P_skip_LL)
+        # Rescale updates to positions and combine with input positions
+        if self.f_pred == 'edm':
+            X_out_L = (
+                (self.sigma_data**2 / (self.sigma_data**2 + t**2))[...,None,None] * X_noisy_L +
+                (self.sigma_data * t / (self.sigma_data**2 + t**2) ** 0.5)[...,None,None] * R_update_L
+            )
+        elif self.f_pred == 'unconditioned':
+            X_out_L = R_update_L
+        elif self.f_pred == 'noise_pred':
+            X_out_L = X_noisy_L + R_update_L
+        else:
+            raise Exception(f'{self.f_pred=} unrecognized')
+
+        return X_out_L
 
 class DiffusionConditioning(nn.Module):
     def __init__(self, sigma_data, c_z, c_s, c_s_inputs, c_t_embed, relative_position_encoding):
@@ -186,20 +185,24 @@ class DiffusionConditioning(nn.Module):
                 Z_trunk_II):
         # Pair conditioning
         Z_II = torch.cat([Z_trunk_II, self.relative_position_encoding(f)], dim=-1)
-        Z_II = self.to_zii(Z_II)
-        for b in range(2):
-            Z_II = Z_II + self.transition_1[b](Z_II)
-        
-        # Single conditioning
-        S_I = torch.cat([S_trunk_I, S_inputs_I], dim=-1)
-        S_I = self.to_si(S_I)
-        N_D = self.fourier_embedding(1/4 * torch.log(t/self.sigma_data))
-        S_I = self.process_n(N_D).unsqueeze(-2) + S_I
-        for b in range(2):
-            S_I = S_I + self.transition_2[b](S_I)
-        
-        return S_I, Z_II
 
+        @activation_checkpointing
+        def _run_conditioning(Z_II,S_trunk_I, S_inputs_I):        
+            Z_II = self.to_zii(Z_II)
+            for b in range(2):
+                Z_II = Z_II + self.transition_1[b](Z_II)
+
+            # Single conditioning
+            S_I = torch.cat([S_trunk_I, S_inputs_I], dim=-1)
+            S_I = self.to_si(S_I)
+            N_D = self.fourier_embedding(1/4 * torch.log(t/self.sigma_data))
+            S_I = self.process_n(N_D).unsqueeze(-2) + S_I
+            for b in range(2):
+                S_I = S_I + self.transition_2[b](S_I)
+        
+            return S_I, Z_II
+            
+        return _run_conditioning(Z_II,S_trunk_I, S_inputs_I)
 
 pi = torch.acos(torch.zeros(1)).item() * 2
 class FourierEmbedding(nn.Module):
@@ -258,7 +261,7 @@ class Model(nn.Module):
                 if i_cycle < n_cycle -1:
                     stack.enter_context(torch.no_grad())
                     stack.enter_context(no_sync())
-                recycling_input["f"]["msa"] = input["f"]["msa_stack"][i_cycle]
+                recycling_input["f"]["msa"] = input["f"]["msa_stack"][i_cycle].to(input["t"].device)
                 recycling_input = self.recycle(**recycling_input)
         return recycling_input
 
@@ -322,12 +325,12 @@ class Model(nn.Module):
                     ):
         if is_training:
             X_pred = self.diffusion_module(
-                X_noisy_L,
+                X_noisy_L.float(),
                 t,
                 f,
-                S_inputs_I, 
-                S_I,
-                Z_II,
+                S_inputs_I.float(), 
+                S_I.float(),
+                Z_II.float(),
             )
         else:
             X_pred = None
@@ -335,9 +338,9 @@ class Model(nn.Module):
         return dict(
             X_L=X_pred,
             distogram=distogram_pred,
-            S_inputs_I=S_inputs_I,
-            S_I=S_I,
-            Z_II=Z_II,
+            S_inputs_I=S_inputs_I.float(),
+            S_I=S_I.float(),
+            Z_II=Z_II.float(),
         )
         
 class DistogramHead(nn.Module):
@@ -395,15 +398,13 @@ class Recycler(nn.Module):
                 S_I,
                 Z_II,
                 ):
-        use_amp = True
-        with torch.cuda.amp.autocast(enabled=use_amp, dtype=torch.bfloat16):
-            Z_II = Z_init_II + self.process_zh(Z_II)
-            Z_II = Z_II + self.template_embedder(f, Z_II)
-            # NOTE: Implementing bugfix from the Protenix Technical report, where residual-connecting the MSA module is redundant
-            # Reference: https://github.com/bytedance/Protenix/blob/main/Protenix_Technical_Report.pdf
-            Z_II = self.msa_module(f, Z_II, S_inputs_I)
-            S_I = S_init_I + self.process_sh(S_I)
-            for block in self.pairformer_stack:
-                S_I, Z_II = block(S_I, Z_II)
-            return S_I, Z_II
+        Z_II = Z_init_II + self.process_zh(Z_II)
+        Z_II = Z_II + self.template_embedder(f, Z_II)
+        # NOTE: Implementing bugfix from the Protenix Technical report, where residual-connecting the MSA module is redundant
+        # Reference: https://github.com/bytedance/Protenix/blob/main/Protenix_Technical_Report.pdf
+        Z_II = self.msa_module(f, Z_II, S_inputs_I)
+        S_I = S_init_I + self.process_sh(S_I)
+        for block in self.pairformer_stack:
+            S_I, Z_II = block(S_I, Z_II)
+        return S_I, Z_II
     

@@ -289,6 +289,7 @@ af3_data_prep:
 
 recycling:
   max_cycle: 4
+  #max_cycle_valid: 10
 
 
 af3_inference:
@@ -370,7 +371,7 @@ dataset_params:
               crop_contiguous_probability: 0.3333333333333333
               crop_spatial_probability: 0.6666666666666667
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
-              max_atoms_in_crop: 3000
+              max_atoms_in_crop: 4000
               n_msa: ${dataset_params.n_msa}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
@@ -433,7 +434,7 @@ dataset_params:
               crop_contiguous_probability: 0.0
               crop_spatial_probability: 1.0
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
-              max_atoms_in_crop: 3000
+              max_atoms_in_crop: 5000
               n_msa: ${dataset_params.n_msa}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
@@ -484,7 +485,7 @@ dataset_params:
               crop_contiguous_probability: 0.25
               crop_spatial_probability: 0.75
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
-              max_atoms_in_crop: 3000
+              max_atoms_in_crop: 4000
               n_msa: ${dataset_params.n_msa}
 
 
@@ -525,7 +526,7 @@ dataset_params:
         is_inference: True
         protein_msa_dirs: ${paths.protein_msa_dirs}
         rna_msa_dirs: ${paths.rna_msa_dirs}
-        n_recycles: ${loader_params.maxcycle}
+        n_recycles: 10
         crop_size: ${loader_params.crop}
         crop_contiguous_probability: 0.0
         crop_spatial_probability: 0.0

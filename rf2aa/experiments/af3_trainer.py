@@ -23,6 +23,7 @@ class AF3Trainer(FlowMatchingTrainer):
 
     def construct_model(self, device="cpu"):
         self.model = AF3_structure.Model(**self.config.model).to(device)
+
         print_n_params = False
         if print_n_params:
             logger.info(f'{get_n_params(self.model)=}')
@@ -34,7 +35,8 @@ class AF3Trainer(FlowMatchingTrainer):
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
 
-        self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
+        #self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
+        self.model = DDP(self.model, device_ids=None, find_unused_parameters=False, broadcast_buffers=False)
         if "partial_t" in self.config.af3_data_prep:
             self.sampler = AF3PartialSampler(self.config, self.model.module.shadow)
         else:
@@ -44,7 +46,7 @@ class AF3Trainer(FlowMatchingTrainer):
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
-        
+
         example = inputs[0]
         print(example["example_id"])
         network_input = {
@@ -62,12 +64,24 @@ class AF3Trainer(FlowMatchingTrainer):
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
         }
-        network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
+        #network_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
+
+        def _inmap(path, x):
+            if hasattr(x, 'cpu') and path != ('f','msa_stack'):
+                return x.to(gpu) 
+            else:
+                return x
+        network_input = tree.map_structure_with_path(_inmap, network_input)
+
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
         logger.debug('network_input:\n' + pretty_describe_dict(network_input))
         logger.debug('loss_input:\n' + pretty_describe_dict(loss_input))
+
         network_input["f"]["msa_stack"] = network_input["f"]["msa_stack"].to(torch.bfloat16)
         network_input["f"]["profile"] = network_input["f"]["profile"].to(torch.bfloat16)
+
+        for x in ['template_distogram','template_restype','template_unit_vector']:
+            network_input["f"][x] = network_input["f"][x].to(torch.bfloat16)
 
         output_i = self.model(
             network_input,
@@ -75,8 +89,6 @@ class AF3Trainer(FlowMatchingTrainer):
             no_sync=self.model.no_sync,
             use_amp=self.config.training_params.use_amp
         )
-        #from rf2aa.memory import mem_report
-        #print(mem_report())
         bad_pdb = "6by7"
         if bad_pdb in example["example_id"]:
             print(f"Bad PDB: {example['example_id']}")
@@ -93,7 +105,7 @@ class AF3Trainer(FlowMatchingTrainer):
         loss_dict = self.unbatch_losses(loss_dict_batched)
 
         return loss, loss_dict
-
+        
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
         gpu = self.model.device
         n_cycle = 10
@@ -117,11 +129,16 @@ class AF3Trainer(FlowMatchingTrainer):
             "example_id": example["example_id"],
         }
         
-        network_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
+        def _inmap(path, x):
+            if hasattr(x, 'cpu') and path != ('f','msa_stack'):
+                return x.to(gpu) 
+            else:
+                return x
+        network_input = tree.map_structure_with_path(_inmap, network_input)
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
-        print(metrics_dict)
+        print('X',metrics_dict)
         return torch.tensor(0), metrics_dict
     
     def valid_epoch(self, epoch, rank, world_size):
@@ -132,10 +149,8 @@ class AF3Trainer(FlowMatchingTrainer):
         for dataset_name, valid_loader in self.valid_loaders.items():
             for valid_idx, inputs in enumerate(valid_loader):
                 n_cycle = self.config.loader_params.maxcycle
-                loss_dict = self.valid_step(inputs, n_cycle)
-                valid_loss_dict.extend(loss_dict)
-                for line in loss_dict:
-                    print (line)
+                _, loss_dict = self.valid_step(inputs, n_cycle)
+                valid_loss_dict.append(loss_dict)
 
             if len(valid_loader) == 0:
                 continue
@@ -152,12 +167,7 @@ class AF3Trainer(FlowMatchingTrainer):
         outfile = self.output_dir+'/'+'valid_'+str(epoch)+'.log'
         with open (outfile,'w') as f:
             for line in loss_dict:
-                f.write(line+'\n')
-
-        outfile = self.output_dir+'/'+'valid_last.log'
-        with open (outfile,'w') as f:
-            for line in loss_dict:
-                f.write(line+'\n')
+                f.write(str(line)+'\n')
 
     
     def write_pdb(self, X_gt_L, crd_mask_I, seq, name="valid.pdb"):

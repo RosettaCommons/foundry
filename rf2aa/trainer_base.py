@@ -9,7 +9,8 @@ from rf2aa.experiments.af3_trainer import AF3Trainer, AF3TrainerRollout
 #from rf2aa.manual_dependency import append_package_path
 #torch.autograd.set_detect_anomaly(True)
 
-
+import warnings
+warnings.filterwarnings("ignore")
 
 @hydra.main(version_base=None, config_path='config/train')
 def main(config):
