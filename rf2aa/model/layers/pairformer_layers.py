@@ -143,9 +143,8 @@ class AtomAttentionEncoderPairformer(nn.Module):
                 self.process_q(Q_L), # [L, C_atom] -> [L, C_token]
                 'mean',
                 include_self=False # Do not use the original values in A_I (all zeros) when aggregating
-            # TODO: Why do we need to clone here?
             ) # [L, C_atom] -> [I, C_token]
-
+            
             return A_I, Q_L, C_L, P_LL
 
         return embed_features(C_L, D_LL, V_LL)

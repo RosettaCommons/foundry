@@ -51,7 +51,7 @@ class AF3Trainer(FlowMatchingTrainer):
         print(example["example_id"])
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
-            "X_noisy_L": torch.nan_to_num(example["ground_truth"]["coord_atom_lvl"]) + example["noise"],
+            "X_noisy_L": torch.nan_to_num(example["coord_atom_lvl_to_be_noised"]) + example["noise"],
             "t": example["t"],
             "f": example["feats"],
         } 
@@ -89,18 +89,11 @@ class AF3Trainer(FlowMatchingTrainer):
             no_sync=self.model.no_sync,
             use_amp=self.config.training_params.use_amp
         )
-        bad_pdb = "6by7"
-        if bad_pdb in example["example_id"]:
-            print(f"Bad PDB: {example['example_id']}")
-            from rf2aa.loss.af3_losses import NullLoss
-            null_loss = NullLoss()
-            loss, loss_dict_batched = null_loss(network_input, output_i, loss_input)
-        else:
-            loss, loss_dict_batched = self.loss(
-                network_input,
-                output_i,
-                loss_input
-            )
+        loss, loss_dict_batched = self.loss(
+            network_input,
+            output_i,
+            loss_input
+        )
         
         loss_dict = self.unbatch_losses(loss_dict_batched)
 
@@ -110,11 +103,11 @@ class AF3Trainer(FlowMatchingTrainer):
         gpu = self.model.device
         n_cycle = 10
         outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
-        
+
         example = inputs[0]
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
-            "X_noisy_L": torch.nan_to_num(example["ground_truth"]["coord_atom_lvl"]) + example["noise"],
+            "X_noisy_L": torch.nan_to_num(example["coord_atom_lvl_to_be_noised"]) + example["noise"],
             "t": example["t"],
             "f": example["feats"],
         } 
@@ -138,9 +131,9 @@ class AF3Trainer(FlowMatchingTrainer):
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
-        print('X',metrics_dict)
+        print(metrics_dict)
         return torch.tensor(0), metrics_dict
-    
+
     def valid_epoch(self, epoch, rank, world_size):
         # turn off gradients
         self.model.eval()
@@ -151,9 +144,6 @@ class AF3Trainer(FlowMatchingTrainer):
                 n_cycle = self.config.loader_params.maxcycle
                 _, loss_dict = self.valid_step(inputs, n_cycle)
                 valid_loss_dict.append(loss_dict)
-
-            if len(valid_loader) == 0:
-                continue
 
         # synchronize
         all_valid_loss_dict = [None for i in range(world_size)]

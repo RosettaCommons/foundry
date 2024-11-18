@@ -362,33 +362,19 @@ class Trainer:
             # aggregate loss and update parameters
             loss = loss / self.config.ddp_params.accum
 
-            if (torch.any(torch.isnan(loss))):
-                #print ('NAN in loss',inputs[-1])
-                print ('NAN in loss',loss_dict)
-                print( inputs[0]["example_id"])
-                exit(1)
+            try:
+                self.scaler.scale(loss).backward()
+            except Exception as e:
+                print('Backwards error in',inputs[0]["example_id"])
+                raise e
 
-            self.scaler.scale(loss).backward()
-
-            hasnans=False
-            for n,p in self.model.named_parameters():
-                if (p.grad is not None and torch.any(torch.isnan(p.grad))):
-                    hasnans = True
-            if hasnans:
-                print ('NAN in grad')
-                print(inputs["item"])
-                for n,p in self.model.named_parameters():
-                    if (p.grad is not None):
-                        print (n, torch.max( torch.abs(p.flatten()) ), torch.max( torch.abs(p.grad.flatten()) ))
-                exit(1)
-            
             find_no_grad_parameters = False
             if find_no_grad_parameters:
                 no_grad_parameters = []
                 for n,p in self.model.module.model.named_parameters():
                     if p.grad is None:
                         no_grad_parameters.append(n)
-                
+
                 if no_grad_parameters:
                     print('Parameters with grad == None:')
                     for n in no_grad_parameters:

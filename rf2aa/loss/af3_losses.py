@@ -115,7 +115,7 @@ class DiffusionLoss(nn.Module):
     
         return self.weight*l_diffusion_total, loss_dict
 
-def smoothed_lddt_loss_naive(X_L, X_gt_L_aligned, crd_mask_L, is_dna, is_rna, tok_idx):
+def _smoothed_lddt_loss_naive(X_L, X_gt_L_aligned, crd_mask_L, is_dna, is_rna, tok_idx):
     """
     computes lddt with a sigmoid within each bucket to smooth the loss
     X_L: (D, L, 3)
@@ -170,8 +170,6 @@ def smoothed_lddt_loss(X_L, X_gt_L, crd_mask_L, is_dna, is_rna, tok_idx, eps=1e-
             )
             del is_na_L
 
-            lddtO = torch.sum(pair_mask)
-    
             # only score pairs that are resolved in the ground truth
             pair_mask *= (crd_mask_L[0:1,first_index] * crd_mask_L[0:1,second_index])
             # don't score pairs that are in the same token

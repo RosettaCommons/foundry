@@ -6,7 +6,7 @@ import tree
 from rf2aa.metrics.metrics_base import Metric
 
 
-def calc_lddt(X_L, X_gt_L, crd_mask_L, tok_idx, pairs_to_score=None, distance_cutoff=15.0):
+def calc_lddt(X_L, X_gt_L, crd_mask_L, tok_idx, pairs_to_score=None, distance_cutoff=15.0, use_amp=True, eps=1e-6):
     """
     X_L: predicted coordinates (D, L, 3)
     X_gt_L: ground truth coordinates (D, L, 3)
@@ -16,25 +16,47 @@ def calc_lddt(X_L, X_gt_L, crd_mask_L, tok_idx, pairs_to_score=None, distance_cu
     """
     D, L = X_L.shape[:2]
     if pairs_to_score is None:
-        pairs_to_score = torch.ones((L, L), dtype=torch.bool).to(X_L.device)
+        pairs_to_score = torch.ones((L, L), dtype=torch.bool).triu(0).to(X_L.device)
     else:
         assert pairs_to_score.shape == (L, L)
+        pairs_to_score = pairs_to_score.triu(0).to(X_L.device)
+
+    first_index,second_index = torch.nonzero(pairs_to_score,as_tuple=True)
+
+    if use_amp:
+        X_L = X_L.to(torch.bfloat16)
+        X_gt_L = X_gt_L.to(torch.bfloat16)
+
+    ground_truth_distances = torch.linalg.norm(X_gt_L[0:1,first_index]-X_gt_L[0:1,second_index], dim=-1)
+
+    with torch.amp.autocast('cuda',enabled=use_amp, dtype=torch.bfloat16):
+        pair_mask = torch.logical_and(
+            ground_truth_distances>0,
+            ground_truth_distances<distance_cutoff
+        )
+
+        # only score pairs that are resolved in the ground truth
+        pair_mask *= (crd_mask_L[0:1,first_index] * crd_mask_L[0:1,second_index])
+        # don't score pairs that are in the same token
+        pair_mask *= (tok_idx[None,first_index] != tok_idx[None,second_index])
+
+        _,valid_pairs = pair_mask.nonzero(as_tuple=True)
+        pair_mask = pair_mask[:,valid_pairs].to(X_L.dtype)
+        ground_truth_distances = ground_truth_distances[:,valid_pairs]    
+        first_index,second_index = first_index[valid_pairs],second_index[valid_pairs]
+
+        predicted_distances = torch.linalg.norm(X_L[:,first_index]-X_L[:,second_index], dim=-1)
     
-    # Compute distance matrix
-    predicted_distances = torch.cdist(X_L, X_L)
-    ground_truth_distances = torch.cdist(X_gt_L, X_gt_L)
-    ground_truth_distances[ground_truth_distances.isnan()] = 9999.0
+        delta_distances = torch.abs(predicted_distances-ground_truth_distances+eps)
+        del predicted_distances, ground_truth_distances
 
-    difference_distances = torch.abs(ground_truth_distances - predicted_distances)
+        lddt = 0.25*(
+            torch.sum( (delta_distances < 4.0)*pair_mask, dim=(1) )
+            +torch.sum( (delta_distances < 2.0)*pair_mask, dim=(1) )
+            +torch.sum( (delta_distances < 1.0)*pair_mask, dim=(1) )
+            +torch.sum( (delta_distances < 0.5)*pair_mask, dim=(1) )
+        ) / (torch.sum( pair_mask, dim=(1) ) + eps)
 
-    lddt_matrix = torch.zeros_like(difference_distances)
-    lddt_matrix = 0.25 * (difference_distances < 4.0) + 0.25 * (difference_distances < 2.0) + 0.25 * (difference_distances < 1.0) + 0.25 * (difference_distances < 0.5)
-
-    is_close_distance_LL = (ground_truth_distances < distance_cutoff)
-    in_same_residue_LL = tok_idx[None, :] == tok_idx[:, None]
-    is_resolved_LL = crd_mask_L[:, None, :] & crd_mask_L[:, :, None]
-    to_score_LL = pairs_to_score[None] & is_close_distance_LL & ~in_same_residue_LL & is_resolved_LL[0]
-    lddt = (lddt_matrix * to_score_LL).sum(dim=(-1,-2)) / (to_score_LL.sum(dim=(-1,-2)) + 1e-6)
     return lddt
 
 

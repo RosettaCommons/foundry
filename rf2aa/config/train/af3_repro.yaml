@@ -113,7 +113,7 @@ interpolant:
   self_condition: False
 
 model_globals:
-  l_max: 10000
+  l_max: 40000  # shouldn't matter...
 model:
   c_s: 384
   c_z: 128
@@ -316,6 +316,7 @@ dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   diffusion_batch_size: 32
+  diffusion_batch_size_valid: 16
   n_msa: 1024
   default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
   train:
@@ -340,7 +341,7 @@ dataset_params:
               filters:
                 - "deposition_date < '2021-09-30'"
                 - "resolution < 9.0"
-                - "num_polymer_pn_units <= 20" 
+                - "num_polymer_pn_units <= 300"
                 - "cluster.notnull()"
                 - "~(q_pn_unit_non_polymer_res_names.notnull() and q_pn_unit_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants.AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
               columns_to_load:
@@ -398,7 +399,7 @@ dataset_params:
               filters:
                 - "deposition_date < '2021-09-30'"
                 - "resolution < 9.0"
-                - "num_polymer_pn_units <= 20" 
+                - "num_polymer_pn_units <= 300"
                 - "cluster.notnull()"
                 - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants.AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
                 - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants.AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
@@ -503,23 +504,8 @@ dataset_params:
         #id_column: ${dataset_params.train.interface.dataset.dataset.id_column}
         id_column: example_id
         data: ${paths.pdb_data_dir}/entry_level_val_df.parquet
-#        columns_to_load:
-            ## columns required for identification, filtering & weighting
-            #- example_id
-            #- pdb_id
-            #- assembly_id
-            ##- deposition_date
-            #- resolution
-##            - num_polymer_pn_units
-            #- method
-##            - cluster
-##            - n_prot
-            ##- n_nuc
-            ##- n_ligand
-            ### interface specific columns
-            ##- pn_unit_1_iid
-            ##- pn_unit_2_iid
-
+        filters:
+          - "example_id not in  [\"{['validation']}{7ptq}{1}{[]}\"]"
       return_key: null
       transform:
         _target_: ${dataset_params.default_transform}
@@ -530,6 +516,6 @@ dataset_params:
         crop_size: ${loader_params.crop}
         crop_contiguous_probability: 0.0
         crop_spatial_probability: 0.0
-        diffusion_batch_size: ${dataset_params.diffusion_batch_size}
+        diffusion_batch_size: ${dataset_params.diffusion_batch_size_valid}
         n_msa: ${dataset_params.n_msa}
         

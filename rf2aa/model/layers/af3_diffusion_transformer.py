@@ -81,12 +81,16 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         D_LL = f['ref_pos'].unsqueeze(-2) - f['ref_pos'].unsqueeze(-3)
         V_LL = (f['ref_space_uid'].unsqueeze(-1) == f['ref_space_uid'].unsqueeze(-2)).unsqueeze(-1)
         P_LL = self.process_d(D_LL) * V_LL
-        
+
         @activation_checkpointing
         def embed_atom_feats(C_L, D_LL, V_LL, P_LL, tok_idx):
             # Embed pairwise inverse squared distances, and the valid mask
-            P_LL = P_LL + self.process_inverse_dist(1/(1+torch.linalg.norm(D_LL, dim=-1, keepdim=True))) * V_LL
-            P_LL = P_LL + self.process_valid_mask(V_LL.to(torch.float)) * V_LL
+            if self.training:
+                P_LL = P_LL + self.process_inverse_dist(1/(1+torch.linalg.norm(D_LL, dim=-1, keepdim=True))) * V_LL
+                P_LL = P_LL + self.process_valid_mask(V_LL.to(P_LL.dtype)) * V_LL
+            else:
+                P_LL[V_LL[...,0]] += self.process_inverse_dist(1/(1+torch.linalg.norm(D_LL[V_LL[...,0]], dim=-1, keepdim=True)))
+                P_LL[V_LL[...,0]] += self.process_valid_mask(V_LL[V_LL[...,0]].to(P_LL.dtype))
 
             # Initialise the atom single representation as the single conditioning.
             Q_L = C_L
@@ -407,8 +411,11 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
             A_I = self.linear_output_project(S_I) * A_I
 
         return A_I
-    
-    def atom_attention(self, A_I, S_I, Z_II):
+
+    def atom_attention(self, A_I, S_I, Z_II,qbatch=32,kbatch=128):
+        assert qbatch % 2 == 0
+        assert kbatch % 2 == 0
+
         if len(A_I.shape) == 2:
             A_I = A_I[None]
         Z_II = Z_II[None]
@@ -419,32 +426,31 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         B_IIH = self.to_b(self.ln_0(Z_II))
         G_IH = self.to_g(A_I)
 
-        # Attention
-        chunk = 32
-        assert chunk % 2 == 0
-
-        subset_centers = torch.arange(0, L, chunk) + chunk / 2
-
-        values = []
-        for i, c in enumerate(subset_centers):
-            i_start = int(max(0, c - chunk / 2))
-            i_end = int(min(L, c + chunk / 2))
-            j_start = int(max(0, c - 64))
-            j_end = int(min(L, c + 64))
-            
-            query_subset = Q_IH[:, i_start:i_end].float()
-            key_subset = K_IH[:, j_start:j_end].float()
-            attn = torch.einsum("...ihd,...jhd->...ijh", query_subset, key_subset)
-            attn = attn / (self.c ** 0.5)
-            # add bias
-            attn += B_IIH[:, i_start:i_end, j_start:j_end]
-            attn = torch.softmax(attn, dim=-2)
-            value_subset = V_IH[:, j_start:j_end]
-            weighted_value = torch.einsum("...ijh,...jhc->...ihc", attn, value_subset)
-            values.append(weighted_value)
+        nqbatch = (L+qbatch-1)//qbatch
+        Cs = torch.arange(nqbatch, device=A_I.device) * qbatch + qbatch//2
+        patchq = torch.arange(qbatch, device=A_I.device) - qbatch//2
+        patchk = torch.arange(kbatch, device=A_I.device) - kbatch//2
         
-        atom_features = torch.cat(values, dim=1)
-        atom_features = G_IH * atom_features
+        indicesQ = Cs[:,None] + patchq[None,:]
+        maskQ = (indicesQ<0)|(indicesQ>L-1)
+        indicesQ = torch.clamp(indicesQ,0,L-1)
+        
+        indicesK = Cs[:,None] + patchk[None,:]
+        maskK = (indicesK<0)|(indicesK>L-1)
+        indicesK = torch.clamp(indicesK,0,L-1)
+    
+        query_subset = Q_IH[:,indicesQ]
+        key_subset = K_IH[:,indicesK]
+        attn = torch.einsum("...ihd,...jhd->...ijh", query_subset, key_subset)
+        attn = attn / (self.c ** 0.5)
+    
+        attn += B_IIH[:,indicesQ[:,:,None],indicesK[:,None,:]] - 1e9*(maskQ[None,:,:,None,None]+maskK[None,:,None,:,None])
+        attn = torch.softmax(attn, dim=-2)
+        
+        value_subset = V_IH[:, indicesK]
+        atom_features = torch.einsum("...ijh,...jhc->...ihc", attn, value_subset)
+        atom_features = atom_features[:,~maskQ]
+        atom_features = (G_IH * atom_features).view(D, L, -1)
         atom_features = self.to_a(atom_features.view(D, L, -1))
 
         A_I = self.linear_output_project(S_I) * atom_features
