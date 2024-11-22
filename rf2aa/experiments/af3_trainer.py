@@ -20,14 +20,18 @@ from rf2aa.debug import pretty_describe_dict
 logger = logging.getLogger(__name__)
 
 class AF3Trainer(FlowMatchingTrainer):
-    def construct_model(self, device="cpu"):
+
+    def construct_model(self, device="cpu", inference=False):
         self.model = AF3_structure.Model(**self.config.model).to(device)
 
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
 
-        #self.model = DDP(self.model, device_ids=[device], find_unused_parameters=False, broadcast_buffers=False)
-        self.model = DDP(self.model, device_ids=None, find_unused_parameters=False, broadcast_buffers=False)
+        if inference is False:
+            self.model = DDP(self.model, device_ids=None, find_unused_parameters=False, broadcast_buffers=False)
+        else:
+            from rf2aa.training.EMA import FakeDDPWrapper
+            self.model = FakeDDPWrapper(self.model)
         if "partial_t" in self.config.af3_data_prep:
             self.sampler = AF3PartialSampler(self.config, self.model.module.shadow)
         else:

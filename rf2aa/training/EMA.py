@@ -58,3 +58,13 @@ class EMA(nn.Module):
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+class FakeDDPWrapper(nn.Module):
+
+    def __init__(self, model):
+        super().__init__()
+        self.module = model
+
+    def forward(self, *args, **kwargs):
+        return self.module(*args, **kwargs)

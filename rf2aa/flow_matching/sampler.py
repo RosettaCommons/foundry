@@ -228,12 +228,11 @@ class AF3Sampler:
                 return x
         network_input = tree.map_structure_with_path(_inmap, network_input)
 
+
         # run model to get evoformer features
-        #pre_recycle_outputs = self.model.module.shadow.pre_recycle(**network_input)
         recycle_inputs = self.model.pre_recycle(**network_input)
         for i in range(n_cycle):
             # run the model for n_steps
-            #post_recycle_outputs = self.model.module.shadow.recycle(**pre_recycle_outputs)
             recycle_inputs["f"]["msa"] = network_input["f"]["msa_stack"][i].to(self.device)
             recycle_inputs = self.model.recycle(**recycle_inputs)
 
@@ -245,9 +244,6 @@ class AF3Sampler:
                 noise_schedule
                 ) 
         # need to return the distogram outputs
-        #outputs = self.model.module.shadow.post_recycle(
-            #**pre_recycle_outputs
-        #)
         outputs = self.model.post_recycle(
             **recycle_inputs,
             is_training=False,
