@@ -265,7 +265,7 @@ class AF3Sampler:
 
     def sample_diffusion(self, f, s_inputs_I, s_trunk_I, Z_trunk_II, noise_schedule, \
                          gamma_0=0.8, gamma_min=1.0, noise_scale=1.003, step_scale=1.5, D=None):
-        D = D if D is not None else self.config.dataset_params["diffusion_batch_size"]
+        D = D if D is not None else self.config.dataset_params["diffusion_batch_size_valid"]
         L = f["ref_pos"].shape[0]
         X_L = self._get_initial_structure(f, noise_schedule, D, L, self.device)
         X_noisy_L_traj = []

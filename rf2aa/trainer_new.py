@@ -42,7 +42,6 @@ from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.chemical import initialize_chemdata
 from rf2aa.set_seed import seed_all
 from rf2aa.model import AF3_structure
-from rf2aa.manual_dependency import append_package_path
 
 logger = logging.getLogger(__name__)
 
@@ -133,13 +132,6 @@ class Trainer:
                     'wrong size',param,
                     self.checkpoint['model_state_dict'][param].shape,
                     state_dict[param].shape )
-
-        #fd hack
-        for param in new_model_state:
-            if param not in state_dict:
-                print ('del',param)
-                del new_model_state[param]
-                del new_shadow_state[param]
 
         self.model.module.model.load_state_dict(new_model_state, strict=False)
         self.model.module.shadow.load_state_dict(new_shadow_state, strict=False)
@@ -321,14 +313,13 @@ class Trainer:
                     warnings.warn(f"User specified reset_optimizer_params=False. Did not load optimizer values from checkpoint")
             self.checkpoint = None # unload checkpoint dict
 
-            #self.valid_epoch(start_epoch-1, rank, world_size)
-
-            print(f"Starting training from epoch {start_epoch}")
             self.recycle_schedule = recycle_sampling["by_batch"](self.config.loader_params.maxcycle, 
                                                                 self.config.experiment.n_epoch,
                                                                 self.config.dataset_params.n_train,
                                                                 world_size)
 
+            print(f"Starting training from epoch {start_epoch}")
+            #self.valid_epoch(start_epoch-1, rank, world_size)
             for epoch in range(start_epoch,self.config.experiment.n_epoch):
                 train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
                 self.train_epoch(epoch, rank, world_size)

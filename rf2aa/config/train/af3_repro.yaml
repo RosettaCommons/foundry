@@ -316,7 +316,8 @@ dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   diffusion_batch_size: 32
-  diffusion_batch_size_valid: 16
+  diffusion_batch_size_valid: ${dataset_params.diffusion_batch_size}
+
   n_msa: 1024
   default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
   train:
@@ -372,7 +373,7 @@ dataset_params:
               crop_contiguous_probability: 0.3333333333333333
               crop_spatial_probability: 0.6666666666666667
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
-              max_atoms_in_crop: 4000
+              max_atoms_in_crop: 5000
               n_msa: ${dataset_params.n_msa}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
@@ -486,7 +487,7 @@ dataset_params:
               crop_contiguous_probability: 0.25
               crop_spatial_probability: 0.75
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
-              max_atoms_in_crop: 4000
+              max_atoms_in_crop: 5000
               n_msa: ${dataset_params.n_msa}
 
 

@@ -1,11 +1,268 @@
 import hydra
 
+import numpy as np
 import torch
 import torch.nn as nn
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.alignment import weighted_rigid_align
 from rf2aa.model.af3_with_rollout import ConfidenceLoss
 from rf2aa.training.checkpoint import activation_checkpointing
+
+# resolve residue-level symmetries in native vs pred
+class ResidueSymmetryResolution(nn.Module):
+    def _get_best(self, x_pred, x_native, x_native_mask, a_i):
+        mask = torch.zeros_like(x_native_mask[0])
+        mask[a_i[0]] = True
+        d_pred = torch.cdist(x_pred[:,mask],x_pred[:,~mask])
+        x_nat_j = x_native.clone()
+        for j in range(a_i.shape[0]):
+            x_nat_j[:,a_i[0]] = x_native[:,a_i[j]]
+            d_nat = torch.cdist(x_nat_j[:,mask],x_nat_j[:,~mask])
+            drms_j = torch.square(d_pred-d_nat).nan_to_num()
+            drms_j[drms_j>15]=15
+            drms_j = torch.mean( drms_j, dim=(-1,-2))
+            if j==0:
+                bestj = torch.zeros(x_pred.shape[0],dtype=torch.long, device=x_pred.device)
+                bestrms = drms_j
+            else:
+                bestj[drms_j<bestrms] = j
+                bestrms[drms_j<bestrms] = drms_j[drms_j<bestrms]
+        #x_nat_j[:,a_i[0]] = x_native[:,a_i[j]]
+        for j in range(x_pred.shape[0]):
+            x_native[j,a_i[0]] = x_native[j,a_i[bestj[j]]]
+            x_native_mask[j,a_i[0]] = x_native_mask[j,a_i[bestj[j]]]
+
+        return x_native,x_native_mask
+        
+    def forward(
+        self,
+        network_output,
+        loss_input,
+        automorph_input
+    ):
+        x_pred = network_output['X_L']
+        x_native = loss_input['X_gt_L']
+        x_native_mask = loss_input['crd_mask_L']
+        for a_i in automorph_input:
+            if a_i.shape[0]==1:
+                continue
+            a_i = torch.tensor(a_i,device=x_pred.device)
+            x_native,x_native_mask = self._get_best(x_pred,x_native,x_native_mask,a_i)
+
+        loss_input['X_gt_L'] = x_native
+        loss_input['crd_mask_L'] = x_native_mask
+
+        return loss_input
+
+# Resolve subunit-level symmetries in native vs pred
+class SubunitSymmetryResolution(nn.Module):
+    def __init__(self, **losses):
+        super().__init__()
+
+    def _rms_align( self, X_fixed, X_moving ):
+        # input:
+        #   X_fixed = predicted = Nbatch x L x 3
+        #   X_moving = native = Nambig x L x 3
+        # output:
+        #   X_pre = Nambig x Nbatch x 3
+        #   U = Nambig x Nbatch x 3 x 3
+        #   X_post = Nambig x Nbatch x 3
+        assert X_fixed.shape[-2:] == X_moving.shape[-2:]
+        Nbatch = X_fixed.shape[0]
+        Nambig = X_moving.shape[0]
+        X_fixed = X_fixed[None,:]
+        X_moving = X_moving[:,None]
+    
+        u_X_fixed = torch.mean(X_fixed, dim=-2)
+        u_X_moving = torch.mean(X_moving, dim=-2)
+    
+        X_fixed = X_fixed - u_X_fixed.unsqueeze(-2)
+        X_moving = X_moving - u_X_moving.unsqueeze(-2)
+    
+        C = torch.einsum('...ji,...jk->...ik', X_moving, X_fixed)
+        U, S, V = torch.linalg.svd(C)
+        R = U @ V
+        F = torch.eye(3,3, device=X_fixed.device)[None,None].repeat(Nambig,Nbatch,1,1)
+        F[...,-1, -1] = torch.sign(torch.linalg.det(R))
+        R = U @ F @ V
+        return u_X_moving, R, u_X_fixed
+
+    def _greedy_resolve_mapping(self, dist, iid_to_index, entity_to_index, iids_by_entity, entity_by_iids, nmodel_by_iid):
+        # returns:
+        #    best_xform      tensor [i]->transform number
+        #    best_assignment dict{pred_iid:[native_iids]} (batch)
+        mapping = {}
+        nTransforms = dist.shape[0]
+        nIid = dist.shape[1]
+        nBatch = dist.shape[-1]
+        toAssign = [k for k,v in nmodel_by_iid.items() if v>0]
+        
+        # sort equiv groups by # resolved residues
+        # first make that list
+        nEquiv = len(iids_by_entity)
+        nmodel_by_equiv = {int(i):0 for i in entity_to_index.keys()} #torch.zeros(nEquiv,dtype=torch.long,device=dist.device)
+        for i,iid in enumerate(toAssign):
+            nmodel_by_equiv[entity_by_iids[iid]] += nmodel_by_iid[iid]
+        equiv_order = sorted(nmodel_by_equiv, key=nmodel_by_equiv.get) #torch.argsort(nmodel_by_equiv,descending=True)
+    
+        best_cost = torch.zeros(nBatch, device=dist.device)
+        best_xform = torch.zeros(nBatch,dtype=torch.long, device=dist.device)
+        best_assignment = {int(i):torch.zeros(nBatch,dtype=torch.long, device=dist.device) for i in toAssign}
+        for t in range(nTransforms):
+            # then sort with most res first
+            cost = torch.zeros(nBatch, device=dist.device)
+            assignment = {int(i):torch.zeros(nBatch,dtype=torch.long, device=dist.device) for i in toAssign}
+        
+            for i_equiv in equiv_order:
+                mask_equiv = torch.zeros((nIid,nIid),dtype=torch.bool,device=dist.device)
+                iids_in_i_equiv = iids_by_entity[ i_equiv ]
+                nIids_in_i_equiv = iids_in_i_equiv.shape[0]
+                iid_idxs_in_i_equiv = np.vectorize(iid_to_index.__getitem__)(iids_in_i_equiv)
+
+                nResolvedEntities_i = len([nmodel_by_iid[int(i)] for i in iids_in_i_equiv if nmodel_by_iid[i]>0])
+    
+                mask_equiv[iid_idxs_in_i_equiv[:,None],iid_idxs_in_i_equiv[None,:]] = True
+                wted_dist = dist[t,mask_equiv].nan_to_num(1e9)
+    
+                # greedily assign min RMS within each equiv group
+                for i in range(nResolvedEntities_i):
+                    wted_dist = wted_dist.view(nIids_in_i_equiv*nIids_in_i_equiv,nBatch)
+                    pn = torch.argmin(wted_dist,dim=0)
+                    # weight the total cost by #residues
+                    cost += wted_dist[pn,torch.arange(nBatch, device=wted_dist.device)] * nmodel_by_iid[iids_in_i_equiv[i]]
+                    i_nat,i_pred = pn//nIids_in_i_equiv, pn%nIids_in_i_equiv
+                    for j,(ii_nat,ii_pred) in enumerate(zip(i_nat,i_pred)):
+                        assignment[ int(iids_by_entity[int(i_equiv)][ii_pred]) ][j] = iids_by_entity[int(i_equiv)][ii_nat]
+                    wted_dist = wted_dist.view(nIids_in_i_equiv,nIids_in_i_equiv,nBatch)
+                    for i in range(i_nat.shape[0]):
+                        wted_dist[i_nat[i],:,i]=1e6
+                        wted_dist[:,i_pred[i],i]=1e6
+            if t==0:
+                best_cost = cost
+                best_assignment = assignment
+            else:
+                mask = cost<best_cost
+                best_cost[mask] = cost[mask]
+                for i,bi in best_assignment.items():
+                    best_assignment[i][mask] = assignment[i][mask]
+                best_xform[mask] = t
+        
+        return (best_xform,best_assignment)
+
+    def _resolve_subunits(self, mol_entities, mol_iid, crop_mask, x_native, mask_native, x_pred):
+        Nbatch = x_pred.shape[0]
+        
+        # index -> entity
+        all_entities = torch.unique(mol_entities)
+        # entity -> index
+        entity_to_index = {int(ii):i for i,ii in enumerate(all_entities)}
+        
+        # index -> iid
+        all_iids = torch.unique(mol_iid).cpu().numpy()
+        Niids = len(all_iids)
+        # iid -> index
+        iid_to_index = {int(ii):i for i,ii in enumerate(all_iids)}
+        
+        # entity -> iid list
+        iids_by_entity = {int(i):torch.unique(mol_iid[mol_entities==i]).long().cpu().numpy() for i in all_entities}
+        # iid -> entity list
+        entity_by_iids = {int(i):torch.unique(mol_entities[mol_iid==i]).long().cpu().item() for i in all_iids}
+        
+        # 1) get the iid with most resolved residues
+        mask = torch.zeros(mol_entities.shape[0],dtype=torch.bool,device=mol_iid.device)
+        mask[crop_mask]=1
+        mask_by_iid = {int(i):mask[mol_iid==i] for i in all_iids}
+        mask_native_by_iid = {int(i):mask_native[mol_iid==i] for i in all_iids}
+        nmodeled_by_iid = {int(i):torch.sum(j) for i,j in mask_by_iid.items()}
+        iid_src_idx = max(nmodeled_by_iid,key = nmodeled_by_iid.get) #int(nmodeled_by_iid.argmax())
+        entity_src_idx = entity_by_iids[iid_src_idx]
+        native_by_iid = {int(i):x_native[mol_iid==i] for i in all_iids}
+        pred_by_iid = {int(ii):x_pred[:,mol_iid[crop_mask]==ii] for ii in all_iids}
+        
+        # align it to all equivalent targets
+        equiv_native_iids = iids_by_entity[entity_src_idx]
+
+        # output:
+        #   xpres = Ntrans x Nbatch x 3
+        #   U = Ntrans x Nbatch x 3 x 3
+        #   xposts = Ntrans x Nbatch x 3
+        xpres,Us,xposts = [],[],[]
+        
+        for n in equiv_native_iids:
+            nat_n = native_by_iid[int(n)][mask_by_iid[int(iid_src_idx)]]
+            pred_n = pred_by_iid[int(iid_src_idx)]
+            mask_unres = ~nat_n[...,0].isnan()
+            nat_n = nat_n[mask_unres]
+            pred_n = pred_n[:,mask_unres]
+        
+            xpre,U,xpost = self._rms_align( pred_n, nat_n[None] )
+            xpres.append(xpre)
+            Us.append(U)
+            xposts.append(xpost)
+        
+        xpres,Us,xposts = torch.cat(xpres,dim=0),torch.cat(Us,dim=0),torch.cat(xposts,dim=0)
+        
+        nat_com = torch.full( (Niids,Niids,3), np.nan, device=Us.device)
+        # build up the matrix of COMs
+        # nat_com[i,j] = com of iid i using mask from iid j (if compatible)
+        for i in all_iids:
+            equiv_native_iids = iids_by_entity[entity_by_iids[i]]
+            for j in equiv_native_iids:
+                mask_ij = mask_by_iid[int(j)] * ~native_by_iid[int(i)][:,0].isnan()
+                if (torch.any(mask_ij)):
+                    nat_com[iid_to_index[i],iid_to_index[j]] = torch.mean(
+                        native_by_iid[int(i)][mask_ij], dim=0)
+        
+        # pred_com[i,j] = com of iid i copy j
+        pred_com = torch.full( (Niids,Nbatch,3), np.nan, device=Us.device)
+        for i,xi in pred_by_iid.items():
+            if (torch.numel(xi)>0):
+                pred_com[iid_to_index[i]] = torch.mean(xi,dim=-2)
+        
+        # apply all transforms to native
+        nat_com=torch.einsum('ijkx,ijlxy->ijkly',nat_com[None,:,:,:]-xpres[:,None,:,:],Us[:,None]) + xposts[:,None,None]
+
+        # collect all distances
+        #   dist[i,j,k,l] - distance assigning ...
+        #      transform i of
+        #      iid j of native to 
+        #      iid k of pred for
+        #      all l models
+        dist = torch.linalg.norm( pred_com[None,None,:,:]-nat_com ,dim=-1)
+
+        # solve mapping
+        transforms,assignment = self._greedy_resolve_mapping(dist, iid_to_index, entity_to_index, iids_by_entity,entity_by_iids,nmodeled_by_iid)
+
+        #generate output stack
+        x_native_aln = torch.zeros_like(x_pred)
+        x_native_mask = torch.zeros(x_pred.shape[:2], dtype=torch.bool, device=x_pred.device)
+        for i,si in assignment.items():
+            for t in range(x_native_aln.shape[0]):
+                mask_src = mol_iid==i
+                x_native_aln[t,mask_src[mask]] = native_by_iid[int(si[t])][ mask_by_iid[int(i)] ]
+                x_native_mask[t,mask_src[mask]] = mask_native_by_iid[int(si[t])][ mask_by_iid[int(i)] ]
+
+        return (x_native_aln, x_native_mask)
+
+    def forward(
+        self,
+        network_output,
+        loss_input,
+        symm_input
+    ):
+        x_pred = network_output['X_L']
+        mol_entities = symm_input['molecule_entity'].to(x_pred.device)
+        mol_iid = symm_input['molecule_iid'].to(x_pred.device)
+        crop_mask = symm_input['crop_mask'].to(x_pred.device)
+        x_native = symm_input['coord_atom_lvl'].to(x_pred.device)
+        mask_native = symm_input['mask_atom_lvl'].to(x_pred.device)
+
+        x_native_aln, x_native_mask = self._resolve_subunits(mol_entities, mol_iid, crop_mask, x_native, mask_native, x_pred)
+
+        loss_input['X_gt_L'] = x_native_aln
+        loss_input['crd_mask_L'] = x_native_mask
+
+        return loss_input
 
 
 

@@ -2,6 +2,7 @@ import re
 import torch
 import logging
 import tree
+import time
 
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -13,6 +14,7 @@ from rf2aa.data.compose_data_datahub_new import NewDatapipeTrainer
 from rf2aa.training.EMA import EMA
 from rf2aa.flow_matching.sampler import AF3Sampler, AF3PartialSampler
 from rf2aa.loss.af3_losses import Loss as AF3Loss
+from rf2aa.loss.af3_losses import SubunitSymmetryResolution, ResidueSymmetryResolution
 from rf2aa.metrics.metrics_base import MetricManager
 from rf2aa.debug import pretty_describe_dict
 
@@ -42,13 +44,14 @@ class AF3Trainer(FlowMatchingTrainer):
         else:
             self.sampler = AF3Sampler(self.config, self.model.module.shadow)
         self.loss = AF3Loss(**self.config.loss)
+        self.subunit_symm_resolve = SubunitSymmetryResolution()
+        self.residue_symm_resolve = ResidueSymmetryResolution()
         self.metrics = MetricManager(**self.config.metrics)
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
 
         example = inputs[0]
-        print(example["example_id"])
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
             "X_noisy_L": torch.nan_to_num(example["coord_atom_lvl_to_be_noised"]) + example["noise"],
@@ -64,7 +67,6 @@ class AF3Trainer(FlowMatchingTrainer):
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
         }
-        #network_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
 
         def _inmap(path, x):
             if hasattr(x, 'cpu') and path != ('f','msa_stack'):
@@ -89,21 +91,20 @@ class AF3Trainer(FlowMatchingTrainer):
             no_sync=self.model.no_sync,
             use_amp=self.config.training_params.use_amp
         )
-        loss, loss_dict_batched = self.loss(
-            network_input,
-            output_i,
-            loss_input
-        )
-        
+
+        # uncomment for symmetry resolution in training
+        #loss_input = self.subunit_symm_resolve(output_i, loss_input, example["symmetry_resolution"])
+        #loss_input = self.residue_symm_resolve(output_i, loss_input, example["automorphisms"])
+
+        loss, loss_dict_batched = self.loss(network_input, output_i, loss_input)
         loss_dict = self.unbatch_losses(loss_dict_batched)
 
         return loss, loss_dict
         
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
         gpu = self.model.device
-        n_cycle = 10
-        outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
 
+        outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
         example = inputs[0]
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
@@ -121,17 +122,22 @@ class AF3Trainer(FlowMatchingTrainer):
             "chain_iid_token_lvl": example["ground_truth"]["chain_iid_token_lvl"],
             "example_id": example["example_id"],
         }
-        
+
         def _inmap(path, x):
             if hasattr(x, 'cpu') and path != ('f','msa_stack'):
                 return x.to(gpu) 
             else:
                 return x
+
         network_input = tree.map_structure_with_path(_inmap, network_input)
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
 
+        # symmetry resolution
+        loss_input = self.subunit_symm_resolve(outputs, loss_input, example["symmetry_resolution"])
+        loss_input = self.residue_symm_resolve(outputs, loss_input, example["automorphisms"])
+
         metrics_dict = self.metrics(network_input, outputs, loss_input)
-        print(metrics_dict)
+
         return torch.tensor(0), metrics_dict
 
     def valid_epoch(self, epoch, rank, world_size):
@@ -141,7 +147,7 @@ class AF3Trainer(FlowMatchingTrainer):
 
         for dataset_name, valid_loader in self.valid_loaders.items():
             for valid_idx, inputs in enumerate(valid_loader):
-                n_cycle = self.config.loader_params.maxcycle
+                n_cycle = inputs[0]["feats"]["msa_stack"].shape[0] # use size of MSA stack to set ncycles
                 _, loss_dict = self.valid_step(inputs, n_cycle)
                 valid_loss_dict.append(loss_dict)
 
@@ -153,8 +159,8 @@ class AF3Trainer(FlowMatchingTrainer):
         if rank==0:
             self.log_validation_losses(epoch, all_valid_loss_dict)
 
-    def log_validation_losses(self, epoch, loss_dict):
-        outfile = self.output_dir+'/'+'valid_'+str(epoch)+'.log'
+    def log_validation_losses(self, epoch, loss_dict, tag='valid'):
+        outfile = self.output_dir+'/'+tag+'_'+str(epoch)+'.log'
         with open (outfile,'w') as f:
             for line in loss_dict:
                 f.write(str(line)+'\n')
@@ -162,7 +168,7 @@ class AF3Trainer(FlowMatchingTrainer):
     
     def write_pdb(self, X_gt_L, crd_mask_I, seq, name="valid.pdb"):
         I = seq.shape[0]
-        
+
         is_real_atom = ChemData().heavyatom_mask.to(self.model.device)[seq]
         X_gt_I = torch.zeros(I, ChemData().NTOTAL, 3, device=self.model.device)
         X_gt_I[is_real_atom] = X_gt_L
