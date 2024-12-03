@@ -15,6 +15,7 @@ import logging
 import tempfile
 import argparse
 import json
+from rf2aa.metrics.metric_utils import write_confidence_metrics
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,6 +47,9 @@ class EvaluateAF3:
 
         # Load the config
         self.config = OmegaConf.create(checkpoint["training_config"])
+
+        # Sampler sets diffusion batch size based on the following, not strictly on batch size in vaildation transform
+        self.config.dataset_params["diffusion_batch_size_valid"] = diffusion_batch_size
 
         # Load the AF-3 trainer
         self.trainer = trainer_factory[self.config.experiment.trainer](config=self.config)
@@ -163,6 +167,11 @@ class EvaluateAF3:
             out_path = Path(to_cif_file(atom_array_stack, self.cif_out_dir / f"{example_id}.cif"))
             logger.info(f"Prediction for {example_id}.cif written to {out_path}.")
 
+            if "confidence" in outputs:
+                logger.info(f"Writing {example_id}.score to {self.cif_out_dir}")
+                write_confidence_metrics(outputs, self.cif_out_dir / f"{example_id}.score", device=gpu)
+                logger.info(f"Confidence metrics for {example_id}.cif written to {self.cif_out_dir / example_id}.score.")
+                
 def main():
     parser = argparse.ArgumentParser(description="Evaluate AF3 using specified paths.")
     parser.add_argument("inputs", nargs="+", help="List of paths to files (JSON or CIF/PDB) or directories of CIF/PDB files.")

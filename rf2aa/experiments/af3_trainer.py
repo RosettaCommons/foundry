@@ -238,3 +238,74 @@ class AF3Trainer(FlowMatchingTrainer):
             **self.config.optimizer.params,
         )
 
+class AF3TrainerRollout(AF3Trainer):
+
+    def construct_model(self, device="cpu", inference=False):
+        #fd initialize chemical data based on input arguments
+        #   this needs to be initialized first
+        #initialize chemdata here so that we can use it in the confidence head, including in inference
+        init = partial(initialize_chemdata, self.config)
+        init()
+
+        model = AF3_structure.Model(**self.config.model).to(device)
+        model.device = device
+        from rf2aa.model.layers.af3_auxiliary_heads import ConfidenceHead
+        confidence = ConfidenceHead(**self.config.confidence_head).to(device)
+        self.confidence = confidence
+        from rf2aa.flow_matching.sampler import AF3Sampler
+        self.sampler = AF3Sampler(self.config, model, confidence=self.confidence)
+        from rf2aa.model.af3_with_rollout import AF3_with_rollout 
+        import copy
+        self.model = AF3_with_rollout(
+            model,
+            confidence,
+            self.sampler,
+            self.config.dataset_params.diffusion_batch_size_rollout
+        )
+
+        if self.config.training_params.EMA is not None:
+            self.model = EMA(self.model, self.config.training_params.EMA)
+
+        if inference is False:
+            self.model = DDP(self.model, device_ids=[device], find_unused_parameters=True, broadcast_buffers=False)
+        else:
+            from rf2aa.training.EMA import FakeDDPWrapper
+            self.model = FakeDDPWrapper(self.model)
+        self.sampler.model = self.model.module.shadow.model
+        self.sampler.confidence = self.model.module.shadow.confidence
+        self.loss = AF3Loss(**self.config.loss)
+        self.subunit_symm_resolve = SubunitSymmetryResolution()
+        self.residue_symm_resolve = ResidueSymmetryResolution()
+        self.metrics = MetricManager(**self.config.metrics)
+
+    def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
+        gpu = self.model.device
+
+        network_input, loss_input = prepare_input_af3(
+            inputs,
+            **self.config.af3_data_prep,
+        )
+
+        network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
+        loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
+        logger.debug('network_input:\n' + pretty_describe_dict(network_input))
+        logger.debug('loss_input:\n' + pretty_describe_dict(loss_input))
+        output_i = self.model(
+            network_input,
+            n_cycle,
+            loss_input["X_gt_I_symm"].to(gpu),
+            loss_input["crd_mask_I_symm"].to(gpu),
+            loss_input["seq"].to(gpu),
+            no_sync=self.model.no_sync,
+        )
+
+        loss, loss_dict_batched = self.loss(
+            network_input,
+            output_i,
+            loss_input
+        )
+        loss_dict = {}
+        output = {"X_L": output_i["X_L"]} | network_input | loss_input
+        from rf2aa.callbacks import lddt_metrics
+
+        return loss, loss_dict

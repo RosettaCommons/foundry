@@ -208,10 +208,11 @@ class AllAtomSampler(Sampler):
 
 class AF3Sampler:
 
-    def __init__(self, config, model):
+    def __init__(self, config, model, confidence=None):
         self.config = config
         self.model = model
         self.device = next(model.parameters()).device
+        self.confidence = confidence
 
 
     def sample(self, inputs: Tuple[str, Any], n_cycle=1, n_diff_steps=200, use_amp=False) -> Dict[str, Any]:
@@ -249,6 +250,17 @@ class AF3Sampler:
             is_training=False,
         )
         outputs.update(X_L)
+
+        #run confidence
+        if self.confidence is not None:
+            confidence_feats = self._get_confidence_feats(inputs)
+            confidence_feats = tree.map_structure_with_path(_inmap, confidence_feats)
+            outputs["confidence"] = self.confidence(post_recycle_outputs["S_inputs_I"], post_recycle_outputs["S_I"], post_recycle_outputs["Z_II"], X_L["X_L"], confidence_feats["rf2aa_seq"], confidence_feats["rep_atom_idx"], frame_atom_idxs=confidence_feats["frame_atom_idxs"])
+            #add the chain label so we can calculate ipae later
+            outputs["confidence"]["chain_iid_token_lvl"] = confidence_feats["chain_iid_token_lvl"]
+            outputs["confidence"]["is_real_atom"] = confidence_feats["is_real_atom"]
+            outputs["confidence"]["rf2aa_seq"] = confidence_feats["rf2aa_seq"]
+
         return outputs
 
     def construct_noise_schedule(self, num_timesteps, min_t, max_t):
@@ -308,6 +320,17 @@ class AF3Sampler:
             t = None,
         )
         return network_input
+    
+    def _get_confidence_feats(self, inputs):
+        example = inputs[0]
+        confidence_feats = dict(
+            rf2aa_seq = example["confidence_feats"]["rf2aa_seq"],
+            frame_atom_idxs = example["confidence_feats"]["pae_frame_idx_token_lvl_from_atom_lvl"],
+            rep_atom_idx = example["ground_truth"]["rep_atom_idxs"],
+            chain_iid_token_lvl = example["ground_truth"]["chain_iid_token_lvl"],
+            is_real_atom = example["confidence_feats"]["is_real_atom"]
+        )
+        return confidence_feats
     
 class AF3PartialSampler(AF3Sampler):
 

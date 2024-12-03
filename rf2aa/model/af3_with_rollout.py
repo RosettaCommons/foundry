@@ -4,35 +4,35 @@ import torch.nn as nn
 import rf2aa
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.loss.loss import resolve_equiv_natives, resolve_equiv_natives_asmb
-from rf2aa.model.layers.af3_auxiliary_heads import find_rep_atoms
+from rf2aa.util import rigid_from_3_points, get_frames
+import torch.utils.checkpoint as checkpoint
+
+from rf2aa.training.checkpoint import create_custom_forward
 
 
 class AF3_with_rollout(nn.Module):
     """ Implements rollout on each training step """
-    def __init__(self, model, confidence, sampler):
+    def __init__(self, model, confidence, sampler, batch_size_rollout):
         super(AF3_with_rollout, self).__init__()
         self.model = model
         self.confidence = confidence
         self.sampler = sampler
-        self.find_optimal_permutation = FindOptimalPermutation()
         self.num_timesteps = 20
+        self.batch_size_rollout = batch_size_rollout
 
     def forward(
             self, 
             input, 
             n_cycle, 
-            X_gt_I_symm, 
-            crd_mask_I, 
             seq, 
-            no_sync
+            rep_atom_idxs,
+            no_sync,
+            frame_atom_idxs=None
         ):
         # first do forward pass
-        with torch.enable_grad():
-            trunk_output = self.model.trunk_forward(input, n_cycle, no_sync)
-        # save embeddings
-        # do rollout conditioned on embeddings
-        # with nograd? 
         with torch.no_grad():
+            trunk_output = self.model.trunk_forward(input, n_cycle, no_sync)
+
             noise_schedule = self.sampler.construct_noise_schedule(self.num_timesteps, 0, 1).to(input["f"]["msa"].device)
             diffusion_output = self.sampler.sample_diffusion(
                 input["f"],
@@ -41,60 +41,45 @@ class AF3_with_rollout(nn.Module):
                 trunk_output["Z_II"].clone().detach(), 
                 noise_schedule,
                 step_scale=1.5, # int he paper it says they changed this during the rollout
-                D=1
+                D=self.batch_size_rollout
             )
-
-            assert diffusion_output["X_L"].shape[0] == 1
-            
-            # find ground truth permutation
-            X_gt_L, X_exists_L = self.find_optimal_permutation(
-                diffusion_output["X_L"].clone().detach(),
-                X_gt_I_symm,
-                crd_mask_I,
-                seq,
-                input["f"]
-            )
-
-        trunk_output = self.model.post_recycle(
-            trunk_output["S_inputs_I"],
-            trunk_output["S_init_I"],
-            trunk_output["Z_init_II"],
-            trunk_output["S_I"],
-            trunk_output["Z_II"],
-            input["f"],
-            input["X_noisy_L"],
-            input["t"]
-        )
-        # TODO: run diffusion training by noising the ground truth permutation closest to the rollout
+        
         # run confidence model on embeddings and output structure
+        #Bug in deepspeed backwards requires us to do it with batch size 1
+        confidence_stack = {}
+        confidence_stack['plddt_logits'] = None
+        confidence_stack['pae_logits'] = None
+        confidence_stack['pde_logits'] = None
+        confidence_stack['exp_resolved_logits'] = None
         with torch.enable_grad():
-            confidence = self.confidence(
-                trunk_output["S_inputs_I"],
-                trunk_output["S_I"],
-                trunk_output["Z_II"],
-                diffusion_output["X_L"],
-                input["f"],
-                seq
-            )
+            for i in range(self.batch_size_rollout):
 
-        ##assert trunk_output["X_L"].is_leaf == True
-        #assert trunk_output["distogram"].is_leaf == True
-        #assert confidence["plddt_logits"].is_leaf == True
-        #assert confidence["pae_logits"].is_leaf == True
-        #assert confidence["pde_logits"].is_leaf == True
-        #assert confidence["exp_resolved_logits"].is_leaf == True
-        ## return output
+                confidence = checkpoint.checkpoint(create_custom_forward(self.confidence, frame_atom_idxs=frame_atom_idxs),
+                    trunk_output["S_inputs_I"],
+                    trunk_output["S_I"],
+                    trunk_output["Z_II"],
+                    diffusion_output["X_L"][i].unsqueeze(0),
+                    seq,
+                    rep_atom_idxs,
+                    use_reentrant=False
+                )
+
+                for k, v in confidence.items():
+                    if confidence_stack[k] is not None:
+                        confidence_stack[k] = torch.cat((confidence_stack[k], v), dim=0)
+                    else:
+                        confidence_stack[k] = v
+
         return dict(
-            X_gt_L=X_gt_L.detach(),
-            X_exists_L=X_exists_L.detach(),
-            X_L=trunk_output["X_L"],
+            X_L=None,
             X_pred_rollout_L=diffusion_output["X_L"],
-            plddt=confidence["plddt_logits"],
-            pae=confidence["pae_logits"],
-            pde=confidence["pde_logits"],
-            exp_resolved=confidence["exp_resolved_logits"],
-            distogram=trunk_output["distogram"],
+            plddt=confidence_stack["plddt_logits"],
+            pae=confidence_stack["pae_logits"],
+            pde=confidence_stack["pde_logits"],
+            exp_resolved=confidence_stack["exp_resolved_logits"],
+            distogram=None,
         )
+
 
 class ConfidenceLoss(nn.Module):
 
