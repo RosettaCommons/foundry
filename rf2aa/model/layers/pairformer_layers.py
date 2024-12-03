@@ -1,16 +1,12 @@
 import torch
 from torch import nn
-from torch.nn import functional as F
-from torch.nn.functional import one_hot, relu, silu, sigmoid
-import numpy as np
+from torch.nn.functional import one_hot, relu
 
-from rf2aa.model.layers.layer_utils import linearNoBias, MultiDimLinear, LinearBiasInit, \
-     AdaLN, collapse, create_batch_dimension_if_not_present, \
-        Transition, unpack_args_for_checkpointing
+from rf2aa.model.layers.layer_utils import linearNoBias, MultiDimLinear, \
+     collapse, create_batch_dimension_if_not_present, \
+        Transition
 
-from rf2aa.model.layers.Attention_module import BiasedAxialAttention, FeedForwardLayer, MSAColAttention, \
-    MSARowAttentionWithBias, TriangleMultiplication, MSAColGlobalAttention, \
-    OldMSAColAttention, OldMSAColGlobalAttention, BiasedUntiedAxialAttention, TriangleAttention
+from rf2aa.model.layers.Attention_module import TriangleMultiplication, TriangleAttention
 from rf2aa.model.layers.outer_product import OuterProductMean_AF3 # need to code this correctly
 from rf2aa.model.layers.af3_diffusion_transformer import AtomTransformer
 from rf2aa.model.AF3_blocks import MsaPairWeightedAverage, MsaSubsampleEmbedder

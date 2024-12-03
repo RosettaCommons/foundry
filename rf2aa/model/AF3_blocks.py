@@ -2,17 +2,13 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 import torch.nn.functional as F
-from functools import partial
 import numpy as np
 
-from rf2aa.debug import debug_nans
-from rf2aa.model.layers.SE3_network import FullyConnectedSE3, FullyConnectedSE3_noR
-from rf2aa.model.layers.structure_bias import structure_bias_factory
-from rf2aa.model.layers.Attention_module import BiasedAxialAttention, FeedForwardLayer, MSAColAttention, \
+from rf2aa.model.layers.Attention_module import FeedForwardLayer, \
     MSARowAttentionWithBias, TriangleMultiplication, MSAColGlobalAttention, \
-    OldMSAColAttention, OldMSAColGlobalAttention, BiasedUntiedAxialAttention, TriangleAttention
+    TriangleAttention
 from rf2aa.model.layers.outer_product import OuterProductMean # need to code this correctly
-from rf2aa.training.checkpoint import create_custom_forward, activation_checkpointing
+from rf2aa.training.checkpoint import activation_checkpointing
 from rf2aa.util_module import Dropout, init_lecun_normal
 from opt_einsum import contract as einsum
 

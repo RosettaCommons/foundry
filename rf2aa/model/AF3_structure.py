@@ -1,38 +1,15 @@
 import torch
 import torch.nn as nn
-from torch.nn.functional import one_hot, sigmoid, silu, relu
-import torch.utils.checkpoint as checkpoint
-from functools import partial
-import numpy as np
-from torch import relu
-from torch.nn import functional as F
-from icecream import ic
 from contextlib import ExitStack
 import logging
 
 from rf2aa.training.checkpoint import activation_checkpointing
-from rf2aa.chemical import ChemicalData as ChemData 
-from rf2aa.debug import debug_nans
-from rf2aa.flow_matching.sampler import AF3Sampler
-from rf2aa.model.layers.SE3_network import FullyConnectedSE3, FullyConnectedSE3_noR
-from rf2aa.model.layers.structure_bias import structure_bias_factory
-from rf2aa.model.layers.Attention_module import BiasedAxialAttention, FeedForwardLayer, MSAColAttention, \
-    MSARowAttentionWithBias, TriangleMultiplication, MSAColGlobalAttention, \
-    OldMSAColAttention, OldMSAColGlobalAttention, BiasedUntiedAxialAttention, TriangleAttention
-from rf2aa.model.layers.outer_product import OuterProductMean_AF3 # need to code this correctly
 from rf2aa.model.layers.pairformer_layers import \
-    PairformerBlock, FeatureInitializer, InputFeatureEmbedder, RelativePositionEncoding, MSAModule, TemplateEmbedder
+    PairformerBlock, FeatureInitializer, RelativePositionEncoding, MSAModule, TemplateEmbedder
 
-from rf2aa.model.layers.layer_utils import linearNoBias, MultiDimLinear, LinearBiasInit, AdaLN, Transition, collapse
-from rf2aa.model.layers.af3_diffusion_transformer import AtomTransformer, DiffusionTransformer, DiffusionTransformerBlock, AtomAttentionEncoderDiffusion
+from rf2aa.model.layers.layer_utils import linearNoBias, Transition
+from rf2aa.model.layers.af3_diffusion_transformer import AtomTransformer, DiffusionTransformer, AtomAttentionEncoderDiffusion
 
-from rf2aa.model.AF3_blocks import MsaPairWeightedAverage, MsaSubsampleEmbedder
-#from rf2aa.model.layers.af3_auxiliary_heads import ConfidenceHead
-from rf2aa.training.checkpoint import create_custom_forward
-from rf2aa.util_module import Dropout
-from rf2aa.alignment import weighted_rigid_align
-from rf2aa.debug import pretty_describe_dict
-from rf2aa.tensor_util import assert_shape, assert_cmp
 
 logger = logging.getLogger(__name__)
 

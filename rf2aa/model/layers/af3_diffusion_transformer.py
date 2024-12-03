@@ -3,7 +3,6 @@ import torch.nn as nn
 import numpy as np
 
 from rf2aa.training.checkpoint import activation_checkpointing
-#from rf2aa.model.layers.pairformer_layers import AttentionPairBias
 from rf2aa.model.layers.layer_utils import linearNoBias, LinearBiasInit, AdaLN, MultiDimLinear, collapse
 from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
 
@@ -348,6 +347,8 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         V_IH = self.to_v(A_I)
         B_IIH = self.to_b(self.ln_0(Z_II))
         G_IH = self.to_g(A_I)
+
+        _, L = B_IIH.shape[:2]
 
         if not self.use_deepspeed_evo or L<=24:
             # Attention
