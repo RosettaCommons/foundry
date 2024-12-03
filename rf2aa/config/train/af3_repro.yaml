@@ -60,8 +60,14 @@ loader_params:
   maxseq: 5132
   n_fallback_retries: 100
 
-training_params:
+training_params: 
+  learning_rate_schedule:
+    num_warmup_steps: 1000
+    num_steps_decay: 50000
+    decay_rate: 0.95
+  grad_clip: 10.0
   seed: 959
+
 interpolant:
   sigma_data: 16
 
@@ -289,8 +295,6 @@ af3_data_prep:
 
 recycling:
   max_cycle: 4
-  #max_cycle_valid: 10
-
 
 af3_inference:
   second_order_solver: False

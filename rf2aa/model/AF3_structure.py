@@ -129,7 +129,7 @@ class DiffusionModule(nn.Module):
         # Full self-attention on token level
 
         A_I = A_I + self.process_s(S_I)
-        A_I = self.diffusion_transformer(A_I, S_I, Z_II, Beta_II=torch.tensor(0.0, device=Z_II.device))
+        A_I = self.diffusion_transformer(A_I, S_I, Z_II, Beta_II=None)
         A_I = self.layer_norm_1(A_I)
 
         # Broadcast token activations to atoms and run Sequence-local Atom Attention

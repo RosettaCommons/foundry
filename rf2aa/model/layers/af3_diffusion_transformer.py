@@ -149,10 +149,6 @@ class AtomTransformer(nn.Module):
         m = torch.arange(l_max).unsqueeze(0).unsqueeze(-1)    # [1, l_max, 1]
         c = subset_centers.unsqueeze(0).unsqueeze(0) # [1, 1, S]
 
-        #Beta_lms_binary = (torch.abs(l - c) < n_queries / 2) * (torch.abs(m - c) < n_keys / 2)
-        #Beta_lm_binary = Beta_lms_binary.sum(dim=-1, dtype=bool)
-        #Beta_lm = torch.where(Beta_lm_binary, 0, -1e5) # is -1e10 in the paper but getting nans
-        #self.register_buffer('Beta_lm', Beta_lm)
         self.diffusion_transformer = DiffusionTransformer(c_token=c_atom, c_s=c_atom, c_tokenpair=c_atompair, **diffusion_transformer)
 
     def forward(
@@ -163,7 +159,6 @@ class AtomTransformer(nn.Module):
     ):
         L = Ql.shape[-2]
         assert L < self.l_max
-        #Beta_lm = self.Beta_lm[:L, :L]
         Beta_lm = True
         return self.diffusion_transformer(Ql, Cl, Plm, Beta_lm)
 
@@ -277,8 +272,6 @@ class AttentionPairBiasDiffusion(nn.Module):
         assert S_I is not None
         if S_I is not None:
             A_I = self.ada_ln_1(A_I, S_I)
-        #else:
-            #A_I = self.ln_1(A_I)
         
         Q_IH = self.to_q(A_I)
         K_IH = self.to_k(A_I)
@@ -353,19 +346,16 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         Q_IH = self.to_q(A_I) #/ np.sqrt(self.c)
         K_IH = self.to_k(A_I)
         V_IH = self.to_v(A_I)
-        B_IIH = self.to_b(self.ln_0(Z_II)) + Beta_II[..., None]
+        B_IIH = self.to_b(self.ln_0(Z_II))
         G_IH = self.to_g(A_I)
 
-        B, L = B_IIH.shape[:2]
-
-        if not self.use_deepspeed_evo or L<=24: 
+        if not self.use_deepspeed_evo or L<=24:
             # Attention
-            Q_IH = Q_IH / torch.sqrt(torch.tensor(self.c).to(Q_IH.device, torch.bfloat16))
-
+            Q_IH = Q_IH / np.sqrt(self.c)
             A_IIH = torch.softmax(torch.einsum("...ihd,...jhd->...ijh", Q_IH, K_IH) + B_IIH, dim=-2) # softmax over j
-            ## G_IH: [I, H, C]
-            ## A_IIH: [I, I, H]
-            ## V_IH: [I, H, C]
+            ## G_IH: [B, I, H, C]
+            ## A_IIH: [B, I, I, H]
+            ## V_IH: [B, I, H, C]
             A_I = torch.einsum("...ijh,...jhc->...ihc", A_IIH, V_IH)
             A_I = G_IH * A_I # [B, I, H, C]
             A_I = A_I.flatten(start_dim=-2) # [B, I, Ca]
@@ -374,36 +364,16 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
             # Q, K, V: [Batch, N_seq, N_res, Head, Dim]
             # res_mask: [Batch, N_seq, 1, 1, N_res]
             # pair_bias: [Batch, 1, Head, N_res, N_res]
-            #from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
-            if len(Q_IH.shape) == 3:
-                Q_IH = Q_IH[None]
-                K_IH = K_IH[None]
-                V_IH = V_IH[None]
-                B_IIH = B_IIH[None]
-                G_IH = G_IH[None]
-            batch = Q_IH.shape[0]
-            n_res = Q_IH.shape[1]
-            n_head = self.n_head
-            c = self.c
-
-            Q_IH = Q_IH[:, None]
+            Q_IH = Q_IH[:,None]
             K_IH = K_IH[:,None]
             V_IH = V_IH[:,None]
             B_IIH = B_IIH.repeat(Q_IH.shape[0],1,1,1)
             B_IIH = B_IIH[:,None]
             B_IIH = B_IIH.permute(0,1,4,2,3).to(torch.bfloat16)
             mask = torch.zeros([Q_IH.shape[0],1,1,1,B_IIH.shape[-1]], dtype=torch.bfloat16, device=B_IIH.device)
-            assert Q_IH.shape == (batch, 1, n_res, n_head, c)
-            assert K_IH.shape == (batch, 1, n_res, n_head, c)
-            assert V_IH.shape == (batch, 1, n_res, n_head, c)
-            assert mask.shape == (batch, 1, 1, 1, n_res)
-            assert B_IIH.shape == (batch, 1, n_head, n_res, n_res)
-
             A_I = DS4Sci_EvoformerAttention(Q_IH, K_IH, V_IH, [mask,B_IIH])
-
-            assert A_I.shape == (batch, 1, n_res, n_head, c)
             A_I = A_I * G_IH[:,None]
-            A_I = A_I.view(batch, n_res,-1)
+            A_I = A_I.view(A_I.shape[0],A_I.shape[2],-1)
 
         A_I = self.to_a(A_I)
         # Output projection (from adaLN-Zero)
