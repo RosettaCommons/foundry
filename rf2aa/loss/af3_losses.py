@@ -131,8 +131,17 @@ class SubunitSymmetryResolution(nn.Module):
                     # weight the total cost by #residues
                     cost += wted_dist[pn,torch.arange(nBatch, device=wted_dist.device)] * nmodel_by_iid[iids_in_i_equiv[i]]
                     i_nat,i_pred = pn//nIids_in_i_equiv, pn%nIids_in_i_equiv
-                    for j,(ii_nat,ii_pred) in enumerate(zip(i_nat,i_pred)):
-                        assignment[ int(iids_by_entity[int(i_equiv)][ii_pred]) ][j] = iids_by_entity[int(i_equiv)][ii_nat]
+                    try:
+                        for j,(ii_nat,ii_pred) in enumerate(zip(i_nat,i_pred)):
+                            assignment[ int(iids_by_entity[int(i_equiv)][ii_pred]) ][j] = iids_by_entity[int(i_equiv)][ii_nat]
+                    except Exception as e:
+                        print('subunit symmetry resolution failed, saving inputs')
+                        with open('subunit_symmetry_resolution_failed.pkl','wb') as f:
+                            torch.save((dist, iid_to_index, entity_to_index, iids_by_entity, entity_by_iids, nmodel_by_iid),f)
+                        print('inputs saved to subunit_symmetry_resolution_failed.pkl')
+                        import sys
+                        sys.exit(1)
+
                     wted_dist = wted_dist.view(nIids_in_i_equiv,nIids_in_i_equiv,nBatch)
                     for i in range(i_nat.shape[0]):
                         wted_dist[i_nat[i],:,i]=1e6

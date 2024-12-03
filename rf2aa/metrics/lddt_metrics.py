@@ -4,6 +4,7 @@ import numpy as np
 import tree
 
 from rf2aa.metrics.metrics_base import Metric
+from rf2aa.alignment import weighted_rigid_align
 
 
 def calc_lddt(X_L, X_gt_L, crd_mask_L, tok_idx, pairs_to_score=None, distance_cutoff=15.0, use_amp=True, eps=1e-6):
@@ -105,6 +106,163 @@ class InterfaceLDDT(Metric):
             interface_lddt["interface_lddt_first"].append(lddt[0].item())
             interface_lddt["interface_lddt_best"].append(lddt.max().item())
         return interface_lddt
+    
+
+class ConfidenceInterfaceLDDT(Metric):
+
+    def __call__(self, 
+                network_input, 
+                network_output, 
+                loss_input
+        ):
+        interface_lddt = {
+            "interface_lddt_first": [],
+            "interface_lddt_best": [],
+            "interface_lddt_ipae": [],
+            "interface_lddt_pae": [],
+            "interface_lddt_pde": [],
+            "interface_lddt_plddt": [],
+        }
+        chain_iid_token_lvl = loss_input["chain_iid_token_lvl"]
+        tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()
+        for chain_i, chain_j, interface_type in loss_input["interfaces_to_score"]:
+            #print(interface_type,chain_i, chain_j) 
+            # get tokens in chain_i and chain_j
+            chain_i_tokens = chain_iid_token_lvl == chain_i
+            chain_j_tokens = chain_iid_token_lvl == chain_j
+            # convert the token level to the atom level
+            chain_i_atoms = chain_i_tokens[tok_idx]
+            chain_j_atoms = chain_j_tokens[tok_idx]
+            # compute the intersection of chain_i and chain_j
+
+            chain_ij_atoms = torch.einsum(
+                                "L, K -> LK", 
+                                torch.tensor(chain_i_atoms), 
+                                torch.tensor(chain_j_atoms)
+                                ).to(network_output["X_L"].device)
+
+            #compute lddt using the pairs_to_score from the intersection
+            lddt = calc_lddt(
+                network_output["X_L"],
+                loss_input["X_gt_L"],
+                loss_input["crd_mask_L"],
+                torch.tensor(tok_idx).to(network_output["X_L"].device),
+                pairs_to_score=chain_ij_atoms,
+                distance_cutoff=30.0
+            )
+            ipae_idx = loss_input["ipae_idx"]
+            pae_idx = loss_input["pae_idx"]
+            pde_idx = loss_input["pde_idx"]
+            plddt_idx = loss_input["plddt_idx"]
+            interface_lddt["interface_lddt_first"].append(lddt[0].item())
+            interface_lddt["interface_lddt_best"].append(lddt.max().item())
+            interface_lddt["interface_lddt_ipae"].append(lddt[ipae_idx].item())
+            interface_lddt["interface_lddt_pae"].append(lddt[pae_idx].item())
+            interface_lddt["interface_lddt_pde"].append(lddt[pde_idx].item())
+            interface_lddt["interface_lddt_plddt"].append(lddt[plddt_idx].item())
+        return interface_lddt
+
+
+class LigRMSD(Metric):
+
+    def __call__(self, 
+                 network_input, 
+                 network_output, 
+                 loss_input
+        ):
+        if not torch.any(network_input['f']['is_ligand']):
+            return {}
+
+        lig_rmsd = {}
+
+        #identify the ligand atoms
+        tok_idx = network_input["f"]["atom_to_token_map"]
+        ligand_mask = network_input['f']['is_ligand'][tok_idx]
+
+        #decide which atoms we should use for alignment
+        alignment_mask = loss_input["alignment_mask"]
+
+        #perform an align weighted on non-ligand atoms
+        X_L = network_output["X_L"]
+        X_gt_L = loss_input["X_gt_L"]
+        X_exists_L = loss_input["crd_mask_L"]
+
+        #find all atoms within 10A of the ligand in the ground truth
+        # Step 1: Extract ligand coordinates
+        ligand_coords = X_gt_L[:, ligand_mask, :]  # Shape: [b, num_ligand_atoms, 3]
+
+        # Step 2: Compute pairwise distances
+        # Expand and broadcast to calculate distances
+        all_coords_expanded = X_gt_L[:, :, None, :]  # Shape: [b, l, 1, 3]
+        ligand_coords_expanded = ligand_coords[:, None, :, :]  # Shape: [b, 1, num_ligand_atoms, 3]
+
+        distances = torch.norm(all_coords_expanded - ligand_coords_expanded, dim=-1)  # Shape: [b, l, num_ligand_atoms]
+
+        # Step 3: Find minimum distance for each atom and threshold at 10 Å
+        close_atoms = (distances <= 10.0).any(dim=-1)  # Shape: [b, l]
+
+        #align only on non-ligand atoms that are close to the ligand (and Ca for protein)
+        w_L = ~ligand_mask
+        w_L = w_L * alignment_mask
+        w_L = w_L * close_atoms
+        #convert to float
+        w_L = w_L.to(torch.float32)
+
+        w_L = w_L.to(X_L.device)
+        w_L = w_L.expand(X_L.shape[0], -1)
+        # X_L_aligned = weighted_rigid_align(X_L, X_gt_L, X_exists_L[0], w_L)
+        # print('X_L_aligned', X_L_aligned.shape, X_L_aligned)
+        rmsd = []
+        for i in range(X_L.shape[0]):
+
+            X_L_aligned = weighted_rigid_align(X_L[i].unsqueeze(0), X_gt_L[i].unsqueeze(0), X_exists_L[i], w_L[i].unsqueeze(0))
+
+            #now for all ligand atoms, compute the RMSD
+            ligand_mask = network_input['f']['is_ligand'][tok_idx]
+            ligand_mask = ligand_mask * X_exists_L[i]
+            ligand_mask = ligand_mask.unsqueeze(0).unsqueeze(-1)
+            ligand_mask = ligand_mask.expand(-1, -1, 3)
+            ligand_mask = ligand_mask.to(X_L.device)
+            diff = (X_L_aligned - X_L[i].unsqueeze(0))**2 * ligand_mask
+            #convert nans to 0
+            diff[torch.isnan(diff)] = 0
+
+
+            ligand_rmsd = torch.sqrt(
+                torch.sum(
+                    diff,
+                    dim=(-1, -2)
+                ) / (torch.sum(ligand_mask, dim=(-1, -2)) + 1e-8)
+            )
+            rmsd.append(ligand_rmsd)
+
+        ipae_idx = loss_input["ipae_idx"]
+        pae_idx = loss_input["pae_idx"]
+        pde_idx = loss_input["pde_idx"]
+        plddt_idx = loss_input["plddt_idx"]
+
+        lig_rmsd["first_lig_rmsd"] = rmsd[0]
+        lig_rmsd["best_lig_rmsd"] = min(rmsd)
+        lig_rmsd["ipae_lig_rmsd"] = rmsd[ipae_idx]
+        lig_rmsd["pae_lig_rmsd"] = rmsd[pae_idx]
+        lig_rmsd["pde_lig_rmsd"] = rmsd[pde_idx]
+        lig_rmsd["plddt_lig_rmsd"] = rmsd[plddt_idx]
+        print('lig_rmsd', lig_rmsd)
+        return lig_rmsd
+    
+# class ConfidenceLossMetric(Metric):
+#     def __call__(self,network_input,network_output,loss_input):
+#         loss = {
+#             'pae_loss':[],
+#             'pde_loss':[],
+#             'plddt_loss':[],
+#             'exp_resolved_loss':[]
+#         }
+
+#         loss
+
+#         return loss
+
 
 
 class ChainLDDT(Metric):
@@ -144,6 +302,8 @@ class ChainLDDT(Metric):
                 torch.tensor(tok_idx).to(network_output["X_L"].device),
                 pairs_to_score=chain_ij_atoms
             )
+
+            
             chain_lddt["chain_lddt_first"].append(lddt[0].item())
             chain_lddt["chain_lddt_best"].append(lddt.max().item())
         return chain_lddt

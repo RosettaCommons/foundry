@@ -1476,3 +1476,30 @@ def get_residue_contacts(xyz, idx, seq_dist_greater_than=10, n_contacts=5):
 
     return idx[nodes]
 
+def unbin_rf3_metrics (plddt_logits, pae_logits, pde_logits, seq, eps = 1e-4, pae_mask=None):
+    is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]
+    is_resolved_I = torch.zeros_like(is_real_atom, dtype=torch.bool)
+    # is_resolved_I = is_resolved_I.unsqueeze(0)
+
+
+    lddt_bins = torch.linspace(0.02, 1.0, 50, device=plddt_logits.device)
+    plddt_unbinned = plddt_logits * is_real_atom[None, None, :, :ChemData().NHEAVY]
+    plddt_unbinned = torch.nn.Softmax(dim=1)(plddt_logits)
+    plddt_unbinned = plddt_unbinned * lddt_bins[None, :, None, None]
+    plddt_unbinned = plddt_unbinned[..., is_real_atom[..., :ChemData().NHEAVY]]
+    plddt = plddt_unbinned.sum() / (is_real_atom.sum() + eps)
+    
+    pae_bins = torch.linspace(0.25, 31.75, 64, device=plddt_logits.device)
+    pae_unbinned = torch.nn.Softmax(dim=1)(pae_logits).detach().float()
+    pae_unbinned = (pae_unbinned * pae_bins[None, :, None, None]).sum(dim=1)
+    if pae_mask is not None:
+        pae_unbinned = pae_unbinned * pae_mask[None, None, :, :]
+        pae = pae_unbinned.sum() / (pae_mask.sum() + eps)
+    else:
+        pae = pae_unbinned.mean()
+
+    pde_unbinned = torch.nn.Softmax(dim=1)(pde_logits).detach().float()
+    pde_unbinned = (pde_unbinned * pae_bins[None, :, None, None]).sum(dim=1)
+    pde = pde_unbinned.mean()
+
+    return plddt, pae, pde

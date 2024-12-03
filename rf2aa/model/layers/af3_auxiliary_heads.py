@@ -5,6 +5,7 @@ import rf2aa
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.data.dataloader_adaptor_af3 import discretize_distance_matrix
 from rf2aa.model.AF3_structure import linearNoBias, PairformerBlock
+import torch.utils.checkpoint as checkpoint
 #from rf2aa.util import calc_rmsd
 
 
@@ -46,57 +47,70 @@ class ConfidenceHead(nn.Module):
                 S_trunk_I,
                 Z_trunk_II,
                 X_pred_L,
-                f,
-                seq
+                #f,
+                seq,
+                rep_atoms,
+                use_amp=True
                 ):
-        # stopgrad on S_trunk_I, Z_trunk_II, X_pred_L but not S_inputs_I (4.3.5)
-        S_trunk_I = S_trunk_I.detach()
-        Z_trunk_II = Z_trunk_II.detach()
-        X_pred_L = X_pred_L.detach()
+        with torch.amp.autocast('cuda',enabled=use_amp, dtype=torch.bfloat16):
 
-        # embed S_inputs_I twice
-        S_inputs_I_right = self.process_s_inputs_right(S_inputs_I)
-        S_inputs_I_left = self.process_s_inputs_left(S_inputs_I)
-        # add outer product of two linear embeddings of S_inputs_I  to Z_II
-        # TODO: check the unsqueezed dimension is the correct one
-        Z_trunk_II = Z_trunk_II + S_inputs_I_right.unsqueeze(-2) * S_inputs_I_left.unsqueeze(-3)
+            # stopgrad on S_trunk_I, Z_trunk_II, X_pred_L but not S_inputs_I (4.3.5)
+            S_trunk_I = S_trunk_I.detach().float() #B, L, 384
+            Z_trunk_II = Z_trunk_II.detach().float() #B, L, L, 128
+            X_pred_L = X_pred_L.detach().float() #B, n_atoms, 3
+            S_inputs_I = S_inputs_I.detach().float() #B, L, 384
+            seq = seq.detach()
 
-        # embed distances of representative atom from every token
-        # in the pair representation
-        rep_atoms = find_rep_atoms(seq)
-        print("rep_atoms", rep_atoms)
-        print("X_pred_L", X_pred_L.shape)
-        X_pred_rep_I = X_pred_L.index_select(1, rep_atoms)
+            #do a layer norm on S_trunk_I
+            S_trunk_I = F.layer_norm(S_trunk_I, normalized_shape=(S_trunk_I.shape))
+            #do a layer norm on Z_trunk_II
+            Z_trunk_II = F.layer_norm(Z_trunk_II, normalized_shape=(Z_trunk_II.shape))
+            #do a layer norm on S_inputs_I
+            S_inputs_I = F.layer_norm(S_inputs_I, normalized_shape=(S_inputs_I.shape))
 
-        dist = torch.cdist(X_pred_rep_I, X_pred_rep_I)
-        # TODO: need to use this function correctly (check what the bins are)
-        # bins are 3.375 to 20.375 in 1.75 increments
-        dist_one_hot = F.one_hot(discretize_distance_matrix(dist, min_distance=3.375, max_distance=20.875, num_bins=10), num_classes=11)
-        Z_trunk_II = Z_trunk_II + self.process_pred_distances(dist_one_hot.float())
+            #for debugging, make pair zero
+            # Z_trunk_II = torch.zeros_like(Z_trunk_II, dtype=Z_trunk_II.dtype)
 
-        # process with pairformer stack
-        S_trunk_residual_I = S_trunk_I.clone()
-        Z_trunk_residual_II = Z_trunk_II.clone()
-        for n in range(len(self.pairformer)):
-            S_trunk_I, Z_trunk_II = self.pairformer[n](S_trunk_I, Z_trunk_II)
-        S_trunk_I = S_trunk_residual_I + S_trunk_I
-        Z_trunk_II = Z_trunk_residual_II + Z_trunk_II 
+            # embed S_inputs_I twice
+            S_inputs_I_right = self.process_s_inputs_right(S_inputs_I)
+            S_inputs_I_left = self.process_s_inputs_left(S_inputs_I)
+            # add outer product of two linear embeddings of S_inputs_I  to Z_II
+            # TODO: check the unsqueezed dimension is the correct one
+            Z_trunk_II = Z_trunk_II + (S_inputs_I_right.unsqueeze(-2) + S_inputs_I_left.unsqueeze(-3))
 
-        # linearly project for each prediction task
-        pde_logits = self.predict_pde(Z_trunk_II + Z_trunk_II.transpose(-2,-3)) #BUG: needs to be symmetrized correctly
+            # embed distances of representative atom from every token
+            # in the pair representation
+            X_pred_rep_I = X_pred_L.index_select(1, rep_atoms)
 
-        pae_logits = self.predict_pae(Z_trunk_II)
+            dist = torch.cdist(X_pred_rep_I, X_pred_rep_I)
+            # TODO: need to use this function correctly (check what the bins are)
+            # bins are 3.375 to 20.375 in 1.75 increments
+            dist_one_hot = F.one_hot(discretize_distance_matrix(dist, min_distance=3.375, max_distance=20.875, num_bins=10), num_classes=11)
+            Z_trunk_II = Z_trunk_II + self.process_pred_distances(dist_one_hot.float())
 
-        plddt_logits = self.predict_plddt(S_trunk_I)
-        exp_resolved_logits = self.predict_exp_resolved(S_trunk_I)
-        #assert pde_logits.is_leaf and pae_logits.is_leaf and plddt_logits.is_leaf and exp_resolved_logits.is_leaf
+            # process with pairformer stack
+            S_trunk_residual_I = S_trunk_I.clone()
+            Z_trunk_residual_II = Z_trunk_II.clone()
+            for n in range(len(self.pairformer)):
+                S_trunk_I, Z_trunk_II = checkpoint.checkpoint(self.pairformer[n], S_trunk_I, Z_trunk_II, use_reentrant=False)
+            S_trunk_I = S_trunk_residual_I + S_trunk_I
+            Z_trunk_II = Z_trunk_residual_II + Z_trunk_II 
 
-        return dict(
-            pde_logits= pde_logits,
-            pae_logits= pae_logits,
-            plddt_logits= plddt_logits,
-            exp_resolved_logits= exp_resolved_logits
-        )
+            # linearly project for each prediction task
+            pde_logits = self.predict_pde(Z_trunk_II + Z_trunk_II.transpose(-2,-3)) #BUG: needs to be symmetrized correctly
+
+            pae_logits = self.predict_pae(Z_trunk_II)
+
+            plddt_logits = self.predict_plddt(S_trunk_I)
+            exp_resolved_logits = self.predict_exp_resolved(S_trunk_I)
+            #assert pde_logits.is_leaf and pae_logits.is_leaf and plddt_logits.is_leaf and exp_resolved_logits.is_leaf
+
+            return dict(
+                pde_logits= pde_logits,
+                pae_logits= pae_logits,
+                plddt_logits= plddt_logits,
+                exp_resolved_logits= exp_resolved_logits
+            )
     
     
 def find_rep_atoms(seq):
@@ -122,5 +136,11 @@ def find_rep_atoms(seq):
     indices = torch.arange(is_real_atom.sum()).to(is_real_atom.device)
     absolute_indices = torch.zeros_like(is_real_atom.long()) 
     absolute_indices[is_real_atom] = indices
+    print(
+        'seq', seq.shape, seq,
+        'is_real_atom', is_real_atom.shape, is_real_atom.sum(), is_real_atom,
+        'absolute_indices', absolute_indices.shape, absolute_indices.max(), absolute_indices,
+        'idx_to_use', idx_to_use.shape, idx_to_use
+    )
     rep_atoms = torch.gather(absolute_indices, 1, idx_to_use[:,None])
     return rep_atoms[:, 0]

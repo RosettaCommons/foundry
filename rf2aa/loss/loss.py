@@ -720,6 +720,39 @@ def mask_unresolved_frames(frames, frame_mask, atom_mask):
     return frames_reindex, frame_mask_update
 
 
+def mask_unresolved_frames_batched(frames, frame_mask, atom_mask):
+    """
+    reindex frames tensor from relative indices to absolute indices and masks out frames with atoms that are unresolved
+    in the structure
+    Input:
+        - frames: relative indices for frames (B, L, nframes, 3)
+        - frame_mask: mask for which frames are valid to compute FAPE/losses (B, L, nframes)
+        - atom_mask: mask for seen coordinates (B, L, natoms)
+    Output: 
+        - frames_reindex: absolute indices for frames 
+        - frame_mask_update: updated frame mask with frames with unresolved atoms removed
+    """
+    B, L, natoms = atom_mask.shape
+
+    # reindex frames for flat X
+    frames_reindex = (
+        torch.arange(L, device=frames.device)[None,:,None,None] + frames[..., 0]
+    )*natoms + frames[..., 1]
+
+    masked_atom_frames = torch.any(frames_reindex>L*natoms, dim=-1) # find frames with atoms that aren't resolved
+    masked_atom_frames *= torch.any(frames_reindex<0, dim=-1)
+    # There are currently indices for frames that aren't in the coordinates bc they arent resolved, reset these indices to 0 to avoid 
+    # indexing errors
+    frames_reindex[masked_atom_frames, :] = 0 
+
+    frame_mask_update = frame_mask.clone()
+    frame_mask_update *= ~masked_atom_frames 
+    frame_mask_update *= torch.all(
+        torch.gather(atom_mask.reshape(B, L*natoms),1,frames_reindex.reshape(B,L*ChemData().NFRAMES*3)).reshape(B,L,-1,3),
+        axis=-1)
+
+    return frames_reindex, frame_mask_update
+
 def calc_crd_rmsd(pred, true, atom_mask, rmsd_mask=None, alignment_radius=None):
     '''
     Calculate coordinate RMSD
