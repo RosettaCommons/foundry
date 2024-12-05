@@ -162,6 +162,57 @@ class ConfidenceInterfaceLDDT(Metric):
             interface_lddt["interface_lddt_plddt"].append(lddt[plddt_idx].item())
         return interface_lddt
 
+class ConfidenceChainLDDT(Metric):
+
+    def __call__(self, 
+                network_input, 
+                network_output, 
+                loss_input
+        ):
+        chain_lddt = {
+            "chain_lddt_first": [],
+            "chain_lddt_best": [],
+            "chain_lddt_ipae": [],
+            "chain_lddt_pae": [],
+            "chain_lddt_pde": [],
+            "chain_lddt_plddt": [],
+        }
+        chain_iid_token_lvl = loss_input["chain_iid_token_lvl"]
+        tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()
+        for chain_i, chain_type in loss_input["pn_units_to_score"]:
+            #print(chain_type)
+            # get tokens in chain_i and chain_j
+            chain_i_tokens = chain_iid_token_lvl == chain_i
+            chain_j_tokens = chain_iid_token_lvl == chain_i
+            # convert the token level to the atom level
+            chain_i_atoms = chain_i_tokens[tok_idx]
+            chain_j_atoms = chain_j_tokens[tok_idx]
+            # compute the intersection of chain_i and chain_j
+
+            chain_ij_atoms = torch.einsum(
+                                "L, K -> LK", 
+                                torch.tensor(chain_i_atoms), 
+                                torch.tensor(chain_j_atoms)
+                                ).to(network_output["X_L"].device)
+
+            #compute lddt using the pairs_to_score from the intersection
+            lddt = calc_lddt(
+                network_output["X_L"],
+                loss_input["X_gt_L"],
+                loss_input["crd_mask_L"],
+                torch.tensor(tok_idx).to(network_output["X_L"].device),
+                pairs_to_score=chain_ij_atoms
+            )
+
+            
+            chain_lddt["chain_lddt_first"].append(lddt[0].item())
+            chain_lddt["chain_lddt_best"].append(lddt.max().item())
+            chain_lddt["chain_lddt_ipae"].append(lddt[loss_input["ipae_idx"]].item())
+            chain_lddt["chain_lddt_pae"].append(lddt[loss_input["pae_idx"]].item())
+            chain_lddt["chain_lddt_pde"].append(lddt[loss_input["pde_idx"]].item())
+            chain_lddt["chain_lddt_plddt"].append(lddt[loss_input["plddt_idx"]].item())
+        print('confidence_chain_lddt', chain_lddt)
+        return chain_lddt
 
 class LigRMSD(Metric):
 
@@ -170,10 +221,17 @@ class LigRMSD(Metric):
                  network_output, 
                  loss_input
         ):
-        if not torch.any(network_input['f']['is_ligand']):
-            return {}
+        lig_rmsd = {
+            "first_lig_rmsd": [],
+            "best_lig_rmsd": [],
+            "ipae_lig_rmsd": [],
+            "pae_lig_rmsd": [],
+            "pde_lig_rmsd": [],
+            "plddt_lig_rmsd": []
+        }
 
-        lig_rmsd = {}
+        if not torch.any(network_input['f']['is_ligand']):
+            return lig_rmsd
 
         #identify the ligand atoms
         tok_idx = network_input["f"]["atom_to_token_map"]
@@ -241,12 +299,12 @@ class LigRMSD(Metric):
         pde_idx = loss_input["pde_idx"]
         plddt_idx = loss_input["plddt_idx"]
 
-        lig_rmsd["first_lig_rmsd"] = rmsd[0]
-        lig_rmsd["best_lig_rmsd"] = min(rmsd)
-        lig_rmsd["ipae_lig_rmsd"] = rmsd[ipae_idx]
-        lig_rmsd["pae_lig_rmsd"] = rmsd[pae_idx]
-        lig_rmsd["pde_lig_rmsd"] = rmsd[pde_idx]
-        lig_rmsd["plddt_lig_rmsd"] = rmsd[plddt_idx]
+        lig_rmsd["first_lig_rmsd"].append(rmsd[0])
+        lig_rmsd["best_lig_rmsd"].append(min(rmsd))
+        lig_rmsd["ipae_lig_rmsd"].append(rmsd[ipae_idx])
+        lig_rmsd["pae_lig_rmsd"].append(rmsd[pae_idx])
+        lig_rmsd["pde_lig_rmsd"].append(rmsd[pde_idx])
+        lig_rmsd["plddt_lig_rmsd"].append(rmsd[plddt_idx])
         print('lig_rmsd', lig_rmsd)
         return lig_rmsd
     

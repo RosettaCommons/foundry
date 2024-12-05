@@ -592,6 +592,14 @@ class AF3TrainerRollout(AF3Trainer):
             "chain_iid_token_lvl": example["ground_truth"]["chain_iid_token_lvl"],
             "example_id": example["example_id"],
             "alignment_mask": example["alignment_mask_atm_lvl"],
+            
+            #for loss calc
+            "seq": example["rf2aa_seq"],
+            "atom_frames": example["atom_frames"],
+            "tok_idx": example['feats']['atom_to_token_map'],
+            "is_real_atom": example['is_real_atom'],
+            "rep_atom_idxs": example['ground_truth']['rep_atom_idxs'],
+            "frame_atom_idxs": example['frame_atom_idxs'],
         }
 
         B = outputs["X_L"].shape[0]
@@ -608,7 +616,6 @@ class AF3TrainerRollout(AF3Trainer):
         interface_mask = torch.zeros(example["rf2aa_seq"].shape[-1], example["rf2aa_seq"].shape[-1], device=outputs["X_L"].device, dtype=torch.bool)
         ch_label = example["ground_truth"]["chain_iid_token_lvl"]
         print('example id', example["example_id"])
-        print('seq', example["rf2aa_seq"])
         for i in range(len(ch_label)):
             for j in range(i+1, len(ch_label)):
                 if ch_label[i] != ch_label[j]:
@@ -623,14 +630,14 @@ class AF3TrainerRollout(AF3Trainer):
             # print('plddt_logits in valid step', plddt_logits.shape)
             # pred_err.append(err)
             # print('err', err)
-            plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device))
+            plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device), is_real_atom=example['is_real_atom'])
             # print('plddt', plddt)
             # print('pae', pae)
             # print('pde', pde)
             pred_err.append({'plddt': plddt, 'pae': pae, 'pde': pde})
 
 
-            _, i_pae, _ = plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device), pae_mask=interface_mask)
+            _, i_pae, _ = plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device), pae_mask=interface_mask, is_real_atom=example['is_real_atom'])
             i_pae_err.append(i_pae)
 
         #Get the index of the lowest complex metric
@@ -674,15 +681,17 @@ class AF3TrainerRollout(AF3Trainer):
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
 
-        # outputs['plddt_logits'] = confidence['plddt_logits']
-        # outputs['pae_logits'] = confidence['pae_logits']
-        # outputs['pde_logits'] = confidence['pde_logits']
-        # outputs['exp_resolved_logits'] = confidence['exp_resolved_logits']
-        # loss, loss_dict_batched = self.loss(
-        #     network_input,
-        #     outputs,
-        #     loss_input
-        # )
+        outputs['plddt'] = confidence['plddt_logits']
+        outputs['pae'] = confidence['pae_logits']
+        outputs['pde'] = confidence['pde_logits']
+        outputs['exp_resolved'] = confidence['exp_resolved_logits']
+        outputs['X_pred_rollout_L'] = outputs['X_L']
+        loss, loss_dict_batched = self.loss(
+            network_input,
+            outputs,
+            loss_input
+        )
+        print('confidence losses', loss_dict_batched)
 
         return torch.tensor(0), metrics_dict
 
