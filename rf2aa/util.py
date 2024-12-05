@@ -1477,7 +1477,7 @@ def get_residue_contacts(xyz, idx, seq_dist_greater_than=10, n_contacts=5):
     return idx[nodes]
 
 def unbin_rf3_metrics (plddt_logits, pae_logits, pde_logits, seq, eps = 1e-4, pae_mask=None, is_real_atom=None):
-    #kept for legacy reasons, though this should be fed as to tok_idx constructed version in af3/rf3 versions.
+    #kept for legacy reasons, though this should be fed as tok_idx constructed version in af3/rf3 versions.
     if is_real_atom is None:
         is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]
     is_resolved_I = torch.zeros_like(is_real_atom, dtype=torch.bool)

@@ -556,7 +556,7 @@ class AF3TrainerRollout(AF3Trainer):
                 # self.valid_epoch(epoch, rank, world_size)
                 # print(donevalidating)
 
-
+                print('about to go into train_epoch for epoch', epoch)
                 self.train_epoch(epoch, rank, world_size)
                 for _, valid_sampler in valid_samplers.items():
                     valid_sampler.set_epoch(epoch)
@@ -566,6 +566,7 @@ class AF3TrainerRollout(AF3Trainer):
                     and epoch % self.config.dataset_params.validate_every_n_epochs==0
                     and (epoch!=start_epoch or self.config.dataset_params.validate_after_first_epoch)
                 ):
+                    print('about to go into valid_epoch for epoch', epoch)
                     self.valid_epoch(epoch, rank, world_size)
 
         self.cleanup()
@@ -573,9 +574,8 @@ class AF3TrainerRollout(AF3Trainer):
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
         gpu = self.model.device
         
-        outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
-        
         example = inputs[0]
+        # input_noise_stack = torch.nan_to_num(example["coord_atom_lvl_to_be_noised"]) + example["noise"]
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
             "X_noisy_L": torch.nan_to_num(example["coord_atom_lvl_to_be_noised"]) + example["noise"],
@@ -583,8 +583,8 @@ class AF3TrainerRollout(AF3Trainer):
             "f": example["feats"],
         } 
         loss_input = {
-            "X_gt_L": example["ground_truth"]["coord_atom_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1,-1),
-            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1),
+            "X_gt_L": example["ground_truth"]["coord_atom_lvl"][None], #.expand(self.config.dataset_params.diffusion_batch_size, -1,-1),
+            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"][None], #.expand(self.config.dataset_params.diffusion_batch_size, -1),
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
             "interfaces_to_score": example["ground_truth"]["interfaces_to_score"],
@@ -602,18 +602,9 @@ class AF3TrainerRollout(AF3Trainer):
             "frame_atom_idxs": example['frame_atom_idxs'],
         }
 
-        B = outputs["X_L"].shape[0]
-        confidence = self.confidence(
-            outputs["S_inputs_I"].repeat(B, 1, 1),
-            outputs["S_I"].repeat(B, 1, 1),
-            outputs["Z_II"].repeat(B, 1, 1, 1),
-            outputs["X_L"],
-            # input["f"],
-            example["rf2aa_seq"],
-            example['ground_truth']['rep_atom_idxs'].to(outputs["X_L"].device),
-        )
+        msa_stack = network_input["f"]["msa_stack"]
 
-        interface_mask = torch.zeros(example["rf2aa_seq"].shape[-1], example["rf2aa_seq"].shape[-1], device=outputs["X_L"].device, dtype=torch.bool)
+        interface_mask = torch.zeros(example["rf2aa_seq"].shape[-1], example["rf2aa_seq"].shape[-1], device=gpu, dtype=torch.bool)
         ch_label = example["ground_truth"]["chain_iid_token_lvl"]
         print('example id', example["example_id"])
         for i in range(len(ch_label)):
@@ -623,22 +614,72 @@ class AF3TrainerRollout(AF3Trainer):
                     interface_mask[j,i] = True
         pred_err = []
         i_pae_err = []
-        for i in range(confidence['plddt_logits'].shape[0]):
-            plddt_logits = confidence['plddt_logits'][i].unsqueeze(0)
-            plddt_logits = plddt_logits.reshape(plddt_logits.shape[0], plddt_logits.shape[1], -1, ChemData().NHEAVY)
-            plddt_logits = plddt_logits.permute(0,2,1,3)
-            # print('plddt_logits in valid step', plddt_logits.shape)
-            # pred_err.append(err)
-            # print('err', err)
-            plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device), is_real_atom=example['is_real_atom'])
-            # print('plddt', plddt)
-            # print('pae', pae)
-            # print('pde', pde)
-            pred_err.append({'plddt': plddt, 'pae': pae, 'pde': pde})
+
+        output_stack = {
+            "X_L": [],
+            "X_gt_L": [],
+            "crd_mask_L": [],
+            'plddt': [],
+            'pae': [],
+            'pde': [],
+            'exp_resolved': [],
+        }
+
+        for i in range(self.config.dataset_params.trunk_batch_size_valid):
+            #get the right msa_stack for this pass
+            network_input["f"]["msa_stack"] = msa_stack[(self.config.dataset_params.trunk_batch_size_valid * i):(self.config.dataset_params.trunk_batch_size_valid * i) + 10]
+
+            outputs = self.sampler.sample(inputs, n_cycle=10, use_amp=self.config.training_params.use_amp)
+
+            B = outputs["X_L"].shape[0]
+            confidence = self.confidence(
+                outputs["S_inputs_I"].repeat(B, 1, 1),
+                outputs["S_I"].repeat(B, 1, 1),
+                outputs["Z_II"].repeat(B, 1, 1, 1),
+                outputs["X_L"],
+                # input["f"],
+                example["rf2aa_seq"],
+                example['ground_truth']['rep_atom_idxs'].to(outputs["X_L"].device),
+            )
+
+            
+            for i in range(confidence['plddt_logits'].shape[0]):
+                plddt_logits = confidence['plddt_logits'][i].unsqueeze(0)
+                plddt_logits = plddt_logits.reshape(plddt_logits.shape[0], plddt_logits.shape[1], -1, ChemData().NHEAVY)
+                plddt_logits = plddt_logits.permute(0,2,1,3)
+                # print('plddt_logits in valid step', plddt_logits.shape)
+                # pred_err.append(err)
+                # print('err', err)
+                plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device), is_real_atom=example['is_real_atom'].to(gpu))
+                # print('plddt', plddt)
+                # print('pae', pae)
+                # print('pde', pde)
+                pred_err.append({'plddt': plddt, 'pae': pae, 'pde': pde})
 
 
-            _, i_pae, _ = plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device), pae_mask=interface_mask, is_real_atom=example['is_real_atom'])
-            i_pae_err.append(i_pae)
+                _, i_pae, _ = plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device), pae_mask=interface_mask, is_real_atom=example['is_real_atom'].to(gpu))
+                i_pae_err.append(i_pae)
+
+            def _inmap(path, x):
+                if hasattr(x, 'cpu') and path != ('f','msa_stack'):
+                    return x.to(gpu) 
+                else:
+                    return x
+
+            network_input = tree.map_structure_with_path(_inmap, network_input)
+            loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
+            # symmetry resolution
+            loss_input = self.subunit_symm_resolve(outputs, loss_input, example["symmetry_resolution"])
+            loss_input = self.residue_symm_resolve(outputs, loss_input, example["automorphisms"])
+
+            output_stack["X_L"].append(outputs["X_L"])
+            output_stack["X_gt_L"].append(loss_input["X_gt_L"])
+            output_stack["crd_mask_L"].append(loss_input["crd_mask_L"])
+            output_stack['plddt'].append(confidence['plddt_logits'])
+            output_stack['pae'].append(confidence['pae_logits'])
+            output_stack['pde'].append(confidence['pde_logits'])
+            output_stack['exp_resolved'].append(confidence['exp_resolved_logits'])
+
 
         #Get the index of the lowest complex metric
         best_plddt = -1.0
@@ -667,25 +708,17 @@ class AF3TrainerRollout(AF3Trainer):
         loss_input['plddt_idx'] = plddt_idx
         loss_input['ipae_idx'] = ipae_idx
 
-        def _inmap(path, x):
-            if hasattr(x, 'cpu') and path != ('f','msa_stack'):
-                return x.to(gpu) 
-            else:
-                return x
-
-        network_input = tree.map_structure_with_path(_inmap, network_input)
-        loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
-        # symmetry resolution
-        loss_input = self.subunit_symm_resolve(outputs, loss_input, example["symmetry_resolution"])
-        loss_input = self.residue_symm_resolve(outputs, loss_input, example["automorphisms"])
+        #now cat the outputs that matter for the confidence metrics and loss
+        outputs["X_L"] = torch.cat(output_stack["X_L"], dim=0)
+        loss_input["X_gt_L"] = torch.cat(output_stack["X_gt_L"], dim=0)
+        loss_input["crd_mask_L"] = torch.cat(output_stack["crd_mask_L"], dim=0)
+        outputs['plddt'] = torch.cat(output_stack['plddt'], dim=0)
+        outputs['pae'] = torch.cat(output_stack['pae'], dim=0)
+        outputs['pde'] = torch.cat(output_stack['pde'], dim=0)
+        outputs['exp_resolved'] = torch.cat(output_stack['exp_resolved'], dim=0)
+        outputs['X_pred_rollout_L'] = outputs['X_L']
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
-
-        outputs['plddt'] = confidence['plddt_logits']
-        outputs['pae'] = confidence['pae_logits']
-        outputs['pde'] = confidence['pde_logits']
-        outputs['exp_resolved'] = confidence['exp_resolved_logits']
-        outputs['X_pred_rollout_L'] = outputs['X_L']
         loss, loss_dict_batched = self.loss(
             network_input,
             outputs,
