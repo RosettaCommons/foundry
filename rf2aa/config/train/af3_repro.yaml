@@ -22,6 +22,9 @@ loss:
   distogram_loss:
     _target_: rf2aa.loss.af3_losses.DistogramLoss
     weight: 3e-2
+  protein_ligand_bond_loss:
+    _target_: rf2aa.loss.af3_losses.ProteinLigandBondLoss
+    weight: 0
   #confidence_loss:
     #weight: 1e-4
     #plddt:
