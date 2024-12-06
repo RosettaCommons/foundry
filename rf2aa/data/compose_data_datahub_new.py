@@ -205,7 +205,11 @@ class NewDatapipeTrainer:
 
             val_datasets[val_name] = hydra.utils.instantiate(val_cfg)
             val_samplers[val_name] = torch.utils.data.distributed.DistributedSampler(
-                val_datasets[val_name], num_replicas=world_size, rank=rank
+                val_datasets[val_name], 
+                num_replicas=world_size, 
+                rank=rank,
+                shuffle=False,
+                drop_last=False,
             )
             fallback_sampler = LazyWeightedRandomSampler(
                 # NOTE: We instantiate a new sampler here to ensure different weights per

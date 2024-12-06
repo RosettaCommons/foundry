@@ -1,16 +1,13 @@
 import logging
 
-import numpy as np
 import torch
-from rf2aa.debug import pretty_describe_dict
-from icecream import ic
 
 logger = logging.getLogger(__name__)
 
 def weighted_rigid_align(
         X_L, # [B, L, 3]
         X_gt_L, # [B, L, 3]
-        X_exists_L, # [B, L]
+        X_exists_L, # [L]
         w_L, # [B, L]
     ):
     '''
@@ -33,10 +30,8 @@ def weighted_rigid_align(
     
     # Computation of the covariance matrix
     # BUG:
-    #C = torch.transpose(X_gt_resolved, -1, -2) @ X_resolved
     # FIXED:
     C = torch.einsum('bji,bjk->bik', w_resolved[...,None]*X_gt_resolved, X_resolved)
-    #C= torch.einsum('bji,bjk->bik', X_resolved, w_resolved[...,None]*X_gt_resolved)
 
     U, S, V = torch.linalg.svd(C)
 
@@ -48,10 +43,6 @@ def weighted_rigid_align(
     R = U @ F @ V
 
     X_gt_L = X_gt_L - u_X_gt.unsqueeze(-2)
-    # NOTE: Implementing bugfix from the Protenix Technical report, where we should use the ground truth center of mass rather than the predicted center of mass for the alignment
-    # Reference: https://github.com/bytedance/Protenix/blob/main/Protenix_Technical_Report.pdf
-    #X_align_L = X_gt_L @ R + u_X_gt.unsqueeze(-2)
-    #fd undo this
     X_align_L = X_gt_L @ R + u_X.unsqueeze(-2)
 
     return X_align_L.detach()

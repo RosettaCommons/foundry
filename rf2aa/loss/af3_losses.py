@@ -321,6 +321,50 @@ class Loss(nn.Module):
             loss_dict.update(loss_dict_)
         return loss, loss_dict
 
+class ProteinLigandBondLoss(nn.Module):
+    def __init__(self, weight):
+        super().__init__()
+        self.weight = weight
+
+    def forward(
+        self, 
+        network_input,
+        network_output,
+        loss_input
+    ):
+        # find p/l bonds at token level
+        is_ligand = network_input["f"]["is_ligand"]
+        is_inter_polymer_ligand = torch.outer(is_ligand, ~is_ligand)
+        token_bonds = network_input["f"]["token_bonds"]
+        pl_bonds = token_bonds * is_inter_polymer_ligand
+        first_tok,second_tok = pl_bonds.nonzero(as_tuple=True)
+
+        # early exit
+        if first_tok.numel()==0:
+            return torch.tensor(0.0), {"protein_ligand_bond_loss": torch.tensor(0.0)}
+
+        # map tokens to atom level
+        atom2token = network_input["f"]['atom_to_token_map']
+        pl_atoms = torch.zeros( (1,atom2token.shape[0],atom2token.shape[0]), dtype=torch.bool, device=atom2token.device )
+        for i,j in zip(first_tok,second_tok):
+            pl_atoms += (atom2token==i)[None,:,None] * (atom2token==j)[None,None,:]
+
+        crd_mask_LL = loss_input["crd_mask_L"][:,None] * loss_input["crd_mask_L"][:,:,None]
+        resolved_bonds = pl_atoms * crd_mask_LL
+
+        # the mask may be different for each structure in the batch, so resolve bonds at the per-batch level
+        b,atom1,atom2 = resolved_bonds.nonzero(as_tuple=True)
+
+        # get loss
+        X_L = network_output["X_L"]
+        X_gt_L = loss_input["X_gt_L"]
+        predicted_distances = torch.linalg.norm(X_L[b,atom1] - X_L[b,atom2], dim=-1)
+        ground_truth_distances = torch.linalg.norm(X_gt_L[b,atom1] - X_gt_L[b,atom2], dim=-1)
+        mask_bonded = (ground_truth_distances<2.4)
+        loss = torch.mean(torch.square(predicted_distances[mask_bonded] - ground_truth_distances[mask_bonded]))
+
+        return self.weight * loss, {"protein_ligand_bond_loss": loss.detach()}
+
 class DiffusionLoss(nn.Module):
 
     def __init__(
@@ -369,10 +413,6 @@ class DiffusionLoss(nn.Module):
             X_gt_aligned_L = weighted_rigid_align(X_L, X_gt_L, crd_mask_L[0], w_L)
         else:
             X_gt_aligned_L = X_gt_L
-        #l_mse = 1/3 * torch.div(
-            #torch.sum(w_L.masked_select(crd_mask_L) * torch.sum((X_L.masked_select(crd_mask_L[...,None].expand(-1,-1,3)) - X_gt_aligned_L.masked_select(crd_mask_L[...,None].expand(-1,-1,3))) ** 2, dim=-1), dim=-1),
-            #(torch.sum(crd_mask_L[0]) + 1e-4)
-        #)
         X_gt_aligned_L = torch.nan_to_num(X_gt_aligned_L)
         l_mse = 1/3 * torch.div(
             torch.sum(w_L * torch.sum((X_L - X_gt_aligned_L) ** 2, dim=-1), dim=-1),

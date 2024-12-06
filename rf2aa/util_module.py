@@ -1,14 +1,9 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from opt_einsum import contract as einsum
 import copy
 import dgl
 import networkx as nx
-from rf2aa.util import *
-from rf2aa.chemical import ChemicalData as ChemData
-from rf2aa.chemical import th_dih, th_ang_v
 
 def init_lecun_normal(module, scale=1.0):
     def truncated_normal(uniform, mu=0.0, sigma=1.0, a=-2, b=2):
@@ -408,6 +403,8 @@ def make_rot_axis(angs, u, eps=1e-6):
 #
 class XYZConverter(nn.Module):
     def __init__(self):
+        from rf2aa.chemical import ChemicalData as ChemData
+
         super(XYZConverter, self).__init__()
         
         self.register_buffer("torsion_indices", ChemData().torsion_indices, persistent=False)
@@ -418,6 +415,8 @@ class XYZConverter(nn.Module):
         self.register_buffer("xyzs_in_base_frame", ChemData().xyzs_in_base_frame, persistent=False)
 
     def compute_all_atom(self, seq, xyz, alphas):
+        from rf2aa.chemical import ChemicalData as ChemData
+
         B,L = xyz.shape[:2]
 
         is_NA = is_nucleic(seq)
@@ -604,6 +603,9 @@ class XYZConverter(nn.Module):
         return tors_mask
 
     def get_torsions(self, xyz_in, seq, mask_in=None):
+        from rf2aa.chemical import th_dih, th_ang_v
+        from rf2aa.chemical import ChemicalData as ChemData
+
         B,L = xyz_in.shape[:2]
 
         tors_mask = self.get_tor_mask(seq, mask_in)
