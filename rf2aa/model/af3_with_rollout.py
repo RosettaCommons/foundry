@@ -311,7 +311,6 @@ class ConfidenceLoss(nn.Module):
         atom_mask[...,1] = torch.gather(X_exists_L, 1, frame_atom_idxs[...,1])
         atom_mask[...,2] = torch.gather(X_exists_L, 1, frame_atom_idxs[...,2])
 
-        # frames, frame_mask = get_rf3_frames(0, 0, seq.unsqueeze(0).repeat(B,1), ChemData().frame_indices.to(seq.device), atom_frames)
         frames, frame_mask = get_frames(0, 0, seq.unsqueeze(0).repeat(B,1), ChemData().frame_indices.to(seq.device), atom_frames)
 
         N, L, natoms, _ = X_pred_I.shape

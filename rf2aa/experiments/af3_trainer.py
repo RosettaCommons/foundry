@@ -268,6 +268,7 @@ class AF3TrainerRollout(AF3Trainer):
         # )
 
         example = inputs[0]
+        print('example id', example["example_id"])
         # #Get sequence from restype so we can get rep atoms in ConfidenceHead
         # seq = example['feats']['restype'].to(gpu)
         # #now collapse the one-hot encoding to a single integer
@@ -378,10 +379,17 @@ class AF3TrainerRollout(AF3Trainer):
             loss_input['X_gt_L'] = loss_input['X_gt_L'].expand(B, -1, -1)
             loss_input['crd_mask_L'] = loss_input['crd_mask_L'].expand(B, -1)
 
-        print('example id', example["example_id"])
+        
         #getting some bugs in this
-        loss_input = self.subunit_symm_resolve(output_i, loss_input, example["symmetry_resolution"])
-        loss_input = self.residue_symm_resolve(output_i, loss_input, example["automorphisms"])
+        try:
+            loss_input = self.subunit_symm_resolve(output_i, loss_input, example["symmetry_resolution"])
+            loss_input = self.residue_symm_resolve(output_i, loss_input, example["automorphisms"])
+        except Exception as e:
+            print('error in symmetry resolution', e)
+            print('example id', example["example_id"])
+            torch.save((output_i, loss_input, example["symmetry_resolution"],example["automorphisms"]), 'sym_error_data.pkl')
+            print('continuing after saving in sym_error_data.pkl')
+
 
         loss, loss_dict_batched = self.loss(
             network_input,
@@ -525,7 +533,7 @@ class AF3TrainerRollout(AF3Trainer):
             loaded_checkpoint = self.load_checkpoint(gpu)
             logger.info(f'Loaded checkpoint: {loaded_checkpoint}')
             if loaded_checkpoint:
-                start_epoch = self.checkpoint["epoch"]
+                start_epoch = self.checkpoint["epoch"] + 1
                 self.load_model()
                 if not self.config.training_params.reset_optimizer_params:
                     self.load_optimizer()
@@ -718,13 +726,17 @@ class AF3TrainerRollout(AF3Trainer):
         outputs['exp_resolved'] = torch.cat(output_stack['exp_resolved'], dim=0)
         outputs['X_pred_rollout_L'] = outputs['X_L']
 
+        #clear up memory
+        del output_stack
+
+
         metrics_dict = self.metrics(network_input, outputs, loss_input)
-        loss, loss_dict_batched = self.loss(
-            network_input,
-            outputs,
-            loss_input
-        )
-        print('confidence losses', loss_dict_batched)
+        # loss, loss_dict_batched = self.loss(
+        #     network_input,
+        #     outputs,
+        #     loss_input
+        # )
+        # print('confidence losses', loss_dict_batched)
 
         return torch.tensor(0), metrics_dict
 

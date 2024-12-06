@@ -131,16 +131,16 @@ class SubunitSymmetryResolution(nn.Module):
                     # weight the total cost by #residues
                     cost += wted_dist[pn,torch.arange(nBatch, device=wted_dist.device)] * nmodel_by_iid[iids_in_i_equiv[i]]
                     i_nat,i_pred = pn//nIids_in_i_equiv, pn%nIids_in_i_equiv
-                    try:
-                        for j,(ii_nat,ii_pred) in enumerate(zip(i_nat,i_pred)):
-                            assignment[ int(iids_by_entity[int(i_equiv)][ii_pred]) ][j] = iids_by_entity[int(i_equiv)][ii_nat]
-                    except Exception as e:
-                        print('subunit symmetry resolution failed, saving inputs')
-                        with open('subunit_symmetry_resolution_failed.pkl','wb') as f:
-                            torch.save((dist, iid_to_index, entity_to_index, iids_by_entity, entity_by_iids, nmodel_by_iid),f)
-                        print('inputs saved to subunit_symmetry_resolution_failed.pkl')
-                        import sys
-                        sys.exit(1)
+                    # try:
+                    for j,(ii_nat,ii_pred) in enumerate(zip(i_nat,i_pred)):
+                        assignment[ int(iids_by_entity[int(i_equiv)][ii_pred]) ][j] = iids_by_entity[int(i_equiv)][ii_nat]
+                    # except Exception as e:
+                    #     print('subunit symmetry resolution failed, saving inputs')
+                    #     with open('subunit_symmetry_resolution_failed.pkl','wb') as f:
+                    #         torch.save((dist, iid_to_index, entity_to_index, iids_by_entity, entity_by_iids, nmodel_by_iid),f)
+                    #     print('inputs saved to subunit_symmetry_resolution_failed.pkl')
+                    #     import sys
+                    #     sys.exit(1)
 
                     wted_dist = wted_dist.view(nIids_in_i_equiv,nIids_in_i_equiv,nBatch)
                     for i in range(i_nat.shape[0]):
@@ -159,6 +159,7 @@ class SubunitSymmetryResolution(nn.Module):
         return (best_xform,best_assignment)
 
     def _resolve_subunits(self, mol_entities, mol_iid, crop_mask, x_native, mask_native, x_pred):
+        # print('x_native',x_native.shape, x_native)
         Nbatch = x_pred.shape[0]
         
         # index -> entity
@@ -182,20 +183,30 @@ class SubunitSymmetryResolution(nn.Module):
         mask[crop_mask]=1
         mask_by_iid = {int(i):mask[mol_iid==i] for i in all_iids}
         mask_native_by_iid = {int(i):mask_native[mol_iid==i] for i in all_iids}
-        nmodeled_by_iid = {int(i):torch.sum(j) for i,j in mask_by_iid.items()}
+        #old version, threw bug when crop was unresolved
+        # nmodeled_by_iid = {int(i):torch.sum(j) for i,j in mask_by_iid.items()}
+        nmodeled_by_iid = {int(i):torch.sum(mask_by_iid[i]*mask_native_by_iid[i]) for i in mask_native_by_iid.keys()}
+
+        # print('nmodeled_by_iid',nmodeled_by_iid)
         iid_src_idx = max(nmodeled_by_iid,key = nmodeled_by_iid.get) #int(nmodeled_by_iid.argmax())
+        # print('iid_src_idx',iid_src_idx)
         entity_src_idx = entity_by_iids[iid_src_idx]
         native_by_iid = {int(i):x_native[mol_iid==i] for i in all_iids}
         pred_by_iid = {int(ii):x_pred[:,mol_iid[crop_mask]==ii] for ii in all_iids}
         
         # align it to all equivalent targets
         equiv_native_iids = iids_by_entity[entity_src_idx]
+        # print('iids_by_entity',iids_by_entity)
+        # print('entity_src_idx',entity_src_idx)
 
         # output:
         #   xpres = Ntrans x Nbatch x 3
         #   U = Ntrans x Nbatch x 3 x 3
         #   xposts = Ntrans x Nbatch x 3
         xpres,Us,xposts = [],[],[]
+        # print('native by iid',native_by_iid.keys())
+        # print('equiv_native_iids',equiv_native_iids)
+        
         
         for n in equiv_native_iids:
             nat_n = native_by_iid[int(n)][mask_by_iid[int(iid_src_idx)]]
@@ -203,11 +214,16 @@ class SubunitSymmetryResolution(nn.Module):
             mask_unres = ~nat_n[...,0].isnan()
             nat_n = nat_n[mask_unres]
             pred_n = pred_n[:,mask_unres]
-        
-            xpre,U,xpost = self._rms_align( pred_n, nat_n[None] )
-            xpres.append(xpre)
-            Us.append(U)
-            xposts.append(xpost)
+
+            # print('mask_unres',mask_unres.sum())
+            if mask_unres.sum()>3:
+                xpre,U,xpost = self._rms_align( pred_n, nat_n[None] )
+                # print('xpre',xpre.shape, xpre)
+                # print('U',U.shape, U)
+                # print('xpost',xpost.shape, xpost)
+                xpres.append(xpre)
+                Us.append(U)
+                xposts.append(xpost)
         
         xpres,Us,xposts = torch.cat(xpres,dim=0),torch.cat(Us,dim=0),torch.cat(xposts,dim=0)
         
@@ -266,7 +282,13 @@ class SubunitSymmetryResolution(nn.Module):
         x_native = symm_input['coord_atom_lvl'].to(x_pred.device)
         mask_native = symm_input['mask_atom_lvl'].to(x_pred.device)
 
+        # try:
         x_native_aln, x_native_mask = self._resolve_subunits(mol_entities, mol_iid, crop_mask, x_native, mask_native, x_pred)
+        # except Exception as e:
+        #     torch.save((network_output, loss_input, symm_input),'failed_symmetry_resolution_forward.pkl')
+        #     print('failed symmetry resolution, inputs saved to failed_symmetry_resolution_forward_train4.pkl')
+        #     import sys
+        #     sys.exit(1)
 
         loss_input['X_gt_L'] = x_native_aln
         loss_input['crd_mask_L'] = x_native_mask
