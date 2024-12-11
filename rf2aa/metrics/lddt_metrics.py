@@ -211,7 +211,6 @@ class ConfidenceChainLDDT(Metric):
             chain_lddt["chain_lddt_pae"].append(lddt[loss_input["pae_idx"]].item())
             chain_lddt["chain_lddt_pde"].append(lddt[loss_input["pde_idx"]].item())
             chain_lddt["chain_lddt_plddt"].append(lddt[loss_input["plddt_idx"]].item())
-        print('confidence_chain_lddt', chain_lddt)
         return chain_lddt
 
 class LigRMSD(Metric):
@@ -305,7 +304,6 @@ class LigRMSD(Metric):
         lig_rmsd["pae_lig_rmsd"].append(rmsd[pae_idx])
         lig_rmsd["pde_lig_rmsd"].append(rmsd[pde_idx])
         lig_rmsd["plddt_lig_rmsd"].append(rmsd[plddt_idx])
-        print('lig_rmsd', lig_rmsd)
         return lig_rmsd
     
 # class ConfidenceLossMetric(Metric):

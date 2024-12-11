@@ -355,6 +355,7 @@ class AF3TrainerRollout(AF3Trainer):
             # loss_input["X_gt_I_symm"].to(gpu),
             # loss_input["crd_mask_I_symm"].to(gpu),
             # loss_input["seq"].to(gpu),
+            frame_atom_idxs=loss_input['frame_atom_idxs'],
             no_sync=self.model.no_sync,
         )
 
@@ -424,44 +425,88 @@ class AF3TrainerRollout(AF3Trainer):
         new_shadow_state = {}
         state_dict = self.model.module.model.state_dict()
 
+        # def merge_torch_weights(first_file_path, second_file_path, output_file_path):
+        #     """
+        #     Merge PyTorch weight files with parameter renaming and filtering.
+            
+        #     Args:
+        #     first_file_path (str): Path to the first .pt weight file
+        #     second_file_path (str): Path to the second .pt weight file
+        #     output_file_path (str): Path to save the merged weight file
+        #     """
+        #     # Load the first checkpoint
+        #     first_checkpoint = torch.load(first_file_path)
+            
+        #     # Load the second checkpoint
+        #     second_checkpoint = torch.load(second_file_path)
+            
+        #     # Create a new state dict
+        #     merged_state_dict = {}
+        #     merged_final_state_dict = {}
+            
+        #     # Rename parameters from the first checkpoint and add 'model.' prefix
+        #     for key, value in first_checkpoint['model_state_dict'].items():
+        #         print(f'Renaming {key} to model.{key}')
+        #         merged_state_dict[f'model.{key}'] = value
+        #     for key, value in first_checkpoint['final_state_dict'].items():
+        #         print(f'Renaming {key} to model.{key}')
+        #         merged_final_state_dict[f'model.{key}'] = value
+            
+        #     # Add parameters from the second checkpoint that contain 'confidence'
+        #     for key, value in second_checkpoint['model_state_dict'].items():
+        #         if 'confidence' in key:
+        #             print(f'Adding {key}')
+        #             merged_state_dict[key] = value
+        #     for key, value in second_checkpoint['final_state_dict'].items():
+        #         if 'confidence' in key:
+        #             print(f'Adding {key}')
+        #             merged_final_state_dict[key] = value
 
-        if self.config.training_params.reset_optimizer_params:
-            #get around a loading issue - I'll only need to do this when loading from a weight set trained on something other than the rollout
-            # Create a new dictionary to store the modified keys
-            new_model_state_dict = {}
+            
+        #     # overwrite state dicts with merged ones
+        #     first_checkpoint['model_state_dict'] = merged_state_dict
+        #     first_checkpoint['final_state_dict'] = merged_final_state_dict
 
-            # Iterate over the original dictionary
-            for param in self.checkpoint['model_state_dict']:
-                # Modify the key
-                new_param = 'model.' + param
-                # Add the modified key and its value to the new dictionary
-                new_model_state_dict[new_param] = self.checkpoint['model_state_dict'][param]
+        #     #overwrite the optimizer with the second checkpoint's optimizer
+        #     # first_checkpoint['optimizer_state_dict'] = second_checkpoint['optimizer_state_dict']
+        #     # first_checkpoint['scheduler_state_dict'] = second_checkpoint['scheduler_state_dict']
+        #     # first_checkpoint['scaler_state_dict'] = second_checkpoint['scaler_state_dict']
+            
+        #     # Save the merged checkpoint
+        #     torch.save(first_checkpoint, output_file_path)
+            
+        #     print(f"Merged weights saved to {output_file_path}")
 
-            # #get the confidence params
-            # for param in self.conf_checkpoint['model_state_dict']:
-            #     if 'confidence' in param:
-            #         new_model_state_dict[param] = self.conf_checkpoint['model_state_dict'][param]
+        # first = '/home/tuscant/weights/rf2aa-af3-repro2_240.pt'
+        # second = '/home/tuscant/code/af3_pae/RF2-allatom/rf2aa/output/rf2aa-af3-repro-rollout_last.pt'
+        # product = '/home/tuscant/weights/240_merged_confidence_5.pt'
+        # merge_torch_weights(first, second, product)
+        # print('merged weights')
+        # print(donemerging)
 
-            # Replace the original dictionary with the new one
-            self.checkpoint['model_state_dict'] = new_model_state_dict
+        # if self.config.training_params.reset_optimizer_params:
+        #     #get around a loading issue - I'll only need to do this when loading from a weight set trained on something other than the rollout
+        #     # Create a new dictionary to store the modified keys
+        #     new_model_state_dict = {}
 
+        #     # Iterate over the original dictionary
+        #     for param in self.checkpoint['model_state_dict']:
+        #         # Modify the key
+        #         new_param = 'model.' + param
+        #         # Add the modified key and its value to the new dictionary
+        #         new_model_state_dict[new_param] = self.checkpoint['model_state_dict'][param]
 
-            #Do the same for the final_state_dict
-            new_model_state_dict = {}
-            for param in self.checkpoint['final_state_dict']:
-                # Modify the key
-                new_param = 'model.' + param
-                # Add the modified key and its value to the new dictionary
-                new_model_state_dict[new_param] = self.checkpoint['final_state_dict'][param]
-            self.checkpoint['final_state_dict'] = new_model_state_dict
+        #     # Replace the original dictionary with the new one
+        #     self.checkpoint['model_state_dict'] = new_model_state_dict
 
-            # #get the confidence params
-            # for param in self.conf_checkpoint['final_state_dict']:
-            #     if 'confidence' in param:
-            #         new_model_state_dict[param] = self.conf_checkpoint['final_state_dict'][param]
-
-
-
+        #     #Do the same for the final_state_dict
+        #     new_model_state_dict = {}
+        #     for param in self.checkpoint['final_state_dict']:
+        #         # Modify the key
+        #         new_param = 'model.' + param
+        #         # Add the modified key and its value to the new dictionary
+        #         new_model_state_dict[new_param] = self.checkpoint['final_state_dict'][param]
+        #     self.checkpoint['final_state_dict'] = new_model_state_dict
 
         for param in state_dict:
             if param not in self.checkpoint['model_state_dict']:
@@ -540,7 +585,7 @@ class AF3TrainerRollout(AF3Trainer):
                     self.load_scheduler()
                     self.load_scaler()
                 else:
-                    warnings.warn(f"User specified reset_optimizer_params=False. Did not load optimizer values from checkpoint")
+                    warnings.warn(f"User specified reset_optimizer_params=True. Did not load optimizer values from checkpoint")
             self.checkpoint = None # unload checkpoint dict
 
             self.recycle_schedule = recycle_sampling["by_batch"](self.config.loader_params.maxcycle, 
@@ -728,9 +773,11 @@ class AF3TrainerRollout(AF3Trainer):
 
         #clear up memory
         del output_stack
+        print('B:', outputs['X_L'].shape[0])
 
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
+        print(metrics_dict)
         # loss, loss_dict_batched = self.loss(
         #     network_input,
         #     outputs,

@@ -30,7 +30,8 @@ class AF3_with_rollout(nn.Module):
             # crd_mask_I, 
             seq, 
             rep_atom_idxs,
-            no_sync
+            no_sync,
+            frame_atom_idxs=None
         ):
         # first do forward pass
         with torch.no_grad():
@@ -50,7 +51,7 @@ class AF3_with_rollout(nn.Module):
                 D=self.config.dataset_params.diffusion_batch_size_rollout
             )
 
-            print('diffusion_output:', diffusion_output["X_L"].shape)
+            # print('diffusion_output:', diffusion_output["X_L"].shape)
             B = diffusion_output["X_L"].shape[0]
             
             # find ground truth permutation
@@ -97,9 +98,10 @@ class AF3_with_rollout(nn.Module):
                     trunk_output["S_inputs_I"],
                     trunk_output["S_I"],
                     trunk_output["Z_II"],
-                    diffusion_output["X_L"][0].unsqueeze(0),
+                    diffusion_output["X_L"][i].unsqueeze(0),
                     seq,
                     rep_atom_idxs,
+                    frame_atom_idxs=frame_atom_idxs,
                     use_reentrant=False
                     )
 
@@ -123,8 +125,8 @@ class AF3_with_rollout(nn.Module):
             distogram=None,
         )
     
-    def confidence_wrapper(self, S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, use_amp=True):
-        return self.confidence(S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, use_amp=use_amp)
+    def confidence_wrapper(self, S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, frame_atom_idxs=None, use_amp=True):
+        return self.confidence(S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, frame_atom_idxs=frame_atom_idxs, use_amp=use_amp)
 
 class ConfidenceLoss(nn.Module):
 
@@ -319,9 +321,6 @@ class ConfidenceLoss(nn.Module):
         X_prime = X_pred_I.reshape(N, L*natoms, -1, 3).repeat(1,1,ChemData().NFRAMES,1)
         Y_prime = X_gt_I.reshape(N, L*natoms, -1, 3).repeat(1,1,ChemData().NFRAMES,1)
         frames_reindex_batched, frame_mask_batched = mask_unresolved_frames_batched(frames, frame_mask, atom_mask)
-
-        if torch.sum(frame_mask_batched) == 0:
-            return torch.zeros(B, X_pred_I.shape[1], X_pred_I.shape[1], device=X_pred_I.device, dtype=torch.int64).detach(), torch.zeros(B, 64, X_pred_I.shape[1], X_pred_I.shape[1], device=X_pred_I.device, dtype=torch.bfloat16), torch.zeros(B, X_pred_I.shape[1], X_pred_I.shape[1], device=X_pred_I.device, dtype=torch.bool)
 
         X_x = torch.gather(X_prime, 1, frames_reindex_batched[...,0:1].repeat(1,1,1,3))
         X_y = torch.gather(X_prime, 1, frames_reindex_batched[...,1:2].repeat(1,1,1,3))

@@ -20,6 +20,7 @@ class ConfidenceHead(nn.Module):
                 n_bins_pde,
                 n_bins_plddt,
                 n_bins_exp_resolved,
+                use_Cb_distances=False
                  ):
         super(ConfidenceHead, self).__init__()
         self.process_s_inputs_right = linearNoBias(449, c_z)
@@ -32,6 +33,9 @@ class ConfidenceHead(nn.Module):
         self.predict_pde = linearNoBias(c_z, n_bins_pde)
         self.predict_plddt = linearNoBias(c_s, ChemData().NHEAVY* n_bins_plddt)
         self.predict_exp_resolved = linearNoBias(c_s, ChemData().NHEAVY * n_bins_exp_resolved)
+        self.use_Cb_distances = use_Cb_distances
+        if self.use_Cb_distances:
+            self.process_Cb_distances = linearNoBias(11, c_z)
 
     def reset_parameters(self):
         for m in self.modules():
@@ -50,7 +54,8 @@ class ConfidenceHead(nn.Module):
                 #f,
                 seq,
                 rep_atoms,
-                use_amp=True
+                use_amp=True,
+                frame_atom_idxs=None
                 ):
         with torch.amp.autocast('cuda',enabled=use_amp, dtype=torch.bfloat16):
 
@@ -88,11 +93,18 @@ class ConfidenceHead(nn.Module):
             dist_one_hot = F.one_hot(discretize_distance_matrix(dist, min_distance=3.375, max_distance=20.875, num_bins=10), num_classes=11)
             Z_trunk_II = Z_trunk_II + self.process_pred_distances(dist_one_hot.float())
 
+            if self.use_Cb_distances:
+                # embed difference between observed cb and ideal cb positions
+                Cb_distances = calc_Cb_distances(X_pred_L, seq, rep_atoms, frame_atom_idxs)
+                Cb_distances_one_hot = F.one_hot(discretize_distance_matrix(Cb_distances, min_distance=0.0001, max_distance=0.25, num_bins=10), num_classes=11)
+                Z_trunk_II = Z_trunk_II + self.process_Cb_distances(Cb_distances_one_hot.float())
+
             # process with pairformer stack
             S_trunk_residual_I = S_trunk_I.clone()
             Z_trunk_residual_II = Z_trunk_II.clone()
             for n in range(len(self.pairformer)):
                 S_trunk_I, Z_trunk_II = checkpoint.checkpoint(self.pairformer[n], S_trunk_I, Z_trunk_II, use_reentrant=False)
+                # S_trunk_I, Z_trunk_II = self.pairformer[n](S_trunk_I, Z_trunk_II)
             S_trunk_I = S_trunk_residual_I + S_trunk_I
             Z_trunk_II = Z_trunk_residual_II + Z_trunk_II 
 
@@ -144,3 +156,31 @@ def find_rep_atoms(seq):
     )
     rep_atoms = torch.gather(absolute_indices, 1, idx_to_use[:,None])
     return rep_atoms[:, 0]
+
+def calc_Cb_distances(X_pred_L, seq, rep_atoms, frame_atom_idxs):
+    frame_atom_idxs = frame_atom_idxs.unsqueeze(0).expand(X_pred_L.shape[0], -1, -1)
+    # print('X_pred_L', X_pred_L.shape)
+    # print('frame_atom_idxs', frame_atom_idxs.shape)
+    N = torch.gather(X_pred_L, 1, frame_atom_idxs[...,0].unsqueeze(-1).expand(-1, -1, 3))
+    Ca = torch.gather(X_pred_L, 1, frame_atom_idxs[...,1].unsqueeze(-1).expand(-1, -1, 3))
+    C = torch.gather(X_pred_L, 1, frame_atom_idxs[...,2].unsqueeze(-1).expand(-1, -1, 3))
+    Cb = X_pred_L.index_select(1, rep_atoms)
+
+    is_valid_Cb = (seq != ChemData().aa2num["UNK"]) & (seq != ChemData().aa2num["GLY"]) & (seq != ChemData().aa2num["MAS"])
+    is_valid_Cb = is_valid_Cb & rf2aa.util.is_protein(seq)
+
+    b = Ca - N
+    c = C - Ca
+    a = torch.cross(b, c, dim=-1)
+
+    ideal_Cb = -0.58273431*a + 0.56802827*b - 0.54067466*c + Ca
+    
+    Cb_distances = torch.norm(Cb - ideal_Cb, dim=-1)
+    print('cb', Cb)
+    print('ideal_Cb', ideal_Cb)
+    Cb_distances[:,~is_valid_Cb] = 0.0
+    print('cb distances', Cb_distances)
+    print('number of valid cb atoms', is_valid_Cb.sum())
+    print('Cb_distances', Cb_distances.shape, Cb_distances[:,is_valid_Cb].mean(), Cb_distances[:,is_valid_Cb].std(), Cb_distances[:,is_valid_Cb].min(), Cb_distances[:,is_valid_Cb].max())
+
+    return Cb_distances
