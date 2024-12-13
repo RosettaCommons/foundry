@@ -68,6 +68,7 @@ class Dropout(nn.Module):
         self.sampler = torch.distributions.bernoulli.Bernoulli(torch.tensor([1-p_drop]))
         self.broadcast_dim=broadcast_dim
         self.p_drop=p_drop
+
     def forward(self, x):
         if not self.training: # no drophead during evaluation mode
             return x
@@ -76,7 +77,7 @@ class Dropout(nn.Module):
             shape[self.broadcast_dim] = 1
         mask = self.sampler.sample(shape).to(x.device).view(shape)
 
-        x = mask * x #/ (1.0 - self.p_drop)
+        x = mask * x / (1.0 - self.p_drop)
         return x
 
 def rbf(D, D_min=0.0, D_count=64, D_sigma=0.5):

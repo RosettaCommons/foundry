@@ -93,6 +93,9 @@ class InterfaceLDDT(Metric):
                                 torch.tensor(chain_j_atoms)
                                 ).to(network_output["X_L"].device)
 
+            # symmetrize
+            chain_ij_atoms = chain_ij_atoms | chain_ij_atoms.T
+
             #compute lddt using the pairs_to_score from the intersection
             lddt = calc_lddt(
                 network_output["X_L"],
@@ -102,6 +105,7 @@ class InterfaceLDDT(Metric):
                 pairs_to_score=chain_ij_atoms,
                 distance_cutoff=30.0
             )
+
             interface_lddt["interface_lddt_first"].append(lddt[0].item())
             interface_lddt["interface_lddt_best"].append(lddt.max().item())
         return interface_lddt

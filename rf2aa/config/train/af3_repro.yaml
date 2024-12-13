@@ -69,7 +69,8 @@ training_params:
     num_steps_decay: 50000
     decay_rate: 0.95
   grad_clip: 10.0
-  seed: 959
+  EMA: 0.999
+  seed: 1
 
 interpolant:
   sigma_data: 16

@@ -192,9 +192,9 @@ class Trainer:
             torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_error.pt")
         else:
             torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_last.pt")
-            if epoch%10==0:
+            if epoch%self.config.log_params.checkpoint_every_n_epochs:  #fd make '12' a flag
                 torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
-        
+
     def launch_distributed_training(self):
         world_size = torch.cuda.device_count()
         if ('MASTER_ADDR' not in os.environ):
@@ -376,18 +376,19 @@ class Trainer:
             train_time = time.time() - start_time
             if (train_idx)%self.config.ddp_params.accum == 0:  
                 self.update_parameters()
-                if train_idx % self.config.log_params.log_every_n_examples == 0 and rank == 0:
-                    train_time = time.time() - start_time
-                    self.log_intermediate_losses(
-                        inputs, loss_dict, n_cycle, 
-                        (train_idx+1)*world_size, 
-                        len(self.train_loader)*world_size, train_time
-                    ) 
-
-                    # If using W&B, log the intermediate losses (note: this is only done for rank = 0)
-                    if self.config.log_params.use_wandb:
-                        wandb.log(loss_dict)
                 torch.cuda.empty_cache()
+
+            if train_idx % self.config.log_params.log_every_n_examples == 0 and rank == 0:
+                train_time = time.time() - start_time
+                self.log_intermediate_losses(
+                    inputs, loss_dict, n_cycle, 
+                    (train_idx+1)*world_size, 
+                    len(self.train_loader)*world_size, train_time
+                ) 
+
+                # If using W&B, log the intermediate losses (note: this is only done for rank = 0)
+                if self.config.log_params.use_wandb:
+                    wandb.log(loss_dict)
 
         if rank == 0:
             self.checkpoint_model(epoch)

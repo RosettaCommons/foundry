@@ -18,11 +18,9 @@ from rf2aa.loss.af3_losses import SubunitSymmetryResolution, ResidueSymmetryReso
 from rf2aa.metrics.metrics_base import MetricManager
 from rf2aa.debug import pretty_describe_dict
 
-
 logger = logging.getLogger(__name__)
 
 class AF3Trainer(FlowMatchingTrainer):
-
     def construct_model(self, device="cpu"):
         self.model = AF3_structure.Model(**self.config.model).to(device)
 
