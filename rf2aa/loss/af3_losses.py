@@ -467,46 +467,42 @@ def smoothed_lddt_loss(X_L, X_gt_L, crd_mask_L, is_dna, is_rna, tok_idx, eps=1e-
         B,L = X_L.shape[:2]
         first_index,second_index = torch.triu_indices(L,L,1, device=X_L.device)
     
-        if use_amp:
-            X_L = X_L.to(torch.bfloat16)
-            X_gt_L = X_gt_L.to(torch.bfloat16)
-            
         # compute the unique distances between all pairs of atoms
         X_gt_L = X_gt_L.nan_to_num()
 
         # only use native 1 (assumes dist map identical btwn all copies)
         ground_truth_distances = torch.linalg.norm(X_gt_L[0:1,first_index]-X_gt_L[0:1,second_index], dim=-1)
 
-        with torch.amp.autocast('cuda',enabled=use_amp, dtype=torch.bfloat16):
-            # only score pairs that are close enough in the ground truth
-            is_na_L = is_dna[tok_idx][first_index] | is_rna[tok_idx][first_index]
-            pair_mask = torch.logical_and(
-                ground_truth_distances>0,
-                ground_truth_distances<torch.where(is_na_L, 30.0, 15.0)
-            )
-            del is_na_L
+        # only score pairs that are close enough in the ground truth
+        is_na_L = is_dna[tok_idx][first_index] | is_rna[tok_idx][first_index]
+        pair_mask = torch.logical_and(
+            ground_truth_distances>0,
+            ground_truth_distances<torch.where(is_na_L, 30.0, 15.0)
+        )
+        del is_na_L
 
-            # only score pairs that are resolved in the ground truth
-            pair_mask *= (crd_mask_L[0:1,first_index] * crd_mask_L[0:1,second_index])
-            # don't score pairs that are in the same token
-            pair_mask *= (tok_idx[None,first_index] != tok_idx[None,second_index])
+        # only score pairs that are resolved in the ground truth
+        pair_mask *= (crd_mask_L[0:1,first_index] * crd_mask_L[0:1,second_index])
+        # don't score pairs that are in the same token
+        pair_mask *= (tok_idx[None,first_index] != tok_idx[None,second_index])
+
+        _,valid_pairs = pair_mask.nonzero(as_tuple=True)
+        pair_mask = pair_mask[:,valid_pairs].to(X_L.dtype)
+        ground_truth_distances = ground_truth_distances[:,valid_pairs]    
+        first_index,second_index = first_index[valid_pairs],second_index[valid_pairs]
+
+        predicted_distances = torch.linalg.norm(X_L[:,first_index]-X_L[:,second_index], dim=-1)
     
-            _,valid_pairs = pair_mask.nonzero(as_tuple=True)
-            pair_mask = pair_mask[:,valid_pairs].to(X_L.dtype)
-            ground_truth_distances = ground_truth_distances[:,valid_pairs]    
-            first_index,second_index = first_index[valid_pairs],second_index[valid_pairs]
+        delta_distances = torch.abs(predicted_distances-ground_truth_distances+eps)
+        del predicted_distances, ground_truth_distances
 
-            predicted_distances = torch.linalg.norm(X_L[:,first_index]-X_L[:,second_index], dim=-1)
-        
-            delta_distances = torch.abs(predicted_distances-ground_truth_distances+eps)
-            del predicted_distances, ground_truth_distances
+        lddt = 0.25*(
+            torch.sum( torch.sigmoid( 0.5 - delta_distances )*pair_mask, dim=(1) )
+            +torch.sum( torch.sigmoid( 1.0 - delta_distances )*pair_mask, dim=(1) )
+            +torch.sum( torch.sigmoid( 2.0 - delta_distances )*pair_mask, dim=(1) )
+            +torch.sum( torch.sigmoid( 4.0 - delta_distances )*pair_mask, dim=(1) )
+        ) / (torch.sum( pair_mask, dim=(1) ) + eps)
 
-            lddt = 0.25*(
-                torch.sum( torch.sigmoid( 0.5 - delta_distances )*pair_mask, dim=(1) )
-                +torch.sum( torch.sigmoid( 1.0 - delta_distances )*pair_mask, dim=(1) )
-                +torch.sum( torch.sigmoid( 2.0 - delta_distances )*pair_mask, dim=(1) )
-                +torch.sum( torch.sigmoid( 4.0 - delta_distances )*pair_mask, dim=(1) )
-            ) / (torch.sum( pair_mask, dim=(1) ) + eps)
         return 1-lddt
 
     return _dolddt(X_L, X_gt_L, crd_mask_L, is_dna, is_rna, tok_idx, eps)

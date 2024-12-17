@@ -192,7 +192,7 @@ class Trainer:
             torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_error.pt")
         else:
             torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_last.pt")
-            if epoch%self.config.log_params.checkpoint_every_n_epochs:  #fd make '12' a flag
+            if epoch%self.config.log_params.checkpoint_every_n_epochs == 0:
                 torch.save(checkpoint_data, f"{self.output_dir}/{self.config.experiment.name}_{epoch}.pt")
 
     def launch_distributed_training(self):
