@@ -1495,7 +1495,7 @@ def unbin_rf3_metrics (plddt_logits, pae_logits, pde_logits, seq, eps = 1e-4, pa
     pae_unbinned = torch.nn.Softmax(dim=1)(pae_logits).detach().float()
     pae_unbinned = (pae_unbinned * pae_bins[None, :, None, None]).sum(dim=1)
     if pae_mask is not None:
-        pae_unbinned = pae_unbinned * pae_mask[None, None, :, :]
+        pae_unbinned = pae_unbinned * pae_mask[None, :, :]
         pae = pae_unbinned.sum() / (pae_mask.sum() + eps)
     else:
         pae = pae_unbinned.mean()
@@ -1505,3 +1505,46 @@ def unbin_rf3_metrics (plddt_logits, pae_logits, pde_logits, seq, eps = 1e-4, pa
     pde = pde_unbinned.mean()
 
     return plddt, pae, pde
+
+def get_ipae_metrics_from_binned(pae_logits, same_chain, token_indices):
+    """
+    Calculate ipae and ipTM for a set of ligand indices
+
+    
+    Arguments:
+        pae_logits: [1, 64, L, L], binned pae logits
+        same_chain: [1, L, L], binned pae logits
+        token_indices: [M], indices of tokens you want to calculate ipae and ipTM for
+    """
+    assert same_chain.shape[0] == 1
+    assert pae_logits.shape[0] == 1
+    pae_bins = torch.linspace(0.25, 31.75, 64, device=pae_logits.device)
+    pae_unbinned = torch.nn.Softmax(dim=1)(pae_logits).detach().float()
+    pae_matrix = (pae_unbinned * pae_bins[None, :, None, None]).sum(dim=1)
+
+    pae_matrix = pae_matrix.squeeze(0)
+    same_chain = same_chain.squeeze(0)
+
+    L = pae_matrix.shape[-1]
+
+    def f(e_ij, Nres):
+        d0 = 1.24 * torch.pow(max(Nres, torch.tensor(19))-15, 1/3) - 1.8
+        den = 1 + torch.square(e_ij / d0)
+        return 1 / den
+    
+    ipTM = None
+    ipae_list = []
+    for i in token_indices:
+        ipTM_i = 0
+        for j in range(L):
+            if same_chain[i,j]: continue
+            ipTM_i += f(pae_matrix[i,j], (~same_chain[i, :]).sum())
+            ipae_list.append(pae_matrix[i,j])
+        ipTM_i /= (~same_chain[i, :]).sum().item()
+        if ipTM is None:
+            ipTM = ipTM_i
+        elif ipTM_i > ipTM:
+            ipTM = ipTM_i
+
+    iPAE = sum(ipae_list) / len(ipae_list)
+    return ipTM, iPAE

@@ -30,6 +30,7 @@ from rf2aa.chemical import initialize_chemdata
 from contextlib import nullcontext
 from icecream import ic
 
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +207,12 @@ class AF3Trainer(FlowMatchingTrainer):
 class AF3TrainerRollout(AF3Trainer):
 
     def construct_model(self, device="cpu"):
+        #fd initialize chemical data based on input arguments
+        #   this needs to be initialized first
+        #initialize chemdata here so that we can use it in the confidence head, including in inference
+        init = partial(initialize_chemdata, self.config)
+        init()
+
         model = AF3_structure.Model(**self.config.model).to(device)
         model.device = device
         from rf2aa.model.layers.af3_auxiliary_heads import ConfidenceHead
@@ -218,7 +225,7 @@ class AF3TrainerRollout(AF3Trainer):
         self.model = AF3_with_rollout(
             model,
             confidence,
-            # copy.deepcopy(self.sampler)
+            # copy.deepcopy(self.sampler) #deepcopying the sampler fails
             self.sampler,
             self.config
         )
@@ -249,7 +256,6 @@ class AF3TrainerRollout(AF3Trainer):
             self.model,
             params_to_ignore
         )
-        # assert len(params_to_ignore)
 
         self.model = DDP(self.model, device_ids=[device], find_unused_parameters=True, broadcast_buffers=False)
         self.sampler.model = self.model.module.shadow.model
@@ -261,28 +267,8 @@ class AF3TrainerRollout(AF3Trainer):
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
 
-        
-        # network_input, loss_input = prepare_input_af3(
-        #     inputs[0]['feats'],
-        #     **self.config.af3_data_prep,
-        # )
-
         example = inputs[0]
         print('example id', example["example_id"])
-        # #Get sequence from restype so we can get rep atoms in ConfidenceHead
-        # seq = example['feats']['restype'].to(gpu)
-        # #now collapse the one-hot encoding to a single integer
-        # seq = torch.argmax(seq, dim=-1)
-        # #now offset everything above 20 since restype doesn't include the mask token
-        # seq[seq > 20] += 1
-        # print('seq', seq, seq.shape)
-
-
-        # print('example:', example.keys())
-        # print('example[encoded]', example['encoded'].keys())
-        # print('example[encoded][seq]:', example['encoded']['seq'], example['encoded']['seq'].shape)
-        # print('example[feats]:', example['feats'].keys())
-        # print('exampe[feats][restype]:', example['feats']['restype'].shape)
         
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
@@ -298,50 +284,13 @@ class AF3TrainerRollout(AF3Trainer):
             "crd_mask_L": example["ground_truth"]["mask_atom_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1),
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
-            # "X_gt_I_symm": example["ground_truth"]["coord_token_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1, -1),
-            # "crd_mask_I_symm": example["ground_truth"]["mask_token_lvl"][None].expand(self.config.dataset_params.diffusion_batch_size, -1),
-            "seq": example["rf2aa_seq"],
-            "atom_frames": example["atom_frames"],
+            "seq": example["confidence_feats"]["rf2aa_seq"],
+            "atom_frames": example["confidence_feats"]["atom_frames"],
             "tok_idx": example['feats']['atom_to_token_map'],
-            "is_real_atom": example['is_real_atom'],
+            "is_real_atom": example["confidence_feats"]['is_real_atom'],
             "rep_atom_idxs": example['ground_truth']['rep_atom_idxs'],
-            "frame_atom_idxs": example['frame_atom_idxs'],
+            "frame_atom_idxs": example["confidence_feats"]['frame_atom_idxs'],
         }
-
-        # atom_to_token_map = example['feats']['atom_to_token_map']
-        # ref_element = torch.argmax(example['feats']['ref_element'], dim=-1)
-        # seq = example['rf2aa_seq']
-        # print('ref_elements:', ref_element.shape)
-        # print('atom_to_token_map:', atom_to_token_map.shape, atom_to_token_map)
-        # for i, token in enumerate(example['rf2aa_seq']):
-        #     expected_atoms = ChemData().heavyatom_mask[token].sum()
-        #     observed_atoms = torch.sum(atom_to_token_map == i)
-        #     if expected_atoms != observed_atoms:
-        #         print('chain info', example['feats']['asym_id'], example['ground_truth']['chain_iid_token_lvl'])
-        #         print(f'mismatch found for position {i} corresponding to token {token}')
-        #         print(f'expected_atoms: {expected_atoms}, observed_atoms: {observed_atoms}')
-        #         print(f'atom_to_token_map: {atom_to_token_map}')
-        #         token_idxs = torch.where(atom_to_token_map == i)
-        #         # print('token_idxs:', token_idxs.shape, token_idxs)
-        #         token_plus_one_idxs = torch.where(atom_to_token_map == i+1)
-        #         token_minus_one_idxs = torch.where(atom_to_token_map == i-1)
-        #         token_plus_two_idxs = torch.where(atom_to_token_map == i+2)
-        #         print(f'prev token is {seq[i-1]}')
-        #         for idx in token_minus_one_idxs:
-        #             print(f'atom in previous token {idx} is {ref_element[idx]}')
-        #         print(f'this token is {seq[i]}')
-        #         for idx in token_idxs:
-        #             print(f'atom {idx} is {ref_element[idx]}')
-        #         print(f'next token is {seq[i+1]}')
-        #         for idx in token_plus_one_idxs:
-        #             print(f'atom in next token {idx} is {ref_element[idx]}')
-        #         print(f'next next token is {seq[i+2]}')
-        #         for idx in token_plus_two_idxs:
-        #             print(f'atom in next next token {idx} is {ref_element[idx]}')
-        #         return torch.tensor(0.0, requires_grad=True), {}
-
-
-
 
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
         loss_input = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, loss_input)
@@ -352,24 +301,9 @@ class AF3TrainerRollout(AF3Trainer):
             n_cycle,
             loss_input["seq"],
             loss_input['rep_atom_idxs'],
-            # loss_input["X_gt_I_symm"].to(gpu),
-            # loss_input["crd_mask_I_symm"].to(gpu),
-            # loss_input["seq"].to(gpu),
             frame_atom_idxs=loss_input['frame_atom_idxs'],
             no_sync=self.model.no_sync,
         )
-
-        # xyz = output_i["X_pred_rollout_L"]
-        # xyz = convert_allatom_coords_to_residue_coords(xyz, loss_input["seq"])
-        # util.writepdb('test_pdbs/rollout.pdb', xyz[0].unsqueeze(0), loss_input["seq"][None])
-        # xyz = loss_input["X_gt_L"]
-        # xyz = convert_allatom_coords_to_residue_coords(xyz, loss_input["seq"])
-        # util.writepdb('test_pdbs/gt.pdb', xyz[0].unsqueeze(0), loss_input["seq"][None])
-        # xyz = output_i["X_L"]
-        # xyz = convert_allatom_coords_to_residue_coords(xyz, loss_input["seq"])
-        # util.writepdb('test_pdbs/X_L.pdb', xyz[0].unsqueeze(0), loss_input["seq"][None])
-        # print('wrote pdbs')
-        # sys.exit(0)
 
         # symmetry resolution
         #HACK change X_L to the rollout so gt matches rollout batch dimesnion. This assumes that weights for 
@@ -380,8 +314,7 @@ class AF3TrainerRollout(AF3Trainer):
             loss_input['X_gt_L'] = loss_input['X_gt_L'].expand(B, -1, -1)
             loss_input['crd_mask_L'] = loss_input['crd_mask_L'].expand(B, -1)
 
-        
-        #getting some bugs in this
+        #still getting occasional bugs in this
         try:
             loss_input = self.subunit_symm_resolve(output_i, loss_input, example["symmetry_resolution"])
             loss_input = self.residue_symm_resolve(output_i, loss_input, example["automorphisms"])
@@ -399,21 +332,6 @@ class AF3TrainerRollout(AF3Trainer):
         )
         loss_dict = self.unbatch_losses(loss_dict_batched)
 
-        # output = {"X_L": output_i["X_L"]} | network_input | loss_input
-        # from rf2aa.callbacks import lddt_metrics
-
-        # lddt, _ = lddt_metrics(None, output)
-        # sigma_data = self.config.af3_data_prep.sigma_data
-        # t = network_input['t']
-        # X_noisy_L = network_input['X_noisy_L']
-        # null_pred = (sigma_data**2 / (sigma_data**2 + t**2))[...,None,None] * X_noisy_L
-        # lddt_null, _ = lddt_metrics(None, {"X_L": null_pred} | network_input | loss_input)
-        # for key, val in lddt_null.items():
-        #     lddt[f"{key}_null_pred"] = val
-        # loss_dict_batched["noise_std_dev"]  = torch.std(X_noisy_L, dim=(-1,-2))
-        # loss_dict_batched = loss_dict_batched | lddt 
-        # loss_dict_batched["t"] = network_input['t']
-        # loss_dict.update(self.unbatch_losses(loss_dict_batched))
         return loss, loss_dict
     
 
@@ -477,9 +395,9 @@ class AF3TrainerRollout(AF3Trainer):
             
         #     print(f"Merged weights saved to {output_file_path}")
 
-        # first = '/home/tuscant/weights/rf2aa-af3-repro2_240.pt'
-        # second = '/home/tuscant/code/af3_pae/RF2-allatom/rf2aa/output/rf2aa-af3-repro-rollout_last.pt'
-        # product = '/home/tuscant/weights/240_merged_confidence_5.pt'
+        # first = '/net/software/lab/RF2-allatom/rf2aa/checkpoints/rf2aa-af3-repro2_270.pt'
+        # second = '/home/tuscant/code/af3_pae/RF2-allatom/rf2aa/output/cb/rf2aa-af3-repro-rollout_240_cont_af3_style_with_cb_last.pt'
+        # product = '/home/tuscant/weights/270_merged_confidence_9.pt'
         # merge_torch_weights(first, second, product)
         # print('merged weights')
         # print(donemerging)
@@ -605,7 +523,7 @@ class AF3TrainerRollout(AF3Trainer):
             for epoch in range(start_epoch,self.config.experiment.n_epoch):
                 train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
 
-                # print(f'about to go into valid_epoch')
+                # print(f'about to go into valid_epoch for epoch {epoch}')
                 # self.valid_epoch(epoch, rank, world_size)
                 # print(donevalidating)
 
@@ -628,7 +546,6 @@ class AF3TrainerRollout(AF3Trainer):
         gpu = self.model.device
         
         example = inputs[0]
-        # input_noise_stack = torch.nan_to_num(example["coord_atom_lvl_to_be_noised"]) + example["noise"]
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
             "X_noisy_L": torch.nan_to_num(example["coord_atom_lvl_to_be_noised"]) + example["noise"],
@@ -644,20 +561,20 @@ class AF3TrainerRollout(AF3Trainer):
             "pn_units_to_score": example["ground_truth"]["pn_units_to_score"],
             "chain_iid_token_lvl": example["ground_truth"]["chain_iid_token_lvl"],
             "example_id": example["example_id"],
-            "alignment_mask": example["alignment_mask_atm_lvl"],
+            "alignment_mask": example["confidence_feats"]["alignment_mask_atm_lvl"],
             
             #for loss calc
-            "seq": example["rf2aa_seq"],
-            "atom_frames": example["atom_frames"],
+            "seq": example["confidence_feats"]["rf2aa_seq"],
+            "atom_frames": example["confidence_feats"]["atom_frames"],
             "tok_idx": example['feats']['atom_to_token_map'],
-            "is_real_atom": example['is_real_atom'],
+            "is_real_atom": example["confidence_feats"]['is_real_atom'],
             "rep_atom_idxs": example['ground_truth']['rep_atom_idxs'],
-            "frame_atom_idxs": example['frame_atom_idxs'],
+            "frame_atom_idxs": example["confidence_feats"]['frame_atom_idxs'],
         }
 
         msa_stack = network_input["f"]["msa_stack"]
 
-        interface_mask = torch.zeros(example["rf2aa_seq"].shape[-1], example["rf2aa_seq"].shape[-1], device=gpu, dtype=torch.bool)
+        interface_mask = torch.zeros(loss_input["seq"].shape[-1], loss_input["seq"].shape[-1], device=gpu, dtype=torch.bool)
         ch_label = example["ground_truth"]["chain_iid_token_lvl"]
         print('example id', example["example_id"])
         for i in range(len(ch_label)):
@@ -665,8 +582,73 @@ class AF3TrainerRollout(AF3Trainer):
                 if ch_label[i] != ch_label[j]:
                     interface_mask[i,j] = True
                     interface_mask[j,i] = True
+
+        #AF3's ranking metrics work more like this, but using ptm instead of ipae:
+        ch_label = example["ground_truth"]["chain_iid_token_lvl"]
+        unique_chains = np.unique(ch_label)
+        interface_masks = {}
+        chain_masks = {}
+        single_chain_masks = {}
+        interfaces = []
+        scored_chains = []
+        chains = []
+        interface_chains = []
+        for k in loss_input['interfaces_to_score']:
+            interfaces.append(f'{k[0]}-{k[1]}')
+            chains.append(k[0])
+            chains.append(k[1])
+            interface_chains.append(k[0])
+            interface_chains.append(k[1])
+        for k in loss_input['pn_units_to_score']:
+            chains.append(k[0])
+            scored_chains.append(k[0])
+        chains = set(chains)
+        lig_chains = []
+        
+        for chain in chains:
+            #check if this is a ligand chain; AF3 handles ligand metrics slightly differently
+            if torch.all(network_input['f']['is_ligand'][ch_label == chain]):
+                lig_chains.append(chain)
+            chain_mask = torch.zeros(loss_input["seq"].shape[-1], loss_input["seq"].shape[-1], device=gpu, dtype=torch.bool)
+            single_chain_mask = torch.zeros(loss_input["seq"].shape[-1], loss_input["seq"].shape[-1], device=gpu, dtype=torch.bool)
+            i_mask = torch.zeros(loss_input["seq"].shape[-1], loss_input["seq"].shape[-1], device=gpu, dtype=torch.bool)
+            for i in range(len(ch_label)):
+                for j in range(i+1, len(ch_label)):
+                    if (ch_label[i] == chain or ch_label[j] == chain):
+                        chain_mask[i,j] = True
+                        chain_mask[j,i] = True
+                        if ch_label[i] == chain and ch_label[j] == chain:
+                            single_chain_mask[i,j] = True
+                            single_chain_mask[j,i] = True
+                        elif ch_label[i] != ch_label[j]:
+                            i_mask[i,j] = True
+                            i_mask[j,i] = True
+            interface_masks[chain] = i_mask
+            single_chain_masks[chain] = single_chain_mask
+            chain_masks[chain] = chain_mask
+
+        same_chain = torch.zeros(loss_input["seq"].shape[-1], loss_input["seq"].shape[-1], device=gpu, dtype=torch.bool)
+        for i in range(len(ch_label)):
+            for j in range(i, len(ch_label)):
+                if ch_label[i] == ch_label[j]:
+                    same_chain[i,j] = True
+                    same_chain[j,i] = True
+        same_chain = same_chain.unsqueeze(0)
+
         pred_err = []
         i_pae_err = []
+        interface_err = {}
+        for interface in interfaces:
+            interface_err[interface] = []
+        lig_err = {}
+        for lig_chain in lig_chains:
+            lig_err[lig_chain] = []
+        chain_err = {}
+        single_chain_err = {}
+        for chain in scored_chains:
+            chain_err[chain] = []
+            single_chain_err[chain] = []
+        i_ptm_stack = torch.zeros(0, len(unique_chains), len(unique_chains), device=gpu)
 
         output_stack = {
             "X_L": [],
@@ -678,6 +660,7 @@ class AF3TrainerRollout(AF3Trainer):
             'exp_resolved': [],
         }
 
+        #set up for sampling the trunk multiple times if desired.
         for i in range(self.config.dataset_params.trunk_batch_size_valid):
             #get the right msa_stack for this pass
             network_input["f"]["msa_stack"] = msa_stack[(self.config.dataset_params.trunk_batch_size_valid * i):(self.config.dataset_params.trunk_batch_size_valid * i) + 10]
@@ -690,9 +673,9 @@ class AF3TrainerRollout(AF3Trainer):
                 outputs["S_I"].repeat(B, 1, 1),
                 outputs["Z_II"].repeat(B, 1, 1, 1),
                 outputs["X_L"],
-                # input["f"],
-                example["rf2aa_seq"],
+                loss_input["seq"],
                 example['ground_truth']['rep_atom_idxs'].to(outputs["X_L"].device),
+                frame_atom_idxs=loss_input['frame_atom_idxs'].to(outputs["X_L"].device),
             )
 
             
@@ -700,18 +683,67 @@ class AF3TrainerRollout(AF3Trainer):
                 plddt_logits = confidence['plddt_logits'][i].unsqueeze(0)
                 plddt_logits = plddt_logits.reshape(plddt_logits.shape[0], plddt_logits.shape[1], -1, ChemData().NHEAVY)
                 plddt_logits = plddt_logits.permute(0,2,1,3)
-                # print('plddt_logits in valid step', plddt_logits.shape)
-                # pred_err.append(err)
-                # print('err', err)
-                plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device), is_real_atom=example['is_real_atom'].to(gpu))
-                # print('plddt', plddt)
-                # print('pae', pae)
-                # print('pde', pde)
+
+                plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), is_real_atom=loss_input['is_real_atom'].to(gpu))
+
                 pred_err.append({'plddt': plddt, 'pae': pae, 'pde': pde})
 
-
-                _, i_pae, _ = plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), example["rf2aa_seq"].to(plddt_logits.device), pae_mask=interface_mask, is_real_atom=example['is_real_atom'].to(gpu))
+                _, i_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_mask, is_real_atom=loss_input['is_real_atom'].to(gpu))
                 i_pae_err.append(i_pae)
+
+                iptm_matrix = torch.zeros(1, len(unique_chains), len(unique_chains), device=gpu) # [1, n_chains,n_chains]
+                ###this is taking a long time, so skipping for now
+                # for w in range(len(unique_chains)):
+                #     # if unique_chains[w] not in interface_chains:
+                #     #     print('skipping', unique_chains[w])
+                #     #     continue
+                #     for z in range(w+1, len(unique_chains)):
+                #         # if unique_chains[z] not in interface_chains:
+                #         #     print('skipping', unique_chains[z])
+                #         #     continue
+                #         if f'{unique_chains[w]}-{unique_chains[z]}' not in interfaces and f'{unique_chains[z]}-{unique_chains[w]}' not in interfaces:
+                #             continue
+                #         print('calculating interface', unique_chains[w], unique_chains[z])
+                #         print('interfaces', interfaces)
+                #         #M is the indices of the two participating chains
+                #         M = np.where((ch_label == unique_chains[w]) | (ch_label == unique_chains[z]))[0]
+                #         #this takes way too long to do right now
+                #         start = time.time()
+                #         iptm, _ = util.get_ipae_metrics_from_binned(confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), same_chain, M)
+                #         print('time', time.time()-start)
+                #         # iptm = 0.0
+                #         iptm_matrix[0,w,z] = iptm
+                #         iptm_matrix[0,w,z] = iptm
+                #         # print('iptm_matrix', iptm_matrix)
+                i_ptm_stack = torch.cat((i_ptm_stack, iptm_matrix), dim=0)
+                # print('i_ptm_stack', i_ptm_stack.shape, i_ptm_stack)
+
+
+                #AF3-style confidence ranking metrics
+                for interface in interfaces:
+                    chain_a = interface.split('-')[0]
+                    chain_b = interface.split('-')[1]
+
+                    #af3 only considers the ligand chain when evaluating interfaces containing a ligand
+                    if (chain_a in lig_chains or chain_b in lig_chains) and not (chain_a in lig_chains and chain_b in lig_chains):
+                        if chain_a in lig_chains:
+                            lig_chain = chain_a
+                        elif chain_b in lig_chains:
+                            lig_chain = chain_b
+
+                        #if a ligand participates in more than 1 interface, we still only want to get calculcate B scores
+                        if len(lig_err[lig_chain]) < i+1:
+                            _, lig_i_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[lig_chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                            lig_err[lig_chain].append(lig_i_pae)
+                        
+                    _, chain_a_i_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[chain_a], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                    _, chain_b_i_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[chain_b], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                    interface_err[interface].append((chain_a_i_pae + chain_b_i_pae))
+                for chain in scored_chains:
+                    _, chain_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=chain_masks[chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                    chain_err[chain].append(chain_pae)
+                    _, single_chain_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=single_chain_masks[chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                    single_chain_err[chain].append(single_chain_pae)
 
             def _inmap(path, x):
                 if hasattr(x, 'cpu') and path != ('f','msa_stack'):
@@ -761,6 +793,71 @@ class AF3TrainerRollout(AF3Trainer):
         loss_input['plddt_idx'] = plddt_idx
         loss_input['ipae_idx'] = ipae_idx
 
+        #now the smae for AF3-style metrics
+        best_interface_idx = {}
+        best_iptm_idx = {}
+        best_lig_ipae_idx = {}
+        best_lig_iptm_idx = {}
+        for k, v in interface_err.items():
+            best_pae = 100
+            best_iptm = -1
+            chain_a = k.split('-')[0]
+            chain_b = k.split('-')[1]
+            chain_a = np.nonzero(unique_chains == chain_a)[0][0]
+            chain_b = np.nonzero(unique_chains == chain_b)[0][0]
+            for i in range(len(v)):
+                if v[i] < best_pae:
+                    best_pae = v[i]
+                    best_interface_idx[k] = i
+                i_ptm = i_ptm_stack[i, chain_a, :].sum() + i_ptm_stack[i, chain_b, :].sum()
+                if i_ptm > best_iptm:
+                    best_iptm = i_ptm
+                    best_iptm_idx[k] = i
+
+            #handle special af3-style lig case
+            best_lig_ipae_idx[k] = -1
+            best_lig_iptm_idx[k] = -1
+            chain_1 = k.split('-')[0]
+            chain_2 = k.split('-')[1]
+            if chain_1 in lig_chains or chain_2 in lig_chains:
+                if chain_1 in lig_chains:
+                    lig_chain = chain_1
+                    lig_num = chain_a
+                elif chain_2 in lig_chains:
+                    lig_chain = chain_2
+                    lig_num = chain_b
+                best_pae = 100
+                best_iptm = -1
+                for i in range(len(lig_err[lig_chain])):
+                    if lig_err[lig_chain][i] < best_pae:
+                        best_pae = lig_err[lig_chain][i]
+                        best_lig_ipae_idx[k] = i
+                    i_ptm = i_ptm_stack[i, lig_num, :].sum()
+                    if i_ptm > best_iptm:
+                        best_iptm = i_ptm
+                        best_lig_iptm_idx[k] = i
+
+        loss_input['best_interface_idx'] = best_interface_idx
+        loss_input['best_iptm_idx'] = best_iptm_idx
+        loss_input['best_lig_ipae_idx'] = best_lig_ipae_idx
+        loss_input['best_lig_iptm_idx'] = best_lig_iptm_idx
+        best_chain_idx = {}
+        best_single_chain_idx = {}
+        for chain in scored_chains:
+            best_chain_pae = 100
+            best_single_chain_pae = 100
+            for i in range(len(chain_err[chain])):
+                if chain_err[chain][i] < best_chain_pae:
+                    best_chain_pae = chain_err[chain][i]
+                    best_chain_idx[chain] = i
+                if single_chain_err[chain][i] < best_single_chain_pae:
+                    best_single_chain_pae = single_chain_err[chain][i]
+                    best_single_chain_idx[chain] = i
+        loss_input['best_chain_idx'] = best_chain_idx
+        loss_input['best_single_chain_idx'] = best_single_chain_idx
+
+
+
         #now cat the outputs that matter for the confidence metrics and loss
         outputs["X_L"] = torch.cat(output_stack["X_L"], dim=0)
         loss_input["X_gt_L"] = torch.cat(output_stack["X_gt_L"], dim=0)
@@ -786,30 +883,3 @@ class AF3TrainerRollout(AF3Trainer):
         # print('confidence losses', loss_dict_batched)
 
         return torch.tensor(0), metrics_dict
-
-
-def convert_allatom_coords_to_residue_coords(X_pred_L, seq):
-    """
-    Reverse of convert_residue_coords_to_allatom_coords.
-
-    X_pred_L: (B, N_real_atoms, 3) - Coordinates for only real atoms (heavy atoms)
-    seq: (B, I) - Sequence tensor indicating residue types
-
-    Returns:
-        X_pred: (B, I, natoms, 3) - Full tensor with coordinates for all atoms,
-                                    with zeroed entries for non-heavy atoms.
-    """
-    # Get the mask for real atoms based on the sequenceChemData()
-    is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]  # (B, I, natoms)
-    # print('is_real_atom:', is_real_atom.shape, is_real_atom)
-
-    # Initialize the full tensor with zeros
-    B = X_pred_L.shape[0]
-    I = seq.shape[-1]
-    natoms = is_real_atom.shape[-1]
-    X_pred = torch.zeros((B, I, natoms, 3), device=seq.device)
-
-    # Fill in only the "real atom" positions from X_pred_L
-    X_pred[:,is_real_atom] = X_pred_L
-
-    return X_pred

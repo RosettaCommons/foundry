@@ -122,6 +122,10 @@ class ConfidenceInterfaceLDDT(Metric):
             "interface_lddt_pae": [],
             "interface_lddt_pde": [],
             "interface_lddt_plddt": [],
+            "interface_lddt_af3_style_ipae": [],
+            "interface_lddt_af3_style_iptm": [],
+            "interface_lddt_af3_style_lig_ipae": [],
+            "interface_lddt_af3_style_lig_iptm": []
         }
         chain_iid_token_lvl = loss_input["chain_iid_token_lvl"]
         tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()
@@ -154,12 +158,17 @@ class ConfidenceInterfaceLDDT(Metric):
             pae_idx = loss_input["pae_idx"]
             pde_idx = loss_input["pde_idx"]
             plddt_idx = loss_input["plddt_idx"]
+            af3_style_ipae_idx = loss_input["best_interface_idx"][f'{chain_i}-{chain_j}']
             interface_lddt["interface_lddt_first"].append(lddt[0].item())
             interface_lddt["interface_lddt_best"].append(lddt.max().item())
             interface_lddt["interface_lddt_ipae"].append(lddt[ipae_idx].item())
             interface_lddt["interface_lddt_pae"].append(lddt[pae_idx].item())
             interface_lddt["interface_lddt_pde"].append(lddt[pde_idx].item())
             interface_lddt["interface_lddt_plddt"].append(lddt[plddt_idx].item())
+            interface_lddt["interface_lddt_af3_style_ipae"].append(lddt[af3_style_ipae_idx].item())
+            interface_lddt["interface_lddt_af3_style_iptm"].append(lddt[loss_input["best_iptm_idx"][f'{chain_i}-{chain_j}']].item())
+            interface_lddt["interface_lddt_af3_style_lig_ipae"].append(lddt[loss_input["best_lig_ipae_idx"][f'{chain_i}-{chain_j}']].item())
+            interface_lddt["interface_lddt_af3_style_lig_iptm"].append(lddt[loss_input["best_lig_iptm_idx"][f'{chain_i}-{chain_j}']].item())
         return interface_lddt
 
 class ConfidenceChainLDDT(Metric):
@@ -176,6 +185,8 @@ class ConfidenceChainLDDT(Metric):
             "chain_lddt_pae": [],
             "chain_lddt_pde": [],
             "chain_lddt_plddt": [],
+            "chain_lddt_af3_style_chain": [],
+            "chain_lddt_af3_style_single_chain": []
         }
         chain_iid_token_lvl = loss_input["chain_iid_token_lvl"]
         tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()
@@ -211,6 +222,8 @@ class ConfidenceChainLDDT(Metric):
             chain_lddt["chain_lddt_pae"].append(lddt[loss_input["pae_idx"]].item())
             chain_lddt["chain_lddt_pde"].append(lddt[loss_input["pde_idx"]].item())
             chain_lddt["chain_lddt_plddt"].append(lddt[loss_input["plddt_idx"]].item())
+            chain_lddt["chain_lddt_af3_style_chain"].append(lddt[loss_input["best_chain_idx"][chain_i]].item())
+            chain_lddt["chain_lddt_af3_style_single_chain"].append(lddt[loss_input["best_single_chain_idx"][chain_i]].item())
         return chain_lddt
 
 class LigRMSD(Metric):
@@ -298,13 +311,127 @@ class LigRMSD(Metric):
         pde_idx = loss_input["pde_idx"]
         plddt_idx = loss_input["plddt_idx"]
 
-        lig_rmsd["first_lig_rmsd"].append(rmsd[0])
-        lig_rmsd["best_lig_rmsd"].append(min(rmsd))
-        lig_rmsd["ipae_lig_rmsd"].append(rmsd[ipae_idx])
-        lig_rmsd["pae_lig_rmsd"].append(rmsd[pae_idx])
-        lig_rmsd["pde_lig_rmsd"].append(rmsd[pde_idx])
-        lig_rmsd["plddt_lig_rmsd"].append(rmsd[plddt_idx])
+        lig_rmsd["first_lig_rmsd"].append(rmsd[0].item())
+        lig_rmsd["best_lig_rmsd"].append(min(rmsd).item())
+        lig_rmsd["ipae_lig_rmsd"].append(rmsd[ipae_idx].item())
+        lig_rmsd["pae_lig_rmsd"].append(rmsd[pae_idx].item())
+        lig_rmsd["pde_lig_rmsd"].append(rmsd[pde_idx].item())
+        lig_rmsd["plddt_lig_rmsd"].append(rmsd[plddt_idx].item())
         return lig_rmsd
+
+def align_and_compute_rmsd_unbatched(X_L, X_gt_L, X_rmsd_mask, X_align_mask, X_exists_L):
+    """
+    Compute the RMSD between two sets of coordinates.
+    Args:
+        - X_L: Predicted coordinates. Shape: [l, 3] 
+        - X_gt_L: Ground truth coordinates. Shape: [l, 3]
+        - X_rmsd_mask: Mask for atoms to include in RMSD calculation. Shape: [l]
+        - X_align_mask: Mask for atoms to include in alignment. Shape: [l]
+    
+    """
+    X_rmsd_mask = X_rmsd_mask * X_exists_L
+
+    if torch.sum(X_rmsd_mask) == 0:
+        return -1
+
+    X_gt_L_aligned = weighted_rigid_align(X_L.unsqueeze(0), X_gt_L.unsqueeze(0), X_exists_L, X_align_mask.unsqueeze(0))
+
+    diff = (X_gt_L_aligned - X_L.unsqueeze(0))**2 * X_rmsd_mask[None, :, None]
+    diff[torch.isnan(diff)] = 0
+
+    ligand_rmsd = torch.sqrt(diff.sum() / (X_rmsd_mask.sum() + 1e-8))
+    return ligand_rmsd.item()
+
+class InterfacePocketLigandRMSD(Metric):
+    """
+    Compute the Ligand RMSD for each interface in the interfaces_to_score list.
+    
+    The ligand RMSD is computed only for interface protein-ligand chains.
+    Given a chain pair (chain_i, chain_j) and the interface type, the RMSD is computed as follows:
+    - if the interface_type is protein_ligand: continue
+    - Rigid align the GT coordinates of onto the predicted coordinates using only the CA atoms within 10A of the ligand in chain_i or chain_j
+    - Compute the RMSD between the aligned GT coordinates and the predicted coordinates of the ligand atoms
+
+    Note: if the interface is not between a protein-ligand pair, the RMSD is set to -1
+    """
+    def __call__(self, 
+                 network_input, 
+                 network_output, 
+                 loss_input
+        ):
+        interface_pocket_ligand_rmsd = {
+            'interface_rmsd_pocket_ligand_first': [],
+            'interface_rmsd_pocket_ligand_best': [],
+            'interface_rmsd_pocket_ligand_mean': [],
+            'interface_rmsd_pocket_ligand_worst': [],
+            'interface_rmsd_pocket_ligand_chain': [],
+            'interface_rmsd_pocket_ligand_ipae': [],
+            'interface_rmsd_pocket_ligand_af3_style_ipae': [],
+            'interface_rmsd_pocket_ligand_af3_style_iptm': [],
+            'interface_rmsd_pocket_ligand_af3_style_lig_ipae': [],
+            'interface_rmsd_pocket_ligand_af3_style_lig_iptm': []
+        }
+
+        chain_iid_token_lvl = loss_input["chain_iid_token_lvl"]
+        tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()
+        ligand_mask_token_lvl = network_input['f']['is_ligand']
+        ligand_mask_atom_lvl = network_input['f']['is_ligand'][tok_idx]
+        protein_mask_atom_lvl = ~ligand_mask_atom_lvl
+        alignment_mask_atom_lvl = loss_input["alignment_mask"]
+
+        X_L = network_output["X_L"]
+        X_gt_L = loss_input["X_gt_L"]
+        X_exists_L = loss_input["crd_mask_L"]
+        pdist = torch.norm(X_gt_L[:, :, None, :] - X_gt_L[:, None, :, :], dim=-1)
+        within_thres_atoms = pdist <= 10 # b, l, l
+
+        for chain_i, chain_j, interface_type in loss_input["interfaces_to_score"]:
+            if interface_type == 'protein-ligand':
+                if torch.all(ligand_mask_token_lvl[chain_iid_token_lvl == chain_i]):
+                    lig_chain_iid = chain_i
+                elif torch.all(ligand_mask_token_lvl[chain_iid_token_lvl == chain_j]):
+                    lig_chain_iid = chain_j
+                else:
+                    print("Error: interface is not between protein-ligand")
+                    continue
+            else:
+                continue
+
+            chain_lig_tokens = chain_iid_token_lvl == lig_chain_iid
+        # for lig_chain_iid in np.unique(chain_iid_token_lvl[network_input['f']['is_ligand'].cpu().numpy()]):
+            # skip if the interface is not between protein and ligand
+            # convert the token level to the atom_level
+            chain_lig_atoms = chain_lig_tokens[tok_idx]
+
+            within_pocket_atoms = torch.any(within_thres_atoms[..., chain_lig_atoms], dim=-1) # assuming symmetric
+
+            alignment_mask_L = protein_mask_atom_lvl # consider only protein atoms for alignment
+            alignment_mask_L = alignment_mask_L * alignment_mask_atom_lvl # consider only alignment atoms (i.e. CA)
+            alignment_mask_L = alignment_mask_L * within_pocket_atoms  # consider only CA atoms within 10A of the ligand
+            alignment_mask_L = alignment_mask_L.to(torch.float32) 
+            alignment_mask_L = alignment_mask_L.to(X_L.device)
+            alignment_mask_L = alignment_mask_L.expand(X_L.shape[0], -1)
+
+            # compute RMSD for the interface pocket ligand
+            X_rmsd_mask_L = torch.tensor(chain_lig_atoms).to(X_L.device)
+            batch_rmsds = torch.zeros(X_L.shape[0])
+            for i in range(X_L.shape[0]):
+                rmsd = align_and_compute_rmsd_unbatched(X_L[i], X_gt_L[i], X_rmsd_mask_L, alignment_mask_L[i], X_exists_L[i]) 
+                batch_rmsds[i] = rmsd
+
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_first'].append(batch_rmsds[0].item())
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_best'].append(batch_rmsds.min().item())
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_mean'].append(batch_rmsds.mean().item())
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_worst'].append(batch_rmsds.max().item())
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_chain'].append(lig_chain_iid)
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_ipae'].append(batch_rmsds[loss_input["ipae_idx"]].item())
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_ipae'].append(batch_rmsds[loss_input["best_interface_idx"][f'{chain_i}-{chain_j}']].item())
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_iptm'].append(batch_rmsds[loss_input["best_iptm_idx"][f'{chain_i}-{chain_j}']].item())
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_lig_ipae'].append(batch_rmsds[loss_input["best_lig_ipae_idx"][f'{chain_i}-{chain_j}']].item())
+            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_lig_iptm'].append(batch_rmsds[loss_input["best_lig_iptm_idx"][f'{chain_i}-{chain_j}']].item())
+
+        return interface_pocket_ligand_rmsd
+
     
 # class ConfidenceLossMetric(Metric):
 #     def __call__(self,network_input,network_output,loss_input):

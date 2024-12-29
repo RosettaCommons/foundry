@@ -8,7 +8,7 @@ from rf2aa.model.layers.af3_auxiliary_heads import find_rep_atoms
 from rf2aa.util import rigid_from_3_points, is_atom, get_frames
 import torch.utils.checkpoint as checkpoint
 
-from scipy.stats import spearmanr, pearsonr
+from scipy.stats import spearmanr
 
 
 class AF3_with_rollout(nn.Module):
@@ -105,13 +105,11 @@ class AF3_with_rollout(nn.Module):
                     use_reentrant=False
                     )
 
-                confidence_stack[i] = confidence
                 for k, v in confidence.items():
                     if confidence_stack[k] is not None:
                         confidence_stack[k] = torch.cat((confidence_stack[k], v), dim=0)
                     else:
                         confidence_stack[k] = v
-
 
         return dict(
             # X_gt_L=X_gt_L.detach(),
@@ -236,6 +234,12 @@ class ConfidenceLoss(nn.Module):
         print('spearman_plddt_corr:', plddt_rank_corr)
         print('spearman_pae_corr:', pae_rank_corr)
         print('spearman_pde_corr:', pde_rank_corr)
+        print('plddt_spread:', plddt_batchmean.max() - plddt_batchmean.min())
+        print('pae_spread:', pae_batchmean.max() - pae_batchmean.min())
+        print('pde_spread:', pde_batchmean.max() - pde_batchmean.min())
+        print('true plddt spread:', true_lddt_batchmean.max() - true_lddt_batchmean.min())
+        print('true pae spread:', true_pae_batchmean.max() - true_pae_batchmean.min())
+        print('true pde spread:', true_pde_batchmean.max() - true_pde_batchmean.min())
 
         return self.weight * (self.plddt.weight * plddt_loss + self.pae.weight * pae_loss + self.pde.weight * pde_loss + self.exp_resolved.weight * exp_resolved_loss), loss_dict
 

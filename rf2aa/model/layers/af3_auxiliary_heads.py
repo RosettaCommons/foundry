@@ -20,12 +20,21 @@ class ConfidenceHead(nn.Module):
                 n_bins_pde,
                 n_bins_plddt,
                 n_bins_exp_resolved,
-                use_Cb_distances=False
-                 ):
+                use_Cb_distances=False,
+                af3_style=False
+                ):
         super(ConfidenceHead, self).__init__()
         self.process_s_inputs_right = linearNoBias(449, c_z)
         self.process_s_inputs_left = linearNoBias(449, c_z)
-        self.process_pred_distances = linearNoBias(11, c_z)
+        self.af3_style = af3_style
+        if self.af3_style:
+            self.layernorm_pde = nn.LayerNorm(c_z)
+            self.layernorm_pae = nn.LayerNorm(c_z)
+            self.layernorm_plddt = nn.LayerNorm(c_s)
+            self.layernorm_exp_resolved = nn.LayerNorm(c_s)
+            self.process_pred_distances = linearNoBias(40, c_z)
+        else:
+            self.process_pred_distances = linearNoBias(11, c_z)
 
         self.pairformer = nn.ModuleList([PairformerBlock(c_s=c_s, c_z=c_z,**pairformer) for _ in range(n_pairformer_layers)])
 
@@ -35,7 +44,7 @@ class ConfidenceHead(nn.Module):
         self.predict_exp_resolved = linearNoBias(c_s, ChemData().NHEAVY * n_bins_exp_resolved)
         self.use_Cb_distances = use_Cb_distances
         if self.use_Cb_distances:
-            self.process_Cb_distances = linearNoBias(11, c_z)
+            self.process_Cb_distances = linearNoBias(25, c_z)
 
     def reset_parameters(self):
         for m in self.modules():
@@ -88,16 +97,26 @@ class ConfidenceHead(nn.Module):
             X_pred_rep_I = X_pred_L.index_select(1, rep_atoms)
 
             dist = torch.cdist(X_pred_rep_I, X_pred_rep_I)
-            # TODO: need to use this function correctly (check what the bins are)
-            # bins are 3.375 to 20.375 in 1.75 increments
-            dist_one_hot = F.one_hot(discretize_distance_matrix(dist, min_distance=3.375, max_distance=20.875, num_bins=10), num_classes=11)
+
+            if not self.af3_style:
+                # bins are 3.375 to 20.375 in 1.75 increments according to pseudocode
+                dist_one_hot = F.one_hot(discretize_distance_matrix(dist, min_distance=3.375, max_distance=20.875, num_bins=10), num_classes=11)
+            else:
+                # published code is 3.25 to 50.75, with 39 bins
+                dist_one_hot = F.one_hot(discretize_distance_matrix(dist, min_distance=3.25, max_distance=50.75, num_bins=39), num_classes=40)
+
             Z_trunk_II = Z_trunk_II + self.process_pred_distances(dist_one_hot.float())
 
             if self.use_Cb_distances:
                 # embed difference between observed cb and ideal cb positions
                 Cb_distances = calc_Cb_distances(X_pred_L, seq, rep_atoms, frame_atom_idxs)
-                Cb_distances_one_hot = F.one_hot(discretize_distance_matrix(Cb_distances, min_distance=0.0001, max_distance=0.25, num_bins=10), num_classes=11)
-                Z_trunk_II = Z_trunk_II + self.process_Cb_distances(Cb_distances_one_hot.float())
+                Cb_distances_one_hot = F.one_hot(discretize_distance_matrix(Cb_distances, min_distance=0.0001, max_distance=0.25, num_bins=24), num_classes=25)
+                Cb_logits = self.process_Cb_distances(Cb_distances_one_hot.float())
+                #symmetrize the logits
+                Cb_logits = Cb_logits[:,None,:,:] + Cb_logits[:,:,None,:]
+
+                # Z_trunk_II = Z_trunk_II + self.process_Cb_distances(Cb_distances_one_hot.float())
+                Z_trunk_II = Z_trunk_II + Cb_logits
 
             # process with pairformer stack
             S_trunk_residual_I = S_trunk_I.clone()
@@ -105,17 +124,31 @@ class ConfidenceHead(nn.Module):
             for n in range(len(self.pairformer)):
                 S_trunk_I, Z_trunk_II = checkpoint.checkpoint(self.pairformer[n], S_trunk_I, Z_trunk_II, use_reentrant=False)
                 # S_trunk_I, Z_trunk_II = self.pairformer[n](S_trunk_I, Z_trunk_II)
-            S_trunk_I = S_trunk_residual_I + S_trunk_I
-            Z_trunk_II = Z_trunk_residual_II + Z_trunk_II 
 
-            # linearly project for each prediction task
-            pde_logits = self.predict_pde(Z_trunk_II + Z_trunk_II.transpose(-2,-3)) #BUG: needs to be symmetrized correctly
+            #despite doing so in their pseudocode, af3's published code does not add the residual back
+            if not self.af3_style:
+                S_trunk_I = S_trunk_residual_I + S_trunk_I
+                Z_trunk_II = Z_trunk_residual_II + Z_trunk_II
 
-            pae_logits = self.predict_pae(Z_trunk_II)
+                # linearly project for each prediction task
+                pde_logits = self.predict_pde(Z_trunk_II + Z_trunk_II.transpose(-2,-3)) #BUG: needs to be symmetrized correctly
 
-            plddt_logits = self.predict_plddt(S_trunk_I)
-            exp_resolved_logits = self.predict_exp_resolved(S_trunk_I)
-            #assert pde_logits.is_leaf and pae_logits.is_leaf and plddt_logits.is_leaf and exp_resolved_logits.is_leaf
+                pae_logits = self.predict_pae(Z_trunk_II)
+
+                plddt_logits = self.predict_plddt(S_trunk_I)
+                exp_resolved_logits = self.predict_exp_resolved(S_trunk_I)
+
+            #af3's published code does not add the residual back and has some additional layernorms before the linear projections
+            #they also do the pde slightly differently, adding the transpose after the linear projection
+            else:
+                left_distance_logits = self.predict_pde(self.layernorm_pde(Z_trunk_II))
+                right_distance_logits = left_distance_logits.transpose(-2,-3)
+                pde_logits = left_distance_logits + right_distance_logits
+
+                pae_logits = self.predict_pae(self.layernorm_pae(Z_trunk_II))
+                plddt_logits = self.predict_plddt(self.layernorm_plddt(S_trunk_I))
+                exp_resolved_logits = self.predict_exp_resolved(self.layernorm_exp_resolved(S_trunk_I))
+
 
             return dict(
                 pde_logits= pde_logits,
@@ -176,11 +209,6 @@ def calc_Cb_distances(X_pred_L, seq, rep_atoms, frame_atom_idxs):
     ideal_Cb = -0.58273431*a + 0.56802827*b - 0.54067466*c + Ca
     
     Cb_distances = torch.norm(Cb - ideal_Cb, dim=-1)
-    print('cb', Cb)
-    print('ideal_Cb', ideal_Cb)
     Cb_distances[:,~is_valid_Cb] = 0.0
-    print('cb distances', Cb_distances)
-    print('number of valid cb atoms', is_valid_Cb.sum())
-    print('Cb_distances', Cb_distances.shape, Cb_distances[:,is_valid_Cb].mean(), Cb_distances[:,is_valid_Cb].std(), Cb_distances[:,is_valid_Cb].min(), Cb_distances[:,is_valid_Cb].max())
 
     return Cb_distances
