@@ -141,6 +141,7 @@ loss_param:
 
 log_params:
   log_every_n_examples: 1
+  checkpoint_every_n_epochs: 12
   use_wandb: False
   wandb_project: 'rf2aa'
 

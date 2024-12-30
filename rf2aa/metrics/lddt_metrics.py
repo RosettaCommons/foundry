@@ -24,42 +24,37 @@ def calc_lddt(X_L, X_gt_L, crd_mask_L, tok_idx, pairs_to_score=None, distance_cu
 
     first_index,second_index = torch.nonzero(pairs_to_score,as_tuple=True)
 
-    if use_amp:
-        X_L = X_L.to(torch.bfloat16)
-        X_gt_L = X_gt_L.to(torch.bfloat16)
-
     lddt = []
     for d in range(D):
         ground_truth_distances = torch.linalg.norm(X_gt_L[d,first_index]-X_gt_L[d,second_index], dim=-1)
   
-        with torch.amp.autocast('cuda',enabled=use_amp, dtype=torch.bfloat16):
-            pair_mask = torch.logical_and(
-                ground_truth_distances>0,
-                ground_truth_distances<distance_cutoff
-            )
+        pair_mask = torch.logical_and(
+            ground_truth_distances>0,
+            ground_truth_distances<distance_cutoff
+        )
+
+        # only score pairs that are resolved in the ground truth
+        pair_mask *= (crd_mask_L[d,first_index] * crd_mask_L[d,second_index])
+        # don't score pairs that are in the same token
+        pair_mask *= (tok_idx[first_index] != tok_idx[second_index])
+
+        valid_pairs = pair_mask.nonzero(as_tuple=True)
+        pair_mask = pair_mask[valid_pairs].to(X_L.dtype)
+        ground_truth_distances = ground_truth_distances[valid_pairs]    
+        first_index,second_index = first_index[valid_pairs],second_index[valid_pairs]
+
+        predicted_distances = torch.linalg.norm(X_L[d,first_index]-X_L[d,second_index], dim=-1)
     
-            # only score pairs that are resolved in the ground truth
-            pair_mask *= (crd_mask_L[d,first_index] * crd_mask_L[d,second_index])
-            # don't score pairs that are in the same token
-            pair_mask *= (tok_idx[first_index] != tok_idx[second_index])
-    
-            valid_pairs = pair_mask.nonzero(as_tuple=True)
-            pair_mask = pair_mask[valid_pairs].to(X_L.dtype)
-            ground_truth_distances = ground_truth_distances[valid_pairs]    
-            first_index,second_index = first_index[valid_pairs],second_index[valid_pairs]
-    
-            predicted_distances = torch.linalg.norm(X_L[d,first_index]-X_L[d,second_index], dim=-1)
-        
-            delta_distances = torch.abs(predicted_distances-ground_truth_distances+eps)
-            del predicted_distances, ground_truth_distances
-    
-            lddt.append( 0.25*(
-                    torch.sum( (delta_distances < 4.0)*pair_mask )
-                    +torch.sum( (delta_distances < 2.0)*pair_mask )
-                    +torch.sum( (delta_distances < 1.0)*pair_mask )
-                    +torch.sum( (delta_distances < 0.5)*pair_mask )
-                ) / (torch.sum( pair_mask ) + eps)
-            )
+        delta_distances = torch.abs(predicted_distances-ground_truth_distances+eps)
+        del predicted_distances, ground_truth_distances
+
+        lddt.append( 0.25*(
+                torch.sum( (delta_distances < 4.0)*pair_mask )
+                +torch.sum( (delta_distances < 2.0)*pair_mask )
+                +torch.sum( (delta_distances < 1.0)*pair_mask )
+                +torch.sum( (delta_distances < 0.5)*pair_mask )
+            ) / (torch.sum( pair_mask ) + eps)
+        )
 
     return torch.tensor(lddt)
 
@@ -94,6 +89,9 @@ class InterfaceLDDT(Metric):
                                 torch.tensor(chain_j_atoms)
                                 ).to(network_output["X_L"].device)
 
+            # symmetrize
+            chain_ij_atoms = chain_ij_atoms | chain_ij_atoms.T
+
             #compute lddt using the pairs_to_score from the intersection
             lddt = calc_lddt(
                 network_output["X_L"],
@@ -103,6 +101,7 @@ class InterfaceLDDT(Metric):
                 pairs_to_score=chain_ij_atoms,
                 distance_cutoff=30.0
             )
+
             interface_lddt["interface_lddt_first"].append(lddt[0].item())
             interface_lddt["interface_lddt_best"].append(lddt.max().item())
         return interface_lddt

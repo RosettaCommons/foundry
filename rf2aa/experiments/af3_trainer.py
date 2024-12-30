@@ -35,7 +35,6 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 class AF3Trainer(FlowMatchingTrainer):
-
     def construct_model(self, device="cpu"):
         self.model = AF3_structure.Model(**self.config.model).to(device)
 
