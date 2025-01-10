@@ -213,7 +213,7 @@ class AF3Sampler:
         self.device = next(model.parameters()).device
 
 
-    def sample(self, inputs: Tuple[str, Any], n_cycle=1, use_amp=False) -> Dict[str, Any]:
+    def sample(self, inputs: Tuple[str, Any], n_cycle=1, n_diff_steps=200, use_amp=False) -> Dict[str, Any]:
         # first receive inputs from dataloader
         # convert them into features
         network_input = self._get_network_input(inputs)
@@ -236,7 +236,7 @@ class AF3Sampler:
             recycle_inputs["f"]["msa"] = network_input["f"]["msa_stack"][i].to(self.device)
             recycle_inputs = self.model.recycle(**recycle_inputs)
 
-        noise_schedule = self.construct_noise_schedule(200, 0, 1)
+        noise_schedule = self.construct_noise_schedule(n_diff_steps, 0, 1)
         noise_schedule = noise_schedule.to(self.device)
         post_recycle_outputs = recycle_inputs
         X_L = self.sample_diffusion(network_input["f"], post_recycle_outputs["S_inputs_I"], \

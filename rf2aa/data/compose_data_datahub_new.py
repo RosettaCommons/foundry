@@ -10,7 +10,6 @@ from datahub.datasets.datasets import ConcatDatasetWithID
 
 import certifi
 import hydra
-from cifutils import CIFParser
 from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler
 
 from datahub.datasets.datasets import (
@@ -20,9 +19,7 @@ from datahub.samplers import (
     DistributedMixedSampler,
     FallbackSamplerWrapper,
     LazyWeightedRandomSampler, 
-    MixedSampler
 )
-from datahub.common import default
 from rf2aa.trainer_new import FlowMatchingTrainer, seed_all
 from resolvers import resolve_import
 from omegaconf import OmegaConf
@@ -43,7 +40,7 @@ torch.set_num_threads(4)
 # ...register custom resolvers
 OmegaConf.register_new_resolver("resolve_import", resolve_import)
 
-def load_structural_datasets(cfg, name: str = "unknown", cif_parser: CIFParser | None= None):
+def load_structural_datasets(cfg, name: str = "unknown"):
     """ 
     Instantiate structural datasets for training or validation.
 
@@ -54,8 +51,6 @@ def load_structural_datasets(cfg, name: str = "unknown", cif_parser: CIFParser |
     Args:
         cfg (dict): Configuration dictionary from Hydra defining datasets and their parameters. Datasets MAY NOT be nested for this function.
         name (str, optional): Name of the dataset. Defaults to "unknown".
-        cif_parser (CIFParser, optional): An instance of CIFParser for parsing CIF files. If None, a new CIFParser
-            instance will be created. Defaults to None.
 
     Returns:
         tuple: A tuple containing the composed dataset and the corresponding sampler.
@@ -71,8 +66,6 @@ def load_structural_datasets(cfg, name: str = "unknown", cif_parser: CIFParser |
 
         # ...instantiate the dataset with the provided configuration
         kwargs = {}
-        if "cif_parser" in dataset_cfg.dataset:
-            kwargs["cif_parser"] = default(cif_parser, CIFParser())
         dataset = hydra.utils.instantiate(dataset_cfg.dataset, **kwargs)
 
         # ...get the sampler for the dataset
@@ -127,9 +120,6 @@ class NewDatapipeTrainer:
         # ...extract relevant parameters
         loader_cfg = loader_params.dataloader_kwargs # (DataLoader configuration)
 
-        # (Shared parser instance, used for all datasets)
-        cif_parser = CIFParser()
-
         # +-------------------------------------------------------------+
         # +--------------------- TRAINING DATASETS ---------------------+
         # +-------------------------------------------------------------+
@@ -143,7 +133,7 @@ class NewDatapipeTrainer:
             # ...load the dataset and sampler
             # (If the dataset contains multiple sub-datasets, they will be concatenated into a single dataset)
             # (This setup only supports a two-level hierarchy: top-level datasets and sub-datasets)
-            dataset, sampler = load_structural_datasets(train_cfg.sub_datasets, train_name, cif_parser)
+            dataset, sampler = load_structural_datasets(train_cfg.sub_datasets, train_name)
             datasets_info.append(
                 dict(name=train_name, dataset=dataset, sampler=sampler, probability=train_cfg.probability)
             )
