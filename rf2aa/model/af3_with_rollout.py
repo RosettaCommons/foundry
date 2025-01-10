@@ -9,6 +9,7 @@ from rf2aa.util import rigid_from_3_points, is_atom, get_frames
 import torch.utils.checkpoint as checkpoint
 
 from scipy.stats import spearmanr
+from rf2aa.training.checkpoint import create_custom_forward
 
 
 class AF3_with_rollout(nn.Module):
@@ -83,27 +84,16 @@ class AF3_with_rollout(nn.Module):
         confidence_stack['exp_resolved_logits'] = None
         with torch.enable_grad():
             for i in range(B):
-                # confidence = self.confidence(
-                #     trunk_output["S_inputs_I"],
-                #     trunk_output["S_I"],
-                #     trunk_output["Z_II"],
-                #     diffusion_output["X_L"][0].unsqueeze(0),
-                #     # input["f"],
-                #     seq,
-                #     rep_atom_idxs
-                # )
 
-                confidence = checkpoint.checkpoint(
-                    self.confidence_wrapper,
+                confidence = checkpoint.checkpoint(create_custom_forward(self.confidence, frame_atom_idxs=frame_atom_idxs),
                     trunk_output["S_inputs_I"],
                     trunk_output["S_I"],
                     trunk_output["Z_II"],
                     diffusion_output["X_L"][i].unsqueeze(0),
                     seq,
                     rep_atom_idxs,
-                    frame_atom_idxs=frame_atom_idxs,
                     use_reentrant=False
-                    )
+                )
 
                 for k, v in confidence.items():
                     if confidence_stack[k] is not None:
@@ -123,8 +113,8 @@ class AF3_with_rollout(nn.Module):
             distogram=None,
         )
     
-    def confidence_wrapper(self, S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, frame_atom_idxs=None, use_amp=True):
-        return self.confidence(S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, frame_atom_idxs=frame_atom_idxs, use_amp=use_amp)
+    # def confidence_wrapper(self, S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, frame_atom_idxs=None, use_amp=True):
+    #     return self.confidence(S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, frame_atom_idxs=frame_atom_idxs, use_amp=use_amp)
 
 class ConfidenceLoss(nn.Module):
 
@@ -240,6 +230,19 @@ class ConfidenceLoss(nn.Module):
         print('true plddt spread:', true_lddt_batchmean.max() - true_lddt_batchmean.min())
         print('true pae spread:', true_pae_batchmean.max() - true_pae_batchmean.min())
         print('true pde spread:', true_pde_batchmean.max() - true_pde_batchmean.min())
+
+        # #an easy way of incentivizing ranking accuracy is the following (Listnet):
+        # rank_plddt_t = torch.nn.Softmax(dim=0)(true_lddt_batchmean)
+        # rank_plddt_p = torch.nn.Softmax(dim=0)(plddt_batchmean)
+        # rank_pae_t = torch.nn.Softmax(dim=0)(true_pae_batchmean)
+        # rank_pae_p = torch.nn.Softmax(dim=0)(pae_batchmean)
+        # rank_pde_t = torch.nn.Softmax(dim=0)(true_pde_batchmean)
+        # rank_pde_p = torch.nn.Softmax(dim=0)(pde_batchmean)
+
+        # plddt_rank_loss = -torch.mean(rank_plddt_t * torch.log(rank_plddt_p))
+        # pae_rank_loss = -torch.mean(rank_pae_t * torch.log(rank_pae_p))
+        # pde_rank_loss = -torch.mean(rank_pde_t * torch.log(rank_pde_p))
+        # print('rank_loss:', plddt_rank_loss, pae_rank_loss, pde_rank_loss)
 
         return self.weight * (self.plddt.weight * plddt_loss + self.pae.weight * pae_loss + self.pde.weight * pde_loss + self.exp_resolved.weight * exp_resolved_loss), loss_dict
 

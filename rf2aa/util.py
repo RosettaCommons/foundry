@@ -1487,7 +1487,9 @@ def unbin_rf3_metrics (plddt_logits, pae_logits, pde_logits, seq, eps = 1e-4, pa
     lddt_bins = torch.linspace(0.02, 1.0, 50, device=plddt_logits.device)
     plddt_unbinned = plddt_logits * is_real_atom[None, None, :, :ChemData().NHEAVY]
     plddt_unbinned = torch.nn.Softmax(dim=1)(plddt_logits)
-    plddt_unbinned = plddt_unbinned * lddt_bins[None, :, None, None]
+
+    plddt_unbinned = (plddt_unbinned * lddt_bins[None, :, None, None]).sum(dim=1)
+
     plddt_unbinned = plddt_unbinned[..., is_real_atom[..., :ChemData().NHEAVY]]
     plddt = plddt_unbinned.sum() / (is_real_atom.sum() + eps)
     

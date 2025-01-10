@@ -21,7 +21,8 @@ class ConfidenceHead(nn.Module):
                 n_bins_plddt,
                 n_bins_exp_resolved,
                 use_Cb_distances=False,
-                af3_style=False
+                af3_style=False,
+                symmetrize_Cb_logits=True
                 ):
         super(ConfidenceHead, self).__init__()
         self.process_s_inputs_right = linearNoBias(449, c_z)
@@ -45,6 +46,7 @@ class ConfidenceHead(nn.Module):
         self.use_Cb_distances = use_Cb_distances
         if self.use_Cb_distances:
             self.process_Cb_distances = linearNoBias(25, c_z)
+        self.symmetrize_Cb_logits = symmetrize_Cb_logits
 
     def reset_parameters(self):
         for m in self.modules():
@@ -113,7 +115,10 @@ class ConfidenceHead(nn.Module):
                 Cb_distances_one_hot = F.one_hot(discretize_distance_matrix(Cb_distances, min_distance=0.0001, max_distance=0.25, num_bins=24), num_classes=25)
                 Cb_logits = self.process_Cb_distances(Cb_distances_one_hot.float())
                 #symmetrize the logits
-                Cb_logits = Cb_logits[:,None,:,:] + Cb_logits[:,:,None,:]
+                if self.symmetrize_Cb_logits:
+                    Cb_logits = Cb_logits[:,None,:,:] + Cb_logits[:,:,None,:]
+                else:
+                    Cb_logits = Cb_logits[:,None,:,:]
 
                 # Z_trunk_II = Z_trunk_II + self.process_Cb_distances(Cb_distances_one_hot.float())
                 Z_trunk_II = Z_trunk_II + Cb_logits

@@ -263,6 +263,9 @@ class AF3TrainerRollout(AF3Trainer):
         self.residue_symm_resolve = ResidueSymmetryResolution()
         self.metrics = MetricManager(**self.config.metrics)
 
+        #for validation, we use the shadow
+        self.confidence = self.model.module.shadow.confidence
+
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
 
@@ -342,64 +345,92 @@ class AF3TrainerRollout(AF3Trainer):
         new_shadow_state = {}
         state_dict = self.model.module.model.state_dict()
 
-        # def merge_torch_weights(first_file_path, second_file_path, output_file_path):
-        #     """
-        #     Merge PyTorch weight files with parameter renaming and filtering.
+        def merge_torch_weights(first_file_path, second_file_path, output_file_path):
+            """
+            Merge PyTorch weight files with parameter renaming and filtering.
             
-        #     Args:
-        #     first_file_path (str): Path to the first .pt weight file
-        #     second_file_path (str): Path to the second .pt weight file
-        #     output_file_path (str): Path to save the merged weight file
-        #     """
-        #     # Load the first checkpoint
-        #     first_checkpoint = torch.load(first_file_path)
+            Args:
+            first_file_path (str): Path to the first .pt weight file
+            second_file_path (str): Path to the second .pt weight file
+            output_file_path (str): Path to save the merged weight file
+            """
+            # Load the first checkpoint
+            first_checkpoint = torch.load(first_file_path)
             
-        #     # Load the second checkpoint
-        #     second_checkpoint = torch.load(second_file_path)
+            # Load the second checkpoint
+            second_checkpoint = torch.load(second_file_path)
             
-        #     # Create a new state dict
-        #     merged_state_dict = {}
-        #     merged_final_state_dict = {}
+            # Create a new state dict
+            merged_state_dict = {}
+            merged_final_state_dict = {}
             
-        #     # Rename parameters from the first checkpoint and add 'model.' prefix
-        #     for key, value in first_checkpoint['model_state_dict'].items():
-        #         print(f'Renaming {key} to model.{key}')
-        #         merged_state_dict[f'model.{key}'] = value
-        #     for key, value in first_checkpoint['final_state_dict'].items():
-        #         print(f'Renaming {key} to model.{key}')
-        #         merged_final_state_dict[f'model.{key}'] = value
+            # Rename parameters from the first checkpoint and add 'model.' prefix
+            for key, value in first_checkpoint['model_state_dict'].items():
+                print(f'Renaming {key} to model.{key}')
+                merged_state_dict[f'model.{key}'] = value
+            for key, value in first_checkpoint['final_state_dict'].items():
+                print(f'Renaming {key} to model.{key}')
+                merged_final_state_dict[f'model.{key}'] = value
             
-        #     # Add parameters from the second checkpoint that contain 'confidence'
-        #     for key, value in second_checkpoint['model_state_dict'].items():
-        #         if 'confidence' in key:
-        #             print(f'Adding {key}')
-        #             merged_state_dict[key] = value
-        #     for key, value in second_checkpoint['final_state_dict'].items():
-        #         if 'confidence' in key:
-        #             print(f'Adding {key}')
-        #             merged_final_state_dict[key] = value
+            # Add parameters from the second checkpoint that contain 'confidence'
+            for key, value in second_checkpoint['model_state_dict'].items():
+                if 'confidence' in key:
+                    print(f'Adding {key}')
+                    merged_state_dict[key] = value
+            for key, value in second_checkpoint['final_state_dict'].items():
+                if 'confidence' in key:
+                    print(f'Adding {key}')
+                    merged_final_state_dict[key] = value
 
             
-        #     # overwrite state dicts with merged ones
-        #     first_checkpoint['model_state_dict'] = merged_state_dict
-        #     first_checkpoint['final_state_dict'] = merged_final_state_dict
+            # overwrite state dicts with merged ones
+            first_checkpoint['model_state_dict'] = merged_state_dict
+            first_checkpoint['final_state_dict'] = merged_final_state_dict
 
-        #     #overwrite the optimizer with the second checkpoint's optimizer
-        #     # first_checkpoint['optimizer_state_dict'] = second_checkpoint['optimizer_state_dict']
-        #     # first_checkpoint['scheduler_state_dict'] = second_checkpoint['scheduler_state_dict']
-        #     # first_checkpoint['scaler_state_dict'] = second_checkpoint['scaler_state_dict']
+            #overwrite the optimizer with the second checkpoint's optimizer
+            first_checkpoint['optimizer_state_dict'] = second_checkpoint['optimizer_state_dict']
+            # first_checkpoint['scheduler_state_dict'] = second_checkpoint['scheduler_state_dict']
+            # first_checkpoint['scaler_state_dict'] = second_checkpoint['scaler_state_dict']
             
-        #     # Save the merged checkpoint
-        #     torch.save(first_checkpoint, output_file_path)
+            # Save the merged checkpoint
+            torch.save(first_checkpoint, output_file_path)
             
-        #     print(f"Merged weights saved to {output_file_path}")
+            print(f"Merged weights saved to {output_file_path}")
 
         # first = '/net/software/lab/RF2-allatom/rf2aa/checkpoints/rf2aa-af3-repro2_270.pt'
         # second = '/home/tuscant/code/af3_pae/RF2-allatom/rf2aa/output/cb/rf2aa-af3-repro-rollout_240_cont_af3_style_with_cb_last.pt'
-        # product = '/home/tuscant/weights/270_merged_confidence_9.pt'
+        # product = '/home/tuscant/weights/270_merged_confidence_9b.pt'
         # merge_torch_weights(first, second, product)
         # print('merged weights')
         # print(donemerging)
+
+        def add_train_confidence_head_to_config(checkpoint_file_path, output_file_path):
+            from omegaconf import OmegaConf
+            """
+            Takes a checkpoint file and adds the train_confidence_head=True to 
+            config.dataset_params.val.interface.transform of the first file.
+            """
+
+            # Load the first checkpoint
+            first_checkpoint = torch.load(checkpoint_file_path)
+
+            # Convert to mutable dictionary (if transform is an OmegaConf struct)
+            transform_config = OmegaConf.to_container(first_checkpoint['training_config']['dataset_params']['val']['interface']['transform'], resolve=True)
+            
+            # Add the new key to the mutable dictionary
+            transform_config['train_confidence_head'] = True
+
+            # Convert it back to an OmegaConf object if needed
+            first_checkpoint['training_config']['dataset_params']['val']['interface']['transform'] = OmegaConf.create(transform_config)
+
+            # Save the updated checkpoint
+            torch.save(first_checkpoint, output_file_path)
+            print(f"Config saved to {output_file_path}")
+
+        # first = '/home/tuscant/code/af3_pae/RF2-allatom/rf2aa/output/cb/rf2aa-af3-repro-rollout_270_cont_9_af3_style_with_cb_last.pt'
+        # product = '/home/tuscant/weights/270_confidence_inference.pt'
+        # add_train_confidence_head_to_config(first, product)
+        # print(doneaddingtoconfig)
 
         # if self.config.training_params.reset_optimizer_params:
         #     #get around a loading issue - I'll only need to do this when loading from a weight set trained on something other than the rollout
@@ -680,8 +711,7 @@ class AF3TrainerRollout(AF3Trainer):
             
             for i in range(confidence['plddt_logits'].shape[0]):
                 plddt_logits = confidence['plddt_logits'][i].unsqueeze(0)
-                plddt_logits = plddt_logits.reshape(plddt_logits.shape[0], plddt_logits.shape[1], -1, ChemData().NHEAVY)
-                plddt_logits = plddt_logits.permute(0,2,1,3)
+                plddt_logits = plddt_logits.reshape(plddt_logits.shape[0], -1, plddt_logits.shape[1], ChemData().NHEAVY)
 
                 plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), is_real_atom=loss_input['is_real_atom'].to(gpu))
 
@@ -840,6 +870,7 @@ class AF3TrainerRollout(AF3Trainer):
         loss_input['best_iptm_idx'] = best_iptm_idx
         loss_input['best_lig_ipae_idx'] = best_lig_ipae_idx
         loss_input['best_lig_iptm_idx'] = best_lig_iptm_idx
+
         best_chain_idx = {}
         best_single_chain_idx = {}
         for chain in scored_chains:
@@ -874,11 +905,11 @@ class AF3TrainerRollout(AF3Trainer):
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
         print(metrics_dict)
-        # loss, loss_dict_batched = self.loss(
-        #     network_input,
-        #     outputs,
-        #     loss_input
-        # )
-        # print('confidence losses', loss_dict_batched)
+        loss, loss_dict_batched = self.loss(
+            network_input,
+            outputs,
+            loss_input
+        )
+        print('confidence losses', loss_dict_batched)
 
         return torch.tensor(0), metrics_dict
