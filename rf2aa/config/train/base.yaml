@@ -147,6 +147,8 @@ log_params:
 
 eval_params: 
   checkpoint_path: null
+  dump_cif_files: False
+  dump_cif_trajectories: False
 
 chem_params:
   use_phospate_frames_for_NA: True
