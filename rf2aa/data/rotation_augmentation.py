@@ -1,7 +1,7 @@
 import math
 import torch
 
-from flow_matching.rigid_utils import rot_vec_mul
+from rf2aa.flow_matching.rigid_utils import rot_vec_mul
 
 def centre(X_L, X_exists_L):
     X_L = X_L.clone()
