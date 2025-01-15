@@ -132,7 +132,7 @@ dataset_params:
   diffusion_batch_size: 32
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
-  default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
+  default_transform: rf2aa.data.pipelines.build_af3_transform_pipeline
   train:
     # ... train datasets
     pdb:
