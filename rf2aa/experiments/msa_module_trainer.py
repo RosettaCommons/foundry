@@ -6,7 +6,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 from rf2aa.trainer_new import ComposedTrainer
 
-from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3
 from rf2aa.model.AF3_structure import MSAModule, FeatureInitializer, DistogramHead, PairformerBlock
 from rf2aa.model.layers.Embeddings import MSA_emb
 from rf2aa.loss.af3_losses import DistogramLoss

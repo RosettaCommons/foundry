@@ -3,19 +3,19 @@ import tree
 import torch.nn.functional as F
 from typing import Any, Dict, Tuple
 import warnings
+from rf2aa.data.rotation_augmentation import centre_random_augmentation
 from rf2aa.flow_matching.interpolant import _centered_gaussian, _uniform_so3
 import rf2aa.flow_matching.data_utils as du
 from rf2aa.flow_matching import data_transforms
 from rf2aa.training.recycling import recycle_step_packed, recycle_step_gen
 from rf2aa.chemical import ChemicalData as ChemData
-from rf2aa.data.dataloader_adaptor import prepare_input_fm, construct_template_feats, prepare_input_fm_allatom
-from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3, centre_random_augmentation
 from rf2aa.training.recycling import unpack_outputs
 from rf2aa.util import rigid_from_3_points, writepdb_file
 
 
 class Sampler:
     def __init__(self, model, num_timesteps, min_t, interpolant, xyz_converter, is_training) -> None:
+        raise NotImplementedError("Sampler has been retired")
         self.model = model
         self.num_timesteps = num_timesteps
         self.min_t = min_t
@@ -123,6 +123,7 @@ class AllAtomSampler(Sampler):
     """ sampler for model which predicts all atom positions, not frames/torsions """
     def __init__(self, model, num_timesteps, min_t, interpolant, xyz_converter, is_training) -> None:
         super().__init__(model, num_timesteps, min_t, interpolant, xyz_converter, is_training)
+        raise NotImplementedError("AllAtomSampler has been retired")
         self.allatom_mask = ChemData().allatom_mask.to(self.device)
 
     def sample(self, inputs: Tuple[str, Any], n_cycle=1, use_amp=False) -> Dict[str, Any]:
@@ -319,8 +320,6 @@ class AF3PartialSampler(AF3Sampler):
         self.partial_t = config.af3_data_prep["partial_t"]
 
     def _get_initial_structure(self, f, noise_schedule, D, L, device):
-        from icecream import ic
-        ic(f"initial noise level: {noise_schedule[0]}")
         noise = torch.normal(mean=0.0, std=noise_schedule[0], size=(D, L, 3), device=device)
         X_L = f["xyz_guess"] + noise 
         #+ noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=device)
