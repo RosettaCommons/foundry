@@ -3,9 +3,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 import rf2aa
 from rf2aa.chemical import ChemicalData as ChemData
-from rf2aa.data.dataloader_adaptor_af3 import discretize_distance_matrix
 from rf2aa.model.AF3_structure import linearNoBias, PairformerBlock
-#from rf2aa.util import calc_rmsd
+
+def discretize_distance_matrix(distance_matrix, num_bins=38, min_distance=3.25, max_distance=50.75):
+    # Calculate the bin width
+    bin_width = (max_distance - min_distance) / num_bins
+    bins = torch.arange(num_bins, device=distance_matrix.device) * bin_width + min_distance
+
+    # Discretize distances into bins (bucketize automatically places out-of-range values in the last bin)
+    binned_distances = torch.bucketize(distance_matrix, bins)
+    
+    return binned_distances
 
 
 class ConfidenceHead(nn.Module):
