@@ -113,11 +113,11 @@ class AF3Trainer(FlowMatchingTrainer):
         loss_dict = self.unbatch_losses(loss_dict_batched)
 
         return loss, loss_dict
-        
+
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
         gpu = self.model.device
-
-        outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
+        with torch.no_grad():
+            outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
         example = inputs[0]
         network_input = {
             #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
@@ -151,6 +151,15 @@ class AF3Trainer(FlowMatchingTrainer):
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
 
+        if self.config.eval_params.dump_cif_files or self.config.eval_params.dump_cif_trajectories:
+            print (example["example_id"], metrics_dict)
+
+        if self.config.eval_params.dump_cif_files:
+            self.write_pdb(example,outputs)
+
+        if self.config.eval_params.dump_cif_trajectories:
+            self.write_pdb(example,outputs, dump_traj=True)
+
         return torch.tensor(0), metrics_dict
 
     def valid_epoch(self, epoch, rank, world_size):
@@ -179,14 +188,59 @@ class AF3Trainer(FlowMatchingTrainer):
                 f.write(str(line)+'\n')
 
     
-    def write_pdb(self, X_gt_L, crd_mask_I, seq, name="valid.pdb"):
-        I = seq.shape[0]
+    def write_pdb(self, example, outputs, dump_traj=False):
+        from datahub.utils.io import convert_af3_model_output_to_atom_array_stack
+        from datahub.encoding_definitions import AF3SequenceEncoding
+        from cifutils.utils.io_utils import to_cif_file
+        
+        encoding = AF3SequenceEncoding()
+        # Collect information needed to write out the CIF file
+        atom_to_token_map = example["feats"]["atom_to_token_map"].cpu().numpy()
+        decoded_restypes = encoding.decode(torch.argmax(example["feats"]["restype"], dim=-1).cpu())
+        pn_unit_iids = example["ground_truth"]["chain_iid_token_lvl"]
 
-        is_real_atom = ChemData().heavyatom_mask.to(self.model.device)[seq]
-        X_gt_I = torch.zeros(I, ChemData().NTOTAL, 3, device=self.model.device)
-        X_gt_I[is_real_atom] = X_gt_L
-        import rf2aa
-        rf2aa.util.writepdb(filename=name, atoms=X_gt_I, atom_mask=crd_mask_I, seq=seq)
+        elements = torch.argmax(example["feats"]["ref_element"], -1).cpu().numpy()
+        example_id = example["example_id"]
+
+        if dump_traj:
+            for i,modelxyz in enumerate(outputs['X_noisy_L_traj']):
+                if (i%10) != 0:
+                    continue
+
+                xyz = modelxyz.cpu().numpy()
+
+                # Convert the model output to an atom array
+                atom_array_stack = convert_af3_model_output_to_atom_array_stack(
+                    atom_to_token_map=atom_to_token_map,
+                    pn_unit_iids=pn_unit_iids,
+                    decoded_restypes=decoded_restypes,
+                    xyz=xyz,
+                    elements=elements,
+                )
+
+                outfile = self.output_dir + f"/{example_id}_traj_{i}.cif"
+                logger.info(f"Writing {outfile}")
+                to_cif_file(atom_array_stack, outfile)
+
+        else:
+            xyz = outputs["X_L"].cpu().numpy()
+
+            # Convert the model output to an atom array
+            atom_array_stack = convert_af3_model_output_to_atom_array_stack(
+                atom_to_token_map=atom_to_token_map,
+                pn_unit_iids=pn_unit_iids,
+                decoded_restypes=decoded_restypes,
+                xyz=xyz,
+                elements=elements,
+            )
+
+            # Write the atom array to a CIF file
+            # NOTE: If the secondary structure does not appear, run `dss` in PyMol 
+            # (see: https://biology.stackexchange.com/questions/70143/can-pymol-show-cartoon-secondary-structure-for-a-pdb-of-multiple-frames)
+            outfile = self.output_dir + f"/{example_id}.cif"
+            logger.info(f"Writing {outfile}")
+            to_cif_file(atom_array_stack, outfile)
+
 
     def unbatch_losses(self, loss_dict_batched):
         loss_dict = {}
