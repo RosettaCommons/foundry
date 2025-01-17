@@ -117,19 +117,12 @@ class ConfidenceLoss(nn.Module):
         X_exists_L = loss_input["crd_mask_L"]
         X_pred_L = network_output["X_pred_rollout_L"]
         B = X_pred_L.shape[0]
-        print('B:', B)
 
-        true_lddt_binned, is_resolved_I = self.calc_lddt(X_pred_L, X_gt_L, X_exists_L, loss_input["seq"], loss_input["is_real_atom"])
+        true_lddt_binned, is_resolved_I = self.calc_lddt(X_pred_L, X_gt_L, X_exists_L, loss_input["seq"], loss_input["is_real_atom"], loss_input['terminal_oxygen_idxs'])
         plddt_loss = self.cce(
             network_output["plddt"].reshape(-1, self.plddt.n_bins, I, ChemData().NHEAVY), 
             true_lddt_binned[..., :ChemData().NHEAVY].long()
             ) * is_resolved_I[..., :ChemData().NHEAVY] 
-        # print('plddt_loss for residue 276', plddt_loss[0, 276].sum(), plddt_loss[0, 276])
-        # print('plddt_loss for residue 277', plddt_loss[0, 277].sum(), plddt_loss[0, 277])
-        # print('plddt_loss for residue 275', plddt_loss[0, 278].sum(), plddt_loss[0, 278])
-        # print('is_real_atom for residue 276', loss_input["is_real_atom"][276].sum())
-        # print('is_real_atom for residue 277', loss_input["is_real_atom"][277].sum())
-        # print('is_real_atom for residue 275', loss_input["is_real_atom"][278].sum())
         plddt_loss = plddt_loss.sum() / (is_resolved_I.sum() + self.eps)
 
         pae_logits = network_output["pae"]
@@ -208,7 +201,6 @@ class ConfidenceLoss(nn.Module):
                 plddt_rank_loss = -torch.mean(rank_plddt_t * torch.log(rank_plddt_p))
                 pae_rank_loss = -torch.mean(rank_pae_t * torch.log(rank_pae_p))
                 pde_rank_loss = -torch.mean(rank_pde_t * torch.log(rank_pde_p))
-                print('rank_loss:', plddt_rank_loss, pae_rank_loss, pde_rank_loss)
 
                 rank_loss_dict = dict(
                     plddt_rank_loss=plddt_rank_loss,
@@ -220,7 +212,26 @@ class ConfidenceLoss(nn.Module):
 
         return self.weight * confidence_loss, loss_dict
 
-    def calc_lddt(self, X_pred_L, X_gt_L, X_exists_L, seq, is_real_atom):
+    def calc_lddt(self, X_pred_L, X_gt_L, X_exists_L, seq, is_real_atom, terminal_oxygen_idxs):
+        tok_idx = is_real_atom.nonzero()[:, 0]
+
+        #Don't calculate plddt for terminal oxygens, so in those cases we excise those idxs from the L representation and update is_real_atom
+        if terminal_oxygen_idxs is not None:
+            #NOTE: We don't clone is_real_atom, as modifying the parent dictionary has the added benefit of fixing the terimanl oxygens for the exp_resolved calculation as well.
+            #NOTE: tradeoff here between doing this as a loop or a mask. There's usually no terminal oxygens, and when they do exist only normally
+            #one or two, so feel that it's better to do the loop that take up the memory required for a mask?
+            for idx in terminal_oxygen_idxs:
+                X_pred_L = torch.cat((X_pred_L[:, :idx], X_pred_L[:, idx+1:]), dim=1)
+                X_gt_L = torch.cat((X_gt_L[:, :idx], X_gt_L[:, idx+1:]), dim=1)
+                X_exists_L = torch.cat((X_exists_L[:, :idx], X_exists_L[:, idx+1:]), dim=1)
+                affected_tok_idx_I = tok_idx[idx]
+                
+                #We need to update the is_real_atom to have one less real atom for the affected residue, so we set the last True value to false
+                is_real_atom[affected_tok_idx_I][is_real_atom[affected_tok_idx_I].nonzero()[-1]] = False
+
+                #Update the tok_idx to reflect the new indices
+                tok_idx = is_real_atom.nonzero()[:, 0]
+
         I = seq.shape[-1]
         B = X_pred_L.shape[0]
         L = X_pred_L.shape[1]
@@ -241,13 +252,6 @@ class ConfidenceLoss(nn.Module):
 
 
         X_exists_LL = X_exists_L.unsqueeze(-1) * X_exists_L.unsqueeze(-2)
-        tok_idx = is_real_atom.nonzero()[:, 0]
-
-        # #get the chemdata version of isrealatom
-        # is_real_atom_b = ChemData().heavyatom_mask.to(seq.device)[seq]
-        # if is_real_atom_b.sum() != is_real_atom.sum():
-        #     print('the mismatch is at residue:', (is_real_atom_b != is_real_atom).nonzero())
-        #     print('*'*200)
 
         difference_distances = torch.abs(ground_truth_distances - predicted_distances)
         lddt_matrix = torch.zeros_like(difference_distances)
@@ -261,8 +265,7 @@ class ConfidenceLoss(nn.Module):
         # include distances where both atoms are resolved and not in the same residue, and are within an inclusion radius (15A)
         mask_LL = X_exists_LL * ~in_same_residue_LL * close_distances_LL
         lddt_per_atom_L = (lddt_matrix * mask_LL).sum(-1) / (mask_LL.sum(-1)+self.eps)
-        # remove unresolved residues
-        #lddt_per_atom_L = lddt_per_atom_L * X_exists_L
+
         # only aggregate over the resolved atoms in each residue
         lddt_per_atom_I = torch.zeros_like(is_real_atom, dtype=torch.float32)
         lddt_per_atom_I = lddt_per_atom_I.unsqueeze(0).repeat(B, 1, 1)
@@ -366,22 +369,11 @@ class ConfidenceLoss(nn.Module):
         return torch.bucketize(values, bins, right=True)
     
     def log_correlation_statistics(self, plddt, pae, pde, true_lddt, true_pae, true_pde, true_lddt_batchmean, true_pae_batchmean, true_pde_batchmean, plddt_batchmean, pae_batchmean, pde_batchmean, loss_dict):
-        # print('in train loss calc, predicted error is :', plddt, pae, pde)
-        # print('in train loss calc, true error is:', true_lddt, true_pae, true_pde)
 
         # Calculate Spearman rank correlation
         plddt_rank_corr, lddt_spearman_p = spearmanr(true_lddt_batchmean.cpu().numpy(), plddt_batchmean.cpu().numpy())
         pae_rank_corr, pae_spearman_p = spearmanr(true_pae_batchmean.cpu().numpy(), pae_batchmean.cpu().numpy())
         pde_rank_corr, pde_spearman_p = spearmanr(true_pde_batchmean.cpu().numpy(), pde_batchmean.cpu().numpy())
-        # print('spearman_plddt_corr:', plddt_rank_corr)
-        # print('spearman_pae_corr:', pae_rank_corr)
-        # print('spearman_pde_corr:', pde_rank_corr)
-        # print('plddt_spread:', plddt_batchmean.max() - plddt_batchmean.min())
-        # print('pae_spread:', pae_batchmean.max() - pae_batchmean.min())
-        # print('pde_spread:', pde_batchmean.max() - pde_batchmean.min())
-        # print('true plddt spread:', true_lddt_batchmean.max() - true_lddt_batchmean.min())
-        # print('true pae spread:', true_pae_batchmean.max() - true_pae_batchmean.min())
-        # print('true pde spread:', true_pde_batchmean.max() - true_pde_batchmean.min())
 
         loss_dict.update({
             'pred_err_plddt': plddt,

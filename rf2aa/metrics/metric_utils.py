@@ -51,9 +51,9 @@ def get_ipae_metrics_from_binned(pae_logits, same_chain, token_indices):
 
     L = pae_matrix.shape[-1]
 
-    def f(e_ij, Nres):
-        d0 = 1.24 * torch.pow(max(Nres, torch.tensor(19))-15, 1/3) - 1.8
-        den = 1 + torch.square(e_ij / d0)
+    def f(pae_matrix_ij, Nres):
+        tm_normalization_constant = 1.24 * torch.pow(max(Nres, torch.tensor(19))-15, 1/3) - 1.8
+        den = 1 + torch.square(pae_matrix_ij / tm_normalization_constant)
         return 1 / den
     
     ipTM = None
@@ -89,27 +89,20 @@ def write_confidence_metrics(outputs, path, device="cpu"):
     interface_pae = []
     chain_pae = {}
 
-    #construct the masks
+    # Construct the masks
     unique_chains = np.unique(ch_label)
     ch_masks = {}
     for chain in unique_chains:
-        mask = torch.zeros(len(ch_label), len(ch_label), dtype=torch.bool, device=device)
-        for i in range(len(ch_label)):
-            for j in range(i, len(ch_label)):
-                if ch_label[i] == ch_label[j] and ch_label[i] == chain:
-                    mask[i,j] = True
-                    mask[j,i] = True
+        indices = torch.from_numpy((ch_label == chain))
+        mask = torch.outer(indices, indices).to(dtype=torch.bool, device=device)
         ch_masks[chain] = mask
         chain_pae[chain] = []
 
-    interface_mask = torch.zeros(len(ch_label), len(ch_label), device=device, dtype=torch.bool)
+    # Construct the interface mask
     if len(unique_chains) > 1:
-        for i in range(len(ch_label)):
-            for j in range(i, len(ch_label)):
-                if ch_label[i] != ch_label[j]:
-                    interface_mask[i,j] = True
-                    interface_mask[j,i] = True
-    
+        interface_mask = torch.from_numpy(ch_label[None,:] != ch_label[:,None]).to(dtype=torch.bool, device=device)
+    else:
+        interface_mask = torch.zeros(len(ch_label), len(ch_label), device=device, dtype=torch.bool)
 
     for i in range(plddt_logit_stack.shape[0]):
         plddt_logits = plddt_logit_stack[i].unsqueeze(0)

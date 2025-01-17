@@ -21,13 +21,13 @@ class ConfidenceHead(nn.Module):
                 n_bins_plddt,
                 n_bins_exp_resolved,
                 use_Cb_distances=False,
-                af3_style=False,
+                use_af3_style_binning_and_final_layer_norms=False,
                 symmetrize_Cb_logits=True
                 ):
         super(ConfidenceHead, self).__init__()
         self.process_s_inputs_right = linearNoBias(449, c_z)
         self.process_s_inputs_left = linearNoBias(449, c_z)
-        self.af3_style = af3_style
+        self.af3_style = use_af3_style_binning_and_final_layer_norms
         if self.af3_style:
             self.layernorm_pde = nn.LayerNorm(c_z)
             self.layernorm_pae = nn.LayerNorm(c_z)

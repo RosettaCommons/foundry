@@ -279,37 +279,12 @@ class AF3TrainerRollout(AF3Trainer):
         self.model = AF3_with_rollout(
             model,
             confidence,
-            # copy.deepcopy(self.sampler) #deepcopying the sampler fails
             self.sampler,
             self.config
         )
 
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
-        # def should_ignore(param_name):
-        #     ignore_regexes = [
-        #         re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_s_trunk\..*'),
-        #         re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_z\..*'),
-        #         re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_r\..*'),
-        #         re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias.ln_1\..*'),
-        #         re.compile(r'model\.model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.linear_output_project\..*'),
-        #         re.compile(r'model\.model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
-        #         re.compile(r'model\.model\.diffusion_module\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
-        #         re.compile(r'model\.model\.diffusion_module\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
-        #         re.compile(r'model\.model\.diffusion_module\.atom_attention_decoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
-        #         re.compile(r'model\.confidence\.pairformer\.\d+\.attention_pair_bias\.linear_output_project\..*'),
-        #         re.compile(r'model\.confidence\.pairformer\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
-
-        #     ]
-        #     return any(regex.match(param_name) for regex in ignore_regexes)
-        # params_to_ignore = []
-        # for param_name, param in self.model.named_parameters():
-        #     if should_ignore(param_name):
-        #         params_to_ignore.append(param_name)
-        # torch.nn.parallel.DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
-        #     self.model,
-        #     params_to_ignore
-        # )
 
         self.model = DDP(self.model, device_ids=[device], find_unused_parameters=True, broadcast_buffers=False)
         self.sampler.model = self.model.module.shadow.model
@@ -319,7 +294,7 @@ class AF3TrainerRollout(AF3Trainer):
         self.metrics = MetricManager(**self.config.metrics)
 
         #for validation, we use the shadow
-        self.confidence = self.model.module.shadow.confidence
+        self.sampler.confidence = self.model.module.shadow.confidence
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
         gpu = self.model.device
@@ -328,7 +303,6 @@ class AF3TrainerRollout(AF3Trainer):
         print('example id', example["example_id"])
         
         network_input = {
-            #TODO: make a transform that places unresolved ground truth coordinates on their closest real atomshh
             "X_noisy_L": torch.nan_to_num(example["coord_atom_lvl_to_be_noised"]) + example["noise"],
             "t": example["t"],
             "f": example["feats"],
@@ -347,6 +321,7 @@ class AF3TrainerRollout(AF3Trainer):
             "is_real_atom": example["confidence_feats"]['is_real_atom'],
             "rep_atom_idxs": example['ground_truth']['rep_atom_idxs'],
             "frame_atom_idxs": example["confidence_feats"]['pae_frame_idx_token_lvl_from_atom_lvl'],
+            "terminal_oxygen_idxs": example["confidence_feats"]["terminal_oxygen_idx_atm_lvl"],
         }
 
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
@@ -380,9 +355,6 @@ class AF3TrainerRollout(AF3Trainer):
             print('example id', example["example_id"])
             torch.save((output_i, loss_input, example["symmetry_resolution"],example["automorphisms"]), 'sym_error_data.pkl')
             print('continuing after saving in sym_error_data.pkl')
-
-        # for debugging the effect of terminal oxygens
-        # (network_input, output_i, loss_input) = torch.load('is_real_atom.pkl')
         
         loss, loss_dict_batched = self.loss(
             network_input,
@@ -402,121 +374,8 @@ class AF3TrainerRollout(AF3Trainer):
         new_shadow_state = {}
         state_dict = self.model.module.model.state_dict()
 
-        def merge_torch_weights(first_file_path, second_file_path, output_file_path):
-            """
-            Merge PyTorch weight files with parameter renaming and filtering.
-            
-            Args:
-            first_file_path (str): Path to the first .pt weight file
-            second_file_path (str): Path to the second .pt weight file
-            output_file_path (str): Path to save the merged weight file
-            """
-            # Load the first checkpoint
-            first_checkpoint = torch.load(first_file_path)
-            
-            # Load the second checkpoint
-            second_checkpoint = torch.load(second_file_path)
-            
-            # Create a new state dict
-            merged_state_dict = {}
-            merged_final_state_dict = {}
-            
-            # Rename parameters from the first checkpoint and add 'model.' prefix
-            for key, value in first_checkpoint['model_state_dict'].items():
-                print(f'Renaming {key} to model.{key}')
-                merged_state_dict[f'model.{key}'] = value
-            for key, value in first_checkpoint['final_state_dict'].items():
-                print(f'Renaming {key} to model.{key}')
-                merged_final_state_dict[f'model.{key}'] = value
-            
-            # Add parameters from the second checkpoint that contain 'confidence'
-            for key, value in second_checkpoint['model_state_dict'].items():
-                if 'confidence' in key:
-                    print(f'Adding {key}')
-                    merged_state_dict[key] = value
-            for key, value in second_checkpoint['final_state_dict'].items():
-                if 'confidence' in key:
-                    print(f'Adding {key}')
-                    merged_final_state_dict[key] = value
-
-            
-            # overwrite state dicts with merged ones
-            first_checkpoint['model_state_dict'] = merged_state_dict
-            first_checkpoint['final_state_dict'] = merged_final_state_dict
-
-            #overwrite the optimizer with the second checkpoint's optimizer
-            first_checkpoint['optimizer_state_dict'] = second_checkpoint['optimizer_state_dict']
-            # first_checkpoint['scheduler_state_dict'] = second_checkpoint['scheduler_state_dict']
-            # first_checkpoint['scaler_state_dict'] = second_checkpoint['scaler_state_dict']
-            
-            # Save the merged checkpoint
-            torch.save(first_checkpoint, output_file_path)
-            
-            print(f"Merged weights saved to {output_file_path}")
-
-        # first = '/home/tuscant/weights/rf2aa-af3-repro3_last.pt'
-        # second = '/home/tuscant/code/af3_pae/RF2-allatom/rf2aa/output/270_restart/rf2aa-af3-repro-rollout_270_from_scratch_af3_style_with_symcb_large_crop_last.pt'
-        # product = '/home/tuscant/weights/new_model_weights_with_270_restart_confidence_after_3_epochs.pt'
-        # merge_torch_weights(first, second, product)
-        # print('merged weights')
-        # print(donemerging)
-
-        def add_run_confidence_head_to_config(checkpoint_file_path, output_file_path):
-            from omegaconf import OmegaConf
-            """
-            Takes a checkpoint file and adds the train_confidence_head=True to 
-            config.dataset_params.val.interface.transform of the first file.
-            """
-
-            # Load the first checkpoint
-            first_checkpoint = torch.load(checkpoint_file_path)
-
-            # Convert to mutable dictionary (if transform is an OmegaConf struct)
-            transform_config = OmegaConf.to_container(first_checkpoint['training_config']['dataset_params']['val']['interface']['transform'], resolve=True)
-            
-            # Add the new key to the mutable dictionary
-            transform_config['run_confidence_head'] = True
-
-            # Convert it back to an OmegaConf object if needed
-            first_checkpoint['training_config']['dataset_params']['val']['interface']['transform'] = OmegaConf.create(transform_config)
-
-            # Save the updated checkpoint
-            torch.save(first_checkpoint, output_file_path)
-            print(f"Config saved to {output_file_path}")
-
-        def add_af3stylechange_to_config(checkpoint_file_path, output_file_path):
-            from omegaconf import OmegaConf
-            """
-            Takes a checkpoint file and adds the train_confidence_head=True to 
-            config.dataset_params.val.interface.transform of the first file.
-            """
-
-            # Load the first checkpoint
-            first_checkpoint = torch.load(checkpoint_file_path)
-
-            # Convert to mutable dictionary (if transform is an OmegaConf struct)
-            confidence_head_config = OmegaConf.to_container(first_checkpoint['training_config']['confidence_head'], resolve=True)
-            
-            # Add the new key to the mutable dictionary
-            confidence_head_config['use_af3_style_binning_and_final_layer_norms'] = True
-
-            # Remove the old key
-            confidence_head_config.pop('af3_style', None)
-
-            # Convert it back to an OmegaConf object if needed
-            first_checkpoint['training_config']['confidence_head'] = OmegaConf.create(confidence_head_config)
-
-            # Save the updated checkpoint
-            torch.save(first_checkpoint, output_file_path)
-            print(f"Config saved to {output_file_path}")
-
-        # first = '/home/tuscant/weights/270_confidence_inference_2.pt'
-        # product = '/home/tuscant/weights/270_confidence_inference_3.pt'
-        # add_af3stylechange_to_config(first, product)
-        # print(doneaddingtoconfig)
-
-        if self.config.training_params.reset_optimizer_params:
-            #get around a loading issue - I'll only need to do this when loading from a weight set trained on something other than the rollout
+        if self.config.training_params.make_fresh_weights_confidence_compatible:
+            #get around a loading issue - only need to do this when loading from a weight set trained on something other than the rollout
             # Create a new dictionary to store the modified keys
             new_model_state_dict = {}
 
@@ -656,6 +515,7 @@ class AF3TrainerRollout(AF3Trainer):
         self.cleanup()
 
     def valid_step(self, inputs, n_cycle, no_grads=True, return_outputs=False):
+        #TODO: get rid of for loops here
         gpu = self.model.device
         
         example = inputs[0]
@@ -666,15 +526,15 @@ class AF3TrainerRollout(AF3Trainer):
             "f": example["feats"],
         } 
         loss_input = {
-            "X_gt_L": example["ground_truth"]["coord_atom_lvl"][None], #.expand(self.config.dataset_params.diffusion_batch_size, -1,-1),
-            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"][None], #.expand(self.config.dataset_params.diffusion_batch_size, -1),
+            "X_gt_L": example["ground_truth"]["coord_atom_lvl"][None],
+            "crd_mask_L": example["ground_truth"]["mask_atom_lvl"][None],
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],
             "interfaces_to_score": example["ground_truth"]["interfaces_to_score"],
             "pn_units_to_score": example["ground_truth"]["pn_units_to_score"],
             "chain_iid_token_lvl": example["ground_truth"]["chain_iid_token_lvl"],
             "example_id": example["example_id"],
-            "alignment_mask": example["confidence_feats"]["alignment_mask_atm_lvl"],
+            "alignment_mask": example["alignment_mask_atm_lvl"],
             
             #for loss calc
             "seq": example["confidence_feats"]["rf2aa_seq"],
@@ -683,18 +543,25 @@ class AF3TrainerRollout(AF3Trainer):
             "is_real_atom": example["confidence_feats"]['is_real_atom'],
             "rep_atom_idxs": example['ground_truth']['rep_atom_idxs'],
             "frame_atom_idxs": example["confidence_feats"]['pae_frame_idx_token_lvl_from_atom_lvl'],
+            "terminal_oxygen_idxs": example["confidence_feats"]["terminal_oxygen_idx_atm_lvl"],
         }
 
         msa_stack = network_input["f"]["msa_stack"]
 
-        interface_mask = torch.zeros(loss_input["seq"].shape[-1], loss_input["seq"].shape[-1], device=gpu, dtype=torch.bool)
+        #AF3's ranking metrics work more like this, but using ptm instead of ipae:
         ch_label = example["ground_truth"]["chain_iid_token_lvl"]
+        unique_chains = np.unique(ch_label)
         print('example id', example["example_id"])
-        for i in range(len(ch_label)):
-            for j in range(i+1, len(ch_label)):
-                if ch_label[i] != ch_label[j]:
-                    interface_mask[i,j] = True
-                    interface_mask[j,i] = True
+        # for i in range(len(ch_label)):
+        #     for j in range(i+1, len(ch_label)):
+        #         if ch_label[i] != ch_label[j]:
+        #             interface_mask[i,j] = True
+        #             interface_mask[j,i] = True
+        
+        if len(unique_chains) > 1:
+            interface_mask = torch.from_numpy(ch_label[None,:] != ch_label[:,None]).to(dtype=torch.bool, device=gpu)
+        else:
+            interface_mask = torch.zeros(len(ch_label), len(ch_label), device=gpu, dtype=torch.bool)
 
         #AF3's ranking metrics work more like this, but using ptm instead of ipae:
         ch_label = example["ground_truth"]["chain_iid_token_lvl"]
@@ -773,26 +640,26 @@ class AF3TrainerRollout(AF3Trainer):
             'exp_resolved': [],
         }
 
-        #set up for sampling the trunk multiple times if desired.
+        #set up for sampling the trunk multiple times if desired - doesn't typically matter unless trunk_batch_size_valid > 1
         for i in range(self.config.dataset_params.trunk_batch_size_valid):
             #get the right msa_stack for this pass
             network_input["f"]["msa_stack"] = msa_stack[(self.config.dataset_params.trunk_batch_size_valid * i):(self.config.dataset_params.trunk_batch_size_valid * i) + 10]
 
             outputs = self.sampler.sample(inputs, n_cycle=10, use_amp=self.config.training_params.use_amp)
-            print('outputs.keys', outputs.keys())
-            print('outputs.confidence.keys', outputs['confidence'].keys())
 
-            B = outputs["X_L"].shape[0]
-            confidence = self.confidence(
-                outputs["S_inputs_I"].repeat(B, 1, 1),
-                outputs["S_I"].repeat(B, 1, 1),
-                outputs["Z_II"].repeat(B, 1, 1, 1),
-                outputs["X_L"],
-                loss_input["seq"],
-                example['ground_truth']['rep_atom_idxs'].to(outputs["X_L"].device),
-                frame_atom_idxs=loss_input['frame_atom_idxs'].to(outputs["X_L"].device),
-            )
-            print('confidence.keys', confidence.keys())
+            # B = outputs["X_L"].shape[0]
+            # confidence = self.confidence(
+            #     outputs["S_inputs_I"].repeat(B, 1, 1),
+            #     outputs["S_I"].repeat(B, 1, 1),
+            #     outputs["Z_II"].repeat(B, 1, 1, 1),
+            #     outputs["X_L"],
+            #     loss_input["seq"],
+            #     example['ground_truth']['rep_atom_idxs'].to(outputs["X_L"].device),
+            #     frame_atom_idxs=loss_input['frame_atom_idxs'].to(outputs["X_L"].device),
+            # )
+            # print('confidence.keys', confidence.keys())
+
+            confidence = outputs['confidence']
             
             for i in range(confidence['plddt_logits'].shape[0]):
                 plddt_logits = confidence['plddt_logits'][i].unsqueeze(0)
@@ -806,7 +673,7 @@ class AF3TrainerRollout(AF3Trainer):
                 i_pae_err.append(i_pae)
 
                 iptm_matrix = torch.zeros(1, len(unique_chains), len(unique_chains), device=gpu) # [1, n_chains,n_chains]
-                ###this is taking a long time, so skipping for now
+                ###this is taking a long time, so skipping for now - should update with new vectorized version
                 # for w in range(len(unique_chains)):
                 #     # if unique_chains[w] not in interface_chains:
                 #     #     print('skipping', unique_chains[w])
@@ -971,8 +838,6 @@ class AF3TrainerRollout(AF3Trainer):
         loss_input['best_chain_idx'] = best_chain_idx
         loss_input['best_single_chain_idx'] = best_single_chain_idx
 
-
-
         #now cat the outputs that matter for the confidence metrics and loss
         outputs["X_L"] = torch.cat(output_stack["X_L"], dim=0)
         loss_input["X_gt_L"] = torch.cat(output_stack["X_gt_L"], dim=0)
@@ -985,16 +850,16 @@ class AF3TrainerRollout(AF3Trainer):
 
         #clear up memory
         del output_stack
-        print('B:', outputs['X_L'].shape[0])
+        # print('B:', outputs['X_L'].shape[0])
 
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
-        print(metrics_dict)
-        loss, loss_dict_batched = self.loss(
-            network_input,
-            outputs,
-            loss_input
-        )
-        print('confidence losses', loss_dict_batched)
+        # print(metrics_dict)
+        # loss, loss_dict_batched = self.loss(
+        #     network_input,
+        #     outputs,
+        #     loss_input
+        # )
+        # print('confidence losses', loss_dict_batched)
 
         return torch.tensor(0), metrics_dict
