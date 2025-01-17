@@ -373,6 +373,7 @@ dataset_params:
                 - q_pn_unit_iid
                 - q_pn_unit_non_polymer_res_names
                 - all_pn_unit_iids_after_processing
+                - q_pn_unit_is_loi
             return_key: null
             transform:
               _target_: ${dataset_params.default_transform}
@@ -393,6 +394,7 @@ dataset_params:
               a_prot: 3.0
               a_nuc: 3.0
               a_ligand: 1.0
+              a_loi: 5.0
 
         interface:
           dataset:
@@ -434,6 +436,7 @@ dataset_params:
                 - pn_unit_2_non_polymer_res_names
                 - is_inter_molecule
                 - all_pn_unit_iids_after_processing
+                - involves_loi
             return_key: null
             transform:
               _target_: ${dataset_params.default_transform}
@@ -454,6 +457,7 @@ dataset_params:
               a_prot: 3.0
               a_nuc: 3.0
               a_ligand: 1.0
+              a_loi: 5.0
 
     monomer_distillation:
       probability: 0.5

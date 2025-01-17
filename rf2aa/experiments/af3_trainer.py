@@ -16,6 +16,7 @@ from rf2aa.flow_matching.sampler import AF3Sampler, AF3PartialSampler
 from rf2aa.loss.af3_losses import Loss as AF3Loss
 from rf2aa.loss.af3_losses import SubunitSymmetryResolution, ResidueSymmetryResolution
 from rf2aa.metrics.metrics_base import MetricManager
+from rf2aa.metrics.metric_utils import unbin_rf3_metrics, get_ipae_metrics_from_binned
 from rf2aa.debug import pretty_describe_dict
 
 import rf2aa.util as util
@@ -231,30 +232,30 @@ class AF3TrainerRollout(AF3Trainer):
 
         if self.config.training_params.EMA is not None:
             self.model = EMA(self.model, self.config.training_params.EMA)
-        def should_ignore(param_name):
-            ignore_regexes = [
-                re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_s_trunk\..*'),
-                re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_z\..*'),
-                re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_r\..*'),
-                re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias.ln_1\..*'),
-                re.compile(r'model\.model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.linear_output_project\..*'),
-                re.compile(r'model\.model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
-                re.compile(r'model\.model\.diffusion_module\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
-                re.compile(r'model\.model\.diffusion_module\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
-                re.compile(r'model\.model\.diffusion_module\.atom_attention_decoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
-                re.compile(r'model\.confidence\.pairformer\.\d+\.attention_pair_bias\.linear_output_project\..*'),
-                re.compile(r'model\.confidence\.pairformer\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
+        # def should_ignore(param_name):
+        #     ignore_regexes = [
+        #         re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_s_trunk\..*'),
+        #         re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_z\..*'),
+        #         re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.process_r\..*'),
+        #         re.compile(r'model\.model\.feature_initializer\.input_feature_embedder\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias.ln_1\..*'),
+        #         re.compile(r'model\.model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.linear_output_project\..*'),
+        #         re.compile(r'model\.model\.recycler\.pairformer_stack\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
+        #         re.compile(r'model\.model\.diffusion_module\.atom_attention_encoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
+        #         re.compile(r'model\.model\.diffusion_module\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
+        #         re.compile(r'model\.model\.diffusion_module\.atom_attention_decoder\.atom_transformer\.diffusion_transformer\.blocks\.\d+\.attention_pair_bias\.ln_1\..*'),
+        #         re.compile(r'model\.confidence\.pairformer\.\d+\.attention_pair_bias\.linear_output_project\..*'),
+        #         re.compile(r'model\.confidence\.pairformer\.\d+\.attention_pair_bias\.ada_ln_1\..*'),
 
-            ]
-            return any(regex.match(param_name) for regex in ignore_regexes)
-        params_to_ignore = []
-        for param_name, param in self.model.named_parameters():
-            if should_ignore(param_name):
-                params_to_ignore.append(param_name)
-        torch.nn.parallel.DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
-            self.model,
-            params_to_ignore
-        )
+        #     ]
+        #     return any(regex.match(param_name) for regex in ignore_regexes)
+        # params_to_ignore = []
+        # for param_name, param in self.model.named_parameters():
+        #     if should_ignore(param_name):
+        #         params_to_ignore.append(param_name)
+        # torch.nn.parallel.DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
+        #     self.model,
+        #     params_to_ignore
+        # )
 
         self.model = DDP(self.model, device_ids=[device], find_unused_parameters=True, broadcast_buffers=False)
         self.sampler.model = self.model.module.shadow.model
@@ -291,7 +292,7 @@ class AF3TrainerRollout(AF3Trainer):
             "tok_idx": example['feats']['atom_to_token_map'],
             "is_real_atom": example["confidence_feats"]['is_real_atom'],
             "rep_atom_idxs": example['ground_truth']['rep_atom_idxs'],
-            "frame_atom_idxs": example["confidence_feats"]['frame_atom_idxs'],
+            "frame_atom_idxs": example["confidence_feats"]['pae_frame_idx_token_lvl_from_atom_lvl'],
         }
 
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
@@ -326,7 +327,9 @@ class AF3TrainerRollout(AF3Trainer):
             torch.save((output_i, loss_input, example["symmetry_resolution"],example["automorphisms"]), 'sym_error_data.pkl')
             print('continuing after saving in sym_error_data.pkl')
 
-
+        # for debugging the effect of terminal oxygens
+        # (network_input, output_i, loss_input) = torch.load('is_real_atom.pkl')
+        
         loss, loss_dict_batched = self.loss(
             network_input,
             output_i,
@@ -397,14 +400,14 @@ class AF3TrainerRollout(AF3Trainer):
             
             print(f"Merged weights saved to {output_file_path}")
 
-        # first = '/net/software/lab/RF2-allatom/rf2aa/checkpoints/rf2aa-af3-repro2_270.pt'
-        # second = '/home/tuscant/code/af3_pae/RF2-allatom/rf2aa/output/cb/rf2aa-af3-repro-rollout_240_cont_af3_style_with_cb_last.pt'
-        # product = '/home/tuscant/weights/270_merged_confidence_9b.pt'
+        # first = '/home/tuscant/weights/rf2aa-af3-repro3_last.pt'
+        # second = '/home/tuscant/code/af3_pae/RF2-allatom/rf2aa/output/270_restart/rf2aa-af3-repro-rollout_270_from_scratch_af3_style_with_symcb_large_crop_last.pt'
+        # product = '/home/tuscant/weights/new_model_weights_with_270_restart_confidence_after_3_epochs.pt'
         # merge_torch_weights(first, second, product)
         # print('merged weights')
         # print(donemerging)
 
-        def add_train_confidence_head_to_config(checkpoint_file_path, output_file_path):
+        def add_run_confidence_head_to_config(checkpoint_file_path, output_file_path):
             from omegaconf import OmegaConf
             """
             Takes a checkpoint file and adds the train_confidence_head=True to 
@@ -418,7 +421,7 @@ class AF3TrainerRollout(AF3Trainer):
             transform_config = OmegaConf.to_container(first_checkpoint['training_config']['dataset_params']['val']['interface']['transform'], resolve=True)
             
             # Add the new key to the mutable dictionary
-            transform_config['train_confidence_head'] = True
+            transform_config['run_confidence_head'] = True
 
             # Convert it back to an OmegaConf object if needed
             first_checkpoint['training_config']['dataset_params']['val']['interface']['transform'] = OmegaConf.create(transform_config)
@@ -427,34 +430,60 @@ class AF3TrainerRollout(AF3Trainer):
             torch.save(first_checkpoint, output_file_path)
             print(f"Config saved to {output_file_path}")
 
-        # first = '/home/tuscant/code/af3_pae/RF2-allatom/rf2aa/output/cb/rf2aa-af3-repro-rollout_270_cont_9_af3_style_with_cb_last.pt'
-        # product = '/home/tuscant/weights/270_confidence_inference.pt'
-        # add_train_confidence_head_to_config(first, product)
+        def add_af3stylechange_to_config(checkpoint_file_path, output_file_path):
+            from omegaconf import OmegaConf
+            """
+            Takes a checkpoint file and adds the train_confidence_head=True to 
+            config.dataset_params.val.interface.transform of the first file.
+            """
+
+            # Load the first checkpoint
+            first_checkpoint = torch.load(checkpoint_file_path)
+
+            # Convert to mutable dictionary (if transform is an OmegaConf struct)
+            confidence_head_config = OmegaConf.to_container(first_checkpoint['training_config']['confidence_head'], resolve=True)
+            
+            # Add the new key to the mutable dictionary
+            confidence_head_config['use_af3_style_binning_and_final_layer_norms'] = True
+
+            # Remove the old key
+            confidence_head_config.pop('af3_style', None)
+
+            # Convert it back to an OmegaConf object if needed
+            first_checkpoint['training_config']['confidence_head'] = OmegaConf.create(confidence_head_config)
+
+            # Save the updated checkpoint
+            torch.save(first_checkpoint, output_file_path)
+            print(f"Config saved to {output_file_path}")
+
+        # first = '/home/tuscant/weights/270_confidence_inference_2.pt'
+        # product = '/home/tuscant/weights/270_confidence_inference_3.pt'
+        # add_af3stylechange_to_config(first, product)
         # print(doneaddingtoconfig)
 
-        # if self.config.training_params.reset_optimizer_params:
-        #     #get around a loading issue - I'll only need to do this when loading from a weight set trained on something other than the rollout
-        #     # Create a new dictionary to store the modified keys
-        #     new_model_state_dict = {}
+        if self.config.training_params.reset_optimizer_params:
+            #get around a loading issue - I'll only need to do this when loading from a weight set trained on something other than the rollout
+            # Create a new dictionary to store the modified keys
+            new_model_state_dict = {}
 
-        #     # Iterate over the original dictionary
-        #     for param in self.checkpoint['model_state_dict']:
-        #         # Modify the key
-        #         new_param = 'model.' + param
-        #         # Add the modified key and its value to the new dictionary
-        #         new_model_state_dict[new_param] = self.checkpoint['model_state_dict'][param]
+            # Iterate over the original dictionary
+            for param in self.checkpoint['model_state_dict']:
+                # Modify the key
+                new_param = 'model.' + param
+                # Add the modified key and its value to the new dictionary
+                new_model_state_dict[new_param] = self.checkpoint['model_state_dict'][param]
 
-        #     # Replace the original dictionary with the new one
-        #     self.checkpoint['model_state_dict'] = new_model_state_dict
+            # Replace the original dictionary with the new one
+            self.checkpoint['model_state_dict'] = new_model_state_dict
 
-        #     #Do the same for the final_state_dict
-        #     new_model_state_dict = {}
-        #     for param in self.checkpoint['final_state_dict']:
-        #         # Modify the key
-        #         new_param = 'model.' + param
-        #         # Add the modified key and its value to the new dictionary
-        #         new_model_state_dict[new_param] = self.checkpoint['final_state_dict'][param]
-        #     self.checkpoint['final_state_dict'] = new_model_state_dict
+            #Do the same for the final_state_dict
+            new_model_state_dict = {}
+            for param in self.checkpoint['final_state_dict']:
+                # Modify the key
+                new_param = 'model.' + param
+                # Add the modified key and its value to the new dictionary
+                new_model_state_dict[new_param] = self.checkpoint['final_state_dict'][param]
+            self.checkpoint['final_state_dict'] = new_model_state_dict
 
         for param in state_dict:
             if param not in self.checkpoint['model_state_dict']:
@@ -599,7 +628,7 @@ class AF3TrainerRollout(AF3Trainer):
             "tok_idx": example['feats']['atom_to_token_map'],
             "is_real_atom": example["confidence_feats"]['is_real_atom'],
             "rep_atom_idxs": example['ground_truth']['rep_atom_idxs'],
-            "frame_atom_idxs": example["confidence_feats"]['frame_atom_idxs'],
+            "frame_atom_idxs": example["confidence_feats"]['pae_frame_idx_token_lvl_from_atom_lvl'],
         }
 
         msa_stack = network_input["f"]["msa_stack"]
@@ -696,6 +725,8 @@ class AF3TrainerRollout(AF3Trainer):
             network_input["f"]["msa_stack"] = msa_stack[(self.config.dataset_params.trunk_batch_size_valid * i):(self.config.dataset_params.trunk_batch_size_valid * i) + 10]
 
             outputs = self.sampler.sample(inputs, n_cycle=10, use_amp=self.config.training_params.use_amp)
+            print('outputs.keys', outputs.keys())
+            print('outputs.confidence.keys', outputs['confidence'].keys())
 
             B = outputs["X_L"].shape[0]
             confidence = self.confidence(
@@ -707,17 +738,17 @@ class AF3TrainerRollout(AF3Trainer):
                 example['ground_truth']['rep_atom_idxs'].to(outputs["X_L"].device),
                 frame_atom_idxs=loss_input['frame_atom_idxs'].to(outputs["X_L"].device),
             )
-
+            print('confidence.keys', confidence.keys())
             
             for i in range(confidence['plddt_logits'].shape[0]):
                 plddt_logits = confidence['plddt_logits'][i].unsqueeze(0)
                 plddt_logits = plddt_logits.reshape(plddt_logits.shape[0], -1, plddt_logits.shape[1], ChemData().NHEAVY)
 
-                plddt, pae, pde = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), is_real_atom=loss_input['is_real_atom'].to(gpu))
+                plddt, pae, pde = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), is_real_atom=loss_input['is_real_atom'].to(gpu))
 
                 pred_err.append({'plddt': plddt, 'pae': pae, 'pde': pde})
 
-                _, i_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_mask, is_real_atom=loss_input['is_real_atom'].to(gpu))
+                _, i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_mask, is_real_atom=loss_input['is_real_atom'].to(gpu))
                 i_pae_err.append(i_pae)
 
                 iptm_matrix = torch.zeros(1, len(unique_chains), len(unique_chains), device=gpu) # [1, n_chains,n_chains]
@@ -738,7 +769,7 @@ class AF3TrainerRollout(AF3Trainer):
                 #         M = np.where((ch_label == unique_chains[w]) | (ch_label == unique_chains[z]))[0]
                 #         #this takes way too long to do right now
                 #         start = time.time()
-                #         iptm, _ = util.get_ipae_metrics_from_binned(confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), same_chain, M)
+                #         iptm, _ = get_ipae_metrics_from_binned(confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), same_chain, M)
                 #         print('time', time.time()-start)
                 #         # iptm = 0.0
                 #         iptm_matrix[0,w,z] = iptm
@@ -762,16 +793,16 @@ class AF3TrainerRollout(AF3Trainer):
 
                         #if a ligand participates in more than 1 interface, we still only want to get calculcate B scores
                         if len(lig_err[lig_chain]) < i+1:
-                            _, lig_i_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[lig_chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                            _, lig_i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[lig_chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
                             lig_err[lig_chain].append(lig_i_pae)
                         
-                    _, chain_a_i_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[chain_a], is_real_atom=loss_input['is_real_atom'].to(gpu))
-                    _, chain_b_i_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[chain_b], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                    _, chain_a_i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[chain_a], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                    _, chain_b_i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[chain_b], is_real_atom=loss_input['is_real_atom'].to(gpu))
                     interface_err[interface].append((chain_a_i_pae + chain_b_i_pae))
                 for chain in scored_chains:
-                    _, chain_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=chain_masks[chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                    _, chain_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=chain_masks[chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
                     chain_err[chain].append(chain_pae)
-                    _, single_chain_pae, _ = util.unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=single_chain_masks[chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                    _, single_chain_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=single_chain_masks[chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
                     single_chain_err[chain].append(single_chain_pae)
 
             def _inmap(path, x):

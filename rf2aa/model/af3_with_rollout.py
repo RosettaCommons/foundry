@@ -3,8 +3,7 @@ import torch.nn as nn
 
 import rf2aa
 from rf2aa.chemical import ChemicalData as ChemData
-from rf2aa.loss.loss import resolve_equiv_natives, resolve_equiv_natives_asmb, mask_unresolved_frames, mask_unresolved_frames_batched
-from rf2aa.model.layers.af3_auxiliary_heads import find_rep_atoms
+from rf2aa.loss.loss import mask_unresolved_frames_batched
 from rf2aa.util import rigid_from_3_points, is_atom, get_frames
 import torch.utils.checkpoint as checkpoint
 
@@ -19,7 +18,6 @@ class AF3_with_rollout(nn.Module):
         self.model = model
         self.confidence = confidence
         self.sampler = sampler
-        self.find_optimal_permutation = FindOptimalPermutation()
         self.num_timesteps = 20
         self.config = config
 
@@ -27,8 +25,6 @@ class AF3_with_rollout(nn.Module):
             self, 
             input, 
             n_cycle, 
-            # X_gt_I_symm, 
-            # crd_mask_I, 
             seq, 
             rep_atom_idxs,
             no_sync,
@@ -37,10 +33,7 @@ class AF3_with_rollout(nn.Module):
         # first do forward pass
         with torch.no_grad():
             trunk_output = self.model.trunk_forward(input, n_cycle, no_sync)
-        # save embeddings
-        # do rollout conditioned on embeddings
-        # with nograd? 
-        # with torch.no_grad():
+
             noise_schedule = self.sampler.construct_noise_schedule(self.num_timesteps, 0, 1).to(input["f"]["msa"].device)
             diffusion_output = self.sampler.sample_diffusion(
                 input["f"],
@@ -52,28 +45,7 @@ class AF3_with_rollout(nn.Module):
                 D=self.config.dataset_params.diffusion_batch_size_rollout
             )
 
-            # print('diffusion_output:', diffusion_output["X_L"].shape)
             B = diffusion_output["X_L"].shape[0]
-            
-            # find ground truth permutation
-            # X_gt_L, X_exists_L = self.find_optimal_permutation(
-            #     diffusion_output["X_L"].clone().detach(),
-            #     X_gt_I_symm,
-            #     crd_mask_I,
-            #     seq,
-            #     input["f"]
-            # )
-
-        #     trunk_output = self.model.post_recycle(
-        #         trunk_output["S_inputs_I"],
-        #         trunk_output["S_init_I"],
-        #         trunk_output["Z_init_II"],
-        #         trunk_output["S_I"],
-        #         trunk_output["Z_II"],
-        #         input["f"],
-        #         input["X_noisy_L"],
-        #         input["t"]
-        # )
         
         # run confidence model on embeddings and output structure
         #Bug in deepspeed backwards requires us to do it with batch size 1
@@ -102,8 +74,6 @@ class AF3_with_rollout(nn.Module):
                         confidence_stack[k] = v
 
         return dict(
-            # X_gt_L=X_gt_L.detach(),
-            # X_exists_L=X_exists_L.detach(),
             X_L=None,
             X_pred_rollout_L=diffusion_output["X_L"],
             plddt=confidence_stack["plddt_logits"],
@@ -112,9 +82,6 @@ class AF3_with_rollout(nn.Module):
             exp_resolved=confidence_stack["exp_resolved_logits"],
             distogram=None,
         )
-    
-    # def confidence_wrapper(self, S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, frame_atom_idxs=None, use_amp=True):
-    #     return self.confidence(S_inputs_I, S_I, Z_II, X_L, seq, rep_atom_idxs, frame_atom_idxs=frame_atom_idxs, use_amp=use_amp)
 
 class ConfidenceLoss(nn.Module):
 
@@ -124,6 +91,8 @@ class ConfidenceLoss(nn.Module):
                 pde,
                 exp_resolved,
                 weight=1,
+                rank_loss=None,
+                log_statistics=False
         ):
         super(ConfidenceLoss, self).__init__()
         self.weight = weight
@@ -133,6 +102,8 @@ class ConfidenceLoss(nn.Module):
         self.exp_resolved = exp_resolved
         self.cce = nn.CrossEntropyLoss(reduction="none")
         self.eps = 1e-6
+        self.rank_loss = rank_loss
+        self.log_statistics = log_statistics
     
     def forward(
         self,
@@ -153,6 +124,12 @@ class ConfidenceLoss(nn.Module):
             network_output["plddt"].reshape(-1, self.plddt.n_bins, I, ChemData().NHEAVY), 
             true_lddt_binned[..., :ChemData().NHEAVY].long()
             ) * is_resolved_I[..., :ChemData().NHEAVY] 
+        # print('plddt_loss for residue 276', plddt_loss[0, 276].sum(), plddt_loss[0, 276])
+        # print('plddt_loss for residue 277', plddt_loss[0, 277].sum(), plddt_loss[0, 277])
+        # print('plddt_loss for residue 275', plddt_loss[0, 278].sum(), plddt_loss[0, 278])
+        # print('is_real_atom for residue 276', loss_input["is_real_atom"][276].sum())
+        # print('is_real_atom for residue 277', loss_input["is_real_atom"][277].sum())
+        # print('is_real_atom for residue 275', loss_input["is_real_atom"][278].sum())
         plddt_loss = plddt_loss.sum() / (is_resolved_I.sum() + self.eps)
 
         pae_logits = network_output["pae"]
@@ -161,11 +138,10 @@ class ConfidenceLoss(nn.Module):
         pae_loss = pae_loss.sum() / (valid_pae_pairs.sum() + self.eps)
 
         true_pde_binned, is_valid_pair = self.calc_pde(X_pred_L, X_gt_L, X_exists_L, loss_input["seq"], loss_input['rep_atom_idxs'])
-        pde_predicted = network_output["pde"].permute(0,3,1,2)
-        pde_loss = self.cce(pde_predicted, true_pde_binned) * is_valid_pair
+        pde_logits = network_output["pde"].permute(0,3,1,2)
+        pde_loss = self.cce(pde_logits, true_pde_binned) * is_valid_pair
         pde_loss = pde_loss.sum() / (is_valid_pair.sum() + self.eps)
 
-        #exp_resolved_logits = self.subsample_exp_resolved_logits(network_output["exp_resolved"], loss_input["seq"])
         exp_resolved_logits = network_output["exp_resolved"]
         exp_resolved_loss = self.cce(
             exp_resolved_logits.reshape(B, 2, I, ChemData().NHEAVY),
@@ -181,70 +157,68 @@ class ConfidenceLoss(nn.Module):
             exp_resolved_loss=exp_resolved_loss.detach(),
         )
 
-        #Get correlations across and within batches
-        #unbin values
-        true_lddt_unbinned = ((true_lddt_binned.detach() + 1) * 0.02 ) * is_resolved_I
-        true_lddt_batchmean = true_lddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
-        true_lddt = true_lddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
+        confidence_loss = (self.plddt.weight * plddt_loss + self.pae.weight * pae_loss + self.pde.weight * pde_loss + self.exp_resolved.weight * exp_resolved_loss)
 
-        true_pae = ((true_pae_binned.detach() + 1) * 0.5 - 0.25) * valid_pae_pairs
-        true_pae_batchmean = true_pae.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
-        true_pae = true_pae.sum() / (valid_pae_pairs.sum() + self.eps)
+        if self.log_statistics or self.rank_loss.use_listnet_loss:
+            #Get correlations across and within batches
+            #unbin values
+            true_lddt_unbinned = ((true_lddt_binned.detach() + 1) * 0.02 ) * is_resolved_I
+            true_lddt_batchmean = true_lddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
+            true_lddt = true_lddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
 
-        true_pde = ((true_pde_binned.detach() + 1) * 0.5 - .25) * is_valid_pair
-        true_pde_batchmean = true_pde.sum(dim=(1,2)) / (is_valid_pair.sum(dim=(1,2)) + self.eps)
-        true_pde = true_pde.sum() / (is_valid_pair.sum() + self.eps)
+            true_pae = ((true_pae_binned.detach() + 1) * 0.5 - 0.25) * valid_pae_pairs
+            true_pae_batchmean = true_pae.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
+            true_pae = true_pae.sum() / (valid_pae_pairs.sum() + self.eps)
 
-        #now do similarly for predicted values
-        lddt_bins = torch.linspace(0.02, 1.0, 50, device=true_lddt_binned.device)
-        plddt_unbinned = network_output["plddt"].reshape(B, self.plddt.n_bins, I, ChemData().NHEAVY).detach().float()
-        plddt_unbinned = torch.nn.Softmax(dim=1)(plddt_unbinned)
-        plddt_unbinned = (plddt_unbinned * lddt_bins[None, :, None, None]).sum(dim=1) * is_resolved_I[..., :ChemData().NHEAVY]
-        plddt_batchmean = plddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
-        plddt = plddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
-           
-        pae_bins = torch.linspace(0.25, 31.75, 64, device=true_pae_binned.device)
-        pae_unbinned = torch.nn.Softmax(dim=1)(pae_logits).detach().float()
-        pae_unbinned = (pae_unbinned * pae_bins[None, :, None, None]).sum(dim=1) * valid_pae_pairs
-        pae_batchmean = pae_unbinned.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
-        pae = (pae_unbinned * valid_pae_pairs).sum() / (valid_pae_pairs.sum() + self.eps)
+            true_pde = ((true_pde_binned.detach() + 1) * 0.5 - .25) * is_valid_pair
+            true_pde_batchmean = true_pde.sum(dim=(1,2)) / (is_valid_pair.sum(dim=(1,2)) + self.eps)
+            true_pde = true_pde.sum() / (is_valid_pair.sum() + self.eps)
 
-        pde_unbinned = torch.nn.Softmax(dim=1)(pde_predicted).detach().float()
-        pde_unbinned = (pde_unbinned * pae_bins[None, :, None, None]).sum(dim=1) * is_valid_pair
-        pde = (pde_unbinned * is_valid_pair).sum() / (is_valid_pair.sum() + self.eps)
-        pde_batchmean = pde_unbinned.detach().mean(dim=(1,2))
+            #now do similarly for predicted values
+            lddt_bins = torch.linspace(0.02, 1.0, 50, device=true_lddt_binned.device)
+            plddt_unbinned = network_output["plddt"].reshape(B, self.plddt.n_bins, I, ChemData().NHEAVY).detach().float()
+            plddt_unbinned = torch.nn.Softmax(dim=1)(plddt_unbinned)
+            plddt_unbinned = (plddt_unbinned * lddt_bins[None, :, None, None]).sum(dim=1) * is_resolved_I[..., :ChemData().NHEAVY]
+            plddt_batchmean = plddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
+            plddt = plddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
+                
+            pae_bins = torch.linspace(0.25, 31.75, 64, device=true_pae_binned.device)
+            pae_unbinned = torch.nn.Softmax(dim=1)(pae_logits).detach().float()
+            pae_unbinned = (pae_unbinned * pae_bins[None, :, None, None]).sum(dim=1) * valid_pae_pairs
+            pae_batchmean = pae_unbinned.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
+            pae = (pae_unbinned * valid_pae_pairs).sum() / (valid_pae_pairs.sum() + self.eps)
 
-        print('in train loss calc, predicted error is :', plddt, pae, pde)
-        print('in train loss calc, true error is:', true_lddt, true_pae, true_pde)
+            pde_unbinned = torch.nn.Softmax(dim=1)(pde_logits).detach().float()
+            pde_unbinned = (pde_unbinned * pae_bins[None, :, None, None]).sum(dim=1) * is_valid_pair
+            pde = (pde_unbinned * is_valid_pair).sum() / (is_valid_pair.sum() + self.eps)
+            pde_batchmean = pde_unbinned.detach().mean(dim=(1,2))
 
-        # Calculate Spearman rank correlation
-        plddt_rank_corr, lddt_spearman_p = spearmanr(true_lddt_batchmean.cpu().numpy(), plddt_batchmean.cpu().numpy())
-        pae_rank_corr, pae_spearman_p = spearmanr(true_pae_batchmean.cpu().numpy(), pae_batchmean.cpu().numpy())
-        pde_rank_corr, pde_spearman_p = spearmanr(true_pde_batchmean.cpu().numpy(), pde_batchmean.cpu().numpy())
-        print('spearman_plddt_corr:', plddt_rank_corr)
-        print('spearman_pae_corr:', pae_rank_corr)
-        print('spearman_pde_corr:', pde_rank_corr)
-        print('plddt_spread:', plddt_batchmean.max() - plddt_batchmean.min())
-        print('pae_spread:', pae_batchmean.max() - pae_batchmean.min())
-        print('pde_spread:', pde_batchmean.max() - pde_batchmean.min())
-        print('true plddt spread:', true_lddt_batchmean.max() - true_lddt_batchmean.min())
-        print('true pae spread:', true_pae_batchmean.max() - true_pae_batchmean.min())
-        print('true pde spread:', true_pde_batchmean.max() - true_pde_batchmean.min())
+            if self.log_statistics:
+                self.log_correlation_statistics(plddt, pae, pde, true_lddt, true_pae, true_pde, true_lddt_batchmean, true_pae_batchmean, true_pde_batchmean, plddt_batchmean, pae_batchmean, pde_batchmean, loss_dict)
 
-        # #an easy way of incentivizing ranking accuracy is the following (Listnet):
-        # rank_plddt_t = torch.nn.Softmax(dim=0)(true_lddt_batchmean)
-        # rank_plddt_p = torch.nn.Softmax(dim=0)(plddt_batchmean)
-        # rank_pae_t = torch.nn.Softmax(dim=0)(true_pae_batchmean)
-        # rank_pae_p = torch.nn.Softmax(dim=0)(pae_batchmean)
-        # rank_pde_t = torch.nn.Softmax(dim=0)(true_pde_batchmean)
-        # rank_pde_p = torch.nn.Softmax(dim=0)(pde_batchmean)
+            if self.rank_loss.use_listnet_loss:
+                # #an easy way of incentivizing ranking accuracy is the following (Listnet):
+                rank_plddt_t = torch.nn.Softmax(dim=0)(true_lddt_batchmean)
+                rank_plddt_p = torch.nn.Softmax(dim=0)(plddt_batchmean)
+                rank_pae_t = torch.nn.Softmax(dim=0)(true_pae_batchmean)
+                rank_pae_p = torch.nn.Softmax(dim=0)(pae_batchmean)
+                rank_pde_t = torch.nn.Softmax(dim=0)(true_pde_batchmean)
+                rank_pde_p = torch.nn.Softmax(dim=0)(pde_batchmean)
 
-        # plddt_rank_loss = -torch.mean(rank_plddt_t * torch.log(rank_plddt_p))
-        # pae_rank_loss = -torch.mean(rank_pae_t * torch.log(rank_pae_p))
-        # pde_rank_loss = -torch.mean(rank_pde_t * torch.log(rank_pde_p))
-        # print('rank_loss:', plddt_rank_loss, pae_rank_loss, pde_rank_loss)
+                plddt_rank_loss = -torch.mean(rank_plddt_t * torch.log(rank_plddt_p))
+                pae_rank_loss = -torch.mean(rank_pae_t * torch.log(rank_pae_p))
+                pde_rank_loss = -torch.mean(rank_pde_t * torch.log(rank_pde_p))
+                print('rank_loss:', plddt_rank_loss, pae_rank_loss, pde_rank_loss)
 
-        return self.weight * (self.plddt.weight * plddt_loss + self.pae.weight * pae_loss + self.pde.weight * pde_loss + self.exp_resolved.weight * exp_resolved_loss), loss_dict
+                rank_loss_dict = dict(
+                    plddt_rank_loss=plddt_rank_loss,
+                    pae_rank_loss=pae_rank_loss,
+                    pde_rank_loss=pde_rank_loss
+                )
+                loss_dict.update(rank_loss_dict)
+                confidence_loss += (plddt_rank_loss + pae_rank_loss + pde_rank_loss) * self.rank_loss.weight
+
+        return self.weight * confidence_loss, loss_dict
 
     def calc_lddt(self, X_pred_L, X_gt_L, X_exists_L, seq, is_real_atom):
         I = seq.shape[-1]
@@ -268,6 +242,12 @@ class ConfidenceLoss(nn.Module):
 
         X_exists_LL = X_exists_L.unsqueeze(-1) * X_exists_L.unsqueeze(-2)
         tok_idx = is_real_atom.nonzero()[:, 0]
+
+        # #get the chemdata version of isrealatom
+        # is_real_atom_b = ChemData().heavyatom_mask.to(seq.device)[seq]
+        # if is_real_atom_b.sum() != is_real_atom.sum():
+        #     print('the mismatch is at residue:', (is_real_atom_b != is_real_atom).nonzero())
+        #     print('*'*200)
 
         difference_distances = torch.abs(ground_truth_distances - predicted_distances)
         lddt_matrix = torch.zeros_like(difference_distances)
@@ -378,14 +358,6 @@ class ConfidenceLoss(nn.Module):
         true_pde_binned = self.bin_values(difference_distances, max_value=self.pde.max_value, n_bins=self.pde.n_bins)
         X_exists_II = X_exists_I.unsqueeze(-1) * X_exists_I.unsqueeze(-2)
         return true_pde_binned.detach(), X_exists_II.detach()
-    
-    def subsample_exp_resolved_logits(self, exp_resolved_logits, seq):
-        I = seq.shape[-1]
-        B = exp_resolved_logits.shape[0]
-        is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq][:, :ChemData().NHEAVY]
-        
-        return exp_resolved_logits.reshape(B, I, ChemData().NHEAVY, 2)[:, is_real_atom]
-
 
     def bin_values(self, values, max_value, n_bins):
         # assumes that the bins go from 0 to max_value
@@ -393,145 +365,39 @@ class ConfidenceLoss(nn.Module):
         bins = torch.linspace(bin_size, max_value - bin_size, n_bins-1, device=values.device)
         return torch.bucketize(values, bins, right=True)
     
+    def log_correlation_statistics(self, plddt, pae, pde, true_lddt, true_pae, true_pde, true_lddt_batchmean, true_pae_batchmean, true_pde_batchmean, plddt_batchmean, pae_batchmean, pde_batchmean, loss_dict):
+        # print('in train loss calc, predicted error is :', plddt, pae, pde)
+        # print('in train loss calc, true error is:', true_lddt, true_pae, true_pde)
 
-class FindOptimalPermutation(nn.Module):
+        # Calculate Spearman rank correlation
+        plddt_rank_corr, lddt_spearman_p = spearmanr(true_lddt_batchmean.cpu().numpy(), plddt_batchmean.cpu().numpy())
+        pae_rank_corr, pae_spearman_p = spearmanr(true_pae_batchmean.cpu().numpy(), pae_batchmean.cpu().numpy())
+        pde_rank_corr, pde_spearman_p = spearmanr(true_pde_batchmean.cpu().numpy(), pde_batchmean.cpu().numpy())
+        # print('spearman_plddt_corr:', plddt_rank_corr)
+        # print('spearman_pae_corr:', pae_rank_corr)
+        # print('spearman_pde_corr:', pde_rank_corr)
+        # print('plddt_spread:', plddt_batchmean.max() - plddt_batchmean.min())
+        # print('pae_spread:', pae_batchmean.max() - pae_batchmean.min())
+        # print('pde_spread:', pde_batchmean.max() - pde_batchmean.min())
+        # print('true plddt spread:', true_lddt_batchmean.max() - true_lddt_batchmean.min())
+        # print('true pae spread:', true_pae_batchmean.max() - true_pae_batchmean.min())
+        # print('true pde spread:', true_pde_batchmean.max() - true_pde_batchmean.min())
 
-    def __init__(self):
-        super(FindOptimalPermutation, self).__init__()
-
-    def forward(
-        self, 
-        X_pred_L,
-        X_gt_symm_I,
-        crd_mask_I,
-        seq, 
-        f
-    ):
-        is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]
-        # create container for X_pred_I
-        I = seq.shape[0]
-        assert X_pred_L.shape[0] == 1
-        X_pred_I = torch.zeros(1, I, ChemData().NTOTAL, 3, device=X_pred_L.device)
-        X_pred_I[:, is_real_atom] = X_pred_L
-
-        if any(rf2aa.util.is_atom(seq)):
-            Ls_prot, Ls_sm = self.get_chain_ls(f, seq)
-
-            print("Ls_prot", Ls_prot)
-            print("Ls_sm", Ls_sm)
-            ch_label = f["entity_id"][None]
-            print("ch_label", ch_label)
-            print("seq", seq)
-            X_gt_I, crd_mask_I = resolve_equiv_natives_asmb(X_pred_I, X_gt_symm_I, crd_mask_I, ch_label, Ls_prot, Ls_sm)
-        else:
-            X_gt_I, crd_mask_I = resolve_equiv_natives(X_pred_I, X_gt_symm_I, crd_mask_I)
+        loss_dict.update({
+            'pred_err_plddt': plddt,
+            'pred_err_pae': pae,
+            'pred_err_pde': pde,
+            'true_err_plddt': true_lddt,
+            'true_err_pae': true_pae,
+            'true_err_pde': true_pde,
+            'plddt_rank_corr': torch.tensor(plddt_rank_corr),
+            'pae_rank_corr': torch.tensor(pae_rank_corr),
+            'pde_rank_corr': torch.tensor(pde_rank_corr),
+            'plddt_spread': plddt_batchmean.max() - plddt_batchmean.min(),
+            'pae_spread': pae_batchmean.max() - pae_batchmean.min(),
+            'pde_spread': pde_batchmean.max() - pde_batchmean.min(),
+            'true_plddt_spread': true_lddt_batchmean.max() - true_lddt_batchmean.min(),
+            'true_pae_spread': true_pae_batchmean.max() - true_pae_batchmean.min(),
+            'true_pde_spread': true_pde_batchmean.max() - true_pde_batchmean.min(),
+        })
         
-        # convert X_gt_I back to L dimension
-        X_gt_L = X_gt_I[:, is_real_atom]
-        X_exists_L = crd_mask_I[:, is_real_atom]
-        return X_gt_L, X_exists_L
-
-    def get_chain_ls(self, f, seq):
-        asym_id = f["asym_id"]
-        Ls = []
-        for i in range(asym_id.max()+1):
-            Ls.append((asym_id == i).sum())
-        print("Ls", Ls)
-        print("asym_id", asym_id)
-        i_start = 0
-        Ls_prot = []
-        Ls_sm = []
-        for L in Ls:
-            # check if the L is a protein or a small molecule
-            # if protein, append to Ls_prot
-            # if small molecule, append to Ls_sm
-            if all(rf2aa.util.is_atom(seq[i_start:i_start+L])):
-                Ls_sm.append(L.item())
-            else:
-                Ls_prot.append(L.item())
-
-            i_start += L 
-        return Ls_prot, Ls_sm             
-
-def cross_entropy_loss(logits, targets):
-    """
-    Compute the categorical cross-entropy loss.
-    
-    Parameters:
-    logits (torch.Tensor): The raw model outputs, shape (N, C) where N is the batch size, C is the number of classes.
-    targets (torch.Tensor): The ground truth labels, shape (N,).
-    
-    Returns:
-    loss (torch.Tensor): The average cross-entropy loss over the batch.
-    """
-    import torch.nn.functional as F 
-    # Step 1: Apply softmax to logits to get probabilities
-    probs = F.softmax(logits, dim=1)  # Shape: (N, C)
-    import pdb; pdb.set_trace()
-    # Step 2: Compute log of probabilities
-    log_probs = torch.log(probs)  # Shape: (N, C)
-    
-    # Step 3: Gather the log-probabilities of the correct class for each sample
-    # `targets` is expected to contain the index of the correct class for each sample in the batch
-    batch_size = logits.shape[0]
-    correct_log_probs = log_probs[range(batch_size), targets]  # Shape: (N,)
-    
-    # Step 4: Compute the negative log likelihood loss
-    loss = -torch.mean(correct_log_probs)  # Average over batch
-    print("probs", probs)
-    print("log_probs", log_probs)
-    print("correct_log_probs", correct_log_probs)
-    print("loss", loss)
-    return loss
-
-def convert_allatom_coords_to_residue_coords(X_pred_L, seq):
-    """
-    Reverse of convert_residue_coords_to_allatom_coords.
-
-    X_pred_L: (B, N_real_atoms, 3) - Coordinates for only real atoms (heavy atoms)
-    seq: (B, I) - Sequence tensor indicating residue types
-
-    Returns:
-        X_pred: (B, I, natoms, 3) - Full tensor with coordinates for all atoms,
-                                    with zeroed entries for non-heavy atoms.
-    """
-    # Get the mask for real atoms based on the sequenceChemData()
-    is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]  # (B, I, natoms)
-    # print('is_real_atom:', is_real_atom.shape, is_real_atom)
-
-    # Initialize the full tensor with zeros
-    B = X_pred_L.shape[0]
-    I = seq.shape[-1]
-    natoms = is_real_atom.shape[-1]
-    X_pred = torch.zeros((B, I, natoms, 3), device=seq.device)
-
-    # Fill in only the "real atom" positions from X_pred_L
-    X_pred[:,is_real_atom] = X_pred_L
-
-    return X_pred
-
-def convert_allatom_mask_to_residue_mask(X_pred_L, seq):
-    """
-    Reverse of convert_residue_coords_to_allatom_coords for X_exists_L.
-
-    X_pred_L: (B, N_real_atoms) - Coordinates for only real atoms (heavy atoms)
-    seq: (B, I) - Sequence tensor indicating residue types
-
-    Returns:
-        X_pred: (B, I, natoms, 3) - Full tensor with coordinates for all atoms,
-                                    with zeroed entries for non-heavy atoms.
-    """
-    # Get the mask for real atoms based on the sequenceChemData()
-    is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]  # (B, I, natoms)
-    # print('is_real_atom:', is_real_atom.shape, is_real_atom)
-
-    # Initialize the full tensor with zeros
-    B = X_pred_L.shape[0]
-    I = seq.shape[-1]
-    natoms = is_real_atom.shape[-1]
-    X_pred = torch.zeros((B, I, natoms), device=seq.device, dtype=torch.bool)
-
-    # Fill in only the "real atom" positions from X_pred_L
-    X_pred[:, is_real_atom] = X_pred_L
-
-    return X_pred

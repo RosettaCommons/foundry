@@ -162,38 +162,6 @@ class ConfidenceHead(nn.Module):
                 exp_resolved_logits= exp_resolved_logits
             )
     
-    
-def find_rep_atoms(seq):
-    # compute a I length tensor with the indices in the L representation of the representative atoms for each token
-    is_real_atom = ChemData().heavyatom_mask.to(seq.device)[seq]
-    #    cbeta for all protein residues except glycine
-    #    calpha for glycine
-    #    c4 for purines 
-    #    c2 for pyrimidines
-    seq_is_protein = rf2aa.util.is_protein(seq).to(torch.bool)
-    use_cbeta = seq_is_protein & (seq != ChemData().aa2num["GLY"]) & (seq != ChemData().aa2num["UNK"])
-    use_calpha = seq_is_protein & ((seq == ChemData().aa2num["GLY"]) | (seq == ChemData().aa2num["UNK"]))
-    
-    #TODO: need to handle unknown DNA/RNA residues
-    use_c4 = (seq == ChemData().aa2num[" DA"]) | (seq == ChemData().aa2num[" DG"]) | (seq == ChemData().aa2num[" RA"]) | (seq == ChemData().aa2num[" RG"])
-    use_c2 = (seq == ChemData().aa2num[" DC"]) | (seq == ChemData().aa2num[" DT"]) | (seq == ChemData().aa2num[" RC"]) | (seq == ChemData().aa2num[" RU"])
-    idx_to_use = torch.ones_like(seq) 
-    idx_to_use[use_cbeta] = 4 # cbeta
-    idx_to_use[use_calpha] = 1 # calpha
-    idx_to_use[use_c4] = 8 # c4
-    idx_to_use[use_c2] = 2 # c2
-    
-    indices = torch.arange(is_real_atom.sum()).to(is_real_atom.device)
-    absolute_indices = torch.zeros_like(is_real_atom.long()) 
-    absolute_indices[is_real_atom] = indices
-    print(
-        'seq', seq.shape, seq,
-        'is_real_atom', is_real_atom.shape, is_real_atom.sum(), is_real_atom,
-        'absolute_indices', absolute_indices.shape, absolute_indices.max(), absolute_indices,
-        'idx_to_use', idx_to_use.shape, idx_to_use
-    )
-    rep_atoms = torch.gather(absolute_indices, 1, idx_to_use[:,None])
-    return rep_atoms[:, 0]
 
 def calc_Cb_distances(X_pred_L, seq, rep_atoms, frame_atom_idxs):
     frame_atom_idxs = frame_atom_idxs.unsqueeze(0).expand(X_pred_L.shape[0], -1, -1)
