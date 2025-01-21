@@ -9,19 +9,6 @@ experiment:
   output_dir: null
 
 loss:
-  # diffusion_loss:
-  #   _target_: rf2aa.loss.af3_losses.DiffusionLoss
-  #   weight: 4.0
-  #   sigma_data: ${model.diffusion_module.sigma_data}
-  #   alpha_dna: 5
-  #   alpha_rna: 5
-  #   alpha_ligand: 10
-  #   edm_lambda: True
-  #   se3_invariant_loss: True
-  #   clamp_diffusion_loss: False
-  # distogram_loss:
-  #   _target_: rf2aa.loss.af3_losses.DistogramLoss
-  #   weight: 3e-2
   confidence_loss:
     _target_: rf2aa.model.af3_with_rollout.ConfidenceLoss
     weight: 1.0
@@ -43,14 +30,8 @@ loss:
       max_value: 1
 
 metrics:
-  # interface_lddt:
-  #   _target_: rf2aa.metrics.lddt_metrics.InterfaceLDDT
-  # chain_lddt:
-  #   _target_: rf2aa.metrics.lddt_metrics.ChainLDDT
   example_id:
     _target_: rf2aa.metrics.metrics_base.AddExampleID
-  # distogram:
-  #   _target_: rf2aa.metrics.distogram_metrics.DistogramLoss
   confidence_interface_lddt:
     _target_: rf2aa.metrics.lddt_metrics.ConfidenceInterfaceLDDT
   ligand_rmsd:
@@ -74,7 +55,6 @@ loader_params:
   dataloader_kwargs:
     shuffle: False
     num_workers: 3
-    #prefetch_factor: 4
     pin_memory: True
 
   crop: 384
