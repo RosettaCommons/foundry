@@ -3,10 +3,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 import rf2aa
 from rf2aa.chemical import ChemicalData as ChemData
-from rf2aa.data.dataloader_adaptor_af3 import discretize_distance_matrix
 from rf2aa.model.AF3_structure import linearNoBias, PairformerBlock
 import torch.utils.checkpoint as checkpoint
-#from rf2aa.util import calc_rmsd
+
+def discretize_distance_matrix(distance_matrix, num_bins=38, min_distance=3.25, max_distance=50.75):
+    # Calculate the bin width
+    bin_width = (max_distance - min_distance) / num_bins
+    bins = torch.arange(num_bins, device=distance_matrix.device) * bin_width + min_distance
+
+    # Discretize distances into bins (bucketize automatically places out-of-range values in the last bin)
+    binned_distances = torch.bucketize(distance_matrix, bins)
+    
+    return binned_distances
 
 
 class ConfidenceHead(nn.Module):
@@ -27,8 +35,8 @@ class ConfidenceHead(nn.Module):
         super(ConfidenceHead, self).__init__()
         self.process_s_inputs_right = linearNoBias(449, c_z)
         self.process_s_inputs_left = linearNoBias(449, c_z)
-        self.af3_style = use_af3_style_binning_and_final_layer_norms
-        if self.af3_style:
+        self.use_af3_style_binning_and_final_layer_norms = use_af3_style_binning_and_final_layer_norms
+        if self.use_af3_style_binning_and_final_layer_norms:
             self.layernorm_pde = nn.LayerNorm(c_z)
             self.layernorm_pae = nn.LayerNorm(c_z)
             self.layernorm_plddt = nn.LayerNorm(c_s)
@@ -100,7 +108,7 @@ class ConfidenceHead(nn.Module):
 
             dist = torch.cdist(X_pred_rep_I, X_pred_rep_I)
 
-            if not self.af3_style:
+            if not self.use_af3_style_binning_and_final_layer_norms:
                 # bins are 3.375 to 20.375 in 1.75 increments according to pseudocode
                 dist_one_hot = F.one_hot(discretize_distance_matrix(dist, min_distance=3.375, max_distance=20.875, num_bins=10), num_classes=11)
             else:
@@ -127,11 +135,11 @@ class ConfidenceHead(nn.Module):
             S_trunk_residual_I = S_trunk_I.clone()
             Z_trunk_residual_II = Z_trunk_II.clone()
             for n in range(len(self.pairformer)):
-                S_trunk_I, Z_trunk_II = checkpoint.checkpoint(self.pairformer[n], S_trunk_I, Z_trunk_II, use_reentrant=False)
-                # S_trunk_I, Z_trunk_II = self.pairformer[n](S_trunk_I, Z_trunk_II)
+                # S_trunk_I, Z_trunk_II = checkpoint.checkpoint(self.pairformer[n], S_trunk_I, Z_trunk_II, use_reentrant=False)
+                S_trunk_I, Z_trunk_II = self.pairformer[n](S_trunk_I, Z_trunk_II)
 
             #despite doing so in their pseudocode, af3's published code does not add the residual back
-            if not self.af3_style:
+            if not self.use_af3_style_binning_and_final_layer_norms:
                 S_trunk_I = S_trunk_residual_I + S_trunk_I
                 Z_trunk_II = Z_trunk_residual_II + Z_trunk_II
 
@@ -161,12 +169,11 @@ class ConfidenceHead(nn.Module):
                 plddt_logits= plddt_logits,
                 exp_resolved_logits= exp_resolved_logits
             )
-    
+
 
 def calc_Cb_distances(X_pred_L, seq, rep_atoms, frame_atom_idxs):
     frame_atom_idxs = frame_atom_idxs.unsqueeze(0).expand(X_pred_L.shape[0], -1, -1)
-    # print('X_pred_L', X_pred_L.shape)
-    # print('frame_atom_idxs', frame_atom_idxs.shape)
+
     N = torch.gather(X_pred_L, 1, frame_atom_idxs[...,0].unsqueeze(-1).expand(-1, -1, 3))
     Ca = torch.gather(X_pred_L, 1, frame_atom_idxs[...,1].unsqueeze(-1).expand(-1, -1, 3))
     C = torch.gather(X_pred_L, 1, frame_atom_idxs[...,2].unsqueeze(-1).expand(-1, -1, 3))

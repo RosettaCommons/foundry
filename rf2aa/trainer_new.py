@@ -18,30 +18,21 @@ import certifi
 import warnings
 import wandb
 import logging
-import tree
 import subprocess
 
-from rf2aa.data.compose_dataset import compose_dataset, compose_single_item_dataset
-from rf2aa.data.dataloader_adaptor import prepare_input, get_loss_calc_items, prepare_input_fm_allatom
-from rf2aa.data.dataloader_adaptor_af3 import prepare_input_af3
 from rf2aa.flow_matching.interpolant import Interpolant
-from rf2aa.flow_matching.sampler import Sampler, AllAtomSampler, AF3Sampler, AF3PartialSampler
+from rf2aa.flow_matching.sampler import  AllAtomSampler
 from rf2aa.debug import debug_unused_params, debug_used_params, debug_grads, pretty_describe_dict
 from rf2aa.training.EMA import EMA, count_parameters
-from rf2aa.loss.af3_losses import Loss as AF3Loss
-from rf2aa.loss.loss import translation_vector_field
 from rf2aa.loss.loss_factory import get_loss_and_misc
 from rf2aa.training.optimizer import add_weight_decay
 from rf2aa.training.recycling import recycle_step_legacy, recycle_step_packed, recycle_step_gen, recycle_sampling, run_model_forward, recycle_step_generic
 from rf2aa.model.network import RosettaFold
 from rf2aa.model.RoseTTAFoldModel import LegacyRoseTTAFoldModule
 from rf2aa.training.scheduler import get_stepwise_decay_schedule_with_warmup
-import rf2aa.util as util
 from rf2aa.util_module import XYZConverter
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.chemical import initialize_chemdata
-from rf2aa.set_seed import seed_all
-from rf2aa.model import AF3_structure
 
 logger = logging.getLogger(__name__)
 

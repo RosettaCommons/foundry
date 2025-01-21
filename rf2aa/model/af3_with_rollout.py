@@ -13,13 +13,13 @@ from rf2aa.training.checkpoint import create_custom_forward
 
 class AF3_with_rollout(nn.Module):
     """ Implements rollout on each training step """
-    def __init__(self, model, confidence, sampler, config):
+    def __init__(self, model, confidence, sampler, batch_size_rollout):
         super(AF3_with_rollout, self).__init__()
         self.model = model
         self.confidence = confidence
         self.sampler = sampler
         self.num_timesteps = 20
-        self.config = config
+        self.batch_size_rollout = batch_size_rollout
 
     def forward(
             self, 
@@ -42,10 +42,8 @@ class AF3_with_rollout(nn.Module):
                 trunk_output["Z_II"].clone().detach(), 
                 noise_schedule,
                 step_scale=1.5, # int he paper it says they changed this during the rollout
-                D=self.config.dataset_params.diffusion_batch_size_rollout
+                D=self.batch_size_rollout
             )
-
-            B = diffusion_output["X_L"].shape[0]
         
         # run confidence model on embeddings and output structure
         #Bug in deepspeed backwards requires us to do it with batch size 1
@@ -55,7 +53,7 @@ class AF3_with_rollout(nn.Module):
         confidence_stack['pde_logits'] = None
         confidence_stack['exp_resolved_logits'] = None
         with torch.enable_grad():
-            for i in range(B):
+            for i in range(self.batch_size_rollout):
 
                 confidence = checkpoint.checkpoint(create_custom_forward(self.confidence, frame_atom_idxs=frame_atom_idxs),
                     trunk_output["S_inputs_I"],
@@ -82,6 +80,7 @@ class AF3_with_rollout(nn.Module):
             exp_resolved=confidence_stack["exp_resolved_logits"],
             distogram=None,
         )
+
 
 class ConfidenceLoss(nn.Module):
 

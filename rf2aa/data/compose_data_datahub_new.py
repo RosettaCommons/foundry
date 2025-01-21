@@ -20,8 +20,7 @@ from datahub.samplers import (
     FallbackSamplerWrapper,
     LazyWeightedRandomSampler, 
 )
-from rf2aa.trainer_new import FlowMatchingTrainer, seed_all
-from resolvers import resolve_import
+from rf2aa.resolvers import resolve_import
 from omegaconf import OmegaConf
 import logging
 

@@ -4,24 +4,11 @@ defaults:
   - _self_
 
 experiment:
-  name: rf2aa-af3-repro-rollout_nmw_from_scratch_af3_style_no_cb_normal_crop
+  name: rf2aa-af3-repro-rollout
   trainer: af3_rollout
-  output_dir: output/nmw_from_scratch_af3_style_no_cb_normal_crop
+  output_dir: null
 
 loss:
-  # diffusion_loss:
-  #   _target_: rf2aa.loss.af3_losses.DiffusionLoss
-  #   weight: 4.0
-  #   sigma_data: ${model.diffusion_module.sigma_data}
-  #   alpha_dna: 5
-  #   alpha_rna: 5
-  #   alpha_ligand: 10
-  #   edm_lambda: True
-  #   se3_invariant_loss: True
-  #   clamp_diffusion_loss: False
-  # distogram_loss:
-  #   _target_: rf2aa.loss.af3_losses.DistogramLoss
-  #   weight: 3e-2
   confidence_loss:
     _target_: rf2aa.model.af3_with_rollout.ConfidenceLoss
     weight: 1.0
@@ -48,14 +35,8 @@ loss:
 
 
 metrics:
-  # interface_lddt:
-  #   _target_: rf2aa.metrics.lddt_metrics.InterfaceLDDT
-  # chain_lddt:
-  #   _target_: rf2aa.metrics.lddt_metrics.ChainLDDT
   example_id:
     _target_: rf2aa.metrics.metrics_base.AddExampleID
-  # distogram:
-  #   _target_: rf2aa.metrics.distogram_metrics.DistogramLoss
   confidence_interface_lddt:
     _target_: rf2aa.metrics.lddt_metrics.ConfidenceInterfaceLDDT
   ligand_rmsd:
@@ -79,7 +60,6 @@ loader_params:
   dataloader_kwargs:
     shuffle: False
     num_workers: 3
-    #prefetch_factor: 4
     pin_memory: True
 
   crop: 384
@@ -94,10 +74,6 @@ training_params:
   EMA: 0.999
   seed: 1
 
-  # resume_from_checkpoint_path: /home/tuscant/weights/new_model_weights_with_270_restart_confidence_after_3_epochs.pt
-  # resume_from_checkpoint_path: /home/tuscant/weights/270_merged_confidence_9b.pt
-  # resume_from_checkpoint_path: /home/tuscant/weights/270_confidence_inference_2.pt
-  # resume_from_checkpoint_path: /home/tuscant/weights/rf2aa-af3-repro3_last.pt
   resume_from_checkpoint_path: /home/tuscant/weights/220azure.pt
   reset_optimizer_params: True
   make_fresh_weights_confidence_compatible: True #turn on when using weights that haven't previously been trained with the confidence head. Will rename parameters to be compatible with rollout model.

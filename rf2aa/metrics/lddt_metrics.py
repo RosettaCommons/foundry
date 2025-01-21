@@ -74,7 +74,6 @@ class InterfaceLDDT(Metric):
         chain_iid_token_lvl = loss_input["chain_iid_token_lvl"]
         tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()
         for chain_i, chain_j, interface_type in loss_input["interfaces_to_score"]:
-            #print(interface_type,chain_i, chain_j) 
             # get tokens in chain_i and chain_j
             chain_i_tokens = chain_iid_token_lvl == chain_i
             chain_j_tokens = chain_iid_token_lvl == chain_j
@@ -122,14 +121,11 @@ class ConfidenceInterfaceLDDT(Metric):
             "interface_lddt_pde": [],
             "interface_lddt_plddt": [],
             "interface_lddt_af3_style_ipae": [],
-            "interface_lddt_af3_style_iptm": [],
             "interface_lddt_af3_style_lig_ipae": [],
-            "interface_lddt_af3_style_lig_iptm": []
         }
         chain_iid_token_lvl = loss_input["chain_iid_token_lvl"]
         tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()
         for chain_i, chain_j, interface_type in loss_input["interfaces_to_score"]:
-            #print(interface_type,chain_i, chain_j) 
             # get tokens in chain_i and chain_j
             chain_i_tokens = chain_iid_token_lvl == chain_i
             chain_j_tokens = chain_iid_token_lvl == chain_j
@@ -165,9 +161,7 @@ class ConfidenceInterfaceLDDT(Metric):
             interface_lddt["interface_lddt_pde"].append(lddt[pde_idx].item())
             interface_lddt["interface_lddt_plddt"].append(lddt[plddt_idx].item())
             interface_lddt["interface_lddt_af3_style_ipae"].append(lddt[af3_style_ipae_idx].item())
-            interface_lddt["interface_lddt_af3_style_iptm"].append(lddt[loss_input["best_iptm_idx"][f'{chain_i}-{chain_j}']].item())
             interface_lddt["interface_lddt_af3_style_lig_ipae"].append(lddt[loss_input["best_lig_ipae_idx"][f'{chain_i}-{chain_j}']].item())
-            interface_lddt["interface_lddt_af3_style_lig_iptm"].append(lddt[loss_input["best_lig_iptm_idx"][f'{chain_i}-{chain_j}']].item())
         return interface_lddt
 
 class ConfidenceChainLDDT(Metric):
@@ -198,7 +192,6 @@ class ConfidenceChainLDDT(Metric):
             chain_i_atoms = chain_i_tokens[tok_idx]
             chain_j_atoms = chain_j_tokens[tok_idx]
             # compute the intersection of chain_i and chain_j
-
             chain_ij_atoms = torch.einsum(
                                 "L, K -> LK", 
                                 torch.tensor(chain_i_atoms), 
@@ -279,8 +272,6 @@ class LigRMSD(Metric):
 
         w_L = w_L.to(X_L.device)
         w_L = w_L.expand(X_L.shape[0], -1)
-        # X_L_aligned = weighted_rigid_align(X_L, X_gt_L, X_exists_L[0], w_L)
-        # print('X_L_aligned', X_L_aligned.shape, X_L_aligned)
         rmsd = []
         for i in range(X_L.shape[0]):
 
@@ -366,9 +357,7 @@ class InterfacePocketLigandRMSD(Metric):
             'interface_rmsd_pocket_ligand_chain': [],
             'interface_rmsd_pocket_ligand_ipae': [],
             'interface_rmsd_pocket_ligand_af3_style_ipae': [],
-            'interface_rmsd_pocket_ligand_af3_style_iptm': [],
             'interface_rmsd_pocket_ligand_af3_style_lig_ipae': [],
-            'interface_rmsd_pocket_ligand_af3_style_lig_iptm': []
         }
 
         chain_iid_token_lvl = loss_input["chain_iid_token_lvl"]
@@ -397,7 +386,6 @@ class InterfacePocketLigandRMSD(Metric):
                 continue
 
             chain_lig_tokens = chain_iid_token_lvl == lig_chain_iid
-        # for lig_chain_iid in np.unique(chain_iid_token_lvl[network_input['f']['is_ligand'].cpu().numpy()]):
             # skip if the interface is not between protein and ligand
             # convert the token level to the atom_level
             chain_lig_atoms = chain_lig_tokens[tok_idx]
@@ -425,26 +413,9 @@ class InterfacePocketLigandRMSD(Metric):
             interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_chain'].append(lig_chain_iid)
             interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_ipae'].append(batch_rmsds[loss_input["ipae_idx"]].item())
             interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_ipae'].append(batch_rmsds[loss_input["best_interface_idx"][f'{chain_i}-{chain_j}']].item())
-            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_iptm'].append(batch_rmsds[loss_input["best_iptm_idx"][f'{chain_i}-{chain_j}']].item())
             interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_lig_ipae'].append(batch_rmsds[loss_input["best_lig_ipae_idx"][f'{chain_i}-{chain_j}']].item())
-            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_lig_iptm'].append(batch_rmsds[loss_input["best_lig_iptm_idx"][f'{chain_i}-{chain_j}']].item())
 
         return interface_pocket_ligand_rmsd
-
-    
-# class ConfidenceLossMetric(Metric):
-#     def __call__(self,network_input,network_output,loss_input):
-#         loss = {
-#             'pae_loss':[],
-#             'pde_loss':[],
-#             'plddt_loss':[],
-#             'exp_resolved_loss':[]
-#         }
-
-#         loss
-
-#         return loss
-
 
 
 class ChainLDDT(Metric):
@@ -485,7 +456,6 @@ class ChainLDDT(Metric):
                 pairs_to_score=chain_ij_atoms
             )
 
-            
             chain_lddt["chain_lddt_first"].append(lddt[0].item())
             chain_lddt["chain_lddt_best"].append(lddt.max().item())
         return chain_lddt

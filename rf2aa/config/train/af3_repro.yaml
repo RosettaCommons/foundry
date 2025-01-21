@@ -332,7 +332,7 @@ dataset_params:
   diffusion_batch_size_valid: ${dataset_params.diffusion_batch_size}
 
   n_msa: 1024
-  default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
+  default_transform: rf2aa.data.pipelines.build_af3_transform_pipeline
   train:
     # ... train datasets
     pdb:
@@ -528,4 +528,3 @@ dataset_params:
         crop_spatial_probability: 0.0
         diffusion_batch_size: ${dataset_params.diffusion_batch_size_valid}
         n_msa: ${dataset_params.n_msa}
-        
