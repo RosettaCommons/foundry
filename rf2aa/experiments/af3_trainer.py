@@ -332,8 +332,8 @@ class AF3TrainerRollout(AF3Trainer):
             no_sync=self.model.no_sync,
         )
 
-        # symmetry resolution
-        #change X_L to the rollout so gt matches rollout batch dimesnion. This assumes that we are not
+        # Symmetry resolution
+        #Change X_L to the rollout so gt matches rollout batch dimension during the symmetry resolution. This assumes that we are not
         #evaluating non-confidence head losses on the rollout model
         output_i["X_L"] = output_i["X_pred_rollout_L"]
         B = output_i["X_L"].shape[0]
@@ -374,15 +374,7 @@ class AF3TrainerRollout(AF3Trainer):
             "chain_iid_token_lvl": example["ground_truth"]["chain_iid_token_lvl"],
             "example_id": example["example_id"],
             "alignment_mask": example["alignment_mask_atm_lvl"],
-            
-            #for loss calc
-            "seq": example["confidence_feats"]["rf2aa_seq"],
-            "atom_frames": example["confidence_feats"]["atom_frames"],
-            "tok_idx": example['feats']['atom_to_token_map'],
-            "is_real_atom": example["confidence_feats"]['is_real_atom'],
-            "rep_atom_idxs": example['ground_truth']['rep_atom_idxs'],
-            "frame_atom_idxs": example["confidence_feats"]['pae_frame_idx_token_lvl_from_atom_lvl'],
-            "terminal_oxygen_idxs": example["confidence_feats"]["terminal_oxygen_idx_atm_lvl"],
+            "is_real_atom": example["confidence_feats"]['is_real_atom'].to(gpu),
         }
 
         # AF3's ranking metrics work like this, but using ptm instead of ipae:
@@ -424,7 +416,7 @@ class AF3TrainerRollout(AF3Trainer):
             interface_mask = torch.zeros(len(ch_label), len(ch_label), device=gpu, dtype=torch.bool)
 
         # Chain masks prep
-        seq_len = loss_input["seq"].shape[-1]
+        I = loss_input['crd_mask_rep_atoms_I'].shape[-1]
         chain_to_all_masks = {}
         chain_to_self_masks = {}
         interface_masks = {}
@@ -438,12 +430,12 @@ class AF3TrainerRollout(AF3Trainer):
             interface_mask = chain_to_all_mask & ~chain_to_self_mask
             
             #the diagonal of the chain_to_all_mask is always false
-            chain_to_all_mask = chain_to_all_mask & ~torch.eye(seq_len, device=chain_to_all_mask.device, dtype=torch.bool)
+            chain_to_all_mask = chain_to_all_mask & ~torch.eye(I, device=chain_to_all_mask.device, dtype=torch.bool)
 
             chain_to_all_masks[chain] = chain_to_all_mask
 
             #the diagonal of the chain_to_self_mask is always false
-            chain_to_self_mask = chain_to_self_mask & ~torch.eye(seq_len, device=chain_to_self_mask.device, dtype=torch.bool)
+            chain_to_self_mask = chain_to_self_mask & ~torch.eye(I, device=chain_to_self_mask.device, dtype=torch.bool)
 
             chain_to_self_masks[chain] = chain_to_self_mask
 
@@ -484,7 +476,7 @@ class AF3TrainerRollout(AF3Trainer):
             plddt_logits = confidence['plddt_logits'][i].unsqueeze(0)
             plddt_logits = plddt_logits.reshape(plddt_logits.shape[0], -1, plddt_logits.shape[1], ChemData().NHEAVY)
 
-            plddt, pae, pde = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), is_real_atom=loss_input['is_real_atom'].to(gpu))
+            plddt, pae, pde = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), is_real_atom=loss_input['is_real_atom'])
 
             pred_err.append({'plddt': plddt, 'pae': pae, 'pde': pde})
 
@@ -502,16 +494,16 @@ class AF3TrainerRollout(AF3Trainer):
 
                     #if a ligand participates in more than 1 interface, we still only want to get calculate one score per batch
                     if len(lig_err[lig_chain]) < i+1:
-                        _, lig_i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[lig_chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                        _, lig_i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), pae_mask=interface_masks[lig_chain], is_real_atom=loss_input['is_real_atom'])
                         lig_err[lig_chain].append(lig_i_pae)
                     
-                _, chain_a_i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[chain_a], is_real_atom=loss_input['is_real_atom'].to(gpu))
-                _, chain_b_i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=interface_masks[chain_b], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                _, chain_a_i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), pae_mask=interface_masks[chain_a], is_real_atom=loss_input['is_real_atom'])
+                _, chain_b_i_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), pae_mask=interface_masks[chain_b], is_real_atom=loss_input['is_real_atom'])
                 interface_err[interface].append((chain_a_i_pae + chain_b_i_pae))
             for chain in scored_chains:
-                _, chain_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=chain_to_all_masks[chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                _, chain_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), pae_mask=chain_to_all_masks[chain], is_real_atom=loss_input['is_real_atom'])
                 chain_to_all_err[chain].append(chain_pae)
-                _, single_chain_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), loss_input["seq"].to(plddt_logits.device), pae_mask=chain_to_self_masks[chain], is_real_atom=loss_input['is_real_atom'].to(gpu))
+                _, single_chain_pae, _ = unbin_rf3_metrics(plddt_logits.float(), confidence['pae_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), confidence['pde_logits'][i].unsqueeze(0).permute(0,3,1,2).float(), pae_mask=chain_to_self_masks[chain], is_real_atom=loss_input['is_real_atom'])
                 chain_to_self_err[chain].append(single_chain_pae)
 
         def _inmap(path, x):

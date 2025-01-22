@@ -128,7 +128,7 @@ class ConfidenceLoss(nn.Module):
         pae_loss = self.cce(pae_logits, true_pae_binned) * valid_pae_pairs
         pae_loss = pae_loss.sum() / (valid_pae_pairs.sum() + self.eps)
 
-        true_pde_binned, is_valid_pair = self.calc_pde(X_pred_L, X_gt_L, X_exists_L, loss_input["seq"], loss_input['rep_atom_idxs'])
+        true_pde_binned, is_valid_pair = self.calc_pde(X_pred_L, X_gt_L, X_exists_L, loss_input['rep_atom_idxs'])
         pde_logits = network_output["pde"].permute(0,3,1,2)
         pde_loss = self.cce(pde_logits, true_pde_binned) * is_valid_pair
         pde_loss = pde_loss.sum() / (is_valid_pair.sum() + self.eps)
@@ -220,7 +220,7 @@ class ConfidenceLoss(nn.Module):
 
         #Don't calculate plddt for terminal oxygens, so in those cases we excise those idxs from the L representation and update is_real_atom
         if terminal_oxygen_idxs is not None:
-            #NOTE: We don't clone is_real_atom, as modifying the parent dictionary has the added benefit of fixing the terimanl oxygens for the exp_resolved calculation as well.
+            #NOTE: We don't clone is_real_atom, as modifying the parent dictionary has the added benefit of fixing the terminal oxygens for the exp_resolved calculation as well.
             #NOTE: tradeoff here between doing this as a loop or a mask. There's usually no terminal oxygens, and when they do exist only normally
             #one or two, maybe better to do the loop
             for idx in terminal_oxygen_idxs:
@@ -235,11 +235,11 @@ class ConfidenceLoss(nn.Module):
                 #Update the tok_idx to reflect the new indices
                 tok_idx = is_real_atom.nonzero()[:, 0]
 
-        I = seq.shape[-1]
+        I = is_real_atom.shape[0]
         B = X_pred_L.shape[0]
         L = X_pred_L.shape[1]
 
-        #If seq is too long, split the batches to deal with a memory issue during validation
+        #If structure is too big, split the batches to deal with a memory issue during validation
         if I > 384:
             ground_truth_distances = torch.cdist(X_gt_L[:B//2], X_gt_L[:B//2], compute_mode="donot_use_mm_for_euclid_dist")
             predicted_distances = torch.cdist(X_pred_L[:B//2], X_pred_L[:B//2], compute_mode="donot_use_mm_for_euclid_dist")
@@ -280,7 +280,6 @@ class ConfidenceLoss(nn.Module):
         lddt_per_atom_binned = self.bin_values(lddt_per_atom_I, max_value=self.plddt.max_value, n_bins=self.plddt.n_bins)
 
         return lddt_per_atom_binned, X_exists_I
-
 
     
     def calc_pae(self, loss_input, X_pred_L, X_gt_L, X_exists_L, pae_logits, frame_atom_idxs, eps=1e-4):
@@ -354,7 +353,7 @@ class ConfidenceLoss(nn.Module):
 
         return true_pae_label.detach(), pae_logits, valid_pairs
 
-    def calc_pde(self, X_pred_L, X_gt_L, X_exists_L, seq, rep_atoms):
+    def calc_pde(self, X_pred_L, X_gt_L, X_exists_L, rep_atoms):
         X_pred_I = X_pred_L.index_select(1, rep_atoms)
         X_gt_I = X_gt_L.index_select(1, rep_atoms)
         X_exists_I = X_exists_L.index_select(1, rep_atoms)

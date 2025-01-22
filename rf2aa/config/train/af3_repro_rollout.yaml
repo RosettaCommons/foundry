@@ -330,14 +330,11 @@ cif_parser_caching_args:
 
 
 dataset_params:
-  validate_every_n_epochs: 10
-  n_train: 24000
-
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   diffusion_batch_size: 1
   diffusion_batch_size_valid: 5
-  diffusion_batch_size_rollout: 24 #48
+  diffusion_batch_size_rollout: 24
 
   n_msa: 1024
   default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
