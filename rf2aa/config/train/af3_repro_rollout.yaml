@@ -49,7 +49,7 @@ metrics:
 
 ddp_params:
   batch_size: 1
-  accum: 6
+  accum: 3
 
 loader_params:
   p_msa_mask: 0.0
@@ -73,10 +73,7 @@ training_params:
   grad_clip: 10.0
   EMA: 0.999
   seed: 1
-
-  resume_from_checkpoint_path: /home/tuscant/weights/220azure.pt
-  reset_optimizer_params: True
-  make_fresh_weights_confidence_compatible: True #turn on when using weights that haven't previously been trained with the confidence head. Will rename parameters to be compatible with rollout model.
+  make_fresh_weights_confidence_compatible: False #turn on when using weights that haven't previously been trained with the confidence head. Will rename parameters to be compatible with rollout model.
 
 interpolant:
   sigma_data: 16
@@ -339,9 +336,8 @@ dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   diffusion_batch_size: 1
-  diffusion_batch_size_valid: 1 #16
+  diffusion_batch_size_valid: 5
   diffusion_batch_size_rollout: 24 #48
-  trunk_batch_size_valid: 1
 
   n_msa: 1024
   default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
@@ -430,7 +426,6 @@ dataset_params:
                 - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants.AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
                 - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants.AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
                 - "is_inter_molecule"
-                # - "example_id in [\"{['pdb', 'interfaces']}{4v5e}{2}{['PC_1', 'QC_1']}\"]"
               columns_to_load:
                 # columns required for identification, filtering & weighting
                 - example_id
@@ -547,4 +542,3 @@ dataset_params:
         diffusion_batch_size: ${dataset_params.diffusion_batch_size_valid}
         n_msa: ${dataset_params.n_msa}
         run_confidence_head: ${loader_params.run_confidence_head}
-        

@@ -476,13 +476,6 @@ class AF3TrainerRollout(AF3Trainer):
             chain_to_self_err[chain] = []
 
         outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
-        #pickle the outputs
-        with open(f'valid_step_debug.pt', 'wb') as f:
-            torch.save(outputs, f)
-        
-        #unpickle the outputs
-        # with open(f'valid_step_debug.pt', 'rb') as f:
-        #     outputs = torch.load(f)
 
         confidence = outputs['confidence']
         
@@ -728,11 +721,7 @@ class AF3TrainerRollout(AF3Trainer):
 
             for epoch in range(start_epoch,self.config.experiment.n_epoch):
                 train_sampler.set_epoch(epoch)
-
-                # print(f'about to go into valid_epoch for epoch {epoch}')
-                # self.valid_epoch(epoch, rank, world_size)
-                # print(donevalidating)
-
+                
                 self.train_epoch(epoch, rank, world_size)
                 for _, valid_sampler in valid_samplers.items():
                     valid_sampler.set_epoch(epoch)
