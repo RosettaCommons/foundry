@@ -110,11 +110,11 @@ class ConfidenceLoss(nn.Module):
         network_output,
         loss_input,
     ):
-        I = loss_input["seq"].shape[-1]
         X_gt_L = loss_input["X_gt_L"]
         X_exists_L = loss_input["crd_mask_L"]
         X_pred_L = network_output["X_pred_rollout_L"]
         B = X_pred_L.shape[0]
+        I = loss_input["is_real_atom"].shape[0]
 
         true_lddt_binned, is_resolved_I = self.calc_lddt(X_pred_L, X_gt_L, X_exists_L, loss_input["seq"], loss_input["is_real_atom"], loss_input['terminal_oxygen_idxs'])
         plddt_loss = self.cce(
@@ -206,9 +206,9 @@ class ConfidenceLoss(nn.Module):
                 pde_rank_loss = -torch.mean(rank_pde_t * torch.log(rank_pde_p))
 
                 rank_loss_dict = dict(
-                    plddt_rank_loss=plddt_rank_loss,
-                    pae_rank_loss=pae_rank_loss,
-                    pde_rank_loss=pde_rank_loss
+                    plddt_rank_loss=plddt_rank_loss.detach(),
+                    pae_rank_loss=pae_rank_loss.detach(),
+                    pde_rank_loss=pde_rank_loss.detach()
                 )
                 loss_dict.update(rank_loss_dict)
                 confidence_loss += (plddt_rank_loss + pae_rank_loss + pde_rank_loss) * self.rank_loss.weight
@@ -239,7 +239,7 @@ class ConfidenceLoss(nn.Module):
         B = X_pred_L.shape[0]
         L = X_pred_L.shape[1]
 
-        #If structure is too big, split the batches to deal with a memory issue during validation
+        #If structure is too big, split the batches to deal with a memory issue
         if I > 384:
             ground_truth_distances = torch.cdist(X_gt_L[:B//2], X_gt_L[:B//2], compute_mode="donot_use_mm_for_euclid_dist")
             predicted_distances = torch.cdist(X_pred_L[:B//2], X_pred_L[:B//2], compute_mode="donot_use_mm_for_euclid_dist")
