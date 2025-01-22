@@ -156,17 +156,17 @@ class ConfidenceLoss(nn.Module):
             #NOTE: for plddt we take the bin value as the upper threshold of the bin, for pae and pde we take the midpoint (consistent with rf2aa)
             lddt_bin_size = self.plddt.max_value / self.plddt.n_bins
             true_lddt_unbinned = ((true_lddt_binned.detach() + 1) * lddt_bin_size ) * is_resolved_I
-            true_lddt_batchmean = true_lddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
+            true_lddt_per_structure = true_lddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
             true_lddt = true_lddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
 
             pae_bin_size = self.pae.max_value / self.pae.n_bins
             true_pae = ((true_pae_binned.detach() + 1) * pae_bin_size - (pae_bin_size / 2)) * valid_pae_pairs
-            true_pae_batchmean = true_pae.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
+            true_pae_per_structure = true_pae.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
             true_pae = true_pae.sum() / (valid_pae_pairs.sum() + self.eps)
 
             pde_bin_size = self.pde.max_value / self.pde.n_bins
             true_pde = ((true_pde_binned.detach() + 1) * pde_bin_size - (pde_bin_size / 2)) * is_valid_pair
-            true_pde_batchmean = true_pde.sum(dim=(1,2)) / (is_valid_pair.sum(dim=(1,2)) + self.eps)
+            true_pde_per_structure = true_pde.sum(dim=(1,2)) / (is_valid_pair.sum(dim=(1,2)) + self.eps)
             true_pde = true_pde.sum() / (is_valid_pair.sum() + self.eps)
 
             #now do similarly for predicted values
@@ -174,32 +174,32 @@ class ConfidenceLoss(nn.Module):
             plddt_unbinned = network_output["plddt"].reshape(B, self.plddt.n_bins, I, ChemData().NHEAVY).detach().float()
             plddt_unbinned = torch.nn.Softmax(dim=1)(plddt_unbinned)
             plddt_unbinned = (plddt_unbinned * lddt_bins[None, :, None, None]).sum(dim=1) * is_resolved_I[..., :ChemData().NHEAVY]
-            plddt_batchmean = plddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
+            plddt_per_structure = plddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
             plddt = plddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
                 
             pae_bins = torch.linspace((pae_bin_size / 2), (self.pae.max_value - (pae_bin_size / 2)), self.pae.n_bins, device=true_pae_binned.device)
             pae_unbinned = torch.nn.Softmax(dim=1)(pae_logits).detach().float()
             pae_unbinned = (pae_unbinned * pae_bins[None, :, None, None]).sum(dim=1) * valid_pae_pairs
-            pae_batchmean = pae_unbinned.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
+            pae_per_structure = pae_unbinned.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
             pae = (pae_unbinned * valid_pae_pairs).sum() / (valid_pae_pairs.sum() + self.eps)
 
             pde_bins = torch.linspace((pde_bin_size / 2), (self.pde.max_value - (pde_bin_size / 2)), self.pde.n_bins, device=true_pde_binned.device)
             pde_unbinned = torch.nn.Softmax(dim=1)(pde_logits).detach().float()
             pde_unbinned = (pde_unbinned * pde_bins[None, :, None, None]).sum(dim=1) * is_valid_pair
+            pde_per_structure = pde_unbinned.sum(dim=(1,2)) / (is_valid_pair.sum(dim=(1,2)) + self.eps)
             pde = (pde_unbinned * is_valid_pair).sum() / (is_valid_pair.sum() + self.eps)
-            pde_batchmean = pde_unbinned.detach().mean(dim=(1,2))
 
             if self.log_statistics:
-                self.log_correlation_statistics(plddt, pae, pde, true_lddt, true_pae, true_pde, true_lddt_batchmean, true_pae_batchmean, true_pde_batchmean, plddt_batchmean, pae_batchmean, pde_batchmean, loss_dict)
+                self.log_correlation_statistics(plddt, pae, pde, true_lddt, true_pae, true_pde, true_lddt_per_structure, true_pae_per_structure, true_pde_per_structure, plddt_per_structure, pae_per_structure, pde_per_structure, loss_dict)
 
             if self.rank_loss.use_listnet_loss:
                 # #an easy way of incentivizing ranking accuracy is the following (Listnet):
-                rank_plddt_t = torch.nn.Softmax(dim=0)(true_lddt_batchmean)
-                rank_plddt_p = torch.nn.Softmax(dim=0)(plddt_batchmean)
-                rank_pae_t = torch.nn.Softmax(dim=0)(true_pae_batchmean)
-                rank_pae_p = torch.nn.Softmax(dim=0)(pae_batchmean)
-                rank_pde_t = torch.nn.Softmax(dim=0)(true_pde_batchmean)
-                rank_pde_p = torch.nn.Softmax(dim=0)(pde_batchmean)
+                rank_plddt_t = torch.nn.Softmax(dim=0)(true_lddt_per_structure)
+                rank_plddt_p = torch.nn.Softmax(dim=0)(plddt_per_structure)
+                rank_pae_t = torch.nn.Softmax(dim=0)(true_pae_per_structure)
+                rank_pae_p = torch.nn.Softmax(dim=0)(pae_per_structure)
+                rank_pde_t = torch.nn.Softmax(dim=0)(true_pde_per_structure)
+                rank_pde_p = torch.nn.Softmax(dim=0)(pde_per_structure)
 
                 plddt_rank_loss = -torch.mean(rank_plddt_t * torch.log(rank_plddt_p))
                 pae_rank_loss = -torch.mean(rank_pae_t * torch.log(rank_pae_p))
@@ -371,12 +371,12 @@ class ConfidenceLoss(nn.Module):
         bins = torch.linspace(bin_size, max_value - bin_size, n_bins-1, device=values.device)
         return torch.bucketize(values, bins, right=True)
     
-    def log_correlation_statistics(self, plddt, pae, pde, true_lddt, true_pae, true_pde, true_lddt_batchmean, true_pae_batchmean, true_pde_batchmean, plddt_batchmean, pae_batchmean, pde_batchmean, loss_dict):
+    def log_correlation_statistics(self, plddt, pae, pde, true_lddt, true_pae, true_pde, true_lddt_per_structure, true_pae_per_structure, true_pde_per_structure, plddt_per_structure, pae_per_structure, pde_per_structure, loss_dict):
 
         # Calculate Spearman rank correlation
-        plddt_rank_corr, lddt_spearman_p = spearmanr(true_lddt_batchmean.cpu().numpy(), plddt_batchmean.cpu().numpy())
-        pae_rank_corr, pae_spearman_p = spearmanr(true_pae_batchmean.cpu().numpy(), pae_batchmean.cpu().numpy())
-        pde_rank_corr, pde_spearman_p = spearmanr(true_pde_batchmean.cpu().numpy(), pde_batchmean.cpu().numpy())
+        plddt_rank_corr, lddt_spearman_p = spearmanr(true_lddt_per_structure.cpu().numpy(), plddt_per_structure.cpu().numpy())
+        pae_rank_corr, pae_spearman_p = spearmanr(true_pae_per_structure.cpu().numpy(), pae_per_structure.cpu().numpy())
+        pde_rank_corr, pde_spearman_p = spearmanr(true_pde_per_structure.cpu().numpy(), pde_per_structure.cpu().numpy())
 
         loss_dict.update({
             'pred_err_plddt': plddt,
@@ -388,11 +388,11 @@ class ConfidenceLoss(nn.Module):
             'plddt_rank_corr': torch.tensor(plddt_rank_corr),
             'pae_rank_corr': torch.tensor(pae_rank_corr),
             'pde_rank_corr': torch.tensor(pde_rank_corr),
-            'plddt_spread': plddt_batchmean.max() - plddt_batchmean.min(),
-            'pae_spread': pae_batchmean.max() - pae_batchmean.min(),
-            'pde_spread': pde_batchmean.max() - pde_batchmean.min(),
-            'true_plddt_spread': true_lddt_batchmean.max() - true_lddt_batchmean.min(),
-            'true_pae_spread': true_pae_batchmean.max() - true_pae_batchmean.min(),
-            'true_pde_spread': true_pde_batchmean.max() - true_pde_batchmean.min(),
+            'plddt_spread': plddt_per_structure.max() - plddt_per_structure.min(),
+            'pae_spread': pae_per_structure.max() - pae_per_structure.min(),
+            'pde_spread': pde_per_structure.max() - pde_per_structure.min(),
+            'true_plddt_spread': true_lddt_per_structure.max() - true_lddt_per_structure.min(),
+            'true_pae_spread': true_pae_per_structure.max() - true_pae_per_structure.min(),
+            'true_pde_spread': true_pde_per_structure.max() - true_pde_per_structure.min(),
         })
         
