@@ -72,7 +72,7 @@ from datahub.transforms.template import (
 from rf2aa.metrics.confidence_metric_transforms import AddAF3PocketAlignmentMask
 
 
-def build_af3__val_transform_pipeline(
+def build_af3_val_transform_pipeline(
     *,
     # Training or inference (required)
     is_inference: bool,  # If True, we skip cropping, etc.

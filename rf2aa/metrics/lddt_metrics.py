@@ -116,7 +116,6 @@ class ConfidenceInterfaceLDDT(Metric):
         interface_lddt = {
             "interface_lddt_first": [],
             "interface_lddt_best": [],
-            "interface_lddt_ipae": [],
             "interface_lddt_pae": [],
             "interface_lddt_pde": [],
             "interface_lddt_plddt": [],
@@ -149,14 +148,12 @@ class ConfidenceInterfaceLDDT(Metric):
                 pairs_to_score=chain_ij_atoms,
                 distance_cutoff=30.0
             )
-            ipae_idx = loss_input["ipae_idx"]
             pae_idx = loss_input["pae_idx"]
             pde_idx = loss_input["pde_idx"]
             plddt_idx = loss_input["plddt_idx"]
             af3_style_ipae_idx = loss_input["best_interface_idx"][f'{chain_i}-{chain_j}']
             interface_lddt["interface_lddt_first"].append(lddt[0].item())
             interface_lddt["interface_lddt_best"].append(lddt.max().item())
-            interface_lddt["interface_lddt_ipae"].append(lddt[ipae_idx].item())
             interface_lddt["interface_lddt_pae"].append(lddt[pae_idx].item())
             interface_lddt["interface_lddt_pde"].append(lddt[pde_idx].item())
             interface_lddt["interface_lddt_plddt"].append(lddt[plddt_idx].item())
@@ -174,7 +171,6 @@ class ConfidenceChainLDDT(Metric):
         chain_lddt = {
             "chain_lddt_first": [],
             "chain_lddt_best": [],
-            "chain_lddt_ipae": [],
             "chain_lddt_pae": [],
             "chain_lddt_pde": [],
             "chain_lddt_plddt": [],
@@ -210,12 +206,11 @@ class ConfidenceChainLDDT(Metric):
             
             chain_lddt["chain_lddt_first"].append(lddt[0].item())
             chain_lddt["chain_lddt_best"].append(lddt.max().item())
-            chain_lddt["chain_lddt_ipae"].append(lddt[loss_input["ipae_idx"]].item())
             chain_lddt["chain_lddt_pae"].append(lddt[loss_input["pae_idx"]].item())
             chain_lddt["chain_lddt_pde"].append(lddt[loss_input["pde_idx"]].item())
             chain_lddt["chain_lddt_plddt"].append(lddt[loss_input["plddt_idx"]].item())
-            chain_lddt["chain_lddt_af3_style_chain"].append(lddt[loss_input["best_chain_idx"][chain_i]].item())
-            chain_lddt["chain_lddt_af3_style_single_chain"].append(lddt[loss_input["best_single_chain_idx"][chain_i]].item())
+            chain_lddt["chain_lddt_af3_style_chain"].append(lddt[loss_input["best_chain_to_all_idx"][chain_i]].item())
+            chain_lddt["chain_lddt_af3_style_single_chain"].append(lddt[loss_input["best_chain_to_self_idx"][chain_i]].item())
         return chain_lddt
 
 class LigRMSD(Metric):
@@ -228,7 +223,6 @@ class LigRMSD(Metric):
         lig_rmsd = {
             "first_lig_rmsd": [],
             "best_lig_rmsd": [],
-            "ipae_lig_rmsd": [],
             "pae_lig_rmsd": [],
             "pde_lig_rmsd": [],
             "plddt_lig_rmsd": []
@@ -296,14 +290,12 @@ class LigRMSD(Metric):
             )
             rmsd.append(ligand_rmsd)
 
-        ipae_idx = loss_input["ipae_idx"]
         pae_idx = loss_input["pae_idx"]
         pde_idx = loss_input["pde_idx"]
         plddt_idx = loss_input["plddt_idx"]
 
         lig_rmsd["first_lig_rmsd"].append(rmsd[0].item())
         lig_rmsd["best_lig_rmsd"].append(min(rmsd).item())
-        lig_rmsd["ipae_lig_rmsd"].append(rmsd[ipae_idx].item())
         lig_rmsd["pae_lig_rmsd"].append(rmsd[pae_idx].item())
         lig_rmsd["pde_lig_rmsd"].append(rmsd[pde_idx].item())
         lig_rmsd["plddt_lig_rmsd"].append(rmsd[plddt_idx].item())
@@ -355,7 +347,6 @@ class InterfacePocketLigandRMSD(Metric):
             'interface_rmsd_pocket_ligand_mean': [],
             'interface_rmsd_pocket_ligand_worst': [],
             'interface_rmsd_pocket_ligand_chain': [],
-            'interface_rmsd_pocket_ligand_ipae': [],
             'interface_rmsd_pocket_ligand_af3_style_ipae': [],
             'interface_rmsd_pocket_ligand_af3_style_lig_ipae': [],
         }
@@ -411,7 +402,6 @@ class InterfacePocketLigandRMSD(Metric):
             interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_mean'].append(batch_rmsds.mean().item())
             interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_worst'].append(batch_rmsds.max().item())
             interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_chain'].append(lig_chain_iid)
-            interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_ipae'].append(batch_rmsds[loss_input["ipae_idx"]].item())
             interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_ipae'].append(batch_rmsds[loss_input["best_interface_idx"][f'{chain_i}-{chain_j}']].item())
             interface_pocket_ligand_rmsd['interface_rmsd_pocket_ligand_af3_style_lig_ipae'].append(batch_rmsds[loss_input["best_lig_ipae_idx"][f'{chain_i}-{chain_j}']].item())
 

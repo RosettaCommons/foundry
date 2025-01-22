@@ -4,7 +4,7 @@ import torch.nn as nn
 import rf2aa
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.loss.loss import mask_unresolved_frames_batched
-from rf2aa.util import rigid_from_3_points, is_atom, get_frames
+from rf2aa.util import rigid_from_3_points, get_frames
 import torch.utils.checkpoint as checkpoint
 
 from scipy.stats import spearmanr
@@ -111,7 +111,6 @@ class ConfidenceLoss(nn.Module):
         loss_input,
     ):
         I = loss_input["seq"].shape[-1]
-        
         X_gt_L = loss_input["X_gt_L"]
         X_exists_L = loss_input["crd_mask_L"]
         X_pred_L = network_output["X_pred_rollout_L"]
@@ -154,34 +153,39 @@ class ConfidenceLoss(nn.Module):
         if self.log_statistics or self.rank_loss.use_listnet_loss:
             #Get correlations across and within batches
             #unbin values
-            true_lddt_unbinned = ((true_lddt_binned.detach() + 1) * 0.02 ) * is_resolved_I
+            #NOTE: for plddt we take the bin value as the upper threshold of the bin, for pae and pde we take the midpoint (consistent with rf2aa)
+            lddt_bin_size = self.plddt.max_value / self.plddt.n_bins
+            true_lddt_unbinned = ((true_lddt_binned.detach() + 1) * lddt_bin_size ) * is_resolved_I
             true_lddt_batchmean = true_lddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
             true_lddt = true_lddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
 
-            true_pae = ((true_pae_binned.detach() + 1) * 0.5 - 0.25) * valid_pae_pairs
+            pae_bin_size = self.pae.max_value / self.pae.n_bins
+            true_pae = ((true_pae_binned.detach() + 1) * pae_bin_size - (pae_bin_size / 2)) * valid_pae_pairs
             true_pae_batchmean = true_pae.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
             true_pae = true_pae.sum() / (valid_pae_pairs.sum() + self.eps)
 
-            true_pde = ((true_pde_binned.detach() + 1) * 0.5 - .25) * is_valid_pair
+            pde_bin_size = self.pde.max_value / self.pde.n_bins
+            true_pde = ((true_pde_binned.detach() + 1) * pde_bin_size - (pde_bin_size / 2)) * is_valid_pair
             true_pde_batchmean = true_pde.sum(dim=(1,2)) / (is_valid_pair.sum(dim=(1,2)) + self.eps)
             true_pde = true_pde.sum() / (is_valid_pair.sum() + self.eps)
 
             #now do similarly for predicted values
-            lddt_bins = torch.linspace(0.02, 1.0, 50, device=true_lddt_binned.device)
+            lddt_bins = torch.linspace(lddt_bin_size, self.plddt.max_value, self.plddt.n_bins, device=true_lddt_binned.device)
             plddt_unbinned = network_output["plddt"].reshape(B, self.plddt.n_bins, I, ChemData().NHEAVY).detach().float()
             plddt_unbinned = torch.nn.Softmax(dim=1)(plddt_unbinned)
             plddt_unbinned = (plddt_unbinned * lddt_bins[None, :, None, None]).sum(dim=1) * is_resolved_I[..., :ChemData().NHEAVY]
             plddt_batchmean = plddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
             plddt = plddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
                 
-            pae_bins = torch.linspace(0.25, 31.75, 64, device=true_pae_binned.device)
+            pae_bins = torch.linspace((pae_bin_size / 2), (self.pae.max_value - (pae_bin_size / 2)), self.pae.n_bins, device=true_pae_binned.device)
             pae_unbinned = torch.nn.Softmax(dim=1)(pae_logits).detach().float()
             pae_unbinned = (pae_unbinned * pae_bins[None, :, None, None]).sum(dim=1) * valid_pae_pairs
             pae_batchmean = pae_unbinned.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
             pae = (pae_unbinned * valid_pae_pairs).sum() / (valid_pae_pairs.sum() + self.eps)
 
+            pde_bins = torch.linspace((pde_bin_size / 2), (self.pde.max_value - (pde_bin_size / 2)), self.pde.n_bins, device=true_pde_binned.device)
             pde_unbinned = torch.nn.Softmax(dim=1)(pde_logits).detach().float()
-            pde_unbinned = (pde_unbinned * pae_bins[None, :, None, None]).sum(dim=1) * is_valid_pair
+            pde_unbinned = (pde_unbinned * pde_bins[None, :, None, None]).sum(dim=1) * is_valid_pair
             pde = (pde_unbinned * is_valid_pair).sum() / (is_valid_pair.sum() + self.eps)
             pde_batchmean = pde_unbinned.detach().mean(dim=(1,2))
 
@@ -218,7 +222,7 @@ class ConfidenceLoss(nn.Module):
         if terminal_oxygen_idxs is not None:
             #NOTE: We don't clone is_real_atom, as modifying the parent dictionary has the added benefit of fixing the terimanl oxygens for the exp_resolved calculation as well.
             #NOTE: tradeoff here between doing this as a loop or a mask. There's usually no terminal oxygens, and when they do exist only normally
-            #one or two, so feel that it's better to do the loop that take up the memory required for a mask?
+            #one or two, maybe better to do the loop
             for idx in terminal_oxygen_idxs:
                 X_pred_L = torch.cat((X_pred_L[:, :idx], X_pred_L[:, idx+1:]), dim=1)
                 X_gt_L = torch.cat((X_gt_L[:, :idx], X_gt_L[:, idx+1:]), dim=1)
@@ -285,7 +289,7 @@ class ConfidenceLoss(nn.Module):
         atom_frames = loss_input["atom_frames"]
         B = X_pred_L.shape[0]
 
-        #Construct the faux atom-36 representation so we can use existing machinery to get frames
+        #Construct the backbone atoms in the faux atom-36 representation so we can use existing machinery to get frames
         frame_atom_idxs = frame_atom_idxs.unsqueeze(0).expand(B, -1, -1)
         X_pred_I = torch.zeros(B, seq.shape[-1], 36, 3, device=X_pred_L.device)
         X_pred_I[...,0,:] = torch.gather(X_pred_L, 1, frame_atom_idxs[...,0].unsqueeze(-1).expand(-1, -1, 3))

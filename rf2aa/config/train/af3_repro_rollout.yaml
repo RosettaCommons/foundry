@@ -339,7 +339,7 @@ dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   diffusion_batch_size: 1
-  diffusion_batch_size_valid: 3 #16
+  diffusion_batch_size_valid: 1 #16
   diffusion_batch_size_rollout: 24 #48
   trunk_batch_size_valid: 1
 
@@ -536,7 +536,7 @@ dataset_params:
           - "example_id not in  [\"{['validation']}{7ptq}{1}{[]}\"]"
       return_key: null
       transform:
-        _target_: rf2aa.metrics.af3_confidence_metric_pipeline.build_af3__val_transform_pipeline
+        _target_: rf2aa.metrics.af3_confidence_metric_pipeline.build_af3_val_transform_pipeline
         is_inference: True
         protein_msa_dirs: ${paths.protein_msa_dirs}
         rna_msa_dirs: ${paths.rna_msa_dirs}

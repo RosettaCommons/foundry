@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import rf2aa
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.model.AF3_structure import linearNoBias, PairformerBlock
-import torch.utils.checkpoint as checkpoint
 
 def discretize_distance_matrix(distance_matrix, num_bins=38, min_distance=3.25, max_distance=50.75):
     # Calculate the bin width
