@@ -15,7 +15,7 @@ from rf2aa.flow_matching.sampler import AF3Sampler, AF3PartialSampler
 from rf2aa.loss.af3_losses import Loss as AF3Loss
 from rf2aa.loss.af3_losses import SubunitSymmetryResolution, ResidueSymmetryResolution
 from rf2aa.metrics.metrics_base import MetricManager
-from rf2aa.metrics.metric_utils import unbin_rf3_metrics, unbin_logits
+from rf2aa.metrics.metric_utils import unbin_logits
 from rf2aa.debug import pretty_describe_dict
 
 from rf2aa.chemical import ChemicalData as ChemData
@@ -315,7 +315,7 @@ class AF3TrainerRollout(AF3Trainer):
             "is_real_atom": example["confidence_feats"]['is_real_atom'],
             "rep_atom_idxs": example['ground_truth']['rep_atom_idxs'],
             "frame_atom_idxs": example["confidence_feats"]['pae_frame_idx_token_lvl_from_atom_lvl'],
-            "terminal_oxygen_idxs": example["confidence_feats"]["terminal_oxygen_idx_atm_lvl"],
+            #"terminal_oxygen_idxs": example["confidence_feats"]["terminal_oxygen_idx_atm_lvl"],
         }
 
         network_input=tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, network_input)
@@ -485,11 +485,13 @@ class AF3TrainerRollout(AF3Trainer):
         pde_logits = confidence['pde_logits'].permute(0,3,1,2).float()
 
         #Complex metrics
-        plddt, pae, pde = unbin_rf3_metrics(plddt_logits, pae_logits, pde_logits, loss_input['is_real_atom'], self.config.loss.confidence_loss.plddt, self.config.loss.confidence_loss.pae, self.config.loss.confidence_loss.pde)
+        plddt = unbin_logits(plddt_logits, self.config.loss.confidence_loss.plddt.max_value, self.config.loss.confidence_loss.plddt.n_bins)
+        pae = unbin_logits(pae_logits, self.config.loss.confidence_loss.pae.max_value, self.config.loss.confidence_loss.pae.n_bins)
+        pde = unbin_logits(pde_logits, self.config.loss.confidence_loss.pde.max_value, self.config.loss.confidence_loss.pde.n_bins)
 
-        complex_err = {'plddt': plddt, 
-                    'pae': pae, 
-                    'pde': pde}
+        complex_err = {'plddt': plddt.mean(dim=(-1, -2)), 
+                    'pae': pae.mean(dim=(-1, -2)),
+                    'pde': pde.mean(dim=(-1, -2))}
 
         #AF3-style confidence ranking metrics
         for interface in interfaces:
@@ -569,140 +571,107 @@ class AF3TrainerRollout(AF3Trainer):
         return torch.tensor(0), metrics_dict
     
 
-    #When loading weights not previously trainied with confidence head, some renaming is required given the structure of the
-    #AF3_rollout model. This is done in load_model, so we redefine it here.
     def load_model(self):
         torch.cuda.empty_cache()
-
-        new_model_state = {}
-        new_shadow_state = {}
-        state_dict = self.model.module.model.state_dict()
-
-        if self.config.training_params.make_fresh_weights_confidence_compatible:
-            #get around a loading issue - only need to do this when loading from a weight set trained on something other than the rollout
-            # Create a new dictionary to store the modified keys
-            new_model_state_dict = {}
-
-            # Iterate over the original dictionary
-            for param in self.checkpoint['model_state_dict']:
-                # Modify the key
-                new_param = 'model.' + param
-                # Add the modified key and its value to the new dictionary
-                new_model_state_dict[new_param] = self.checkpoint['model_state_dict'][param]
-
-            # Replace the original dictionary with the new one
-            self.checkpoint['model_state_dict'] = new_model_state_dict
-
-            #Do the same for the final_state_dict
-            new_model_state_dict = {}
-            for param in self.checkpoint['final_state_dict']:
-                # Modify the key
-                new_param = 'model.' + param
-                # Add the modified key and its value to the new dictionary
-                new_model_state_dict[new_param] = self.checkpoint['final_state_dict'][param]
-            self.checkpoint['final_state_dict'] = new_model_state_dict
-
-        for param in state_dict:
-            if param not in self.checkpoint['model_state_dict']:
-                print ('missing',param)
-            elif (self.checkpoint['model_state_dict'][param].shape == state_dict[param].shape):
-                new_model_state[param] = self.checkpoint['final_state_dict'][param]
-                new_shadow_state[param] = self.checkpoint['model_state_dict'][param]
-            else:
-                print (
-                    'wrong size',param,
-                    self.checkpoint['model_state_dict'][param].shape,
-                    state_dict[param].shape )
-
-        self.model.module.model.load_state_dict(new_model_state, strict=False)
-        self.model.module.shadow.load_state_dict(new_shadow_state, strict=False)
-        print("Checkpoint loaded into model")
-
-        
-    #Recreated here rather than inherited from super so we can ensure grads are set to false for non-confidence parameters
-    def train_model(self, rank, world_size):
-        """ runs model training on each gpu """ 
-        gpu = self.init_process_group(rank, world_size) 
-        #rank = gpu
-        ic(rank, world_size, gpu)
-
-        #fd initialize chemical data based on input arguments
-        #   this needs to be initialized first
-        init = partial(initialize_chemdata, self.config)
-        init()
-
-        # Define context manager for training run (either nullcontext or W&B)
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        
-        if self.config.log_params.use_wandb:    
-            import wandb
-            wandb.login()
-            context_manager = wandb.init(
-                    project=self.config.log_params.wandb_project, 
-                    config=omegaconf.OmegaConf.to_container(
-                        self.config, resolve=True, throw_on_missing=True
-                    ),
-                    name = f"{self.config.experiment.name}_{timestamp}"
-                ) 
+        checkpoint_training_config = self.checkpoint['training_config']
+        if "confidence_head" in checkpoint_training_config:
+            super().load_model()
         else:
-            context_manager = nullcontext() # Does nothing
+            logger.warning("Loading weights from a model that was not trained with a confidence head. Renaming weights to be compatible with confidence head")
+            self.model.module.model.model.load_state_dict(self.checkpoint["final_state_dict"], strict=False)
+            self.model.module.shadow.model.load_state_dict(self.checkpoint["model_state_dict"], strict=False)
+            logger.info("Checkpoint loaded into model")
+            logger.warning("Resetting optimizer since model was not trained with confidence head")
+            self.config.training_params.reset_optimizer_params = True
+        for name, param in self.model.named_parameters():
+            if 'confidence' not in name:
+                param.requires_grad = False
+
+        
+    ##Recreated here rather than inherited from super so we can ensure grads are set to false for non-confidence parameters
+    #def train_model(self, rank, world_size):
+        #""" runs model training on each gpu """ 
+        #gpu = self.init_process_group(rank, world_size) 
+        ##rank = gpu
+        #ic(rank, world_size, gpu)
+
+        ##fd initialize chemical data based on input arguments
+        ##   this needs to be initialized first
+        #init = partial(initialize_chemdata, self.config)
+        #init()
+
+        ## Define context manager for training run (either nullcontext or W&B)
+        #timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        
+        #if self.config.log_params.use_wandb:    
+            #import wandb
+            #wandb.login()
+            #context_manager = wandb.init(
+                    #project=self.config.log_params.wandb_project, 
+                    #config=omegaconf.OmegaConf.to_container(
+                        #self.config, resolve=True, throw_on_missing=True
+                    #),
+                    #name = f"{self.config.experiment.name}_{timestamp}"
+                #) 
+        #else:
+            #context_manager = nullcontext() # Does nothing
         
 
-        # Without W&B, context manager does nothing
-        with context_manager: 
-            train_loader, train_sampler, valid_loaders, valid_samplers = self.construct_dataset(
-                init, rank, world_size
-            )
+        ## Without W&B, context manager does nothing
+        #with context_manager: 
+            #train_loader, train_sampler, valid_loaders, valid_samplers = self.construct_dataset(
+                #init, rank, world_size
+            #)
 
-            self.train_loader = train_loader
-            self.valid_loaders = valid_loaders
+            #self.train_loader = train_loader
+            #self.valid_loaders = valid_loaders
 
-            # move global information to device
-            self.move_constants_to_device(gpu)
+            ## move global information to device
+            #self.move_constants_to_device(gpu)
 
-            self.construct_model(device=gpu)
-            if rank == 0:
-                print(f"Loading model with {count_parameters(self.model)} parameters")
+            #self.construct_model(device=gpu)
+            #if rank == 0:
+                #print(f"Loading model with {count_parameters(self.model)} parameters")
 
-            self.construct_optimizer()
-            self.construct_scheduler()
-            self.construct_scaler()
-            start_epoch = 0
-            loaded_checkpoint = self.load_checkpoint(gpu)
-            logger.info(f'Loaded checkpoint: {loaded_checkpoint}')
-            if loaded_checkpoint:
-                start_epoch = self.checkpoint["epoch"] + 1
-                self.load_model()
-                if not self.config.training_params.reset_optimizer_params:
-                    self.load_optimizer()
-                    self.load_scheduler()
-                    self.load_scaler()
-                else:
-                    warnings.warn(f"User specified reset_optimizer_params=True. Did not load optimizer values from checkpoint")
-            self.checkpoint = None # unload checkpoint dict
+            #self.construct_optimizer()
+            #self.construct_scheduler()
+            #self.construct_scaler()
+            #start_epoch = 0
+            #loaded_checkpoint = self.load_checkpoint(gpu)
+            #logger.info(f'Loaded checkpoint: {loaded_checkpoint}')
+            #if loaded_checkpoint:
+                #start_epoch = self.checkpoint["epoch"] + 1
+                #self.load_model()
+                #if not self.config.training_params.reset_optimizer_params:
+                    #self.load_optimizer()
+                    #self.load_scheduler()
+                    #self.load_scaler()
+                #else:
+                    #warnings.warn(f"User specified reset_optimizer_params=True. Did not load optimizer values from checkpoint")
+            #self.checkpoint = None # unload checkpoint dict
 
-            self.recycle_schedule = recycle_sampling["by_batch"](self.config.loader_params.maxcycle, 
-                                                                self.config.experiment.n_epoch,
-                                                                self.config.dataset_params.n_train,
-                                                                world_size)
+            #self.recycle_schedule = recycle_sampling["by_batch"](self.config.loader_params.maxcycle, 
+                                                                #self.config.experiment.n_epoch,
+                                                                #self.config.dataset_params.n_train,
+                                                                #world_size)
 
-            #set requires_grad to false for all non confidence parameters to be safe
-            for name, param in self.model.named_parameters():
-                if 'confidence' not in name:
-                    param.requires_grad = False
+            ##set requires_grad to false for all non confidence parameters to be safe
+            #for name, param in self.model.named_parameters():
+                #if 'confidence' not in name:
+                    #assert param.requires_grad == False
 
-            for epoch in range(start_epoch,self.config.experiment.n_epoch):
-                train_sampler.set_epoch(epoch)
+            #for epoch in range(start_epoch,self.config.experiment.n_epoch):
+                #train_sampler.set_epoch(epoch)
                 
-                self.train_epoch(epoch, rank, world_size)
-                for _, valid_sampler in valid_samplers.items():
-                    valid_sampler.set_epoch(epoch)
+                #self.train_epoch(epoch, rank, world_size)
+                #for _, valid_sampler in valid_samplers.items():
+                    #valid_sampler.set_epoch(epoch)
 
-                if (
-                    self.config.dataset_params.validate_every_n_epochs > 0 
-                    and epoch % self.config.dataset_params.validate_every_n_epochs==0
-                    and (epoch!=start_epoch or self.config.dataset_params.validate_after_first_epoch)
-                ):
-                    self.valid_epoch(epoch, rank, world_size)
+                #if (
+                    #self.config.dataset_params.validate_every_n_epochs > 0 
+                    #and epoch % self.config.dataset_params.validate_every_n_epochs==0
+                    #and (epoch!=start_epoch or self.config.dataset_params.validate_after_first_epoch)
+                #):
+                    #self.valid_epoch(epoch, rank, world_size)
 
-        self.cleanup()
+        #self.cleanup()

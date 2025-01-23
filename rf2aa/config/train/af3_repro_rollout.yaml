@@ -39,12 +39,8 @@ metrics:
     _target_: rf2aa.metrics.metrics_base.AddExampleID
   confidence_interface_lddt:
     _target_: rf2aa.metrics.lddt_metrics.ConfidenceInterfaceLDDT
-  ligand_rmsd:
-    _target_: rf2aa.metrics.lddt_metrics.LigRMSD
   confidence_chain_lddt:
     _target_: rf2aa.metrics.lddt_metrics.ConfidenceChainLDDT
-  scored_interface_lig_rmsd:
-   _target_: rf2aa.metrics.lddt_metrics.InterfacePocketLigandRMSD
 
 
 ddp_params:
