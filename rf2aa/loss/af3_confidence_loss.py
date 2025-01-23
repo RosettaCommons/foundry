@@ -80,22 +80,10 @@ class ConfidenceLoss(nn.Module):
 
         if self.log_statistics or self.rank_loss.use_listnet_loss:
             #Get correlations across and within batches
-            #Convert the true values per atom to per structure and mean
-            #TODO: refactor this to make it more readable, comes from legacy codebase
-            lddt_bin_size = self.plddt.max_value / self.plddt.n_bins
-            true_lddt_unbinned = ((true_lddt_binned.detach() + 1) * lddt_bin_size - (lddt_bin_size / 2) ) * is_resolved_I
-            true_lddt_per_structure = true_lddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
-            true_lddt = true_lddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
-            
-            pae_bin_size = self.pae.max_value / self.pae.n_bins
-            true_pae = ((true_pae_binned.detach() + 1) * pae_bin_size - (pae_bin_size / 2)) * valid_pae_pairs
-            true_pae_per_structure = true_pae.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
-            true_pae = true_pae.sum() / (valid_pae_pairs.sum() + self.eps)
-
-            pde_bin_size = self.pde.max_value / self.pde.n_bins
-            true_pde = ((true_pde_binned.detach() + 1) * pde_bin_size - (pde_bin_size / 2)) * is_valid_pair
-            true_pde_per_structure = true_pde.sum(dim=(1,2)) / (is_valid_pair.sum(dim=(1,2)) + self.eps)
-            true_pde = true_pde.sum() / (is_valid_pair.sum() + self.eps)
+            #Get the true values per metric
+            true_lddt, true_lddt_per_structure = self.get_true_metrics(true_lddt_binned, self.plddt, is_resolved_I)
+            true_pae, true_pae_per_structure = self.get_true_metrics(true_pae_binned, self.pae, valid_pae_pairs)
+            true_pde, true_pde_per_structure = self.get_true_metrics(true_pde_binned, self.pde, is_valid_pair)
 
             # reorder the input tensors to be in (B, n_bins, ...) format for unbinning 
             # pae and pde were already reordered above
@@ -116,17 +104,10 @@ class ConfidenceLoss(nn.Module):
                 self.log_correlation_statistics(plddt, pae, pde, true_lddt, true_pae, true_pde, true_lddt_per_structure, true_pae_per_structure, true_pde_per_structure, plddt_per_structure, pae_per_structure, pde_per_structure, loss_dict)
 
             if self.rank_loss.use_listnet_loss:
-                # #an easy way of incentivizing ranking accuracy is the following (Listnet):
-                rank_plddt_t = torch.nn.Softmax(dim=0)(true_lddt_per_structure)
-                rank_plddt_p = torch.nn.Softmax(dim=0)(plddt_per_structure)
-                rank_pae_t = torch.nn.Softmax(dim=0)(true_pae_per_structure)
-                rank_pae_p = torch.nn.Softmax(dim=0)(pae_per_structure)
-                rank_pde_t = torch.nn.Softmax(dim=0)(true_pde_per_structure)
-                rank_pde_p = torch.nn.Softmax(dim=0)(pde_per_structure)
-
-                plddt_rank_loss = -torch.mean(rank_plddt_t * torch.log(rank_plddt_p))
-                pae_rank_loss = -torch.mean(rank_pae_t * torch.log(rank_pae_p))
-                pde_rank_loss = -torch.mean(rank_pde_t * torch.log(rank_pde_p))
+                #an easy way of incentivizing ranking accuracy is the following (Listnet):
+                plddt_rank_loss = self.listnet_loss(true_lddt_per_structure, plddt_per_structure)
+                pae_rank_loss = self.listnet_loss(true_pae_per_structure, pae_per_structure)
+                pde_rank_loss = self.listnet_loss(true_pde_per_structure, pde_per_structure)
 
                 rank_loss_dict = dict(
                     plddt_rank_loss=plddt_rank_loss.detach(),
@@ -301,3 +282,17 @@ class ConfidenceLoss(nn.Module):
             'true_pde_spread': true_pde_per_structure.max() - true_pde_per_structure.min(),
         })
  
+    def get_true_metrics(self, true_metric_binned, metric_config, mask):
+        # Calculate the true metric values from the binned values along with the per structure metrics
+        bin_size = metric_config.max_value / metric_config.n_bins
+        true_metric_unbinned = ((true_metric_binned.detach() + 1) * bin_size - (bin_size / 2) ) * mask
+        true_metric_per_structure = true_metric_unbinned.sum(dim=(1,2)) / (mask.sum(dim=(1,2)) + self.eps)
+        true_metric = true_metric_unbinned.sum() / (mask.sum() + self.eps)
+
+        return true_metric, true_metric_per_structure
+    
+    def listnet_loss(self, true_metric_per_structure, pred_metric_per_structure):
+        # Calculate the ListNet loss
+        rank_true = torch.nn.Softmax(dim=0)(true_metric_per_structure)
+        rank_pred = torch.nn.Softmax(dim=0)(pred_metric_per_structure)
+        return -torch.mean(rank_true * torch.log(rank_pred))
