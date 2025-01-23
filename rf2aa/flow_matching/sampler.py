@@ -328,7 +328,7 @@ class AF3Sampler:
             frame_atom_idxs = example["confidence_feats"]["pae_frame_idx_token_lvl_from_atom_lvl"],
             rep_atom_idx = example["ground_truth"]["rep_atom_idxs"],
             chain_iid_token_lvl = example["ground_truth"]["chain_iid_token_lvl"],
-            is_real_atom = ChemData().heavyatom_mask[example["confidence_feats"]["rf2aa_seq"]]
+            is_real_atom = example["confidence_feats"]["is_real_atom"]
         )
         return confidence_feats
     
