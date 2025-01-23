@@ -70,42 +70,6 @@ def test_write_confidence():
     num_chains = len(np.unique(outputs["confidence"]["chain_iid_token_lvl"]))
     num_interfaces = num_chains * (num_chains - 1) // 2
     num_batches = outputs["confidence"]["plddt_logits"].shape[0]
-    # chains = np.unique(outputs["confidence"]["chain_iid_token_lvl"])
-    # chain_pairs = list(combinations(chains, 2))
-
-
-    # rows = []
-    # for batch_idx in range(num_batches):
-    #     for chain_id in range(num_chains):
-    #         chain = chains[chain_id]
-    #         row = {
-    #             'example_id': data['example_id'],
-    #             'chain_chainwise': chain,
-    #             'chainwise_plddt': data['chain_wise_mean_plddt'][chain][batch_idx],
-    #             'chainwise_pde': data['chain_wise_mean_pde'][chain][batch_idx],
-    #             'chainwise_pae': data['chain_wise_mean_pae'][chain][batch_idx],
-    #             'overall_plddt': data['mean_plddt'][batch_idx],
-    #             'overall_pde': data['mean_pde'][batch_idx],
-    #             'overall_pae': data['mean_pae'][batch_idx],
-    #             'batch_idx': batch_idx
-    #         }
-    #         rows.append(row)
-    #     for interface in chain_pairs:
-    #         chain_i, chain_j = interface
-    #         row = {
-    #             'example_id': data['example_id'],
-    #             'chain_i_interface': chain_i,
-    #             'chain_j_interface': chain_j,
-    #             'pae_interface': data['interface_wise_mean_pae'][interface][batch_idx],
-    #             'pde_interface': data['interface_wise_mean_pde'][interface][batch_idx],
-    #             'overall_plddt': data['mean_plddt'][batch_idx],
-    #             'overall_pde': data['mean_pde'][batch_idx],
-    #             'overall_pae': data['mean_pae'][batch_idx],
-    #             'batch_idx': batch_idx
-    #         }
-    #         rows.append(row)
-        
-    # df = pd.DataFrame(rows)
 
     target_columns = ['example_id', 'chain_chainwise', 'chainwise_plddt', 'chainwise_pde', 'chainwise_pae', 'overall_plddt', 'overall_pde', 'overall_pae', 'batch_idx', 'chain_i_interface', 'chain_j_interface', 'pae_interface', 'pde_interface']
     assert df.columns.tolist() == target_columns, 'Dataframe columns not set correctly'
