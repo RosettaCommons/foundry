@@ -123,7 +123,7 @@ class GetConfidenceIndices(Metric):
                     network_output,
                     loss_input
     ):
-
+        raise NotImplementedError("This metric is not implemented for this model.")
         # AF3's ranking metrics work like this, but using ptm instead of ipae:
         confidence_loss = loss_input['confidence_loss']
         del loss_input['confidence_loss']

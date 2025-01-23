@@ -264,7 +264,6 @@ class AF3TrainerRollout(AF3Trainer):
         from rf2aa.flow_matching.sampler import AF3Sampler
         self.sampler = AF3Sampler(self.config, model, confidence=self.confidence)
         from rf2aa.model.af3_with_rollout import AF3_with_rollout 
-        import copy
         self.model = AF3_with_rollout(
             model,
             confidence,
@@ -394,12 +393,12 @@ class AF3TrainerRollout(AF3Trainer):
         metrics_dict = self.metrics(network_input, outputs, loss_input)
 
         return torch.tensor(0), metrics_dict
-    
 
     def load_model(self):
         torch.cuda.empty_cache()
         checkpoint_training_config = self.checkpoint['training_config']
-        if "confidence_head" in checkpoint_training_config:
+        if "confidence_loss" in checkpoint_training_config["loss"]:
+            logger.warning("Loading weights with pretrained confidence head because confidence loss is present in the checkpoint")
             super().load_model()
         else:
             logger.warning("Loading weights from a model that was not trained with a confidence head. Renaming weights to be compatible with confidence head")

@@ -205,7 +205,7 @@ def create_interface_masks_2d(ch_label, device="cpu"):
         pairs_to_score[(chain_i, chain_j)] = to_be_scored
     return pairs_to_score
 
-def compute_mean_over_subsampled_pairs(matrix_to_mean, pairs_to_score):
+def compute_mean_over_subsampled_pairs(matrix_to_mean, pairs_to_score, eps=1e-6):
     """
     Compute the mean over a subsample of pairs in a 2d matrix. Returns a tensor with an element for each batch
     Args:
@@ -214,10 +214,10 @@ def compute_mean_over_subsampled_pairs(matrix_to_mean, pairs_to_score):
     Returns:
         1d tensor of shape (batch,) with the mean over the subsampled pairs for each batch
     """
-    B, L, M = matrix_to_mean.shape[:2]
-    assert matrix_to_mean.shape == (B, L, M), "Matrix to mean should be of shape (batch, L, L)"
-    assert pairs_to_score.shape == (L, M), "Pairs to score should be of shape (L, L)"   
-    batch = (matrix_to_mean * pairs_to_score).sum(dim=(-1,-2)) / pairs_to_score.sum()
+    B, L, M = matrix_to_mean.shape
+    assert matrix_to_mean.shape == (B, L, M), "Matrix to mean should be of shape (batch, L, M)"
+    assert pairs_to_score.shape == (L, M), "Pairs to score should be of shape (L, M)"   
+    batch = (matrix_to_mean * pairs_to_score).sum(dim=(-1,-2)) / (pairs_to_score.sum()+eps)
     assert batch.shape == (B,), "Batch should be of shape (batch,)"
     return batch
 

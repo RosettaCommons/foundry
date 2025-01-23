@@ -10,7 +10,7 @@ experiment:
 
 loss:
   confidence_loss:
-    _target_: rf2aa.model.af3_with_rollout.ConfidenceLoss
+    _target_: rf2aa.loss.af3_confidence_loss.ConfidenceLoss
     weight: 1.0
     plddt:
       weight: 1.0
@@ -523,7 +523,7 @@ dataset_params:
           - "example_id not in  [\"{['validation']}{7ptq}{1}{[]}\"]"
       return_key: null
       transform:
-        _target_: rf2aa.metrics.af3_confidence_metric_pipeline.build_af3_val_transform_pipeline
+        _target_: ${dataset_params.default_transform}
         is_inference: True
         protein_msa_dirs: ${paths.protein_msa_dirs}
         rna_msa_dirs: ${paths.rna_msa_dirs}
