@@ -15,7 +15,7 @@ import logging
 import tempfile
 import argparse
 import json
-from rf2aa.metrics.metric_utils import write_confidence_metrics
+from rf2aa.metrics.predicted_error import WriteAF3Confidence
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -61,6 +61,10 @@ class EvaluateAF3:
         # Model parameters
         self.n_recycles = n_recycles
         self.diffusion_batch_size = diffusion_batch_size
+        if "confidence_loss" in self.config.loss:
+            self.confidence_writer = WriteAF3Confidence(**self.config.loss.confidence_loss)
+        else:
+            self.confidence_writer = None
 
     def construct_pipeline(self):
         """Construct the AF3 inference pipeline."""
@@ -168,8 +172,13 @@ class EvaluateAF3:
             logger.info(f"Prediction for {example_id}.cif written to {out_path}.")
 
             if "confidence" in outputs:
+                loss_input = {
+                    "example_id": example_id,
+                    "is_real_atom": pipeline_output["confidence_feats"]["is_real_atom"],
+                }
                 logger.info(f"Writing {example_id}.score to {self.cif_out_dir}")
-                write_confidence_metrics(outputs, self.cif_out_dir / f"{example_id}.score", device=gpu)
+                df = self.confidence_writer(None, outputs, loss_input)
+                df.to_csv(self.cif_out_dir / f"{example_id}.score", index=False)
                 logger.info(f"Confidence metrics for {example_id}.cif written to {self.cif_out_dir / example_id}.score.")
                 
 def main():

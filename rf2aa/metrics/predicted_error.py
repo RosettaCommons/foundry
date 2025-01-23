@@ -68,13 +68,13 @@ class WriteAF3Confidence(Metric):
 
         pae_interface = {}
         pde_interface = {}
-        for interface, pairs_to_score in create_interface_masks_2d(ch_label).items():
+        for interface, pairs_to_score in create_interface_masks_2d(ch_label, device=pae.device).items():
             pae_interface[interface] = spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(pae, pairs_to_score))
             pde_interface[interface] = spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(pde, pairs_to_score))
 
         pae_chainwise = {}
         pde_chainwise = {}
-        for chain, pairs_to_score in create_chainwise_masks_2d(ch_label).items():
+        for chain, pairs_to_score in create_chainwise_masks_2d(ch_label, device=pae.device).items():
             pae_chainwise[chain] = spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(pae, pairs_to_score))
             pde_chainwise[chain] = spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(pde, pairs_to_score))
         
@@ -101,6 +101,7 @@ class WriteAF3Confidence(Metric):
         num_chains = len(chains)
         chain_pairs = list(combinations(chains, 2))
 
+        #TODO: refactor to remove for loops
         rows = []
         for batch_idx in range(num_batches):
             for chain_id in range(num_chains):

@@ -9,7 +9,7 @@ import torch.utils.checkpoint as checkpoint
 
 from scipy.stats import spearmanr
 from rf2aa.training.checkpoint import create_custom_forward
-from rf2aa.metrics.metric_utils import unbin_rf3_metrics
+#from rf2aa.metrics.metric_utils import unbin_rf3_metrics
 
 
 class AF3_with_rollout(nn.Module):

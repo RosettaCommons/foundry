@@ -118,14 +118,6 @@ def test_unbin_pae_logits():
         max_distance=max_distance,
         num_bins=n_bins
     )
-    plddt, pae, pde = unbin_rf3_metrics(outputs["confidence"]["plddt_logits"].permute(0,3,1,2).float(), 
-                                        outputs["confidence"]["pae_logits"].permute(0,3,1,2).float(), 
-                                        outputs["confidence"]["pde_logits"].permute(0,3,1,2).float(), 
-                                        is_real_atom,
-                                        data.plddt,
-                                        data.pae,
-                                        data.pde
-    )
 
 
     assert torch.allclose(torch.mean(pae_unbinned), torch.tensor(15.99) , atol=1e-2)
@@ -173,14 +165,6 @@ def test_unbin_pde_logits():
         max_distance=max_distance,
         num_bins=n_bins
     )
-    plddt, pae, pde = unbin_rf3_metrics(outputs["confidence"]["plddt_logits"].permute(0,3,1,2).float(), 
-                                        outputs["confidence"]["pae_logits"].permute(0,3,1,2).float(), 
-                                        outputs["confidence"]["pde_logits"].permute(0,3,1,2).float(), 
-                                        is_real_atom,
-                                        data.plddt,
-                                        data.pae,
-                                        data.pde
-    )
 
     assert torch.allclose(torch.mean(pde_unbinned), pde , atol=1e-2)
     assert torch.allclose(torch.mean(pde_unbinned), torch.tensor(16.00) , atol=1e-2)
@@ -225,14 +209,6 @@ def test_unbin_plddt_logits():
     outputs["confidence"]["is_real_atom"] = is_real_atom
 
     plddt_unbinned = unbin_logits(outputs["confidence"]["plddt_logits"].permute(0,3,1,2).float(), max_distance, n_bins)
-    plddt, pae, pde = unbin_rf3_metrics(outputs["confidence"]["plddt_logits"].permute(0,3,1,2).float(), 
-                                        outputs["confidence"]["pae_logits"].permute(0,3,1,2).float(), 
-                                        outputs["confidence"]["pde_logits"].permute(0,3,1,2).float(), 
-                                        is_real_atom,
-                                        data.plddt,
-                                        data.pae,
-                                        data.pde
-    )
 
     assert torch.allclose(torch.mean(plddt_unbinned), plddt, atol=1e-2)
     assert plddt_unbinned.shape == (1, L, ChemData().NHEAVY)
