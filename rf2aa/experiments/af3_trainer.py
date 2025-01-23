@@ -15,7 +15,7 @@ from rf2aa.flow_matching.sampler import AF3Sampler, AF3PartialSampler
 from rf2aa.loss.af3_losses import Loss as AF3Loss
 from rf2aa.loss.af3_losses import SubunitSymmetryResolution, ResidueSymmetryResolution
 from rf2aa.metrics.metrics_base import MetricManager
-from rf2aa.metrics.metric_utils import unbin_rf3_metrics, unbin_logits
+from rf2aa.metrics.predicted_error import GetConfidenceIndices
 from rf2aa.debug import pretty_describe_dict
 
 from rf2aa.chemical import ChemicalData as ChemData
@@ -289,6 +289,7 @@ class AF3TrainerRollout(AF3Trainer):
         self.loss = AF3Loss(**self.config.loss)
         self.subunit_symm_resolve = SubunitSymmetryResolution()
         self.residue_symm_resolve = ResidueSymmetryResolution()
+        self.confidence_indices = GetConfidenceIndices()
         self.metrics = MetricManager(**self.config.metrics)
 
     def train_step(self, inputs, n_cycle, no_grads=False, return_outputs=False):
@@ -376,91 +377,7 @@ class AF3TrainerRollout(AF3Trainer):
             "is_real_atom": example["confidence_feats"]['is_real_atom'].to(gpu),
         }
 
-        # AF3's ranking metrics work like this, but using ptm instead of ipae:
-        ch_label = example["ground_truth"]["chain_iid_token_lvl"]
-        unique_chains = np.unique(ch_label)
-        
-        if len(unique_chains) > 1:
-            interface_mask = torch.from_numpy(ch_label[None,:] != ch_label[:,None]).to(dtype=torch.bool, device=gpu)
-        else:
-            interface_mask = torch.zeros(len(ch_label), len(ch_label), device=gpu, dtype=torch.bool)
-
-        ch_label = example["ground_truth"]["chain_iid_token_lvl"]
-        unique_chains = np.unique(ch_label)
-        interface_masks = {}
-        chain_to_all_masks = {}
-        chain_to_self_masks = {}
-        interfaces = []
-        scored_chains = []
-        chains = []
-        interface_chains = []
-        for k in loss_input['interfaces_to_score']:
-            interfaces.append(f'{k[0]}-{k[1]}')
-            chains.append(k[0])
-            chains.append(k[1])
-            interface_chains.append(k[0])
-            interface_chains.append(k[1])
-        for k in loss_input['pn_units_to_score']:
-            chains.append(k[0])
-            scored_chains.append(k[0])
-        chains = set(chains)
-
-        #AF3 handles ligand evaluation metrics as a special case
-        lig_chains = []
-
-        # Masks prep
-        I = loss_input['crd_mask_rep_atoms_I'].shape[-1]
-        chain_to_all_masks = {}
-        chain_to_self_masks = {}
-        interface_masks = {}
-        lig_chains = []
-        
-        #AF3 does a number of unique masks, not simply chain-to-chain interface masks and chainwise masks
-        for chain in chains:
-            mask = ch_label == chain
-            mask = torch.from_numpy(mask)
-            chain_to_all_mask = mask.unsqueeze(0) | mask.unsqueeze(1)
-            chain_to_self_mask = mask.unsqueeze(0) & mask.unsqueeze(1)
-            interface_mask = chain_to_all_mask & ~chain_to_self_mask
-            
-            #the diagonal of the chain_to_all_mask is always false
-            chain_to_all_mask = chain_to_all_mask & ~torch.eye(I, device=chain_to_all_mask.device, dtype=torch.bool)
-            chain_to_all_masks[chain] = chain_to_all_mask
-
-            #the diagonal of the chain_to_self_mask is always false
-            chain_to_self_mask = chain_to_self_mask & ~torch.eye(I, device=chain_to_self_mask.device, dtype=torch.bool)
-            chain_to_self_masks[chain] = chain_to_self_mask
-
-            interface_masks[chain] = interface_mask
-            
-            if torch.all(network_input['f']['is_ligand'][mask]):
-                lig_chains.append(chain)
-            
-            # Same-chain mask
-            same_chain = (ch_label[:, None] == ch_label[None, :])  # Adds dimensions and compares
-            same_chain = np.expand_dims(same_chain, axis=0)  # Add the final dimension
-
-            #map everything to gpu
-            chain_to_all_masks = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, chain_to_all_masks)
-            chain_to_self_masks = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, chain_to_self_masks)
-            interface_masks = tree.map_structure(lambda x: x.to(gpu) if hasattr(x, 'cpu') else x, interface_masks)
-            same_chain = torch.from_numpy(same_chain).to(gpu)
-
-        interface_err = {}
-        for interface in interfaces:
-            interface_err[interface] = []
-        lig_err = {}
-        for lig_chain in lig_chains:
-            lig_err[lig_chain] = []
-        chain_to_all_err = {}
-        chain_to_self_err = {}
-        for chain in scored_chains:
-            chain_to_all_err[chain] = []
-            chain_to_self_err[chain] = []
-
         outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
-
-        confidence = outputs['confidence']
 
         def _inmap(path, x):
             if hasattr(x, 'cpu') and path != ('f','msa_stack'):
@@ -475,94 +392,8 @@ class AF3TrainerRollout(AF3Trainer):
         loss_input = self.subunit_symm_resolve(outputs, loss_input, example["symmetry_resolution"])
         loss_input = self.residue_symm_resolve(outputs, loss_input, example["automorphisms"])
 
-        plddt_logits = confidence['plddt_logits']
-
-        #Reshape logits to B, K, L, NHEAVY
-        plddt_logits = plddt_logits.reshape(plddt_logits.shape[0], -1, plddt_logits.shape[1], ChemData().NHEAVY).float()
-
-        #Reshape the logits to B, K, L, L
-        pae_logits = confidence['pae_logits'].permute(0,3,1,2).float()
-        pde_logits = confidence['pde_logits'].permute(0,3,1,2).float()
-
-        #Complex metrics
-        plddt, pae, pde = unbin_rf3_metrics(plddt_logits, pae_logits, pde_logits, loss_input['is_real_atom'], self.config.loss.confidence_loss.plddt, self.config.loss.confidence_loss.pae, self.config.loss.confidence_loss.pde)
-
-        complex_err = {'plddt': plddt, 
-                    'pae': pae, 
-                    'pde': pde}
-
-        #AF3-style confidence ranking metrics
-        for interface in interfaces:
-            chain_a = interface.split('-')[0]
-            chain_b = interface.split('-')[1]
-
-            #af3 only considers the ligand chain metric when evaluating interfaces containing a ligand
-            if (chain_a in lig_chains or chain_b in lig_chains) and not (chain_a in lig_chains and chain_b in lig_chains):
-                if chain_a in lig_chains:
-                    lig_chain = chain_a
-                elif chain_b in lig_chains:
-                    lig_chain = chain_b
-
-                #if a ligand participates in more than 1 interface, we still only want to get calculate one score per batch
-                if len(lig_err[lig_chain]) < 1:
-                    lig_i_pae = unbin_logits(pae_logits, self.config.loss.confidence_loss.pae.max_value, self.config.loss.confidence_loss.pae.n_bins) * interface_masks[lig_chain]
-                    lig_i_pae = lig_i_pae.sum(dim=(1,2)) / interface_masks[lig_chain].sum()
-
-                    lig_err[lig_chain] = lig_i_pae
-                
-            #AF3 interface metrics take the average of each interface chain's interaction with all other chains
-            chain_a_i_pae = unbin_logits(pae_logits, self.config.loss.confidence_loss.pae.max_value, self.config.loss.confidence_loss.pae.n_bins) * interface_masks[chain_a]
-            chain_a_i_pae = chain_a_i_pae.sum(dim=(1,2)) / interface_masks[chain_a].sum()
-            
-            chain_b_i_pae = unbin_logits(pae_logits, self.config.loss.confidence_loss.pae.max_value, self.config.loss.confidence_loss.pae.n_bins) * interface_masks[chain_b]
-            chain_b_i_pae = chain_b_i_pae.sum(dim=(1,2)) / interface_masks[chain_b].sum()
-            
-            interface_err[interface] = (chain_a_i_pae + chain_b_i_pae) / 2
-
-        for chain in scored_chains:
-            chain_to_all_pae = unbin_logits(pae_logits, self.config.loss.confidence_loss.pae.max_value, self.config.loss.confidence_loss.pae.n_bins) * chain_to_all_masks[chain]
-            chain_to_all_pae = chain_to_all_pae.sum(dim=(1,2)) / chain_to_all_masks[chain].sum()
-            
-            chain_to_self_pae = unbin_logits(pae_logits, self.config.loss.confidence_loss.pae.max_value, self.config.loss.confidence_loss.pae.n_bins) * chain_to_self_masks[chain]
-            chain_to_self_pae = chain_to_self_pae.sum(dim=(1,2)) / chain_to_self_masks[chain].sum()
-            
-            chain_to_all_err[chain] = chain_to_all_pae
-            chain_to_self_err[chain] = chain_to_self_pae
-
-        loss_input['pae_idx'] = torch.argmin(complex_err['pae'])
-        loss_input['pde_idx'] = torch.argmin(complex_err['pde'])
-        loss_input['plddt_idx'] = torch.argmax(complex_err['plddt'])
-
-        #get the rest of the indices for the interfaces to score
-        best_interface_idx = {}
-        best_lig_ipae_idx = {}
-        for k, v in interface_err.items():
-            best_interface_idx[k] = torch.argmin(v)
-
-            #handle special af3-style lig case, where they only use metrics for the ligand chain at evaluation
-            #if there's no ligand, still assign a random value for easier parsing of metrics
-            best_lig_ipae_idx[k] = -1
-            chain_1 = k.split('-')[0]
-            chain_2 = k.split('-')[1]
-            if chain_1 in lig_chains or chain_2 in lig_chains:
-                if chain_1 in lig_chains:
-                    lig_chain = chain_1
-                elif chain_2 in lig_chains:
-                    lig_chain = chain_2
-
-                best_lig_ipae_idx[k] = torch.argmin(lig_err[lig_chain])
-
-        loss_input['best_interface_idx'] = best_interface_idx
-        loss_input['best_lig_ipae_idx'] = best_lig_ipae_idx
-
-        best_chain_to_all_idx = {}
-        best_chain_to_self_idx = {}
-        for chain in scored_chains:
-            best_chain_to_all_idx[chain] = torch.argmin(chain_to_all_err[chain])
-            best_chain_to_self_idx[chain] = torch.argmin(chain_to_self_err[chain])
-
-        loss_input['best_chain_to_all_idx'] = best_chain_to_all_idx
-        loss_input['best_chain_to_self_idx'] = best_chain_to_self_idx
+        loss_input['confidence_loss'] = self.config.loss.confidence_loss
+        loss_input = self.confidence_indices(network_input, outputs, loss_input)
 
         metrics_dict = self.metrics(network_input, outputs, loss_input)
 
