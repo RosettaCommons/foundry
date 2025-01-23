@@ -9,6 +9,7 @@ import torch.utils.checkpoint as checkpoint
 
 from scipy.stats import spearmanr
 from rf2aa.training.checkpoint import create_custom_forward
+from rf2aa.metrics.metric_utils import unbin_rf3_metrics
 
 
 class AF3_with_rollout(nn.Module):
@@ -152,10 +153,9 @@ class ConfidenceLoss(nn.Module):
 
         if self.log_statistics or self.rank_loss.use_listnet_loss:
             #Get correlations across and within batches
-            #unbin values
-            #NOTE: for plddt we take the bin value as the upper threshold of the bin, for pae and pde we take the midpoint (consistent with rf2aa)
+            #Convert the true values per atom to per structure and mean
             lddt_bin_size = self.plddt.max_value / self.plddt.n_bins
-            true_lddt_unbinned = ((true_lddt_binned.detach() + 1) * lddt_bin_size ) * is_resolved_I
+            true_lddt_unbinned = ((true_lddt_binned.detach() + 1) * lddt_bin_size - (lddt_bin_size / 2) ) * is_resolved_I
             true_lddt_per_structure = true_lddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
             true_lddt = true_lddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
 
@@ -170,24 +170,10 @@ class ConfidenceLoss(nn.Module):
             true_pde = true_pde.sum() / (is_valid_pair.sum() + self.eps)
 
             #now do similarly for predicted values
-            lddt_bins = torch.linspace(lddt_bin_size, self.plddt.max_value, self.plddt.n_bins, device=true_lddt_binned.device)
-            plddt_unbinned = network_output["plddt"].reshape(B, self.plddt.n_bins, I, ChemData().NHEAVY).detach().float()
-            plddt_unbinned = torch.nn.Softmax(dim=1)(plddt_unbinned)
-            plddt_unbinned = (plddt_unbinned * lddt_bins[None, :, None, None]).sum(dim=1) * is_resolved_I[..., :ChemData().NHEAVY]
-            plddt_per_structure = plddt_unbinned.sum(dim=(1,2)) / (is_resolved_I.sum(dim=(1,2)) + self.eps)
-            plddt = plddt_unbinned.sum() / (is_resolved_I.sum() + self.eps)
-                
-            pae_bins = torch.linspace((pae_bin_size / 2), (self.pae.max_value - (pae_bin_size / 2)), self.pae.n_bins, device=true_pae_binned.device)
-            pae_unbinned = torch.nn.Softmax(dim=1)(pae_logits).detach().float()
-            pae_unbinned = (pae_unbinned * pae_bins[None, :, None, None]).sum(dim=1) * valid_pae_pairs
-            pae_per_structure = pae_unbinned.sum(dim=(1,2)) / (valid_pae_pairs.sum(dim=(1,2)) + self.eps)
-            pae = (pae_unbinned * valid_pae_pairs).sum() / (valid_pae_pairs.sum() + self.eps)
-
-            pde_bins = torch.linspace((pde_bin_size / 2), (self.pde.max_value - (pde_bin_size / 2)), self.pde.n_bins, device=true_pde_binned.device)
-            pde_unbinned = torch.nn.Softmax(dim=1)(pde_logits).detach().float()
-            pde_unbinned = (pde_unbinned * pde_bins[None, :, None, None]).sum(dim=1) * is_valid_pair
-            pde_per_structure = pde_unbinned.sum(dim=(1,2)) / (is_valid_pair.sum(dim=(1,2)) + self.eps)
-            pde = (pde_unbinned * is_valid_pair).sum() / (is_valid_pair.sum() + self.eps)
+            plddt_per_structure, pae_per_structure, pde_per_structure = unbin_rf3_metrics(network_output["plddt"].reshape(B, self.plddt.n_bins, I, ChemData().NHEAVY).detach().float(), pae_logits, pde_logits, is_resolved_I, self.plddt, self.pae, self.pde, pae_mask=valid_pae_pairs, pde_mask=is_valid_pair)
+            plddt = plddt_per_structure.mean()
+            pae = pae_per_structure.mean()
+            pde = pde_per_structure.mean()
 
             if self.log_statistics:
                 self.log_correlation_statistics(plddt, pae, pde, true_lddt, true_pae, true_pde, true_lddt_per_structure, true_pae_per_structure, true_pde_per_structure, plddt_per_structure, pae_per_structure, pde_per_structure, loss_dict)
