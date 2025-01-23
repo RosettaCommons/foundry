@@ -368,8 +368,8 @@ class AF3TrainerRollout(AF3Trainer):
             "pn_units_to_score": example["ground_truth"]["pn_units_to_score"],
             "chain_iid_token_lvl": example["ground_truth"]["chain_iid_token_lvl"],
             "example_id": example["example_id"],
-            "alignment_mask": example["alignment_mask_atm_lvl"],
             "is_real_atom": example["confidence_feats"]['is_real_atom'].to(gpu),
+            "is_ligand": example["feats"]['is_ligand'].to(gpu),
         }
 
         outputs = self.sampler.sample(inputs, n_cycle=n_cycle, use_amp=self.config.training_params.use_amp)
