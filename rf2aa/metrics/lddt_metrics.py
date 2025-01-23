@@ -214,7 +214,7 @@ class ConfidenceChainLDDT(Metric):
         return chain_lddt
 
 class LigRMSD(Metric):
-
+    #TODO: move these to a separate file, here for backwards compatibility with configs
     def __call__(self, 
                  network_input, 
                  network_output, 
@@ -225,6 +225,8 @@ class LigRMSD(Metric):
 
 
 class InterfacePocketLigandRMSD(Metric):
+    #TODO: move these to a separate file, here for backwards compatibility with configs
+
     """
     Compute the Ligand RMSD for each interface in the interfaces_to_score list.
     

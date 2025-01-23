@@ -15,21 +15,13 @@ from rf2aa.flow_matching.sampler import AF3Sampler, AF3PartialSampler
 from rf2aa.loss.af3_losses import Loss as AF3Loss
 from rf2aa.loss.af3_losses import SubunitSymmetryResolution, ResidueSymmetryResolution
 from rf2aa.metrics.metrics_base import MetricManager
-<<<<<<< HEAD
 from rf2aa.metrics.predicted_error import GetConfidenceIndices
-=======
 from rf2aa.metrics.metric_utils import unbin_logits
->>>>>>> 3b0223e4f81796f5f8b07d22c72039b26c2e1211
 from rf2aa.debug import pretty_describe_dict
 
 from rf2aa.chemical import ChemicalData as ChemData
-import warnings
-from rf2aa.training.recycling import recycle_sampling
 from functools import partial
-import omegaconf
-import datetime
 from rf2aa.chemical import initialize_chemdata
-from contextlib import nullcontext
 from icecream import ic
 
 import numpy as np
@@ -419,92 +411,3 @@ class AF3TrainerRollout(AF3Trainer):
         for name, param in self.model.named_parameters():
             if 'confidence' not in name:
                 param.requires_grad = False
-
-        
-    ##Recreated here rather than inherited from super so we can ensure grads are set to false for non-confidence parameters
-    #def train_model(self, rank, world_size):
-        #""" runs model training on each gpu """ 
-        #gpu = self.init_process_group(rank, world_size) 
-        ##rank = gpu
-        #ic(rank, world_size, gpu)
-
-        ##fd initialize chemical data based on input arguments
-        ##   this needs to be initialized first
-        #init = partial(initialize_chemdata, self.config)
-        #init()
-
-        ## Define context manager for training run (either nullcontext or W&B)
-        #timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        
-        #if self.config.log_params.use_wandb:    
-            #import wandb
-            #wandb.login()
-            #context_manager = wandb.init(
-                    #project=self.config.log_params.wandb_project, 
-                    #config=omegaconf.OmegaConf.to_container(
-                        #self.config, resolve=True, throw_on_missing=True
-                    #),
-                    #name = f"{self.config.experiment.name}_{timestamp}"
-                #) 
-        #else:
-            #context_manager = nullcontext() # Does nothing
-        
-
-        ## Without W&B, context manager does nothing
-        #with context_manager: 
-            #train_loader, train_sampler, valid_loaders, valid_samplers = self.construct_dataset(
-                #init, rank, world_size
-            #)
-
-            #self.train_loader = train_loader
-            #self.valid_loaders = valid_loaders
-
-            ## move global information to device
-            #self.move_constants_to_device(gpu)
-
-            #self.construct_model(device=gpu)
-            #if rank == 0:
-                #print(f"Loading model with {count_parameters(self.model)} parameters")
-
-            #self.construct_optimizer()
-            #self.construct_scheduler()
-            #self.construct_scaler()
-            #start_epoch = 0
-            #loaded_checkpoint = self.load_checkpoint(gpu)
-            #logger.info(f'Loaded checkpoint: {loaded_checkpoint}')
-            #if loaded_checkpoint:
-                #start_epoch = self.checkpoint["epoch"] + 1
-                #self.load_model()
-                #if not self.config.training_params.reset_optimizer_params:
-                    #self.load_optimizer()
-                    #self.load_scheduler()
-                    #self.load_scaler()
-                #else:
-                    #warnings.warn(f"User specified reset_optimizer_params=True. Did not load optimizer values from checkpoint")
-            #self.checkpoint = None # unload checkpoint dict
-
-            #self.recycle_schedule = recycle_sampling["by_batch"](self.config.loader_params.maxcycle, 
-                                                                #self.config.experiment.n_epoch,
-                                                                #self.config.dataset_params.n_train,
-                                                                #world_size)
-
-            ##set requires_grad to false for all non confidence parameters to be safe
-            #for name, param in self.model.named_parameters():
-                #if 'confidence' not in name:
-                    #assert param.requires_grad == False
-
-            #for epoch in range(start_epoch,self.config.experiment.n_epoch):
-                #train_sampler.set_epoch(epoch)
-                
-                #self.train_epoch(epoch, rank, world_size)
-                #for _, valid_sampler in valid_samplers.items():
-                    #valid_sampler.set_epoch(epoch)
-
-                #if (
-                    #self.config.dataset_params.validate_every_n_epochs > 0 
-                    #and epoch % self.config.dataset_params.validate_every_n_epochs==0
-                    #and (epoch!=start_epoch or self.config.dataset_params.validate_after_first_epoch)
-                #):
-                    #self.valid_epoch(epoch, rank, world_size)
-
-        #self.cleanup()

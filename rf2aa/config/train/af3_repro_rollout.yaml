@@ -69,7 +69,6 @@ training_params:
   grad_clip: 10.0
   EMA: 0.999
   seed: 1
-  make_fresh_weights_confidence_compatible: False #turn on when using weights that haven't previously been trained with the confidence head. Will rename parameters to be compatible with rollout model.
 
 interpolant:
   sigma_data: 16

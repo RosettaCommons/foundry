@@ -4,37 +4,18 @@ import tree
 from typing import Any
 
 from rf2aa.metrics.metrics_base import Metric
-from rf2aa.metrics.metric_utils import unbin_logits, create_interface_masks_2d, create_chainwise_masks_2d, create_chainwise_masks_1d, unbin_rf3_metrics
+from rf2aa.metrics.metric_utils import \
+    unbin_logits, \
+    create_interface_masks_2d, \
+    create_chainwise_masks_2d, \
+    create_chainwise_masks_1d, \
+    spread_batch_into_dictionary, \
+    compute_mean_over_subsampled_pairs
 from rf2aa.chemical import ChemicalData as ChemData
 
 import numpy as np
 import pandas as pd
 from itertools import combinations
-
-
-def compute_mean_over_subsampled_pairs(matrix_to_mean, pairs_to_score):
-    """
-    Compute the mean over a subsample of pairs in a 2d matrix. Returns a tensor with an element for each batch
-    Args:
-        matrix_to_mean: tensor of shape (batch, L, L)
-        pairs_to_score: 2d tensor of shape (L, L) with 1s where pairs should be scored and 0s elsewhere
-    Returns:
-        1d tensor of shape (batch,) with the mean over the subsampled pairs for each batch
-    """
-    B, L = matrix_to_mean.shape[:2]
-    assert matrix_to_mean.shape == (B, L, L), "Matrix to mean should be of shape (batch, L, L)"
-    assert pairs_to_score.shape == (L, L), "Pairs to score should be of shape (L, L)"   
-    batch = (matrix_to_mean * pairs_to_score).sum(dim=(-1,-2)) / pairs_to_score.sum()
-    assert batch.shape == (B,), "Batch should be of shape (batch,)"
-    return batch
-
-
-def spread_batch_into_dictionary(batch):
-    """
-    Given a batch of data, create a dictionary with keys as the batch index and value as the corresponding data
-    """
-    assert len(batch.shape) == 1, f"Batch should be a 1d tensor, {batch}" 
-    return {i: data.item() for i, data in enumerate(batch)}
 
 
 class WriteAF3Confidence(Metric):
@@ -79,10 +60,9 @@ class WriteAF3Confidence(Metric):
             pde_chainwise[chain] = spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(pde, pairs_to_score))
         
         plddt_chainwise = {}
-        for chain, mask in create_chainwise_masks_1d(ch_label).items():
-            plddt_real_atoms = plddt * is_real_atom[..., :ChemData().NHEAVY]
-            plddt_real_atoms = plddt_real_atoms[:, mask, :].sum(dim=(1,2)) / is_real_atom[:, mask, :ChemData().NHEAVY].sum(dim=(1,2))
-            plddt_chainwise[chain] = spread_batch_into_dictionary(plddt_real_atoms)
+        for chain, residue_atom_indices_to_score in create_chainwise_masks_1d(ch_label).items():
+            chain_is_real_atom = is_real_atom[..., :ChemData().NHEAVY] * residue_atom_indices_to_score
+            plddt_chainwise[chain] = spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(plddt, chain_is_real_atom))
 
         confidence_data = {
             "example_id": loss_input["example_id"],
@@ -145,7 +125,6 @@ class GetConfidenceIndices(Metric):
     ):
 
         # AF3's ranking metrics work like this, but using ptm instead of ipae:
-
         confidence_loss = loss_input['confidence_loss']
         del loss_input['confidence_loss']
 
