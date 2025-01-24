@@ -10,7 +10,7 @@ experiment:
 
 loss:
   confidence_loss:
-    _target_: rf2aa.model.af3_with_rollout.ConfidenceLoss
+    _target_: rf2aa.loss.af3_confidence_loss.ConfidenceLoss
     weight: 1.0
     plddt:
       weight: 1.0
@@ -28,18 +28,19 @@ loss:
       weight: 1.0
       n_bins: 2
       max_value: 1
+    log_statistics: True #adds to loss_dict true and predicted average plddt, pae, and pde per batch, also info about the spread and correlation of those values within a batch
+    rank_loss:
+      use_listnet_loss: False
+      weight: 0.0
+
 
 metrics:
   example_id:
     _target_: rf2aa.metrics.metrics_base.AddExampleID
   confidence_interface_lddt:
     _target_: rf2aa.metrics.lddt_metrics.ConfidenceInterfaceLDDT
-  ligand_rmsd:
-    _target_: rf2aa.metrics.lddt_metrics.LigRMSD
   confidence_chain_lddt:
     _target_: rf2aa.metrics.lddt_metrics.ConfidenceChainLDDT
-  scored_interface_lig_rmsd:
-   _target_: rf2aa.metrics.lddt_metrics.InterfacePocketLigandRMSD
 
 
 ddp_params:
@@ -274,9 +275,9 @@ confidence_head:
   n_bins_pde: 64
   n_bins_plddt: 50
   n_bins_exp_resolved: 2
-  use_Cb_distances: True
+  use_Cb_distances: False
   use_af3_style_binning_and_final_layer_norms: True
-  symmetrize_Cb_logits: False
+  symmetrize_Cb_logits: True
 
 optimizer:
   type: Adam
@@ -327,9 +328,8 @@ dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
   diffusion_batch_size: 1
-  diffusion_batch_size_valid: 16
-  diffusion_batch_size_rollout: 48
-  trunk_batch_size_valid: 1
+  diffusion_batch_size_valid: 5
+  diffusion_batch_size_rollout: 24
 
   n_msa: 1024
   default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
@@ -369,6 +369,7 @@ dataset_params:
                 - n_prot
                 - n_nuc
                 - n_ligand
+                - n_peptide
                 # pn_unit specific columns
                 - q_pn_unit_iid
                 - q_pn_unit_non_polymer_res_names
@@ -430,6 +431,7 @@ dataset_params:
                 - n_prot
                 - n_nuc
                 - n_ligand
+                - n_peptide
                 # interface specific columns
                 - pn_unit_1_iid
                 - pn_unit_2_iid

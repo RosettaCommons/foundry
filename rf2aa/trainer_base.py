@@ -5,7 +5,7 @@ from rf2aa.set_seed import seed_all
 
 from rf2aa.trainer_new import ComposedTrainer, LegacyTrainer, FlowMatchingTrainer
 from rf2aa.experiments.msa_module_trainer import MsaModuleTrainer
-from rf2aa.experiments.af3_trainer import AF3Trainer
+from rf2aa.experiments.af3_trainer import AF3Trainer, AF3TrainerRollout
 #torch.autograd.set_detect_anomaly(True)
 
 import warnings
@@ -35,6 +35,7 @@ trainer_factory = {
     "composed": ComposedTrainer,
     "flow_matching": FlowMatchingTrainer,
     "af3_repro": AF3Trainer,
+    "af3_rollout": AF3TrainerRollout,
     "msa_module": MsaModuleTrainer,
 }
 
