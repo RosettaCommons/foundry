@@ -17,6 +17,7 @@ import argparse
 import json
 from rf2aa.metrics.predicted_error import WriteAF3Confidence
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -135,10 +136,15 @@ class EvaluateAF3:
             example_id = structure.name.split('.')[0]
             out = parse(structure, remove_hydrogens=True)
 
+            # ... get the atom array and set NaN coordinates to random
+            atom_array = out["assemblies"]["1"][0] if "assemblies" in out else out["asym_unit"][0]
+            # HACK: Set NaN coordinates to random values to avoid unexpected behavior in the pipeline
+            atom_array.coord[np.isnan(atom_array.coord)] = np.random.rand(*atom_array.coord[np.isnan(atom_array.coord)].shape)
+
             # ... assemble the pipeline input in a format compatible with the DataHub pipeline
             pipeline_input = {
                 "example_id": example_id,
-                "atom_array": out["assemblies"]["1"][0] if "assemblies" in out else out["asym_unit"][0],
+                "atom_array": atom_array,
                 "chain_info": out["chain_info"],
             }
 
@@ -167,9 +173,9 @@ class EvaluateAF3:
 
             # Write the atom array to a CIF file
             # NOTE: To make the secondary structure appear, run `dss` in PyMol (see: https://biology.stackexchange.com/questions/70143/can-pymol-show-cartoon-secondary-structure-for-a-pdb-of-multiple-frames)
-            logger.info(f"Writing prediction for {example_id}.cif to {self.cif_out_dir / example_id}.cif...")
-            out_path = Path(to_cif_file(atom_array_stack, self.cif_out_dir / f"{example_id}.cif"))
-            logger.info(f"Prediction for {example_id}.cif written to {out_path}.")
+            logger.info(f"Writing prediction for {example_id}.cif to {self.cif_out_dir / example_id}...")
+            out_path = Path(to_cif_file(atom_array_stack, self.cif_out_dir / f"{example_id}.cif", include_entity_poly=False))
+            logger.info(f"Prediction for {example_id} written to {out_path}.")
 
             if "confidence" in outputs:
                 loss_input = {
@@ -204,7 +210,7 @@ def main():
                     inputs = json.load(json_file)
 
                     # ... build components
-                    atom_array, components = components_to_atom_array(inputs, return_components=True, _set_nan_to_random=True)
+                    atom_array, components = components_to_atom_array(inputs, return_components=True)
                     msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(components)
 
                     # ... create a temporary CIF file from the JSON data
