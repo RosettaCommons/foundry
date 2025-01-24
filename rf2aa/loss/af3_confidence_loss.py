@@ -92,9 +92,9 @@ class ConfidenceLoss(nn.Module):
             pae_per_structure = unbin_logits(pae_logits, self.pae.max_value, self.pae.n_bins)
             pde_per_structure = unbin_logits(pde_logits, self.pde.max_value, self.pde.n_bins)
             
-            plddt_per_structure = compute_mean_over_subsampled_pairs(plddt_per_structure, is_resolved_I[0,...,:ChemData().NHEAVY])
-            pae_per_structure = compute_mean_over_subsampled_pairs(pae_per_structure, is_valid_pair[0])
-            pde_per_structure = compute_mean_over_subsampled_pairs(pde_per_structure, is_valid_pair[0])
+            plddt_per_structure = torch.cat([compute_mean_over_subsampled_pairs(plddt_per_structure[i][None], is_resolved_I[i,...,:ChemData().NHEAVY]) for i in range(plddt_logit_stack.shape[0])], dim=0)
+            pae_per_structure = torch.cat([compute_mean_over_subsampled_pairs(pae_per_structure[i][None], is_valid_pair[i]) for i in range(pae_per_structure.shape[0])], dim=0)
+            pde_per_structure = torch.cat([compute_mean_over_subsampled_pairs(pde_per_structure[i][None], is_valid_pair[i]) for i in range(pde_per_structure.shape[0])], dim=0)
             
             plddt = plddt_per_structure.mean()
             pae = pae_per_structure.mean()
