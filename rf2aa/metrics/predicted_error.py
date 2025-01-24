@@ -39,8 +39,6 @@ class WriteAF3Confidence(Metric):
         pde_logits = network_output["confidence"]["pde_logits"]
         ch_label = network_output["confidence"]["chain_iid_token_lvl"]
         is_real_atom = network_output["confidence"]["is_real_atom"]
-        if len(is_real_atom.shape) == 2:
-            is_real_atom = is_real_atom.unsqueeze(0)
 
         # reorder the input tensors to be in (B, n_bins, ...) format for unbinning 
         plddt = unbin_logits(plddt_logit_stack.reshape(plddt_logit_stack.shape[0], -1, plddt_logit_stack.shape[1], ChemData().NHEAVY).float(), self.plddt.max_value, self.plddt.n_bins)
@@ -60,8 +58,8 @@ class WriteAF3Confidence(Metric):
             pde_chainwise[chain] = spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(pde, pairs_to_score))
         
         plddt_chainwise = {}
-        for chain, residue_atom_indices_to_score in create_chainwise_masks_1d(ch_label).items():
-            chain_is_real_atom = is_real_atom[..., :ChemData().NHEAVY] * residue_atom_indices_to_score
+        for chain, residue_atom_indices_to_score in create_chainwise_masks_1d(ch_label, device=is_real_atom.device).items():
+            chain_is_real_atom = is_real_atom[..., :ChemData().NHEAVY] * residue_atom_indices_to_score[:, None]
             plddt_chainwise[chain] = spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(plddt, chain_is_real_atom))
 
         confidence_data = {
