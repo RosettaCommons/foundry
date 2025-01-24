@@ -168,7 +168,7 @@ class AF3Trainer(FlowMatchingTrainer):
         all_valid_loss_dict = sum(all_valid_loss_dict, []) # flatten
 
         if rank==0:
-            self.log_validation_losses(epoch, all_valid_loss_dict)
+            self.log_validation_losses(epoch, all_valid_loss_dict, self.config.experiment.name)
 
     def log_validation_losses(self, epoch, loss_dict, tag='valid'):
         outfile = self.output_dir+'/'+tag+'_'+str(epoch)+'.log'
@@ -192,10 +192,7 @@ class AF3Trainer(FlowMatchingTrainer):
         example_id = example["example_id"]
 
         if dump_traj:
-            for i,modelxyz in enumerate(outputs['X_noisy_L_traj']):
-                if (i%10) != 0:
-                    continue
-
+            for i,modelxyz in enumerate(outputs['X_denoised_L_traj']):
                 xyz = modelxyz.cpu().numpy()
 
                 # Convert the model output to an atom array
@@ -207,7 +204,23 @@ class AF3Trainer(FlowMatchingTrainer):
                     elements=elements,
                 )
 
-                outfile = self.output_dir + f"/{example_id}_traj_{i}.cif"
+                outfile = self.output_dir + f"/{example_id}_denoised_{i}.cif"
+                logger.info(f"Writing {outfile}")
+                to_cif_file(atom_array_stack, outfile)
+
+            for i,modelxyz in enumerate(outputs['X_noisy_L_traj']):
+                xyz = modelxyz.cpu().numpy()
+
+                # Convert the model output to an atom array
+                atom_array_stack = convert_af3_model_output_to_atom_array_stack(
+                    atom_to_token_map=atom_to_token_map,
+                    pn_unit_iids=pn_unit_iids,
+                    decoded_restypes=decoded_restypes,
+                    xyz=xyz,
+                    elements=elements,
+                )
+
+                outfile = self.output_dir + f"/{example_id}_noisy_{i}.cif"
                 logger.info(f"Writing {outfile}")
                 to_cif_file(atom_array_stack, outfile)
 

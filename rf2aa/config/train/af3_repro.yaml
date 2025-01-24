@@ -7,6 +7,7 @@ experiment:
   name: rf2aa-af3-repro
   trainer: af3_repro
   output_dir: null
+  prevalidate: True
 
 loss:
   diffusion_loss:
@@ -305,7 +306,8 @@ af3_data_prep:
   t: null
 
 af3_inference:
-  second_order_solver: False
+  num_steps: 200
+  solver: "af3"
 
 resume:
   False
@@ -369,6 +371,7 @@ dataset_params:
                 - n_prot
                 - n_nuc
                 - n_ligand
+                - n_peptide
                 # pn_unit specific columns
                 - q_pn_unit_iid
                 - q_pn_unit_non_polymer_res_names
@@ -429,6 +432,7 @@ dataset_params:
                 - n_prot
                 - n_nuc
                 - n_ligand
+                - n_peptide
                 # interface specific columns
                 - pn_unit_1_iid
                 - pn_unit_2_iid

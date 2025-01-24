@@ -215,7 +215,7 @@ class AF3Sampler:
         self.confidence = confidence
 
 
-    def sample(self, inputs: Tuple[str, Any], n_cycle=1, n_diff_steps=200, use_amp=False) -> Dict[str, Any]:
+    def sample(self, inputs: Tuple[str, Any], n_cycle=1, use_amp=False) -> Dict[str, Any]:
         # first receive inputs from dataloader
         # convert them into features
         network_input = self._get_network_input(inputs)
@@ -237,14 +237,37 @@ class AF3Sampler:
             recycle_inputs["f"]["msa"] = network_input["f"]["msa_stack"][i].to(self.device)
             recycle_inputs = self.model.recycle(**recycle_inputs)
 
+        n_diff_steps = self.config.af3_inference.num_steps
+
         noise_schedule = self.construct_noise_schedule(n_diff_steps, 0, 1)
         noise_schedule = noise_schedule.to(self.device)
         post_recycle_outputs = recycle_inputs
-        X_L = self.sample_diffusion(network_input["f"], post_recycle_outputs["S_inputs_I"], \
-                post_recycle_outputs["S_I"], post_recycle_outputs["Z_II"], \
+
+        if self.config.af3_inference.solver == "af3":
+            X_L = self.sample_diffusion(
+                network_input["f"], post_recycle_outputs["S_inputs_I"],
+                post_recycle_outputs["S_I"], post_recycle_outputs["Z_II"],
                 noise_schedule
-                ) 
-        # need to return the distogram outputs
+            ) 
+        elif self.config.af3_inference.solver == "simple":
+            X_L = self.sample_diffusion_simple(
+                network_input["f"], post_recycle_outputs["S_inputs_I"],
+                post_recycle_outputs["S_I"], post_recycle_outputs["Z_II"],
+                noise_schedule
+            ) 
+        elif self.config.af3_inference.solver == "euler":
+            X_L = self.sample_diffusion_euler(
+                network_input["f"], post_recycle_outputs["S_inputs_I"],
+                post_recycle_outputs["S_I"], post_recycle_outputs["Z_II"],
+                noise_schedule
+            ) 
+        elif self.config.af3_inference.solver == "heun":
+            X_L = self.sample_diffusion_heun(
+                network_input["f"], post_recycle_outputs["S_inputs_I"],
+                post_recycle_outputs["S_I"], post_recycle_outputs["Z_II"],
+                noise_schedule
+            ) 
+
         outputs = self.model.post_recycle(
             **recycle_inputs,
             is_training=False,
@@ -285,16 +308,19 @@ class AF3Sampler:
             s_trans = 1.0
             X_L = centre_random_augmentation(X_L, X_exists_L, s_trans)
             gamma = gamma_0 if c_t > gamma_min else 0
+
             t_hat = c_t_minus_1 * (gamma + 1)
-            epsilon_L = noise_scale * torch.sqrt(torch.square(t_hat) - torch.square(c_t_minus_1)) * torch.normal(mean=0.0, std=1.0, size=X_L.shape, device=X_L.device)
+
+            epsilon_L = noise_scale * torch.sqrt(
+                torch.square(t_hat) - torch.square(c_t_minus_1)
+            ) * torch.normal(
+                mean=0.0, std=1.0, size=X_L.shape, device=X_L.device
+            )
             X_noisy_L = X_L + epsilon_L
-            #X_denoised_L = self.model.module.shadow.diffusion_module(X_noisy_L, t_hat.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
             X_denoised_L = self.model.diffusion_module(X_noisy_L, t_hat.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
             delta_L =  (X_noisy_L - X_denoised_L) / t_hat
             d_t = c_t - t_hat
             X_L = X_noisy_L + step_scale * d_t * delta_L
-            if self.config.af3_inference.second_order_solver:
-                pass
 
             X_noisy_L_traj.append(X_noisy_L)
             X_denoised_L_traj.append(X_denoised_L)
@@ -306,6 +332,104 @@ class AF3Sampler:
             t_hats= t_hats
         )
 
+    def sample_diffusion_simple(self, f, s_inputs_I, s_trunk_I, Z_trunk_II, noise_schedule, D=None):
+        D = D if D is not None else self.config.dataset_params["diffusion_batch_size_valid"]
+        L = f["ref_pos"].shape[0]
+        X_L = self._get_initial_structure(f, noise_schedule, D, L, self.device)
+        X_noisy_L_traj = []
+        X_denoised_L_traj = []  
+        t_hats = []
+        for c_t_minus_1, c_t in zip(noise_schedule, noise_schedule[1:]):
+            X_exists_L = torch.ones((D, L)).bool()
+            s_trans = 1.0
+            X_L = centre_random_augmentation(X_L, X_exists_L, s_trans)
+
+            if (c_t_minus_1 != noise_schedule[0]):
+                epsilon_L = c_t_minus_1 * torch.normal(
+                    mean=0.0, std=1.0, size=X_L.shape, device=X_L.device
+                )
+                X_noisy_L = X_L + epsilon_L
+            else:
+                X_noisy_L = X_L
+            X_denoised_L = self.model.diffusion_module(X_noisy_L, c_t_minus_1.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
+            X_L = X_denoised_L
+
+            X_noisy_L_traj.append(X_noisy_L)
+            X_denoised_L_traj.append(X_denoised_L)
+            t_hats.append(c_t_minus_1)
+        return dict(
+            X_L= X_L,
+            X_noisy_L_traj= X_noisy_L_traj,
+            X_denoised_L_traj= X_denoised_L_traj,
+            t_hats= t_hats
+        )
+
+    def sample_diffusion_euler(self, f, s_inputs_I, s_trunk_I, Z_trunk_II, noise_schedule, D=None):
+        D = D if D is not None else self.config.dataset_params["diffusion_batch_size_valid"]
+        L = f["ref_pos"].shape[0]
+        X_L = self._get_initial_structure(f, noise_schedule, D, L, self.device)
+        X_noisy_L_traj = []
+        X_denoised_L_traj = []  
+        t_hats = []
+        for c_t_minus_1, c_t in zip(noise_schedule, noise_schedule[1:]):
+            X_exists_L = torch.ones((D, L)).bool()
+            s_trans = 1.0
+            X_L = centre_random_augmentation(X_L, X_exists_L, s_trans)
+
+            X_noisy_L = X_L
+            X_denoised_L = self.model.diffusion_module(X_noisy_L, c_t_minus_1.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
+            delta_L =  (X_noisy_L - X_denoised_L) / c_t_minus_1
+            d_t = c_t - c_t_minus_1
+            X_L = X_noisy_L + d_t * delta_L
+
+            X_noisy_L_traj.append(X_noisy_L)
+            X_denoised_L_traj.append(X_denoised_L)
+            t_hats.append(c_t_minus_1)
+        return dict(
+            X_L= X_L,
+            X_noisy_L_traj= X_noisy_L_traj,
+            X_denoised_L_traj= X_denoised_L_traj,
+            t_hats= t_hats
+        )
+
+    def sample_diffusion_heun(self, f, s_inputs_I, s_trunk_I, Z_trunk_II, noise_schedule, D=None):
+        D = D if D is not None else self.config.dataset_params["diffusion_batch_size_valid"]
+        L = f["ref_pos"].shape[0]
+        X_L = self._get_initial_structure(f, noise_schedule, D, L, self.device)
+        X_noisy_L_traj = []
+        X_denoised_L_traj = []  
+        t_hats = []
+        for c_t_minus_1, c_t in zip(noise_schedule, noise_schedule[1:]):
+            X_exists_L = torch.ones((D, L)).bool()
+            s_trans = 1.0
+            X_L = centre_random_augmentation(X_L, X_exists_L, s_trans)
+
+            X_noisy_L = X_L
+            d_t = c_t - c_t_minus_1
+
+            X_denoised_L1 = self.model.diffusion_module(X_noisy_L, c_t_minus_1.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
+            delta_L1 =  (X_noisy_L - X_denoised_L1) / c_t_minus_1
+
+            if (c_t != noise_schedule[-1]):
+                print (c_t_minus_1,'->',c_t,'2nd order correction')
+                X_L1 = X_noisy_L + d_t * delta_L1
+                X_denoised_L2 = self.model.diffusion_module(X_L1, c_t.tile(D), f, s_inputs_I, s_trunk_I, Z_trunk_II)
+                delta_L2 =  (X_L1 - X_denoised_L2) / c_t
+                X_L = X_noisy_L + d_t/2 * (delta_L1 + delta_L2)
+            else:
+                print (c_t_minus_1,'->',c_t,'1st order only')
+                X_L = X_noisy_L + d_t * delta_L1
+                X_denoised_L2 = X_denoised_L1
+
+            X_noisy_L_traj.append(X_noisy_L)
+            X_denoised_L_traj.append(X_denoised_L2)
+            t_hats.append(c_t_minus_1)
+        return dict(
+            X_L= X_L,
+            X_noisy_L_traj= X_noisy_L_traj,
+            X_denoised_L_traj= X_denoised_L_traj,
+            t_hats= t_hats
+        )
 
     def _get_initial_structure(self, f, noise_schedule, D, L, device):
         X_L = noise_schedule[0] * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=device)
