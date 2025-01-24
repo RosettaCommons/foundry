@@ -20,7 +20,7 @@ from datahub.samplers import (
     FallbackSamplerWrapper,
     LazyWeightedRandomSampler, 
 )
-from resolvers import resolve_import
+from rf2aa.resolvers import resolve_import
 from omegaconf import OmegaConf
 import logging
 

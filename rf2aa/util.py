@@ -1475,4 +1475,3 @@ def get_residue_contacts(xyz, idx, seq_dist_greater_than=10, n_contacts=5):
     nodes,_ = torch.sort(torch.stack(nodes))
 
     return idx[nodes]
-

@@ -590,7 +590,7 @@ class TriangleAttention(nn.Module):
             # res_mask: [Batch, N_res, 1, 1, N_res]
             # right_edges: [Batch, 1, Head, N_res, N_res]
             #from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
-            bias = bias.unsqueeze(1).repeat(B,1,1,1,1)
+            bias = bias.unsqueeze(1)
             bias = bias.permute(0,1,4,2,3)
             mask = torch.zeros([B,L,1,1,L], dtype=torch.bfloat16, device=bias.device)
             out = DS4Sci_EvoformerAttention(query, key, value, [mask,bias]).reshape(B, L, L, -1)

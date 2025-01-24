@@ -4,55 +4,44 @@ defaults:
   - _self_
 
 experiment:
-  name: rf2aa-af3-repro
-  trainer: af3_repro
+  name: rf2aa-af3-repro-rollout
+  trainer: af3_rollout
   output_dir: null
 
 loss:
-  diffusion_loss:
-    _target_: rf2aa.loss.af3_losses.DiffusionLoss
-    weight: 4.0
-    sigma_data: ${model.diffusion_module.sigma_data}
-    alpha_dna: 5
-    alpha_rna: 5
-    alpha_ligand: 10
-    edm_lambda: True
-    se3_invariant_loss: True
-    clamp_diffusion_loss: False
-  distogram_loss:
-    _target_: rf2aa.loss.af3_losses.DistogramLoss
-    weight: 3e-2
-  protein_ligand_bond_loss:
-    _target_: rf2aa.loss.af3_losses.ProteinLigandBondLoss
-    weight: 0
-  #confidence_loss:
-    #weight: 1e-4
-    #plddt:
-      #weight: 1.0
-      #n_bins: 50
-      #max_value: 1.0
-    #pae:
-      #weight: 1.0
-      #n_bins: 64
-      #max_value: 32
-    #pde:  
-      #weight: 1.0
-      #n_bins: 64
-      #max_value: 32
-    #exp_resolved:
-      #weight: 1.0
-      #n_bins: 2
-      #max_value: 1
+  confidence_loss:
+    _target_: rf2aa.loss.af3_confidence_loss.ConfidenceLoss
+    weight: 1.0
+    plddt:
+      weight: 1.0
+      n_bins: 50
+      max_value: 1.0
+    pae:
+      weight: 1.0
+      n_bins: 64
+      max_value: 32
+    pde:  
+      weight: 1.0
+      n_bins: 64
+      max_value: 32
+    exp_resolved:
+      weight: 1.0
+      n_bins: 2
+      max_value: 1
+    log_statistics: True #adds to loss_dict true and predicted average plddt, pae, and pde per batch, also info about the spread and correlation of those values within a batch
+    rank_loss:
+      use_listnet_loss: False
+      weight: 0.0
+
 
 metrics:
-  interface_lddt:
-    _target_: rf2aa.metrics.lddt_metrics.InterfaceLDDT
-  chain_lddt:
-    _target_: rf2aa.metrics.lddt_metrics.ChainLDDT
   example_id:
     _target_: rf2aa.metrics.metrics_base.AddExampleID
-  distogram:
-    _target_: rf2aa.metrics.distogram_metrics.DistogramLoss
+  confidence_interface_lddt:
+    _target_: rf2aa.metrics.lddt_metrics.ConfidenceInterfaceLDDT
+  confidence_chain_lddt:
+    _target_: rf2aa.metrics.lddt_metrics.ConfidenceChainLDDT
+
 
 ddp_params:
   batch_size: 1
@@ -67,8 +56,10 @@ loader_params:
   dataloader_kwargs:
     shuffle: False
     num_workers: 3
-    #prefetch_factor: 4
     pin_memory: True
+
+  crop: 384
+  run_confidence_head: True
 
 training_params: 
   learning_rate_schedule:
@@ -272,13 +263,21 @@ confidence_head:
   n_pairformer_layers: 4
   pairformer:
     p_drop: 0.25
-    c: 128
+    # c: 128
+    triangle_multiplication:
+      d_hidden: 128
+    triangle_attention:
+      n_head: 4
+      d_hidden: 32
     attention_pair_bias:
       n_head: 16 
   n_bins_pae: 64
   n_bins_pde: 64
   n_bins_plddt: 50
   n_bins_exp_resolved: 2
+  use_Cb_distances: False
+  use_af3_style_binning_and_final_layer_norms: True
+  symmetrize_Cb_logits: True
 
 optimizer:
   type: Adam
@@ -328,11 +327,12 @@ cif_parser_caching_args:
 dataset_params:
   constructor:
     _target_: "rf2aa.data.compose_data_datahub_new.NewDatapipeTrainer"
-  diffusion_batch_size: 32
-  diffusion_batch_size_valid: ${dataset_params.diffusion_batch_size}
+  diffusion_batch_size: 1
+  diffusion_batch_size_valid: 5
+  diffusion_batch_size_rollout: 24
 
   n_msa: 1024
-  default_transform: rf2aa.data.pipelines.build_af3_transform_pipeline
+  default_transform: datahub.pipelines.af3.build_af3_transform_pipeline
   train:
     # ... train datasets
     pdb:
@@ -369,6 +369,7 @@ dataset_params:
                 - n_prot
                 - n_nuc
                 - n_ligand
+                - n_peptide
                 # pn_unit specific columns
                 - q_pn_unit_iid
                 - q_pn_unit_non_polymer_res_names
@@ -387,6 +388,7 @@ dataset_params:
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
               max_atoms_in_crop: 5000
               n_msa: ${dataset_params.n_msa}
+              run_confidence_head: ${loader_params.run_confidence_head}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -429,6 +431,7 @@ dataset_params:
                 - n_prot
                 - n_nuc
                 - n_ligand
+                - n_peptide
                 # interface specific columns
                 - pn_unit_1_iid
                 - pn_unit_2_iid
@@ -450,6 +453,7 @@ dataset_params:
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
               max_atoms_in_crop: 5000
               n_msa: ${dataset_params.n_msa}
+              run_confidence_head: ${loader_params.run_confidence_head}
           weights:
             _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
             beta: 0.5
@@ -500,6 +504,7 @@ dataset_params:
               diffusion_batch_size: ${dataset_params.diffusion_batch_size}
               max_atoms_in_crop: 5000
               n_msa: ${dataset_params.n_msa}
+              run_confidence_head: ${loader_params.run_confidence_head}
 
 
   val:
@@ -528,3 +533,4 @@ dataset_params:
         crop_spatial_probability: 0.0
         diffusion_batch_size: ${dataset_params.diffusion_batch_size_valid}
         n_msa: ${dataset_params.n_msa}
+        run_confidence_head: ${loader_params.run_confidence_head}

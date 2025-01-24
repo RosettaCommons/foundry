@@ -18,7 +18,6 @@ import certifi
 import warnings
 import wandb
 import logging
-import tree
 import subprocess
 
 from rf2aa.flow_matching.interpolant import Interpolant
