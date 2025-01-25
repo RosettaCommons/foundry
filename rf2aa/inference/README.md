@@ -105,13 +105,13 @@ Example commands (to be run from the `inference` working directory):
 
 ### Using a CIF or PDB
 ```bash
-apptainer -s run --nv /projects/ml/RF2_allatom/inference/SE3nv-20250115.sif inference.py ./examples/inputs/example_from_ccd.cif --checkpoint_path /projects/ml/RF2_allatom/inference/rf2aa-af3-repro3_180_2025_01_13.pt --cif_out_dir ./examples/predictions
+apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/inference/examples/inputs/example_from_ccd.cif --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./examples/predictions
 ```
 
 ### Using the JSON
 
 ```bash
-apptainer -s run --nv /projects/ml/RF2_allatom/inference/SE3nv-20250115.sif inference.py ./examples/inputs/example_from_json.json --checkpoint_path /projects/ml/RF2_allatom/inference/rf2aa-af3-repro3_180_2025_01_13.pt --cif_out_dir ./examples/predictions
+apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/inference/examples/inputs/example_from_json.json --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./examples/predictions
 ```
 
 ## Step 3: View the Predicted Structure(s)
