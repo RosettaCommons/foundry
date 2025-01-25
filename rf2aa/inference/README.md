@@ -105,21 +105,12 @@ Example commands (to be run from the `inference` working directory):
 
 ### Using a CIF or PDB
 ```bash
-export REPO_DIR="/net/software/lab/RF2-allatom"
-export PYTHONPATH=$REPO_DIR
-export CCD_MIRROR_PATH=/net/databases/frozen_pdb_copies/2024_12_11_ccd
-export PDB_MIRROR_PATH=/net/databases/frozen_pdb_copies/2024_12_01_pdb
 apptainer -s run --nv /projects/ml/RF2_allatom/inference/SE3nv-20250115.sif inference.py ./examples/inputs/example_from_ccd.cif --checkpoint_path /projects/ml/RF2_allatom/inference/rf2aa-af3-repro3_180_2025_01_13.pt --cif_out_dir ./examples/predictions
 ```
 
 ### Using the JSON
 
 ```bash
-export REPO_DIR="/net/software/lab/RF2-allatom"
-export PYTHONPATH=$REPO_DIR
-export CCD_MIRROR_PATH=/net/databases/frozen_pdb_copies/2024_12_11_ccd
-export PDB_MIRROR_PATH=/net/databases/frozen_pdb_copies/2024_12_01_pdb
-
 apptainer -s run --nv /projects/ml/RF2_allatom/inference/SE3nv-20250115.sif inference.py ./examples/inputs/example_from_json.json --checkpoint_path /projects/ml/RF2_allatom/inference/rf2aa-af3-repro3_180_2025_01_13.pt --cif_out_dir ./examples/predictions
 ```
 

@@ -4,6 +4,7 @@ from pathlib import Path
 from cifutils import parse
 from omegaconf import OmegaConf
 import torch
+import numpy as np
 from rf2aa.trainer_base import trainer_factory
 
 import os
