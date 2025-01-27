@@ -310,7 +310,11 @@ class Trainer:
                                                                 world_size)
 
             print(f"Starting training from epoch {start_epoch}")
-            #self.valid_epoch(start_epoch-1, rank, world_size)
+
+            if self.config.experiment.prevalidate:
+                logger.info("Prevalidating checkpoint, if you want to directly start training set config.experiment.prevalidate=False")
+                self.valid_epoch(start_epoch-1, rank, world_size)
+
             for epoch in range(start_epoch,self.config.experiment.n_epoch):
                 train_sampler.set_epoch(epoch) #TODO: need to make sure each gpu gets a different example
                 self.train_epoch(epoch, rank, world_size)
