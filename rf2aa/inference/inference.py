@@ -1,4 +1,11 @@
 import hydra
+import os
+
+# Add cifutils and datahub to the path
+import sys
+sys.path.append("/home/ncorley/projects/cifutils/src")
+sys.path.append("/home/ncorley/projects/datahub/src")
+
 from os import PathLike
 from pathlib import Path
 from cifutils import parse
@@ -7,7 +14,6 @@ import torch
 import numpy as np
 from rf2aa.trainer_base import trainer_factory
 
-import os
 from datahub.utils.io import convert_af3_model_output_to_atom_array_stack
 from cifutils.tools.inference import components_to_atom_array, build_msa_paths_by_chain_id_from_component_list
 from datahub.encoding_definitions import AF3SequenceEncoding
@@ -31,7 +37,9 @@ class EvaluateAF3:
                  checkpoint_path: PathLike, 
                  cif_out_dir: PathLike, 
                  n_recycles: int, 
-                 diffusion_batch_size: int
+                 diffusion_batch_size: int,
+                 residue_renaming_dict: dict | None = None,
+                 temp_dir: PathLike | None = None
                  ):
         """Initialize the evaluator.
 
@@ -41,6 +49,8 @@ class EvaluateAF3:
             world_size (int): Number of GPUs to use for evaluation.
             n_recycles (int): Number of recycles for AF3. The default is 10.
             diffusion_batch_size (int): Diffusion batch size for AF3. Each predicted structure will be saved as a separate model within the same CIF file.
+            residue_renaming_dict (dict): Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': '#L1'}.
+            temp_dir (PathLike): Temporary directory to store intermediate files. The default is None.
         """
 
         # Load the checkpoint
@@ -58,7 +68,7 @@ class EvaluateAF3:
         self.trainer.checkpoint = checkpoint
 
         # Set the output directory for the CIF files (e.g., predicted structures)
-        self.cif_out_dir = Path(cif_out_dir) if cif_out_dir is not None else None
+        self.cif_out_dir = Path(cif_out_dir) if cif_out_dir else Path("./")
 
         # Model parameters
         self.n_recycles = n_recycles
@@ -67,6 +77,10 @@ class EvaluateAF3:
             self.confidence_writer = WriteAF3Confidence(**self.config.loss.confidence_loss)
         else:
             self.confidence_writer = None
+        
+        # Rename residues
+        self.residue_renaming_dict = residue_renaming_dict
+        self.temp_dir = Path(temp_dir)
 
     def construct_pipeline(self):
         """Construct the AF3 inference pipeline."""
@@ -135,12 +149,26 @@ class EvaluateAF3:
             # ... parse into an AtomArray (`parse` handles all valid formats)
             logger.info(f"Parsing from path: {structure}")
             example_id = structure.name.split('.')[0]
+
+            # If we're renaming residues, we do a brute-force replacement in the CIF file
+            if self.residue_renaming_dict:
+                logger.info(f"Renaming residues in {structure} with brute-force find and replace: {self.residue_renaming_dict}")
+                with open(structure, "r") as f:
+                    content = f.read()
+                    for old_res, new_res in self.residue_renaming_dict.items():
+                        content = content.replace(old_res, new_res)
+                structure = Path(self.temp_dir / structure.name)
+                with open(structure, "w") as f:
+                    f.write(content)
+
             out = parse(structure, remove_hydrogens=True)
 
             # ... get the atom array and set NaN coordinates to random
             atom_array = out["assemblies"]["1"][0] if "assemblies" in out else out["asym_unit"][0]
+
             # HACK: Set NaN coordinates to random values to avoid unexpected behavior in the pipeline
             atom_array.coord[np.isnan(atom_array.coord)] = np.random.rand(*atom_array.coord[np.isnan(atom_array.coord)].shape)
+
 
             # ... assemble the pipeline input in a format compatible with the DataHub pipeline
             pipeline_input = {
@@ -195,6 +223,7 @@ def main():
     parser.add_argument("--cif_out_dir", type=str, required=True, help="Directory for output CIF files")
     parser.add_argument("--n_recycles", type=int, default=10, help="Number of recycles for AF3")
     parser.add_argument("--diffusion_batch_size", type=int, default=5, help="Diffusion batch size for AF3")
+    parser.add_argument("--rename_residues", type=str, default="", help="Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': '#L1'}")
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -216,6 +245,7 @@ def main():
 
                     # ... create a temporary CIF file from the JSON data
                     # (By writing the MSA paths to a category in the CIF file, they will ultimately end up in `chain_info`, as desired)
+                    # TODO: Write to buffer instead of file to avoid filesystem I/O
                     path = temp_dir / f"{path.stem}.cif"
                     save_path = to_cif_file(
                         atom_array,
@@ -226,12 +256,16 @@ def main():
             else:
                 file_paths_for_prediction.append(path)
         
+        residue_renaming_dict = json.loads(args.rename_residues) if args.rename_residues else {}
+        
         # Construct the evaluator
         evaluator = EvaluateAF3(
             checkpoint_path=args.checkpoint_path,
             cif_out_dir=args.cif_out_dir,
             n_recycles=args.n_recycles,
             diffusion_batch_size=args.diffusion_batch_size,
+            residue_renaming_dict=residue_renaming_dict,
+            temp_dir=temp_dir
         )
 
         # Launch the evaluation
