@@ -65,6 +65,8 @@ class FakeDDPWrapper(nn.Module):
     def __init__(self, model):
         super().__init__()
         self.module = model
+        self.no_sync = lambda: None
+
 
     def forward(self, *args, **kwargs):
         return self.module(*args, **kwargs)
