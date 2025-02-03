@@ -98,7 +98,7 @@ Arguments to `inference.py` are:
 - `--cif_out_dir` (required): Where to save predicted structures. The output files will be named the same was as the input structures.
 - `--n_recycles` (optional, defaults to 10): Number of recycles.
 - `--diffusion_batch_size` (optional, default to 5): Number of output structures in the ensemble, drawn from the same model seed.
-- `--rename_residues` (optional, default to an empty string): Dictionary of residue names to rename to avoid CCD clashes, e.g., '{"ALA": "#L1"}'. When parsing files, we use the given residue names to help identify any missing atoms. Thus, if a custom ligand overlaps with a ligand in the CCD, the prediction will be catastrophically wrong. To circumvent this issue, we accept a dictionary of ligands to rename. We suggest renaming all custom ligands to begin with `#` to avoid all clashes with the CCD. WARNING: This command uses brute-force find a replace; please ensure that there are no other possible matches (e.g., atom names).
+- `--rename_residues` (optional, default to an empty string): Dictionary of residue names to rename to avoid CCD clashes, e.g., '{"ALA": "L:1"}'. When parsing files, we use the given residue names to help identify any missing atoms. Thus, if a custom ligand overlaps with a ligand in the CCD, the prediction will be catastrophically wrong. To circumvent this issue, we accept a dictionary of ligands to rename. We suggest renaming all custom ligands to begin with `L:` to avoid all clashes with the CCD. WARNING: This command uses brute-force find a replace; please ensure that there are no other possible matches (e.g., atom names). Additionally, avoid `#` to mitigate possible CIF-parsing errors from PyMol.
 
 > *NOTE:* The CIF files are saved in a compressed format, `.cif.gz`. These compressed files can be directly loaded by PyMol or parsed by `cifutils`. If you need to inspect the uncompressed file, you can use `gunzip <PATH>`.
 
@@ -114,7 +114,7 @@ apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_2025012
 ### Using a PDB from MPNN, renaming clashing ligands (example from Indrek)
 Note that in this PDB file, the ligand "HGS" is a custom ligand, whose three-letter code overlaps with a real CCD ligand. Thus, we must rename.
 ```bash
-apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/inference/examples/inputs/example_pdb_from_indrek.cif --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./examples/predictions --rename_residues '{"HGS": "#L1"}'
+apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/inference/examples/inputs/example_pdb_from_indrek.cif --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./examples/predictions --rename_residues '{"HGS": "L:1"}'
 ```
 
 ### Using the JSON
