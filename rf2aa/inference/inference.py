@@ -1,11 +1,6 @@
 import hydra
 import os
 
-# Add cifutils and datahub to the path
-import sys
-sys.path.append("/home/ncorley/projects/cifutils/src")
-sys.path.append("/home/ncorley/projects/datahub/src")
-
 from os import PathLike
 from pathlib import Path
 from cifutils import parse
