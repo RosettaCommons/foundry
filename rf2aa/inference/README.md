@@ -1,7 +1,7 @@
-# Inference with AF3 Repro
+# Inference with `modelhub-AF3` repository
 
 We have reproduced AF3 and are sharing the weights with the lab to use for various tasks. 
-This guide provides instructions on preparing inputs and running inference for our AF3 reproduction (name TBD).
+This guide provides instructions on preparing inputs and running inference for our AF3 reproduction.
 
 Additional variations (e.g., with chirality inputs, ligand geometry conditioning, protein backbone coordinate conditioning) are in-the-works; however, the core inference API will not change.
 
@@ -13,7 +13,7 @@ We enumerate two options for preparing inputs: one with a JSON API, one by creat
 
 ### Option 1: Prepare inputs using a combination of one-letter polymer sequences, SMILES strings, CCD codes, and SDF files
 
-Create a JSON file with each component similar to `inputs/example)from_json.json`; e.g.,
+Create a JSON file with each component similar to `rf2aa/tests/data/example_from_json.json`; e.g.,
 
 ```json
 [
@@ -82,8 +82,8 @@ ligand_from_ccd = {
 atom_array_from_ccd = components_to_atom_array([monomer, ligand_from_ccd])
 atom_array_from_smiles = components_to_atom_array([monomer, ligand_from_smiles])
 
-to_cif_file(atom_array_from_ccd, "./inputs/example_from_ccd.cif")
-to_cif_file(atom_array_from_smiles, "./inputs/example_from_smiles.cif")
+to_cif_file(atom_array_from_ccd, "example_from_ccd.cif")
+to_cif_file(atom_array_from_smiles, "example_from_smiles.cif")
 ```
 
 ## Step 2: Run `inference.py`
@@ -108,19 +108,19 @@ Example commands (to be run from the `inference` working directory):
 
 ### Using a CIF
 ```bash
-apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/inference/examples/inputs/example_from_ccd.cif --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./examples/predictions
+apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/tests/data/example_from_ccd.cif --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./predictions
 ```
 
 ### Using a PDB from MPNN, renaming clashing ligands (example from Indrek)
 Note that in this PDB file, the ligand "HGS" is a custom ligand, whose three-letter code overlaps with a real CCD ligand. Thus, we must rename.
 ```bash
-apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/inference/examples/inputs/example_pdb_from_indrek.cif --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./examples/predictions --rename_residues '{"HGS": "L:1"}'
+apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/tests/data/example_pdb_from_indrek.cif --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./predictions --rename_residues '{"HGS": "L:1"}'
 ```
 
 ### Using the JSON
 
 ```bash
-apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/inference/examples/inputs/example_from_json.json --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./examples/predictions
+apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/tests/data/example_from_json.json --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./predictions
 ```
 
 ## Step 3: View the Predicted Structure(s)
