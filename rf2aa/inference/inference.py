@@ -80,7 +80,7 @@ def _spoof_cif_from_dictionary(item: dict, temp_dir: os.PathLike) -> Path:
     msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(component_list)
 
     # Create a temporary CIF file from the JSON data
-    cif_path = Path(temp_dir) / f"{item["name"]}.cif"
+    cif_path = Path(temp_dir) / f"{item['name']}.cif"
     save_path = to_cif_file(
         atom_array,
         cif_path,
