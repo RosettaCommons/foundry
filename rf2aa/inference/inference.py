@@ -14,7 +14,6 @@ import torch
 import numpy as np
 from rf2aa.trainer_base import trainer_factory
 
-from datahub.utils.io import convert_af3_model_output_to_atom_array_stack
 from cifutils.tools.inference import components_to_atom_array, build_msa_paths_by_chain_id_from_component_list
 from datahub.encoding_definitions import AF3SequenceEncoding
 from cifutils.utils.io_utils import to_cif_file
@@ -23,6 +22,7 @@ import tempfile
 import argparse
 import json
 from rf2aa.metrics.predicted_error import WriteAF3Confidence
+from biotite.structure import stack, AtomArray, AtomArrayStack
 
 
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +30,32 @@ logger = logging.getLogger(__name__)
 
 # Define the sequence encoding; needed to decode the restypes when saving to CIF
 encoding = AF3SequenceEncoding()
+
+def build_stack_from_atom_array_and_batched_coords(
+    coords: np.ndarray, atom_array: AtomArray, annotations_to_keep: list[str] = ["chain_id", "transformation_id", "res_id", "res_name", "element"]
+) -> AtomArrayStack:
+    """Builds an AtomArrayStack from an AtomArray and a set of coordinates with a batch dimension.
+
+    Additionally, handles the case where the AtomArray contains multiple transformations and we must adjust the chain_id.
+
+    Args:
+        coords (np.array): The coordinates to be assigned to the AtomArrayStack. Must have shape (nbatch, n_atoms, 3).
+        atom_array (AtomArray): The AtomArray to be stacked. Must have shape (n_atoms,)
+    """
+    # (Diffusion batch size will become the number of models)
+    n_batch = coords.shape[0]
+
+    atom_array_stack = stack([atom_array for _ in range(n_batch)])
+    atom_array_stack.coord = coords
+
+    # Adjust chain_id if there are multiple transformations
+    # (Otherwise, we will have ambiguous bond annotations)
+    if "transformation_id" in atom_array.get_annotation_categories() and len(np.unique(atom_array_stack.transformation_id)) > 1:
+        atom_array_stack.chain_id = (
+            atom_array_stack.chain_id + atom_array_stack.transformation_id
+        )
+
+    return atom_array_stack
 
 class EvaluateAF3:
     """Class for inference with AF3. Evaluates a trained AF3 model on a set of spoofed CIFs."""
@@ -49,7 +75,7 @@ class EvaluateAF3:
             world_size (int): Number of GPUs to use for evaluation.
             n_recycles (int): Number of recycles for AF3. The default is 10.
             diffusion_batch_size (int): Diffusion batch size for AF3. Each predicted structure will be saved as a separate model within the same CIF file.
-            residue_renaming_dict (dict): Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': '#L1'}.
+            residue_renaming_dict (dict): Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': 'L:1'}.
             temp_dir (PathLike): Temporary directory to store intermediate files. The default is None.
         """
 
@@ -86,6 +112,7 @@ class EvaluateAF3:
         """Construct the AF3 inference pipeline."""
         self.config.dataset_params.val.interface.transform.n_recycles = self.n_recycles
         self.config.dataset_params.val.interface.transform.diffusion_batch_size = self.diffusion_batch_size
+        self.config.dataset_params.val.interface.transform.return_atom_array = True # Required for `to_cif`
 
         assert self.config.dataset_params.val.interface.transform.n_recycles == self.n_recycles, "Number of recycles not set correctly."
         assert self.config.dataset_params.val.interface.transform.diffusion_batch_size == self.diffusion_batch_size, "Diffusion batch size not set correctly."
@@ -183,27 +210,16 @@ class EvaluateAF3:
             # Model inference
             with torch.no_grad():
                 outputs = self.trainer.sampler.sample([pipeline_output], n_cycle=self.n_recycles, use_amp=self.config.training_params.use_amp)
+            
 
-            # Collect information needed to write out the CIF file
-            atom_to_token_map = pipeline_output["feats"]["atom_to_token_map"].cpu().numpy()
-            decoded_restypes = encoding.decode(torch.argmax(pipeline_output["feats"]["restype"], dim=-1).cpu())
-            pn_unit_iids = pipeline_output["ground_truth"]["chain_iid_token_lvl"]
-            xyz = outputs["X_L"].cpu().numpy()
-            elements = torch.argmax(pipeline_output["feats"]["ref_element"], -1).cpu().numpy()
-
-            # Convert the model output to an atom array
-            atom_array_stack = convert_af3_model_output_to_atom_array_stack(
-                atom_to_token_map=atom_to_token_map,
-                pn_unit_iids=pn_unit_iids,
-                decoded_restypes=decoded_restypes,
-                xyz=xyz,
-                elements=elements,
+            # Override the AtomArray with the predited coordinates
+            atom_array_stack = build_stack_from_atom_array_and_batched_coords(
+                outputs["X_L"].cpu().numpy(), pipeline_output["atom_array"]
             )
 
             # Write the atom array to a CIF file
             # NOTE: To make the secondary structure appear, run `dss` in PyMol (see: https://biology.stackexchange.com/questions/70143/can-pymol-show-cartoon-secondary-structure-for-a-pdb-of-multiple-frames)
-            logger.info(f"Writing prediction for {example_id}.cif to {self.cif_out_dir / example_id}...")
-            out_path = Path(to_cif_file(atom_array_stack, self.cif_out_dir / f"{example_id}.cif", include_entity_poly=False))
+            out_path = to_cif_file(atom_array_stack, self.cif_out_dir / example_id, file_type="cif")
             logger.info(f"Prediction for {example_id} written to {out_path}.")
 
             if "confidence" in outputs:
@@ -223,7 +239,7 @@ def main():
     parser.add_argument("--cif_out_dir", type=str, required=True, help="Directory for output CIF files")
     parser.add_argument("--n_recycles", type=int, default=10, help="Number of recycles for AF3")
     parser.add_argument("--diffusion_batch_size", type=int, default=5, help="Diffusion batch size for AF3")
-    parser.add_argument("--rename_residues", type=str, default="", help="Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': '#L1'}")
+    parser.add_argument("--rename_residues", type=str, default="", help="Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': 'L:1'}")
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -251,6 +267,7 @@ def main():
                         atom_array,
                         path,
                         extra_categories={"msa_paths_by_chain_id": msa_paths_by_chain_id} if msa_paths_by_chain_id else None,
+                        file_type="cif"
                     )
                     file_paths_for_prediction.append(Path(save_path))
             else:
