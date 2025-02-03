@@ -23,6 +23,7 @@ import argparse
 import json
 from rf2aa.metrics.predicted_error import WriteAF3Confidence
 from biotite.structure import stack, AtomArray, AtomArrayStack
+import pickle
 
 
 logging.basicConfig(level=logging.INFO)
@@ -56,6 +57,39 @@ def build_stack_from_atom_array_and_batched_coords(
         )
 
     return atom_array_stack
+
+def _spoof_cif_from_dictionary(item: dict, temp_dir: os.PathLike) -> Path:
+    """Unpacks a dictionary to create a CIF file from its components.
+    
+    Args:
+        item (dict): A dictionary containing 'name' and 'components', optionally 'bonds'.
+        temp_dir (Path): Path to the temporary directory for storing CIF files.
+    
+    Returns:
+        Path: The path to the created CIF file, saved in the temporary directory.
+    
+    Raises:
+        NotImplementedError: If 'bonds' is present in the dictionary.
+        ValueError: If 'name' or 'components' are missing from the dictionary.
+    """
+    # Validate the dictionary structure ("name" and "components" are required, "bonds" is optional)
+    assert "name" in item and "components" in item, "The input dictionary must contain 'name' and 'components' keys."
+    
+    # Build components
+    atom_array, component_list = components_to_atom_array(item["components"], return_components=True, bonds=item.get("bonds", None))
+    msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(component_list)
+
+    # Create a temporary CIF file from the JSON data
+    cif_path = Path(temp_dir) / f"{item["name"]}.cif"
+    save_path = to_cif_file(
+        atom_array,
+        cif_path,
+        extra_categories={"msa_paths_by_chain_id": msa_paths_by_chain_id} if msa_paths_by_chain_id else None,
+        file_type="cif" # Not zipped for efficiency (as it's a temporary directory anyways)
+    )
+    
+    return Path(save_path)
+
 
 class EvaluateAF3:
     """Class for inference with AF3. Evaluates a trained AF3 model on a set of spoofed CIFs."""
@@ -250,27 +284,24 @@ def main():
         file_paths_for_prediction = []
         for path in args.inputs:
             path = Path(path)
-            if path.suffix in {".json"}:
-                with open(path, 'r') as json_file:
-                    # ... load the JSON data
-                    inputs = json.load(json_file)
+            if path.suffix in {".json", ".yaml", ".yml", ".pkl"}:
+                # (Dictionary-like inputs, which will be converted to "spoofed" CIF files)
+                with open(path, 'r') as file:
+                    # Load data based on file extension
+                    if path.suffix == ".json":
+                        data = json.load(file)
+                    elif path.suffix in {".yaml", ".yml"}:
+                        raise NotImplementedError("YAML files are not yet supported.")
+                    elif path.suffix == ".pkl":
+                        data = pickle.load(file)
+                    
+                    if isinstance(data, dict):
+                        data = [data]  # Convert single dictionary to list for uniform processing
 
-                    # ... build components
-                    atom_array, components = components_to_atom_array(inputs, return_components=True)
-                    msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(components)
-
-                    # ... create a temporary CIF file from the JSON data
-                    # (By writing the MSA paths to a category in the CIF file, they will ultimately end up in `chain_info`, as desired)
-                    # TODO: Write to buffer instead of file to avoid filesystem I/O
-                    path = temp_dir / f"{path.stem}.cif"
-                    save_path = to_cif_file(
-                        atom_array,
-                        path,
-                        extra_categories={"msa_paths_by_chain_id": msa_paths_by_chain_id} if msa_paths_by_chain_id else None,
-                        file_type="cif"
-                    )
-                    file_paths_for_prediction.append(Path(save_path))
+                    for item in data:
+                        file_paths_for_prediction.append(_spoof_cif_from_dictionary(item, temp_dir))
             else:
+                # (CIF/PDB files or directories of CIF/PDB files)
                 file_paths_for_prediction.append(path)
         
         residue_renaming_dict = json.loads(args.rename_residues) if args.rename_residues else {}
