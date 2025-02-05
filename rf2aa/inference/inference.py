@@ -1,24 +1,26 @@
-import hydra
-
-from os import PathLike
-from pathlib import Path
-from cifutils import parse
-from omegaconf import OmegaConf
-import torch
-import numpy as np
-from rf2aa.trainer_base import trainer_factory
-
-from cifutils.tools.inference import components_to_atom_array, build_msa_paths_by_chain_id_from_component_list
-from datahub.encoding_definitions import AF3SequenceEncoding
-from cifutils.utils.io_utils import to_cif_file
-import logging
-import tempfile
 import argparse
 import json
-from rf2aa.metrics.predicted_error import WriteAF3Confidence
-from biotite.structure import stack, AtomArray, AtomArrayStack
+import logging
 import pickle
+import tempfile
+from os import PathLike
+from pathlib import Path
 
+import hydra
+import numpy as np
+import torch
+from biotite.structure import AtomArray, AtomArrayStack, stack
+from cifutils import parse
+from cifutils.tools.inference import (
+    build_msa_paths_by_chain_id_from_component_list,
+    components_to_atom_array,
+)
+from cifutils.utils.io_utils import to_cif_file
+from datahub.encoding_definitions import AF3SequenceEncoding
+from omegaconf import OmegaConf
+
+from rf2aa.metrics.predicted_error import WriteAF3Confidence
+from rf2aa.trainer_base import trainer_factory
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,8 +28,18 @@ logger = logging.getLogger(__name__)
 # Define the sequence encoding; needed to decode the restypes when saving to CIF
 encoding = AF3SequenceEncoding()
 
+
 def build_stack_from_atom_array_and_batched_coords(
-    coords: np.ndarray, atom_array: AtomArray, annotations_to_keep: list[str] = ["chain_id", "transformation_id", "res_id", "res_name", "element", "atom_name"]
+    coords: np.ndarray,
+    atom_array: AtomArray,
+    annotations_to_keep: list[str] = [
+        "chain_id",
+        "transformation_id",
+        "res_id",
+        "res_name",
+        "element",
+        "atom_name",
+    ],
 ) -> AtomArrayStack:
     """Builds an AtomArrayStack from an AtomArray and a set of coordinates with a batch dimension.
 
@@ -51,44 +63,57 @@ def build_stack_from_atom_array_and_batched_coords(
 
     # Adjust chain_id if there are multiple transformations
     # (Otherwise, we will have ambiguous bond annotations, since only `chain_id` is used for the bond annotations)
-    if "transformation_id" in atom_array.get_annotation_categories() and len(np.unique(atom_array_stack.transformation_id)) > 1:
+    if (
+        "transformation_id" in atom_array.get_annotation_categories()
+        and len(np.unique(atom_array_stack.transformation_id)) > 1
+    ):
         atom_array_stack.chain_id = (
             atom_array_stack.chain_id + atom_array_stack.transformation_id
         )
 
     return atom_array_stack
 
+
 def _spoof_cif_from_dictionary(item: dict, temp_dir: PathLike) -> Path:
     """Unpacks a dictionary to create a CIF file from its components.
-    
+
     Args:
         item (dict): A dictionary containing 'name' and 'components', optionally 'bonds'.
         temp_dir (Path): Path to the temporary directory for storing CIF files.
-    
+
     Returns:
         Path: The path to the created CIF file, saved in the temporary directory.
-    
+
     Raises:
         NotImplementedError: If 'bonds' is present in the dictionary.
         ValueError: If 'name' or 'components' are missing from the dictionary.
     """
     # Validate the dictionary structure ("name" and "components" are required, "bonds" is optional)
-    assert "name" in item and "components" in item, "The input dictionary must contain 'name' and 'components' keys."
-    
+    assert "name" in item and "components" in item, (
+        "The input dictionary must contain 'name' and 'components' keys."
+    )
+
     # Build components
-    atom_array, component_list = components_to_atom_array(item["components"], return_components=True, bonds=item.get("bonds", None))
-    msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(component_list)
+    atom_array, component_list = components_to_atom_array(
+        item["components"], return_components=True, bonds=item.get("bonds", None)
+    )
+    msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(
+        component_list
+    )
 
     # Create a temporary CIF file from the JSON data
     cif_path = Path(temp_dir) / f"{item['name']}.cif"
     save_path = to_cif_file(
         atom_array,
         cif_path,
-        extra_categories={"msa_paths_by_chain_id": msa_paths_by_chain_id} if msa_paths_by_chain_id else None,
-        file_type="cif" # Not zipped for efficiency (as it's a temporary directory anyways)
+        extra_categories={"msa_paths_by_chain_id": msa_paths_by_chain_id}
+        if msa_paths_by_chain_id
+        else None,
+        file_type="cif",  # Not zipped for efficiency (as it's a temporary directory anyways)
     )
-    
+
     return Path(save_path)
+
 
 def _build_file_paths_for_prediction(inputs: list, temp_dir: PathLike) -> list[Path]:
     """Prepare files for prediction based on the input paths.
@@ -110,16 +135,20 @@ def _build_file_paths_for_prediction(inputs: list, temp_dir: PathLike) -> list[P
     paths_to_raw_input_files = []
     for input_path in inputs:
         if Path(input_path).is_dir():
-            paths_to_raw_input_files.extend(_find_files(input_path, DICTIONARY_LIKE_EXTENSIONS | CIF_LIKE_EXTENSIONS))
+            paths_to_raw_input_files.extend(
+                _find_files(
+                    input_path, DICTIONARY_LIKE_EXTENSIONS | CIF_LIKE_EXTENSIONS
+                )
+            )
         else:
             paths_to_raw_input_files.append(Path(input_path))
-    
+
     paths_to_cif_like_files = []
     for path in paths_to_raw_input_files:
-        concatenated_suffix = ''.join(path.suffixes)
+        concatenated_suffix = "".join(path.suffixes)
         if concatenated_suffix in DICTIONARY_LIKE_EXTENSIONS:
             # Spoof CIF files from dictionary-like formats
-            with open(path, 'rb' if path.suffix == ".pkl" else 'r') as file:
+            with open(path, "rb" if path.suffix == ".pkl" else "r") as file:
                 # Load data based on file extension
                 if path.suffix == ".json":
                     data = json.load(file)
@@ -129,17 +158,24 @@ def _build_file_paths_for_prediction(inputs: list, temp_dir: PathLike) -> list[P
                     data = pickle.load(file)
 
                 if isinstance(data, dict):
-                    data = [data]  # Convert single dictionary to list for uniform processing
+                    data = [
+                        data
+                    ]  # Convert single dictionary to list for uniform processing
 
                 for item in data:
-                    paths_to_cif_like_files.append(_spoof_cif_from_dictionary(item, temp_dir))
+                    paths_to_cif_like_files.append(
+                        _spoof_cif_from_dictionary(item, temp_dir)
+                    )
         elif concatenated_suffix in CIF_LIKE_EXTENSIONS:
             # Directly use CIF-like files
             paths_to_cif_like_files.append(path)
         else:
-            raise ValueError(f"Unsupported file extension: {path.suffix} (path: {path}; paths: {paths_to_raw_input_files}).")
-    
+            raise ValueError(
+                f"Unsupported file extension: {path.suffix} (path: {path}; paths: {paths_to_raw_input_files})."
+            )
+
     return paths_to_cif_like_files
+
 
 def _find_files(path: PathLike, supported_file_types: list) -> list[Path]:
     """Recursively find all files with the given extensions in the specified path.
@@ -154,11 +190,11 @@ def _find_files(path: PathLike, supported_file_types: list) -> list[Path]:
     files_with_supported_types = []
     path = Path(path)
 
-  # Check if the path is a directory
+    # Check if the path is a directory
     if path.is_dir():
         # Search for files with each supported extension
         for file_type in supported_file_types:
-            files_with_supported_types.extend(path.glob(f'*{file_type}'))
+            files_with_supported_types.extend(path.glob(f"*{file_type}"))
     elif path.is_file() and path.suffix in supported_file_types:
         # If it's a file and has a supported extension, add to the list
         files_with_supported_types.append(path)
@@ -168,16 +204,18 @@ def _find_files(path: PathLike, supported_file_types: list) -> list[Path]:
 
 class EvaluateAF3:
     """Class for inference with AF3. Evaluates a trained AF3 model on a set of spoofed CIFs."""
-    def __init__(self, 
-                 checkpoint_path: PathLike, 
-                 cif_out_dir: PathLike, 
-                 n_recycles: int, 
-                 diffusion_batch_size: int,
-                 residue_renaming_dict: dict | None = None,
-                 temp_dir: PathLike | None = None,
-                 num_steps: int = 200,
-                 solver: str = "af3",
-                 ):
+
+    def __init__(
+        self,
+        checkpoint_path: PathLike,
+        cif_out_dir: PathLike,
+        n_recycles: int,
+        diffusion_batch_size: int,
+        residue_renaming_dict: dict | None = None,
+        temp_dir: PathLike | None = None,
+        num_steps: int = 200,
+        solver: str = "af3",
+    ):
         """Initialize the evaluator.
 
         Args:
@@ -205,7 +243,9 @@ class EvaluateAF3:
         self.config.af3_inference["solver"] = solver
 
         # Load the AF-3 trainer
-        self.trainer = trainer_factory[self.config.experiment.trainer](config=self.config)
+        self.trainer = trainer_factory[self.config.experiment.trainer](
+            config=self.config
+        )
         self.trainer.checkpoint = checkpoint
 
         # Set the output directory for the CIF files (e.g., predicted structures)
@@ -215,10 +255,12 @@ class EvaluateAF3:
         self.n_recycles = n_recycles
         self.diffusion_batch_size = diffusion_batch_size
         if "confidence_loss" in self.config.loss:
-            self.confidence_writer = WriteAF3Confidence(**self.config.loss.confidence_loss)
+            self.confidence_writer = WriteAF3Confidence(
+                **self.config.loss.confidence_loss
+            )
         else:
             self.confidence_writer = None
-        
+
         # Rename residues
         self.residue_renaming_dict = residue_renaming_dict
         self.temp_dir = Path(temp_dir)
@@ -226,32 +268,43 @@ class EvaluateAF3:
     def construct_pipeline(self):
         """Construct the AF3 inference pipeline."""
         self.config.dataset_params.val.interface.transform.n_recycles = self.n_recycles
-        self.config.dataset_params.val.interface.transform.diffusion_batch_size = self.diffusion_batch_size
-        self.config.dataset_params.val.interface.transform.return_atom_array = True # Required for `to_cif`
+        self.config.dataset_params.val.interface.transform.diffusion_batch_size = (
+            self.diffusion_batch_size
+        )
+        self.config.dataset_params.val.interface.transform.return_atom_array = (
+            True  # Required for `to_cif`
+        )
 
-        assert self.config.dataset_params.val.interface.transform.n_recycles == self.n_recycles, "Number of recycles not set correctly."
-        assert self.config.dataset_params.val.interface.transform.diffusion_batch_size == self.diffusion_batch_size, "Diffusion batch size not set correctly."
-        pipeline = hydra.utils.instantiate(self.config.dataset_params.val.interface.transform)
+        assert (
+            self.config.dataset_params.val.interface.transform.n_recycles
+            == self.n_recycles
+        ), "Number of recycles not set correctly."
+        assert (
+            self.config.dataset_params.val.interface.transform.diffusion_batch_size
+            == self.diffusion_batch_size
+        ), "Diffusion batch size not set correctly."
+        pipeline = hydra.utils.instantiate(
+            self.config.dataset_params.val.interface.transform
+        )
         return pipeline
-    
 
     def eval(self, files: list[PathLike]):
-        """Evaluate the model on a set of spoofed CIF files. 
+        """Evaluate the model on a set of spoofed CIF files.
 
         Args:
             files (list[PathLike]): List of paths to spoofed CIF files or directories containing spoofed CIF files.
-                Coordinates must be present but may contain NaN values. If a directory is provided, 
+                Coordinates must be present but may contain NaN values. If a directory is provided,
                 all files with the extensions .cif, .pdb, .bcif, .cif.gz, .pdb.gz, .bcif.gz will be processed.
         """
         # Construct the model and load the checkpoint
-        gpu = f"cuda:0" if torch.cuda.is_available() else "cpu"
+        gpu = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.trainer.construct_model(device=gpu, inference=True)
         self.trainer.load_model()
 
         # Set the model to evaluation mode
         self.trainer.model.eval()
 
-        logger.info(f"Building Transform pipeline...")
+        logger.info("Building Transform pipeline...")
 
         # Construct the AF3 inference pipeline
         pipeline = self.construct_pipeline()
@@ -261,11 +314,13 @@ class EvaluateAF3:
         for structure in files:
             # ... parse into an AtomArray (`parse` handles all valid formats)
             logger.info(f"Parsing from path: {structure}")
-            example_id = structure.name.split('.')[0]
+            example_id = structure.name.split(".")[0]
 
             # If we're renaming residues, we do a brute-force replacement in the CIF file
             if self.residue_renaming_dict:
-                logger.info(f"Renaming residues in {structure} with brute-force find and replace: {self.residue_renaming_dict}")
+                logger.info(
+                    f"Renaming residues in {structure} with brute-force find and replace: {self.residue_renaming_dict}"
+                )
                 with open(structure, "r") as f:
                     content = f.read()
                     for old_res, new_res in self.residue_renaming_dict.items():
@@ -277,11 +332,16 @@ class EvaluateAF3:
             out = parse(structure, remove_hydrogens=True)
 
             # ... get the atom array and set NaN coordinates to random
-            atom_array = out["assemblies"]["1"][0] if "assemblies" in out else out["asym_unit"][0]
+            atom_array = (
+                out["assemblies"]["1"][0]
+                if "assemblies" in out
+                else out["asym_unit"][0]
+            )
 
             # HACK: Set NaN coordinates to random values to avoid unexpected behavior in the pipeline
-            atom_array.coord[np.isnan(atom_array.coord)] = np.random.rand(*atom_array.coord[np.isnan(atom_array.coord)].shape)
-
+            atom_array.coord[np.isnan(atom_array.coord)] = np.random.rand(
+                *atom_array.coord[np.isnan(atom_array.coord)].shape
+            )
 
             # ... assemble the pipeline input in a format compatible with the DataHub pipeline
             pipeline_input = {
@@ -295,8 +355,12 @@ class EvaluateAF3:
 
             # Model inference
             with torch.no_grad():
-                outputs = self.trainer.sampler.sample([pipeline_output], n_cycle=self.n_recycles, use_amp=self.config.training_params.use_amp)
-            
+                outputs = self.trainer.sampler.sample(
+                    [pipeline_output],
+                    n_cycle=self.n_recycles,
+                    use_amp=self.config.training_params.use_amp,
+                )
+
             # Override the AtomArray with the predited coordinates
             atom_array_stack = build_stack_from_atom_array_and_batched_coords(
                 outputs["X_L"].cpu().numpy(), pipeline_output["atom_array"]
@@ -304,7 +368,9 @@ class EvaluateAF3:
 
             # Write the atom array to a CIF file
             # NOTE: To make the secondary structure appear, run `dss` in PyMol (see: https://biology.stackexchange.com/questions/70143/can-pymol-show-cartoon-secondary-structure-for-a-pdb-of-multiple-frames)
-            out_path = to_cif_file(atom_array_stack, self.cif_out_dir / example_id, file_type="cif")
+            out_path = to_cif_file(
+                atom_array_stack, self.cif_out_dir / example_id, file_type="cif"
+            )
             logger.info(f"Prediction for {example_id} written to {out_path}.")
 
             if "confidence" in outputs:
@@ -315,18 +381,51 @@ class EvaluateAF3:
                 logger.info(f"Writing {example_id}.score to {self.cif_out_dir}")
                 df = self.confidence_writer(None, outputs, loss_input)
                 df.to_csv(self.cif_out_dir / f"{example_id}.score", index=False)
-                logger.info(f"Confidence metrics for {example_id}.cif written to {self.cif_out_dir / example_id}.score.")
-                
+                logger.info(
+                    f"Confidence metrics for {example_id}.cif written to {self.cif_out_dir / example_id}.score."
+                )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Evaluate AF3 using specified paths.")
-    parser.add_argument("inputs", nargs="+", help="List of paths to supported file types or directories of of supported files.")
-    parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to the checkpoint file")
-    parser.add_argument("--cif_out_dir", type=str, required=True, help="Directory for output CIF files")
-    parser.add_argument("--n_recycles", type=int, default=10, help="Number of recycles for AF3")
-    parser.add_argument("--diffusion_batch_size", type=int, default=5, help="Diffusion batch size for AF3")
-    parser.add_argument("--rename_residues", type=str, default="", help="Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': 'L:1'}")
-    parser.add_argument("--num_steps", type=int, default=200, help="Number of steps for sampling of the diffusion model")
-    parser.add_argument("--solver", type=str, default="af3", help="Solver to use for inference. Options are 'af3', 'simple', 'euler', and 'heun'.")
+    parser.add_argument(
+        "inputs",
+        nargs="+",
+        help="List of paths to supported file types or directories of of supported files.",
+    )
+    parser.add_argument(
+        "--checkpoint_path", type=str, required=True, help="Path to the checkpoint file"
+    )
+    parser.add_argument(
+        "--cif_out_dir", type=str, required=True, help="Directory for output CIF files"
+    )
+    parser.add_argument(
+        "--n_recycles", type=int, default=10, help="Number of recycles for AF3"
+    )
+    parser.add_argument(
+        "--diffusion_batch_size",
+        type=int,
+        default=5,
+        help="Diffusion batch size for AF3",
+    )
+    parser.add_argument(
+        "--rename_residues",
+        type=str,
+        default="",
+        help="Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': 'L:1'}",
+    )
+    parser.add_argument(
+        "--num_steps",
+        type=int,
+        default=200,
+        help="Number of steps for sampling of the diffusion model",
+    )
+    parser.add_argument(
+        "--solver",
+        type=str,
+        default="af3",
+        help="Solver to use for inference. Options are 'af3', 'simple', 'euler', and 'heun'.",
+    )
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -334,11 +433,15 @@ def main():
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Prepare inputs based on the file types
-        file_paths_for_prediction = _build_file_paths_for_prediction(args.inputs, temp_dir)
-        
+        file_paths_for_prediction = _build_file_paths_for_prediction(
+            args.inputs, temp_dir
+        )
+
         # Rename residues if necessary (e.g., for MPNN outputs that have ligand names that clash with the CCD)
-        residue_renaming_dict = json.loads(args.rename_residues) if args.rename_residues else {}
-        
+        residue_renaming_dict = (
+            json.loads(args.rename_residues) if args.rename_residues else {}
+        )
+
         # Construct the evaluator
         evaluator = EvaluateAF3(
             checkpoint_path=args.checkpoint_path,
@@ -353,6 +456,7 @@ def main():
 
         # Launch the evaluation
         evaluator.eval(files=file_paths_for_prediction)
+
 
 if __name__ == "__main__":
     main()

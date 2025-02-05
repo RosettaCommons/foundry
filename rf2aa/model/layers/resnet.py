@@ -1,10 +1,9 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint as checkpoint
 
-from rf2aa.util_module import init_lecun_normal
 from rf2aa.chemical import ChemicalData as ChemData
+from rf2aa.util_module import init_lecun_normal
+
 
 # pre-activation bottleneck resblock
 class ResBlock2D_bottleneck(nn.Module):
@@ -12,8 +11,8 @@ class ResBlock2D_bottleneck(nn.Module):
         super(ResBlock2D_bottleneck, self).__init__()
         padding = self._get_same_padding(kernel, dilation)
 
-        n_b = n_c // 2 # bottleneck channel
-        
+        n_b = n_c // 2  # bottleneck channel
+
         layer_s = list()
         # pre-activation
         layer_s.append(nn.InstanceNorm2d(n_c, affine=True, eps=1e-6))
@@ -23,7 +22,9 @@ class ResBlock2D_bottleneck(nn.Module):
         layer_s.append(nn.InstanceNorm2d(n_b, affine=True, eps=1e-6))
         layer_s.append(nn.ELU(inplace=True))
         # convolution
-        layer_s.append(nn.Conv2d(n_b, n_b, kernel, dilation=dilation, padding=padding, bias=False))
+        layer_s.append(
+            nn.Conv2d(n_b, n_b, kernel, dilation=dilation, padding=padding, bias=False)
+        )
         layer_s.append(nn.InstanceNorm2d(n_b, affine=True, eps=1e-6))
         layer_s.append(nn.ELU(inplace=True))
         # dropout
@@ -32,14 +33,14 @@ class ResBlock2D_bottleneck(nn.Module):
         layer_s.append(nn.Conv2d(n_b, n_c, 1, bias=False))
 
         # make final layer initialize with zeros
-        #nn.init.zeros_(layer_s[-1].weight)
+        # nn.init.zeros_(layer_s[-1].weight)
 
         self.layer = nn.Sequential(*layer_s)
 
         self.reset_parameter()
 
     def reset_parameter(self):
-        # zero-initialize final layer right before residual connection 
+        # zero-initialize final layer right before residual connection
         nn.init.zeros_(self.layer[-1].weight)
 
     def _get_same_padding(self, kernel, dilation):
@@ -49,11 +50,18 @@ class ResBlock2D_bottleneck(nn.Module):
         out = self.layer(x)
         return x + out
 
-class ResidualNetwork(nn.Module):
-    def __init__(self, n_block, n_feat_in, n_feat_block, n_feat_out, 
-                 dilation=[1,2,4,8], p_drop=0.15):
-        super(ResidualNetwork, self).__init__()
 
+class ResidualNetwork(nn.Module):
+    def __init__(
+        self,
+        n_block,
+        n_feat_in,
+        n_feat_block,
+        n_feat_out,
+        dilation=[1, 2, 4, 8],
+        p_drop=0.15,
+    ):
+        super(ResidualNetwork, self).__init__()
 
         layer_s = list()
         # project to n_feat_block
@@ -62,21 +70,23 @@ class ResidualNetwork(nn.Module):
 
         # add resblocks
         for i_block in range(n_block):
-            d = dilation[i_block%len(dilation)]
-            res_block = ResBlock2D_bottleneck(n_feat_block, kernel=3, dilation=d, p_drop=p_drop)
+            d = dilation[i_block % len(dilation)]
+            res_block = ResBlock2D_bottleneck(
+                n_feat_block, kernel=3, dilation=d, p_drop=p_drop
+            )
             layer_s.append(res_block)
 
         if n_feat_out != n_feat_block:
             # project to n_feat_out
             layer_s.append(nn.Conv2d(n_feat_block, n_feat_out, 1))
-        
+
         self.layer = nn.Sequential(*layer_s)
-    
+
     def forward(self, x):
         return self.layer(x)
 
 
-#TODO: get rid of this duplicated code, needed now to avoid circular import
+# TODO: get rid of this duplicated code, needed now to avoid circular import
 class SCPred(nn.Module):
     def __init__(self, d_msa=256, d_state=32, d_hidden=128, p_drop=0.15):
         super(SCPred, self).__init__()
@@ -92,7 +102,7 @@ class SCPred(nn.Module):
         self.linear_4 = nn.Linear(d_hidden, d_hidden)
 
         # Final outputs
-        self.linear_out = nn.Linear(d_hidden, 2*ChemData().NTOTALDOFS)
+        self.linear_out = nn.Linear(d_hidden, 2 * ChemData().NTOTALDOFS)
 
         self.reset_parameter()
 
@@ -104,11 +114,11 @@ class SCPred(nn.Module):
         nn.init.zeros_(self.linear_s0.bias)
         nn.init.zeros_(self.linear_si.bias)
         nn.init.zeros_(self.linear_out.bias)
-        
+
         # right before relu activation: He initializer (kaiming normal)
-        nn.init.kaiming_normal_(self.linear_1.weight, nonlinearity='relu')
+        nn.init.kaiming_normal_(self.linear_1.weight, nonlinearity="relu")
         nn.init.zeros_(self.linear_1.bias)
-        nn.init.kaiming_normal_(self.linear_3.weight, nonlinearity='relu')
+        nn.init.kaiming_normal_(self.linear_3.weight, nonlinearity="relu")
         nn.init.zeros_(self.linear_3.bias)
 
         # right before residual connection: zero initialize
@@ -116,16 +126,16 @@ class SCPred(nn.Module):
         nn.init.zeros_(self.linear_2.bias)
         nn.init.zeros_(self.linear_4.weight)
         nn.init.zeros_(self.linear_4.bias)
-    
+
     def forward(self, seq, state):
-        '''
+        """
         Predict side-chain torsion angles along with backbone torsions
         Inputs:
             - seq: hidden embeddings corresponding to query sequence (B, L, d_msa)
             - state: state feature (output l0 feature) from previous SE3 layer (B, L, d_state)
         Outputs:
             - si: predicted torsion/pseudotorsion angles (phi, psi, omega, chi1~4 with cos/sin, theta) (B, L, NTOTALDOFS, 2)
-        '''
+        """
         B, L = seq.shape[:2]
         seq = self.norm_s0(seq)
         state = self.norm_si(state)
@@ -136,4 +146,3 @@ class SCPred(nn.Module):
 
         si = self.linear_out(F.relu_(si))
         return si.view(B, L, ChemData().NTOTALDOFS, 2)
-

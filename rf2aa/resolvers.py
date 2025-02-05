@@ -2,10 +2,11 @@ import importlib
 import sys
 from typing import Any
 
+
 def resolve_import(path: str) -> Any:
-    """ 
-    Import a module from a string path. 
-    If the module is not already imported, we dynamically import 
+    """
+    Import a module from a string path.
+    If the module is not already imported, we dynamically import
     with `importlib.import_module` and return the module object.
 
     Args:

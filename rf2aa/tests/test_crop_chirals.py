@@ -1,6 +1,8 @@
+from itertools import product
+
 import pytest
 import torch
-from itertools import product
+
 from rf2aa.data.chain_crop import crop_chirals
 from rf2aa.tensor_util import assert_equal
 

@@ -70,30 +70,33 @@ class LRSchedulerCallback(BaseCallback):
 
     def on_fit_start(self, optimizer, args, start_epoch):
         self.scheduler = self.get_scheduler(optimizer, args, start_epoch - 1)
-        if hasattr(self, 'state_dict'):
+        if hasattr(self, "state_dict"):
             self.scheduler.load_state_dict(self.state_dict)
 
     def on_checkpoint_load(self, checkpoint):
-        self.state_dict = checkpoint['scheduler_state_dict']
+        self.state_dict = checkpoint["scheduler_state_dict"]
 
     def on_checkpoint_save(self, checkpoint):
-        checkpoint['scheduler_state_dict'] = self.scheduler.state_dict()
+        checkpoint["scheduler_state_dict"] = self.scheduler.state_dict()
 
     def on_epoch_end(self):
         if self.logger is not None:
-            self.logger.log_metrics({'learning rate': self.scheduler.get_last_lr()[0]}, step=self.scheduler.last_epoch)
+            self.logger.log_metrics(
+                {"learning rate": self.scheduler.get_last_lr()[0]},
+                step=self.scheduler.last_epoch,
+            )
         self.scheduler.step()
 
 
 class QM9MetricCallback(BaseCallback):
-    """ Logs the rescaled mean absolute error for QM9 regression tasks """
+    """Logs the rescaled mean absolute error for QM9 regression tasks"""
 
-    def __init__(self, logger, targets_std, prefix=''):
+    def __init__(self, logger, targets_std, prefix=""):
         self.mae = MeanAbsoluteError()
         self.logger = logger
         self.targets_std = targets_std
         self.prefix = prefix
-        self.best_mae = float('inf')
+        self.best_mae = float("inf")
         self.last_mae = None
 
     def on_validation_step(self, input, target, pred):
@@ -101,15 +104,17 @@ class QM9MetricCallback(BaseCallback):
 
     def on_validation_end(self, epoch=None):
         mae = self.mae.compute() * self.targets_std
-        logging.info(f'{self.prefix} MAE: {mae}')
-        self.logger.log_metrics({f'{self.prefix} MAE': mae}, epoch)
+        logging.info(f"{self.prefix} MAE: {mae}")
+        self.logger.log_metrics({f"{self.prefix} MAE": mae}, epoch)
         self.best_mae = min(self.best_mae, mae)
         self.last_mae = mae
 
     def on_fit_end(self):
-        if self.best_mae != float('inf'):
-            self.logger.log_metrics({f'{self.prefix} best MAE': self.best_mae})
-            self.logger.log_metrics({f'{self.prefix} loss': self.last_mae / self.targets_std})
+        if self.best_mae != float("inf"):
+            self.logger.log_metrics({f"{self.prefix} best MAE": self.best_mae})
+            self.logger.log_metrics(
+                {f"{self.prefix} loss": self.last_mae / self.targets_std}
+            )
 
 
 class QM9LRSchedulerCallback(LRSchedulerCallback):
@@ -118,12 +123,20 @@ class QM9LRSchedulerCallback(LRSchedulerCallback):
         self.epochs = epochs
 
     def get_scheduler(self, optimizer, args, last_epoch):
-        min_lr = args.min_learning_rate if args.min_learning_rate else args.learning_rate / 10.0
-        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.epochs, eta_min=min_lr, last_epoch=last_epoch)
+        min_lr = (
+            args.min_learning_rate
+            if args.min_learning_rate
+            else args.learning_rate / 10.0
+        )
+        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, self.epochs, eta_min=min_lr, last_epoch=last_epoch
+        )
 
 
 class PerformanceCallback(BaseCallback):
-    def __init__(self, logger, batch_size: int, warmup_epochs: int = 1, mode: str = 'train'):
+    def __init__(
+        self, logger, batch_size: int, warmup_epochs: int = 1, mode: str = "train"
+    ):
         self.batch_size = batch_size
         self.warmup_epochs = warmup_epochs
         self.epoch = 0
@@ -139,7 +152,7 @@ class PerformanceCallback(BaseCallback):
     def _log_perf(self):
         stats = self.process_performance_stats()
         for k, v in stats.items():
-            logging.info(f'performance {k}: {v}')
+            logging.info(f"performance {k}: {v}")
 
         self.logger.log_metrics(stats)
 

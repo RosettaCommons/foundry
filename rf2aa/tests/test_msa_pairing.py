@@ -1,8 +1,9 @@
-import torch
-import pytest
 import numpy as np
-from rf2aa.data.loaders.polymer_partners import join_msas_by_taxid
+import pytest
+import torch
+
 from rf2aa.chemical import initialize_chemdata
+from rf2aa.data.loaders.polymer_partners import join_msas_by_taxid
 
 initialize_chemdata()
 
@@ -138,6 +139,6 @@ def test_msa_pairing(msa_a, msa_b, paired_msa_out):
     paired_msa = paired_msa_dict["msa"]
     for i in range(paired_msa_out.shape[0]):
         desired_row = paired_msa_out[i][None]
-        assert (
-            (desired_row == paired_msa).all(dim=1).any().item()
-        ), f"Missing row {desired_row} in paired_msa."
+        assert (desired_row == paired_msa).all(dim=1).any().item(), (
+            f"Missing row {desired_row} in paired_msa."
+        )

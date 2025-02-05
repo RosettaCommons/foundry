@@ -1,6 +1,5 @@
-import pandas as pd
-from typing import Dict, Any
 from icecream import ic
+
 from rf2aa.data.loaders.rcsb_loader import get_cif_metadata, loader_sm_compl_assembly
 
 
@@ -13,6 +12,7 @@ def get_partner_from_chainid(
     partner = (chain_letter, transform_index, 0, 0, chain_type)
     return partner
 
+
 def choose_assembly(cif_outs, ids_list):
     chletter_list = [x.split("_")[1] for x in ids_list]
     for assembly in cif_outs["asmb"]:
@@ -20,6 +20,7 @@ def choose_assembly(cif_outs, ids_list):
         if set(chletter_list).issubset(chains_in_asmb):
             return assembly
     raise ValueError(f"Could not find assembly for {ids_list}")
+
 
 def spoofed_loader(
     item,
@@ -49,7 +50,7 @@ def spoofed_loader(
         if len(partners) == 1:
             crop_params = {
                 "preferred_chain": partners[0][0],
-                "preferred_chain_type" : partners[0][-1],
+                "preferred_chain_type": partners[0][-1],
             }
         else:
             crop_params = {
@@ -73,15 +74,22 @@ def spoofed_loader(
             **kwargs,
         )
     except Exception as e:
-        #raise e
-        # print exception so that whole traceback is visible    
+        # raise e
+        # print exception so that whole traceback is visible
         ic(f"Error in spoofed_loader: {repr(e)}")
         ic(f"{item}")
         from rf2aa.tests.test_conditions import sm_compl_item
+
         spoofed_sm_compl_item = sm_compl_item
         crop_params = {
-            "preferred_interface": (sm_compl_item["LIGAND"][0], sm_compl_item["PARTNERS"][0][0]),
-            "preferred_interface_type": (sm_compl_item["LIGAND"][-1], sm_compl_item["PARTNERS"][0][-1]),
+            "preferred_interface": (
+                sm_compl_item["LIGAND"][0],
+                sm_compl_item["PARTNERS"][0][0],
+            ),
+            "preferred_interface_type": (
+                sm_compl_item["LIGAND"][-1],
+                sm_compl_item["PARTNERS"][0][-1],
+            ),
         }
         spoofed_sm_compl_item.update(crop_params)
         cif_outs = None

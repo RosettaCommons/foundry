@@ -1,13 +1,12 @@
-import torch
-import torch.nn as nn
- 
+import contextlib
 from collections import OrderedDict
 from copy import deepcopy
 
-import contextlib
+import torch
+import torch.nn as nn
+
 
 class EMA(nn.Module):
-
     def __init__(self, model, decay):
         super().__init__()
         self.decay = decay
@@ -21,7 +20,11 @@ class EMA(nn.Module):
     @torch.no_grad()
     def update(self):
         if not self.training:
-            print("EMA update should only be called during training", file=stderr, flush=True)
+            print(
+                "EMA update should only be called during training",
+                file=stderr,
+                flush=True,
+            )
             return
 
         model_params = OrderedDict(self.model.named_parameters())
@@ -34,7 +37,9 @@ class EMA(nn.Module):
             # see https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage
             # shadow_variable -= (1 - decay) * (shadow_variable - variable)
             if param.requires_grad:
-                shadow_params[name].sub_((1. - self.decay) * (shadow_params[name] - param))
+                shadow_params[name].sub_(
+                    (1.0 - self.decay) * (shadow_params[name] - param)
+                )
 
         model_buffers = OrderedDict(self.model.named_buffers())
         shadow_buffers = OrderedDict(self.shadow.named_buffers())
@@ -46,7 +51,7 @@ class EMA(nn.Module):
             # buffers are copied
             shadow_buffers[name].copy_(buffer)
 
-    #fd A hack to allow non-DDP models to be passed into the Trainer
+    # fd A hack to allow non-DDP models to be passed into the Trainer
     def no_sync(self):
         return contextlib.nullcontext()
 
@@ -56,17 +61,16 @@ class EMA(nn.Module):
         else:
             return self.shadow(*args, **kwargs)
 
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
 class FakeDDPWrapper(nn.Module):
-
     def __init__(self, model):
         super().__init__()
         self.module = model
         self.no_sync = lambda: None
-
 
     def forward(self, *args, **kwargs):
         return self.module(*args, **kwargs)

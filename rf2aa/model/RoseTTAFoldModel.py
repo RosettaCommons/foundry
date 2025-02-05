@@ -1,22 +1,29 @@
+import logging
+
 import torch
 import torch.nn as nn
-import assertpy
 from assertpy import assert_that
 from icecream import ic
 
-from rf2aa.model.layers.Embeddings import MSA_emb, Extra_emb, Bond_emb, Templ_emb, recycling_factory
-from rf2aa.model.Track_module import IterativeSimulator
-from rf2aa.model.layers.AuxiliaryPredictor import (
-    DistanceNetwork,
-    MaskedTokenNetwork,
-    LDDTNetwork,
-    PAENetwork,
-    BinderNetwork,
-)
-from rf2aa.tensor_util import assert_shape, assert_equal
 import rf2aa.util
 from rf2aa.chemical import ChemicalData as ChemData
-import logging
+from rf2aa.model.layers.AuxiliaryPredictor import (
+    BinderNetwork,
+    DistanceNetwork,
+    LDDTNetwork,
+    MaskedTokenNetwork,
+    PAENetwork,
+)
+from rf2aa.model.layers.Embeddings import (
+    Bond_emb,
+    Extra_emb,
+    MSA_emb,
+    Templ_emb,
+    recycling_factory,
+)
+from rf2aa.model.Track_module import IterativeSimulator
+from rf2aa.tensor_util import assert_equal, assert_shape
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,41 +38,42 @@ def get_shape(t):
 
 class LegacyRoseTTAFoldModule(nn.Module):
     def __init__(
-        self, 
-        symmetrize_repeats=None,       # whether to symmetrize repeats in the pair track 
-        repeat_length=None,            # if symmetrizing repeats, what length are they? 
-        symmsub_k=None,                # if symmetrizing repeats, which diagonals?
-        sym_method=None,               # if symmetrizing repeats, which block symmetrization method? 
-        main_block=None,               # if copying template blocks along main diag, which block is main block? (the one w/ motif)
-        copy_main_block_template=None, # whether or not to copy main block template along main diag
-        n_extra_block=4, 
-        n_main_block=8, 
-        n_ref_block=4, 
+        self,
+        symmetrize_repeats=None,  # whether to symmetrize repeats in the pair track
+        repeat_length=None,  # if symmetrizing repeats, what length are they?
+        symmsub_k=None,  # if symmetrizing repeats, which diagonals?
+        sym_method=None,  # if symmetrizing repeats, which block symmetrization method?
+        main_block=None,  # if copying template blocks along main diag, which block is main block? (the one w/ motif)
+        copy_main_block_template=None,  # whether or not to copy main block template along main diag
+        n_extra_block=4,
+        n_main_block=8,
+        n_ref_block=4,
         n_finetune_block=0,
-        d_msa=256, 
-        d_msa_full=64, 
-        d_pair=128, 
+        d_msa=256,
+        d_msa_full=64,
+        d_pair=128,
         d_templ=64,
-        n_head_msa=8, 
-        n_head_pair=4, 
+        n_head_msa=8,
+        n_head_pair=4,
         n_head_templ=4,
-        d_hidden=32, 
+        d_hidden=32,
         d_hidden_templ=64,
         d_t1d=0,
         d_t2d=0,
         p_drop=0.15,
         additional_dt1d=0,
         recycling_type="msa_pair",
-        SE3_param={}, SE3_ref_param={},
-        atom_type_index=None, 
-        aamask=None, 
-        ljlk_parameters=None, 
-        lj_correction_parameters=None, 
-        cb_len=None, 
-        cb_ang=None, 
+        SE3_param={},
+        SE3_ref_param={},
+        atom_type_index=None,
+        aamask=None,
+        ljlk_parameters=None,
+        lj_correction_parameters=None,
+        cb_len=None,
+        cb_ang=None,
         cb_tor=None,
-        num_bonds=None, 
-        lj_lin=0.6, 
+        num_bonds=None,
+        lj_lin=0.6,
         use_chiral_l1=True,
         use_lj_l1=False,
         use_atom_frames=True,
@@ -80,26 +88,32 @@ class LegacyRoseTTAFoldModule(nn.Module):
         tscale=1.0,
         clash=4.0,
         detach_xyz=True,
-        pseudo_cycle=False, # whether to use pseudocycle in template embedding/Track_module
+        pseudo_cycle=False,  # whether to use pseudocycle in template embedding/Track_module
         T_break_sym=None,
         allow_particle_recenter=True,
-        **kwargs
+        **kwargs,
     ):
         super(LegacyRoseTTAFoldModule, self).__init__()
         self.freeze_track_motif = freeze_track_motif
         self.assert_single_sequence_input = assert_single_sequence_input
         self.recycling_type = recycling_type
-        self.T_break_sym  = T_break_sym # if not None, break symmetrization at this timestep
-        self.allow_particle_recenter = allow_particle_recenter # allows particles to recenter to origin each forward step
-        self.clash = clash # clash distance for symmetrization clash loss 
+        self.T_break_sym = (
+            T_break_sym  # if not None, break symmetrization at this timestep
+        )
+        self.allow_particle_recenter = allow_particle_recenter  # allows particles to recenter to origin each forward step
+        self.clash = clash  # clash distance for symmetrization clash loss
 
         #
         # Input Embeddings
         d_state = SE3_param["l0_out_features"]
 
         self.latent_emb = MSA_emb(
-            d_msa=d_msa, d_pair=d_pair, d_state=d_state, p_drop=p_drop, use_same_chain=use_same_chain,
-            enable_same_chain=enable_same_chain
+            d_msa=d_msa,
+            d_pair=d_pair,
+            d_state=d_state,
+            p_drop=p_drop,
+            use_same_chain=use_same_chain,
+            enable_same_chain=enable_same_chain,
         )
 
         self.full_emb = Extra_emb(
@@ -108,26 +122,30 @@ class LegacyRoseTTAFoldModule(nn.Module):
 
         self.bond_emb = Bond_emb(d_pair=d_pair, d_init=ChemData().NBTYPES)
 
-        self.templ_emb = Templ_emb(d_t1d=d_t1d,
-                                   d_t2d=d_t2d,
-                                   d_pair=d_pair,
-                                   d_templ=d_templ, 
-                                   d_state=d_state, 
-                                   n_head=n_head_templ,
-                                   d_hidden=d_hidden_templ, 
-                                   p_drop=0.25,
-                                   symmetrize_repeats=symmetrize_repeats, # repeat protein stuff 
-                                   repeat_length=repeat_length, 
-                                   symmsub_k=symmsub_k,
-                                   sym_method=sym_method, 
-                                   main_block=main_block, 
-                                   copy_main_block=copy_main_block_template,
-                                   additional_dt1d=additional_dt1d,
-                                   pseudo_cycle=pseudo_cycle)
+        self.templ_emb = Templ_emb(
+            d_t1d=d_t1d,
+            d_t2d=d_t2d,
+            d_pair=d_pair,
+            d_templ=d_templ,
+            d_state=d_state,
+            n_head=n_head_templ,
+            d_hidden=d_hidden_templ,
+            p_drop=0.25,
+            symmetrize_repeats=symmetrize_repeats,  # repeat protein stuff
+            repeat_length=repeat_length,
+            symmsub_k=symmsub_k,
+            sym_method=sym_method,
+            main_block=main_block,
+            copy_main_block=copy_main_block_template,
+            additional_dt1d=additional_dt1d,
+            pseudo_cycle=pseudo_cycle,
+        )
 
         # Update inputs with outputs from previous round
-        
-        self.recycle = recycling_factory[recycling_type](d_msa=d_msa, d_pair=d_pair, d_state=d_state) 
+
+        self.recycle = recycling_factory[recycling_type](
+            d_msa=d_msa, d_pair=d_pair, d_state=d_state
+        )
         #
         self.simulator = IterativeSimulator(
             n_extra_block=n_extra_block,
@@ -174,14 +192,14 @@ class LegacyRoseTTAFoldModule(nn.Module):
         self.lddt_pred = LDDTNetwork(d_state)
         self.pae_pred = PAENetwork(d_pair)
         self.pde_pred = PAENetwork(
-                        d_pair
-                    )  # distance error, but use same architecture as aligned error
+            d_pair
+        )  # distance error, but use same architecture as aligned error
         # binder predictions are made on top of the pair features, just like
         # PAE predictions are. It's not clear if this is the best place to insert
         # this prediction head.
         # self.binder_network = BinderNetwork(d_pair, d_state)
 
-        self.bind_pred = BinderNetwork() #fd - expose n_hidden as variable?
+        self.bind_pred = BinderNetwork()  # fd - expose n_hidden as variable?
 
         self.use_atom_frames = use_atom_frames
         self.enable_same_chain = enable_same_chain
@@ -200,16 +218,30 @@ class LegacyRoseTTAFoldModule(nn.Module):
         bond_feats,
         dist_matrix,
         chirals,
-        atom_frames=None, t1d=None, t2d=None, xyz_t=None, alpha_t=None, mask_t=None, same_chain=None,
-        msa_prev=None, pair_prev=None, state_prev=None, mask_recycle=None, is_motif=None,
+        atom_frames=None,
+        t1d=None,
+        t2d=None,
+        xyz_t=None,
+        alpha_t=None,
+        mask_t=None,
+        same_chain=None,
+        msa_prev=None,
+        pair_prev=None,
+        state_prev=None,
+        mask_recycle=None,
+        is_motif=None,
         return_raw=False,
         use_checkpoint=False,
-        return_infer=False, #fd ?
-        p2p_crop=-1, topk_crop=-1,   # striping
-        symmids=None, symmsub=None, symmRs=None, symmmeta=None,  # symmetry
-        pair_symm_ok=True, # dj - this allows modular symmetrization in PairStr2Pair occurs
-        cyclic_reses=None, # Dj - this allows better handling of peptide bond connection between asymmetrical units, applied during symmetrization
-        t=None # timestep
+        return_infer=False,  # fd ?
+        p2p_crop=-1,
+        topk_crop=-1,  # striping
+        symmids=None,
+        symmsub=None,
+        symmRs=None,
+        symmmeta=None,  # symmetry
+        pair_symm_ok=True,  # dj - this allows modular symmetrization in PairStr2Pair occurs
+        cyclic_reses=None,  # Dj - this allows better handling of peptide bond connection between asymmetrical units, applied during symmetrization
+        t=None,  # timestep
     ):
         # ic(get_shape(msa_latent))
         # ic(get_shape(msa_full))
@@ -235,7 +267,7 @@ class LegacyRoseTTAFoldModule(nn.Module):
         B, N, L = msa_latent.shape[:3]
         A = atom_frames.shape[1]
         dtype = msa_latent.dtype
-        
+
         if self.assert_single_sequence_input:
             assert_shape(msa_latent, (1, 1, L, 164))
             assert_shape(msa_full, (1, 1, L, 83))
@@ -250,12 +282,12 @@ class LegacyRoseTTAFoldModule(nn.Module):
             # assert_shape(atom_frames, (1, 4, L)) # This is set to 4 for the recycle count, but that can't be right
 
             assert_shape(atom_frames, (1, A, 3, 2))  # What is 4?
-            assert t1d.shape[1] in [1,2,3]
+            assert t1d.shape[1] in [1, 2, 3]
             assert_shape(t1d, (1, t1d.shape[1], L, 80))
             assert_shape(xyz_t, (1, t1d.shape[1], L, 3))
             assert_shape(alpha_t, (1, t1d.shape[1], L, 60))
             assert_shape(mask_t, (1, t1d.shape[1], L, L))
-            if t1d.shape[1] in [1,2]:
+            if t1d.shape[1] in [1, 2]:
                 assert_shape(t2d, (1, t1d.shape[1], L, L, 68))
             else:
                 assert_shape(t2d, (1, t1d.shape[1], L, L, 69))
@@ -277,18 +309,18 @@ class LegacyRoseTTAFoldModule(nn.Module):
             assert_that(alpha_t.device).is_equal_to(device)
             assert_that(mask_t.device).is_equal_to(device)
             assert_that(same_chain.device).is_equal_to(device)
-        
-        #is_sm = rf2aa.util.is_atom(seq[0])  # (L) (prot + non-protein)
+
+        # is_sm = rf2aa.util.is_atom(seq[0])  # (L) (prot + non-protein)
         is_prot = rf2aa.util.is_protein(seq[0])  # (L) (protein)()
         if self.verbose_checks:
-            #ic(is_motif.shape)
-            #is_protein_motif = is_motif & ~is_sm
-            #if is_motif.any():
+            # ic(is_motif.shape)
+            # is_protein_motif = is_motif & ~is_sm
+            # if is_motif.any():
             #    motif_protein_i = torch.where(is_motif)[0][0]
-            #is_motif_sm = is_motif & is_sm
-            #if is_sm.any():
+            # is_motif_sm = is_motif & is_sm
+            # if is_sm.any():
             #    motif_sm_i = torch.where(is_motif_sm)[0][0]
-            #diffused_protein_i = torch.where(~is_sm & ~is_motif)[0][0]
+            # diffused_protein_i = torch.where(~is_sm & ~is_motif)[0][0]
 
             """
             msa_full: NSEQ,N_INDEL,N_TERMINUS,
@@ -299,46 +331,69 @@ class LegacyRoseTTAFoldModule(nn.Module):
             NINDEL = 1
             NTERMINUS = 2
             NMSAFULL = ChemData().NAATOKENS + NINDEL + NTERMINUS
-            NMSAMASKED = ChemData().NAATOKENS + ChemData().NAATOKENS + NINDEL + NINDEL + NTERMINUS
+            NMSAMASKED = (
+                ChemData().NAATOKENS
+                + ChemData().NAATOKENS
+                + NINDEL
+                + NINDEL
+                + NTERMINUS
+            )
             assert_that(msa_latent.shape[-1]).is_equal_to(NMSAMASKED)
             assert_that(msa_full.shape[-1]).is_equal_to(NMSAFULL)
 
-            msa_full_seq = np.r_[0:ChemData().NAATOKENS]
+            msa_full_seq = np.r_[0 : ChemData().NAATOKENS]
             msa_full_indel = np.r_[ChemData().NAATOKENS : ChemData().NAATOKENS + NINDEL]
             msa_full_term = np.r_[ChemData().NAATOKENS + NINDEL : NMSAFULL]
 
-            msa_latent_seq1 = np.r_[0:ChemData().NAATOKENS]
+            msa_latent_seq1 = np.r_[0 : ChemData().NAATOKENS]
             msa_latent_seq2 = np.r_[ChemData().NAATOKENS : 2 * ChemData().NAATOKENS]
-            msa_latent_indel1 = np.r_[2 * ChemData().NAATOKENS : 2 * ChemData().NAATOKENS + NINDEL]
-            msa_latent_indel2 = np.r_[
-                2 * ChemData().NAATOKENS + NINDEL : 2 * ChemData().NAATOKENS + NINDEL + NINDEL
+            msa_latent_indel1 = np.r_[
+                2 * ChemData().NAATOKENS : 2 * ChemData().NAATOKENS + NINDEL
             ]
-            msa_latent_terminus = np.r_[2 * ChemData().NAATOKENS + 2 * NINDEL : NMSAMASKED]
+            msa_latent_indel2 = np.r_[
+                2 * ChemData().NAATOKENS + NINDEL : 2 * ChemData().NAATOKENS
+                + NINDEL
+                + NINDEL
+            ]
+            msa_latent_terminus = np.r_[
+                2 * ChemData().NAATOKENS + 2 * NINDEL : NMSAMASKED
+            ]
 
-            #i_name = [(diffused_protein_i, "diffused_protein")]
-            #if is_sm.any():
+            # i_name = [(diffused_protein_i, "diffused_protein")]
+            # if is_sm.any():
             #    i_name.insert(0, (motif_sm_i, "motif_sm"))
-            #if is_motif.any():
+            # if is_motif.any():
             #    i_name.insert(0, (motif_protein_i, "motif_protein"))
             i_name = [(0, "tst")]
             for i, name in i_name:
                 ic(f"------------------{name}:{i}----------------")
-                msa_full_seq = msa_full[0, 0, i, np.r_[0:ChemData().NAATOKENS]]
+                msa_full_seq = msa_full[0, 0, i, np.r_[0 : ChemData().NAATOKENS]]
                 msa_full_indel = msa_full[
                     0, 0, i, np.r_[ChemData().NAATOKENS : ChemData().NAATOKENS + NINDEL]
                 ]
-                msa_full_term = msa_full[0, 0, i, np.r_[ChemData().NAATOKENS + NINDEL : NMSAFULL]]
+                msa_full_term = msa_full[
+                    0, 0, i, np.r_[ChemData().NAATOKENS + NINDEL : NMSAFULL]
+                ]
 
-                msa_latent_seq1 = msa_latent[0, 0, i, np.r_[0:ChemData().NAATOKENS]]
-                msa_latent_seq2 = msa_latent[0, 0, i, np.r_[ChemData().NAATOKENS : 2 * ChemData().NAATOKENS]]
+                msa_latent_seq1 = msa_latent[0, 0, i, np.r_[0 : ChemData().NAATOKENS]]
+                msa_latent_seq2 = msa_latent[
+                    0, 0, i, np.r_[ChemData().NAATOKENS : 2 * ChemData().NAATOKENS]
+                ]
                 msa_latent_indel1 = msa_latent[
-                    0, 0, i, np.r_[2 * ChemData().NAATOKENS : 2 * ChemData().NAATOKENS + NINDEL]
+                    0,
+                    0,
+                    i,
+                    np.r_[2 * ChemData().NAATOKENS : 2 * ChemData().NAATOKENS + NINDEL],
                 ]
                 msa_latent_indel2 = msa_latent[
                     0,
                     0,
                     i,
-                    np.r_[2 * ChemData().NAATOKENS + NINDEL : 2 * ChemData().NAATOKENS + NINDEL + NINDEL],
+                    np.r_[
+                        2 * ChemData().NAATOKENS + NINDEL : 2 * ChemData().NAATOKENS
+                        + NINDEL
+                        + NINDEL
+                    ],
                 ]
                 msa_latent_term = msa_latent[
                     0, 0, i, np.r_[2 * ChemData().NAATOKENS + 2 * NINDEL : NMSAMASKED]
@@ -366,10 +421,16 @@ class LegacyRoseTTAFoldModule(nn.Module):
                 )
 
         # Get embeddings
-        #if self.enable_same_chain == False:
+        # if self.enable_same_chain == False:
         #    same_chain = None
         msa_latent, pair, state = self.latent_emb(
-            msa_latent, seq, idx, bond_feats, dist_matrix, same_chain=same_chain, cyclize=cyclic_reses
+            msa_latent,
+            seq,
+            idx,
+            bond_feats,
+            dist_matrix,
+            same_chain=same_chain,
+            cyclize=cyclic_reses,
         )
         msa_full = self.full_emb(msa_full, seq, idx)
         pair = pair + self.bond_emb(bond_feats)
@@ -380,45 +441,83 @@ class LegacyRoseTTAFoldModule(nn.Module):
         #
         # Do recycling
         if msa_prev is None:
-            msa_prev = torch.zeros_like(msa_latent[:,0])
+            msa_prev = torch.zeros_like(msa_latent[:, 0])
         if pair_prev is None:
             pair_prev = torch.zeros_like(pair)
-        if state_prev is None or self.recycling_type == "msa_pair": #explicitly remove state features if only recycling msa and pair
+        if (
+            state_prev is None or self.recycling_type == "msa_pair"
+        ):  # explicitly remove state features if only recycling msa and pair
             state_prev = torch.zeros_like(state)
 
-        msa_recycle, pair_recycle, state_recycle = self.recycle(msa_prev, pair_prev, xyz, state_prev, sctors, mask_recycle)
+        msa_recycle, pair_recycle, state_recycle = self.recycle(
+            msa_prev, pair_prev, xyz, state_prev, sctors, mask_recycle
+        )
         msa_recycle, pair_recycle = msa_recycle.to(dtype), pair_recycle.to(dtype)
 
-        msa_latent[:,0] = msa_latent[:,0] + msa_recycle.reshape(B,L,-1)
+        msa_latent[:, 0] = msa_latent[:, 0] + msa_recycle.reshape(B, L, -1)
         pair = pair + pair_recycle
-        state = state + state_recycle # if state is not recycled these will be zeros
+        state = state + state_recycle  # if state is not recycled these will be zeros
 
         # add template embedding
-        pair, state = self.templ_emb(t1d, t2d, alpha_t, xyz_t, mask_t, pair, state, use_checkpoint=use_checkpoint, p2p_crop=p2p_crop, is_prot=is_prot)
+        pair, state = self.templ_emb(
+            t1d,
+            t2d,
+            alpha_t,
+            xyz_t,
+            mask_t,
+            pair,
+            state,
+            use_checkpoint=use_checkpoint,
+            p2p_crop=p2p_crop,
+            is_prot=is_prot,
+        )
 
         # timestep check for symmetrization
-        if not(self.T_break_sym == None) and not(t == None):
-            pair_symm_ok = (t > self.T_break_sym)
+        if not (self.T_break_sym == None) and not (t == None):
+            pair_symm_ok = t > self.T_break_sym
         else:
             pair_symm_ok = True
-        #if t == 
+        # if t ==
         if not (pair_symm_ok):
-            print(t, 'breaking sym pair2pair')
+            print(t, "breaking sym pair2pair")
 
         # Predict coordinates from given inputs
-        is_motif = is_motif if self.freeze_track_motif else torch.zeros_like(seq).bool()[0]
+        is_motif = (
+            is_motif if self.freeze_track_motif else torch.zeros_like(seq).bool()[0]
+        )
 
         msa, pair, xyz, alpha_s, xyz_allatom, state, symmsub, quat = self.simulator(
-            seq_unmasked, msa_latent, msa_full, pair, xyz[:,:,:3], state, idx,
-            symmids, symmsub, symmRs, symmmeta,
-            bond_feats, dist_matrix, same_chain, chirals, is_motif, atom_frames, 
-            use_checkpoint=use_checkpoint, use_atom_frames=self.use_atom_frames, 
-            p2p_crop=p2p_crop, topk_crop=topk_crop, pair_symm_ok=pair_symm_ok, is_prot=is_prot, cyclic_reses=cyclic_reses, clash=self.clash)
+            seq_unmasked,
+            msa_latent,
+            msa_full,
+            pair,
+            xyz[:, :, :3],
+            state,
+            idx,
+            symmids,
+            symmsub,
+            symmRs,
+            symmmeta,
+            bond_feats,
+            dist_matrix,
+            same_chain,
+            chirals,
+            is_motif,
+            atom_frames,
+            use_checkpoint=use_checkpoint,
+            use_atom_frames=self.use_atom_frames,
+            p2p_crop=p2p_crop,
+            topk_crop=topk_crop,
+            pair_symm_ok=pair_symm_ok,
+            is_prot=is_prot,
+            cyclic_reses=cyclic_reses,
+            clash=self.clash,
+        )
 
         if return_raw:
             # get last structure
             xyz_last = xyz_allatom[-1].unsqueeze(0)
-            return msa[:,0], pair, xyz_last, alpha_s[-1], None
+            return msa[:, 0], pair, xyz_last, alpha_s[-1], None
 
         # predict masked amino acids
         logits_aa = self.aa_pred(msa)
@@ -433,27 +532,50 @@ class LegacyRoseTTAFoldModule(nn.Module):
             ic(pseq_0.shape)
             pseq_0 = pseq_0[0]
             ic(
-                f"motif    sequence: { rf2aa.util.seq2chars(torch.argmax(pseq_0[is_motif], dim=-1).tolist())}" # rf2aa.chemical.seq2chars is not callable
+                f"motif    sequence: {rf2aa.util.seq2chars(torch.argmax(pseq_0[is_motif], dim=-1).tolist())}"  # rf2aa.chemical.seq2chars is not callable
             )
             ic(
-                f"diffused sequence: { rf2aa.util.seq2chars(torch.argmax(pseq_0[~is_motif], dim=-1).tolist())}"
+                f"diffused sequence: {rf2aa.util.seq2chars(torch.argmax(pseq_0[~is_motif], dim=-1).tolist())}"
             )
 
         logits_pae = logits_pde = p_bind = None
         # predict aligned error and distance error
-        logits_pae = self.pae_pred(pair)        
-        logits_pde = self.pde_pred(pair + pair.permute(0,2,1,3)) # symmetrize pair features
+        logits_pae = self.pae_pred(pair)
+        logits_pde = self.pde_pred(
+            pair + pair.permute(0, 2, 1, 3)
+        )  # symmetrize pair features
 
-        #fd  predict bind/no-bind
-        p_bind = self.bind_pred(logits_pae,same_chain)
+        # fd  predict bind/no-bind
+        p_bind = self.bind_pred(logits_pae, same_chain)
 
         if self.get_quaternion:
             return (
-            logits, logits_aa, logits_pae, logits_pde, p_bind, 
-            xyz, alpha_s, xyz_allatom, lddt, msa[:,0], pair, state, quat
+                logits,
+                logits_aa,
+                logits_pae,
+                logits_pde,
+                p_bind,
+                xyz,
+                alpha_s,
+                xyz_allatom,
+                lddt,
+                msa[:, 0],
+                pair,
+                state,
+                quat,
             )
         else:
             return (
-                logits, logits_aa, logits_pae, logits_pde, p_bind, 
-                xyz, alpha_s, xyz_allatom, lddt, msa[:,0], pair, state
+                logits,
+                logits_aa,
+                logits_pae,
+                logits_pde,
+                p_bind,
+                xyz,
+                alpha_s,
+                xyz_allatom,
+                lddt,
+                msa[:, 0],
+                pair,
+                state,
             )

@@ -1,9 +1,9 @@
-import os
 import torch
-import pytest
 from icecream import ic
-from rf2aa.alignment import weighted_rigid_align, get_rmsd
+
+from rf2aa.alignment import get_rmsd, weighted_rigid_align
 from rf2aa.util import kabsch
+
 
 def pseudobatched_kabsch(xyz1, xyz2):
     B = xyz1.shape[0]
@@ -11,6 +11,7 @@ def pseudobatched_kabsch(xyz1, xyz2):
     for i in range(B):
         out.append(kabsch(xyz1[i], xyz2[i])[0])
     return torch.stack(out)
+
 
 def test_align():
     torch.manual_seed(0)
@@ -27,7 +28,10 @@ def test_align():
     x_from_align = weighted_rigid_align(x_from, x_to, is_resolved, w)
     rmsd_weighted_rigid = get_rmsd(x_to, x_from_align)
     ic(rmsd_weighted_rigid, rmsd_kabsch)
-    assert (torch.abs(rmsd_weighted_rigid - rmsd_kabsch) < 1e-5).all(), f'{rmsd_weighted_rigid} != {rmsd_kabsch}'    
+    assert (torch.abs(rmsd_weighted_rigid - rmsd_kabsch) < 1e-5).all(), (
+        f"{rmsd_weighted_rigid} != {rmsd_kabsch}"
+    )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test_align()

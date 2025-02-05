@@ -1,9 +1,10 @@
 """Utilities for calculating all atom representations."""
+
 import torch
+from cogen.data import utils as du
 from openfold.data import data_transforms
 from openfold.np import residue_constants
 from openfold.utils import rigid_utils as ru
-from cogen.data import utils as du
 
 Rigid = ru.Rigid
 Rotation = ru.Rotation
@@ -21,7 +22,7 @@ def to_atom37(trans, rots):
     num_batch, num_res, _ = trans.shape
     final_atom37 = compute_backbone(
         du.create_rigid(rots, trans),
-        torch.zeros(num_batch, num_res, 2, device=trans.device)
+        torch.zeros(num_batch, num_res, 2, device=trans.device),
     )[0]
     return final_atom37
 
@@ -151,7 +152,8 @@ def frames_to_atom14_pos(
 
 def compute_backbone(bb_rigids, psi_torsions):
     torsion_angles = torch.tile(
-        psi_torsions[..., None, :], tuple([1 for _ in range(len(bb_rigids.shape))]) + (7, 1)
+        psi_torsions[..., None, :],
+        tuple([1 for _ in range(len(bb_rigids.shape))]) + (7, 1),
     )
     aatype = torch.zeros(bb_rigids.shape, device=bb_rigids.device).long()
     # aatype = torch.zeros(bb_rigids.shape).long().to(bb_rigids.device)
@@ -224,23 +226,15 @@ def transrot_traj_to_atom37(transrot_traj, res_mask):
     return atom37_traj
 
 
-def atom37_from_trans_rot(trans, rots, res_mask = None):
+def atom37_from_trans_rot(trans, rots, res_mask=None):
     if res_mask is None:
         res_mask = torch.ones([*trans.shape[:-1]], device=trans.device)
     rigids = du.create_rigid(rots, trans)
     atom37 = compute_backbone(
-        rigids,
-        torch.zeros(
-            trans.shape[0],
-            trans.shape[1],
-            2,
-            device=trans.device
-        )
+        rigids, torch.zeros(trans.shape[0], trans.shape[1], 2, device=trans.device)
     )[0]
     batch_atom37 = []
     num_batch = res_mask.shape[0]
     for i in range(num_batch):
-        batch_atom37.append(
-            du.adjust_oxygen_pos(atom37[i], res_mask[i])
-        )
+        batch_atom37.append(du.adjust_oxygen_pos(atom37[i], res_mask[i]))
     return torch.stack(batch_atom37)

@@ -1,11 +1,10 @@
-import torch
+import hydra
 import torch.nn as nn
 
-import hydra
+# class Metric:
+# def __call__(self, rf_output, loss_calc_items) -> float:
+# raise NotImplementedError("base class")
 
-#class Metric:
-    #def __call__(self, rf_output, loss_calc_items) -> float:
-        #raise NotImplementedError("base class")
 
 class MetricManager(nn.Module):
     """
@@ -19,7 +18,7 @@ class MetricManager(nn.Module):
             metric_fn = hydra.utils.instantiate(metric)
             print(f"Adding metric {metric_name} to the validation metrics")
             self.to_compute.append(metric_fn)
-        
+
     def forward(
         self,
         network_input,
@@ -34,12 +33,10 @@ class MetricManager(nn.Module):
 
 
 class Metric:
-
     def __call__(self, network_input, network_output, loss_input) -> float:
         raise NotImplementedError("base class")
 
 
 class AddExampleID(Metric):
-
     def __call__(self, network_input, network_output, loss_input):
         return {"example_id": loss_input["example_id"]}

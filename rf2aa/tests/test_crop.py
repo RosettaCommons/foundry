@@ -1,14 +1,13 @@
-import torch
 import numpy as np
-import pytest
+import torch
+
 from rf2aa.data.loaders.crop import (
-    get_preferred_chain_or_interface,
-    select_preferred_token,
-    radial_crop_index,
     contiguous_crop_index,
+    get_preferred_chain_or_interface,
+    radial_crop_index,
+    select_preferred_token,
 )
 from rf2aa.util import get_protein_bond_feats
-
 
 merged_outs = {
     "ch_letters_poly": ["A", "B", "C"],
@@ -137,5 +136,6 @@ def test_contiguous_crop():
             ),
         )
     )
+
 
 test_contiguous_crop()

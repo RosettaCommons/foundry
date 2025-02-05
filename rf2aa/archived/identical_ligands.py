@@ -1,9 +1,16 @@
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+import networkx as nx
 import numpy as np
 import torch
-import networkx as nx
-from typing import Dict, Optional, Tuple, List, Set, Any
+
 import rf2aa.cifutils_legacy as cifutils
-from rf2aa.util import get_ligand_atoms_bonds, cif_ligand_to_xyz, cif_ligand_to_obmol, get_automorphs
+from rf2aa.util import (
+    cif_ligand_to_obmol,
+    cif_ligand_to_xyz,
+    get_automorphs,
+    get_ligand_atoms_bonds,
+)
 
 
 def get_left_out_chain_letters(
@@ -97,9 +104,10 @@ def merge_chain_sets(
 
         # Note: we need to pop the larger index before the smaller index,
         # because the larger index would change if we popped the smaller index first.
-        key_set_index_larger, key_set_index_smaller = max(
-            key_set_index_a, key_set_index_b
-        ), min(key_set_index_a, key_set_index_b)
+        key_set_index_larger, key_set_index_smaller = (
+            max(key_set_index_a, key_set_index_b),
+            min(key_set_index_a, key_set_index_b),
+        )
 
         key_set_larger = chain_sets.pop(key_set_index_larger)
         key_set_smaller = chain_sets.pop(key_set_index_smaller)
@@ -153,7 +161,7 @@ def get_nonpoly_akeys(
 
 
 def get_partial_akeys(
-    akeys: List[Tuple[str, str, str, str]]
+    akeys: List[Tuple[str, str, str, str]],
 ) -> List[Tuple[str, str, str]]:
     return list(set([akey[:3] for akey in akeys]))
 
@@ -444,8 +452,8 @@ def get_extra_identical_copies_from_chains(
     for query_index, query_string in enumerate(sorted_query_string_list):
         query_length = Ls_sm[query_index]
         query_akeys = akeys_sm[query_index]
-        query_xyz = xyz_sm[:, cumulative_length: cumulative_length + query_length]
-        query_mask = mask_sm[:, cumulative_length: cumulative_length + query_length]
+        query_xyz = xyz_sm[:, cumulative_length : cumulative_length + query_length]
+        query_mask = mask_sm[:, cumulative_length : cumulative_length + query_length]
 
         partial_query_akeys = get_partial_akeys(query_akeys)
 

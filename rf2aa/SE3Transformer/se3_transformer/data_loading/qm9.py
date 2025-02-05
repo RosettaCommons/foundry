@@ -20,15 +20,15 @@
 #
 # SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES
 # SPDX-License-Identifier: MIT
+import pathlib
 from typing import Tuple
 
 import dgl
-import pathlib
 import torch
-from dgl.data import QM9EdgeDataset
 from dgl import DGLGraph
+from dgl.data import QM9EdgeDataset
 from torch import Tensor
-from torch.utils.data import random_split, DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, random_split
 from tqdm import tqdm
 
 from se3_transformer.data_loading.data_module import DataModule
@@ -37,7 +37,7 @@ from se3_transformer.runtime.utils import get_local_rank, str2bool, using_tensor
 
 
 def _get_relative_pos(qm9_graph: DGLGraph) -> Tensor:
-    x = qm9_graph.ndata['pos']
+    x = qm9_graph.ndata["pos"]
     src, dst = qm9_graph.edges()
     rel_pos = x[dst] - x[src]
     return rel_pos
@@ -61,17 +61,21 @@ class QM9DataModule(DataModule):
     NODE_FEATURE_DIM = 6
     EDGE_FEATURE_DIM = 4
 
-    def __init__(self,
-                 data_dir: pathlib.Path,
-                 task: str = 'homo',
-                 batch_size: int = 240,
-                 num_workers: int = 8,
-                 num_degrees: int = 4,
-                 amp: bool = False,
-                 precompute_bases: bool = False,
-                 **kwargs):
+    def __init__(
+        self,
+        data_dir: pathlib.Path,
+        task: str = "homo",
+        batch_size: int = 240,
+        num_workers: int = 8,
+        num_degrees: int = 4,
+        amp: bool = False,
+        precompute_bases: bool = False,
+        **kwargs,
+    ):
         self.data_dir = data_dir  # This needs to be before __init__ so that prepare_data has access to it
-        super().__init__(batch_size=batch_size, num_workers=num_workers, collate_fn=self._collate)
+        super().__init__(
+            batch_size=batch_size, num_workers=num_workers, collate_fn=self._collate
+        )
         self.amp = amp
         self.task = task
         self.batch_size = batch_size
@@ -79,16 +83,29 @@ class QM9DataModule(DataModule):
 
         qm9_kwargs = dict(label_keys=[self.task], verbose=False, raw_dir=str(data_dir))
         if precompute_bases:
-            bases_kwargs = dict(max_degree=num_degrees - 1, use_pad_trick=using_tensor_cores(amp), amp=amp)
-            full_dataset = CachedBasesQM9EdgeDataset(bases_kwargs=bases_kwargs, batch_size=batch_size,
-                                                     num_workers=num_workers, **qm9_kwargs)
+            bases_kwargs = dict(
+                max_degree=num_degrees - 1,
+                use_pad_trick=using_tensor_cores(amp),
+                amp=amp,
+            )
+            full_dataset = CachedBasesQM9EdgeDataset(
+                bases_kwargs=bases_kwargs,
+                batch_size=batch_size,
+                num_workers=num_workers,
+                **qm9_kwargs,
+            )
         else:
             full_dataset = QM9EdgeDataset(**qm9_kwargs)
 
-        self.ds_train, self.ds_val, self.ds_test = random_split(full_dataset, _get_split_sizes(full_dataset),
-                                                                generator=torch.Generator().manual_seed(0))
+        self.ds_train, self.ds_val, self.ds_test = random_split(
+            full_dataset,
+            _get_split_sizes(full_dataset),
+            generator=torch.Generator().manual_seed(0),
+        )
 
-        train_targets = full_dataset.targets[self.ds_train.indices, full_dataset.label_keys[0]]
+        train_targets = full_dataset.targets[
+            self.ds_train.indices, full_dataset.label_keys[0]
+        ]
         self.targets_mean = train_targets.mean()
         self.targets_std = train_targets.std()
 
@@ -99,10 +116,14 @@ class QM9DataModule(DataModule):
     def _collate(self, samples):
         graphs, y, *bases = map(list, zip(*samples))
         batched_graph = dgl.batch(graphs)
-        edge_feats = {'0': batched_graph.edata['edge_attr'][:, :self.EDGE_FEATURE_DIM, None]}
-        batched_graph.edata['rel_pos'] = _get_relative_pos(batched_graph)
+        edge_feats = {
+            "0": batched_graph.edata["edge_attr"][:, : self.EDGE_FEATURE_DIM, None]
+        }
+        batched_graph.edata["rel_pos"] = _get_relative_pos(batched_graph)
         # get node features
-        node_feats = {'0': batched_graph.ndata['attr'][:, :self.NODE_FEATURE_DIM, None]}
+        node_feats = {
+            "0": batched_graph.ndata["attr"][:, : self.NODE_FEATURE_DIM, None]
+        }
         targets = (torch.cat(y) - self.targets_mean) / self.targets_std
 
         if bases:
@@ -119,23 +140,56 @@ class QM9DataModule(DataModule):
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("QM9 dataset")
-        parser.add_argument('--task', type=str, default='homo', const='homo', nargs='?',
-                            choices=['mu', 'alpha', 'homo', 'lumo', 'gap', 'r2', 'zpve', 'U0', 'U', 'H', 'G', 'Cv',
-                                     'U0_atom', 'U_atom', 'H_atom', 'G_atom', 'A', 'B', 'C'],
-                            help='Regression task to train on')
-        parser.add_argument('--precompute_bases', type=str2bool, nargs='?', const=True, default=False,
-                            help='Precompute bases at the beginning of the script during dataset initialization,'
-                                 ' instead of computing them at the beginning of each forward pass.')
+        parser.add_argument(
+            "--task",
+            type=str,
+            default="homo",
+            const="homo",
+            nargs="?",
+            choices=[
+                "mu",
+                "alpha",
+                "homo",
+                "lumo",
+                "gap",
+                "r2",
+                "zpve",
+                "U0",
+                "U",
+                "H",
+                "G",
+                "Cv",
+                "U0_atom",
+                "U_atom",
+                "H_atom",
+                "G_atom",
+                "A",
+                "B",
+                "C",
+            ],
+            help="Regression task to train on",
+        )
+        parser.add_argument(
+            "--precompute_bases",
+            type=str2bool,
+            nargs="?",
+            const=True,
+            default=False,
+            help="Precompute bases at the beginning of the script during dataset initialization,"
+            " instead of computing them at the beginning of each forward pass.",
+        )
         return parent_parser
 
     def __repr__(self):
-        return f'QM9({self.task})'
+        return f"QM9({self.task})"
 
 
 class CachedBasesQM9EdgeDataset(QM9EdgeDataset):
-    """ Dataset extending the QM9 dataset from DGL with precomputed (cached in RAM) pairwise bases """
+    """Dataset extending the QM9 dataset from DGL with precomputed (cached in RAM) pairwise bases"""
 
-    def __init__(self, bases_kwargs: dict, batch_size: int, num_workers: int, *args, **kwargs):
+    def __init__(
+        self, bases_kwargs: dict, batch_size: int, num_workers: int, *args, **kwargs
+    ):
         """
         :param bases_kwargs:  Arguments to feed the bases computation function
         :param batch_size:    Batch size to use when iterating over the dataset for computing bases
@@ -150,14 +204,28 @@ class CachedBasesQM9EdgeDataset(QM9EdgeDataset):
         super().load()
         # Iterate through the dataset and compute bases (pairwise only)
         # Potential improvement: use multi-GPU and gather
-        dataloader = DataLoader(self, shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers,
-                                collate_fn=lambda samples: dgl.batch([sample[0] for sample in samples]))
+        dataloader = DataLoader(
+            self,
+            shuffle=False,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            collate_fn=lambda samples: dgl.batch([sample[0] for sample in samples]),
+        )
         bases = []
-        for i, graph in tqdm(enumerate(dataloader), total=len(dataloader), desc='Precomputing QM9 bases',
-                             disable=get_local_rank() != 0):
+        for i, graph in tqdm(
+            enumerate(dataloader),
+            total=len(dataloader),
+            desc="Precomputing QM9 bases",
+            disable=get_local_rank() != 0,
+        ):
             rel_pos = _get_relative_pos(graph)
             # Compute the bases with the GPU but convert the result to CPU to store in RAM
-            bases.append({k: v.cpu() for k, v in get_basis(rel_pos.cuda(), **self.bases_kwargs).items()})
+            bases.append(
+                {
+                    k: v.cpu()
+                    for k, v in get_basis(rel_pos.cuda(), **self.bases_kwargs).items()
+                }
+            )
         self.bases = bases  # Assign at the end so that __getitem__ isn't confused
 
     def __getitem__(self, idx: int):
@@ -165,9 +233,19 @@ class CachedBasesQM9EdgeDataset(QM9EdgeDataset):
 
         if self.bases:
             bases_idx = idx // self.batch_size
-            bases_cumsum_idx = self.ne_cumsum[idx] - self.ne_cumsum[bases_idx * self.batch_size]
-            bases_cumsum_next_idx = self.ne_cumsum[idx + 1] - self.ne_cumsum[bases_idx * self.batch_size]
-            return graph, label, {key: basis[bases_cumsum_idx:bases_cumsum_next_idx] for key, basis in
-                                  self.bases[bases_idx].items()}
+            bases_cumsum_idx = (
+                self.ne_cumsum[idx] - self.ne_cumsum[bases_idx * self.batch_size]
+            )
+            bases_cumsum_next_idx = (
+                self.ne_cumsum[idx + 1] - self.ne_cumsum[bases_idx * self.batch_size]
+            )
+            return (
+                graph,
+                label,
+                {
+                    key: basis[bases_cumsum_idx:bases_cumsum_next_idx]
+                    for key, basis in self.bases[bases_idx].items()
+                },
+            )
         else:
             return graph, label

@@ -32,18 +32,23 @@ from tqdm import tqdm
 from se3_transformer.runtime import gpu_affinity
 from se3_transformer.runtime.arguments import PARSER
 from se3_transformer.runtime.callbacks import BaseCallback
-from se3_transformer.runtime.loggers import DLLogger, WandbLogger, LoggerCollection
-from se3_transformer.runtime.utils import to_cuda, get_local_rank
+from se3_transformer.runtime.loggers import DLLogger, LoggerCollection, WandbLogger
+from se3_transformer.runtime.utils import get_local_rank, to_cuda
 
 
 @torch.inference_mode()
-def evaluate(model: nn.Module,
-             dataloader: DataLoader,
-             callbacks: List[BaseCallback],
-             args):
+def evaluate(
+    model: nn.Module, dataloader: DataLoader, callbacks: List[BaseCallback], args
+):
     model.eval()
-    for i, batch in tqdm(enumerate(dataloader), total=len(dataloader), unit='batch', desc=f'Evaluation',
-                         leave=False, disable=(args.silent or get_local_rank() != 0)):
+    for i, batch in tqdm(
+        enumerate(dataloader),
+        total=len(dataloader),
+        unit="batch",
+        desc="Evaluation",
+        leave=False,
+        disable=(args.silent or get_local_rank() != 0),
+    ):
         *input, target = to_cuda(batch)
 
         for callback in callbacks:
@@ -56,31 +61,37 @@ def evaluate(model: nn.Module,
                 callback.on_validation_step(input, target, pred)
 
 
-if __name__ == '__main__':
-    from se3_transformer.runtime.callbacks import QM9MetricCallback, PerformanceCallback
-    from se3_transformer.runtime.utils import init_distributed, seed_everything
-    from se3_transformer.model import SE3TransformerPooled, Fiber
-    from se3_transformer.data_loading import QM9DataModule
-    import torch.distributed as dist
+if __name__ == "__main__":
     import logging
     import sys
+
+    import torch.distributed as dist
+
+    from se3_transformer.data_loading import QM9DataModule
+    from se3_transformer.model import Fiber, SE3TransformerPooled
+    from se3_transformer.runtime.callbacks import PerformanceCallback, QM9MetricCallback
+    from se3_transformer.runtime.utils import init_distributed, seed_everything
 
     is_distributed = init_distributed()
     local_rank = get_local_rank()
     args = PARSER.parse_args()
 
-    logging.getLogger().setLevel(logging.CRITICAL if local_rank != 0 or args.silent else logging.INFO)
+    logging.getLogger().setLevel(
+        logging.CRITICAL if local_rank != 0 or args.silent else logging.INFO
+    )
 
-    logging.info('====== SE(3)-Transformer ======')
-    logging.info('|  Inference on the test set  |')
-    logging.info('===============================')
+    logging.info("====== SE(3)-Transformer ======")
+    logging.info("|  Inference on the test set  |")
+    logging.info("===============================")
 
     if not args.benchmark and args.load_ckpt_path is None:
-        logging.error('No load_ckpt_path provided, you need to provide a saved model to evaluate')
+        logging.error(
+            "No load_ckpt_path provided, you need to provide a saved model to evaluate"
+        )
         sys.exit(1)
 
     if args.benchmark:
-        logging.info('Running benchmark mode with one warmup pass')
+        logging.info("Running benchmark mode with one warmup pass")
 
     if args.seed is not None:
         seed_everything(args.seed)
@@ -89,7 +100,13 @@ if __name__ == '__main__':
 
     loggers = [DLLogger(save_dir=args.log_dir, filename=args.dllogger_name)]
     if args.wandb:
-        loggers.append(WandbLogger(name=f'QM9({args.task})', save_dir=args.log_dir, project='se3-transformer'))
+        loggers.append(
+            WandbLogger(
+                name=f"QM9({args.task})",
+                save_dir=args.log_dir,
+                project="se3-transformer",
+            )
+        )
     logger = LoggerCollection(loggers)
     datamodule = QM9DataModule(**vars(args))
     model = SE3TransformerPooled(
@@ -97,46 +114,54 @@ if __name__ == '__main__':
         fiber_out=Fiber({0: args.num_degrees * args.num_channels}),
         fiber_edge=Fiber({0: datamodule.EDGE_FEATURE_DIM}),
         output_dim=1,
-        tensor_cores=(args.amp and major_cc >= 7) or major_cc >= 8,  # use Tensor Cores more effectively
-        **vars(args)
+        tensor_cores=(args.amp and major_cc >= 7)
+        or major_cc >= 8,  # use Tensor Cores more effectively
+        **vars(args),
     )
-    callbacks = [QM9MetricCallback(logger, targets_std=datamodule.targets_std, prefix='test')]
+    callbacks = [
+        QM9MetricCallback(logger, targets_std=datamodule.targets_std, prefix="test")
+    ]
 
     model.to(device=torch.cuda.current_device())
     if args.load_ckpt_path is not None:
-        checkpoint = torch.load(str(args.load_ckpt_path), map_location={'cuda:0': f'cuda:{local_rank}'})
-        model.load_state_dict(checkpoint['state_dict'])
+        checkpoint = torch.load(
+            str(args.load_ckpt_path), map_location={"cuda:0": f"cuda:{local_rank}"}
+        )
+        model.load_state_dict(checkpoint["state_dict"])
 
     if is_distributed:
         nproc_per_node = torch.cuda.device_count()
-        affinity = gpu_affinity.set_affinity(local_rank, nproc_per_node, scope='socket')
-        model = DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
+        affinity = gpu_affinity.set_affinity(local_rank, nproc_per_node, scope="socket")
+        model = DistributedDataParallel(
+            model, device_ids=[local_rank], output_device=local_rank
+        )
         model._set_static_graph()
 
-    torch.set_float32_matmul_precision('high')
+    torch.set_float32_matmul_precision("high")
 
-    test_dataloader = datamodule.test_dataloader() if not args.benchmark else datamodule.train_dataloader()
+    test_dataloader = (
+        datamodule.test_dataloader()
+        if not args.benchmark
+        else datamodule.train_dataloader()
+    )
     if not args.benchmark:
-        evaluate(model,
-                 test_dataloader,
-                 callbacks,
-                 args)
+        evaluate(model, test_dataloader, callbacks, args)
 
         for callback in callbacks:
             callback.on_validation_end()
 
     else:
         world_size = dist.get_world_size() if dist.is_initialized() else 1
-        callbacks = [PerformanceCallback(
-            logger, args.batch_size * world_size,
-            warmup_epochs=1 if args.epochs > 1 else 0,
-            mode='inference'
-        )]
+        callbacks = [
+            PerformanceCallback(
+                logger,
+                args.batch_size * world_size,
+                warmup_epochs=1 if args.epochs > 1 else 0,
+                mode="inference",
+            )
+        ]
         for _ in range(args.epochs):
-            evaluate(model,
-                     test_dataloader,
-                     callbacks,
-                     args)
+            evaluate(model, test_dataloader, callbacks, args)
             callbacks[0].on_epoch_end()
 
         callbacks[0].on_fit_end()

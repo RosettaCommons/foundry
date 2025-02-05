@@ -1,10 +1,11 @@
-import pytest
-import numpy as np
-import hydra
 from functools import partial
+
+import hydra
+import pytest
 from scipy.stats import pearsonr
-from rf2aa.data.compose_dataset import compose_dataset
+
 from rf2aa.chemical import initialize_chemdata
+from rf2aa.data.compose_dataset import compose_dataset
 
 
 def get_sampler(config_name: str = "base", rank: int = 0, world_size: int = 1):

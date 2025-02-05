@@ -1,6 +1,5 @@
-import os
 import torch
-import pytest
+
 from rf2aa.util_module import Dropout
 
 
@@ -10,20 +9,19 @@ def test_dropout():
     d = 8
     x = torch.rand((d, d))
     x = drop_row(x)
-    print('x:')
+    print("x:")
     print(x)
 
-    assert not torch.all(x==0)
+    assert not torch.all(x == 0)
     for i in range(d):
         row = x[i]
-        if torch.any(row==0):
-            assert torch.all(row==0)
-    
+        if torch.any(row == 0):
+            assert torch.all(row == 0)
+
     has_all_zero_row = False
     for i in range(d):
         row = x[i]
-        if torch.all(row==0):
+        if torch.all(row == 0):
             has_all_zero_row = True
-    
-    assert has_all_zero_row
 
+    assert has_all_zero_row

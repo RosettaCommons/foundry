@@ -1,42 +1,37 @@
-import json
-import dataclasses
-import numpy as np
 import collections
+import json
 import logging
-import string
-import pickle
 import os
+import pickle
+import string
+from typing import Any, Dict, List
+
+import numpy as np
 import torch
-from typing import List, Dict, Any
-from rf2aa.flow_matching import rigid_utils as ru
-#from torch_geometric.utils import scatter
+
+# from torch_geometric.utils import scatter
 from torch import scatter
-from glob import glob
+
+from rf2aa.flow_matching import rigid_utils as ru
 
 Rigid = ru.Rigid
-#Protein = protein.Protein
+# Protein = protein.Protein
 
 logger = logging.getLogger(__name__)
 
 # Global map from chain characters to integers.
-ALPHANUMERIC = string.ascii_letters + string.digits + ' '
-CHAIN_TO_INT = {
-    chain_char: i for i, chain_char in enumerate(ALPHANUMERIC)
-}
-INT_TO_CHAIN = {
-    i: chain_char for i, chain_char in enumerate(ALPHANUMERIC)
-}
+ALPHANUMERIC = string.ascii_letters + string.digits + " "
+CHAIN_TO_INT = {chain_char: i for i, chain_char in enumerate(ALPHANUMERIC)}
+INT_TO_CHAIN = {i: chain_char for i, chain_char in enumerate(ALPHANUMERIC)}
 
 NM_TO_ANG_SCALE = 10.0
 ANG_TO_NM_SCALE = 1 / NM_TO_ANG_SCALE
 
-CHAIN_FEATS = [
-    'atom_positions', 'aatype', 'atom_mask', 'residue_index', 'b_factors'
-]
+CHAIN_FEATS = ["atom_positions", "aatype", "atom_mask", "residue_index", "b_factors"]
 
-#NUM_TOKENS = residue_constants.restype_num
-#MASK_TOKEN_INDEX = residue_constants.restypes_with_x.index('X')
-#CA_IDX = residue_constants.atom_order['CA']
+# NUM_TOKENS = residue_constants.restype_num
+# MASK_TOKEN_INDEX = residue_constants.restypes_with_x.index('X')
+# CA_IDX = residue_constants.atom_order['CA']
 
 to_numpy = lambda x: x.detach().cpu().numpy()
 """
@@ -46,20 +41,22 @@ seq_to_aatype = lambda seq: [
         residue_constants.restypes_with_x.index(x) for x in seq]
 """
 
+
 class CPU_Unpickler(pickle.Unpickler):
     """Pytorch pickle loading workaround.
 
     https://github.com/pytorch/pytorch/issues/16797
     """
+
     def find_class(self, module, name):
-        if module == 'torch.storage' and name == '_load_from_bytes':
-            return lambda b: torch.load(io.BytesIO(b), map_location='cpu')
-        else: return super().find_class(module, name)
+        if module == "torch.storage" and name == "_load_from_bytes":
+            return lambda b: torch.load(io.BytesIO(b), map_location="cpu")
+        else:
+            return super().find_class(module, name)
 
 
 def remove_com_from_tensor_7(tensor_7):
-    """remove_com_from_tensor_7 removes the center of mass along the L dimension from a tensor of shape (..., L, 7).
-    """
+    """remove_com_from_tensor_7 removes the center of mass along the L dimension from a tensor of shape (..., L, 7)."""
     rigid = Rigid.from_tensor_7(tensor_7)
     rigid_trans = rigid.get_trans()
     COM = rigid_trans.mean(dim=[-2], keepdim=True)
@@ -75,14 +72,14 @@ def create_rigid(rots, trans):
 
 def batch_align_structures(pos_1, pos_2, mask=None):
     if pos_1.shape != pos_2.shape:
-        raise ValueError('pos_1 and pos_2 must have the same shape.')
+        raise ValueError("pos_1 and pos_2 must have the same shape.")
     if pos_1.ndim != 3:
-        raise ValueError(f'Expected inputs to have shape [B, N, 3]')
+        raise ValueError("Expected inputs to have shape [B, N, 3]")
 
     num_batch = pos_1.shape[0]
     device = pos_1.device
     batch_indices = (
-        torch.ones(*pos_1.shape[:2], device=device, dtype=torch.int64) 
+        torch.ones(*pos_1.shape[:2], device=device, dtype=torch.int64)
         * torch.arange(num_batch, device=device)[:, None]
     )
     flat_pos_1 = pos_1.reshape(-1, 3)
@@ -90,27 +87,21 @@ def batch_align_structures(pos_1, pos_2, mask=None):
     flat_batch_indices = batch_indices.reshape(-1)
     if mask is None:
         aligned_pos_1, aligned_pos_2, align_rots = align_structures(
-            flat_pos_1, flat_batch_indices, flat_pos_2)
+            flat_pos_1, flat_batch_indices, flat_pos_2
+        )
         aligned_pos_1 = aligned_pos_1.reshape(num_batch, -1, 3)
         aligned_pos_2 = aligned_pos_2.reshape(num_batch, -1, 3)
         return aligned_pos_1, aligned_pos_2, align_rots
 
     flat_mask = mask.reshape(-1).bool()
     _, _, align_rots = align_structures(
-        flat_pos_1[flat_mask],
-        flat_batch_indices[flat_mask],
-        flat_pos_2[flat_mask]
+        flat_pos_1[flat_mask], flat_batch_indices[flat_mask], flat_pos_2[flat_mask]
     )
-    aligned_pos_1 = torch.bmm(
-        pos_1,
-        align_rots
-    )
+    aligned_pos_1 = torch.bmm(pos_1, align_rots)
     return aligned_pos_1, pos_2, align_rots
 
 
-def adjust_oxygen_pos(
-    atom_37: torch.Tensor, pos_is_known = None
-) -> torch.Tensor:
+def adjust_oxygen_pos(atom_37: torch.Tensor, pos_is_known=None) -> torch.Tensor:
     """
     Imputes the position of the oxygen atom on the backbone by using adjacent frame information.
     Specifically, we say that the oxygen atom is in the plane created by the Calpha and C from the
@@ -146,7 +137,9 @@ def adjust_oxygen_pos(
         torch.norm(atom_37[:-1, 2, :] - atom_37[1:, 0, :], keepdim=True, dim=1) + 1e-4
     )
 
-    carbonyl_to_oxygen: torch.Tensor = calpha_to_carbonyl + nitrogen_to_carbonyl  # (N-1, 3)
+    carbonyl_to_oxygen: torch.Tensor = (
+        calpha_to_carbonyl + nitrogen_to_carbonyl
+    )  # (N-1, 3)
     carbonyl_to_oxygen = carbonyl_to_oxygen / (
         torch.norm(carbonyl_to_oxygen, dim=1, keepdim=True) + 1e-4
     )
@@ -175,7 +168,9 @@ def adjust_oxygen_pos(
     # known due to pos_is_known being false.
 
     if pos_is_known is None:
-        pos_is_known = torch.ones((atom_37.shape[0],), dtype=torch.int64, device=atom_37.device)
+        pos_is_known = torch.ones(
+            (atom_37.shape[0],), dtype=torch.int64, device=atom_37.device
+        )
 
     next_res_gone: torch.Tensor = ~pos_is_known.bool()  # (N,)
     next_res_gone = torch.cat(
@@ -184,22 +179,20 @@ def adjust_oxygen_pos(
     next_res_gone = next_res_gone[1:]  # (N,)
 
     atom_37[next_res_gone, 4, :] = (
-        atom_37[next_res_gone, 2, :]
-        + carbonyl_to_oxygen_term[next_res_gone, :] * 1.23
+        atom_37[next_res_gone, 2, :] + carbonyl_to_oxygen_term[next_res_gone, :] * 1.23
     )
 
     return atom_37
 
 
-def write_pkl(
-        save_path: str, pkl_data: Any, create_dir: bool = False, use_torch=False):
+def write_pkl(save_path: str, pkl_data: Any, create_dir: bool = False, use_torch=False):
     """Serialize data into a pickle file."""
     if create_dir:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
     if use_torch:
         torch.save(pkl_data, save_path, pickle_protocol=pickle.HIGHEST_PROTOCOL)
     else:
-        with open(save_path, 'wb') as handle:
+        with open(save_path, "wb") as handle:
             pickle.dump(pkl_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
@@ -209,16 +202,19 @@ def read_pkl(read_path: str, verbose=True, use_torch=False, map_location=None):
         if use_torch:
             return torch.load(read_path, map_location=map_location)
         else:
-            with open(read_path, 'rb') as handle:
+            with open(read_path, "rb") as handle:
                 return pickle.load(handle)
     except Exception as e:
         try:
-            with open(read_path, 'rb') as handle:
+            with open(read_path, "rb") as handle:
                 return CPU_Unpickler(handle).load()
         except Exception as e2:
             if verbose:
-                print(f'Failed to read {read_path}. First error: {e}\n Second error: {e2}')
-            raise(e)
+                print(
+                    f"Failed to read {read_path}. First error: {e}\n Second error: {e2}"
+                )
+            raise (e)
+
 
 def chain_str_to_int(chain_str: str):
     chain_int = 0
@@ -228,21 +224,22 @@ def chain_str_to_int(chain_str: str):
         chain_int += CHAIN_TO_INT[chain_char] + (i * len(ALPHANUMERIC))
     return chain_int
 
-#def parse_chain_feats(chain_feats, scale_factor=1., center=True):
-    #chain_feats['bb_mask'] = chain_feats['atom_mask'][:, CA_IDX]
-    #bb_pos = chain_feats['atom_positions'][:, CA_IDX]
-    #if center:
-        #bb_center = np.sum(bb_pos, axis=0) / (np.sum(chain_feats['bb_mask']) + 1e-4)
-        #centered_pos = chain_feats['atom_positions'] - bb_center[None, None, :]
-        #scaled_pos = centered_pos / scale_factor
-    #else:
-        #scaled_pos = chain_feats['atom_positions'] / scale_factor
-    #chain_feats['atom_positions'] = scaled_pos * chain_feats['atom_mask'][..., None]
-    #chain_feats['bb_positions'] = chain_feats['atom_positions'][:, CA_IDX]
-    #return chain_feats
 
-def concat_np_features(
-        np_dicts: List[Dict[str, np.ndarray]], add_batch_dim: bool):
+# def parse_chain_feats(chain_feats, scale_factor=1., center=True):
+# chain_feats['bb_mask'] = chain_feats['atom_mask'][:, CA_IDX]
+# bb_pos = chain_feats['atom_positions'][:, CA_IDX]
+# if center:
+# bb_center = np.sum(bb_pos, axis=0) / (np.sum(chain_feats['bb_mask']) + 1e-4)
+# centered_pos = chain_feats['atom_positions'] - bb_center[None, None, :]
+# scaled_pos = centered_pos / scale_factor
+# else:
+# scaled_pos = chain_feats['atom_positions'] / scale_factor
+# chain_feats['atom_positions'] = scaled_pos * chain_feats['atom_mask'][..., None]
+# chain_feats['bb_positions'] = chain_feats['atom_positions'][:, CA_IDX]
+# return chain_feats
+
+
+def concat_np_features(np_dicts: List[Dict[str, np.ndarray]], add_batch_dim: bool):
     """Performs a nested concatenation of feature dicts.
 
     Args:
@@ -338,7 +335,10 @@ def align_structures(
 
     # Compute covariance matrix for optimal rotation (Q.T @ P) -> [B x 3 x 3].
     cov = scatter(
-        batch_positions[:, None, :] * reference_positions[:, :, None], batch_indices, dim=0, reduce="sum"
+        batch_positions[:, None, :] * reference_positions[:, :, None],
+        batch_indices,
+        dim=0,
+        reduce="sum",
     )
 
     # Perform singular value decomposition. (all [B x 3 x 3])
@@ -365,170 +365,177 @@ def align_structures(
     return batch_positions_rotated, reference_positions, rotation_matrices
 
 
-#def parse_pdb_feats(
-        #pdb_name: str,
-        #pdb_path: str,
-        #scale_factor=1.,
-        ## TODO: Make the default behaviour read all chains.
-        #chain_id='A',
-    #):
-    #"""
-    #Args:
-        #pdb_name: name of PDB to parse.
-        #pdb_path: path to PDB file to read.
-        #scale_factor: factor to scale atom positions.
-        #mean_center: whether to mean center atom positions.
-    #Returns:
-        #Dict with CHAIN_FEATS features extracted from PDB with specified
-        #preprocessing.
-    #"""
-    #parser = PDB.PDBParser(QUIET=True)
-    #structure = parser.get_structure(pdb_name, pdb_path)
-    #struct_chains = {
-        #chain.id: chain
-        #for chain in structure.get_chains()}
+# def parse_pdb_feats(
+# pdb_name: str,
+# pdb_path: str,
+# scale_factor=1.,
+## TODO: Make the default behaviour read all chains.
+# chain_id='A',
+# ):
+# """
+# Args:
+# pdb_name: name of PDB to parse.
+# pdb_path: path to PDB file to read.
+# scale_factor: factor to scale atom positions.
+# mean_center: whether to mean center atom positions.
+# Returns:
+# Dict with CHAIN_FEATS features extracted from PDB with specified
+# preprocessing.
+# """
+# parser = PDB.PDBParser(QUIET=True)
+# structure = parser.get_structure(pdb_name, pdb_path)
+# struct_chains = {
+# chain.id: chain
+# for chain in structure.get_chains()}
 
-    #def _process_chain_id(x):
-        #chain_prot = process_chain(struct_chains[x], x)
-        #chain_dict = dataclasses.asdict(chain_prot)
+# def _process_chain_id(x):
+# chain_prot = process_chain(struct_chains[x], x)
+# chain_dict = dataclasses.asdict(chain_prot)
 
-        ## Process features
-        #feat_dict = {x: chain_dict[x] for x in CHAIN_FEATS}
-        #return parse_chain_feats(
-            #feat_dict, scale_factor=scale_factor)
+## Process features
+# feat_dict = {x: chain_dict[x] for x in CHAIN_FEATS}
+# return parse_chain_feats(
+# feat_dict, scale_factor=scale_factor)
 
-    #if isinstance(chain_id, str):
-        #return _process_chain_id(chain_id)
-    #elif isinstance(chain_id, list):
-        #return {
-            #x: _process_chain_id(x) for x in chain_id
-        #}
-    #elif chain_id is None:
-        #return {
-            #x: _process_chain_id(x) for x in struct_chains
-        #}
-    #else:
-        #raise ValueError(f'Unrecognized chain list {chain_id}')
-
-
-#def process_chain(chain: Chain, chain_id: str) -> Protein:
-    #"""Convert a PDB chain object into a AlphaFold Protein instance.
-
-    #Forked from alphafold.common.protein.from_pdb_string
-
-    #WARNING: All non-standard residue types will be converted into UNK. All
-        #non-standard atoms will be ignored.
-
-    #Took out lines 94-97 which don't allow insertions in the PDB.
-    #Sabdab uses insertions for the chothia numbering so we need to allow them.
-
-    #Took out lines 110-112 since that would mess up CDR numbering.
-
-    #Args:
-        #chain: Instance of Biopython's chain class.
-
-    #Returns:
-        #Protein object with protein features.
-    #"""
-    #atom_positions = []
-    #aatype = []
-    #atom_mask = []
-    #residue_index = []
-    #b_factors = []
-    #chain_ids = []
-    #for res in chain:
-        #res_shortname = residue_constants.restype_3to1.get(res.resname, 'X')
-        #restype_idx = residue_constants.restype_order.get(
-            #res_shortname, residue_constants.restype_num)
-        #pos = np.zeros((residue_constants.atom_type_num, 3))
-        #mask = np.zeros((residue_constants.atom_type_num,))
-        #res_b_factors = np.zeros((residue_constants.atom_type_num,))
-        #for atom in res:
-            #if atom.name not in residue_constants.atom_types:
-                #continue
-            #pos[residue_constants.atom_order[atom.name]] = atom.coord
-            #mask[residue_constants.atom_order[atom.name]] = 1.
-            #res_b_factors[residue_constants.atom_order[atom.name]
-                          #] = atom.bfactor
-        #aatype.append(restype_idx)
-        #atom_positions.append(pos)
-        #atom_mask.append(mask)
-        #residue_index.append(res.id[1])
-        #b_factors.append(res_b_factors)
-        #chain_ids.append(chain_id)
-
-    #return Protein(
-        #atom_positions=np.array(atom_positions),
-        #atom_mask=np.array(atom_mask),
-        #aatype=np.array(aatype),
-        #residue_index=np.array(residue_index),
-        #chain_index=np.array(chain_ids),
-        #b_factors=np.array(b_factors))
+# if isinstance(chain_id, str):
+# return _process_chain_id(chain_id)
+# elif isinstance(chain_id, list):
+# return {
+# x: _process_chain_id(x) for x in chain_id
+# }
+# elif chain_id is None:
+# return {
+# x: _process_chain_id(x) for x in struct_chains
+# }
+# else:
+# raise ValueError(f'Unrecognized chain list {chain_id}')
 
 
-#def extract_sequence_from_pdb(file_path):
-    #parser = PDB.PDBParser(QUIET=True)
-    #structure = parser.get_structure('decoy', file_path)
+# def process_chain(chain: Chain, chain_id: str) -> Protein:
+# """Convert a PDB chain object into a AlphaFold Protein instance.
 
-    ## Extract all chains
-    #struct_chains = {
-        #chain.id.upper(): chain
-        #for chain in structure.get_chains()}
-    #if len(struct_chains) > 1:
-        #raise ValueError('Only compatible with monomers')
+# Forked from alphafold.common.protein.from_pdb_string
 
-    ## Convert chain id into int
-    #chain_id = list(struct_chains.keys())[0]
-    #chain = struct_chains[chain_id]
-    #chain_prot = parsers.process_chain(chain, chain_id)
-    #chain_dict = dataclasses.asdict(chain_prot)
-    #chain_dict = parse_chain_feats(chain_dict)
-    #return chain_dict['aatype']
+# WARNING: All non-standard residue types will be converted into UNK. All
+# non-standard atoms will be ignored.
+
+# Took out lines 94-97 which don't allow insertions in the PDB.
+# Sabdab uses insertions for the chothia numbering so we need to allow them.
+
+# Took out lines 110-112 since that would mess up CDR numbering.
+
+# Args:
+# chain: Instance of Biopython's chain class.
+
+# Returns:
+# Protein object with protein features.
+# """
+# atom_positions = []
+# aatype = []
+# atom_mask = []
+# residue_index = []
+# b_factors = []
+# chain_ids = []
+# for res in chain:
+# res_shortname = residue_constants.restype_3to1.get(res.resname, 'X')
+# restype_idx = residue_constants.restype_order.get(
+# res_shortname, residue_constants.restype_num)
+# pos = np.zeros((residue_constants.atom_type_num, 3))
+# mask = np.zeros((residue_constants.atom_type_num,))
+# res_b_factors = np.zeros((residue_constants.atom_type_num,))
+# for atom in res:
+# if atom.name not in residue_constants.atom_types:
+# continue
+# pos[residue_constants.atom_order[atom.name]] = atom.coord
+# mask[residue_constants.atom_order[atom.name]] = 1.
+# res_b_factors[residue_constants.atom_order[atom.name]
+# ] = atom.bfactor
+# aatype.append(restype_idx)
+# atom_positions.append(pos)
+# atom_mask.append(mask)
+# residue_index.append(res.id[1])
+# b_factors.append(res_b_factors)
+# chain_ids.append(chain_id)
+
+# return Protein(
+# atom_positions=np.array(atom_positions),
+# atom_mask=np.array(atom_mask),
+# aatype=np.array(aatype),
+# residue_index=np.array(residue_index),
+# chain_index=np.array(chain_ids),
+# b_factors=np.array(b_factors))
 
 
-#def center_on_motif(scaffold_mask, trans_1):
-    #motif_mask = 1 - scaffold_mask
-    #motif_1 = trans_1 * motif_mask[..., None]
-    #motif_com = torch.sum(motif_1, dim=1) / (torch.sum(motif_mask) + 1)
-    #trans_1 -= motif_com[:, None, :]
-    #return trans_1
+# def extract_sequence_from_pdb(file_path):
+# parser = PDB.PDBParser(QUIET=True)
+# structure = parser.get_structure('decoy', file_path)
 
-#def get_synthetic_data_folder(dataset_cfg):
-    #synthetic_data_folders = glob(os.path.join(os.path.dirname(dataset_cfg.synthetic_data_folder), "*"))
-    #target_pid = os.getpid() if rank_zero_only.rank == 0 else os.getppid()
-    #for folder in synthetic_data_folders:
-        #current_date = os.path.dirname(dataset_cfg.synthetic_data_folder).split('_')[0]
-        #if current_date in folder and str(target_pid) in folder:
-            #return folder
-    #print("Didnt find any matching synthetic data folder")
-    #return None
+## Extract all chains
+# struct_chains = {
+# chain.id.upper(): chain
+# for chain in structure.get_chains()}
+# if len(struct_chains) > 1:
+# raise ValueError('Only compatible with monomers')
+
+## Convert chain id into int
+# chain_id = list(struct_chains.keys())[0]
+# chain = struct_chains[chain_id]
+# chain_prot = parsers.process_chain(chain, chain_id)
+# chain_dict = dataclasses.asdict(chain_prot)
+# chain_dict = parse_chain_feats(chain_dict)
+# return chain_dict['aatype']
+
+
+# def center_on_motif(scaffold_mask, trans_1):
+# motif_mask = 1 - scaffold_mask
+# motif_1 = trans_1 * motif_mask[..., None]
+# motif_com = torch.sum(motif_1, dim=1) / (torch.sum(motif_mask) + 1)
+# trans_1 -= motif_com[:, None, :]
+# return trans_1
+
+# def get_synthetic_data_folder(dataset_cfg):
+# synthetic_data_folders = glob(os.path.join(os.path.dirname(dataset_cfg.synthetic_data_folder), "*"))
+# target_pid = os.getpid() if rank_zero_only.rank == 0 else os.getppid()
+# for folder in synthetic_data_folders:
+# current_date = os.path.dirname(dataset_cfg.synthetic_data_folder).split('_')[0]
+# if current_date in folder and str(target_pid) in folder:
+# return folder
+# print("Didnt find any matching synthetic data folder")
+# return None
+
 
 def initialize(sequence_config):
     global NUM_TOKENS
     global MASK_TOKEN_INDEX
-    logger.info(f'initializing {sequence_config.num_tokens=} {sequence_config.mask_token_index=}')
+    logger.info(
+        f"initializing {sequence_config.num_tokens=} {sequence_config.mask_token_index=}"
+    )
     NUM_TOKENS = sequence_config.num_tokens
     MASK_TOKEN_INDEX = sequence_config.mask_token_index
+
 
 def pretty_describe_dict(d):
     mapped = describe_dict(d)
     mapped = tree.map_structure(str, mapped)
     return json.dumps(mapped, indent=4)
 
+
 def describe_dict(d):
     return tree.map_structure(describe, d)
 
+
 def describe(t: torch.Tensor):
-    out = [f'type:{type(t)}']
-    if hasattr(t, 'shape'):
-        out.append(f'shape:{str(t.shape)}')
-    if hasattr(t, 'dtype'):
-        out.append(f'dtype:{str(t.dtype)}')
-    if hasattr(t, 'device'):
-        out.append(f'device:{str(t.device)}')
-    return ' '.join(out)
+    out = [f"type:{type(t)}"]
+    if hasattr(t, "shape"):
+        out.append(f"shape:{str(t.shape)}")
+    if hasattr(t, "dtype"):
+        out.append(f"dtype:{str(t.dtype)}")
+    if hasattr(t, "device"):
+        out.append(f"device:{str(t.device)}")
+    return " ".join(out)
+
 
 def safe_shape(t: torch.Tensor):
-    if hasattr(t, 'shape'):
+    if hasattr(t, "shape"):
         return t.shape
     return None

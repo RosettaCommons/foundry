@@ -1,8 +1,10 @@
-import torch
-import numpy as np
 import warnings
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import torch
 from scipy.sparse.csgraph import shortest_path
-from typing import Optional, Tuple, Dict, Any, List
+
 from rf2aa.data.chain_crop import (
     crop_sm_compl_asmb_contig,
     crop_sm_compl_assembly,
@@ -103,7 +105,9 @@ def get_preferred_chain_or_interface(
 
         return None, (index_a, index_b)
     else:
-        raise ValueError(f"Either preferred_chain or preferred_interface must be present in item keys: {item.keys()}.")
+        raise ValueError(
+            f"Either preferred_chain or preferred_interface must be present in item keys: {item.keys()}."
+        )
 
 
 def select_preferred_token(
@@ -116,18 +120,18 @@ def select_preferred_token(
     """
     This function dictates which token should be selected to crop around.
     """
-    assert not (
-        preferred_chain is not None and preferred_interface is not None
-    ), "You can only specify one of preferred_chain or preferred_interface"
+    assert not (preferred_chain is not None and preferred_interface is not None), (
+        "You can only specify one of preferred_chain or preferred_interface"
+    )
 
     if rng is None:
         rng = np.random.default_rng()
 
     lengths_list = merged_outs["Ls_poly"] + merged_outs["Ls_sm"]
     if preferred_chain is not None:
-        assert preferred_chain < len(
-            lengths_list
-        ), f"preferred_chain {preferred_chain} is out of bounds for lengths_list {lengths_list}"
+        assert preferred_chain < len(lengths_list), (
+            f"preferred_chain {preferred_chain} is out of bounds for lengths_list {lengths_list}"
+        )
 
         start_index = sum(lengths_list[:preferred_chain])
         end_index = sum(lengths_list[: preferred_chain + 1])
@@ -182,7 +186,9 @@ def select_preferred_token(
         possible_indices = torch.where(global_index_is_valid)[0]
         return rng.choice(possible_indices.numpy())
     else:
-        raise ValueError("Either preferred_chain or preferred_interface must be specified in token selection.")
+        raise ValueError(
+            "Either preferred_chain or preferred_interface must be specified in token selection."
+        )
 
 
 def radial_crop_index(

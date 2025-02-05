@@ -1,11 +1,13 @@
-import hydra
-import torch
-import pandas as pd
-import numpy as np
-from typing import Dict
 from pathlib import Path
-from rf2aa.data.data_loader import get_train_valid_set
+from typing import Dict
+
+import hydra
+import numpy as np
+import pandas as pd
+import torch
+
 from rf2aa.data.compose_dataset import set_data_loader_params
+from rf2aa.data.data_loader import get_train_valid_set
 
 
 def _compute_name_of_row(row: pd.Series) -> str:

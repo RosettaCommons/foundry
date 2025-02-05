@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 # https://raw.githubusercontent.com/ahcm/ffindex/master/python/ffindex.py
 
-'''
+"""
 Created on Apr 30, 2014
 
 @author: meiermark
-'''
+"""
 
-
-import sys
 import mmap
 from collections import namedtuple
 
@@ -17,13 +15,13 @@ FFindexEntry = namedtuple("FFindexEntry", "name, offset, length")
 
 def read_index(ffindex_filename):
     entries = []
-    
+
     fh = open(ffindex_filename, "r")
     for line in fh:
         tokens = line.split("\t")
         entries.append(FFindexEntry(tokens[0], int(tokens[1]), int(tokens[2])))
     fh.close()
-    
+
     return entries
 
 
@@ -35,20 +33,22 @@ def read_data(ffdata_filename):
 
 
 def get_entry_by_name(name, index):
-    #TODO: bsearch
+    # TODO: bsearch
     for entry in index:
-        if(name == entry.name):
+        if name == entry.name:
             return entry
     return None
 
 
 def read_entry_lines(entry, data):
-    lines = data[entry.offset:entry.offset + entry.length - 1].decode("utf-8").split("\n")
+    lines = (
+        data[entry.offset : entry.offset + entry.length - 1].decode("utf-8").split("\n")
+    )
     return lines
 
 
 def read_entry_data(entry, data):
-    return data[entry.offset:entry.offset + entry.length - 1]
+    return data[entry.offset : entry.offset + entry.length - 1]
 
 
 def write_entry(entries, data_fh, entry_name, offset, data):
@@ -77,7 +77,11 @@ def write_entries_to_db(entries, ffindex_filename):
     index_fh = open(ffindex_filename, "w")
 
     for entry in entries:
-        index_fh.write("{name:.64}\t{offset}\t{length}\n".format(name=entry.name, offset=entry.offset, length=entry.length))
+        index_fh.write(
+            "{name:.64}\t{offset}\t{length}\n".format(
+                name=entry.name, offset=entry.offset, length=entry.length
+            )
+        )
 
     index_fh.close()
 
@@ -87,5 +91,5 @@ def write_entry_to_file(entry, data, file):
 
     fh = open(file, "w")
     for line in lines:
-        fh.write(line+"\n")
+        fh.write(line + "\n")
     fh.close()

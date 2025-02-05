@@ -132,7 +132,8 @@ def skew_matrix_exponential_map(
     exp_skew = (
         id3
         + sin_coeff * skew_matrices
-        + cos_coeff * torch.einsum("b...ik,b...kj->b...ij", skew_matrices, skew_matrices)
+        + cos_coeff
+        * torch.einsum("b...ik,b...kj->b...ij", skew_matrices, skew_matrices)
     )
     return exp_skew
 
@@ -156,7 +157,9 @@ def rotvec_to_rotmat(rotation_vectors: torch.Tensor, tol: float = 1e-4) -> torch
     skew_matrices = vector_to_skew_matrix(rotation_vectors)
 
     # Compute rotation matrices via matrix exponential.
-    rotation_matrices = skew_matrix_exponential_map(rotation_angles, skew_matrices, tol=tol)
+    rotation_matrices = skew_matrix_exponential_map(
+        rotation_angles, skew_matrices, tol=tol
+    )
 
     return rotation_matrices
 
@@ -202,13 +205,17 @@ def rotmat_to_rotvec(rotation_matrices: torch.Tensor) -> torch.Tensor:
     # Get angles and sin/cos from rotation matrix.
     angles, angles_sin, _ = angle_from_rotmat(rotation_matrices)
     # Compute skew matrix representation and extract so(3) vector components.
-    vector = skew_matrix_to_vector(rotation_matrices - rotation_matrices.transpose(-2, -1))
+    vector = skew_matrix_to_vector(
+        rotation_matrices - rotation_matrices.transpose(-2, -1)
+    )
 
     # Three main cases for angle theta, which are captured
     # 1) Angle is 0 or close to zero -> use Taylor series for small values / return 0 vector.
     mask_zero = torch.isclose(angles, torch.zeros_like(angles)).to(angles.dtype)
     # 2) Angle is close to pi -> use outer product relation.
-    mask_pi = torch.isclose(angles, torch.full_like(angles, np.pi), atol=1e-2).to(angles.dtype)
+    mask_pi = torch.isclose(angles, torch.full_like(angles, np.pi), atol=1e-2).to(
+        angles.dtype
+    )
     # 3) Angle is unproblematic -> use the standard formula.
     mask_else = (1 - mask_zero) * (1 - mask_pi)
 
@@ -232,13 +239,17 @@ def rotmat_to_rotvec(rotation_matrices: torch.Tensor) -> torch.Tensor:
     skew_outer = skew_outer + (torch.relu(skew_outer) - skew_outer) * id3
 
     # Get basic rotation vector as sqrt of diagonal (is unit vector).
-    vector_pi = torch.sqrt(torch.diagonal(torch.clamp(skew_outer, min=1e-4), dim1=-2, dim2=-1))
+    vector_pi = torch.sqrt(
+        torch.diagonal(torch.clamp(skew_outer, min=1e-4), dim1=-2, dim2=-1)
+    )
 
     # Compute the signs of vector elements (up to a global phase).
     # Fist select indices for outer product slices with the largest norm.
     signs_line_idx = torch.argmax(torch.norm(skew_outer, dim=-1), dim=-1).long()
     # Select rows of outer product and determine signs.
-    signs_line = torch.take_along_dim(skew_outer, dim=-2, indices=signs_line_idx[..., None, None])
+    signs_line = torch.take_along_dim(
+        skew_outer, dim=-2, indices=signs_line_idx[..., None, None]
+    )
     signs_line = signs_line.squeeze(-2)
     signs = torch.sign(signs_line)
 
@@ -295,7 +306,9 @@ def vector_to_skew_matrix(vectors: torch.Tensor) -> torch.Tensor:
         torch.Tensor: Vectors in skew matrix representation.
     """
     # Generate empty skew matrices.
-    skew_matrices = torch.zeros((*vectors.shape, 3), device=vectors.device, dtype=vectors.dtype)
+    skew_matrices = torch.zeros(
+        (*vectors.shape, 3), device=vectors.device, dtype=vectors.dtype
+    )
 
     # Populate positive values.
     skew_matrices[..., 2, 1] = vectors[..., 0]
@@ -344,7 +357,9 @@ def _rotquat_to_axis_angle(
     rotation_axes_norms = torch.norm(rotation_axes, dim=-1)
 
     # Compute rotation angle via atan2
-    rotation_angles = 2.0 * torch.atan2(rotation_axes_norms, rotation_quaternions[..., 0])
+    rotation_angles = 2.0 * torch.atan2(
+        rotation_axes_norms, rotation_quaternions[..., 0]
+    )
 
     # Save division.
     rotation_axes = rotation_axes / (rotation_axes_norms[:, None] + tol)
@@ -494,7 +509,9 @@ def calc_rot_vf(mat_t: torch.Tensor, mat_1: torch.Tensor) -> torch.Tensor:
     return rotmat_to_rotvec(rot_mult(rot_transpose(mat_t), mat_1))
 
 
-def geodesic_t(t: float, mat: torch.Tensor, base_mat: torch.Tensor, rot_vf=None) -> torch.Tensor:
+def geodesic_t(
+    t: float, mat: torch.Tensor, base_mat: torch.Tensor, rot_vf=None
+) -> torch.Tensor:
     """
     Computes the geodesic at time t. Specifically, R_t = Exp_{base_mat}(t * Log_{base_mat}(mat)).
 
@@ -511,7 +528,8 @@ def geodesic_t(t: float, mat: torch.Tensor, base_mat: torch.Tensor, rot_vf=None)
     mat_t = rotvec_to_rotmat(t * rot_vf)
     if base_mat.shape != mat_t.shape:
         raise ValueError(
-            f'Incompatible shapes: base_mat={base_mat.shape}, mat_t={mat_t.shape}')
+            f"Incompatible shapes: base_mat={base_mat.shape}, mat_t={mat_t.shape}"
+        )
     return torch.einsum("...ij,...jk->...ik", base_mat, mat_t)
 
 
@@ -606,7 +624,7 @@ class BaseSampleSO3(nn.Module):
         interpolate: bool = True,
         cache_dir: Optional[str] = None,
         overwrite_cache: bool = False,
-        device: str = 'cpu',
+        device: str = "cpu",
     ) -> None:
         """
         Base torch.nn module for sampling rotations from the IGSO(3) distribution. Samples are
@@ -648,7 +666,9 @@ class BaseSampleSO3(nn.Module):
         self.register_buffer("sigma_grid", sigma_grid, persistent=False)
 
         # Generate / load lookups and store in non-persistent buffers.
-        omega_grid, cdf_igso3 = self._setup_lookup(sigma_grid, cache_dir, overwrite_cache)
+        omega_grid, cdf_igso3 = self._setup_lookup(
+            sigma_grid, cache_dir, overwrite_cache
+        )
         self.register_buffer("omega_grid", omega_grid, persistent=False)
         self.register_buffer("cdf_igso3", cdf_igso3, persistent=False)
 
@@ -742,7 +762,9 @@ class BaseSampleSO3(nn.Module):
         raise NotImplementedError
 
     @torch.no_grad()
-    def _generate_lookup(self, sigma_grid: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _generate_lookup(
+        self, sigma_grid: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Generate the lookup table for sampling from the target SO(3) CDF. The table is 2D, with the
         rows corresponding to different sigma values and the columns with angles computed on a grid.
@@ -825,7 +847,9 @@ class BaseSampleSO3(nn.Module):
         rotation_matrices = rotvec_to_rotmat(rotation_vectors, tol=self.tol)
         return rotation_matrices
 
-    def _process_angles(self, sigma: torch.Tensor, angles: torch.Tensor) -> torch.Tensor:
+    def _process_angles(
+        self, sigma: torch.Tensor, angles: torch.Tensor
+    ) -> torch.Tensor:
         """
         Auxiliary function for performing additional processing steps on the sampled angles. One
         example would be to ensure sampled angles are 0 for a std dev of 0 for IGSO(3).
@@ -872,7 +896,9 @@ class BaseSampleSO3(nn.Module):
         cdf_tmp = self.cdf_igso3[sigma_indices, :]
 
         # Draw from uniform distribution.
-        p_uniform = torch.rand((*sigma_indices.shape, *[num_samples]), device=sigma_indices.device)
+        p_uniform = torch.rand(
+            (*sigma_indices.shape, *[num_samples]), device=sigma_indices.device
+        )
 
         # Determine indices for CDF.
         idx_stop = torch.sum(cdf_tmp[..., None] < p_uniform[:, None, :], dim=1).long()
@@ -887,7 +913,9 @@ class BaseSampleSO3(nn.Module):
 
             # Compute weights for linear interpolation.
             cdf_delta = torch.clamp(cdf_stop - cdf_start, min=self.tol)
-            cdf_weight = torch.clamp((p_uniform - cdf_start) / cdf_delta, min=0.0, max=1.0)
+            cdf_weight = torch.clamp(
+                (p_uniform - cdf_start) / cdf_delta, min=0.0, max=1.0
+            )
 
             # Get angle range for interpolation.
             omega_start = self.omega_grid[idx_start]
@@ -912,7 +940,7 @@ class SampleIGSO3(BaseSampleSO3):
         l_max: int = 1000,
         cache_dir: Optional[str] = None,
         overwrite_cache: bool = False,
-        device: str = 'cpu',
+        device: str = "cpu",
     ) -> None:
         """
         Module for sampling rotations from the IGSO(3) distribution using the explicit series
@@ -992,9 +1020,13 @@ class SampleIGSO3(BaseSampleSO3):
         Returns:
             torch.Tensor: IGSO(3) distribution for angles discretized on a 2D grid.
         """
-        return generate_igso3_lookup_table(omega_grid, sigma_grid, l_max=self.l_max, tol=self.tol)
+        return generate_igso3_lookup_table(
+            omega_grid, sigma_grid, l_max=self.l_max, tol=self.tol
+        )
 
-    def _process_angles(self, sigma: torch.Tensor, angles: torch.Tensor) -> torch.Tensor:
+    def _process_angles(
+        self, sigma: torch.Tensor, angles: torch.Tensor
+    ) -> torch.Tensor:
         """
         Ensure sampled angles are 0 for small noise levels in IGSO(3). (Series expansion gives
         uniform probability distribution.)
@@ -1096,7 +1128,9 @@ class SampleUSO3(BaseSampleSO3):
 
 
 @torch.no_grad()
-def integrate_trapezoid_cumulative(f_grid: torch.Tensor, x_grid: torch.Tensor) -> torch.Tensor:
+def integrate_trapezoid_cumulative(
+    f_grid: torch.Tensor, x_grid: torch.Tensor
+) -> torch.Tensor:
     """
     Auxiliary function for numerically integrating a discretized 1D function using the trapezoid
     rule. This is mainly used for computing the cumulative probability distributions for sampling
@@ -1227,13 +1261,15 @@ class ScoreSO3(nn.Module):
         Returns:
             Base name of the cache file.
         """
-        cache_name = "cache_score-scaling_s{:04.3f}-{:04.3f}-{:d}_l{:d}_o{:d}-{:d}.npz".format(
-            torch.min(self.sigma_grid).cpu().item(),
-            torch.max(self.sigma_grid).cpu().item(),
-            self.sigma_grid.shape[0],
-            self.l_grid.shape[0],
-            self.num_omega,
-            self.omega_exponent,
+        cache_name = (
+            "cache_score-scaling_s{:04.3f}-{:04.3f}-{:d}_l{:d}_o{:d}-{:d}.npz".format(
+                torch.min(self.sigma_grid).cpu().item(),
+                torch.max(self.sigma_grid).cpu().item(),
+                self.sigma_grid.shape[0],
+                self.l_grid.shape[0],
+                self.num_omega,
+                self.omega_exponent,
+            )
         )
         return cache_name
 
@@ -1325,7 +1361,9 @@ class ScoreSO3(nn.Module):
 
         return score_scaling.to(sigma_grid.dtype)
 
-    def forward(self, sigma: torch.Tensor, rotation_vectors: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, sigma: torch.Tensor, rotation_vectors: torch.Tensor
+    ) -> torch.Tensor:
         """
         Compute the SO(3) score in rotation vector representation.
 
@@ -1339,9 +1377,15 @@ class ScoreSO3(nn.Module):
         # Compute rotation angles as vector lengths.
         rotation_angles = torch.norm(rotation_vectors, dim=-1)
         # Compute the derivative term coming from the IGSO(3) expansion logarithm.
-        dlog_igso3 = dlog_igso3_expansion(rotation_angles, sigma, self.l_grid, tol=self.tol)
+        dlog_igso3 = dlog_igso3_expansion(
+            rotation_angles, sigma, self.l_grid, tol=self.tol
+        )
         # Compute full score (small offset for numerical stability).
-        score = rotation_vectors / (rotation_angles[..., None] + self.tol) * dlog_igso3[..., None]
+        score = (
+            rotation_vectors
+            / (rotation_angles[..., None] + self.tol)
+            * dlog_igso3[..., None]
+        )
         return score
 
 
@@ -1394,7 +1438,9 @@ def igso3_expansion(
     numerator_sin = torch.sin((l_grid[None, :] + 1 / 2) * omega[:, None])
 
     # Pre-compute exponential term with (2l+1) prefactor.
-    exponential_term = l_fac_1[None, :] * torch.exp(l_fac_2[None, :] * sigma[:, None] ** 2 / 2)
+    exponential_term = l_fac_1[None, :] * torch.exp(
+        l_fac_2[None, :] * sigma[:, None] ** 2 / 2
+    )
 
     # Compute series expansion
     f_igso = torch.sum(exponential_term * numerator_sin, dim=1)
@@ -1411,7 +1457,9 @@ def igso3_expansion(
 
     # Remove remaining numerical problems
     f_igso = torch.where(
-        torch.logical_or(torch.isinf(f_igso), torch.isnan(f_igso)), torch.zeros_like(f_igso), f_igso
+        torch.logical_or(torch.isinf(f_igso), torch.isnan(f_igso)),
+        torch.zeros_like(f_igso),
+        f_igso,
     )
 
     return f_igso
@@ -1449,13 +1497,15 @@ def digso3_expansion(
     l_fac_3 = -l_grid * l_fac_2
 
     # Pre-compute numerator of expansion which only depends on angles.
-    numerator_sin = l_grid[None, :] * torch.sin(l_fac_2[None, :] * omega[:, None]) - l_fac_2[
-        None, :
-    ] * torch.sin(l_grid[None, :] * omega[:, None])
+    numerator_sin = l_grid[None, :] * torch.sin(
+        l_fac_2[None, :] * omega[:, None]
+    ) - l_fac_2[None, :] * torch.sin(l_grid[None, :] * omega[:, None])
 
     # Compute series expansion
     df_igso = torch.sum(
-        l_fac_1[None, :] * torch.exp(l_fac_3[None, :] * sigma[:, None] ** 2 / 2) * numerator_sin,
+        l_fac_1[None, :]
+        * torch.exp(l_fac_3[None, :] * sigma[:, None] ** 2 / 2)
+        * numerator_sin,
         dim=1,
     )
 
@@ -1533,7 +1583,9 @@ def generate_lookup_table(
     n_sigma = len(sigma_grid)
 
     # Populate lookup table for different time frames.
-    f_table = torch.zeros(n_sigma, n_omega, device=omega_grid.device, dtype=omega_grid.dtype)
+    f_table = torch.zeros(
+        n_sigma, n_omega, device=omega_grid.device, dtype=omega_grid.dtype
+    )
 
     for eps_idx in tqdm(range(n_sigma), desc=f"Computing {base_function.__name__}"):
         f_table[eps_idx, :] = base_function(
@@ -1605,9 +1657,8 @@ def generate_dlog_igso3_lookup_table(
     return dlog_igso
 
 
-
-
 ### from https://github1s.com/blt2114/twisted_diffusion_sampler/blob/main/protein_exp/data/so3_utils.py
+
 
 # hat map from vector space R^3 to Lie algebra so(3)
 def hat(v):
@@ -1616,15 +1667,21 @@ def hat(v):
     hat_v: [..., 3, 3]
     """
     hat_v = torch.zeros([*v.shape[:-1], 3, 3], dtype=v.dtype, device=v.device)
-    hat_v[..., 0, 1], hat_v[..., 0, 2], hat_v[..., 1, 2] = -v[..., 2], v[..., 1], -v[..., 0]
+    hat_v[..., 0, 1], hat_v[..., 0, 2], hat_v[..., 1, 2] = (
+        -v[..., 2],
+        v[..., 1],
+        -v[..., 0],
+    )
     return hat_v + -hat_v.transpose(-1, -2)
 
 
 # vee map from Lie algebra so(3) to the vector space R^3
 def vee(A):
     if not torch.allclose(A, -A.transpose(-1, -2), atol=1e-4, rtol=1e-4):
-        print("Input A must be skew symmetric, Err" + str(((A - A.transpose(-1,
-            -2))**2).sum(dim=[-1, -2])))
+        print(
+            "Input A must be skew symmetric, Err"
+            + str(((A - A.transpose(-1, -2)) ** 2).sum(dim=[-1, -2]))
+        )
     vee_A = torch.stack([-A[..., 1, 2], A[..., 0, 2], -A[..., 0, 1]], dim=-1)
     return vee_A
 
@@ -1638,15 +1695,18 @@ def Log(R):
 
 
 # logarithmic map from SO(3) to so(3), this is the matrix logarithm
-def log(R): return hat(Log(R))
+def log(R):
+    return hat(Log(R))
 
 
 # Exponential map from so(3) to SO(3), this is the matrix exponential
-def exp(A): return torch.matrix_exp(A)
+def exp(A):
+    return torch.matrix_exp(A)
 
 
 # Exponential map from R^3 to SO(3)
-def Exp(A): return exp(hat(A))
+def Exp(A):
+    return exp(hat(A))
 
 
 # Angle of rotation SO(3) to R^+, this is the norm in our chosen orthonormal basis
@@ -1654,8 +1714,8 @@ def Omega(R, eps=1e-4):
     # multiplying by (1-epsilon) prevents instability of arccos when provided with -1 or 1 as input.
     R_ = R.to(torch.float64)
     assert not torch.any(torch.abs(R) > 1.1)
-    trace = torch.diagonal(R_, dim1=-2, dim2=-1).sum(dim=-1) * (1-eps)
-    out = (trace - 1.)/2.
+    trace = torch.diagonal(R_, dim1=-2, dim2=-1).sum(dim=-1) * (1 - eps)
+    out = (trace - 1.0) / 2.0
     out = torch.clamp(out, min=-0.9999, max=0.9999)
     return torch.arccos(out).to(R.dtype)
 
@@ -1664,37 +1724,35 @@ def Omega(R, eps=1e-4):
 def expmap(R0, tangent=None, skew_sym=None):
     assert (tangent is not None) ^ (skew_sym is not None)
     if skew_sym is None:
-        skew_sym = torch.einsum('...ij,...ik->...jk', R0, tangent)
-        if not  torch.allclose(skew_sym, -skew_sym.transpose(-1, -2), atol=1e-3,
-                rtol=1e-3):
+        skew_sym = torch.einsum("...ij,...ik->...jk", R0, tangent)
+        if not torch.allclose(
+            skew_sym, -skew_sym.transpose(-1, -2), atol=1e-3, rtol=1e-3
+        ):
             print("in expmap, R0.T @ tangent must be skew symmetric")
-        skew_sym = (skew_sym - torch.transpose(skew_sym, -2, -1))/2.
+        skew_sym = (skew_sym - torch.transpose(skew_sym, -2, -1)) / 2.0
     exp_skew_sym = exp(skew_sym)
-    return torch.einsum('...ij,...jk->...ik', R0, exp_skew_sym)
+    return torch.einsum("...ij,...jk->...ik", R0, exp_skew_sym)
 
 
 # Logarithmic map from SO(3) to tangent space at R0
 def logmap(R0, R):
-    R0_transpose_R = torch.einsum('...ij,...ik->...jk', R0, R)
-    return torch.einsum(
-        '...ij,...jk->...ik',
-        R0, log(R0_transpose_R)
-    )
+    R0_transpose_R = torch.einsum("...ij,...ik->...jk", R0, R)
+    return torch.einsum("...ij,...jk->...ik", R0, log(R0_transpose_R))
 
 
 def sample_uniform(N, M=1000):
     omega_grid = np.linspace(0, np.pi, M)
-    cdf = np.cumsum(np.pi**-1 * (1-np.cos(omega_grid)), 0)/(M/np.pi)
+    cdf = np.cumsum(np.pi**-1 * (1 - np.cos(omega_grid)), 0) / (M / np.pi)
     omegas = np.interp(np.random.rand(N), cdf, omega_grid)
     axes = np.random.randn(N, 3)
-    axes = omegas[..., None]* axes/np.linalg.norm(axes, axis=-1, keepdims=True)
+    axes = omegas[..., None] * axes / np.linalg.norm(axes, axis=-1, keepdims=True)
     axes_ = axes.reshape([-1, 3])
     Rs = exp(hat(torch.tensor(axes_)))
     Rs = Rs.reshape([N, 3, 3])
     return Rs
 
 
-def sample_wrapped_normal(N, scale=1.):
+def sample_wrapped_normal(N, scale=1.0):
     v = scale * torch.randn([N, 3])
     Rs = exp(hat(v))
     Rs = Rs.reshape([N, 3, 3])
@@ -1734,11 +1792,13 @@ def rotation_vector_from_matrix(rot_mat):
         Rotation vector.
     """
     angle = Omega(rot_mat)
-    assert len(angle.shape)==1, "cannot handle vectorized Log map here"
+    assert len(angle.shape) == 1, "cannot handle vectorized Log map here"
     n_rot_mats = len(angle)
     rot_mat_transpose = torch.transpose(rot_mat, -2, -1)
     rot_vec_not_pi = vee(rot_mat - rot_mat_transpose)
-    mask_0 = torch.isclose(angle, torch.tensor(0.0, dtype=angle.dtype, device=angle.device)).to(angle.dtype)
+    mask_0 = torch.isclose(
+        angle, torch.tensor(0.0, dtype=angle.dtype, device=angle.device)
+    ).to(angle.dtype)
     mask_pi = torch.isclose(angle, torch_pi.to(angle.dtype), atol=1e-2).to(angle.dtype)
     mask_else = (1 - mask_0) * (1 - mask_pi)
 
@@ -1749,10 +1809,16 @@ def rotation_vector_from_matrix(rot_mat):
 
     rot_vec_not_pi = rot_vec_not_pi * numerator[..., None] / denominator[..., None]
 
-    vector_outer = 0.5 * (torch.eye(3, dtype=rot_mat.dtype, device=rot_mat.device) + rot_mat)
-    vector_outer = vector_outer + (torch.maximum(torch.tensor(0.0,
-        dtype=vector_outer.dtype, device=rot_mat.device), vector_outer) - vector_outer)*torch.eye(3,
-                dtype=vector_outer.dtype, device=rot_mat.device)
+    vector_outer = 0.5 * (
+        torch.eye(3, dtype=rot_mat.dtype, device=rot_mat.device) + rot_mat
+    )
+    vector_outer = vector_outer + (
+        torch.maximum(
+            torch.tensor(0.0, dtype=vector_outer.dtype, device=rot_mat.device),
+            vector_outer,
+        )
+        - vector_outer
+    ) * torch.eye(3, dtype=vector_outer.dtype, device=rot_mat.device)
     squared_diag_comp = torch.diagonal(vector_outer, dim1=-2, dim2=-1)
     diag_comp = torch.sqrt(squared_diag_comp)
     norm_line = torch.linalg.norm(vector_outer, dim=-1)
@@ -1796,13 +1862,17 @@ def regularize(point):
     angle = theta - 2 * k * torch_pi
 
     # this avoids dividing by 0
-    theta_eps = torch.where(torch.isclose(theta, torch.tensor(0.0,
-        dtype=theta.dtype)), 1.0, theta)
+    theta_eps = torch.where(
+        torch.isclose(theta, torch.tensor(0.0, dtype=theta.dtype)), 1.0, theta
+    )
 
     # angle in [0, pi]
     normalized_angle = torch.where(angle <= torch_pi, angle, 2 * torch_pi - angle)
-    norm_ratio = torch.where(torch.isclose(theta, torch.tensor(0.0,
-        dtype=theta.dtype)), 1.0, normalized_angle / theta_eps)
+    norm_ratio = torch.where(
+        torch.isclose(theta, torch.tensor(0.0, dtype=theta.dtype)),
+        1.0,
+        normalized_angle / theta_eps,
+    )
 
     # reverse sign if angle was greater than pi
     norm_ratio = torch.where(angle > torch_pi, -norm_ratio, norm_ratio)
