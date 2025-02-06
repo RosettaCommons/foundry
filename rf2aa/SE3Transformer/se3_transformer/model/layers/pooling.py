@@ -37,16 +37,18 @@ class GPooling(nn.Module):
     If you want max-pooling for type > 0 features, look into Vector Neurons.
     """
 
-    def __init__(self, feat_type: int = 0, pool: Literal['max', 'avg'] = 'max'):
+    def __init__(self, feat_type: int = 0, pool: Literal["max", "avg"] = "max"):
         """
         :param feat_type: Feature type to pool
         :param pool: Type of pooling: max or avg
         """
         super().__init__()
-        assert pool in ['max', 'avg'], f'Unknown pooling: {pool}'
-        assert feat_type == 0 or pool == 'avg', 'Max pooling on type > 0 features will break equivariance'
+        assert pool in ["max", "avg"], f"Unknown pooling: {pool}"
+        assert feat_type == 0 or pool == "avg", (
+            "Max pooling on type > 0 features will break equivariance"
+        )
         self.feat_type = feat_type
-        self.pool = MaxPooling() if pool == 'max' else AvgPooling()
+        self.pool = MaxPooling() if pool == "max" else AvgPooling()
 
     def forward(self, features: Dict[str, Tensor], graph: DGLGraph, **kwargs) -> Tensor:
         pooled = self.pool(graph, features[str(self.feat_type)])

@@ -32,7 +32,7 @@ def get_random_graph(N, num_edges_factor=18):
 
 def assign_relative_pos(graph, coords):
     src, dst = graph.edges()
-    graph.edata['rel_pos'] = coords[src] - coords[dst]
+    graph.edata["rel_pos"] = coords[src] - coords[dst]
     return graph
 
 
@@ -41,19 +41,25 @@ def get_max_diff(a, b):
 
 
 def rot_z(gamma):
-    return torch.tensor([
-        [torch.cos(gamma), -torch.sin(gamma), 0],
-        [torch.sin(gamma), torch.cos(gamma), 0],
-        [0, 0, 1]
-    ], dtype=gamma.dtype)
+    return torch.tensor(
+        [
+            [torch.cos(gamma), -torch.sin(gamma), 0],
+            [torch.sin(gamma), torch.cos(gamma), 0],
+            [0, 0, 1],
+        ],
+        dtype=gamma.dtype,
+    )
 
 
 def rot_y(beta):
-    return torch.tensor([
-        [torch.cos(beta), 0, torch.sin(beta)],
-        [0, 1, 0],
-        [-torch.sin(beta), 0, torch.cos(beta)]
-    ], dtype=beta.dtype)
+    return torch.tensor(
+        [
+            [torch.cos(beta), 0, torch.sin(beta)],
+            [0, 1, 0],
+            [-torch.sin(beta), 0, torch.cos(beta)],
+        ],
+        dtype=beta.dtype,
+    )
 
 
 def rot(alpha, beta, gamma):

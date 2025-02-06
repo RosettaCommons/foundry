@@ -21,21 +21,26 @@
 # SPDX-FileCopyrightText: Copyright (c) 2021-2022 NVIDIA CORPORATION & AFFILIATES
 # SPDX-License-Identifier: MIT
 
-import torch.distributed as dist
 from abc import ABC
-from torch.utils.data import DataLoader, DistributedSampler, Dataset
+
+import torch.distributed as dist
+from torch.utils.data import DataLoader, Dataset, DistributedSampler
 
 from se3_transformer.runtime.utils import get_local_rank
 
 
 def _get_dataloader(dataset: Dataset, shuffle: bool, **kwargs) -> DataLoader:
     # Classic or distributed dataloader depending on the context
-    sampler = DistributedSampler(dataset, shuffle=shuffle) if dist.is_initialized() else None
-    return DataLoader(dataset, shuffle=(shuffle and sampler is None), sampler=sampler, **kwargs)
+    sampler = (
+        DistributedSampler(dataset, shuffle=shuffle) if dist.is_initialized() else None
+    )
+    return DataLoader(
+        dataset, shuffle=(shuffle and sampler is None), sampler=sampler, **kwargs
+    )
 
 
 class DataModule(ABC):
-    """ Abstract DataModule. Children must define self.ds_{train | val | test}. """
+    """Abstract DataModule. Children must define self.ds_{train | val | test}."""
 
     def __init__(self, **dataloader_kwargs):
         super().__init__()
@@ -46,12 +51,15 @@ class DataModule(ABC):
         if dist.is_initialized():
             dist.barrier(device_ids=[get_local_rank()])
 
-        self.dataloader_kwargs = {'pin_memory': True, 'persistent_workers': dataloader_kwargs.get('num_workers', 0) > 0,
-                                  **dataloader_kwargs}
+        self.dataloader_kwargs = {
+            "pin_memory": True,
+            "persistent_workers": dataloader_kwargs.get("num_workers", 0) > 0,
+            **dataloader_kwargs,
+        }
         self.ds_train, self.ds_val, self.ds_test = None, None, None
 
     def prepare_data(self):
-        """ Method called only once per node. Put here any downloading or preprocessing """
+        """Method called only once per node. Put here any downloading or preprocessing"""
         pass
 
     def train_dataloader(self) -> DataLoader:

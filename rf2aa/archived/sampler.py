@@ -1,12 +1,13 @@
+import logging
 import os
 import warnings
-import torch
-import pandas as pd
-import numpy as np
-from torch.utils import data
-from typing import Dict
 from collections import OrderedDict
-import logging
+from typing import Dict
+
+import numpy as np
+import pandas as pd
+import torch
+from torch.utils import data
 
 logger = logging.getLogger(__name__)
 
@@ -86,24 +87,24 @@ class DistributedWeightedSampler(data.Sampler):
         batch_by_length=False,
         **unused,
     ):
-        assert (
-            num_replicas is not None
-        ), "Please provide the number of replicas in DistributedWeightedSampler"
-        assert (
-            rank is not None
-        ), "Please provide the rank of the current node in DistributedWeightedSampler"
+        assert num_replicas is not None, (
+            "Please provide the number of replicas in DistributedWeightedSampler"
+        )
+        assert rank is not None, (
+            "Please provide the rank of the current node in DistributedWeightedSampler"
+        )
 
-        assert (
-            num_example_per_epoch % num_replicas
-        ) == 0, "Please ensure that the number of examples per epoch is evenly divisible by the number of nodes"
-        assert np.allclose(
-            sum([v for k, v in fractions.items()]), 1.0
-        ), f"Fractions of datasets add up to {sum([v for k,v in fractions.items()])}, should add up to 1.0"
+        assert (num_example_per_epoch % num_replicas) == 0, (
+            "Please ensure that the number of examples per epoch is evenly divisible by the number of nodes"
+        )
+        assert np.allclose(sum([v for k, v in fractions.items()]), 1.0), (
+            f"Fractions of datasets add up to {sum([v for k, v in fractions.items()])}, should add up to 1.0"
+        )
 
         if not batch_by_dataset:
-            assert (
-                not batch_by_length
-            ), "Cannot batch by length without also batching by dataset."
+            assert not batch_by_length, (
+                "Cannot batch by length without also batching by dataset."
+            )
 
         self.dataset = dataset
         self.lengths_dict = get_lengths_dict(dataset)
@@ -125,7 +126,7 @@ class DistributedWeightedSampler(data.Sampler):
         self.num_samples = self.total_size // self.num_replicas
 
         if rank == 0:
-            print(f"Total examples:")
+            print("Total examples:")
             for k, v in self.dataset.ID_dict.items():
                 print("  " + k, ":", len(v))
             print(f"Training examples per epoch ({self.total_size} total):")
@@ -297,12 +298,12 @@ class DistributedWeightedSamplerOld(data.Sampler):
                 raise RuntimeError("Requires distributed package to be available")
             rank = torch.distributed.get_rank()
 
-        assert (
-            num_example_per_epoch % num_replicas
-        ) == 0, "Please ensure that the number of examples per epoch is evenly divisible by the number of nodes"
-        assert np.allclose(
-            sum([v for k, v in fractions.items()]), 1.0
-        ), f"Fractions of datasets add up to {sum([v for k,v in fractions.items()])}, should add up to 1.0"
+        assert (num_example_per_epoch % num_replicas) == 0, (
+            "Please ensure that the number of examples per epoch is evenly divisible by the number of nodes"
+        )
+        assert np.allclose(sum([v for k, v in fractions.items()]), 1.0), (
+            f"Fractions of datasets add up to {sum([v for k, v in fractions.items()])}, should add up to 1.0"
+        )
 
         # Load lengths into a tensor, if file exists
         if lengths is not None and os.path.isfile(lengths):
@@ -315,14 +316,14 @@ class DistributedWeightedSamplerOld(data.Sampler):
             lengths = None
 
         if batch_by_length:
-            assert (
-                lengths is not None
-            ), "If batching by length, must pass a valid lengths tensor."
+            assert lengths is not None, (
+                "If batching by length, must pass a valid lengths tensor."
+            )
 
         if not batch_by_dataset:
-            assert (
-                not batch_by_length
-            ), "Cannot batch by length without also batching by dataset."
+            assert not batch_by_length, (
+                "Cannot batch by length without also batching by dataset."
+            )
 
         self.dataset = dataset
         self.weights_dict = weights_dict
@@ -370,9 +371,9 @@ class DistributedWeightedSamplerOld(data.Sampler):
         # Handle remainders by rounding down to the nearest multiple of num_replicas and sampling from `pdb`
         remainder = num_example_per_epoch - num_per_epoch_actual
         remainder = remainder - (remainder % num_replicas)
-        self.num_per_epoch_dict[
-            nonzero_dataset_names[0]
-        ] += remainder  # The first dataset is the pdb
+        self.num_per_epoch_dict[nonzero_dataset_names[0]] += (
+            remainder  # The first dataset is the pdb
+        )
 
         self.total_size = num_per_epoch_actual + remainder
         self.num_samples = self.total_size // self.num_replicas
@@ -382,7 +383,7 @@ class DistributedWeightedSamplerOld(data.Sampler):
         # Other datasets (e.g., small molecule datasets) will be sampled WITHOUT replacement (since LEN_EXIST is not the appropriate weighting)
         self.datasets_with_replacement = datasets_with_replacement
         if rank == 0:
-            print(f"Total examples:")
+            print("Total examples:")
             for k, v in self.dataset.ID_dict.items():
                 print("  " + k, ":", len(v))
             print(f"Training examples per epoch ({self.total_size} total):")

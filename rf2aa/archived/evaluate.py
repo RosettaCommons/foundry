@@ -1,22 +1,16 @@
-import sys, os, time, datetime, subprocess, shutil
+import sys
+
 import numpy as np
 import pandas as pd
-from copy import deepcopy
-from collections import OrderedDict
 import torch
-import torch.nn as nn
 import wandb
+
+# disable openbabel warnings
+from openbabel import openbabel as ob
 from torch.utils import data
+
+from rf2aa.archived.train_multi_EMA import EMA, Trainer, count_parameters
 from rf2aa.data.data_loader import (
-    get_train_valid_set,
-    loader_pdb,
-    loader_fb,
-    loader_complex,
-    loader_na_complex,
-    loader_rna,
-    loader_sm,
-    loader_sm_compl_assembly,
-    loader_atomize_pdb,
     Dataset,
     DatasetComplex,
     DatasetNAComplex,
@@ -24,30 +18,32 @@ from rf2aa.data.data_loader import (
     DatasetSM,
     DatasetSMComplex,
     DatasetSMComplexAssembly,
+    get_train_valid_set,
+    loader_atomize_pdb,
+    loader_complex,
+    loader_na_complex,
+    loader_pdb,
+    loader_rna,
+    loader_sm,
+    loader_sm_compl_assembly,
 )
-from rf2aa.model.RoseTTAFoldModel import RoseTTAFoldModule
 from rf2aa.loss.loss import *
+from rf2aa.model.RoseTTAFoldModel import RoseTTAFoldModule
 from rf2aa.util import *
-
-from rf2aa.archived.train_multi_EMA import Trainer, EMA, count_parameters
-
-# disable openbabel warnings
-from openbabel import openbabel as ob
 
 ob.obErrorLog.SetOutputLevel(0)
 
 # distributed data parallel
-import torch.distributed as dist
-import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
-
 # torch.autograd.set_detect_anomaly(True)
 # torch.backends.cudnn.benchmark = False
 # torch.backends.cudnn.deterministic = True
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1" # disable asynchronous execution
-
 ## To reproduce errors
 import random
+
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 random.seed(0)
 torch.manual_seed(5924)
@@ -56,9 +52,9 @@ np.random.seed(6636)
 USE_AMP = False
 torch.set_num_threads(4)
 
+
 class Evaluator(Trainer):
     def train_model(self, rank, world_size):
-
         if rank == 0:
             self.record_git_commit()
 
@@ -67,7 +63,16 @@ class Evaluator(Trainer):
         torch.cuda.set_device("cuda:%d" % gpu)
 
         # define dataset & data loader
-        train_ID_dict, valid_ID_dict, weights_dict, train_dict, valid_dict, homo, chid2hash, chid2taxid = get_train_valid_set(self.loader_param)
+        (
+            train_ID_dict,
+            valid_ID_dict,
+            weights_dict,
+            train_dict,
+            valid_dict,
+            homo,
+            chid2hash,
+            chid2taxid,
+        ) = get_train_valid_set(self.loader_param)
 
         train_ID_dict["atomize_pdb"] = train_ID_dict["pdb"]
         valid_ID_dict["atomize_pdb"] = valid_ID_dict["pdb"]
@@ -266,18 +271,30 @@ class Evaluator(Trainer):
                 num_protein_chains=1,
             ),
             dude_actives=DatasetSMComplexAssembly(
-                valid_ID_dict['dude_actives'][:self.dataset_param['n_valid_dude_actives']],
-                loader_sm_compl_assembly, valid_dict['dude_actives'],
-                chid2hash, chid2taxid,
-                self.loader_param, load_from_smiles_string=True,
-                task="dude_actives", num_protein_chains=1,
+                valid_ID_dict["dude_actives"][
+                    : self.dataset_param["n_valid_dude_actives"]
+                ],
+                loader_sm_compl_assembly,
+                valid_dict["dude_actives"],
+                chid2hash,
+                chid2taxid,
+                self.loader_param,
+                load_from_smiles_string=True,
+                task="dude_actives",
+                num_protein_chains=1,
             ),
             dude_inactives=DatasetSMComplexAssembly(
-                valid_ID_dict['dude_inactives'][:self.dataset_param['n_valid_dude_inactives']],
-                loader_sm_compl_assembly, valid_dict['dude_inactives'],
-                chid2hash, chid2taxid,
-                self.loader_param, load_from_smiles_string=True,
-                task="dude_inactives", num_protein_chains=1,
+                valid_ID_dict["dude_inactives"][
+                    : self.dataset_param["n_valid_dude_inactives"]
+                ],
+                loader_sm_compl_assembly,
+                valid_dict["dude_inactives"],
+                chid2hash,
+                chid2taxid,
+                self.loader_param,
+                load_from_smiles_string=True,
+                task="dude_inactives",
+                num_protein_chains=1,
             ),
         )
         valid_headers = dict(
@@ -364,7 +381,9 @@ class Evaluator(Trainer):
             )
             if loaded_epoch == -1:
                 if self.debug_mode:
-                    print(f"Running in debug mode with no checkpoint. Weights will be random.")
+                    print(
+                        "Running in debug mode with no checkpoint. Weights will be random."
+                    )
                 else:
                     print(f"Checkpoint doesn't exist for epoch {epoch}. Quitting.")
                     dist.destroy_process_group()

@@ -1,24 +1,22 @@
-import torch
 import ast
-import numpy as np
-import networkx as nx
-
 from collections import OrderedDict
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-from rf2aa.data.parsers import parse_mol
-from rf2aa.data.chain_crop import crop_chirals
+import numpy as np
+import torch
+
 from rf2aa.chemical import ChemicalData as ChemData
-from rf2aa.kinematics import get_chirals
 from rf2aa.data.identical_ligands import get_extra_identical_copies_from_chains
+from rf2aa.data.parsers import parse_mol
+from rf2aa.kinematics import get_chirals
 from rf2aa.util import (
-    get_nxgraph,
-    get_atom_frames,
-    get_bond_feats,
-    cif_ligand_to_xyz,
     cif_ligand_to_obmol,
+    cif_ligand_to_xyz,
+    get_atom_frames,
     get_automorphs,
+    get_bond_feats,
     get_ligand_atoms_bonds,
+    get_nxgraph,
 )
 
 
@@ -181,7 +179,7 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
         if xyz_.shape[0] > params["MAXNSYMM"]:
             print(
                 f"WARNING: Too many atom permutations ({xyz_.shape[0]}) in {ligand}. "
-                f'Keeping only {params["MAXNSYMM"]}.'
+                f"Keeping only {params['MAXNSYMM']}."
             )
             xyz_ = xyz_[: params["MAXNSYMM"]]
             mask_ = mask_[: params["MAXNSYMM"]]
@@ -192,19 +190,19 @@ def featurize_single_ligand(ligand, chains, covale, lig_xf_s, asmb_xfs, params):
         # if ligand has too many masked atoms, remove all masked atoms
         # this avoids wasting compute on ligands missing entire chemical fragments
         # while keeping (most) masked atoms that are isolated and integral to a given fragment
-        #if (~mask_[0]).sum() > params["MAXMASKEDLIGATOMS"]:
-            #xyz_ = xyz_[:, mask_[0]]
-            #occ_ = occ_[mask_[0]]
-            #msa_ = msa_[mask_[0]]
-            #chid_ = chid_[mask_[0]]
-            #akeys_ = [k for m, k in zip(mask_[0], akeys_) if m]
-            #bond_feats_ = bond_feats_[mask_[0]][:, mask_[0]]
-            #G = nx.Graph(bond_feats_.cpu().numpy())
-            #frames_ = get_atom_frames(
-                #msa_, G, omit_permutation=params["OMIT_PERMUTATE"]
-            #)
-            #chirals_ = crop_chirals(chirals_, torch.where(mask_[0])[0])
-            #mask_ = mask_[:, mask_[0]]
+        # if (~mask_[0]).sum() > params["MAXMASKEDLIGATOMS"]:
+        # xyz_ = xyz_[:, mask_[0]]
+        # occ_ = occ_[mask_[0]]
+        # msa_ = msa_[mask_[0]]
+        # chid_ = chid_[mask_[0]]
+        # akeys_ = [k for m, k in zip(mask_[0], akeys_) if m]
+        # bond_feats_ = bond_feats_[mask_[0]][:, mask_[0]]
+        # G = nx.Graph(bond_feats_.cpu().numpy())
+        # frames_ = get_atom_frames(
+        # msa_, G, omit_permutation=params["OMIT_PERMUTATE"]
+        # )
+        # chirals_ = crop_chirals(chirals_, torch.where(mask_[0])[0])
+        # mask_ = mask_[:, mask_[0]]
 
         if chirals_.numel() > 0:
             chirals_[:, :-1] = chirals_[:, :-1] + sum(Ls_lig)
@@ -347,7 +345,6 @@ def featurize_asmb_ligands(partners, params, chains, asmb_xfs, covale):
     uniques = []
 
     for ligkey, lig_xf_s in lig2xf.items():
-
         ligand = ast.literal_eval(ligkey)
 
         (
@@ -600,6 +597,7 @@ def remove_unsupported_metals(
             residues_to_atomize,
             uniques,
         )
+
 
 def get_empty_small_molecule_partners() -> Dict[str, Any]:
     lig_outs = {

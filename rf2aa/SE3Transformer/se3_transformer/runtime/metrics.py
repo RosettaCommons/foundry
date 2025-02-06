@@ -29,7 +29,7 @@ from torch import Tensor
 
 
 class Metric(ABC):
-    """ Metric class with synchronization capabilities similar to TorchMetrics """
+    """Metric class with synchronization capabilities similar to TorchMetrics"""
 
     def __init__(self):
         self.states = {}
@@ -42,7 +42,9 @@ class Metric(ABC):
     def synchronize(self):
         if dist.is_initialized():
             for state in self.states:
-                dist.all_reduce(getattr(self, state), op=dist.ReduceOp.SUM, group=dist.group.WORLD)
+                dist.all_reduce(
+                    getattr(self, state), op=dist.ReduceOp.SUM, group=dist.group.WORLD
+                )
 
     def __call__(self, *args, **kwargs):
         self.update(*args, **kwargs)
@@ -69,8 +71,8 @@ class Metric(ABC):
 class MeanAbsoluteError(Metric):
     def __init__(self):
         super().__init__()
-        self.add_state('error', torch.tensor(0, dtype=torch.float32, device='cuda'))
-        self.add_state('total', torch.tensor(0, dtype=torch.int32, device='cuda'))
+        self.add_state("error", torch.tensor(0, dtype=torch.float32, device="cuda"))
+        self.add_state("total", torch.tensor(0, dtype=torch.int32, device="cuda"))
 
     def update(self, preds: Tensor, targets: Tensor):
         preds = preds.detach()

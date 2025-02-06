@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from rf2aa.util_module import init_lecun_normal
 from rf2aa.training.checkpoint import activation_checkpointing
+from rf2aa.util_module import init_lecun_normal
 
 
 class OuterProductMean(nn.Module):
@@ -11,7 +11,7 @@ class OuterProductMean(nn.Module):
         self.norm = nn.LayerNorm(d_msa)
         self.proj_left = nn.Linear(d_msa, d_hidden)
         self.proj_right = nn.Linear(d_msa, d_hidden)
-        self.proj_out = nn.Linear(d_hidden*d_hidden, d_pair)
+        self.proj_out = nn.Linear(d_hidden * d_hidden, d_pair)
 
         self.reset_parameter()
 
@@ -32,9 +32,9 @@ class OuterProductMean(nn.Module):
         left = self.proj_left(msa)
         right = self.proj_right(msa)
         right = right / float(N)
-        out = torch.einsum('bsli,bsmj->blmij', left, right).reshape(B, L, L, -1)
+        out = torch.einsum("bsli,bsmj->blmij", left, right).reshape(B, L, L, -1)
         out = self.proj_out(out)
-        
+
         return out
 
 
@@ -44,7 +44,7 @@ class OuterProductMean_AF3(nn.Module):
         self.norm = nn.LayerNorm(c_msa_embed)
         self.proj_left = nn.Linear(c_msa_embed, c_outer_product)
         self.proj_right = nn.Linear(c_msa_embed, c_outer_product)
-        self.proj_out = nn.Linear(c_outer_product*c_outer_product, c_out)
+        self.proj_out = nn.Linear(c_outer_product * c_outer_product, c_out)
 
     @activation_checkpointing
     def forward(self, msa):
@@ -53,7 +53,7 @@ class OuterProductMean_AF3(nn.Module):
         left = self.proj_left(msa)
         right = self.proj_right(msa)
         right = right / float(N)
-        out = torch.einsum('bsli,bsmj->blmij', left, right).reshape(B, L, L, -1)
+        out = torch.einsum("bsli,bsmj->blmij", left, right).reshape(B, L, L, -1)
         out = self.proj_out(out)
-        
+
         return out

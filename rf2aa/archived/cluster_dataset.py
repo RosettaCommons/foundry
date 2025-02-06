@@ -1,9 +1,9 @@
-import torch
+from typing import Dict, List, Optional, Tuple
+
 import pandas as pd
-import numpy as np
 from openbabel import pybel
 from tqdm import tqdm
-from typing import Dict, List, Optional, Tuple
+
 from rf2aa.chemical import load_pdb_ideal_sdf_strings
 from rf2aa.data.data_loader import parse_mol
 
@@ -70,7 +70,7 @@ def cluster_for_each_protein_cluster_ligand_tanimoto(
         sub-cluster.
     5. If the ligand is not similar to any of the representatives, start a new sub-cluster.
     6. Update the "CLUSTER" column with the new sub-clusters.
-    
+
     Args:
         df: DataFrame with columns "CLUSTER", "LIGAND" and "LIGAND_ID".
         sim_threshold: Similarity threshold for clustering ligands.

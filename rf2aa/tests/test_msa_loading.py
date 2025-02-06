@@ -1,12 +1,13 @@
+from typing import Dict, List, Optional, Tuple
+
 import pytest
 import torch
-from typing import Tuple, Dict, List, Optional
 
-from rf2aa.data.data_loader import _load_df
+from rf2aa.chemical import initialize_chemdata
 from rf2aa.data.compose_dataset import default_dataloader_params
+from rf2aa.data.data_loader import _load_df
 from rf2aa.data.loaders.polymer_partners import load_multi_msa
 from rf2aa.data.parsers import parse_a3m, parse_fasta
-from rf2aa.chemical import initialize_chemdata
 
 initialize_chemdata()
 
@@ -69,7 +70,7 @@ inputs = [
     ),
     (
         "5gam",
-        ["Z"], # Chain z does not exist, so this should default to the primary sequence
+        ["Z"],  # Chain z does not exist, so this should default to the primary sequence
         [178],
         ["polyribonucleotide"],
         False,
@@ -135,6 +136,6 @@ def test_loading(
         assert (a3m["ins"] == ins).all().item()
         assert a3m["is_paired"].all().item()
 
+
 if __name__ == "__main__":
     test_loading(*inputs[5])
-    

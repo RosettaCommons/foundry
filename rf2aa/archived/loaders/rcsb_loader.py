@@ -1,38 +1,37 @@
-import torch
-import pickle
 import gzip
+import pickle
 import warnings
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 import numpy as np
+import torch
+
 from rf2aa.data.chain_crop import (
-    get_crop,
-    crop_sm_compl_asmb_contig,
-    crop_sm_compl_assembly,
     crop_chirals,
-)
-from rf2aa.util import (
-    get_protein_bond_feats,
-    center_and_realign_missing,
-    idx_from_Ls,
-    same_chain_2d_from_Ls,
-    reindex_protein_feats_after_atomize,
-    reassign_symmetry_after_cropping,
+    get_crop,
 )
 from rf2aa.data.data_loader import (
+    MSAFeaturize,
     blank_template,
-    merge_a3m_hetero,
     generate_xyz_prev,
     get_bond_distances,
     get_term_feats,
-    MSAFeaturize,
+    merge_a3m_hetero,
 )
+from rf2aa.data.loaders.crop import sm_compl_crop_factory, universal_crop_factory
 from rf2aa.data.loaders.polymer_partners import load_polymer_partners
 from rf2aa.data.loaders.small_molecule_partners import (
     load_small_molecule_partners,
     prune_lig_partners,
 )
-from rf2aa.data.loaders.crop import universal_crop_factory, sm_compl_crop_factory
+from rf2aa.util import (
+    center_and_realign_missing,
+    get_protein_bond_feats,
+    idx_from_Ls,
+    reassign_symmetry_after_cropping,
+    reindex_protein_feats_after_atomize,
+    same_chain_2d_from_Ls,
+)
 
 
 def get_cif_metadata(
@@ -136,9 +135,7 @@ def merge_outs(combined_outs, random_noise: float = 5.0):
     ch_label = torch.cat(
         [
             combined_outs["ch_label_poly"],
-            combined_outs["ch_label_sm"]
-            + combined_outs["ch_label_poly"].max()
-            + 1,
+            combined_outs["ch_label_sm"] + combined_outs["ch_label_poly"].max() + 1,
         ]
     )
 
@@ -286,12 +283,16 @@ def get_crop_sel(merged_outs, item, params):
     msa = merged_outs["msa"]
     Ls_poly = merged_outs["Ls_poly"]
     Ls_sm = merged_outs["Ls_sm"]
-    
+
     crop_params = params["crop_params"]
     crop_probabilities = crop_params["crop_probabilities"]
 
     crop_factory = universal_crop_factory
-    if len(Ls_sm) > 0 and len(Ls_poly) > 0 and crop_params["use_sm_crop_for_sm_compl_examples"]:
+    if (
+        len(Ls_sm) > 0
+        and len(Ls_poly) > 0
+        and crop_params["use_sm_crop_for_sm_compl_examples"]
+    ):
         crop_factory = sm_compl_crop_factory
 
     crop_type_selection = np.random.uniform()
@@ -304,7 +305,9 @@ def get_crop_sel(merged_outs, item, params):
         crop_probability_offset += crop_prob
 
     if crop_fn is None:
-        warnings.warn(f"Given crop probabilities {crop_probabilities} do not sum to 1.0. Defaulting to a linear crop.")
+        warnings.warn(
+            f"Given crop probabilities {crop_probabilities} do not sum to 1.0. Defaulting to a linear crop."
+        )
         sel = get_crop(len(idx), mask[0], msa.device, params["CROP"])
     else:
         sel = crop_fn(
@@ -473,13 +476,14 @@ def loader_sm_compl_assembly(
 
     # make sure no common keys before combining
     common_keys = polymer_keys.intersection(small_molecule_keys)
-    assert len(common_keys) == 0, f"Keys {common_keys} are present in both polymer and small molecule outputs"
+    assert len(common_keys) == 0, (
+        f"Keys {common_keys} are present in both polymer and small molecule outputs"
+    )
     combined_outs = {**polymer_outs, **small_molecule_outs}
     from rf2aa.data.loaders.data_transforms import pipeline
-    combined_outs = pipeline(combined_outs) 
-    merged_outs = merge_outs(
-        combined_outs, random_noise=random_noise
-    )
+
+    combined_outs = pipeline(combined_outs)
+    merged_outs = merge_outs(combined_outs, random_noise=random_noise)
 
     merged_outs = reindex_atomize_wrapper(
         merged_outs, polymer_partners, remove_residue=remove_residue
@@ -494,43 +498,44 @@ def loader_sm_compl_assembly(
     remove_keys = []
     for k, v in merged_outs.items():
         if not isinstance(v, torch.Tensor) and not isinstance(v, bool):
-           remove_keys.append(k)
-    merged_outs = {k: v for k, v in merged_outs.items() if k not in remove_keys} 
-            
+            remove_keys.append(k)
+    merged_outs = {k: v for k, v in merged_outs.items() if k not in remove_keys}
+
     merged_outs["item"] = item
     if "symmetry_group" not in merged_outs:
         merged_outs["symmetry_group"] = "C1"
 
     return merged_outs
+
+
 #    return (
-        #merged_outs["seq"].long(),
-        #merged_outs["msa_seed_orig"].long(),
-        #merged_outs["msa_seed"].float(),
-        #merged_outs["msa_extra"].float(),
-        #merged_outs["mask_msa"],
-        #merged_outs["xyz"].float(),
-        #merged_outs["mask"],
-        #merged_outs["idx"].long(),
-        #merged_outs["xyz_t"].float(),
-        #merged_outs["f1d_t"].float(),
-        #merged_outs["mask_t"],
-        #merged_outs["xyz_prev"].float(),
-        #merged_outs["mask_prev"],
-        #merged_outs["same_chain"],
-        #merged_outs["unclamp"],
-        #merged_outs["negative"],
-        #merged_outs["frames"],
-        #merged_outs["bond_feats"],
-        #merged_outs["dist_matrix"],
-        #merged_outs["chirals"],
-        #merged_outs["ch_label"],
-        #merged_outs["symmetry_group"],
-        #task,
-        #item,
-    #)
+# merged_outs["seq"].long(),
+# merged_outs["msa_seed_orig"].long(),
+# merged_outs["msa_seed"].float(),
+# merged_outs["msa_extra"].float(),
+# merged_outs["mask_msa"],
+# merged_outs["xyz"].float(),
+# merged_outs["mask"],
+# merged_outs["idx"].long(),
+# merged_outs["xyz_t"].float(),
+# merged_outs["f1d_t"].float(),
+# merged_outs["mask_t"],
+# merged_outs["xyz_prev"].float(),
+# merged_outs["mask_prev"],
+# merged_outs["same_chain"],
+# merged_outs["unclamp"],
+# merged_outs["negative"],
+# merged_outs["frames"],
+# merged_outs["bond_feats"],
+# merged_outs["dist_matrix"],
+# merged_outs["chirals"],
+# merged_outs["ch_label"],
+# merged_outs["symmetry_group"],
+# task,
+# item,
+# )
 
 
 def loader_sm_compl_assembly_single(*args, **kwargs):
     kwargs["num_protein_chains"] = 1
     return loader_sm_compl_assembly(*args, **kwargs)
-
