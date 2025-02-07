@@ -123,7 +123,7 @@ apptainer -s run --nv /projects/ml/modelhub/apptainer/frozen_modelhub_datahub_ci
 ### Using a PDB from MPNN, renaming custom ligand that overlaps with ligand names in the CCD *(example from Indrek)*
 Note that in this PDB file, the ligand "HGS" is a custom ligand, whose three-letter code overlaps with a real CCD ligand. Thus, we must rename.
 ```bash
-apptainer -s run --nv /projects/ml/modelhub/apptainer/frozen_modelhub_datahub_cifutils_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /net/software/lab/modelhub/rf2aa/tests/data/example_pdb_from_indrek.cif --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./ --rename_residues '{"HGS": "L:1"}'
+apptainer -s run --nv /projects/ml/modelhub/apptainer/modelhub_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /projects/ml/modelhub/inference/example_pdb_with_clashing_ligand_name.pdb --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./ --rename_residues '{"HGS": "L:1"}'  
 ```
 
 ## Step 3: View the Predicted Structure(s)
