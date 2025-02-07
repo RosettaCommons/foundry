@@ -111,19 +111,19 @@ Example commands (to be run from the `inference` working directory):
 
 ### Using a JSON with multiple examples to predict
 ```bash
-apptainer -s run --nv /projects/ml/modelhub/apptainer/frozen_modelhub_datahub_cifutils_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /projects/ml/modelhub/inference/examples_from_json.json --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./
+apptainer -s run --nv /net/software/containers/users/ncorley/modelhub/frozen_modelhub_datahub_cifutils_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /projects/ml/modelhub/inference/examples_from_json.json --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./
 ```
 
 ### Using a PDB, specifying a covalent modification in the `CONECT` record (*example from Meg)*
 See line `1672` for the manually-added bond; note as well the renaming of the ligand. Such renaming could be accomplished *a-priori* by modifying the file (as in this example), or with the `rename_residues` flag (see below).
 ```bash
-apptainer -s run --nv /projects/ml/modelhub/apptainer/frozen_modelhub_datahub_cifutils_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /projects/ml/modelhub/inference/example_from_pdb_with_inter_chain_bond.pdb --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./
+apptainer -s run --nv /net/software/containers/users/ncorley/modelhub/frozen_modelhub_datahub_cifutils_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /projects/ml/modelhub/inference/example_from_pdb_with_inter_chain_bond.pdb --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./
 ```
 
 ### Using a PDB from MPNN, renaming custom ligand that overlaps with ligand names in the CCD *(example from Indrek)*
 Note that in this PDB file, the ligand "HGS" is a custom ligand, whose three-letter code overlaps with a real CCD ligand. Thus, we must rename.
 ```bash
-apptainer -s run --nv /projects/ml/modelhub/apptainer/modelhub_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /projects/ml/modelhub/inference/example_pdb_with_clashing_ligand_name.pdb --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./ --rename_residues '{"HGS": "L:1"}'  
+apptainer -s run --nv /net/software/containers/users/ncorley/modelhub/frozen_modelhub_datahub_cifutils_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /projects/ml/modelhub/inference/example_pdb_with_clashing_ligand_name.pdb --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./ --rename_residues '{"HGS": "L:1"}'  
 ```
 
 ## Step 3: View the Predicted Structure(s)
