@@ -13,7 +13,7 @@ We enumerate two options for preparing inputs: one with a JSON API, one by creat
 
 ### Option 1: Prepare inputs using a combination of one-letter polymer sequences, SMILES strings, CCD codes, and SDF files
 
-Create a JSON file with each component similar to `rf2aa/tests/data/example_from_json.json`; e.g.,
+Create a JSON file with each component; e.g.,
 
 ```json
 [
@@ -43,7 +43,7 @@ Supported input options:
 -   `seq`: For proteins and nucleic acids using non-canonical one-letter codes as they appear in a CIF file.
 -   `smiles`: For small molecules (ensure correctness of SMILES).
 -   `ccd_code`: If your small molecule is already in the CCD.
--   `path`: If you have a `.sdf` file
+-   `path`: If you have a `.sdf` file. Note that we will not (yet) use the coordinates from the `.sdf` file for the reference conformer (but that's in-the-works).
 
 Coming soon: support for `cif` files and `mol` files as components.
 
@@ -86,41 +86,44 @@ to_cif_file(atom_array_from_ccd, "example_from_ccd.cif")
 to_cif_file(atom_array_from_smiles, "example_from_smiles.cif")
 ```
 
-## Step 2: Run `inference.py`
+## Step 2: Run `run_inference.py`
+
+The apptainers that we release pre-install `modelhub`, `datahub`, and `cifutils`. That means in order to run inference, essentially all that is needed is `from modelhub.inference import run_inference`, `run_inference()`. For convenience, we have written a script with that functionality, and saved to `/projects/ml/modelhub/inference/run_inference.py`. Note that this also means these apptainers are not "hackable" — if you would like to modify `modelhub`, you'll need to clone the repository, and use an appptainer without `modelhub` pre-installed.
 
 ### Using an Existing CIF or PDB File
 
-Run `inference.py` with the appropriate apptainer, checkpoint, input directory, and output directory.
+Run `run_inference.py` with the appropriate apptainer, checkpoint, input directory, and output directory.
 
-Arguments to `inference.py` are:
-- `inputs` (required): Paths to files (CIF/PDB/JSON) for prediction; if given a directory, all CIF/PDB files in that directory will be predicted
+Arguments to `run_inference.py` (and thus `inference.py`, which is called by `run_inference.py`) are:
+- `inputs` (required): Path to a file (CIF/PDB/JSON) for prediction; if given a directory, all CIF/PDB files in that directory will be predicted
 - `--checkpoint-path` (required): Path to checkpoint file
-- `--cif_out_dir` (required): Where to save predicted structures. The output files will be named the same was as the input structures.
+- `--cif_out_dir` (required): Where to save predicted structures. The output files will be named the same was as the input structures. Use `./` for current directory.
 - `--n_recycles` (optional, defaults to 10): Number of recycles.
-- `--diffusion_batch_size` (optional, default to 5): Number of output structures in the ensemble, drawn from the same model seed.
+- `--diffusion_batch_size` (optional, default to 5): Number of output structures in the ensemble, drawn from the same model seed and forward pass of the Pairformer.
 - `--rename_residues` (optional, default to an empty string): Dictionary of residue names to rename to avoid CCD clashes, e.g., '{"ALA": "L:1"}'. When parsing files, we use the given residue names to help identify any missing atoms. Thus, if a custom ligand overlaps with a ligand in the CCD, the prediction will be catastrophically wrong. To circumvent this issue, we accept a dictionary of ligands to rename. We suggest renaming all custom ligands to begin with `L:` to avoid all clashes with the CCD. WARNING: This command uses brute-force find a replace; please ensure that there are no other possible matches (e.g., atom names). Additionally, avoid `#` to mitigate possible CIF-parsing errors from PyMol.
+- `num_steps` (optiona, default to 200)L Number of steps for sampling of the diffusino model. The default is 200. We see no deterioation in performance with 50 steps, but significant (>2x) speed improvements.
 
-> *NOTE:* The CIF files are saved in a compressed format, `.cif.gz`. These compressed files can be directly loaded by PyMol or parsed by `cifutils`. If you need to inspect the uncompressed file, you can use `gunzip <PATH>`.
+> *NOTE:* The CIF files are saved in a compressed format, `.cif.gz`. These compressed files can be directly loaded by PyMol or parsed by `cifutils`. If you need to inspect the uncompressed file, you can use `gunzip <PATH>`. 
 
 > *NOTE:* The CIF output file will contain multiple **models**, one for each diffusion outputs (e.g., 5 by default). PyMol will hide secondary structure by default with multiple models; the command `dss` will display it again.
 
 Example commands (to be run from the `inference` working directory):
 
-### Using a CIF
+### Using a JSON with multiple examples to predict
 ```bash
-apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/tests/data/example_from_ccd.cif --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./predictions
+apptainer -s run --nv /projects/ml/modelhub/apptainer/frozen_modelhub_datahub_cifutils_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /projects/ml/modelhub/inference/examples_from_json.json --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./
 ```
 
-### Using a PDB from MPNN, renaming clashing ligands (example from Indrek)
+### Using a PDB, specifying a covalent modification in the `CONECT` record (*example from Meg)*
+See line `1672` for the manually-added bond; note as well the renaming of the ligand. Such renaming could be accomplished *a-priori* by modifying the file (as in this example), or with the `rename_residues` flag (see below).
+```bash
+apptainer -s run --nv /projects/ml/modelhub/apptainer/frozen_modelhub_datahub_cifutils_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /projects/ml/modelhub/inference/example_from_pdb_with_inter_chain_bond.pdb --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./
+```
+
+### Using a PDB from MPNN, renaming custom ligand that overlaps with ligand names in the CCD *(example from Indrek)*
 Note that in this PDB file, the ligand "HGS" is a custom ligand, whose three-letter code overlaps with a real CCD ligand. Thus, we must rename.
 ```bash
-apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/tests/data/example_pdb_from_indrek.cif --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./predictions --rename_residues '{"HGS": "L:1"}'
-```
-
-### Using the JSON
-
-```bash
-apptainer -s run --nv /net/software/containers/users/rohith/modelhub_lab_20250124.sif /net/software/lab/modelhub/rf2aa/inference/inference.py /net/software/lab/modelhub/rf2aa/tests/data/example_from_json.json --checkpoint_path /projects/ml/RF2_allatom/weights/af3_repro_with_confidence_20250124.pt --cif_out_dir ./predictions
+apptainer -s run --nv /projects/ml/modelhub/apptainer/frozen_modelhub_datahub_cifutils_2025-02-06.sif python /projects/ml/modelhub/inference/run_inference.py /net/software/lab/modelhub/rf2aa/tests/data/example_pdb_from_indrek.cif --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06 --cif_out_dir ./ --rename_residues '{"HGS": "L:1"}'
 ```
 
 ## Step 3: View the Predicted Structure(s)
