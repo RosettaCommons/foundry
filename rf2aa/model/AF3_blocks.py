@@ -247,7 +247,7 @@ class MsaSubsampleEmbedder(nn.Module):
 class MsaPairWeightedAverage(nn.Module):
     """implements Algorithm 10 from AF3 paper"""
 
-    def __init__(self, c_weighted_average, n_heads, c_msa_embed, c_z):
+    def __init__(self, c_weighted_average, n_heads, c_msa_embed, c_z, bugfix):
         super(MsaPairWeightedAverage, self).__init__()
         self.weighted_average_channels = c_weighted_average
         self.n_heads = n_heads
@@ -257,7 +257,13 @@ class MsaPairWeightedAverage(nn.Module):
         self.to_v = nn.Linear(self.msa_channels, self.n_heads*self.weighted_average_channels, bias=False)
         self.norm_pair = nn.LayerNorm(self.pair_channels)
         self.to_bias = nn.Linear(self.pair_channels, self.n_heads, bias=False)
-        self.to_gate = nn.Linear(self.msa_channels, self.weighted_average_channels*self.n_heads, bias=False)
+
+        self.bugfix = bugfix
+        if bugfix:
+            self.to_gate = nn.Linear(self.msa_channels, self.weighted_average_channels*self.n_heads, bias=False)
+        else:
+            self.to_gate = nn.Linear(self.msa_channels, self.n_heads, bias=False)
+
         self.to_out = nn.Linear(self.weighted_average_channels*self.n_heads, self.msa_channels, bias=False)
 
     @activation_checkpointing
@@ -278,14 +284,16 @@ class MsaPairWeightedAverage(nn.Module):
         # construct gate
         gate_SIH = torch.sigmoid(self.to_gate(msa_SI))
 
-        # compute weighted average
-        weights = torch.einsum( "ijh,sjhc->sihc", w_IIH, v_SIH).reshape(S, I, -1)
-
-        # apply gate
-        o_SIH = gate_SIH * weights
+        # compute weighted average & apply gate
+        if self.bugfix:
+            weights = torch.einsum( "ijh,sjhc->sihc", w_IIH, v_SIH).reshape(S, I, -1)
+            o_SIH = gate_SIH * weights
+        else:
+            weights = torch.einsum( "ijh,sjhc->sihc", w_IIH, v_SIH)
+            o_SIH = gate_SIH[...,None] * weights
 
         # concatenate heads and project
-        msa_update_SI = self.to_out(o_SIH)
+        msa_update_SI = self.to_out(o_SIH.reshape(S, I, -1))
         return msa_update_SI
 
 
