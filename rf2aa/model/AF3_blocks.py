@@ -254,27 +254,24 @@ class MsaPairWeightedAverage(nn.Module):
         self.msa_channels = c_msa_embed
         self.pair_channels = c_z
         self.norm_msa = nn.LayerNorm(self.msa_channels)
-        self.to_v = nn.Linear(
-            self.msa_channels, self.n_heads * self.weighted_average_channels, bias=False
-        )
+        self.to_v = nn.Linear(self.msa_channels, self.n_heads*self.weighted_average_channels, bias=False)
         self.norm_pair = nn.LayerNorm(self.pair_channels)
         self.to_bias = nn.Linear(self.pair_channels, self.n_heads, bias=False)
-        self.to_gate = nn.Linear(self.msa_channels, self.n_heads, bias=False)
-        self.to_out = nn.Linear(
-            self.weighted_average_channels * self.n_heads, self.msa_channels, bias=False
-        )
+        self.to_gate = nn.Linear(self.msa_channels, self.weighted_average_channels*self.n_heads, bias=False)
+        self.to_out = nn.Linear(self.weighted_average_channels*self.n_heads, self.msa_channels, bias=False)
 
     @activation_checkpointing
-    def forward(self, msa_SI, pair_II):
+    def forward(self,
+                msa_SI,
+                pair_II
+                ):
         S, I = msa_SI.shape[:2]
 
         # normalize inputs
         msa_SI = self.norm_msa(msa_SI)
 
         # construct values, bias and weights
-        v_SIH = self.to_v(msa_SI).reshape(
-            S, I, self.n_heads, self.weighted_average_channels
-        )
+        v_SIH = self.to_v(msa_SI).reshape(S, I, self.n_heads, self.weighted_average_channels)
         bias_IIH = self.to_bias(self.norm_pair(pair_II))
         w_IIH = F.softmax(bias_IIH, dim=-2)
 
@@ -282,13 +279,13 @@ class MsaPairWeightedAverage(nn.Module):
         gate_SIH = torch.sigmoid(self.to_gate(msa_SI))
 
         # compute weighted average
-        weights = torch.einsum("ijh,sjhc->sihc", w_IIH, v_SIH)
+        weights = torch.einsum( "ijh,sjhc->sihc", w_IIH, v_SIH).reshape(S, I, -1)
 
         # apply gate
-        o_SIH = gate_SIH[..., None] * weights
+        o_SIH = gate_SIH * weights
 
         # concatenate heads and project
-        msa_update_SI = self.to_out(o_SIH.reshape(S, I, -1))
+        msa_update_SI = self.to_out(o_SIH)
         return msa_update_SI
 
 
