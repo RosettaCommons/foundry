@@ -181,6 +181,7 @@ model:
       n_block: 2
       raw_template_dim: 108
       c: 64
+      p_drop: 0.25
     msa_module:
       n_block: 4
       c_m: 64

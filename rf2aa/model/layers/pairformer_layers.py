@@ -593,7 +593,7 @@ class MSAModule(nn.Module):
 
 
 class TemplateEmbedder(nn.Module):
-    def __init__(self, n_block, raw_template_dim, c_z, c):
+    def __init__(self, n_block, raw_template_dim, c_z, c, p_drop):
         super().__init__()
         self.c = c
         self.emb_pair = nn.Linear(c_z, c, bias=False)
@@ -607,7 +607,7 @@ class TemplateEmbedder(nn.Module):
                 PairformerBlock(
                     c_s=0,
                     c_z=c,
-                    p_drop=0.0,
+                    p_drop=p_drop,
                     triangle_multiplication=dict(d_hidden=c),
                     triangle_attention=dict(d_hidden=c),
                     attention_pair_bias={},
