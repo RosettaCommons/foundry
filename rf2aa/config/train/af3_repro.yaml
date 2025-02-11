@@ -200,6 +200,7 @@ model:
         c_weighted_average: 32
         c_msa_embed: ${model.recycler.msa_module.c_m}
         c_z: ${model.c_z}
+        separate_gate_for_every_channel: False
       msa_transition: 
         n: 4  
         c: ${model.recycler.msa_module.c_m}
