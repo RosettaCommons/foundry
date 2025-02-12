@@ -5,8 +5,7 @@ from scipy.stats import spearmanr
 from rf2aa.chemical import ChemicalData as ChemData
 from rf2aa.loss.loss import mask_unresolved_frames_batched
 from rf2aa.metrics.metric_utils import compute_mean_over_subsampled_pairs, unbin_logits
-from rf2aa.util import get_frames, rigid_from_3_points
-
+from rf2aa.alignment import weighted_rigid_align
 
 class ConfidenceLoss(nn.Module):
     def __init__(
