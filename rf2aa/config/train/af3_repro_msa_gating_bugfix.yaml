@@ -1,0 +1,34 @@
+defaults:
+  - af3_repro
+
+experiment:
+  prevalidate: false
+  name: af3_repro_7
+
+model:
+  recycler:
+    msa_module:
+      msa_pair_weighted_averaging:
+        separate_gate_for_every_channel: true
+  feature_initializer:
+    input_feature_embedder:
+      atom_attention_encoder:
+        atom_transformer:
+          diffusion_transformer:
+            diffusion_transformer_block:
+              no_residual_connection_between_attention_and_transition: false
+  diffusion_module:
+    atom_attention_encoder:
+      broadcast_trunk_feats_on_1dim_old: False
+      atom_transformer:
+        diffusion_transformer:
+          diffusion_transformer_block:
+            no_residual_connection_between_attention_and_transition: False
+    diffusion_transformer:
+      diffusion_transformer_block:
+        no_residual_connection_between_attention_and_transition: False
+    atom_attention_decoder:
+      atom_transformer:
+        diffusion_transformer:
+          diffusion_transformer_block:
+            no_residual_connection_between_attention_and_transition: False

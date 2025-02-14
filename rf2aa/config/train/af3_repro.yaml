@@ -163,6 +163,8 @@ model:
             n_block: 3
             diffusion_transformer_block:
               n_head: 4
+              no_residual_connection_between_attention_and_transition: True
+
     relative_position_encoding:
       r_max: 32
       s_max: 2
@@ -254,11 +256,13 @@ model:
           n_block: 3
           diffusion_transformer_block:
             n_head: 4
+            no_residual_connection_between_attention_and_transition: True
       broadcast_trunk_feats_on_1dim_old: True
     diffusion_transformer:
       n_block: 24
       diffusion_transformer_block:
         n_head: 16
+        no_residual_connection_between_attention_and_transition: True
     atom_attention_decoder:
       atom_transformer:
         n_queries: 32
@@ -268,6 +272,8 @@ model:
           n_block: 3
           diffusion_transformer_block:
             n_head: 4
+            no_residual_connection_between_attention_and_transition: True
+
   distogram_head:
     bins: 65 
 confidence_head:
