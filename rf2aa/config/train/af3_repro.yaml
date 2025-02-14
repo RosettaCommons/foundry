@@ -254,6 +254,7 @@ model:
           n_block: 3
           diffusion_transformer_block:
             n_head: 4
+      broadcast_trunk_feats_on_1dim_old: True
     diffusion_transformer:
       n_block: 24
       diffusion_transformer_block:

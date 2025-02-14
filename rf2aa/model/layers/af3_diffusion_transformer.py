@@ -24,6 +24,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         atom_1d_features,
         c_atom_1d_features,
         atom_transformer,
+        broadcast_trunk_feats_on_1dim_old,
     ):
         super().__init__()
         self.c_atom = c_atom
@@ -32,6 +33,8 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         self.c_tokenpair = c_tokenpair
         self.c_s = c_s
         self.atom_1d_features = atom_1d_features
+        self.broadcast_trunk_feats_on_1dim_old = broadcast_trunk_feats_on_1dim_old
+
 
         self.process_input_features = linearNoBias(c_atom_1d_features, c_atom)
 
@@ -135,7 +138,10 @@ class AtomAttentionEncoderDiffusion(nn.Module):
 
                 C_L = C_L + S_trunk_embed_L
                 assert not (C_L == Q_L).all()
-                P_LL = P_LL + self.process_z(Z_II)[..., tok_idx, tok_idx, :]
+                if self.broadcast_trunk_feats_on_1dim_old:
+                    P_LL = P_LL + self.process_z(Z_II)[..., tok_idx, tok_idx, :]
+                else:
+                    P_LL = P_LL + self.process_z(Z_II)[..., tok_idx, :, :][..., tok_idx, :]
 
                 # Add the noisy positions.
                 Q_L = self.process_r(R_L) + Q_L
