@@ -45,11 +45,13 @@ class ConfidenceLoss(nn.Module):
         true_lddt_binned, is_resolved_I = self.calc_lddt(
             X_pred_L, X_gt_L, X_exists_L, loss_input["seq"], loss_input["is_real_atom"]
         )
+
+        plddt_logits = network_output["plddt"].reshape(
+            -1, I, ChemData().NHEAVY, self.plddt.n_bins
+        ).permute(0,3,1,2)
         plddt_loss = (
             self.cce(
-                network_output["plddt"].reshape(
-                    -1, self.plddt.n_bins, I, ChemData().NHEAVY
-                ),
+                plddt_logits,
                 true_lddt_binned[..., : ChemData().NHEAVY].long(),
             )
             * is_resolved_I[..., : ChemData().NHEAVY]
