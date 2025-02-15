@@ -14,6 +14,9 @@ from cifutils.enums import ChainType
 from datahub.common import exists
 from datahub.encoding_definitions import AF3SequenceEncoding
 from datahub.transforms.af3_reference_molecule import GetAF3ReferenceMoleculeFeatures
+from datahub.transforms.chirals import AddAF3ChiralFeatures
+
+from datahub.transforms.rdkit_utils import GetRDKitChiralCenters
 from datahub.transforms.atom_array import (
     AddGlobalAtomIdAnnotation,
     AddGlobalTokenIdAnnotation,
@@ -248,6 +251,8 @@ def build_af3_transform_pipeline(
         ),
         FindAutomorphismsWithNetworkX(),  # Adds the  "automorphisms" key to the data dictionary
         ComputeAtomToTokenMap(),
+        GetRDKitChiralCenters(),
+        AddAF3ChiralFeatures(),
         ConditionalRoute(
             condition_func=lambda data: data["is_inference"],
             transform_map={
