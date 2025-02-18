@@ -80,7 +80,7 @@ class ConfidenceLoss(nn.Module):
         exp_resolved_logits = network_output["exp_resolved"]
         exp_resolved_loss = (
             self.cce(
-                exp_resolved_logits.reshape(B, 2, I, ChemData().NHEAVY),
+                exp_resolved_logits.reshape(B, I, ChemData().NHEAVY, self.exp_resolved.n_bins).permute(0, 3, 1, 2),
                 is_resolved_I[:, :, : ChemData().NHEAVY].long(),
             )
             * loss_input["is_real_atom"][:, : ChemData().NHEAVY]
