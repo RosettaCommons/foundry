@@ -121,11 +121,11 @@ class ConfidenceLoss(nn.Module):
             plddt_logit_stack = network_output["plddt"]
             plddt_per_structure = unbin_logits(
                 plddt_logit_stack.reshape(
-                    plddt_logit_stack.shape[0],
                     -1,
-                    plddt_logit_stack.shape[1],
+                    I,
                     ChemData().NHEAVY,
-                ).float(),
+                    self.plddt.n_bins,
+                ).permute(0, 3, 1, 2).float(),
                 self.plddt.max_value,
                 self.plddt.n_bins,
             )

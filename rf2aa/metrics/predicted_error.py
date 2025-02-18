@@ -40,11 +40,11 @@ class WriteAF3Confidence(Metric):
         # reorder the input tensors to be in (B, n_bins, ...) format for unbinning
         plddt = unbin_logits(
             plddt_logit_stack.reshape(
-                plddt_logit_stack.shape[0],
                 -1,
                 plddt_logit_stack.shape[1],
                 ChemData().NHEAVY,
-            ).float(),
+                self.plddt.n_bins,
+            ).permute(0, 3, 1, 2).float(),
             self.plddt.max_value,
             self.plddt.n_bins,
         )
@@ -187,8 +187,8 @@ class GetConfidenceIndices(Metric):
         # Reshape logits to B, K, L, NHEAVY
         is_real_atom = network_output["confidence"]["is_real_atom"]
         plddt_logits = plddt_logits.reshape(
-            plddt_logits.shape[0], -1, plddt_logits.shape[1], ChemData().NHEAVY
-        ).float()
+            -1, plddt_logits.shape[1], ChemData().NHEAVY, confidence_loss.plddt.n_bins
+        ).permute(0, 3, 1, 2).float()
         # Reshape the pae and pde logits to B, K, L, L
         pae_logits = confidence["pae_logits"].permute(0, 3, 1, 2).float()
         pde_logits = confidence["pde_logits"].permute(0, 3, 1, 2).float()
