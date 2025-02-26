@@ -237,6 +237,12 @@ class EvaluateAF3:
         # Load the config
         self.config = OmegaConf.create(checkpoint["training_config"])
 
+        # Make sure we aren't using the version with a bug in plddt
+        if self.config.experiment.name == "rf2aa-af3-repro-rollout_nmw_from_scratch_af3_style_no_cb_normal_crop_cont_3":
+            raise ValueError(
+                "These weights are outdated and the plddt metric may be inaccurate. Please update to the latest available weights."
+            )
+
         # Sampler sets diffusion batch size based on the following, not strictly on batch size in vaildation transform
         self.config.dataset_params["diffusion_batch_size_valid"] = diffusion_batch_size
         self.config.af3_inference["num_steps"] = num_steps
