@@ -45,6 +45,7 @@ from datahub.transforms.diffusion.edm import SampleEDMNoise
 from datahub.transforms.encoding import EncodeAF3TokenLevelFeatures
 from datahub.transforms.feature_aggregation.af3 import AggregateFeaturesLikeAF3
 from datahub.transforms.featurize_unresolved_residues import (
+    MaskResiduesWithUnresolvedBackboneAtoms,
     PlaceUnresolvedTokenAtomsOnRepresentativeAtom,
     PlaceUnresolvedTokenOnClosestResolvedTokenInSequence,
 )
@@ -171,6 +172,7 @@ def build_af3_transform_pipeline(
         RemovePolymersWithTooFewResolvedResidues(
             min_residues=4
         ),  # Remove polymers with too few resolved residues
+        MaskResiduesWithUnresolvedBackboneAtoms(),
         HandleUndesiredResTokens(undesired_res_names),  # e.g., non-standard residues
         FlagAndReassignCovalentModifications(),
         FlagNonPolymersForAtomization(),
