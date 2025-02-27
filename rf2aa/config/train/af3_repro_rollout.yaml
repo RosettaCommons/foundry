@@ -7,6 +7,7 @@ experiment:
   name: rf2aa-af3-repro-rollout
   trainer: af3_rollout
   output_dir: null
+  prevalidate: True
 
 loss:
   confidence_loss:
@@ -192,6 +193,7 @@ model:
         c_weighted_average: 32
         c_msa_embed: ${model.recycler.msa_module.c_m}
         c_z: ${model.c_z}
+        separate_gate_for_every_channel: False
       msa_transition: 
         n: 4  
         c: ${model.recycler.msa_module.c_m}
@@ -310,7 +312,8 @@ af3_data_prep:
   t: null
 
 af3_inference:
-  second_order_solver: False
+  num_steps: 200
+  solver: "af3"
 
 resume:
   False
