@@ -11,7 +11,7 @@ from rf2aa.model.layers.layer_utils import (
     linearNoBias,
 )
 from rf2aa.training.checkpoint import activation_checkpointing
-
+from rf2aa.loss.loss import calc_chiral_grads_flat_impl
 
 class AtomAttentionEncoderDiffusion(nn.Module):
     def __init__(
@@ -25,6 +25,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         c_atom_1d_features,
         atom_transformer,
         broadcast_trunk_feats_on_1dim_old,
+        use_chiral_features
     ):
         super().__init__()
         self.c_atom = c_atom
@@ -34,11 +35,12 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         self.c_s = c_s
         self.atom_1d_features = atom_1d_features
         self.broadcast_trunk_feats_on_1dim_old = broadcast_trunk_feats_on_1dim_old
-
+        self.use_chiral_features = use_chiral_features
 
         self.process_input_features = linearNoBias(c_atom_1d_features, c_atom)
 
-        self.process_d = linearNoBias(3, c_atompair)
+        self.process_d = linearNoBias(3, c_atompair)  # x,y,z
+
         self.process_inverse_dist = linearNoBias(1, c_atompair)
         self.process_valid_mask = linearNoBias(1, c_atompair)
 
@@ -48,7 +50,10 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         self.process_z = nn.Sequential(
             nn.LayerNorm(c_tokenpair), linearNoBias(c_tokenpair, c_atompair)
         )
-        self.process_r = linearNoBias(3, c_atom)
+        if self.use_chiral_features:
+            self.process_r = linearNoBias(6, c_atom)
+        else:
+            self.process_r = linearNoBias(3, c_atom)
 
         self.process_single_l = nn.Sequential(
             nn.ReLU(), linearNoBias(c_atom, c_atompair)
@@ -108,7 +113,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         P_LL = self.process_d(D_LL) * V_LL
 
         @activation_checkpointing
-        def embed_atom_feats(C_L, D_LL, V_LL, P_LL, tok_idx):
+        def embed_atom_feats(R_L, C_L, D_LL, V_LL, P_LL, tok_idx):
             # Embed pairwise inverse squared distances, and the valid mask
             if self.training:
                 P_LL = (
@@ -142,6 +147,15 @@ class AtomAttentionEncoderDiffusion(nn.Module):
                     P_LL = P_LL + self.process_z(Z_II)[..., tok_idx, tok_idx, :]
                 else:
                     P_LL = P_LL + self.process_z(Z_II)[..., tok_idx, :, :][..., tok_idx, :]
+
+                # add chirality gradients
+                if self.use_chiral_features:
+                    # do not pass grads through grad calc
+                    RC_L = calc_chiral_grads_flat_impl(
+                        R_L.detach(), f['chiral_feats']
+                    ).nan_to_num()
+
+                    R_L = torch.cat([R_L,RC_L],dim=-1)
 
                 # Add the noisy positions.
                 Q_L = self.process_r(R_L) + Q_L
@@ -177,7 +191,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
 
             return A_I, Q_L, C_L, P_LL
 
-        return embed_atom_feats(C_L, D_LL, V_LL, P_LL, tok_idx)
+        return embed_atom_feats(R_L, C_L, D_LL, V_LL, P_LL, tok_idx)
 
 
 class AtomTransformer(nn.Module):
@@ -244,10 +258,10 @@ class DiffusionTransformer(nn.Module):
 
 
 class DiffusionTransformerBlock(nn.Module):
-    def __init__(self, c_token, c_s, c_tokenpair, n_head, no_residual_connection_between_attention_and_transition):
+    def __init__(self, c_token, c_s, c_tokenpair, n_head, no_residual_connection_between_attention_and_transition, kq_norm):
         super().__init__()
         self.attention_pair_bias = AttentionPairBiasDiffusionDeepspeed(
-            c_a=c_token, c_s=c_s, c_pair=c_tokenpair, n_head=n_head
+            c_a=c_token, c_s=c_s, c_pair=c_tokenpair, n_head=n_head, kq_norm = kq_norm
         )
         self.conditioned_transition_block = ConditionedTransitionBlock(
             c_token=c_token, c_s=c_s
@@ -267,8 +281,8 @@ class DiffusionTransformerBlock(nn.Module):
                 B_I = self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
                 A_I = B_I + self.conditioned_transition_block(A_I, S_I)
             else:
-                A_I = A_I + self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
-                A_I = A_I + self.conditioned_transition_block(A_I, S_I)
+                B_I = A_I + self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
+                A_I = B_I + self.conditioned_transition_block(A_I, S_I)
         return A_I
 
 
@@ -370,7 +384,7 @@ class AttentionPairBiasDiffusion(nn.Module):
 
 
 class AttentionPairBiasDiffusionDeepspeed(nn.Module):
-    def __init__(self, c_a, c_s, c_pair, n_head):
+    def __init__(self, c_a, c_s, c_pair, n_head, kq_norm):
         super().__init__()
         self.n_head = n_head
         self.c_a = c_a
@@ -396,6 +410,11 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         self.use_deepspeed_evo = False
         self.force_bfloat16 = True
 
+        self.kq_norm = kq_norm
+        if self.kq_norm:
+            self.key_layer_norm = nn.LayerNorm((self.n_head*self.c,))
+            self.query_layer_norm = nn.LayerNorm((self.n_head*self.c,))
+
     @activation_checkpointing
     def forward(
         self,
@@ -410,16 +429,22 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
             A_I = self.ada_ln_1(A_I, S_I)
 
         if Beta_II is not None:
+            # zero out layer norms for the key and query
             return self.atom_attention(A_I, S_I, Z_II)
 
         if self.use_deepspeed_evo or self.force_bfloat16:
             A_I = A_I.to(torch.bfloat16)
+            assert len(A_I.shape) == 3, f"(Diffusion batch, I, C_a) but got {A_I.shape}"
 
         Q_IH = self.to_q(A_I)  # / np.sqrt(self.c)
         K_IH = self.to_k(A_I)
         V_IH = self.to_v(A_I)
         B_IIH = self.to_b(self.ln_0(Z_II))
         G_IH = self.to_g(A_I)
+
+        if self.kq_norm:
+            Q_IH = self.query_layer_norm(Q_IH.reshape(-1, self.n_head*self.c)).reshape(Q_IH.shape)
+            K_IH = self.key_layer_norm(K_IH.reshape(-1, self.n_head*self.c)).reshape(K_IH.shape)
 
         _, L = B_IIH.shape[:2]
 
@@ -475,6 +500,10 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         V_IH = self.to_v(A_I)
         B_IIH = self.to_b(self.ln_0(Z_II))
         G_IH = self.to_g(A_I)
+
+        if self.kq_norm:
+            Q_IH = self.query_layer_norm(Q_IH.reshape(-1, self.n_head*self.c)).reshape(Q_IH.shape)
+            K_IH = self.key_layer_norm(K_IH.reshape(-1, self.n_head*self.c)).reshape(K_IH.shape)
 
         nqbatch = (L + qbatch - 1) // qbatch
         Cs = torch.arange(nqbatch, device=A_I.device) * qbatch + qbatch // 2

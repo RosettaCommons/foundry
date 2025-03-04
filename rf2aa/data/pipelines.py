@@ -13,10 +13,11 @@ from cifutils.constants import (
 from cifutils.enums import ChainType
 from datahub.common import exists
 from datahub.encoding_definitions import AF3SequenceEncoding
-from datahub.transforms.af3_reference_molecule import GetAF3ReferenceMoleculeFeatures
-from datahub.transforms.chirals import AddAF3ChiralFeatures
 
-from datahub.transforms.rdkit_utils import GetRDKitChiralCenters
+from rf2aa.data.chiral_transforms import GetAF3ReferenceMoleculeFeatures
+from rf2aa.data.chiral_transforms import AddAF3ChiralFeatures
+from rf2aa.data.chiral_transforms import GetRDKitChiralCenters
+
 from datahub.transforms.atom_array import (
     AddGlobalAtomIdAnnotation,
     AddGlobalTokenIdAnnotation,
@@ -48,7 +49,7 @@ from datahub.transforms.diffusion.edm import SampleEDMNoise
 from datahub.transforms.encoding import EncodeAF3TokenLevelFeatures
 from datahub.transforms.feature_aggregation.af3 import AggregateFeaturesLikeAF3
 from datahub.transforms.featurize_unresolved_residues import (
-    MaskResiduesWithUnresolvedBackboneAtoms,
+    MaskPolymerResiduesWithUnresolvedFrameAtoms,
     PlaceUnresolvedTokenAtomsOnRepresentativeAtom,
     PlaceUnresolvedTokenOnClosestResolvedTokenInSequence,
 )
@@ -114,7 +115,7 @@ def build_af3_transform_pipeline(
     # Cache paths
     msa_cache_dir: PathLike | str | None = None,
     sigma_data: float = 16.0,
-    diffusion_batch_size: int = 48,
+    diffusion_batch_size: int = 48
 ):
     """Build the AF3 pipeline with specified parameters.
 
@@ -175,7 +176,7 @@ def build_af3_transform_pipeline(
         RemovePolymersWithTooFewResolvedResidues(
             min_residues=4
         ),  # Remove polymers with too few resolved residues
-        MaskResiduesWithUnresolvedBackboneAtoms(),
+        MaskPolymerResiduesWithUnresolvedFrameAtoms(),
         HandleUndesiredResTokens(undesired_res_names),  # e.g., non-standard residues
         FlagAndReassignCovalentModifications(),
         FlagNonPolymersForAtomization(),

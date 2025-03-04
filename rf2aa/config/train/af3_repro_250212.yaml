@@ -1,5 +1,5 @@
 defaults:
-  - af3_repro
+  - af3_repro_250125
 
 experiment:
   prevalidate: false
@@ -9,26 +9,31 @@ model:
   recycler:
     msa_module:
       msa_pair_weighted_averaging:
-        separate_gate_for_every_channel: true
+        separate_gate_for_every_channel: True
   feature_initializer:
     input_feature_embedder:
       atom_attention_encoder:
         atom_transformer:
           diffusion_transformer:
             diffusion_transformer_block:
-              no_residual_connection_between_attention_and_transition: false
+              no_residual_connection_between_attention_and_transition: False
+              kq_norm: False
   diffusion_module:
     atom_attention_encoder:
+      use_chiral_features: True
       broadcast_trunk_feats_on_1dim_old: False
       atom_transformer:
         diffusion_transformer:
           diffusion_transformer_block:
             no_residual_connection_between_attention_and_transition: False
+            kq_norm: False
     diffusion_transformer:
       diffusion_transformer_block:
         no_residual_connection_between_attention_and_transition: False
+        kq_norm: True
     atom_attention_decoder:
       atom_transformer:
         diffusion_transformer:
           diffusion_transformer_block:
             no_residual_connection_between_attention_and_transition: False
+            kq_norm: False

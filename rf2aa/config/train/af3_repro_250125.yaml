@@ -242,6 +242,7 @@ model:
     atom_attention_encoder:
       c_tokenpair: ${model.c_z}
       c_atom_1d_features: 389
+      use_chiral_features: False
       atom_1d_features:
           - ref_pos
           - ref_charge
