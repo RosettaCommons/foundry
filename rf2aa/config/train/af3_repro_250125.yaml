@@ -54,6 +54,8 @@ metrics:
     _target_: rf2aa.metrics.metrics_base.AddExampleID
   distogram:
     _target_: rf2aa.metrics.distogram_metrics.DistogramLoss
+  chiral:
+    _target_: rf2aa.metrics.chiral_metrics.ChiralLoss
 
 ddp_params:
   batch_size: 1
