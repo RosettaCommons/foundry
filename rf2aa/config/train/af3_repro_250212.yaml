@@ -16,6 +16,7 @@ model:
         atom_transformer:
           diffusion_transformer:
             diffusion_transformer_block:
+              no_residual_connection_between_attention_and_transition: True
               kq_norm: False
   diffusion_module:
     atom_attention_encoder:
@@ -24,12 +25,15 @@ model:
       atom_transformer:
         diffusion_transformer:
           diffusion_transformer_block:
+            no_residual_connection_between_attention_and_transition: True
             kq_norm: False
     diffusion_transformer:
       diffusion_transformer_block:
+        no_residual_connection_between_attention_and_transition: True
         kq_norm: True
     atom_attention_decoder:
       atom_transformer:
         diffusion_transformer:
           diffusion_transformer_block:
+            no_residual_connection_between_attention_and_transition: True
             kq_norm: False
