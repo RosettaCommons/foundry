@@ -258,7 +258,7 @@ class DiffusionTransformer(nn.Module):
 
 
 class DiffusionTransformerBlock(nn.Module):
-    def __init__(self, c_token, c_s, c_tokenpair, n_head, no_residual_connection_between_attention_and_transition, kq_norm):
+    def __init__(self, c_token, c_s, c_tokenpair, n_head, kq_norm):
         super().__init__()
         self.attention_pair_bias = AttentionPairBiasDiffusionDeepspeed(
             c_a=c_token, c_s=c_s, c_pair=c_tokenpair, n_head=n_head, kq_norm = kq_norm
@@ -266,7 +266,6 @@ class DiffusionTransformerBlock(nn.Module):
         self.conditioned_transition_block = ConditionedTransitionBlock(
             c_token=c_token, c_s=c_s
         )
-        self.no_residual_connection_between_attention_and_transition = no_residual_connection_between_attention_and_transition
 
     @activation_checkpointing
     def forward(
@@ -277,12 +276,8 @@ class DiffusionTransformerBlock(nn.Module):
         Beta_II,  # [I, I]
     ):
         with torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
-            if self.no_residual_connection_between_attention_and_transition:
-                B_I = self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
-                A_I = B_I + self.conditioned_transition_block(A_I, S_I)
-            else:
-                B_I = A_I + self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
-                A_I = B_I + self.conditioned_transition_block(A_I, S_I)
+            B_I = self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
+            A_I = B_I + self.conditioned_transition_block(A_I, S_I)
         return A_I
 
 
