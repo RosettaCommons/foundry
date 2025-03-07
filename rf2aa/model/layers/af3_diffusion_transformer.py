@@ -251,9 +251,7 @@ class DiffusionTransformer(nn.Module):
         Beta_II,  # [I, I]
     ):
         for block in self.blocks:
-            # NOTE: inconsistent with the original implementation added residual connection
-            # old implementation A_I = block(A_I, S_I, Z_II, Beta_II)
-            A_I = A_I + block(A_I, S_I, Z_II, Beta_II)
+            A_I = block(A_I, S_I, Z_II, Beta_II)
         return A_I
 
 
