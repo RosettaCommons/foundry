@@ -38,7 +38,7 @@ class ConfidenceHead(nn.Module):
         use_Cb_distances=False,
         use_af3_style_binning_and_final_layer_norms=False,
         symmetrize_Cb_logits=True,
-        corrected_layer_norm=False
+        layer_norm_along_feature_dimension=False
     ):
         super(ConfidenceHead, self).__init__()
         self.process_s_inputs_right = linearNoBias(449, c_z)
@@ -46,7 +46,7 @@ class ConfidenceHead(nn.Module):
         self.use_af3_style_binning_and_final_layer_norms = (
             use_af3_style_binning_and_final_layer_norms
         )
-        self.corrected_layer_norm = corrected_layer_norm
+        self.layer_norm_along_feature_dimension = layer_norm_along_feature_dimension
         if self.use_af3_style_binning_and_final_layer_norms:
             self.layernorm_pde = nn.LayerNorm(c_z)
             self.layernorm_pae = nn.LayerNorm(c_z)
@@ -101,7 +101,7 @@ class ConfidenceHead(nn.Module):
             S_inputs_I = S_inputs_I.detach().float()  # B, L, 384
             seq = seq.detach()
             
-            if self.corrected_layer_norm:
+            if self.layer_norm_along_feature_dimension:
                 # do a layer norm on S_trunk_I
                 S_trunk_I = F.layer_norm(S_trunk_I, normalized_shape=(S_trunk_I.shape[-1]))
                 # do a layer norm on Z_trunk_II

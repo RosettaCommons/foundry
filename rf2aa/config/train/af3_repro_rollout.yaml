@@ -286,6 +286,7 @@ confidence_head:
   use_Cb_distances: False
   use_af3_style_binning_and_final_layer_norms: True
   symmetrize_Cb_logits: True
+  layer_norm_along_feature_dimension: True
 
 optimizer:
   type: Adam
