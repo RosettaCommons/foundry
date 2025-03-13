@@ -19,6 +19,7 @@ from cifutils.tools.inference import (
 )
 from cifutils.utils.io_utils import to_cif_file
 from datahub.encoding_definitions import AF3SequenceEncoding
+import omegaconf
 from omegaconf import OmegaConf
 
 from rf2aa.metrics.predicted_error import WriteAF3Confidence
@@ -221,7 +222,7 @@ def _update_nested_dictconfig(d: Mapping, u: Mapping, depth: int = 0) -> Mapping
     for k, v in u.items():
         if isinstance(v, Mapping):
             d[k] = _update_nested_dictconfig(d.get(k, {}), v, depth=depth + 1)
-        elif k not in d.keys():
+        else:
             d[k] = v
     if depth == 0:
         return d
@@ -267,8 +268,10 @@ class EvaluateAF3:
         self.config = OmegaConf.create(checkpoint["training_config"])
 
         if config_override_path is not None:
-            config_override_dict = yaml.load(config_override_path)
+            with open(config_override_path, 'r') as fs:
+                config_override_dict = yaml.load(fs, yaml.FullLoader)
             self.config = _update_nested_dictconfig(self.config, config_override_dict)
+            self.config = OmegaConf.create(self.config)
 
         # Make sure we aren't using the version with a bug in plddt
         if (
