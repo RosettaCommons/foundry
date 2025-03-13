@@ -3,12 +3,14 @@ import json
 import logging
 import pickle
 import tempfile
+from collections.abc import Mapping
 from os import PathLike
 from pathlib import Path
 
 import hydra
 import numpy as np
 import torch
+import yaml
 from biotite.structure import AtomArray, AtomArrayStack, stack
 from cifutils import parse
 from cifutils.tools.inference import (
@@ -89,9 +91,9 @@ def _spoof_cif_from_dictionary(item: dict, temp_dir: PathLike) -> Path:
         ValueError: If 'name' or 'components' are missing from the dictionary.
     """
     # Validate the dictionary structure ("name" and "components" are required, "bonds" is optional)
-    assert "name" in item and "components" in item, (
-        "The input dictionary must contain 'name' and 'components' keys."
-    )
+    assert (
+        "name" in item and "components" in item
+    ), "The input dictionary must contain 'name' and 'components' keys."
 
     # Build components
     atom_array, component_list = components_to_atom_array(
@@ -202,6 +204,31 @@ def _find_files(path: PathLike, supported_file_types: list) -> list[Path]:
     return files_with_supported_types
 
 
+def _update_nested_dictconfig(d: Mapping, u: Mapping, depth: int = 0) -> Mapping:
+    """Recursive function to overwrite contents of one nested omegaconf dictconfig with another.
+
+    Args:
+        d: dictionary of dictconfigs whose contents will be overwritten
+        u: dictionary of items which will overwrite or add to values in d
+        depth: depth of recursion: a positive integer:
+            -used to keep the outermost layer of the config as a dict instead of DictConfig.
+            -set to 1 or higher to return only DictConfig.
+    Returns:
+        d updated to contain values in u
+    """
+    d = dict(d)
+    u = dict(u)
+    for k, v in u.items():
+        if isinstance(v, Mapping):
+            d[k] = _update_nested_dictconfig(d.get(k, {}), v, depth=depth + 1)
+        elif k not in d.keys():
+            d[k] = v
+    if depth == 0:
+        return d
+    else:
+        return omegaconf.dictconfig.DictConfig(d)
+
+
 class EvaluateAF3:
     """Class for inference with AF3. Evaluates a trained AF3 model on a set of spoofed CIFs."""
 
@@ -211,6 +238,7 @@ class EvaluateAF3:
         cif_out_dir: PathLike,
         n_recycles: int,
         diffusion_batch_size: int,
+        config_override_path: PathLike | None = None,
         residue_renaming_dict: dict | None = None,
         temp_dir: PathLike | None = None,
         num_steps: int = 200,
@@ -221,6 +249,7 @@ class EvaluateAF3:
         Args:
             checkpoint_path (PathLike): Path to the checkpoint file, e.g., /path/to/checkpoint.pt.
             cif_out_dir (PathLike): Directory to save the output (predicted) CIF files.
+            config_override_path (PathLike): Path to a yaml file with config options to override those in the checkpoint file.
             world_size (int): Number of GPUs to use for evaluation.
             n_recycles (int): Number of recycles for AF3. The default is 10.
             diffusion_batch_size (int): Diffusion batch size for AF3. Each predicted structure will be saved as a separate model within the same CIF file.
@@ -237,8 +266,15 @@ class EvaluateAF3:
         # Load the config
         self.config = OmegaConf.create(checkpoint["training_config"])
 
+        if config_override_path is not None:
+            config_override_dict = yaml.load(config_override_path)
+            self.config = _update_nested_dictconfig(self.config, config_override_dict)
+
         # Make sure we aren't using the version with a bug in plddt
-        if self.config.experiment.name == "rf2aa-af3-repro-rollout_nmw_from_scratch_af3_style_no_cb_normal_crop_cont_3":
+        if (
+            self.config.experiment.name
+            == "rf2aa-af3-repro-rollout_nmw_from_scratch_af3_style_no_cb_normal_crop_cont_3"
+        ):
             raise ValueError(
                 "These weights are outdated and the plddt metric may be inaccurate. Please update to the latest available weights."
             )
@@ -406,6 +442,12 @@ def main():
         "--cif_out_dir", type=str, required=True, help="Directory for output CIF files"
     )
     parser.add_argument(
+        "--config_override_path",
+        type=str,
+        required=False,
+        help="Path to a yaml file with configs to override those in the checkpoint file",
+    )
+    parser.add_argument(
         "--n_recycles", type=int, default=10, help="Number of recycles for AF3"
     )
     parser.add_argument(
@@ -452,6 +494,7 @@ def main():
         evaluator = EvaluateAF3(
             checkpoint_path=args.checkpoint_path,
             cif_out_dir=args.cif_out_dir,
+            config_override_path=args.config_override_path,
             n_recycles=args.n_recycles,
             diffusion_batch_size=args.diffusion_batch_size,
             residue_renaming_dict=residue_renaming_dict,
