@@ -50,10 +50,10 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         self.process_z = nn.Sequential(
             nn.LayerNorm(c_tokenpair), linearNoBias(c_tokenpair, c_atompair)
         )
+        self.process_r = linearNoBias(3, c_atom)
         if self.use_chiral_features:
-            self.process_r = linearNoBias(6, c_atom)
-        else:
-            self.process_r = linearNoBias(3, c_atom)
+            self.process_ch = linearNoBias(3, c_atom)
+            nn.init.zeros_(self.process_ch.weight)
 
         self.process_single_l = nn.Sequential(
             nn.ReLU(), linearNoBias(c_atom, c_atompair)
@@ -148,17 +148,16 @@ class AtomAttentionEncoderDiffusion(nn.Module):
                 else:
                     P_LL = P_LL + self.process_z(Z_II)[..., tok_idx, :, :][..., tok_idx, :]
 
+                # Add the noisy positions.
+                Q_L = self.process_r(R_L) + Q_L
+
                 # add chirality gradients
                 if self.use_chiral_features:
                     # do not pass grads through grad calc
-                    RC_L = calc_chiral_grads_flat_impl(
+                    R_L = calc_chiral_grads_flat_impl(
                         R_L.detach(), f['chiral_feats']
                     ).nan_to_num()
-
-                    R_L = torch.cat([R_L,RC_L],dim=-1)
-
-                # Add the noisy positions.
-                Q_L = self.process_r(R_L) + Q_L
+                    Q_L = self.process_ch(R_L) + Q_L
 
             # Add the combined single conditioning to the pair representation.
             P_LL = P_LL + (
