@@ -53,7 +53,6 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         self.process_r = linearNoBias(3, c_atom)
         if self.use_chiral_features:
             self.process_ch = linearNoBias(3, c_atom)
-            nn.init.zeros_(self.process_ch.weight)
 
         self.process_single_l = nn.Sequential(
             nn.ReLU(), linearNoBias(c_atom, c_atompair)
@@ -79,6 +78,12 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         self.atom_transformer = AtomTransformer(
             c_atom=c_atom, c_atompair=c_atompair, **atom_transformer
         )
+
+        self.reset_parameter()
+
+    def reset_parameter(self):
+        if self.use_chiral_features:
+            nn.init.zeros_(self.process_ch.weight)
 
     def forward(
         self,
