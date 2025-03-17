@@ -81,6 +81,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
 
 
     def reset_parameters(self):
+        super().reset_parameters()
         if self.use_chiral_features:
             nn.init.zeros_(self.process_ch.weight)
 
