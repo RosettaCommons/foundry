@@ -13,11 +13,6 @@ from cifutils.constants import (
 from cifutils.enums import ChainType
 from datahub.common import exists
 from datahub.encoding_definitions import AF3SequenceEncoding
-
-from rf2aa.data.chiral_transforms import GetAF3ReferenceMoleculeFeatures
-from rf2aa.data.chiral_transforms import AddAF3ChiralFeatures
-from rf2aa.data.chiral_transforms import GetRDKitChiralCenters
-
 from datahub.transforms.atom_array import (
     AddGlobalAtomIdAnnotation,
     AddGlobalTokenIdAnnotation,
@@ -46,6 +41,7 @@ from datahub.transforms.diffusion.batch_structures import (
     BatchStructuresForDiffusionNoising,
 )
 from datahub.transforms.diffusion.edm import SampleEDMNoise
+from datahub.transforms.dna import PadDNA
 from datahub.transforms.encoding import EncodeAF3TokenLevelFeatures
 from datahub.transforms.feature_aggregation.af3 import AggregateFeaturesLikeAF3
 from datahub.transforms.featurize_unresolved_residues import (
@@ -74,6 +70,12 @@ from datahub.transforms.template import (
     FeaturizeTemplatesLikeAF3,
     OneHotTemplateRestype,
     RandomSubsampleTemplates,
+)
+
+from rf2aa.data.chiral_transforms import (
+    AddAF3ChiralFeatures,
+    GetAF3ReferenceMoleculeFeatures,
+    GetRDKitChiralCenters,
 )
 
 
@@ -115,7 +117,7 @@ def build_af3_transform_pipeline(
     # Cache paths
     msa_cache_dir: PathLike | str | None = None,
     sigma_data: float = 16.0,
-    diffusion_batch_size: int = 48
+    diffusion_batch_size: int = 48,
 ):
     """Build the AF3 pipeline with specified parameters.
 
@@ -159,9 +161,9 @@ def build_af3_transform_pipeline(
             crop_contiguous_probability + crop_spatial_probability, 1.0, atol=1e-6
         ), "Crop probabilities must sum to 1.0"
         assert crop_size > 0, "Crop size must be greater than 0"
-        assert crop_center_cutoff_distance > 0, (
-            "Crop center cutoff distance must be greater than 0"
-        )
+        assert (
+            crop_center_cutoff_distance > 0
+        ), "Crop center cutoff distance must be greater than 0"
 
     af3_sequence_encoding = AF3SequenceEncoding()
 
@@ -178,6 +180,7 @@ def build_af3_transform_pipeline(
         ),  # Remove polymers with too few resolved residues
         MaskPolymerResiduesWithUnresolvedFrameAtoms(),
         HandleUndesiredResTokens(undesired_res_names),  # e.g., non-standard residues
+        PadDNA(),
         FlagAndReassignCovalentModifications(),
         FlagNonPolymersForAtomization(),
         AddGlobalAtomIdAnnotation(),
