@@ -1,3 +1,4 @@
+import os
 import argparse
 import json
 import logging
@@ -148,7 +149,8 @@ def _build_file_paths_for_prediction(inputs: list, temp_dir: PathLike) -> list[P
 
     paths_to_cif_like_files = []
     for path in paths_to_raw_input_files:
-        concatenated_suffix = "".join(path.suffixes)
+        #concatenated_suffix = "".join(path.suffixes)
+        concatenated_suffix = path.suffixes[-1]
         if concatenated_suffix in DICTIONARY_LIKE_EXTENSIONS:
             # Spoof CIF files from dictionary-like formats
             with open(path, "rb" if path.suffix == ".pkl" else "r") as file:
@@ -244,6 +246,7 @@ class EvaluateAF3:
         temp_dir: PathLike | None = None,
         num_steps: int = 200,
         solver: str = "af3",
+        overwrite: bool = False
     ):
         """Initialize the evaluator.
 
@@ -310,6 +313,8 @@ class EvaluateAF3:
         self.residue_renaming_dict = residue_renaming_dict
         self.temp_dir = Path(temp_dir)
 
+        self.overwrite = overwrite
+
     def construct_pipeline(self):
         """Construct the AF3 inference pipeline."""
         self.config.dataset_params.val.interface.transform.n_recycles = self.n_recycles
@@ -359,7 +364,15 @@ class EvaluateAF3:
         for structure in files:
             # ... parse into an AtomArray (`parse` handles all valid formats)
             logger.info(f"Parsing from path: {structure}")
-            example_id = structure.name.split(".")[0]
+            #example_id = structure.name.split(".")[0]
+            example_id = ".".join(structure.name.split(".")[:-1])
+
+            # optionally, skip if output already exists
+            cif_output_path = example_id + '.cif'
+            cif_output_path = self.cif_out_dir / cif_output_path
+            if os.path.exists(cif_output_path) and not self.overwrite:
+                logger.info(f"Existing output for {example_id} found at {cif_output_path}. Skipping this example. Set --overwrite to not skip examples with existing output")
+                continue
 
             # If we're renaming residues, we do a brute-force replacement in the CIF file
             if self.residue_renaming_dict:
@@ -477,6 +490,12 @@ def main():
         default="af3",
         help="Solver to use for inference. Options are 'af3', 'simple', 'euler', and 'heun'.",
     )
+    parser.add_argument(
+        "--overwrite",
+        default=False,
+        action="store_true",
+        help="Overwrite existing .cif outputs with new runs.",
+    )
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -504,6 +523,7 @@ def main():
             temp_dir=temp_dir,
             num_steps=args.num_steps,
             solver=args.solver,
+            overwrite=args.overwrite
         )
 
         # Launch the evaluation
