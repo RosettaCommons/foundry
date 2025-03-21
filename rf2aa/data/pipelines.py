@@ -41,7 +41,7 @@ from datahub.transforms.diffusion.batch_structures import (
     BatchStructuresForDiffusionNoising,
 )
 from datahub.transforms.diffusion.edm import SampleEDMNoise
-from datahub.transforms.dna import PadDNA
+from datahub.transforms.dna.pad_dna import PadDNA
 from datahub.transforms.encoding import EncodeAF3TokenLevelFeatures
 from datahub.transforms.feature_aggregation.af3 import AggregateFeaturesLikeAF3
 from datahub.transforms.featurize_unresolved_residues import (
