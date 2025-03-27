@@ -118,6 +118,7 @@ def build_af3_transform_pipeline(
     msa_cache_dir: PathLike | str | None = None,
     sigma_data: float = 16.0,
     diffusion_batch_size: int = 48,
+    pad_dna_p_skip: float = 0.0,
 ):
     """Build the AF3 pipeline with specified parameters.
 
@@ -136,6 +137,7 @@ def build_af3_transform_pipeline(
             Defaults to 0.5.
         conformer_generation_timeout (float, optional): The timeout for conformer generation in seconds.
             Defaults to 10.0.
+        pad_dna_p_skip (float 0-1, optional): The chance to skip the PadDNA transform.
 
     Returns:
         Transform: A composed pipeline of transforms.
@@ -180,7 +182,7 @@ def build_af3_transform_pipeline(
         ),  # Remove polymers with too few resolved residues
         MaskPolymerResiduesWithUnresolvedFrameAtoms(),
         HandleUndesiredResTokens(undesired_res_names),  # e.g., non-standard residues
-        PadDNA(),
+        PadDNA(p_skip = pad_dna_p_skip),
         FlagAndReassignCovalentModifications(),
         FlagNonPolymersForAtomization(),
         AddGlobalAtomIdAnnotation(),
