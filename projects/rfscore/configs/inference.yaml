@@ -1,0 +1,12 @@
+# @package _global_
+# ^ The "package" determines where the content of the config is placed in the output config
+# For more information about overriding configs, see: https://hydra.cc/docs/advanced/overriding_packages/#overriding-packages-using-the-defaults-list
+
+# This line enables us to access the common configs in the root-level `configs` directory
+# For more information, see: https://hydra.cc/docs/advanced/search_path/
+hydra:
+  searchpath:
+    - pkg://configs
+
+defaults:
+  - inference_engine: ???

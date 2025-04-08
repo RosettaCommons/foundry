@@ -1,0 +1,105 @@
+# Standard AF-3 training with experimental data validation
+
+defaults:
+  - base
+
+  # Training
+  - train/pdb/af3_train_interface@train.pdb.sub_datasets.interface
+  - train/pdb/af3_train_pn_unit@train.pdb.sub_datasets.pn_unit
+
+  # Standard validation (conditional and unconditional)
+  - val/rfscore@val.unconditional
+  - val/rfscore@val.template_ligand
+  - val/rfscore@val.template_polymer
+
+  # (Experimental data validation)
+  - val/af3_validation@val.ts1_unconditional
+  - _self_
+
+pipeline_target: projects.rfscore.pipelines.rfscore.build_rfscore_transform_pipeline
+
+# TRAINING
+# We train with the same dataset as AF-3, with the following modifications:
+# - We use element types as atom names for atomized tokens
+# - We add ground-truth templates conditioning, adding up to 5A noise to all tokens (each token noise is sampled independently)
+train: 
+  pdb:
+    probability: 1.0
+    sub_datasets:
+      interface:
+        dataset:
+          transform:
+            p_unconditional: 0.2 # No templating
+            use_element_for_atom_names_of_atomized_tokens: True
+            train_template_noise_scales:
+              not_atomized: 10 # 10A noise
+              atomized: 10 # 10A noise
+            allowed_chain_types_for_conditioning: 
+              _target_: cifutils.enums.ChainType.get_all_types
+      pn_unit:
+          dataset:
+            transform:
+              p_unconditional: 0.2 # No templating
+              use_element_for_atom_names_of_atomized_tokens: True
+              train_template_noise_scales:
+                not_atomized: 10 # 10A noise
+                atomized: 10 # 10A noise
+              allowed_chain_types_for_conditioning:
+                _target_: cifutils.enums.ChainType.get_all_types
+
+# VALIDATION
+val:
+  ##### STANDARD VALIDATION #####
+  # No conditioning information provided
+  unconditional:
+    dataset:
+      transform:
+        inference_template_noise_scales:
+          not_atomized: null # No conditioning
+          atomized: null # No conditioning
+        allowed_chain_types_for_conditioning: null
+        use_element_for_atom_names_of_atomized_tokens: True
+  # No noise on ligand atoms
+  template_ligand:
+    dataset:
+      transform:
+        inference_template_noise_scales:
+          not_atomized: null # Does not matter; no conditioning
+          atomized: 1e-4 # No noise on ligand atoms (epsilon to avoid division by zero)
+        allowed_chain_types_for_conditioning:
+          _target_: cifutils.enums.ChainType.get_non_polymers
+        use_element_for_atom_names_of_atomized_tokens: True
+  # No noise on polymer atoms
+  template_polymer:
+    dataset:
+      transform:
+        inference_template_noise_scales:
+          not_atomized: 1e-4 # No noise on polymer atoms (epsilon to avoid division by zero)
+          atomized: null # Does not matter; no conditioning
+        allowed_chain_types_for_conditioning:
+          _target_: cifutils.enums.ChainType.get_polymers
+        use_element_for_atom_names_of_atomized_tokens: True
+
+  ##### EXPERIMENTAL VALIDATION #####
+  # Validation as a scoring function for experimental data
+  ts1_unconditional:
+    dataset:
+      dataset_parser:
+        _target_: datahub.datasets.parsers.GenericDFParser
+        attrs:
+          selection_strings:
+            - "B/*/*/*"
+            - "A/*/128/*"
+            - "A/*/95/*"
+            - "A/*/53/*"
+      dataset:
+        data: /projects/ml/rfscore/datasets/experimental_validation/serine_hydrolase/dfs/ts1.parquet
+        filters:
+          - activity_bin != "SLIGHTLY_ACTIVE"
+      transform:
+        inference_template_noise_scales:
+          not_atomized: null
+          atomized: null
+        allowed_chain_types_for_conditioning: null
+        use_element_for_atom_names_of_atomized_tokens: True
+    key_to_balance: null # (Because we inherit from AF-3 validation, we must set to null)

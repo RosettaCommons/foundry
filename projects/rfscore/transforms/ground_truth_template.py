@@ -1,0 +1,426 @@
+import logging
+from dataclasses import dataclass
+
+import numpy as np
+import torch
+from beartype.typing import Any, Callable, Final, Sequence
+from biotite.structure import AtomArray
+from cifutils.enums import ChainType
+from datahub.transforms._checks import (
+    check_atom_array_annotation,
+    check_contains_keys,
+    check_is_instance,
+)
+from datahub.transforms.atomize import AtomizeByCCDName
+from datahub.transforms.base import Transform
+from datahub.utils.token import (
+    get_af3_token_center_masks,
+    get_token_starts,
+)
+from jaxtyping import Bool, Float, Shaped
+from torch import Tensor
+
+from modelhub.utils.torch_utils import assert_no_nans
+
+logger = logging.getLogger(__name__)
+
+MaskingFunction = Callable[[AtomArray], Bool[Shaped, "n"]]
+"""A function that takes in an AtomArray and returns a boolean mask."""
+
+NoiseScaleSampler = Callable[[Sequence[int]], Float[Tensor, "..."] | float]
+"""
+A noise scale sampler that, when given a shape-tuple, returns a sample of
+noise scales of the appropriate shape.
+
+Examples:
+    - partial(torch.normal, mean=0.0, std=1.0)
+    - af3_noise_scale_distribution
+    - af3_noise_scale_distribution_wrapped
+"""
+
+
+@dataclass
+class TokenGroupNoiseScaleSampler:
+    mask_and_sampling_fns: tuple[tuple[MaskingFunction, NoiseScaleSampler], ...]
+
+    def __call__(self, atom_array: AtomArray) -> Tensor:
+        # ... determine token centers
+        token_center_mask = get_af3_token_center_masks(atom_array)  # [n_token] (bool)
+        token_array = atom_array[token_center_mask]  # [n_token] (AtomArray)
+
+        # ... sample a noise scale for each token group
+        noise_scales = torch.full(
+            size=(len(token_array),),
+            fill_value=float("nan"),
+            dtype=torch.float32,
+        )
+        for mask_fn, sampling_fn in self.mask_and_sampling_fns:
+            mask = mask_fn(token_array)
+            n_tokens_to_sample = mask.sum()
+            if n_tokens_to_sample > 0:
+                # ... all tokens in that group receive the same noise scale
+                noise_scales[mask] = sampling_fn((1,))
+
+        return noise_scales
+
+
+DEFAULT_DISTOGRAM_BINS: Final[Float[Tensor, "63"]] = torch.concat(
+    (torch.arange(1.0, 4.0, 0.1, device="cpu"), torch.arange(4.0, 20.5, 0.5, device="cpu"))
+)
+"""
+Default bins for discretizing distances in the distogram (in Angstrom).
+    - 0.1A resolution from 1.0 -  4.0 A
+    - 0.5A resolution from 4.0 - 20.0 A
+Total number of bins: 64  (i.e. 63 bin boundaries above)
+"""
+
+
+def wrap_probability_distribution(
+    samples: Float[Tensor, "..."],
+    lower: float = float("-inf"),
+    upper: float = float("inf"),
+) -> Float[Tensor, "..."]:
+    """
+    Wrap a probability distribution around lower and upper bounds to create
+    samples from the corresponding wrapped probability distribution.
+
+    Args:
+        - samples: Input tensor of samples to wrap
+        - lower: Lower bound for wrapping (inclusive, unless infinite)
+        - upper: Upper bound for wrapping (inclusive, unless infinite)
+
+    Returns:
+        - samples: Samples wrapped around the lower and upper bounds within
+            the interval ]lower, upper[.
+    Reference:
+        - https://en.wikipedia.org/wiki/Wrapped_distribution
+    """
+    if lower > float("-inf") and upper < float("inf"):
+        return ((samples - lower) % (upper - lower)) + lower
+    elif lower > float("-inf"):
+        return lower + (samples - lower).abs()
+    elif upper < float("inf"):
+        return upper - (samples - upper).abs()
+    return samples
+
+
+def wrapped_normal(
+    mean: float,
+    std: float,
+    size: Sequence[int],
+    *,
+    lower: float = float("-inf"),
+    upper: float = float("inf"),
+    **normal_kwargs,
+) -> Float[Tensor, "..."]:
+    """Sample from a wrapped normal distribution."""
+    samples = torch.normal(mean=mean, std=std, size=size, **normal_kwargs)
+    return wrap_probability_distribution(samples, lower, upper)
+
+
+def af3_noise_scale_to_noise_level(
+    noise_scale: Tensor | float, eps: int = 1e-8
+) -> Tensor:
+    """Converts AlphaFold3 noise scale (t^) in Angstroms to noise level (t).
+
+    This function converts from a noise scale in Angstroms (t^) to the
+    corresponding standard normal noise level (t) using the formula:
+        t = (log(t^/16.0) + 1.2) / 1.5
+
+    Args:
+        - noise_scale (Tensor): The noise scale (t^) in Angstroms,
+            representing the standard deviation of positional noise.
+
+    Returns:
+        - noise_level (Tensor): The corresponding noise level (t) as a
+            standard normal random variable.
+
+    Notes:
+        - We use the term 'noise-level' to refer to the standard normal random
+        variable `t` in the AF3 paper and 'noise-scale' to refer to the variable
+        `t^` which denotes the noise scale in Angstrom. This is the inverse
+        operation of af3_noise_level_to_noise_scale().
+        - To avoid taking the log of zero, we add a small constant to the
+        denominator (16.0) in the formula.
+    """
+    noise_scale_tensor = torch.as_tensor(noise_scale)
+    return (torch.log(torch.clamp(noise_scale_tensor, min=eps) / 16.0) + 1.2) / 1.5
+
+
+def af3_noise_level_to_noise_scale(noise_level: Tensor | float) -> Tensor:
+    """Convert AlphaFold3 noise level (t) to noise scale (t^) in Angstroms.
+
+    This function converts from a standard normal noise level (t) to the
+    corresponding noise scale in Angstroms (t^) using the formula:
+        t^ = 16.0 * exp(1.5t - 1.2)     (log-N(log(0.04), 1.5^2))
+
+    Args:
+        - noise_level (Tensor): The noise level (t) as a standard normal random
+            variable, sampled from N(0,1).
+
+    Returns:
+        - noise_scale (Tensor): The corresponding noise scale (t^) in Angstroms,
+            representing the standard deviation of positional noise to apply.
+
+    Note:
+        This is the inverse operation of af3_noise_scale_to_noise_level(). The
+        transformation is designed to convert between a normal distribution and
+        a log-normal distribution with specific parameters chosen by AlphaFold3.
+    """
+    return 16.0 * torch.exp((torch.as_tensor(noise_level) * 1.5) - 1.2)
+
+
+def af3_noise_scale_distribution(size: Sequence[int], **kwargs) -> Tensor:
+    """
+    The log-normal noise-scale distribution used in AF3 (in Angstrom).
+
+       t^ = 16.0 * exp(1.5t - 1.2),
+       where:
+        - t  = noise-level ~ N(0,1)
+        - t^ = noise-scale ~ log-N(log(0.04), 1.5^2)
+    """
+    noise_level = torch.normal(mean=0.0, std=1.0, size=size, **kwargs)
+    return af3_noise_level_to_noise_scale(noise_level)
+
+
+def af3_noise_scale_distribution_wrapped(
+    size: Sequence[int],
+    *,
+    lower_noise_level: float = float("-inf"),
+    upper_noise_level: float = float("inf"),
+    **kwargs,
+) -> Tensor:
+    """
+    The noise-scale distribution used in AF3 (in Angstrom), wrapped around the lower
+    and upper bounds.
+
+    WARNING: The lower/upper here correspond to the noise-level (t) (not noise-scale (t^)),
+        wrapping happens in the noise-level space before converting to the corresponding
+        log-normal noise-scale distribution (t^) in Angstroms.
+    """
+    noise_level = wrapped_normal(
+        mean=0.0,
+        std=1.0,
+        size=size,
+        lower=lower_noise_level,
+        upper=upper_noise_level,
+        **kwargs,
+    )
+    return af3_noise_level_to_noise_scale(noise_level)
+
+
+def featurize_noised_ground_truth_as_template_distogram(
+    atom_array: AtomArray,
+    *,
+    noise_scale: Float[Tensor, "n_token"] | float,  # noqa: F821
+    distogram_bins: Float[Tensor, "n_bin_edges"],  # noqa: F821
+    allowed_chain_types: list[ChainType],
+    mask_inter_molecule_distances: bool = True,
+    p_unconditional: float = 0.0,
+) -> dict[str, Tensor]:  # noqa: F821
+    """Add and featurize noised ground truth as a template.
+
+    Used to leak ground-truth information into the model.
+
+    Args:
+        atom_array (AtomArray): The input atom array.
+        noise_scale (Tensor | float): Standard deviation of the noise to add to the ground truth.
+            Different tokens may have different noise scales (e.g. one noise scale for
+            side-chains, one for ligand atoms and one for backbone atoms).
+            Units are in Angstrom. If given as tensor, must be of shape [n_token] (float).
+        allowed_chain_types (list): List of allowed chain types. Only token pairs where both
+            tokens have a chain type in this list will have a distogram condition.
+        distogram_bins (Tensor): Bins for discretizing distances in the distogram (in Angstrom).
+            Shape: [n_bin].
+        mask_inter_molecule_distances (bool): Whether to mask inter-molecule (inter-chain) distances.
+            Default is True.
+        p_unconditional (float): Probability of discarding all conditioning. Tunable hyperparameter;
+            see Classifier-Free Diffusion Guidance (Ho et al., 2022) for details.
+
+    Returns:
+        - distogram_condition_features (dict): A dictionary containing the following features:
+            - "distogram_condition_noise_scale": The noise scale for each token.
+                Shape: [n_token] (float).
+            - "has_distogram_condition": A mask indicating which pairs of tokens have a distogram condition.
+                Shape: [n_token, n_token] (bool).
+            - "distogram_condition": The distogram condition for each pair of tokens.
+                Shape: [n_token, n_token, n_bin] (float).
+    """
+    MASK_VALUE = float("nan")
+
+    # Get full atom array token starts (useful for going from atom-level -> token-level annotations)
+    _a_token_starts = get_token_starts(atom_array)  # [n_token] (int)
+    _n_token = len(_a_token_starts)
+
+    # Create one blank template (ground truth), initialized to mask tokens (we will only use the distogram, and ignore the other features)
+    template_distogram = torch.full((_n_token, _n_token), fill_value=MASK_VALUE)
+
+    # Sample Gaussian noise according to the noise scale for each token
+    # NOTE: If a scalar noise scale is provided, it will be broadcasted to all tokens
+    # NOTE: We sample noise independently for each token; no two tokens will have the exact same noise
+    noise = torch.normal(mean=0.0, std=1.0, size=(_n_token, 3)) * noise_scale.unsqueeze(
+        -1
+    )
+
+    # Get the center coordinates of the tokens (CA for proteins, C1' for nucleic acids), and add noise
+    center_token_mask = get_af3_token_center_masks(atom_array)  # [n_atom] (bool)
+    noisy_center_coords = (
+        torch.from_numpy(atom_array.coord[center_token_mask]) + noise
+    )  # [n_token, 3] (float)
+
+    # Create a mask of supported chain types...
+    tokens_with_supported_chain_types_mask = np.isin(
+        atom_array.chain_type[center_token_mask], allowed_chain_types
+    )  # [n_token] (bool)
+
+    # ... and mask of tokens with resolved center atoms
+    resolved_tokens_mask = (
+        atom_array.occupancy[center_token_mask] > 0
+    )  # [n_token] (bool)
+
+    # The tokens to fill are those with supported chain types, resolved center atoms, and non-NaN noise
+    token_to_fill_mask = (
+        tokens_with_supported_chain_types_mask & resolved_tokens_mask & torch.isfinite(noise).all(dim=-1).numpy()
+    )  # [n_token] (bool)
+
+    # With probability `p_unconditional`, discard all conditioning
+    if p_unconditional > 0.0 and np.random.rand() < p_unconditional:
+        token_to_fill_mask = np.full_like(token_to_fill_mask, False)
+
+    token_idxs_to_fill = np.where(token_to_fill_mask)[0]  # [n_token_to_fill] (int)
+
+    # ... fill the template_distogram
+    ix1, ix2 = np.ix_(token_idxs_to_fill, token_idxs_to_fill)
+    template_distogram[ix1.astype(int), ix2.astype(int)] = torch.cdist(
+        noisy_center_coords[token_to_fill_mask],
+        noisy_center_coords[token_to_fill_mask],
+        compute_mode="donot_use_mm_for_euclid_dist",  # Important for numerical stability
+    )
+
+    # (Create n_token x n_token mask, where True indicates a condition); e.g., True for all non-mask tokens
+    token_to_fill_mask_II = token_to_fill_mask[:, None] & token_to_fill_mask[None, :]
+
+    # ... mask inter-molecule distances, if required
+    if mask_inter_molecule_distances:
+        # Create a mask of tokens that belong to different molecules
+        is_inter_molecule = (
+            atom_array.molecule_id[center_token_mask][:, None]
+            != atom_array.molecule_id[center_token_mask]
+        )
+
+        # ... mask inter-molecule distances
+        token_to_fill_mask_II[is_inter_molecule] = False
+        template_distogram[is_inter_molecule] = MASK_VALUE
+
+    # ... bucketize the distogram (NOTE: `nan`s get grouped into the last (highest) bin)
+    template_distogram = torch.bucketize(
+        template_distogram,
+        boundaries=distogram_bins,
+    )
+    n_bins = len(distogram_bins) + 1
+    template_distogram = torch.nn.functional.one_hot(
+        template_distogram, num_classes=n_bins
+    ).to(torch.float32)  # We don't need int64 precision
+
+    # ... expand noise scale to provide it for embedding in the model
+    noise_scale = (
+        noise_scale.expand(_n_token)
+        if isinstance(noise_scale, Tensor)
+        else torch.full_like(noise, fill_value=noise_scale)
+    )
+
+    # ... set noise scale to zero for tokens without distogram condition
+    # (That way, we can at least be consistent with the noise scale for the tokens that are masked)
+    noise_scale[~token_to_fill_mask] = 0.0
+
+    out = {
+        "distogram_condition_noise_scale": noise_scale,  # [n_token] (float)
+        "has_distogram_condition": torch.as_tensor(
+            token_to_fill_mask_II, dtype=torch.bool
+        ),  # [n_token, n_token] (bool)
+        "distogram_condition": template_distogram,  # [n_token, n_token, n_bins] (float)
+    }
+
+    assert_no_nans(out, msg="Conditioning features contain NaNs!")
+
+    return out
+
+
+class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
+    """Add noised ground truth as a template distogram.
+
+    Creates template features by adding Gaussian noise to the ground truth
+    coordinates and converting the resulting distances into a discretized
+    distogram.
+
+    Args:
+        - noise_scale_distribution (Callable): Function that returns the standard
+            deviation of noise to add to the ground truth coordinates. Should take
+            a sequence of dimensions and return a tensor or float. Default is
+            af3_noise_scale_distribution.
+        - distogram_bins (Tensor): Bin boundaries for discretizing distances in
+            the distogram. Shape [n_bins-1].
+        - allowed_chain_types (list): List of allowed chain types. Default is all chain types.
+        - mask_inter_molecule_distances (bool): Whether to mask inter-molecule (inter-chain)
+            distances. Default is True.
+        - p_unconditional (float): Probability of discarding all conditioning. Default is 0.0.
+
+    Adds the following features to the `feats` dict:
+        - "distogram_condition_noise_scale": Noise scale for each
+            token [n_token] (float)
+        - "has_distogram_condition": Mask indicating which token pairs have a distogram
+            condition [n_token, n_token] (bool)
+        - "distogram_condition": One-hot encoded distogram
+            [n_token, n_token, n_bins] (float)
+    """
+
+    requires_previous_transforms = [AtomizeByCCDName]
+
+    def __init__(
+        self,
+        noise_scale_distribution: NoiseScaleSampler
+        | TokenGroupNoiseScaleSampler = af3_noise_scale_distribution,
+        distogram_bins: torch.Tensor = DEFAULT_DISTOGRAM_BINS,
+        allowed_chain_types: list[ChainType] = ChainType.get_all_types(),
+        mask_inter_molecule_distances: bool = True,
+        p_unconditional: float = 0.0,
+    ):
+        self.distogram_bins = distogram_bins
+        self.noise_scale_distribution = noise_scale_distribution
+        self.mask_inter_molecule_distances = mask_inter_molecule_distances
+        self.allowed_chain_types = allowed_chain_types
+        self.p_unconditional = p_unconditional
+
+        if not self.allowed_chain_types:
+            logger.warning("No chain types allowed; no conditioning will be given.")
+
+    def check_input(self, data: dict[str, Any]) -> None:
+        check_contains_keys(data, ["atom_array"])
+        check_is_instance(data, "atom_array", AtomArray)
+        check_atom_array_annotation(data, ["chain_type", "occupancy"])
+
+    def forward(self, data: dict[str, Any]) -> dict[str, Any]:
+        atom_array = data["atom_array"]
+
+        if isinstance(self.noise_scale_distribution, TokenGroupNoiseScaleSampler):
+            # ... different noise scale for each token group
+            noise_scale = self.noise_scale_distribution(atom_array)  # [n_token] (float)
+        else:
+            # ... same noise scale for all tokens
+            noise_scale = self.noise_scale_distribution(size=(1,))  # [1] (float)
+
+        template_features = featurize_noised_ground_truth_as_template_distogram(
+            atom_array=atom_array,
+            noise_scale=noise_scale,
+            allowed_chain_types=self.allowed_chain_types,
+            distogram_bins=self.distogram_bins,
+            mask_inter_molecule_distances=self.mask_inter_molecule_distances,
+            p_unconditional=self.p_unconditional,
+        )
+
+        # Add the template features to the `feats` dict
+        if "feats" not in data:
+            data["feats"] = {}
+        data["feats"].update(template_features)
+
+        return data

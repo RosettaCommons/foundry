@@ -1,0 +1,13 @@
+defaults:
+  - base
+
+dataset:
+  dataset_parser:
+    _target_: datahub.datasets.parsers.ValidationDFParserLikeAF3
+  dataset:
+    _target_: datahub.datasets.datasets.PandasDataset
+    data: ${paths.data.pdb_data_dir}/entry_level_val_df.parquet
+    filters:
+      # Only score examples with protein-ligand interfaces
+      - "interfaces_to_score.str.contains('protein-ligand')"
+      - example_id not in ["{['validation']}{7qbs}{1}{[]}"]

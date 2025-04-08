@@ -1,0 +1,23 @@
+# @package _global_
+
+name: rfscore-arbitrary-templating
+
+# For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
+defaults:
+  - override /callbacks: experimental_validation
+  - override /datasets: rfscore_arbitrary_templating
+  - override /model: rfscore
+  - override /logger: csv
+  - override /trainer/metrics: experimental_validation
+
+tags:
+  # list of tags to add to the run (& on wandb to easily find & filter runs)
+  - experiment
+  - arbitrary-templating
+  - rfscore
+
+model:
+  lr_scheduler:
+    base_lr: 0.9e-3 # 1/2 of original learning rate (1.8e-3)
+
+ckpt_path: /projects/ml/modelhub/inference/rf2aa-af3-repro7_ep680.pt

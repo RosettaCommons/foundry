@@ -1,0 +1,39 @@
+# @package _global_
+
+defaults:
+  - /model/af3
+  - _self_
+
+model:
+  net:
+    _target_: projects.rfscore.model.RFScore.RFScore
+
+    feature_initializer:
+      input_feature_embedder:
+        atom_attention_encoder:
+          c_atom_1d_features: 390 # Add one more channel to concatenate the feature indicating whether the conformer is the ground truth
+          atom_1d_features:
+            - ref_pos
+            - ref_charge
+            - ref_mask
+            - ref_element
+            - ref_atom_name_chars
+            - ref_pos_is_ground_truth 
+
+    recycler:
+      template_embedder:
+        # Concatenated encoding: 66
+        # Fourier encoding: 64
+        raw_template_dim: 66
+        use_fourier_encoding: false
+
+    diffusion_module:
+      atom_attention_encoder:
+        c_atom_1d_features: 390 # Add one more channel to concatenate the feature indicating whether the conformer is the ground truth
+        atom_1d_features:
+          - ref_pos
+          - ref_charge
+          - ref_mask
+          - ref_element
+          - ref_atom_name_chars
+          - ref_pos_is_ground_truth

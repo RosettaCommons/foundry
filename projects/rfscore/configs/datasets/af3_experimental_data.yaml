@@ -1,0 +1,25 @@
+# Standard AF-3 training with experimental data validation
+
+defaults:
+  - af3
+
+  # (Experimental data validation)
+  - val/af3_validation@val.ts1_unconditional
+  - _self_
+
+val:
+  # Validation as a scoring function for experimental data
+  ts1_unconditional:
+    dataset:
+      dataset_parser:
+        _target_: datahub.datasets.parsers.GenericDFParser
+        attrs:
+          selection_strings:
+            - "B/*/*/C5"
+            - "A/*/128/CB"
+            - "A/*/95/N"
+            - "A/*/95/CD2"
+            - "A/*/53/O"
+      dataset:
+        data: /projects/ml/rfscore/datasets/experimental_validation/serine_hydrolase/dfs/ts1.parquet
+    key_to_balance: null # (Because we inherit from AF-3 validation, we must set to null)
