@@ -62,7 +62,9 @@ exclude = [
     "env",
     ".venv",
     "venv",
-    "modelhub",
+    "*.ipynb",
+    "dev.py",
+    "archive",
 ]
 
 [tool.ruff.format]
@@ -86,9 +88,6 @@ docstring-code-line-length = 88
 [tool.ruff.lint]
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-
-# Avoid linting notebooks
-exclude = ["*.ipynb", "dev.py"]
 
 # Sort imports
 extend-select = ["I"]

@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from rf2aa.metrics.metrics_base import Metric
-from rf2aa.kinematics import get_dih
+from modelhub.metrics.metrics_base import Metric
+from modelhub.kinematics import get_dih
 
 def calc_chiral_loss_masked(pred, chirals, mask):
     """

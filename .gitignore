@@ -202,9 +202,6 @@ wandb/
 # Hydra
 .hydra/
 
-# Outputs
-**/outputs/
-
 # Logs
 logs/
 
@@ -214,7 +211,6 @@ logs/
 
 # Misc
 **/notebooks/
-**/models/
-**/run_scripts/
 **/scratch/
+**/outputs/
 
