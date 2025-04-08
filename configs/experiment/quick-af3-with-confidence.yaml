@@ -1,0 +1,14 @@
+# @package _global_
+
+# Experiment that loads a small dataset for quick testing
+
+name: quick-af3-with-confidence
+
+# For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
+defaults:
+  - quick-af3
+  - override /model: af3_with_confidence
+  - override /trainer: af3_with_confidence
+  - _self_
+
+ckpt_path: /projects/ml/modelhub/inference/weights_with_confidence_2025_2_27_new_modelhub.ckpt

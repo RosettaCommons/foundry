@@ -1,0 +1,10 @@
+# @package _global_
+
+defaults:
+  - /hydra: no_logging
+
+ckpt_path: ???
+inputs: ???
+out_dir: ./
+num_nodes: 1
+devices_per_node: 1

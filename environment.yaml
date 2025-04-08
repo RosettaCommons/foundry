@@ -6,53 +6,80 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  # Core dependencies
+  - pip
   - python=3.11
   - cuda
   - pytorch=2.4
   - pytorch-cuda=12.4
   - pytorch-scatter>=2.1.0,<3
   - lightning>=2.4.0,<2.5
-  - pandas>=1.4.2,<2.3
-  - numpy>=1.25.0,<2.1
-  - scipy>=1.13.1,<2
-  - cytoolz>=0.12.3,<1
-  - biopython>=1.83,<2
-  - fire>=0.6.0,<1
-  - ruff>=0.6.2
-  - pytest-dotenv>=0.5.2,<1
-  - pytest-cov>=4.1.0,<5
+  # Small molecule libraries
   - rdkit>=2024.3.5
   - openbabel=3.1.1 
-  - pip
   - pip:
-    - biotite>=1.1.0,<1.2
-    - seaborn>=0.13.0,<1
-    - loguru>=0.7.0,<1
-    - beartype>=0.18.0,<1
+    # Project-related dependencies
+    # ... generic tools
+    - GitPython>=3.0.0,<4  # GitPython is a Python library used to interact with Git repositories
+    - cython>=3.0.0,<4  # Cython compiler for C extensions
+    - cytoolz>=0.12.3,<1  # Cython-optimized tools for itertools and functional programming
+    - assertpy>=1.1.0,<2  # Assertions library
+    - tqdm>=4.65.0,<5  # Fast, extensible progress bar for loops and more
+    - rootutils>=1.0.7,<1.1 # Setting up the project root paths
+    - dm-tree>=0.1.6,<1 # Tree data structure from DeepMind
+    - deepdiff>=8.0.0,<9 # Deep difference and search of any Python object
+    # ... configuration & CLI
+    - fire>=0.6.0,<1  # Better argument parsing than argparse
+    - hydra-core>=1.3.0,<1.4  # Config management framework
+    - environs>=11.0.0,<12
+    # ... linear algebra, maths & ml
+    - numpy>=1.25.0,<2  
+    - scipy>=1.13.1,<2
     - einops>=0.8.0,<1
     - einx>=0.1.0,<1
-    - debugpy>=1.8.5,<2
-    - cython>=3.0.0,<4
-    - pytest>=8.2.0,<9
-    - assertpy>=1.1.0,<2
-    - pre-commit>=3.7.1
-    - tqdm>=4.65.0,<5
-    - py3Dmol>=2.2.1,<3
-    - pyarrow>=17.0.0
-    - fastparquet>=2024.5.0
-    - ipykernel>=6.29.4,<7
-    - jaxtyping>=0.2.17,<1
-    - hydra-core>=1.3.0,<1.4
-    - wandb>=0.15.10,<1
-    - environs>=11.0.0,<12
-    - rootutils>=1.0.7,<1.1
     - opt_einsum>=3.4.0,<4
-    - rich>=13.9.4,<14
-    - msgpack>=1.1.0,<2
-    - pymol-remote>=0.1.0
-    - deepspeed>=0.15.1
+    - deepspeed>=0.15.1 # will be uninstalled by the apptainer's `spec` file, if pre-compiling
+    # ... data tools
+    - pandas>=2.2,<2.3  # Data manipulation and analysis
+    - pyarrow==17.0.0  # Columnar data format for efficient data storage and processing
+    - fastparquet==2024.5.0  # Fast Parquet file format implementation
+    - seaborn>=0.13.0,<1
+    # ... bioinformatics
+    - biopython>=1.83,<2  # Collection of Python modules for bioinformatics
+    - py3Dmol>=2.2.1,<3  # Python wrapper for 3Dmol.js
+    - pymol-remote>=0.0.5  # Remote access to PyMOL from Python (has no dependencies)
     - git+https://github.com/biotite-dev/biotite.git@fab175e7ba4608d9613f092ad4e080661c6cc816
-    - GitPython>=3.0.0,<4  # Git library for Python
+    - hydride==1.2.3 #biotite supported hydrogen addition
+    # ... logging
+    - wandb>=0.15.10,<1
+    - rich>=13.9.4,<14
 
-# NOTE: After navigating to the datahub  / cifutils directories, you can install the local package in editable mode with:
+    # Formatting & linting (only needed for development)
+    - ruff==0.8.3  # python linter & formatter
+    - pre-commit==3.7.1  # pre-commit hooks for formatting & linting
+
+    # Debugger & interactive tools (only needed for development)
+    - debugpy>=1.8.5,<2  # debugger for python
+    - ipykernel>=6.29.4,<7  # ipython kernel for jupyter
+    - icecream>=2.0.0,<3 # print debugging
+    - pymol-remote>=0.1.0 # Remote access to PyMOL from Python (has no dependencies)
+    - ipdb>=0.13.9  # IPython debugger
+
+    # Pytest plugins (only needed for development)
+    - pytest>=8.2.0,<9  # testing framework
+    - pytest-testmon>=2.1.1,<3  # run only tests related to changed code
+    - pytest-xdist>=3.6.1,<4  # run tests in parallel
+    - pytest-dotenv>=0.5.2,<1  # load environment variables from .env file
+    - pytest-cov>=4.1.0,<5  # generate coverage report
+    - pytest-benchmark>=5.0.0,<6  # benchmark tests for speed
+
+    # Typing & documentation (only needed for development)
+    - jaxtyping>=0.2.17,<1
+    - beartype>=0.18.0,<1
+
+# NOTE: After navigating to the datahub / cifutils / modelhub directories, you can install the local package in editable mode with:
 #   pip install -e .
+
+# NOTE: By default, DeepSpeed just-in-time compiles, which may take 3-4 minutes when first running the code on a new machine.
+# It may be possible to pre-compile DeepSpeed within a `conda` environment; see: https://www.deepspeed.ai/tutorials/advanced-install/
+# By default, the apptainers will have DeepSpeed pre-compiled, so when performance is a concern, it is recommended to use the apptainers.

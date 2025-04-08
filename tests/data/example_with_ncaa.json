@@ -1,0 +1,14 @@
+[
+    {
+        "name": "example_with_ncaa",
+        "components": [
+            {
+                "seq": "SPLEEREEELDRLYEKYKEEFKDLSPEELRAEVVAAIARVAEAFSDVDVWIVVSRYVTPERAAVARELAREAGYPEVLLFHSSRVEEAKAKKKELEAKGKKVKVSVDSSVDLPEADFVIPDKYAKI(PBF)WDGAAAGGTTLDFAALANALAEVLSRLAKEE",
+                "chain_id": "A"
+            },
+            {
+                "smiles": "O=C1Nc2ccccc2[C@]34OCC[C@H]3C[C@H]14"
+            }
+        ]
+    }
+]

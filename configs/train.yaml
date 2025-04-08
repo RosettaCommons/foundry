@@ -1,0 +1,42 @@
+# @package _global_
+# ^ The "package" determines where the content of the config is placed in the output config
+# For more information about overriding configs, see: https://hydra.cc/docs/advanced/overriding_packages/#overriding-packages-using-the-defaults-list
+
+# NOTE: order of defaults determines the order in which configs override each other (higher up items are overridden by lower items)
+defaults:
+  - callbacks: default
+  - logger: csv
+  - trainer: ???
+  - paths: default
+  - datasets: ???
+  - dataloader: default
+  - hydra: default
+  - model: ???
+  # We must keep _self_ before experiment and debug to ensure that the experiment and debug configs can override
+  - _self_
+
+  # experiment configs allow for version control of specific hyperparameters
+  # e.g. best hyperparameters for given model and datamodule
+  - experiment: ???
+
+  # debug configs to add onto any experiment for quickly testing or debugging code
+  - debug: null
+
+
+# DO NOT set these here. Set them in the relevant experiment config file.
+# ... these are just here to ensure users always specify these fields in their experiment configs.
+name: ???
+tags: ???
+
+# NOTE: These values will be overwritten by the experiment config if they are set there. They are just provided as defaults
+#       here.
+# ... task name (determines the output directory path)
+task_name: "train"
+
+project: ??? # required for W&B logging
+
+seed: 1
+
+# Provide checkpoint path to resume training from a checkpoint
+# NOTE: If using W&B, must also set the `id` and `resume` fields in the `logger/wandb` config
+ckpt_path: null

@@ -1,0 +1,8 @@
+by_type_lddt:
+  _target_: modelhub.metrics.lddt.ByTypeLDDT
+all_atom_lddt:
+  _target_: modelhub.metrics.lddt.AllAtomLDDT
+distogram:
+  _target_: modelhub.metrics.distogram.DistogramLoss
+distogram_comparisons:
+  _target_: modelhub.metrics.distogram.DistogramComparisons

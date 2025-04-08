@@ -1,0 +1,12 @@
+# Base Transform defaults
+diffusion_batch_size_train: 48
+diffusion_batch_size_inference: 5
+
+n_recycles_train: 4
+n_recycles_validation: 10
+
+n_msa: 1024
+crop_size: 384
+max_atoms_in_crop: 5000 
+
+key_to_balance: n_tokens_total

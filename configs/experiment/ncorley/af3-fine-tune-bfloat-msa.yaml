@@ -1,0 +1,30 @@
+# @package _global_
+
+name: af3
+
+defaults:
+  - override /datasets: af3
+  - override /model: af3
+  - override /trainer: af3
+
+tags:
+  - af3
+  - fine-tune
+
+project: af3
+
+ckpt_path: /projects/ml/modelhub/inference/rf2aa-af3-repro7_ep680.pt
+
+model:
+  lr_scheduler:
+    base_lr: 0.9e-3 # 1/2 of original learning rate (1.8e-3)
+
+# Protein-ligand only for speed
+val:
+  af3_validation:
+    dataset: 
+      dataset:
+        filters:
+            # Only score examples with protein-ligand interfaces
+            - "interfaces_to_score.str.contains('protein-ligand')"
+            - example_id not in ["{['validation']}{7qbs}{1}{[]}"]

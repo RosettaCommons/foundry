@@ -1,0 +1,50 @@
+# @package _global_
+
+# Experiment that loads a small dataset for quick testing
+
+name: quick-af3
+
+# For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
+defaults:
+  - override /trainer: af3
+  - override /datasets: af3
+  - override /model: af3
+
+tags:
+  # list of tags to add to the run ( & on wandb to easily find & filter runs)
+  - quick
+
+project: test
+
+ckpt_path: /projects/ml/modelhub/inference/rf2aa-af3-repro7_ep680.pt
+
+datasets:
+  train:
+    pdb:
+      # We must adjust the probability, since we set the monomer distillation dataset to null
+      probability: 1.0
+      sub_datasets:
+        interface:
+          dataset:
+            dataset:
+              # A small dataframe that loads quickly
+              data: /projects/ml/datahub/dfs/pdb/test_dfs/interfaces_df.parquet
+              filters:
+                - "num_polymer_pn_units <= 2" 
+                - "cluster.notnull()"
+        pn_unit:
+          dataset:
+            dataset:
+              # A small dataframe that loads quickly
+              data: /projects/ml/datahub/dfs/pdb/test_dfs/pn_units_df.parquet
+              filters:
+                - "num_polymer_pn_units <= 2" 
+                - "cluster.notnull()"
+    # Datasets set to null are ignored
+    monomer_distillation: null
+  val: 
+    af3_validation:
+      dataset:
+        dataset:
+          filters:
+            - "n_tokens_total < 200"

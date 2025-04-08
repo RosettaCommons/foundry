@@ -24,25 +24,72 @@ format:
 	ruff format .
 	ruff check --fix .
 
-## Create a new conda environment
+_github_token_error:
+	@echo "==============================================================================="; \
+	echo "Error: Environment variables GITHUB_USER and GITHUB_TOKEN must be set."; \
+	echo ""; \
+	echo "You need to set the environment variables GITHUB_USER and GITHUB_TOKEN."; \
+	echo "You can create a personal access token on GitHub at:"; \
+	echo "   https://github.com/settings/tokens"; \
+	echo ""; \
+	echo "For more info see: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic"; \
+	echo ""; \
+	echo "To expose these variables, you can use:"; \
+	echo "export GITHUB_USER=<github-username>"; \
+	echo "export GITHUB_TOKEN=<github-token>"; \
+	echo ""; \
+	echo "It is recommended that you set these tokens in your .bashrc or .zshrc file for future use."; \
+	echo "===============================================================================";
+	exit 1;
+
+_check_conda:
+	@echo "... checking if conda/mamba is installed"
+	@command -v $(CONDA_BINARY) >/dev/null 2>&1 || { \
+		echo "Error: Conda/mamba is not installed or not found in PATH" >&2; \
+		exit 1; \
+	}
+	@echo "... found conda executable: $(CONDA_BINARY)"
+
+_check_tokens:
+	@echo "... checking if GITHUB_USER and GITHUB_TOKEN are set"
+	@if [ -z "$(GITHUB_USER)" ] || [ -z "$(GITHUB_TOKEN)" ]; then \
+		$(MAKE) _github_token_error; \
+	fi
+	@echo "... found GITHUB_USER ($(GITHUB_USER)) and GITHUB_TOKEN."
+
+## Create a new conda environment and install modelhub
 env:
-	$(CONDA_BINARY) env create -n modelhub --file environment.yaml
-	conda init
-	conda activate modelhub
-	pip install -e ".[dev]"
+	@echo "Creating modelhub conda environment: modelhub"
+
+	@$(MAKE) --no-print-directory _check_tokens
+	@$(MAKE) --no-print-directory _check_conda
+
+	@$(CONDA_BINARY) env create -n modelhub --file environment.yaml
+	@conda init
+	@conda activate modelhub
+	@pip install -e ".[dev]"
+	@python -m biotite.setup_ccd
+
 
 ## Install modelhub locally into the current environment
 install:
 	# Install the conda requirements in the current activated environment
 	$(CONDA_BINARY) env update --file environment.yaml
 	# Install the pip requirements in the current activated environment
-	pip install -e ".[dev]"
+	@pip install -e ".[dev]"
+	@python -m biotite.setup_ccd
 
 ## Build the apptainer image
-apptainer:
+base_apptainer:
 	$(eval DATE := $(shell date +%Y-%m-%d))
-	$(eval IMAGE := modelhub_$(DATE).sif)
-	bash ./scripts/build_apptainer.sh
+	bash ./scripts/build_base_apptainer.sh
+
+# Set INSTALL_PROJECT to true to install modelhub within the apptainer (much slower)
+# e.g., `make INSTALL_PROJECT=true freeze_apptainer` or `make freeze_apptainer INSTALL_PROJECT=true`
+INSTALL_PROJECT ?= false
+freeze_apptainer: 
+	$(eval DATE := $(shell date +%Y-%m-%d))
+	bash ./scripts/freeze_apptainer.sh $(INSTALL_PROJECT)
 
 ## Run pytest and generate coverage report
 test:

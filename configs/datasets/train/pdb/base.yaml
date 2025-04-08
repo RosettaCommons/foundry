@@ -1,0 +1,33 @@
+dataset:
+  _target_: datahub.datasets.datasets.StructuralDatasetWrapper
+  save_failed_examples_to_dir: ${paths.data.failed_examples_dir}
+  cif_parser_args:
+    cache_dir: null
+    load_from_cache: false
+    save_to_cache: false
+  dataset:
+    _target_: datahub.datasets.datasets.PandasDataset
+    # we will use the example_id as the unique column
+    id_column: example_id
+  # return all keys (do not subset)
+  return_key: null
+  transform:
+    # common Transform pipeline components for all PDB datasets
+    _target_: ${datasets.pipeline_target}
+    is_inference: False
+    protein_msa_dirs: ${paths.data.protein_msa_dirs}
+    rna_msa_dirs: ${paths.data.rna_msa_dirs}
+    n_recycles: ${datasets.n_recycles_train}
+    crop_size: ${datasets.crop_size}
+    n_msa: ${datasets.n_msa}
+    diffusion_batch_size: ${datasets.diffusion_batch_size_train}
+    max_atoms_in_crop: ${datasets.max_atoms_in_crop}
+
+weights:
+  _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df
+  beta: 0.5
+  alphas:
+    a_prot: 3.0 # 3 for AF-3
+    a_nuc: 0.0 # 3 for AF-3
+    a_ligand: 1.0 # 1 for AF-3
+    a_loi: 5.0 # 5 for AF-3

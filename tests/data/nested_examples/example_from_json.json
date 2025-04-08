@@ -1,0 +1,12 @@
+{
+    "name": "example_from_smiles(json)",
+    "components": [
+        {
+            "seq": "MNAKEIVVHALRLLENGDARGWCDLFHPEGVLEYPYPPPGYKTRFEGRETIWAHMRLFPEYMTIRFTDVQFYETADPDLAIGEFHGDGVHTVSGGKLAADYISVLRTRDGQILLYRLFFNPLRVLEPLGLEHHHHHH",
+            "chain_id": "A"
+        },
+        {
+            "smiles": "O=C1OCC(=C1)C5C4(C(O)CC3C(CCC2CC(O)CCC23C)C4(O)CC5)C"
+        }
+    ]
+}

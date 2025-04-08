@@ -1,0 +1,4 @@
+defaults:
+  # Note that the SmoothedLDDTLoss is included within the DiffusionLoss
+  - losses/diffusion_loss@diffusion_loss
+  - losses/distogram_loss@distogram_loss

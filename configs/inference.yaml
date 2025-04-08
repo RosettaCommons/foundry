@@ -1,0 +1,7 @@
+# @package _global_
+# ^ The "package" determines where the content of the config is placed in the output config
+# For more information about overriding configs, see: https://hydra.cc/docs/advanced/overriding_packages/#overriding-packages-using-the-defaults-list
+
+defaults:
+  - inference_engine: ???
+  - _self_

@@ -1,0 +1,22 @@
+# @package _global_
+
+defaults:
+  - base
+  - _self_
+
+_target_: modelhub.inference_engines.af3.AF3InferenceEngine
+
+ckpt_path: /net/tukwila/ncorley/modelhub/inference/modelhub_latest.ckpt
+
+n_recycles: 10
+diffusion_batch_size: 5
+residue_renaming_dict: null
+num_steps: 50
+solver: "af3"
+print_config: true
+seed: null
+skip_existing: true
+
+dump_predictions: true
+dump_trajectories: false
+one_model_per_file: false

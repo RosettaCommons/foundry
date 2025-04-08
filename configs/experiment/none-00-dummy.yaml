@@ -1,0 +1,15 @@
+# @package _global_
+
+# NOTE: Dummy experiment that you can use to just run the code
+# . For actual experiments, please create a new experiment config from copying the template 'user-XX-template.yaml'
+
+
+name: none-00-dummy
+
+tags:
+  # list of tags to add to the run ( & on wandb to easily find & filter runs)
+  - experiment
+  - dummy
+
+project: test
+

@@ -20,19 +20,19 @@ build-backend = "hatchling.build"
 source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "rf2aa/version.py"
+version-file = "src/modelhub/version.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["rf2aa"]
+packages = ["src/modelhub"]
 
 # Formatting & linting settings -------------------------------------------------------
 [tool.ruff]
 line-length = 88
 indent-width = 4
-target-version = "py311"
+target-version = "py310"
 exclude = [
     ".bzr",
     ".direnv",

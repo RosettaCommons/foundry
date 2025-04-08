@@ -1,0 +1,12 @@
+defaults:
+  - base
+
+dataset:
+  dataset_parser:
+    _target_: datahub.datasets.parsers.ValidationDFParserLikeAF3
+  dataset:
+    _target_: datahub.datasets.datasets.PandasDataset
+    data: ${paths.data.pdb_data_dir}/entry_level_val_df.parquet
+    filters:
+      # NOTE: We exclude these examples from validation because they produce an error upon RDKit small molecule processing that causes a data loading fallback
+      - example_id not in ["{['validation']}{7erc}{1}{[]}", "{['validation']}{7qbs}{1}{[]}", "{['validation']}{7z0n}{1}{[]}"]

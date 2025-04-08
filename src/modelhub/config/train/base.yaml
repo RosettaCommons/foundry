@@ -1,0 +1,169 @@
+experiment:
+  name: rf2a-fd4-20231117
+  n_epoch: 800
+  output_dir: null
+  trainer: "legacy"
+
+model: 
+  embedding: null
+  blocks: null
+  refinement: null
+  auxiliary_predictors: {}
+legacy_model: null
+dataset_params: 
+  constructor: 
+    _target_: "modelhub.data.compose_dataset.LegacyDatasetConstructor"
+  validate_every_n_epochs: 0
+  validate_after_first_epoch: False
+  fraction_pdb: 0
+  fraction_fb: 0
+  fraction_compl: 0
+  fraction_neg_compl: 0
+  fraction_na_compl: 0 
+  fraction_neg_na_compl: 0
+  fraction_distil_tf: 0
+  fraction_tf: 0
+  fraction_neg_tf: 0 
+  fraction_rna: 0 
+  fraction_dna: 0 
+  fraction_sm_compl: 1
+  fraction_metal_compl: 0 
+  fraction_sm_compl_multi: 0 
+  fraction_sm_compl_covale: 0 
+  fraction_sm: 0 
+  fraction_atomize_pdb: 0 
+  fraction_atomize_complex: 0 
+  fraction_sm_compl_asmb: 0
+  n_train: 25600
+  n_valid_pdb: 0
+  n_valid_homo: 0
+  n_valid_dslf: 0 
+  n_valid_compl: 0 
+  n_valid_neg_compl: 0 
+  n_valid_na_compl: 0 
+  n_valid_neg_na_compl: 0 
+  n_valid_distil_tf: 0 
+  n_valid_tf: 0 
+  n_valid_neg_tf: 0 
+  n_valid_rna: 0 
+  n_valid_dna: 0 
+  n_valid_sm_compl: 0 
+  n_valid_metal_compl: 0 
+  n_valid_sm_compl_multi: 0
+  n_valid_sm_compl_covale: 0 
+  n_valid_sm_compl_strict: 0 
+  n_valid_sm: 0 
+  n_valid_atomize_pdb: 0 
+  n_valid_atomize_complex: 0 
+  n_valid_sm_compl_asmb: 0
+  p_homo_cut: 0
+  p_short_crop: 0 
+  p_dslf_crop: 0 
+  dslf_fb_upsample: 1
+
+loader_params: 
+  batch_size: 1
+  crop_params:
+    crop_probabilities:
+      radial_crop: 0.0
+      contig_crop: 1.0
+    use_sm_crop_for_sm_compl_examples: True
+    interface_selection_cutoff: 15.0
+  OMIT_PERMUTATE: True
+  maxseq: 1024
+  maxtoken: 1024  
+  maxlat: 128
+  crop: 256
+  rescut: 4.5
+  mintplt: 1
+  maxtplt: 4
+  seqid: 150.0
+  p_msa_mask: 0.15
+  maxcycle: 4
+  nres_atomize_min: 3
+  nres_atomize_max: 5
+  atomize_flank: 0
+  p_metal: 1
+  p_atomize_modres: 1
+  batch_by_dataset: True
+  batch_by_length: True
+  sm_compl_cluster_method: by_protein_sequence
+  ligands_to_remove: []
+  weight_sm_compl_by_seq_len: True
+  min_metal_contacts: 0
+  min_metal_contact_dist: 2.6
+  sampler_class: DistributedWeightedSampler
+  no_match_okay: False # If False, asserts that the dataset params in the cached dataset pickle match the config dataset params
+  dataloader_kwargs:
+    shuffle: False
+    num_workers: 0
+    pin_memory: True
+
+ddp_params:
+  accum: 1
+  batch_size: 1
+  port: 12435
+
+training_params: 
+  resume_from_checkpoint_path: null
+  reset_optimizer_params: False
+  EMA: 0.99
+  weight_decay: 0.01
+  learning_rate: .001
+  learning_rate_schedule:
+    num_warmup_steps: 0
+    num_steps_decay: 5000
+    decay_rate: 0.95
+  grad_clip: 0.2
+  use_amp: False
+  ddp_backend: nccl
+  seed: 446
+
+loss_param:
+  w_dist: 1.0
+  w_str: 10.0
+  w_inter_fape: 0.0
+  w_lig_fape: 0.0
+  w_lddt: 0.1
+  w_aa: 3.0
+  w_bond: 0.0
+  w_bind: 0.0
+  binder_loss_label_smoothing: 0.0
+  w_clash: 0.0
+  w_atom_bond: 0.0
+  w_skip_bond: 0.0
+  w_rigid: 0.0
+  w_hb: 0.0
+  w_pae: 0.05
+  w_pde: 0.05
+  w_trans: 0.0
+  lj_lin: 0.75
+
+log_params:
+  log_every_n_examples: 1
+  checkpoint_every_n_epochs: 12
+  use_wandb: False
+  wandb_project: 'rf2aa'
+
+eval_params: 
+  checkpoint_path: null
+  dump_cif_files: False
+  dump_cif_trajectories: False
+
+chem_params:
+  use_phospate_frames_for_NA: True
+  use_lj_params_for_atoms: False
+
+debug_params:
+  debug_grads: False
+
+#metrics: ["mean_pae", "mean_plddt"]
+
+hydra:
+  job_logging:
+    formatters:
+      simple:
+        format: '[%(asctime)s][%(filename)25s:%(lineno)4s][%(name)30s:%(funcName)30s()][%(levelname)s] %(message)s'
+
+cpu_training: false
+autograd_detect_anomaly: false
