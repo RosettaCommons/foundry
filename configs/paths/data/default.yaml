@@ -1,9 +1,17 @@
+########################
+# Datasets
+########################
+
 # path to directory with training splits
 pdb_data_dir: /projects/ml/datahub/dfs/af3_splits/2024_12_16/
 
 # fb monomer distillation dataset
 monomer_distillation_data_dir: /squash/af2_distillation_facebook/
 monomer_distillation_parquet_dir: /projects/ml/datahub/dfs/distillation/af2_distillation_facebook
+
+########################
+# MSAs
+########################
 
 # path(s) to search for protein MSAs (for PDB datasets)
 protein_msa_dirs:
@@ -18,6 +26,10 @@ protein_msa_dirs:
 # path(s) to search for RNA MSAs
 rna_msa_dirs:
   - {"dir": "/projects/msa/rf2aa_af3/rf2aa_paper_model_rna_msas", "extension": ".afa", "directory_depth": 0}
+
+########################
+# Misc
+########################
 
 # path to save examples that fail during the Transform pipeline (null = do not save)
 failed_examples_dir: null
