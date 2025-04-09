@@ -54,6 +54,7 @@ def dump_structures(
     base_path: PathLike,
     one_model_per_file: bool,
     extra_fields: list[str] | Literal["all"] = [],
+    **kwargs
 ) -> None:
     """Dump structures to CIF files, given the coordinates and input AtomArray.
 
@@ -66,7 +67,6 @@ def dump_structures(
         extra_fields (list[str] | Literal["all"]): List of extra fields to include in the CIF file.
     """
     base_path = Path(base_path)
-
     if one_model_per_file:
         assert isinstance(atom_arrays, AtomArrayStack) or isinstance(
             atom_arrays, list
@@ -74,13 +74,11 @@ def dump_structures(
         # One model per file —> loop over the diffusion batch
         for i in range(len(atom_arrays)):
             path = f"{base_path}_model_{i}"
-            to_cif_file(
-                atom_arrays[i], path, file_type="cif.gz", include_entity_poly=False, extra_fields=extra_fields
-            )
+            to_cif_file(atom_arrays[i], path, file_type="cif.gz", include_entity_poly=False, extra_fields=extra_fields, **kwargs)
     else:
         # Include all models in a single CIF file
         to_cif_file(
-            atom_arrays, base_path, file_type="cif.gz", include_entity_poly=False, extra_fields=extra_fields
+            atom_arrays, base_path, file_type="cif.gz", include_entity_poly=False, extra_fields=extra_fields, **kwargs
         )
 
 
@@ -89,6 +87,9 @@ def dump_trajectories(
     atom_array: AtomArray,
     base_path: Path,
     align_structures: bool = True,
+    post_process_function = None,
+    coord_atom_lvl_to_be_noised: torch.Tensor | None = None,
+    is_motif_atom_with_fixed_pos: torch.Tensor | None = None,
 ) -> None:
     """Write denoising trajectories to CIF files.
 
@@ -135,6 +136,8 @@ def dump_trajectories(
         atom_array_stack = build_stack_from_atom_array_and_batched_coords(
             trajectory, atom_array
         )
+        if post_process_function is not None:
+            atom_array_stack = post_process_function(atom_array_stack)
 
         path = f"{base_path}_model_{i}"
         to_cif_file(

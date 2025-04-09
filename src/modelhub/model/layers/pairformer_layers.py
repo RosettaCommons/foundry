@@ -316,6 +316,7 @@ class PairformerBlock(nn.Module):
         attention_pair_bias,
         n_transition=4,
         use_deepspeed_evo=True,
+        use_triangle_attn=True
     ):
         super().__init__()
 
@@ -328,18 +329,22 @@ class PairformerBlock(nn.Module):
         self.tri_mul_incoming = TriangleMultiplication(
             c_z, **triangle_multiplication, outgoing=False, bias=False
         )
-        self.tri_attn_start = TriangleAttention(
-            c_z,
-            **triangle_attention,
-            start_node=True,
-            use_deepspeed_evo=use_deepspeed_evo,
-        )
-        self.tri_attn_end = TriangleAttention(
-            c_z,
-            **triangle_attention,
-            start_node=False,
-            use_deepspeed_evo=use_deepspeed_evo,
-        )
+        self.use_triangle_attn=use_triangle_attn
+        
+        # Optionally use triangle attn
+        if use_triangle_attn:
+            self.tri_attn_start = TriangleAttention(
+                c_z,
+                **triangle_attention,
+                start_node=True,
+                use_deepspeed_evo=use_deepspeed_evo,
+            )
+            self.tri_attn_end = TriangleAttention(
+                c_z,
+                **triangle_attention,
+                start_node=False,
+                use_deepspeed_evo=use_deepspeed_evo,
+            )
 
         self.z_transition = Transition(c=c_z, n=n_transition)
 
@@ -365,12 +370,13 @@ class PairformerBlock(nn.Module):
             Z_II = Z_II + self.drop_row(
                 self.maybe_make_batched(self.tri_mul_incoming)(Z_II)
             )
-            Z_II = Z_II + self.drop_row(
-                self.maybe_make_batched(self.tri_attn_start)(Z_II)
-            )
-            Z_II = Z_II + self.drop_col(
-                self.maybe_make_batched(self.tri_attn_end)(Z_II)
-            )
+            if self.use_triangle_attn:
+                Z_II = Z_II + self.drop_row(
+                    self.maybe_make_batched(self.tri_attn_start)(Z_II)
+                )
+                Z_II = Z_II + self.drop_col(
+                    self.maybe_make_batched(self.tri_attn_end)(Z_II)
+                )
             Z_II = Z_II + self.z_transition(Z_II)
             if S_I is not None:
                 S_I = S_I + self.attention_pair_bias(

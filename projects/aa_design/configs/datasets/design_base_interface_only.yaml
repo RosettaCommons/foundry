@@ -1,0 +1,62 @@
+# base training dataset for training AF3 design models (atom14 variants):
+# protein subsampling only.
+
+defaults:
+  - base
+  # Interface dataset only
+  - train/pdb/af3_train_interface@train.pdb.sub_datasets.interface
+  # Customized validation datasets
+  - val/unconditional@val.unconditional
+  - _self_
+
+# Create a dictionary used for transform arguments
+pipeline_target: projects.aa_design.transforms.pipelines.build_atom14_base_pipeline
+global_transform_args:
+  seed: ${seed}
+  allowed_types: ['is_protein']
+  n_atoms_per_token: 14
+  central_atom: 'CB'
+  sigma_perturb: 0.0
+  mask_args: 
+    low_prop: 1.0
+    high_prop: 1.0
+    broken_prop: 1.0
+    mask_params:
+      get_unconditional_diffusion_mask: {}
+    diff_mask_probs:
+      get_unconditional_diffusion_mask: 1.0
+
+# Base config overrides:
+diffusion_batch_size_train: 32
+diffusion_batch_size_inference: 16
+crop_size: 256  # Can't go too big for a14 since there are additional atoms in each residue.
+n_recycles_train: 1
+n_recycles_validation: 1
+n_msa: null
+
+cif_parser_args:
+  cache_dir: /net/scratch/jbutch/cif_cache
+  load_from_cache: True
+  save_to_cache: False
+
+# Datasets:
+train:
+  pdb:
+    probability: 0.5
+    sub_datasets:
+      interface:
+        dataset:
+          cif_parser_args:
+            cache_dir: ${datasets.cif_parser_args.cache_dir}
+            load_from_cache: ${datasets.cif_parser_args.load_from_cache}
+            save_to_cache: ${datasets.cif_parser_args.save_to_cache}
+          transform:
+            seed: ${datasets.global_transform_args.seed}
+            allowed_types: ${datasets.global_transform_args.allowed_types}
+            central_atom: ${datasets.global_transform_args.central_atom}
+            n_atoms_per_token: ${datasets.global_transform_args.n_atoms_per_token}
+            mask_args: ${datasets.global_transform_args.mask_args}
+
+val:
+  unconditional: 
+    probability: 1.0

@@ -1,0 +1,17 @@
+
+defaults:
+  - design_base
+  - val/indexed@val.indexed
+  - _self_
+
+global_transform_args:
+  allowed_types: ['is_protein', 'is_ligand']
+  sigma_perturb: 1.0
+
+  train_masks:
+    unconditional:
+      frequency: 0.2
+    indexed:
+      frequency: 0.8
+
+

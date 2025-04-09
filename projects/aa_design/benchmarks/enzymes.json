@@ -1,0 +1,23 @@
+{
+    "retroaldolase": {
+        "input": "enzymes/retroaldolase.pdb",
+        "length": 200,
+        "ligand": "LLK",
+        "ori_token": [-16.407,  25.586, -18.000],
+        "rf_diffusion_args": "inference.input_pdb=tipatom_bench/ra_5an7_no_cov_ORI_cm1.pdb contigmap.contigs=[\\'10-100,A1051-1051,10-100,A1083-1083,10-100,A1110-1110,10-100,A1180-1180,10-100\\'] contigmap.contig_atoms=\"'{\\'A1051\\':\\'OH,CZ\\',\\'A1083\\':\\'NZ,CE\\',\\'A1110\\':\\'OD1,CG,ND2\\',\\'A1180\\':\\'OH,CZ\\'}'\" inference.ligand=LLK inference.contig_as_guidepost=True contigmap.length=150-150"
+    },
+    "chorismate-mutase": {
+        "input": "enzymes/chorismate_mutase.pdb",
+        "length": 200,
+        "ligand": "TSA",
+        "ori_token": [28.504,  33.662,  23.792],
+        "rf_diffusion_args": "contigmap.contig_atoms=\"'{\\'A11\\':\\'NH2,NH1,CZ,NE,CD\\',\\'A28\\':\\'NH2,NH1,CZ,NE,CD\\',\\'A39\\':\\'NZ,CE,CD\\',\\'A52\\':\\'OE2\\',\\'A88\\':\\'OE1,NE2,CD,CG\\'}'\" contigmap.length=100-150 contigmap.contigs=[\\'10-150,A11-11,10-150,A28-28,10-150,A39-39,10-150,A52-52,10-150,A88-88\\']"
+    },
+    "petase": {
+        "input": "enzymes/chorismate_mutase.pdb",
+        "length": 200,
+        "ligand": "pt1",
+        "ori_token": [-0.024, -0.039, -0.281],
+        "rf_diffusion_args": "inference.input_pdb=tipatom_bench/kiera_petase.pdb inference.ligand=pt1 contigmap.contig_atoms=\"'{\\'A58\\':\\'OG,CB,CA,N,C\\',\\'A84\\':\\'NE2,CE1,ND1,CD2,CG,CB\\',\\'A114\\':\\'CG,CB,OD2,OD1\\',\\'B146\\':\\'N,CA,C\\'}'\" contigmap.contigs=[\\'12,A84-84,29,A58-58,12,B146-146,65,A114-114,33-34\\']"
+    }
+}

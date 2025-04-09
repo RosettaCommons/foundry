@@ -1,11 +1,11 @@
 #!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../scripts/shebang/modelhub_exec.sh" "$0" "$@"'
 
 import logging
-
 import hydra
 import rootutils
 from omegaconf import DictConfig
 import os
+import numpy as np
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
@@ -86,6 +86,7 @@ def train(cfg: DictConfig) -> None:
     # ==============================================================================
     # Trainer and model instantiation
     # ==============================================================================
+
 
     # ... instantiate the trainer
     ranked_logger.info("Instantiating trainer...")

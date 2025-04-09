@@ -1,0 +1,16 @@
+# @package _global_
+
+defaults:
+  - override /model: unet-noise-encoding
+
+name: train-unet-nenc
+
+tags:
+  # list of tags to add to the run (& on wandb to easily find & filter runs)
+  - experiment
+  - atom14
+  - detrunked
+  - unet-pretrained
+  - unet-nenc
+
+# args='training_params.reset_optimizer_params=True '

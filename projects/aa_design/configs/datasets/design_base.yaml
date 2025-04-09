@@ -1,0 +1,97 @@
+# base training dataset for training AF3 design models (atom14 variants):
+# protein subsampling only.
+
+defaults:
+  - base
+  # These are just the defaults:
+  - train/pdb/af3_train_interface@train.pdb.sub_datasets.interface
+  - train/pdb/af3_train_pn_unit@train.pdb.sub_datasets.pn_unit
+  - train:
+    - monomer_distillation
+  # Customized validation datasets
+  - val/unconditional@val.unconditional
+
+  # Customized train masks
+  - train_masks/unconditional@global_transform_args.train_masks.unconditional
+  - train_masks/indexed@global_transform_args.train_masks.indexed
+  - train_masks/unindexed@global_transform_args.train_masks.unindexed
+
+  - _self_
+
+# Create a dictionary used for transform arguments
+pipeline_target: projects.aa_design.transforms.pipelines.build_atom14_base_pipeline
+global_transform_args:
+  seed: ${seed}
+  allowed_types: ['is_protein']
+  n_atoms_per_token: 14
+  central_atom: 'CB'
+  sigma_perturb: 0.0
+  
+  train_masks:
+    unconditional:
+      frequency: 1.0
+    indexed:  
+      frequency: 0.0
+    unindexed:
+      frequency: 0.0
+
+# Base config overrides:
+diffusion_batch_size_train: 32
+diffusion_batch_size_inference: 16
+crop_size: 256  # Can't go too big for a14 since there are additional atoms in each residue.
+n_recycles_train: 1
+n_recycles_validation: 1
+n_msa: null
+
+cif_parser_args:
+  cache_dir: /net/scratch/jbutch/cif_cache
+  load_from_cache: True
+  save_to_cache: False
+
+# Datasets:
+train:
+  pdb:
+    probability: 0.75
+    sub_datasets:
+      interface:
+        dataset:
+          cif_parser_args:
+            cache_dir: ${datasets.cif_parser_args.cache_dir}
+            load_from_cache: ${datasets.cif_parser_args.load_from_cache}
+            save_to_cache: ${datasets.cif_parser_args.save_to_cache}
+          transform:
+            seed: ${datasets.global_transform_args.seed}
+            allowed_types: ${datasets.global_transform_args.allowed_types}
+            central_atom: ${datasets.global_transform_args.central_atom}
+            n_atoms_per_token: ${datasets.global_transform_args.n_atoms_per_token}
+            train_masks: ${datasets.global_transform_args.train_masks}
+      
+      pn_unit:
+        dataset:
+          transform:
+            seed: ${datasets.global_transform_args.seed}
+            allowed_types: ${datasets.global_transform_args.allowed_types}
+            central_atom: ${datasets.global_transform_args.central_atom}
+            n_atoms_per_token: ${datasets.global_transform_args.n_atoms_per_token}
+            train_masks: ${datasets.global_transform_args.train_masks}
+
+          cif_parser_args:
+            cache_dir: ${datasets.cif_parser_args.cache_dir}
+            load_from_cache: ${datasets.cif_parser_args.load_from_cache}
+            save_to_cache: ${datasets.cif_parser_args.save_to_cache}
+
+  monomer_distillation:
+    probability: 0.25
+    dataset:
+      transform:
+        seed: ${datasets.global_transform_args.seed}
+        allowed_types: ${datasets.global_transform_args.allowed_types}
+        central_atom: ${datasets.global_transform_args.central_atom}
+        n_atoms_per_token: ${datasets.global_transform_args.n_atoms_per_token}
+        train_masks: ${datasets.global_transform_args.train_masks}
+
+      cif_parser_args:
+        cache_dir: ${datasets.cif_parser_args.cache_dir}
+        load_from_cache: False # ${datasets.cif_parser_args.load_from_cache}
+        save_to_cache: False # ${datasets.cif_parser_args.save_to_cache}
+

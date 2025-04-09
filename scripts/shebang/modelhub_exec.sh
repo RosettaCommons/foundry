@@ -114,6 +114,9 @@ else
     echo "Already running inside container $APPTAINER_NAME. Executing $PYTHON_SCRIPT with $(which python) in the existing container."
 fi
 
+
+# SIF_PATH=/software/containers/users/faxue/modelhub_2025-02-17_ipdb.sif
+
 # Function to print debug=mode warning
 print_debug_warning() {
     echo
@@ -141,6 +144,7 @@ if [ ! -z $SIF_PATH ]; then
     echo
     /usr/bin/apptainer exec --nv --slurm \
         --bind "$REPO_ROOT:$REPO_ROOT" \
+        --bind "/home/jbutch:/home/jbutch" \
         --env PYTHONPATH="\$PYTHONPATH:$PYTHONPATH" \
         $SIF_PATH $python_cmd "$PYTHON_SCRIPT" "$@"
 else

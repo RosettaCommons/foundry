@@ -1,0 +1,11 @@
+{
+    "monomer-short": {
+        "length": "100-100"
+    },
+    "monomer-medium": {
+        "length": "150-150"
+    },
+    "monomer-long": {
+        "length": "250-250"
+    }
+}

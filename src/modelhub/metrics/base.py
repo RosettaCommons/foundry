@@ -140,7 +140,7 @@ class Metric(ABC):
     To implement a new metric, subclass this class and implement the `compute` method, at a minimum.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, **_) -> None:
         # Check that the 'keys' of the compute_from_kwargs method are a subset of the 'compute' methods signature
         if self.kwargs_to_compute_args:
             assert self.kwargs_to_compute_args.keys() <= self.required_compute_args, (

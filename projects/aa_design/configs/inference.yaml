@@ -1,0 +1,10 @@
+# @package _global_
+hydra:
+  searchpath:
+    - pkg://configs
+
+defaults:
+  - inference_engine: atom14
+
+ckpt_path: ???
+

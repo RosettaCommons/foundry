@@ -12,3 +12,4 @@ wandb:
   tags: ${tags}
   # (Default resume to "never" to avoid accidentally resuming runs; we want to be explicit about resuming)
   resume: never # never, allow, or must (see: https://docs.wandb.ai/guides/runs/resuming/)
+  

@@ -6,6 +6,7 @@ import hydra
 import rootutils
 from omegaconf import DictConfig
 import os
+import numpy as np
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
@@ -16,6 +17,14 @@ _config_path = os.path.join(os.environ.get("PROJECT_PATH", os.environ["PROJECT_R
 
 _spawning_process_logger = logging.getLogger(__name__)
 
+def port_safe_launch(launch_func):
+    try:
+        launch_func()
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        print('Switching port')
+        os.environ['MASTER_PORT'] = str(1024 + np.random.randint(64512))
+        launch_func()
 
 @hydra.main(config_path=_config_path, config_name="validate", version_base="1.3")
 def validate(cfg: DictConfig) -> None:
@@ -95,10 +104,11 @@ def validate(cfg: DictConfig) -> None:
     ranked_logger.info(
         f"Spawning {trainer.fabric.world_size} processes from {trainer.fabric.global_rank}..."
     )
-    trainer.fabric.launch()
+    port_safe_launch(trainer.fabric.launch)
 
     # ... construct the model
     trainer.construct_model()
+
 
     # ==============================================================================
     # Dataset instantiation

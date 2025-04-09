@@ -1,0 +1,18 @@
+# @package _global_
+
+defaults:
+  - override /model: unet-small
+  - override /logger: csv
+
+name: a14-quick
+tags:
+  - quick
+project: test
+ckpt_path: null
+
+trainer:
+  prevalidate: False
+
+datasets:
+  diffusion_batch_size_train: 8
+  diffusion_batch_size_inference: 4

@@ -1,5 +1,6 @@
 #!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../scripts/shebang/modelhub_exec.sh" "$0" "$@"'
 
+import numpy as np
 from omegaconf import DictConfig
 import hydra
 from hydra.utils import instantiate
@@ -15,6 +16,14 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # If the user has set `PROJECT_PATH`, use it to build the config path; otherwise, fall back to `PROJECT_ROOT`
 _config_path = os.path.join(os.environ.get("PROJECT_PATH", os.environ["PROJECT_ROOT"]), "configs")
 
+def port_safe_launch(launch_func):
+    try:
+        launch_func()
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        print('Switching port')
+        os.environ['MASTER_PORT'] = str(1024 + np.random.randint(64512))
+        launch_func()
 
 @hydra.main(
     config_path=_config_path,
@@ -28,7 +37,7 @@ def run_inference(cfg: DictConfig) -> None:
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         inference_engine = instantiate(cfg, temp_dir=temp_dir, _convert_="partial")
-        inference_engine.trainer.fabric.launch()
+        port_safe_launch(inference_engine.trainer.fabric.launch)
         inference_engine.eval()
 
 

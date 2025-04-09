@@ -195,7 +195,6 @@ class DiffusionConditioning(nn.Module):
         self.to_si = nn.Sequential(
             nn.LayerNorm(c_s + c_s_inputs), linearNoBias(c_s + c_s_inputs, c_s)
         )
-        c_t_embed = 256
         self.fourier_embedding = FourierEmbedding(c_t_embed)
         self.process_n = nn.Sequential(
             nn.LayerNorm(c_t_embed), linearNoBias(c_t_embed, c_s)
@@ -209,7 +208,14 @@ class DiffusionConditioning(nn.Module):
 
     def forward(self, t, f, S_inputs_I, S_trunk_I, Z_trunk_II):
         # Pair conditioning
-        Z_II = torch.cat([Z_trunk_II, self.relative_position_encoding(f)], dim=-1)
+        
+        Z_cond = self.relative_position_encoding(f)
+        
+        # Add batch dim to Z_cond if present in Z_II
+        if Z_trunk_II.dim() == 4 and Z_cond.dim() == 3:
+            Z_cond = Z_cond.unsqueeze(0).tile(Z_trunk_II.shape[0], 1, 1, 1)
+
+        Z_II = torch.cat([Z_trunk_II, Z_cond], dim=-1)
 
         @activation_checkpointing
         def _run_conditioning(Z_II, S_trunk_I, S_inputs_I):

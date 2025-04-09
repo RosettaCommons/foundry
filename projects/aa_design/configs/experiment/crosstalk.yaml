@@ -1,0 +1,15 @@
+# @package _global_
+defaults:
+  - override /model: crosstalk
+
+name: train-unet-detrunked-pretrainedweights
+tags:
+  - experiment
+  - atom14
+  - detrunked
+  - unet-pretrained
+
+trainer:
+  prevalidate: False
+
+ckpt_path: null

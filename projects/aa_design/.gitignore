@@ -1,0 +1,5 @@
+tests/outs
+configs/model/old
+transforms/old
+benchmarks
+old

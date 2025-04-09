@@ -1,0 +1,23 @@
+# @package _global_
+defaults:
+  - /inference_engine/af3
+  - _self_
+
+_target_: projects.aa_design.inference.inference_engine.Atom14InferenceEngine
+
+ckpt_path: /net/scratch/jfunk21/training/atom14/2025-03-07/atom14-pretrained-template/atom14-pretrained-template_310.pt
+
+# Unused args:
+inputs: null
+n_recycles: 1
+
+# Diffusion args
+num_steps: 100
+diffusion_batch_size: 16
+n_backbones: 1
+n_residues: 150
+
+# Saving args
+one_model_per_file: False
+dump_predictions: True
+dump_trajectories: True

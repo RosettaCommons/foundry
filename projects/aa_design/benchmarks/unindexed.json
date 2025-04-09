@@ -1,0 +1,17 @@
+{
+    "rsv0-1": {
+        "input": "rfbench/rsv0_4jhw.pdb", 
+        "unindex": "F63-69,F196-211",
+        "length": "76-76"
+    },
+	"theo_1": {
+        "input": "rfbench/theozyme/theo_1.pdb", 
+        "unindex": "A7-7,A194-195,A242-243",
+        "length": "251-251"
+    },
+    "ra-2": {
+        "input": "rfbench/ra_5an7.pdb", 
+        "unindex": "A1051-1051,A1083-1083,A1110-1110,A1180-1180",
+        "length": "80-200"
+    }
+}
