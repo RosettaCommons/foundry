@@ -2,6 +2,7 @@
 
 import importlib
 from beartype.typing import Any
+from cifutils.enums import ChainType, ChainTypeInfo
 
 
 def resolve_import(module_path: str, attribute_path: str = None) -> Any:
@@ -25,3 +26,29 @@ def resolve_import(module_path: str, attribute_path: str = None) -> Any:
         return attr
     else:
         return module
+
+def chain_type_info_to_regex(*args) -> Any:
+    """Convert a combination of ChainType or ChainTypeInfo attributes to a regex string.
+     
+    Primarily used for filtering a dataset by chain type prior to training/validation.
+
+    Example filter:
+    - "pn_unit_1_type.astype('str').str.match('${chain_type_info_to_regex:PROTEINS}')"
+    
+    """
+    regex_str = ""
+
+    for arg in args:
+        if hasattr(ChainType, arg):
+            regex_str += f"{getattr(ChainType, arg).value}|"
+        elif hasattr(ChainTypeInfo, arg):
+            chain_types_list = getattr(ChainTypeInfo, arg)
+            for ct in chain_types_list:
+                regex_str += f"{ct.value}|"
+        else:
+            raise ValueError(f"Attribute not found for ChainType or ChainTypeInfo: {arg}.")
+    
+    # Remove the trailing '|'
+    regex_str = regex_str[:-1]
+
+    return regex_str
