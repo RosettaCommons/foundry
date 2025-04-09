@@ -8,6 +8,7 @@ import hydra
 from modelhub.utils.ddp import RankedLogger
 from modelhub.utils.torch_utils import assert_no_nans, assert_same_shape
 from einops import repeat
+from modelhub.utils.ddp import RankedLogger
 from modelhub.utils.predicted_error import (
     compute_batch_indices_with_lowest_predicted_error,
 )
@@ -127,7 +128,6 @@ class AF3Trainer(FabricTrainer):
                 # During validation, since we do not crop, there should be no NaN's in the coordinates to noise
                 # (They were either removed, as is done with fully unresolved chains, or resolved accoring to our pipeline's rules)
                 raise e
-        # assert float(network_input['X_noisy_L'].abs().sum()) > 0, 'Input has no value'
 
         assert_no_nans(
             network_input["f"],
@@ -168,7 +168,6 @@ class AF3Trainer(FabricTrainer):
             "crd_mask_L": crd_mask_L,  # [D, L]
             "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],  # [D, I, 3]
             "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],  # [D, I]
-            "Seq_gt_I": example["ground_truth"]["seq_token_lvl"],  # [I, 32]
         }
 
     def _assemble_metrics_extra_info(self, example: dict, network_output: dict) -> dict:
@@ -291,7 +290,9 @@ class AF3Trainer(FabricTrainer):
         # (Note that forward() passes to the EMA/shadow model if the model is not training)
         network_output = model.forward(
             input=network_input,
-            n_cycle=example["feats"].get("msa_stack", torch.ones(1)).shape[0],  # Determine the number of recycles from the MSA stack shape
+            n_cycle=example["feats"]["msa_stack"].shape[
+                0
+            ],  # Determine the number of recycles from the MSA stack shape
             coord_atom_lvl_to_be_noised=example["coord_atom_lvl_to_be_noised"],
         )
 
@@ -310,19 +311,17 @@ class AF3Trainer(FabricTrainer):
             # TODO: Refactor such that symmetry returns the ideal coordinate permutation, we apply permutation, and pass adjusted prediction to metrics
             # (without needing to use `extra_info` as we are now)
             # TODO: Update symmetry resolution to be functional (vs. using class variable), take explicit inputs (vs. all from netowork_ouput), and use extra_info for the keys it needs
-            
-            if 'symmetry_resolution' in example:
-                metrics_extra_info = self.subunit_symm_resolve(
-                    network_output,
-                    metrics_extra_info,
-                    example["symmetry_resolution"],
-                )
-            if 'automorphisms' in example:
-                metrics_extra_info = self.residue_symm_resolve(
-                    network_output,
-                    metrics_extra_info,
-                    example["automorphisms"],
-                )
+            metrics_extra_info = self.subunit_symm_resolve(
+                network_output,
+                metrics_extra_info,
+                example["symmetry_resolution"],
+            )
+
+            metrics_extra_info = self.residue_symm_resolve(
+                network_output,
+                metrics_extra_info,
+                example["automorphisms"],
+            )
 
             metrics_output = self.metrics(
                 network_input=network_input,
@@ -336,12 +335,6 @@ class AF3Trainer(FabricTrainer):
                     network_output["X_L"], example.get("atom_array", None)
                 )
             )
-
-            if "X_gt_index_to_X" in metrics_extra_info:
-                # Remap outputs to minimize error with ground truth
-                # TODO: Remap before computing metrics, so that we can avoid pass `extra_info` to metrics (we instead just pass the remapped prediction)
-                mapping = metrics_extra_info["X_gt_index_to_X"]  # [D, L]
-                network_output["X_L"] = _remap_outputs(network_output["X_L"], mapping)
 
             # Avoid gradients in stored values to prevent memory leaks
             if metrics_output is not None:
@@ -424,14 +417,12 @@ class AF3TrainerWithConfidence(AF3Trainer):
             # NOTE: Since `X_L` derives from the rollout, we cannot compute standard training loss and perform gradient updates
             network_output["X_L"] = network_output["X_pred_rollout_L"]
 
-            if "symmetry_resolution" in example:
-                loss_extra_info = self.subunit_symm_resolve(
-                    network_output, loss_extra_info, example["symmetry_resolution"]
-                )
-            if "automorphisms" in example:
-                loss_extra_info = self.residue_symm_resolve(
-                    network_output, loss_extra_info, example["automorphisms"]
-                )
+            loss_extra_info = self.subunit_symm_resolve(
+                network_output, loss_extra_info, example["symmetry_resolution"]
+            )
+            loss_extra_info = self.residue_symm_resolve(
+                network_output, loss_extra_info, example["automorphisms"]
+            )
 
             # We only assess the confidence loss
             total_loss, loss_dict_batched = self.loss(

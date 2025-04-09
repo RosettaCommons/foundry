@@ -1,7 +1,4 @@
 # Base .gitignore from https://github.com/github/gitignore/blob/main/Python.gitignore
-scripts/shebang/modelhub_exec.sh
-*.cif.gz
-configs/paths/data/default.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -217,12 +214,3 @@ logs/
 **/scratch/
 **/outputs/
 
-# weights
-*.pt
-*.pth
-*.ckpt
-*.pt.gz
-*.pth.gz
-*.ckpt.gz
-*.pt.gz.part
-*.pth.gz.part

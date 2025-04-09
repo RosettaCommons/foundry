@@ -3,8 +3,6 @@ import torch
 import torch.nn as nn
 from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
 
-from einops import repeat
-
 from modelhub.model.layers.layer_utils import (
     AdaLN,
     LinearBiasInit,
@@ -90,7 +88,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
 
     def forward(
         self,
-        f,    # Dict (Input feature dictionary)
+        f,  # Dict (Input feature dictionary)
         R_L,  # [D, L, 3]
         S_trunk_I,  # [B, I, C_S_trunk] [...,I,C_S_trunk]
         Z_II,  # [B, I, I, C_Z] [...,I,I,C_Z]
@@ -151,13 +149,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
 
                 C_L = C_L + S_trunk_embed_L
                 assert not (C_L == Q_L).all()
-
-                if len(Z_II.shape) == 4:
-                    # P_LL = P_LL.unsqueeze(0).tile(Z_II.shape[0], 1, 1, 1)
-                    P_LL = P_LL + 0 * self.process_z(Z_II)[0, tok_idx, tok_idx, :].unsqueeze(0)
-                    pass  # do not allow P_LL to have a batch dimension
-                    
-                elif self.broadcast_trunk_feats_on_1dim_old:
+                if self.broadcast_trunk_feats_on_1dim_old:
                     P_LL = P_LL + self.process_z(Z_II)[..., tok_idx, tok_idx, :]
                 else:
                     P_LL = (
@@ -215,12 +207,18 @@ class AtomTransformer(nn.Module):
         c_atom,
         c_atompair,
         diffusion_transformer,
-        # deprecated args:
-        n_queries=None,
-        n_keys=None,
-        l_max=999999,
+        n_queries,
+        n_keys,
+        l_max,
     ):
         super().__init__()
+        self.l_max = l_max
+        subset_centers = torch.arange(0, l_max, n_queries) + (n_queries - 1) / 2
+
+        l = torch.arange(l_max).unsqueeze(-1).unsqueeze(-1)  # [l_max, 1, 1]
+        m = torch.arange(l_max).unsqueeze(0).unsqueeze(-1)  # [1, l_max, 1]
+        c = subset_centers.unsqueeze(0).unsqueeze(0)  # [1, 1, S]
+
         self.diffusion_transformer = DiffusionTransformer(
             c_token=c_atom, c_s=c_atom, c_tokenpair=c_atompair, **diffusion_transformer
         )
@@ -232,60 +230,36 @@ class AtomTransformer(nn.Module):
         Plm,  # [B, L, L, C_atompair]
     ):
         L = Ql.shape[-2]
+        assert L < self.l_max
         Beta_lm = True
         return self.diffusion_transformer(Ql, Cl, Plm, Beta_lm)
 
-class DiffusionTransformer(nn.Module):
 
-    def __init__(self, c_token, c_s, c_tokenpair, n_block, diffusion_transformer_block, n_registers=0):
+class DiffusionTransformer(nn.Module):
+    def __init__(self, c_token, c_s, c_tokenpair, n_block, diffusion_transformer_block):
         super().__init__()
-        self.blocks = torch.nn.ModuleList([
-            DiffusionTransformerBlock(c_token=c_token, c_s=c_s, c_tokenpair=c_tokenpair, **diffusion_transformer_block)
-            for _ in range(n_block)
-        ])
-        self.n_registers=n_registers
-        if n_registers > 0:
-            self.register = nn.Parameter(
-                torch.randn(n_registers, c_token) / 20.0
-            )
+        self.blocks = torch.nn.ModuleList(
+            [
+                DiffusionTransformerBlock(
+                    c_token=c_token,
+                    c_s=c_s,
+                    c_tokenpair=c_tokenpair,
+                    **diffusion_transformer_block,
+                )
+                for _ in range(n_block)
+            ]
+        )
 
     def forward(
         self,
-        A_I,    # [..., I, C_token]
-        S_I,    # [..., I, C_token]
-        Z_II,   # [..., I, I, C_tokenpair]
-        Beta_II,   # [I, I]
+        A_I,  # [..., I, C_token]
+        S_I,  # [..., I, C_token]
+        Z_II,  # [..., I, I, C_tokenpair]
+        Beta_II,  # [I, I]
     ):
-        if self.n_registers > 0:
-            assert Beta_II is None, f'Registers implemented only for all-by-all self attention, but got {Beta_II.shape}'
-            A_I, S_I, Z_II = self._insert_registers(A_I, S_I, Z_II)
-
         for block in self.blocks:
             A_I = block(A_I, S_I, Z_II, Beta_II)
-        
-        if self.n_registers > 0:
-            A_I, S_I, Z_II = self._remove_registers(A_I, S_I, Z_II)
         return A_I
-
-    def _insert_registers(self, A_I, S_I, Z_II):
-        # NOTE: for inspiration https://github.com/NVIDIA-Digital-Bio/proteina/blob/main/proteinfoundation/nn/protein_transformer.py
-        B = A_I.shape[0]
-        A_I = torch.cat([A_I, repeat(
-            self.register, 'n d -> b n d', b=B
-        )], dim=-2)
-        S_I = torch.nn.functional.pad(
-            S_I, (0, 0, 0, self.n_registers)
-        )
-        Z_II = torch.nn.functional.pad(
-            Z_II, (0, 0, 0, self.n_registers, 0, self.n_registers)
-        )
-        return A_I, S_I, Z_II
-
-    def _remove_registers(self, A_I, S_I, Z_II):
-        A_I = A_I[..., :-self.n_registers, :]
-        S_I = S_I[..., :-self.n_registers, :]
-        Z_II = Z_II[..., :-self.n_registers, :-self.n_registers, :]
-        return A_I, S_I, Z_II
 
 
 class DiffusionTransformerBlock(nn.Module):
@@ -526,8 +500,7 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
 
         if len(A_I.shape) == 2:
             A_I = A_I[None]
-        if len(Z_II.shape) == 3:
-            Z_II = Z_II[None]
+        Z_II = Z_II[None]
         D, L = A_I.shape[:2]
         Q_IH = self.to_q(A_I)
         K_IH = self.to_k(A_I)

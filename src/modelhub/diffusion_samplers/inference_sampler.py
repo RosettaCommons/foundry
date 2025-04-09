@@ -2,7 +2,7 @@ from beartype.typing import Any
 
 import torch
 from jaxtyping import Float
-from beartype.typing import Literal, Optional
+from beartype.typing import Literal
 
 from modelhub.data.rotation_augmentation import centre_random_augmentation
 from modelhub.utils.ddp import RankedLogger
@@ -106,16 +106,19 @@ class SampleDiffusion:
         """
         noise = c0 * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=c0.device)
         X_L = noise + coord_atom_lvl_to_be_noised
+
         return X_L
 
     def sample_diffusion_like_af3(
         self,
         *,
+        S_inputs_I: Float[torch.Tensor, "I c_s_inputs"],
+        S_trunk_I: Float[torch.Tensor, "I c_s"],
+        Z_trunk_II: Float[torch.Tensor, "I I c_z"],
         f: dict[str, Any],
         diffusion_module: torch.nn.Module,
         diffusion_batch_size: int,
         coord_atom_lvl_to_be_noised: Float[torch.Tensor, "D L 3"],
-        **trunk_outputs,
     ) -> dict[str, Any]:
         """Perform a complete diffusion roll-out with the given recycling outputs.
 
@@ -125,7 +128,7 @@ class SampleDiffusion:
         """
         # Construct the noise schedule t_hat for inference on the appropriate device
         noise_schedule = self._construct_inference_noise_schedule(
-            device=coord_atom_lvl_to_be_noised.device
+            device=S_inputs_I.device
         )
 
         # Infer number of atoms from any atom-level feature
@@ -169,13 +172,14 @@ class SampleDiffusion:
             X_noisy_L = X_L + epsilon_L
 
             # Denoise the coordinates
-            outs = diffusion_module(
+            X_denoised_L = diffusion_module(
                 X_noisy_L=X_noisy_L,
                 t=t_hat.tile(D),
                 f=f,
-                **trunk_outputs,
+                S_inputs_I=S_inputs_I,
+                S_trunk_I=S_trunk_I,
+                Z_trunk_II=Z_trunk_II,
             )
-            X_denoised_L = outs["X_L"] if isinstance(outs, dict) and "X_L" in outs else outs
 
             # Compute the delta between the noisy and denoised coordinates, scaled by t_hat
             delta_L = (X_noisy_L - X_denoised_L) / t_hat
@@ -188,7 +192,6 @@ class SampleDiffusion:
             X_noisy_L_traj.append(X_noisy_L)
             X_denoised_L_traj.append(X_denoised_L)
             t_hats.append(t_hat)
-                
 
         return dict(
             X_L=X_L,  # (D, L, 3)

@@ -13,7 +13,6 @@ from datetime import timedelta
 from pathlib import Path
 from typing import cast
 from beartype.typing import Any, Literal
-import time
 
 import lightning as L
 import torch
@@ -36,7 +35,6 @@ from datahub.samplers import set_sampler_epoch
 
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
-logger = RankedLogger(__name__, rank_zero_only=False)
 
 
 class FabricTrainer(ABC):
@@ -61,7 +59,6 @@ class FabricTrainer(ABC):
         limit_val_batches: int | float = float("inf"),
         prevalidate: bool = False,
         nccl_timeout: int = 3200,
-        skip_optimizer_loading: bool = False,
     ) -> None:
         """Base Trainer class built around Lightning Fabric.
 
@@ -133,7 +130,6 @@ class FabricTrainer(ABC):
         # Checkpoints
         self.output_dir = Path(output_dir) if output_dir else None
         self.checkpoint_every_n_epochs = checkpoint_every_n_epochs
-        self.skip_optimizer_loading = skip_optimizer_loading
 
     def initialize_or_update_trainer_state(
         self,
@@ -406,9 +402,7 @@ class FabricTrainer(ABC):
         # Set sampler epochs
         set_sampler_epoch(train_loader.sampler, self.state["current_epoch"])
 
-        t_step_end = time.time()
         for batch_idx, batch in enumerate(train_loader):
-
             # (End epoch if stopping training completely or maximum desired batches for this epoch reached)
             if self.should_stop or batch_idx >= limit_batches:
                 break
@@ -420,17 +414,11 @@ class FabricTrainer(ABC):
             # Optimizer should step if we've accumulated the desired number of gradients
             should_optimizer_step = (batch_idx + 1) % self.grad_accum_steps == 0
 
-            t_step_start = time.time()
-            if batch_idx % 10 == 0:
-                logger.info(f'Finished Dataloading for batch {batch_idx} in {t_step_start - t_step_end} (s, Wall)')
             self.training_step(
                 batch=batch,
                 batch_idx=batch_idx,
                 is_accumulating=not should_optimizer_step,
             )
-            t_step_end=time.time()
-            if batch_idx % 10 == 0:
-                logger.info(f'Finished training step in {t_step_end - t_step_start} (s, Wall)', rank=0)
 
             if should_optimizer_step:
                 self.fabric.call(
@@ -594,7 +582,6 @@ class FabricTrainer(ABC):
             )
 
         # Run the validation loop
-        self.state["model"].eval()
         self.validation_loop(
             val_loaders=val_loaders, limit_batches=self.limit_val_batches
         )
@@ -692,7 +679,7 @@ class FabricTrainer(ABC):
 
     def _load_optimizer(self, ckpt: Mapping) -> None:
         """Loads the optimizer state from the checkpoint."""
-        if "optimizer" in ckpt and self.state["optimizer"] and not self.skip_optimizer_loading:
+        if "optimizer" in ckpt and self.state["optimizer"]:
             self.state["optimizer"].load_state_dict(ckpt["optimizer"])
         else:
             ranked_logger.warning("Skipping optimizer loading...")

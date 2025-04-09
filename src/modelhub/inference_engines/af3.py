@@ -306,7 +306,6 @@ class AF3InferenceEngine(InferenceEngine):
             atom_array_stack = build_stack_from_atom_array_and_batched_coords(
                 network_output["X_L"], pipeline_output["atom_array"]
             )
-
             if "plddt" in network_output:
                 confidence_outs = compile_af3_confidence_outputs(
                     plddt_logits=network_output["plddt"],
@@ -345,16 +344,13 @@ class AF3InferenceEngine(InferenceEngine):
                     trajectory_list=network_output["X_denoised_L_traj"],
                     atom_array=pipeline_output["atom_array"],
                     base_path=self.cif_out_dir / f"{example_id}_denoised",
-                    post_process_function=self.post_process_atom_array,
                 )
                 dump_trajectories(
                     trajectory_list=network_output["X_noisy_L_traj"],
                     atom_array=pipeline_output["atom_array"],
                     base_path=self.cif_out_dir / f"{example_id}_noisy",
-                    post_process_function=self.post_process_atom_array,
                 )
 
             ranked_logger.info(
                 f"Outputs for {example_id} written to {self.cif_out_dir / example_id}."
             )
-    

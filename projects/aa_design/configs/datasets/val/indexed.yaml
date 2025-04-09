@@ -1,8 +1,0 @@
-
-defaults:
-  - unconditional
-  - _self_
-
-dataset:
-  data: ${paths.data.design_benchmark_data_dir}/indexed.json
-  name: indexed-design

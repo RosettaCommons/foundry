@@ -15,7 +15,7 @@ from datahub.samplers import (
     LoadBalancedDistributedSampler,
 )
 from omegaconf import DictConfig, ListConfig, OmegaConf
-from modelhub.resolvers import resolve_import, chain_type_info_to_regex
+from modelhub.resolvers import resolve_import
 from torch.utils.data import (
     DataLoader,
     Dataset,
@@ -33,7 +33,6 @@ ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 #  (Custom resolvers)
 OmegaConf.register_new_resolver("resolve_import", resolve_import)
-OmegaConf.register_new_resolver("chain_type_info_to_regex", chain_type_info_to_regex)
 
 
 def wrap_dataset_and_sampler_with_fallbacks(
