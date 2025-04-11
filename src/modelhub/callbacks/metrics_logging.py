@@ -142,6 +142,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         trainer.fabric.barrier()
 
         # Only rank 0 loads and concatenates the DataFrames
+        ranked_logger.info("Loading and concatenating DataFrames...")
         if trainer.fabric.is_global_zero:
             # ... load all partial CSVs
             merged_df = self._load_and_concatenate_csvs(epoch)
@@ -163,21 +164,42 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
             self._cleanup_temp_files()
 
     def _load_and_concatenate_csvs(self, epoch: int) -> pd.DataFrame:
-        """Load rank-specific CSVs for the given epoch and concatenate them."""
+        """Load rank-specific CSVs for the given epoch and concatenate them without duplicating examples."""
         pattern = f"validation_output_rank_*_epoch_{epoch}.csv"
         files = list(self.save_dir.glob(pattern))
-        dataframes = []
+        
+        # Track which example_id + dataset combinations we've already seen
+        seen_examples = set()
+        final_dataframes = []
+        
         for f in files:
             try:
                 df = pd.read_csv(f)
-                dataframes.append(df)
+                
+                # Create a filter for rows with new example_id + dataset combinations
+                if not df.empty:
+                    # Create a unique identifier for each example_id + dataset combination
+                    df['_example_key'] = df['example_id'].astype(str) + '|' + df['dataset'].astype(str)
+                    
+                    # Filter out rows with example_id + dataset combinations we've already seen
+                    new_examples_mask = ~df['_example_key'].isin(seen_examples)
+                    
+                    # If there are any new examples, add them to our final list
+                    if new_examples_mask.any():
+                        new_examples_df = df[new_examples_mask].copy()
+                        
+                        # Update our set of seen examples
+                        seen_examples.update(new_examples_df['_example_key'].tolist())
+                        
+                        # Remove the temporary column before adding to final list
+                        new_examples_df.drop('_example_key', axis=1, inplace=True)
+                        final_dataframes.append(new_examples_df)
+                
             except pd.errors.EmptyDataError:
                 ranked_logger.warning(f"Skipping empty CSV: {f}")
-
-        # Concatenate DataFrames, filling missing columns with NaN
-        concatenated_df = pd.concat(dataframes, axis=0, ignore_index=True, sort=False)
-
-        return concatenated_df
+        
+        # Concatenate dataframes, filling missing columns with NaN
+        return pd.concat(final_dataframes, axis=0, ignore_index=True, sort=False)
 
     def _cleanup_temp_files(self):
         """Remove temporary files used to store individual rank outputs."""

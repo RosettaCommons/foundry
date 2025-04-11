@@ -64,11 +64,13 @@ add_to_pythonpath "$REPO_ROOT"
 SRC_PATH="$REPO_ROOT/src"
 add_to_pythonpath "$SRC_PATH"
 
-# Add modelhub to PYTHONPATH if not already present
+# Add datahub and cifutils from `/lib` to the PYTHONPATH
 echo
-echo "Checking and adding 'modelhub' directory to PYTHONPATH..."
-MODELHUB_PATH="$SRC_PATH/modelhub"
-add_to_pythonpath "$MODELHUB_PATH"
+echo "Checking and adding 'datahub' and 'cifutils' directories to PYTHONPATH..."
+DATAHUB_PATH="$REPO_ROOT/lib/datahub/src"
+CIFUTILS_PATH="$REPO_ROOT/lib/cifutils/src"
+add_to_pythonpath "$DATAHUB_PATH"
+add_to_pythonpath "$CIFUTILS_PATH"
 
 # Load the .env file environment variables from the repo root
 echo

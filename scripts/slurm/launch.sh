@@ -5,12 +5,10 @@
 #SBATCH --ntasks-per-node 8
 #SBATCH --mem=512g
 #SBATCH -t 7-00:00:00
-#SBATCH -J af3-old-msas-pdb-only-experimental
+#SBATCH -J none-00-dummy
 #SBATCH -o slurm_logs/%x_%j.out
 #SBATCH -e slurm_logs/%x_%j.err
 #SBATCH --no-kill=off
-
-### Excluded Nodes:
 
 ### To call this script run:  `sbatch launch.sh` from this directory
 ### For reference, see the Lightning Fabric + SLURM guide: https://lightning.ai/docs/fabric/stable/guide/multi_node/slurm.html
@@ -24,13 +22,11 @@ export MASTER_PORT=$((1024 + RANDOM % 64512))
 export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 
 ### Set custom paths
-# WARNING: You will need to update these paths to match your local setup
-# ... cifutils and datahub
-export PYTHONPATH="/home/ncorley/projects/datahub/src:/home/ncorley/projects/cifutils/src:/home/ncorley/projects/modelhub/src"
-# ... project path (if not using root src/modelhub)
-export PROJECT_PATH="/home/ncorley/projects/modelhub/projects/rfscore"  
+# (Projects, if not using src/modelhub)
+# export PROJECT_PATH="/home/<USER>/projects/modelhub/projects/rfscore"  
+# (Triton kernels)
 # ... cache directory for Triton kernels (e.g., DeepSpeed4Science fused kernels)
-export TRITON_CACHE_DIR="/home/ncorley/.triton" # Change this to a directory with write permissions
+export TRITON_CACHE_DIR="/home/<USER>/.triton" # Change this to a directory with write permissions
 
 ### Environment flags
 
@@ -50,12 +46,8 @@ export NCCL_P2P_DISABLE=1
 export OMP_NUM_THREADS=4    
 export OPENBLAS_NUM_THREADS=4
 
-#######################################################################################################
-### WARNING: The command below is just an example. It will fail if you don't update the experiment  ###
-###          config in the command below. Please adapt according to your target experiment          ###
-#######################################################################################################
-
 ### Set the effective batch size
+### NOTE: Should be adjusted based on specific use case
 EFFECTIVE_BATCH_SIZE=16
 
 ### Compose the training script

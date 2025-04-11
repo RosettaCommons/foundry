@@ -12,3 +12,4 @@ log_af3_validation_metrics_callback:
         - all_atom_lddt
         - distogram_loss
         - distogram_comparisons
+        - chiral_loss

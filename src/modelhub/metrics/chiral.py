@@ -108,14 +108,10 @@ class ChiralLoss(Metric):
                 # No chiral centers - skip
                 continue
                 
-            # ... store the metric results
-            chiral_loss[f"{category}_chiral_loss_sum"] = result["chiral_loss_sum"].item()
+            # ... store the metric results, meaned over the diffusion batch
             if result["n_chiral_centers"] > 0:
-                chiral_loss[f"{category}_chiral_loss_mean"] = (result["chiral_loss_sum"] / result["n_chiral_centers"]).item()
-            else:
-                chiral_loss[f"{category}_chiral_loss_mean"] = 0.0
-                
-            chiral_loss[f"{category}_n_chiral_centers"] = result["n_chiral_centers"].item()
-            chiral_loss[f"{category}_percent_correct_chirality"] = result["percent_correct_chirality"].item()
+                chiral_loss[f"{category}_n_chiral_centers"] = result["n_chiral_centers"].item()
+                chiral_loss[f"{category}_chiral_loss_mean"] = (result["chiral_loss_sum"] / result["n_chiral_centers"]).mean().item()
+                chiral_loss[f"{category}_percent_correct_chirality"] = result["percent_correct_chirality"].mean().item()
 
         return chiral_loss

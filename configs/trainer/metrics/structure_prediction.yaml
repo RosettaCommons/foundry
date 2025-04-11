@@ -6,6 +6,6 @@ distogram:
   _target_: modelhub.metrics.distogram.DistogramLoss
 distogram_comparisons:
   _target_: modelhub.metrics.distogram.DistogramComparisons
-chiral:
+chiral_loss:
   _target_: modelhub.metrics.chiral.ChiralLoss
 
