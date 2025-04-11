@@ -1,5 +1,6 @@
-import torch
 import math
+
+import torch
 from datahub.utils.rng import create_rng_state_from_seeds, rng_state
 
 
@@ -33,7 +34,9 @@ def get_recycle_schedule(
         # ...generate a recycling schedule for each epoch
         recycle_schedule = []
         for i in range(n_epochs):
-            schedule = torch.randint(1, max_cycle + 1, (math.ceil(n_train / world_size),))
+            schedule = torch.randint(
+                1, max_cycle + 1, (math.ceil(n_train / world_size),)
+            )
             recycle_schedule.append(schedule)
 
     return torch.stack(recycle_schedule, dim=0)

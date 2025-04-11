@@ -1,13 +1,14 @@
+import re
 from os import PathLike
-import numpy as np
-from biotite.structure import stack, AtomArray, AtomArrayStack
-import torch
 from pathlib import Path
 from typing import Literal
+
+import numpy as np
+import torch
+from biotite.structure import AtomArray, AtomArrayStack, stack
 from cifutils.utils.io_utils import to_cif_file
-from biotite.structure import AtomArray
+
 from modelhub.alignment import weighted_rigid_align
-import re
 
 DICTIONARY_LIKE_EXTENSIONS = {".json", ".yaml", ".yml", ".pkl"}
 CIF_LIKE_EXTENSIONS = {".cif", ".pdb", ".bcif", ".cif.gz", ".pdb.gz", ".bcif.gz"}
@@ -58,7 +59,7 @@ def dump_structures(
     """Dump structures to CIF files, given the coordinates and input AtomArray.
 
     Args:
-        atom_arrays (AtomArrayStack | list[AtomArray] | AtomArray): Either an AtomArrayStack, a list of AtomArray objects, 
+        atom_arrays (AtomArrayStack | list[AtomArray] | AtomArray): Either an AtomArrayStack, a list of AtomArray objects,
             or a single AtomArray object to be dumped to CIF file(s)
         base_path (PathLike): Base path where the output files will be saved.
         one_model_per_file (bool): Flag to determine if each model should be dumped into a separate file. Has no effect if
@@ -68,19 +69,27 @@ def dump_structures(
     base_path = Path(base_path)
 
     if one_model_per_file:
-        assert isinstance(atom_arrays, AtomArrayStack) or isinstance(
-            atom_arrays, list
+        assert (
+            isinstance(atom_arrays, AtomArrayStack) or isinstance(atom_arrays, list)
         ), "AtomArrayStack or list of AtomArray required when one_model_per_file is True"
         # One model per file —> loop over the diffusion batch
         for i in range(len(atom_arrays)):
             path = f"{base_path}_model_{i}"
             to_cif_file(
-                atom_arrays[i], path, file_type="cif.gz", include_entity_poly=False, extra_fields=extra_fields
+                atom_arrays[i],
+                path,
+                file_type="cif.gz",
+                include_entity_poly=False,
+                extra_fields=extra_fields,
             )
     else:
         # Include all models in a single CIF file
         to_cif_file(
-            atom_arrays, base_path, file_type="cif.gz", include_entity_poly=False, extra_fields=extra_fields
+            atom_arrays,
+            base_path,
+            file_type="cif.gz",
+            include_entity_poly=False,
+            extra_fields=extra_fields,
         )
 
 
@@ -166,23 +175,27 @@ def find_files_with_extension(path: PathLike, supported_file_types: list) -> lis
 
     return files_with_supported_types
 
+
 def create_example_id_extractor(extensions: set | list = CIF_LIKE_EXTENSIONS) -> str:
     """Create a function with closure that extracts example_ids from file paths with specified extensions.
-    
+
     Example:
         >>> extractor = create_example_id_extractor({".cif", ".cif.gz"})
         >>> extractor("example.path.example_id.cif.gz")
         'example_id'
     """
-    pattern = re.compile('(' + '|'.join(re.escape(ext) + '$' for ext in extensions) + ')')
-    
+    pattern = re.compile(
+        "(" + "|".join(re.escape(ext) + "$" for ext in extensions) + ")"
+    )
+
     def extract_id(file_path: PathLike) -> str:
         """Extract example_id from file path."""
         # Remove extension and get last part after splitting by dots
-        without_ext = pattern.sub('', Path(file_path).name)
-        return without_ext.split('.')[-1]
-    
+        without_ext = pattern.sub("", Path(file_path).name)
+        return without_ext.split(".")[-1]
+
     return extract_id
+
 
 def extract_example_id_from_path(file_path: PathLike, extensions: set | list) -> str:
     """Extract example_id from file path with specified extensions."""

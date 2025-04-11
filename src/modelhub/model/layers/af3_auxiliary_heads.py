@@ -40,7 +40,7 @@ class ConfidenceHead(nn.Module):
         use_Cb_distances=False,
         use_af3_style_binning_and_final_layer_norms=False,
         symmetrize_Cb_logits=True,
-        layer_norm_along_feature_dimension=False
+        layer_norm_along_feature_dimension=False,
     ):
         super(ConfidenceHead, self).__init__()
         self.process_s_inputs_right = linearNoBias(449, c_z)
@@ -104,18 +104,28 @@ class ConfidenceHead(nn.Module):
             X_pred_L = X_pred_L.detach().float()  # B, n_atoms, 3
             S_inputs_I = S_inputs_I.detach().float()  # B, L, 384
             seq = seq.detach()
-            
+
             if self.layer_norm_along_feature_dimension:
                 # do a layer norm on S_trunk_I
-                S_trunk_I = F.layer_norm(S_trunk_I, normalized_shape=(S_trunk_I.shape[-1]))
+                S_trunk_I = F.layer_norm(
+                    S_trunk_I, normalized_shape=(S_trunk_I.shape[-1])
+                )
                 # do a layer norm on Z_trunk_II
-                Z_trunk_II = F.layer_norm(Z_trunk_II, normalized_shape=(Z_trunk_II.shape[-1]))
+                Z_trunk_II = F.layer_norm(
+                    Z_trunk_II, normalized_shape=(Z_trunk_II.shape[-1])
+                )
                 # do a layer norm on S_inputs_I
-                S_inputs_I = F.layer_norm(S_inputs_I, normalized_shape=(S_inputs_I.shape[-1]))
-            else: 
+                S_inputs_I = F.layer_norm(
+                    S_inputs_I, normalized_shape=(S_inputs_I.shape[-1])
+                )
+            else:
                 S_trunk_I = F.layer_norm(S_trunk_I, normalized_shape=(S_trunk_I.shape))
-                Z_trunk_II = F.layer_norm(Z_trunk_II, normalized_shape=(Z_trunk_II.shape))
-                S_inputs_I = F.layer_norm(S_inputs_I, normalized_shape=(S_inputs_I.shape))
+                Z_trunk_II = F.layer_norm(
+                    Z_trunk_II, normalized_shape=(Z_trunk_II.shape)
+                )
+                S_inputs_I = F.layer_norm(
+                    S_inputs_I, normalized_shape=(S_inputs_I.shape)
+                )
 
             # embed S_inputs_I twice
             S_inputs_I_right = self.process_s_inputs_right(S_inputs_I)

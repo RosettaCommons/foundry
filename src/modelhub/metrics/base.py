@@ -1,12 +1,12 @@
+import inspect
 from abc import ABC, abstractmethod
-from beartype.typing import Any
+from functools import cached_property
 
 import hydra
-from omegaconf import DictConfig
+from beartype.typing import Any
 from datahub.utils import error, nested_dict
-import inspect
-from toolz import valmap, keymap
-from functools import cached_property
+from omegaconf import DictConfig
+from toolz import keymap, valmap
 
 from modelhub.utils.ddp import RankedLogger
 

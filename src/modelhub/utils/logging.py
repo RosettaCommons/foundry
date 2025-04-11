@@ -1,5 +1,5 @@
+import pandas as pd
 from beartype.typing import Any
-
 from lightning_fabric.utilities import rank_zero_only
 from omegaconf import DictConfig, OmegaConf
 from rich.console import Console
@@ -10,7 +10,6 @@ from torch import nn
 from wandb.integration.lightning.fabric import WandbLogger
 
 from modelhub.utils.ddp import RankedLogger
-import pandas as pd
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
@@ -155,7 +154,8 @@ def table_from_df(df: pd.DataFrame, title: str) -> Table:
 
     return table
 
-def safe_print(obj: Any, console_width = 100) -> None:
+
+def safe_print(obj: Any, console_width=100) -> None:
     """Print a Rich object in a console- and logger-safe manner."""
     console = Console(force_terminal=False, color_system=None, width=console_width)
 

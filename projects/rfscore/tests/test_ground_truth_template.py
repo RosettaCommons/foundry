@@ -17,6 +17,7 @@ from datahub.utils.token import get_af3_token_center_masks
 from jaxtyping import Float
 from torch import Tensor
 
+from modelhub.utils.torch_utils import assert_no_nans, assert_same_shape
 from projects.rfscore.transforms.ground_truth_template import (
     DEFAULT_DISTOGRAM_BINS,
     FeaturizeNoisedGroundTruthAsTemplateDistogram,
@@ -24,7 +25,6 @@ from projects.rfscore.transforms.ground_truth_template import (
     af3_noise_scale_distribution_wrapped,
     af3_noise_scale_to_noise_level,
 )
-from modelhub.utils.torch_utils import assert_no_nans, assert_same_shape
 
 TEST_CASES = ["6wtf", "5ocm"]
 
@@ -183,9 +183,9 @@ def test_distogram_featurization(
             ).all(), "All values without distogram condition should be the same"
         else:
             # Noised output should be different from the distogram bins
-            assert not (output == ground_truth_distogram_bins).all(), (
-                "Noised output should be different from the distogram bins"
-            )
+            assert not (
+                output == ground_truth_distogram_bins
+            ).all(), "Noised output should be different from the distogram bins"
 
             # Check that all values with distogram condition have been noised...
             assert (
@@ -222,9 +222,9 @@ def test_distogram_featurization(
         # Sanity check: we should have at least 5 unique values in the output
         unique_values = torch.unique(output)
         # Assert we have more than 30 unique values in the noised output
-        assert len(unique_values) > 30, (
-            "We should have more than 30 unique values in the noised output"
-        )
+        assert (
+            len(unique_values) > 30
+        ), "We should have more than 30 unique values in the noised output"
 
 
 if __name__ == "__main__":

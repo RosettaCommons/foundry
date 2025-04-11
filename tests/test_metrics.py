@@ -1,13 +1,17 @@
-from datahub.utils.testing import cached_parse
 from copy import deepcopy
-from modelhub.metrics.chiral import ChiralLoss
-import numpy as np
+
 import pytest
+from datahub.utils.testing import cached_parse
+
+from modelhub.metrics.chiral import ChiralLoss
+
 
 @pytest.mark.parametrize("pdb_id", ["5ocm", "6wtf"])
 def test_chiral_metrics(pdb_id: str):
     # ... get the AtomArray
-    ground_truth_atom_array = cached_parse(pdb_id, hydrogen_policy="remove")["atom_array"]
+    ground_truth_atom_array = cached_parse(pdb_id, hydrogen_policy="remove")[
+        "atom_array"
+    ]
     predicted_atom_array = deepcopy(ground_truth_atom_array)
 
     chiral_loss = ChiralLoss()
@@ -34,8 +38,20 @@ def test_chiral_metrics(pdb_id: str):
 
     # Compare the two outputs
     # (Perfect vs. terrible)
-    assert perfect_output["polymer_chiral_loss_sum"] * 10 <  terrible_output["polymer_chiral_loss_sum"]
-    assert perfect_output["non_polymer_chiral_loss_sum"] * 10 < terrible_output["non_polymer_chiral_loss_sum"]
+    assert (
+        perfect_output["polymer_chiral_loss_sum"] * 10
+        < terrible_output["polymer_chiral_loss_sum"]
+    )
+    assert (
+        perfect_output["non_polymer_chiral_loss_sum"] * 10
+        < terrible_output["non_polymer_chiral_loss_sum"]
+    )
     # (Same number of chiral centers)
-    assert perfect_output["polymer_n_chiral_centers"] == terrible_output["polymer_n_chiral_centers"]
-    assert perfect_output["non_polymer_n_chiral_centers"] == terrible_output["non_polymer_n_chiral_centers"]
+    assert (
+        perfect_output["polymer_n_chiral_centers"]
+        == terrible_output["polymer_n_chiral_centers"]
+    )
+    assert (
+        perfect_output["non_polymer_n_chiral_centers"]
+        == terrible_output["non_polymer_n_chiral_centers"]
+    )

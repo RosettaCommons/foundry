@@ -1,4 +1,3 @@
-import logging
 from collections import defaultdict
 from typing import Any, Literal
 
@@ -6,19 +5,9 @@ import numpy as np
 import toolz
 import torch
 from biotite.structure import AtomArray
-from cifutils.constants import ELEMENT_NAME_TO_ATOMIC_NUMBER, UNKNOWN_LIGAND
+from cifutils.constants import ELEMENT_NAME_TO_ATOMIC_NUMBER
 from cifutils.tools.rdkit import atom_array_from_rdkit
-from cifutils.utils.ccd import get_available_ccd_codes
 from cifutils.utils.selection import get_residue_starts
-from rdkit import Chem
-
-from datahub.transforms.af3_reference_molecule import (
-    _get_rdkit_mols_with_conformers, 
-    _map_reference_conformer_to_residue,
-    _encode_atom_names_like_af3,
-    KNOWN_CCD_CODES,
-    logger
-)
 from datahub.enums import GroundTruthConformerPolicy
 from datahub.transforms._checks import (
     check_atom_array_annotation,
@@ -26,15 +15,21 @@ from datahub.transforms._checks import (
     check_is_instance,
     check_nonzero_length,
 )
+from datahub.transforms.af3_reference_molecule import (
+    KNOWN_CCD_CODES,
+    _encode_atom_names_like_af3,
+    _get_rdkit_mols_with_conformers,
+    _map_reference_conformer_to_residue,
+    logger,
+)
 from datahub.transforms.base import Transform
+from datahub.transforms.chirals import get_rf2aa_chiral_features
 from datahub.transforms.rdkit_utils import (
-    ccd_code_to_rdkit_with_conformers,
     find_automorphisms_with_rdkit,
+    get_chiral_centers,
     sample_rdkit_conformer_for_atom_array,
-    get_chiral_centers
 )
 from datahub.utils.geometry import masked_center, random_rigid_augmentation
-from datahub.transforms.chirals import get_rf2aa_chiral_features
 
 
 def get_af3_reference_molecule_features_ch(
@@ -104,7 +99,9 @@ def get_af3_reference_molecule_features_ch(
     unknown_ccd_conformers = defaultdict(list)
     ref_mols_with_unk = ref_mols.copy()
     if not all(res_name in KNOWN_CCD_CODES for res_name in res_stochiometry):
-        res_indices_with_unknown = np.where(~np.isin(_res_names, list(KNOWN_CCD_CODES)))[0]
+        res_indices_with_unknown = np.where(
+            ~np.isin(_res_names, list(KNOWN_CCD_CODES))
+        )[0]
         for res_index in res_indices_with_unknown:
             res_name = _res_names[res_index]
 
@@ -161,11 +158,13 @@ def get_af3_reference_molecule_features_ch(
             # (a) the ground-truth conformer policy is set to "replace" for all atoms in the residue
             # (b) the current conformer is all 0's/NaN's (i.e., the conformer generation failed), and the policy is set to "fallback" for all atoms in the residue
             if np.all(
-                atom_array.ground_truth_conformer_policy[res_start:res_end] == GroundTruthConformerPolicy.REPLACE
+                atom_array.ground_truth_conformer_policy[res_start:res_end]
+                == GroundTruthConformerPolicy.REPLACE
             ) or (
                 np.all(np.nan_to_num(conformer.coord) == 0)
                 and np.all(
-                    atom_array.ground_truth_conformer_policy[res_start:res_end] == GroundTruthConformerPolicy.FALLBACK
+                    atom_array.ground_truth_conformer_policy[res_start:res_end]
+                    == GroundTruthConformerPolicy.FALLBACK
                 )
             ):
                 # NOTE: Inefficient since we generate with RDKit, and then discard, the conformer; however, this replacement-based approach is more interpretable and thus preferred
@@ -191,7 +190,9 @@ def get_af3_reference_molecule_features_ch(
         # ... apply a random rotation and translation to the reference conformer, if requested
         if apply_random_rotation_and_translation:
             # TODO: Implement more elegantly directly in numpy
-            _ref_pos = random_rigid_augmentation(torch.from_numpy(_ref_pos[np.newaxis, :]), batch_size=1).numpy()
+            _ref_pos = random_rigid_augmentation(
+                torch.from_numpy(_ref_pos[np.newaxis, :]), batch_size=1
+            ).numpy()
 
         # ... fill the reference features for this residue
         ref_pos[res_start:res_end] = _ref_pos
@@ -228,7 +229,9 @@ def get_af3_reference_molecule_features_ch(
         assert (
             "atomize" in atom_array.get_annotation_categories()
         ), "Atomize annotation is required when using element for atom names of atomized tokens."
-        ref_atom_name_chars[atom_array.atomize] = _encode_atom_names_like_af3(atom_array.element[atom_array.atomize])
+        ref_atom_name_chars[atom_array.atomize] = _encode_atom_names_like_af3(
+            atom_array.element[atom_array.atomize]
+        )
 
     # ... space uid (type conversion needed for some older torch versions)
     ref_space_uid = atom_array.token_id.astype(np.int64)
@@ -287,11 +290,17 @@ class GetAF3ReferenceMoleculeFeatures(Transform):
         **generate_conformers_kwargs,
     ):
         self.conformer_generation_timeout = conformer_generation_timeout
-        self.should_generate_automorphisms_with_rdkit = should_generate_automorphisms_with_rdkit
+        self.should_generate_automorphisms_with_rdkit = (
+            should_generate_automorphisms_with_rdkit
+        )
         self.generate_conformers_kwargs = generate_conformers_kwargs
         self.save_rdkit_mols = save_rdkit_mols
-        self.use_element_for_atom_names_of_atomized_tokens = use_element_for_atom_names_of_atomized_tokens
-        self.apply_random_rotation_and_translation = apply_random_rotation_and_translation
+        self.use_element_for_atom_names_of_atomized_tokens = (
+            use_element_for_atom_names_of_atomized_tokens
+        )
+        self.apply_random_rotation_and_translation = (
+            apply_random_rotation_and_translation
+        )
         self.generate_conformers_kwargs = generate_conformers_kwargs
 
         if self.use_element_for_atom_names_of_atomized_tokens:
@@ -300,7 +309,9 @@ class GetAF3ReferenceMoleculeFeatures(Transform):
     def check_input(self, data: dict):
         check_contains_keys(data, ["atom_array"])
         check_is_instance(data, "atom_array", AtomArray)
-        check_atom_array_annotation(data, ["res_name", "element", "charge", "atom_name", "token_id"])
+        check_atom_array_annotation(
+            data, ["res_name", "element", "charge", "atom_name", "token_id"]
+        )
 
         if self.use_element_for_atom_names_of_atomized_tokens:
             check_atom_array_annotation(data, ["atomize"])
@@ -329,7 +340,10 @@ class GetAF3ReferenceMoleculeFeatures(Transform):
 
         return data
 
-def _get_reference_conformer_to_residue_mapping(atom_names: np.ndarray, conformer: AtomArray) -> tuple[np.ndarray]:
+
+def _get_reference_conformer_to_residue_mapping(
+    atom_names: np.ndarray, conformer: AtomArray
+) -> tuple[np.ndarray]:
     """
     Maps atom indices from a reference conformer (as an AtomArray) to the specified residue, dropping all atoms that are not in the residue.
     Args:
@@ -426,6 +440,7 @@ class AddAF3ChiralFeatures(Transform):
 
         return data
 
+
 class GetRDKitChiralCenters(Transform):
     """
     Identify chiral centers in the RDKit molecules stored in the `data["rdkit"]` dictionary.
@@ -469,6 +484,8 @@ class GetRDKitChiralCenters(Transform):
                 data["chiral_centers"][resname] = get_chiral_centers(rdmol)
 
             except Exception as e:
-                logger.warning(f"Failed to find chiral centers for molecule {resname}: {e}")
+                logger.warning(
+                    f"Failed to find chiral centers for molecule {resname}: {e}"
+                )
 
         return data

@@ -1,27 +1,27 @@
 import time
-from beartype.typing import Any
+from collections import defaultdict
 
+import pandas as pd
+from beartype.typing import Any
 from datahub.common import parse_example_id
+from lightning.fabric.wrappers import (
+    _FabricOptimizer,
+)
+from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
-from rich.console import Group
 from torch import nn
 from torchmetrics.aggregation import MeanMetric
 
 from modelhub.callbacks.base import BaseCallback
 from modelhub.utils.ddp import RankedLogger
 from modelhub.utils.logging import (
-    print_model_parameters,
     print_df_as_table,
-    table_from_df,
+    print_model_parameters,
     safe_print,
+    table_from_df,
 )
-from modelhub.utils.loss import mean_losses, convert_batched_losses_to_list_of_dicts
-from lightning.fabric.wrappers import (
-    _FabricOptimizer,
-)
-import pandas as pd
-from collections import defaultdict
+from modelhub.utils.loss import convert_batched_losses_to_list_of_dicts, mean_losses
 
 
 class LogModelParametersCallback(BaseCallback):
@@ -47,7 +47,9 @@ class PrintExampleIDBeforeForwardPassCallback(BaseCallback):
         )
         example_id_info = f"[bold yellow]Example ID: {example_id}[/bold yellow]"
 
-        safe_print(f"{rank_info} {epoch_batch_info} - {example_id_info}",)
+        safe_print(
+            f"{rank_info} {epoch_batch_info} - {example_id_info}",
+        )
 
 
 class LogDatasetSamplingRatiosCallback(BaseCallback):
@@ -160,10 +162,16 @@ class LogAF3TrainingLossesCallback(BaseCallback):
         if trainer.fabric.is_global_zero and batch_idx % self.log_every_n == 0:
             # ... log losses for each structure in the batch
             if self.log_full_batch_losses:
-                full_batch_loss_dicts = convert_batched_losses_to_list_of_dicts(outputs["loss_dict"])
+                full_batch_loss_dicts = convert_batched_losses_to_list_of_dicts(
+                    outputs["loss_dict"]
+                )
                 for loss_dict in full_batch_loss_dicts:
-                    loss_dict = {f"train/per_structure/{k}": v for k, v in loss_dict.items()}
-                    trainer.fabric.log_dict(loss_dict, step=trainer.state["global_step"])
+                    loss_dict = {
+                        f"train/per_structure/{k}": v for k, v in loss_dict.items()
+                    }
+                    trainer.fabric.log_dict(
+                        loss_dict, step=trainer.state["global_step"]
+                    )
 
             # ... log losses meaned across the batch
             # (Prepend "train/batch_mean" to the keys in the loss dictionary)

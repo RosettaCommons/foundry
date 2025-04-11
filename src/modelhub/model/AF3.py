@@ -1,19 +1,19 @@
 from contextlib import ExitStack
 
 import torch
+import torch.utils.checkpoint as checkpoint
 from omegaconf import DictConfig
 from torch import nn
 
-from modelhub.model.AF3_structure import DiffusionModule, DistogramHead, Recycler
-from modelhub.model.layers.pairformer_layers import (
-    FeatureInitializer,
-)
 from modelhub.diffusion_samplers.inference_sampler import (
     SampleDiffusion,
     SamplePartialDiffusion,
 )
+from modelhub.model.AF3_structure import DiffusionModule, DistogramHead, Recycler
+from modelhub.model.layers.pairformer_layers import (
+    FeatureInitializer,
+)
 from modelhub.training.checkpoint import create_custom_forward
-import torch.utils.checkpoint as checkpoint
 
 """
 Shape Annotation Glossary:

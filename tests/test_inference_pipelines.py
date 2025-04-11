@@ -28,4 +28,3 @@ def test_build_file_paths_for_prediction(file_path: PathLike, tmp_path: Path):
         output = parse(path)
         assert output is not None
         assert len(output["assemblies"]["1"][0]) > 0
-    

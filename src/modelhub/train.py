@@ -1,18 +1,20 @@
 #!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../scripts/shebang/modelhub_exec.sh" "$0" "$@"'
 
 import logging
+import os
 
 import hydra
 import rootutils
 from omegaconf import DictConfig
-import os
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 # If the user has set `PROJECT_PATH`, use it to build the config path; otherwise, fall back to `PROJECT_ROOT`
-_config_path = os.path.join(os.environ.get("PROJECT_PATH", os.environ["PROJECT_ROOT"]), "configs")
+_config_path = os.path.join(
+    os.environ.get("PROJECT_PATH", os.environ["PROJECT_ROOT"]), "configs"
+)
 
 _spawning_process_logger = logging.getLogger(__name__)
 

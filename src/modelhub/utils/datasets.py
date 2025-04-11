@@ -1,7 +1,6 @@
-from beartype.typing import Any
-
 import hydra
 import torch
+from beartype.typing import Any
 from datahub.datasets.datasets import (
     ConcatDatasetWithID,
     FallbackDatasetWrapper,
@@ -11,11 +10,10 @@ from datahub.samplers import (
     DistributedMixedSampler,
     FallbackSamplerWrapper,
     LazyWeightedRandomSampler,
-    MixedSampler,
     LoadBalancedDistributedSampler,
+    MixedSampler,
 )
 from omegaconf import DictConfig, ListConfig, OmegaConf
-from modelhub.resolvers import resolve_import, chain_type_info_to_regex
 from torch.utils.data import (
     DataLoader,
     Dataset,
@@ -27,6 +25,7 @@ from torch.utils.data import (
 )
 from torch.utils.data.distributed import DistributedSampler
 
+from modelhub.resolvers import chain_type_info_to_regex, resolve_import
 from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)

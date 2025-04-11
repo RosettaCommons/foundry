@@ -99,7 +99,7 @@ class AtomAttentionEncoderPairformer(nn.Module):
         # ... get the number of atoms and tokens
         tok_idx = f["atom_to_token_map"]
         L = len(tok_idx)  # N_atom
-        I = tok_idx.max() + 1  # N_token 
+        I = tok_idx.max() + 1  # N_token
 
         # ... flatten the last two dimensions of ref_atom_name_chars
         # (the letter dimension and the one-hot encoding of the unicode character dimension)

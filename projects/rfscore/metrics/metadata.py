@@ -1,11 +1,14 @@
-from beartype.typing import Any, Literal, Hashable
-from modelhub.metrics.base import Metric
 import json
+
+from beartype.typing import Any, Literal
+
+from modelhub.metrics.base import Metric
+
 
 class ExtraInfo(Metric):
     """Stores the extra_info from the dataloader output in the metrics dictionary.
     Only basic Python types that are hashable and can be JSON serialized are stored."""
-    
+
     def __init__(self, keys_to_store: list[str] | Literal["all"] = "all"):
         super().__init__()
         self.keys_to_store = keys_to_store
@@ -19,7 +22,7 @@ class ExtraInfo(Metric):
         try:
             # First check if it's hashable
             hash(value)
-            
+
             # Then check if it's JSON serializable
             json.dumps(value)
             return True

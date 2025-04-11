@@ -1,9 +1,10 @@
 from functools import partial
-import pytest
 
 import numpy as np
+import pytest
 import torch
 from lightning.fabric import seed_everything
+from omegaconf import DictConfig
 
 from modelhub.chemical import ChemicalData as ChemData
 from modelhub.chemical import initialize_chemdata
@@ -12,7 +13,6 @@ from modelhub.metrics.metric_utils import (
     unbin_logits,
 )
 from modelhub.utils.predicted_error import compile_af3_confidence_outputs
-from omegaconf import DictConfig
 
 
 def test_compile_af3_confidence_outputs():
@@ -35,23 +35,25 @@ def test_compile_af3_confidence_outputs():
     outputs["confidence"]["is_real_atom"] = is_real_atom
 
     # Spoof the confidence loss Hydra configuration
-    cfg = DictConfig({
-        "plddt": {
-            "weight": 1.0,
-            "n_bins": 50,
-            "max_value": 1.0,
-        },
-        "pae": {
-            "weight": 1.0,
-            "n_bins": 64,
-            "max_value": 32,
-        },
-        "pde": {
-            "weight": 1.0,
-            "n_bins": 64,
-            "max_value": 32,
-        },
-    })
+    cfg = DictConfig(
+        {
+            "plddt": {
+                "weight": 1.0,
+                "n_bins": 50,
+                "max_value": 1.0,
+            },
+            "pae": {
+                "weight": 1.0,
+                "n_bins": 64,
+                "max_value": 32,
+            },
+            "pde": {
+                "weight": 1.0,
+                "n_bins": 64,
+                "max_value": 32,
+            },
+        }
+    )
 
     output = compile_af3_confidence_outputs(
         plddt_logits=outputs["confidence"]["plddt_logits"],
@@ -60,7 +62,7 @@ def test_compile_af3_confidence_outputs():
         chain_iid_token_lvl=outputs["confidence"]["chain_iid_token_lvl"],
         is_real_atom=is_real_atom,
         example_id="test",
-        confidence_loss_cfg=cfg
+        confidence_loss_cfg=cfg,
     )
 
     num_chains = len(np.unique(outputs["confidence"]["chain_iid_token_lvl"]))
@@ -187,6 +189,7 @@ def test_bin_midpoints():
     expected_bins = torch.linspace(0.25, 31.75, 64, device="cpu")
     pae_bins = find_bin_midpoints(max_distance, num_bins)
     assert torch.allclose(pae_bins, expected_bins)
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

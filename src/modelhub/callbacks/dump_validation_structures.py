@@ -1,13 +1,15 @@
+from os import PathLike
+from pathlib import Path
+
 from beartype.typing import Any
+from datahub.common import parse_example_id
+
 from modelhub.callbacks.base import BaseCallback
 from modelhub.utils.io import (
+    build_stack_from_atom_array_and_batched_coords,
     dump_structures,
     dump_trajectories,
-    build_stack_from_atom_array_and_batched_coords,
 )
-from datahub.common import parse_example_id
-from pathlib import Path
-from os import PathLike
 
 
 class DumpValidationStructuresCallback(BaseCallback):
@@ -62,16 +64,11 @@ class DumpValidationStructuresCallback(BaseCallback):
 
         def _build_path_from_example_id(dir: str, extra: str = "") -> Path:
             """Helper function to build a path from a training or validation example_id."""
-            path = (
-                self.save_dir
-                / dir
-                / f"epoch_{trainer.state['current_epoch']}"
-            )
-            
-            path = path / dataset_name
-                
-            return path / f"{identifier}{extra}"
+            path = self.save_dir / dir / f"epoch_{trainer.state['current_epoch']}"
 
+            path = path / dataset_name
+
+            return path / f"{identifier}{extra}"
 
         if self.dump_predictions:
             atom_array_stack = build_stack_from_atom_array_and_batched_coords(

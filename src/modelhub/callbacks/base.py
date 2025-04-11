@@ -1,6 +1,6 @@
 from abc import ABC
-from beartype.typing import Any
 
+from beartype.typing import Any
 from lightning.fabric.wrappers import (
     _FabricOptimizer,
 )

@@ -1,10 +1,10 @@
 import logging
-from beartype.typing import Any
 
+import torch
+from beartype.typing import Any
 from lightning_fabric.utilities import rank_zero_only
 from lightning_utilities.core.rank_zero import rank_prefixed_message
 from omegaconf import DictConfig
-import torch
 
 logger = logging.getLogger(__name__)
 

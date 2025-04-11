@@ -65,7 +65,10 @@ class TokenGroupNoiseScaleSampler:
 
 
 DEFAULT_DISTOGRAM_BINS: Final[Float[Tensor, "63"]] = torch.concat(
-    (torch.arange(1.0, 4.0, 0.1, device="cpu"), torch.arange(4.0, 20.5, 0.5, device="cpu"))
+    (
+        torch.arange(1.0, 4.0, 0.1, device="cpu"),
+        torch.arange(4.0, 20.5, 0.5, device="cpu"),
+    )
 )
 """
 Default bins for discretizing distances in the distogram (in Angstrom).
@@ -280,7 +283,9 @@ def featurize_noised_ground_truth_as_template_distogram(
 
     # The tokens to fill are those with supported chain types, resolved center atoms, and non-NaN noise
     token_to_fill_mask = (
-        tokens_with_supported_chain_types_mask & resolved_tokens_mask & torch.isfinite(noise).all(dim=-1).numpy()
+        tokens_with_supported_chain_types_mask
+        & resolved_tokens_mask
+        & torch.isfinite(noise).all(dim=-1).numpy()
     )  # [n_token] (bool)
 
     # With probability `p_unconditional`, discard all conditioning

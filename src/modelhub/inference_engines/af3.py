@@ -1,28 +1,31 @@
+import logging
 from os import PathLike
 from pathlib import Path
 
 import hydra
 import numpy as np
 import torch
+from biotite.structure import AtomArray
 from cifutils import parse
+from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
-from modelhub.utils.inference import build_file_paths_for_prediction
-from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
-from modelhub.utils.logging import print_config_tree
+from modelhub.inference_engines.base import InferenceEngine
 from modelhub.utils.datasets import (
     assemble_distributed_inference_loader_from_list_of_paths,
 )
-from modelhub.utils.predicted_error import compile_af3_confidence_outputs, annotate_atom_array_b_factor_with_plddt
-from modelhub.inference_engines.base import InferenceEngine
+from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
+from modelhub.utils.inference import build_file_paths_for_prediction
 from modelhub.utils.io import (
+    build_stack_from_atom_array_and_batched_coords,
     dump_structures,
     dump_trajectories,
-    build_stack_from_atom_array_and_batched_coords,
 )
-import logging
-from biotite.structure import AtomArray
-from lightning.fabric import seed_everything
+from modelhub.utils.logging import print_config_tree
+from modelhub.utils.predicted_error import (
+    annotate_atom_array_b_factor_with_plddt,
+    compile_af3_confidence_outputs,
+)
 
 logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
@@ -95,9 +98,9 @@ class AF3InferenceEngine(InferenceEngine):
         self.cfg = OmegaConf.create(checkpoint["train_cfg"])
 
         self.paths = build_file_paths_for_prediction(
-            input=inputs, 
-            temp_dir=temp_dir, 
-            existing_outputs_dir=out_dir if skip_existing else None
+            input=inputs,
+            temp_dir=temp_dir,
+            existing_outputs_dir=out_dir if skip_existing else None,
         )
 
         # Override specific parameters within the Hydra config:
@@ -181,7 +184,7 @@ class AF3InferenceEngine(InferenceEngine):
         )
 
         return pipeline
-    
+
     def parse_from_path(self, path_to_structure: Path) -> dict:
         """Parse a structure from a CIF file.
 
@@ -201,7 +204,7 @@ class AF3InferenceEngine(InferenceEngine):
                 f.write(content)
 
         return parse(path_to_structure, remove_hydrogens=True)
-    
+
     def prepare_atom_array(self, atom_array: AtomArray) -> AtomArray:
         """Prepare the AtomArray for inference.
 
@@ -323,7 +326,9 @@ class AF3InferenceEngine(InferenceEngine):
                     confidence_outs["plddt"],
                     pipeline_output["confidence_feats"]["is_real_atom"],
                 )
-                logging.info(f"Annotated PLDDT scores into B-factors for {example_id}. Forcing one model per file to accommodate separate b_factors in each model.")
+                logging.info(
+                    f"Annotated PLDDT scores into B-factors for {example_id}. Forcing one model per file to accommodate separate b_factors in each model."
+                )
                 self.one_model_per_file = True
                 confidence_outs["confidence_df"].to_csv(
                     self.cif_out_dir / f"{example_id}.score", index=False
@@ -334,7 +339,9 @@ class AF3InferenceEngine(InferenceEngine):
 
             if self.dump_predictions:
                 dump_structures(
-                    atom_arrays=atom_array_stack if not "plddt" in network_output else atom_array_list,
+                    atom_arrays=atom_array_stack
+                    if "plddt" not in network_output
+                    else atom_array_list,
                     base_path=self.cif_out_dir / example_id,
                     one_model_per_file=self.one_model_per_file,
                 )

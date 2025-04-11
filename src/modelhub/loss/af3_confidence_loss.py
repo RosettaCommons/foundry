@@ -1,22 +1,20 @@
 import torch
 import torch.nn as nn
+from omegaconf import DictConfig
 from scipy.stats import spearmanr
 
+# TODO: REFACTOR; COPIED FROM RF2AA. WE NEED TO REMOVE CHEMDATA, ADD DOCSTRINGS, EXAMPLES, HOPEFULLY TESTS, AND CLEAN UP
+# HACK: Initialize ChemData without dependence on legacy configs
+from modelhub.chemical import ChemicalData as ChemData
 from modelhub.metrics.metric_utils import (
     compute_mean_over_subsampled_pairs,
     unbin_logits,
 )
 from modelhub.utils.frames import (
     get_frames,
-    rigid_from_3_points,
     mask_unresolved_frames_batched,
+    rigid_from_3_points,
 )
-from omegaconf import DictConfig
-
-# TODO: REFACTOR; COPIED FROM RF2AA. WE NEED TO REMOVE CHEMDATA, ADD DOCSTRINGS, EXAMPLES, HOPEFULLY TESTS, AND CLEAN UP
-
-# HACK: Initialize ChemData without dependence on legacy configs
-from modelhub.chemical import ChemicalData as ChemData
 
 chemdata = ChemData(
     params=DictConfig(
@@ -99,7 +97,9 @@ class ConfidenceLoss(nn.Module):
         exp_resolved_logits = network_output["exp_resolved"]
         exp_resolved_loss = (
             self.cce(
-                exp_resolved_logits.reshape(B, I, ChemData().NHEAVY, self.exp_resolved.n_bins).permute(0, 3, 1, 2),
+                exp_resolved_logits.reshape(
+                    B, I, ChemData().NHEAVY, self.exp_resolved.n_bins
+                ).permute(0, 3, 1, 2),
                 is_resolved_I[:, :, : ChemData().NHEAVY].long(),
             )
             * loss_input["is_real_atom"][:, : ChemData().NHEAVY]
@@ -145,7 +145,9 @@ class ConfidenceLoss(nn.Module):
                     I,
                     ChemData().NHEAVY,
                     self.plddt.n_bins,
-                ).permute(0, 3, 1, 2).float(),
+                )
+                .permute(0, 3, 1, 2)
+                .float(),
                 self.plddt.max_value,
                 self.plddt.n_bins,
             )

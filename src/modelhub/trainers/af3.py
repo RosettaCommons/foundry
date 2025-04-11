@@ -1,27 +1,26 @@
-from modelhub.trainers.fabric import FabricTrainer
-from beartype.typing import Any
-from modelhub.utils.recycling import get_recycle_schedule
-from lightning_utilities import apply_to_collection
-import torch
-
 import hydra
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.torch_utils import assert_no_nans, assert_same_shape
+import torch
+from beartype.typing import Any
 from einops import repeat
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.predicted_error import (
-    compute_batch_indices_with_lowest_predicted_error,
-)
-from modelhub.training.EMA import EMA
-from modelhub.metrics.base import MetricManager
+from jaxtyping import Float, Int
+from lightning_utilities import apply_to_collection
+from omegaconf import DictConfig
+
 from modelhub.loss.af3_losses import Loss as AF3Loss
 from modelhub.loss.af3_losses import (
     ResidueSymmetryResolution,
     SubunitSymmetryResolution,
 )
-from omegaconf import DictConfig
-from jaxtyping import Float, Int
+from modelhub.metrics.base import MetricManager
+from modelhub.trainers.fabric import FabricTrainer
+from modelhub.training.EMA import EMA
+from modelhub.utils.ddp import RankedLogger
 from modelhub.utils.io import build_stack_from_atom_array_and_batched_coords
+from modelhub.utils.predicted_error import (
+    compute_batch_indices_with_lowest_predicted_error,
+)
+from modelhub.utils.recycling import get_recycle_schedule
+from modelhub.utils.torch_utils import assert_no_nans, assert_same_shape
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
@@ -305,7 +304,9 @@ class AF3Trainer(FabricTrainer):
         if compute_metrics:
             assert self.metrics is not None, "Metrics are not defined!"
 
-            metrics_extra_info = self._assemble_metrics_extra_info(example, network_output)
+            metrics_extra_info = self._assemble_metrics_extra_info(
+                example, network_output
+            )
 
             # Symmetry resolution
             # TODO: Refactor such that symmetry returns the ideal coordinate permutation, we apply permutation, and pass adjusted prediction to metrics
@@ -333,15 +334,19 @@ class AF3Trainer(FabricTrainer):
                 ),
                 predicted_atom_array_stack=build_stack_from_atom_array_and_batched_coords(
                     network_output["X_L"], example.get("atom_array", None)
-                )
+                ),
             )
 
             # Avoid gradients in stored values to prevent memory leaks
             if metrics_output is not None:
-                metrics_output = apply_to_collection(metrics_output, torch.Tensor, lambda x: x.detach())
-        
+                metrics_output = apply_to_collection(
+                    metrics_output, torch.Tensor, lambda x: x.detach()
+                )
+
         if network_output is not None:
-            network_output = apply_to_collection(network_output, torch.Tensor, lambda x: x.detach())
+            network_output = apply_to_collection(
+                network_output, torch.Tensor, lambda x: x.detach()
+            )
 
         return {"metrics_output": metrics_output, "network_output": network_output}
 

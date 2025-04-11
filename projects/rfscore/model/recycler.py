@@ -13,5 +13,7 @@ class RFScoreRecycler(Recycler):
 
         # ... override the template embedder to use the RFScore template embedder, which provides additional conditioning
         self.template_embedder = RFScoreTemplateEmbedder(
-            c_z=kwargs["c_z"], **kwargs["template_embedder"], use_fourier_encoding=use_fourier_encoding
+            c_z=kwargs["c_z"],
+            **kwargs["template_embedder"],
+            use_fourier_encoding=use_fourier_encoding,
         )

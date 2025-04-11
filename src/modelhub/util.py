@@ -1745,10 +1745,10 @@ def reassign_symmetry_after_cropping(sel, Ls_prot, ch_label, mask, item):
         chain_break_idxs
     ]  # makes ch_label chainwise instead of residue wise
 
-    assert torch.all(torch.diff(ch_label_per_prot_chain) >= 0), (
-        f"all identical chains are not next to each other so symmetry resolution will not work. here is the order of chain labels\
+    assert torch.all(
+        torch.diff(ch_label_per_prot_chain) >= 0
+    ), f"all identical chains are not next to each other so symmetry resolution will not work. here is the order of chain labels\
                 {ch_label_per_prot_chain}"
-    )
 
     all_perms = []
     ch_number = 0

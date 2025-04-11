@@ -1,6 +1,7 @@
 # TODO: REFACTOR; COPIED FROM RF2AA. WE NEED TO REMOVE CHEMDATA, ADD DOCSTRINGS, EXAMPLES, HOPEFULLY TESTS, AND CLEAN UP
 
 import torch
+
 from modelhub.chemical import ChemicalData as ChemData
 
 

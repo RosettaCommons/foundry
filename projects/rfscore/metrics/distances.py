@@ -5,19 +5,22 @@ from cifutils.utils.selection import (
     get_mask_from_atom_selection,
     parse_selection_string,
 )
+from datahub.utils import nested_dict
 
 from modelhub.metrics.base import Metric
-from datahub.utils import nested_dict
+
 
 class SelectedAtomByAtomDistances(Metric):
     """Computes all-by-all 2D distances given a list of selection strings"""
-    
+
     def compute_from_kwargs(self, **kwargs: Any) -> dict[str, Any]:
         """Override parent class to handle optional selection_strings parameter"""
         compute_inputs = {
-            "atom_array_stack": nested_dict.getitem(kwargs, key="predicted_atom_array_stack")
+            "atom_array_stack": nested_dict.getitem(
+                kwargs, key="predicted_atom_array_stack"
+            )
         }
-        
+
         # Add selection_strings only if it exists
         try:
             compute_inputs["selection_strings"] = nested_dict.getitem(
@@ -25,9 +28,8 @@ class SelectedAtomByAtomDistances(Metric):
             )
         except (KeyError, IndexError, TypeError):
             pass
-            
-        return self.compute(**compute_inputs)
 
+        return self.compute(**compute_inputs)
 
     def compute(
         self,
@@ -37,7 +39,7 @@ class SelectedAtomByAtomDistances(Metric):
         # Short-circuit if no selection strings are provided
         if not selection_strings:
             return {}
-        
+
         # ... select the specified atoms
         mask = np.zeros(atom_array_stack.array_length(), dtype=bool)
         atom_selections = [parse_selection_string(s) for s in selection_strings]
@@ -67,7 +69,7 @@ class SelectedAtomByAtomDistances(Metric):
             selected_atom_array_stack.chain_id,
             selected_atom_array_stack.res_name,
             selected_atom_array_stack.res_id,
-            selected_atom_array_stack.atom_name
+            selected_atom_array_stack.atom_name,
         )
 
         # Create a 2x2 numpy arrays of names, where we concatenate the id ...
@@ -77,7 +79,9 @@ class SelectedAtomByAtomDistances(Metric):
         # ... and store the results in a dictionary, naming the columns with the concatenated id
         results = {}
         for i in range(len(id)):
-            for j in range(i+1, len(id)):  # Only consider j > i to avoid symmetric duplicates
+            for j in range(
+                i + 1, len(id)
+            ):  # Only consider j > i to avoid symmetric duplicates
                 col_id = id_II[i, j]
                 mean = mean_distances[i, j]
                 std = std_distances[i, j]

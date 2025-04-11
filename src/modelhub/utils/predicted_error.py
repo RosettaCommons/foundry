@@ -1,11 +1,13 @@
-from itertools import combinations, chain
-from beartype.typing import Any
+from itertools import chain, combinations
 from typing import List
 
 import numpy as np
 import pandas as pd
 import torch
 import tree
+from beartype.typing import Any
+from biotite.structure import AtomArray, AtomArrayStack
+from omegaconf import DictConfig
 
 from modelhub.chemical import ChemicalData as ChemData
 from modelhub.metrics.metric_utils import (
@@ -16,8 +18,6 @@ from modelhub.metrics.metric_utils import (
     spread_batch_into_dictionary,
     unbin_logits,
 )
-from omegaconf import DictConfig
-from biotite.structure import AtomArray, AtomArrayStack
 
 
 def compile_af3_confidence_outputs(
@@ -287,21 +287,22 @@ def compute_batch_indices_with_lowest_predicted_error(
 
     return return_dict
 
+
 def annotate_atom_array_b_factor_with_plddt(
-    atom_array: AtomArray | AtomArrayStack, 
-    plddt: torch.Tensor, 
-    is_real_atom: torch.Tensor
+    atom_array: AtomArray | AtomArrayStack,
+    plddt: torch.Tensor,
+    is_real_atom: torch.Tensor,
 ) -> List[AtomArray]:
     """Annotates the b_factor of an AtomArray with the pLDDT values in the occupancy field.
 
     Args:
-        atom_array: The AtomArray or AtomArrayStack to annotate 
+        atom_array: The AtomArray or AtomArrayStack to annotate
         plddt: The pLDDT tensor of shape (B, I, NHEAVY)
         is_real_atom: A mask indicating which atoms are in the structure of shape (I, NHEAVY)
 
     Returns:
-        list[AtomArray]: The annotated list of AtomArrays. We must return a list of AtomArrays 
-            because the AtomArray class does not support setting different values as annotations 
+        list[AtomArray]: The annotated list of AtomArrays. We must return a list of AtomArrays
+            because the AtomArray class does not support setting different values as annotations
             other than the coordinate feature.
     """
     atom_wise_plddt = plddt[:, is_real_atom[..., : ChemData().NHEAVY]]
@@ -322,6 +323,7 @@ def annotate_atom_array_b_factor_with_plddt(
         assert np.isnan(aa.b_factor).sum() == 0
 
     return atom_array_list
+
 
 def _select_scored_units(
     interfaces_to_score: list[tuple], pn_units_to_score: list[tuple]

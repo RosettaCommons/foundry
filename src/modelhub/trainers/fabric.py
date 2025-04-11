@@ -8,14 +8,16 @@ References:
 """
 
 import math
-from beartype.typing import Mapping
+from abc import ABC, abstractmethod
 from datetime import timedelta
 from pathlib import Path
 from typing import cast
-from beartype.typing import Any, Literal
 
+import hydra
 import lightning as L
 import torch
+from beartype.typing import Any, Literal, Mapping
+from datahub.samplers import set_sampler_epoch
 from lightning.fabric.accelerators import Accelerator
 from lightning.fabric.loggers import Logger
 from lightning.fabric.strategies import DDPStrategy, Strategy
@@ -25,14 +27,10 @@ from lightning.fabric.wrappers import (
     _FabricOptimizer,
 )
 
-from modelhub.training.EMA import EMA
 from modelhub.callbacks.base import BaseCallback
-from modelhub.utils.ddp import RankedLogger
-from abc import ABC, abstractmethod
-import hydra
+from modelhub.training.EMA import EMA
 from modelhub.training.schedulers import SchedulerConfig
-from datahub.samplers import set_sampler_epoch
-
+from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
@@ -311,7 +309,10 @@ class FabricTrainer(ABC):
             # Increment the global epoch (e.g., if we loaded a checkpoint from [the end of] epoch 5, we should start training at epoch 6)
             self.state["current_epoch"] += 1
             # Stopping conditions
-            if (self.max_epochs is not None and self.state["current_epoch"] >= self.max_epochs):
+            if (
+                self.max_epochs is not None
+                and self.state["current_epoch"] >= self.max_epochs
+            ):
                 self.should_stop = True
         else:
             ranked_logger.info("No checkpoint provided; training from scratch.")

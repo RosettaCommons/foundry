@@ -1,19 +1,18 @@
+import os
+from copy import deepcopy
 from pathlib import Path
-from beartype.typing import Any, Literal
 
-import lightning as L
 import pandas as pd
+from beartype.typing import Any, Literal
+from datahub.utils import nested_dict
+from omegaconf import ListConfig
 
 from modelhub.callbacks.base import BaseCallback
 from modelhub.utils.ddp import RankedLogger
-from datahub.utils import nested_dict
 from modelhub.utils.logging import (
-    print_df_as_table,
     condense_count_columns_of_grouped_df,
+    print_df_as_table,
 )
-from copy import deepcopy
-import os
-from omegaconf import ListConfig
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
@@ -66,9 +65,13 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         metrics_as_list_of_dicts = []
 
         # ... remove metrics that are not in the save list
-        if self.metrics_to_save != "all" and isinstance(self.metrics_to_save, list | ListConfig):
+        if self.metrics_to_save != "all" and isinstance(
+            self.metrics_to_save, list | ListConfig
+        ):
             metrics_output = {
-                k: v for k, v in metrics_output.items() if any(k.startswith(prefix) for prefix in self.metrics_to_save)
+                k: v
+                for k, v in metrics_output.items()
+                if any(k.startswith(prefix) for prefix in self.metrics_to_save)
             }
 
         def _build_row_from_flattened_dict(
@@ -167,37 +170,39 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         """Load rank-specific CSVs for the given epoch and concatenate them without duplicating examples."""
         pattern = f"validation_output_rank_*_epoch_{epoch}.csv"
         files = list(self.save_dir.glob(pattern))
-        
+
         # Track which example_id + dataset combinations we've already seen
         seen_examples = set()
         final_dataframes = []
-        
+
         for f in files:
             try:
                 df = pd.read_csv(f)
-                
+
                 # Create a filter for rows with new example_id + dataset combinations
                 if not df.empty:
                     # Create a unique identifier for each example_id + dataset combination
-                    df['_example_key'] = df['example_id'].astype(str) + '|' + df['dataset'].astype(str)
-                    
+                    df["_example_key"] = (
+                        df["example_id"].astype(str) + "|" + df["dataset"].astype(str)
+                    )
+
                     # Filter out rows with example_id + dataset combinations we've already seen
-                    new_examples_mask = ~df['_example_key'].isin(seen_examples)
-                    
+                    new_examples_mask = ~df["_example_key"].isin(seen_examples)
+
                     # If there are any new examples, add them to our final list
                     if new_examples_mask.any():
                         new_examples_df = df[new_examples_mask].copy()
-                        
+
                         # Update our set of seen examples
-                        seen_examples.update(new_examples_df['_example_key'].tolist())
-                        
+                        seen_examples.update(new_examples_df["_example_key"].tolist())
+
                         # Remove the temporary column before adding to final list
-                        new_examples_df.drop('_example_key', axis=1, inplace=True)
+                        new_examples_df.drop("_example_key", axis=1, inplace=True)
                         final_dataframes.append(new_examples_df)
-                
+
             except pd.errors.EmptyDataError:
                 ranked_logger.warning(f"Skipping empty CSV: {f}")
-        
+
         # Concatenate dataframes, filling missing columns with NaN
         return pd.concat(final_dataframes, axis=0, ignore_index=True, sort=False)
 
@@ -209,6 +214,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
                 file.unlink()  # Remove the file
             except Exception as e:
                 ranked_logger.warning(f"Failed to delete file {file}: {e}")
+
 
 class LogAF3ValidationMetricsCallback(BaseCallback):
     def __init__(
@@ -222,7 +228,9 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
         if not trainer.fabric.is_global_zero:
             return
 
-        assert hasattr(trainer, "validation_results_path"), "Results path not found! Ensure that StoreValidationMetricsInDFCallback is called first."
+        assert hasattr(
+            trainer, "validation_results_path"
+        ), "Results path not found! Ensure that StoreValidationMetricsInDFCallback is called first."
         df = pd.read_csv(trainer.validation_results_path)
 
         # ... filter to most recent epoch, drop epoch column
@@ -230,9 +238,15 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
         df.drop(columns=["epoch", "example_id"], inplace=True)
 
         # ... filter to columns that start with the metrics_to_log prefixes (and "dataset")
-        if self.metrics_to_log != "all" and isinstance(self.metrics_to_log, list | ListConfig):
+        if self.metrics_to_log != "all" and isinstance(
+            self.metrics_to_log, list | ListConfig
+        ):
             df = df[
-                [col for col in df.columns if any(col.startswith(prefix) for prefix in self.metrics_to_log)]
+                [
+                    col
+                    for col in df.columns
+                    if any(col.startswith(prefix) for prefix in self.metrics_to_log)
+                ]
                 + ["dataset"]
             ]
 
@@ -243,18 +257,22 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
             print(f"\n+{' ' + dataset + ' ':-^150}+\n")
 
             # +------------- LDDT by type (chain, interface) -------------+
-            by_type_lddt_cols = [col for col in df.columns if col.startswith("by_type_lddt")]
+            by_type_lddt_cols = [
+                col for col in df.columns if col.startswith("by_type_lddt")
+            ]
             if by_type_lddt_cols:
                 # ... build by-type DataFrame
                 by_type_df = dataset_df[by_type_lddt_cols].copy()
-                by_type_df= by_type_df.dropna(how='all')
+                by_type_df = by_type_df.dropna(how="all")
 
                 # ... remove the "by_type_lddt." prefix
                 by_type_df.columns = by_type_df.columns.str.replace("by_type_lddt.", "")
                 numeric_cols = by_type_df.select_dtypes(include="number").columns
-                
+
                 # ... group by type
-                grouped = by_type_df.groupby("type")[numeric_cols].agg(["mean", "count"])
+                grouped = by_type_df.groupby("type")[numeric_cols].agg(
+                    ["mean", "count"]
+                )
                 print_df_as_table(
                     condense_count_columns_of_grouped_df(grouped).reset_index(),
                     f"{dataset} — Epoch {trainer.state['current_epoch']} — Validation Metrics: LDDT by Type",
@@ -265,7 +283,9 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
                     for _, row in grouped.reset_index().iterrows():
                         trainer.fabric.log_dict(
                             {
-                                f"val/{dataset}/{row['type'].iloc[0]}/{col}": row[col]["mean"]
+                                f"val/{dataset}/{row['type'].iloc[0]}/{col}": row[col][
+                                    "mean"
+                                ]
                                 for col in numeric_cols
                             },
                             step=trainer.state["current_epoch"],
@@ -274,7 +294,7 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
             # +----------------- Other metrics -----------------+
             remaining_cols = list(set(dataset_df.columns) - set(by_type_lddt_cols))
             remaining_df = dataset_df[remaining_cols].copy()
-            remaining_df = remaining_df.dropna(how='all')
+            remaining_df = remaining_df.dropna(how="all")
             numeric_cols = remaining_df.select_dtypes(include="number").columns
 
             # Compute means and non-NaN counts for numeric columns
@@ -296,4 +316,7 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
 
             if trainer.fabric:
                 for col in numeric_cols:
-                    trainer.fabric.log_dict({f"val/{dataset}/{col}": final_means[col]}, step=trainer.state["current_epoch"])
+                    trainer.fabric.log_dict(
+                        {f"val/{dataset}/{col}": final_means[col]},
+                        step=trainer.state["current_epoch"],
+                    )

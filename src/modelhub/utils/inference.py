@@ -1,14 +1,21 @@
+import json
+import pickle
+from os import PathLike
+from pathlib import Path
+
 from cifutils.tools.inference import (
     build_msa_paths_by_chain_id_from_component_list,
     components_to_atom_array,
 )
 from cifutils.utils.io_utils import to_cif_file
-from modelhub.utils.io import find_files_with_extension, create_example_id_extractor, DICTIONARY_LIKE_EXTENSIONS, CIF_LIKE_EXTENSIONS
 
-import json
-import pickle
-from os import PathLike
-from pathlib import Path
+from modelhub.utils.io import (
+    CIF_LIKE_EXTENSIONS,
+    DICTIONARY_LIKE_EXTENSIONS,
+    create_example_id_extractor,
+    find_files_with_extension,
+)
+
 
 def _spoof_cif_from_dictionary(item: dict, temp_dir: PathLike) -> Path:
     """Unpacks a dictionary to create a CIF file from its components.
@@ -52,9 +59,9 @@ def _spoof_cif_from_dictionary(item: dict, temp_dir: PathLike) -> Path:
 
 
 def build_file_paths_for_prediction(
-    input: PathLike | list[PathLike], 
-    temp_dir: PathLike, 
-    existing_outputs_dir: PathLike | None = None
+    input: PathLike | list[PathLike],
+    temp_dir: PathLike,
+    existing_outputs_dir: PathLike | None = None,
 ) -> list[Path]:
     """Prepare files for prediction based on the input paths.
 
@@ -77,7 +84,10 @@ def build_file_paths_for_prediction(
     existing_example_ids = None
     if existing_outputs_dir:
         existing_example_ids = set(
-            example_id_extractor(path) for path in find_files_with_extension(existing_outputs_dir, CIF_LIKE_EXTENSIONS)
+            example_id_extractor(path)
+            for path in find_files_with_extension(
+                existing_outputs_dir, CIF_LIKE_EXTENSIONS
+            )
         )
 
     paths_to_raw_input_files = []
@@ -123,6 +133,10 @@ def build_file_paths_for_prediction(
 
     # Filter out existing example_ids if provided
     if existing_example_ids:
-        paths_to_cif_like_files= [path for path in paths_to_cif_like_files if example_id_extractor(path) not in existing_example_ids]
+        paths_to_cif_like_files = [
+            path
+            for path in paths_to_cif_like_files
+            if example_id_extractor(path) not in existing_example_ids
+        ]
 
     return paths_to_cif_like_files

@@ -152,7 +152,11 @@ class ByTypeInterfaceLDDT(Metric):
         tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()  # [n_atoms]
 
         # Loop over the interfaces to score (e.g., pn_unit_i, pn_unit_j, interface_type)
-        interfaces_to_score = eval(extra_info["interfaces_to_score"]) if isinstance(extra_info["interfaces_to_score"], str) else extra_info["interfaces_to_score"]
+        interfaces_to_score = (
+            eval(extra_info["interfaces_to_score"])
+            if isinstance(extra_info["interfaces_to_score"], str)
+            else extra_info["interfaces_to_score"]
+        )
         for pn_unit_i, pn_unit_j, interface_type in interfaces_to_score:
             # Get tokens in pn_unit_i and pn_unit_j
             pn_unit_i_tokens = pn_unit_iid_token_lvl == pn_unit_i
@@ -245,7 +249,11 @@ class ChainLDDTByType(Metric):
         tok_idx = network_input["f"]["atom_to_token_map"].cpu().numpy()
 
         # For all chains (pn_units) to score...
-        pn_units_to_score = eval(extra_info["pn_units_to_score"]) if isinstance(extra_info["pn_units_to_score"], str) else extra_info["pn_units_to_score"]
+        pn_units_to_score = (
+            eval(extra_info["pn_units_to_score"])
+            if isinstance(extra_info["pn_units_to_score"], str)
+            else extra_info["pn_units_to_score"]
+        )
         for chain, chain_type in pn_units_to_score:
             # ... get tokens in chain_i and chain_j
             chain_tokens = chain_iid_token_lvl == chain
@@ -302,6 +310,7 @@ class ChainLDDTByType(Metric):
 
         return chain_results
 
+
 # TODO: Refactor to use new metrics API
 class ByTypeLDDT(Metric):
     """Calculates LDDT scores by type for both chains and interfaces"""
@@ -327,7 +336,6 @@ class ByTypeLDDT(Metric):
         combined_results = interface_results + chain_results
 
         return combined_results
-
 
 
 # TODO: Rewrite with new Metrics API

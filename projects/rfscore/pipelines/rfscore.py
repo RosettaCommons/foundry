@@ -4,13 +4,15 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from cifutils.constants import AF3_EXCLUDED_LIGANDS, STANDARD_AA, STANDARD_DNA, STANDARD_RNA
+from cifutils.constants import (
+    AF3_EXCLUDED_LIGANDS,
+    STANDARD_AA,
+    STANDARD_DNA,
+    STANDARD_RNA,
+)
 from cifutils.enums import ChainType
-from omegaconf import DictConfig
-
 from datahub.common import exists
 from datahub.encoding_definitions import RF2AA_ATOM36_ENCODING, AF3SequenceEncoding
-from datahub.transforms.dna.pad_dna import PadDNA
 from datahub.transforms.af3_reference_molecule import GetAF3ReferenceMoleculeFeatures
 from datahub.transforms.atom_array import (
     AddGlobalAtomIdAnnotation,
@@ -38,10 +40,15 @@ from datahub.transforms.base import (
 from datahub.transforms.bonds import AddAF3TokenBondFeatures
 from datahub.transforms.center_random_augmentation import CenterRandomAugmentation
 from datahub.transforms.chirals import AddAF3ChiralFeatures
-from datahub.transforms.covalent_modifications import FlagAndReassignCovalentModifications
+from datahub.transforms.covalent_modifications import (
+    FlagAndReassignCovalentModifications,
+)
 from datahub.transforms.crop import CropContiguousLikeAF3, CropSpatialLikeAF3
-from datahub.transforms.diffusion.batch_structures import BatchStructuresForDiffusionNoising
+from datahub.transforms.diffusion.batch_structures import (
+    BatchStructuresForDiffusionNoising,
+)
 from datahub.transforms.diffusion.edm import SampleEDMNoise
+from datahub.transforms.dna.pad_dna import PadDNA
 from datahub.transforms.encoding import EncodeAF3TokenLevelFeatures, EncodeAtomArray
 from datahub.transforms.feature_aggregation.af3 import AggregateFeaturesLikeAF3
 from datahub.transforms.feature_aggregation.confidence import PackageConfidenceFeats
@@ -68,9 +75,7 @@ from datahub.transforms.msa.msa import (
 )
 from datahub.transforms.rdkit_utils import GetRDKitChiralCenters
 from datahub.transforms.symmetry import FindAutomorphismsWithNetworkX
-from datahub.transforms.template import (
-    OneHotTemplateRestype,
-)
+from omegaconf import DictConfig
 
 from projects.rfscore.transforms.ground_truth_template import (
     FeaturizeNoisedGroundTruthAsTemplateDistogram,
@@ -119,7 +124,8 @@ def build_rfscore_transform_pipeline(
         "atomized": 10.0,
         "not_atomized": 10.0,
     },
-    allowed_chain_types_for_conditioning: list[int | str | ChainType] | None = None,  # None = no conditioning
+    allowed_chain_types_for_conditioning: list[int | str | ChainType]
+    | None = None,  # None = no conditioning
     inference_template_noise_scales: dict | DictConfig = {
         "atomized": 1.0,
         "not_atomized": 5.0,
@@ -161,18 +167,24 @@ def build_rfscore_transform_pipeline(
           https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-024-07487-w/MediaObjects/41586_2024_7487_MOESM1_ESM.pdf
     """
 
-    if (crop_contiguous_probability > 0 or crop_spatial_probability > 0) and not is_inference:
+    if (
+        crop_contiguous_probability > 0 or crop_spatial_probability > 0
+    ) and not is_inference:
         assert np.isclose(
             crop_contiguous_probability + crop_spatial_probability, 1.0, atol=1e-6
         ), "Crop probabilities must sum to 1.0"
         assert crop_size > 0, "Crop size must be greater than 0"
-        assert crop_center_cutoff_distance > 0, "Crop center cutoff distance must be greater than 0"
+        assert (
+            crop_center_cutoff_distance > 0
+        ), "Crop center cutoff distance must be greater than 0"
 
     af3_sequence_encoding = AF3SequenceEncoding()
     rf2aa_sequence_encoding = RF2AA_ATOM36_ENCODING
 
     transforms = [
-        AddData({"is_inference": is_inference, "run_confidence_head": run_confidence_head}),
+        AddData(
+            {"is_inference": is_inference, "run_confidence_head": run_confidence_head}
+        ),
         RemoveHydrogens(),
         FilterToSpecifiedPNUnits(
             extra_info_key_with_pn_unit_iids_to_keep="all_pn_unit_iids_after_processing"
@@ -182,12 +194,14 @@ def build_rfscore_transform_pipeline(
         RemovePolymersWithTooFewResolvedResidues(min_residues=4),
         MaskPolymerResiduesWithUnresolvedFrameAtoms(),
         # NOTE: For inference, we must keep UNL to support ligands that are not in the CCD
-        HandleUndesiredResTokens(undesired_res_tokens=undesired_res_names),  # e.g., non-standard residues
+        HandleUndesiredResTokens(
+            undesired_res_tokens=undesired_res_names
+        ),  # e.g., non-standard residues
         ConditionalRoute(
             condition_func=lambda data: data.get("is_inference", False),
             transform_map={
                 True: Identity(),
-                False: PadDNA(p_skip = pad_dna_p_skip),
+                False: PadDNA(p_skip=pad_dna_p_skip),
             },
         ),
         FlagAndReassignCovalentModifications(),
@@ -270,23 +284,31 @@ def build_rfscore_transform_pipeline(
     inference_mask_and_sampling_fns = []
 
     if inference_template_noise_scales["atomized"] is not None:
-        inference_mask_and_sampling_fns.append((
-            lambda arr: arr.atomize,
-            lambda size: torch.ones(size) * inference_template_noise_scales["atomized"]
-        ))
+        inference_mask_and_sampling_fns.append(
+            (
+                lambda arr: arr.atomize,
+                lambda size: torch.ones(size)
+                * inference_template_noise_scales["atomized"],
+            )
+        )
 
     if inference_template_noise_scales["not_atomized"] is not None:
-        inference_mask_and_sampling_fns.append((
-            lambda arr: ~arr.atomize,
-            lambda size: torch.ones(size) * inference_template_noise_scales["not_atomized"]
-        ))
+        inference_mask_and_sampling_fns.append(
+            (
+                lambda arr: ~arr.atomize,
+                lambda size: torch.ones(size)
+                * inference_template_noise_scales["not_atomized"],
+            )
+        )
 
-    inference_featurize_noised_ground_truth_as_template_distogram = FeaturizeNoisedGroundTruthAsTemplateDistogram(
-        noise_scale_distribution=TokenGroupNoiseScaleSampler(
-            mask_and_sampling_fns=inference_mask_and_sampling_fns,
-        ),
-        allowed_chain_types=allowed_chain_types_for_conditioning,
-        p_unconditional=p_unconditional,
+    inference_featurize_noised_ground_truth_as_template_distogram = (
+        FeaturizeNoisedGroundTruthAsTemplateDistogram(
+            noise_scale_distribution=TokenGroupNoiseScaleSampler(
+                mask_and_sampling_fns=inference_mask_and_sampling_fns,
+            ),
+            allowed_chain_types=allowed_chain_types_for_conditioning,
+            p_unconditional=p_unconditional,
+        )
     )
 
     transforms.append(
@@ -324,7 +346,10 @@ def build_rfscore_transform_pipeline(
         ),
         PairAndMergePolymerMSAs(dense=dense_msa),
         # ... encode MSA to AF-3 format
-        EncodeMSA(encoding=af3_sequence_encoding, token_to_use_for_gap=af3_sequence_encoding.token_to_idx["<G>"]),
+        EncodeMSA(
+            encoding=af3_sequence_encoding,
+            token_to_use_for_gap=af3_sequence_encoding.token_to_idx["<G>"],
+        ),
         # ... fill MSA, indexing into only the portions of the polymers that are present in the cropped structure
         FillFullMSAFromEncoded(pad_token=af3_sequence_encoding.token_to_idx["<G>"]),
         AddAF3TokenBondFeatures(),
@@ -345,16 +370,21 @@ def build_rfscore_transform_pipeline(
         # ... add placeholder coordinates for noising
         CopyAnnotation(annotation_to_copy="coord", new_annotation="coord_to_be_noised"),
         # ... handling of unresolved residues (note that these Transforms create the "atom_array_to_noise" dictionary, if not already present)
-        PlaceUnresolvedTokenAtomsOnRepresentativeAtom(annotation_to_update="coord_to_be_noised"),
+        PlaceUnresolvedTokenAtomsOnRepresentativeAtom(
+            annotation_to_update="coord_to_be_noised"
+        ),
         PlaceUnresolvedTokenOnClosestResolvedTokenInSequence(
-            annotation_to_update="coord_to_be_noised", annotation_to_copy="coord_to_be_noised"
+            annotation_to_update="coord_to_be_noised",
+            annotation_to_copy="coord_to_be_noised",
         ),
         # Feature aggregation
         AggregateFeaturesLikeAF3(),
         # ... batching and noise sampling for diffusion
         BatchStructuresForDiffusionNoising(batch_size=diffusion_batch_size),
         CenterRandomAugmentation(batch_size=diffusion_batch_size),
-        SampleEDMNoise(sigma_data=sigma_data, diffusion_batch_size=diffusion_batch_size),
+        SampleEDMNoise(
+            sigma_data=sigma_data, diffusion_batch_size=diffusion_batch_size
+        ),
     ]
 
     confidence_transforms = Compose(

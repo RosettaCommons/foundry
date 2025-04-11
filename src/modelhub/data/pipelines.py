@@ -187,7 +187,7 @@ def build_af3_transform_pipeline(
             condition_func=lambda data: data.get("is_inference", False),
             transform_map={
                 True: Identity(),
-                False: PadDNA(p_skip = pad_dna_p_skip),
+                False: PadDNA(p_skip=pad_dna_p_skip),
             },
         ),
         FlagAndReassignCovalentModifications(),

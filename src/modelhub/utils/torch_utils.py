@@ -4,11 +4,10 @@ __all__ = ["map_to", "assert_no_nans", "assert_shape", "assert_same_shape"]
 
 import warnings
 from contextlib import contextmanager
-from beartype.typing import Any
 
 import numpy as np
 import torch
-from beartype.typing import Sequence
+from beartype.typing import Any, Sequence
 from toolz import valmap
 from torch import Tensor
 from torch._prims_common import DeviceLikeType

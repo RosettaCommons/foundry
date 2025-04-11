@@ -1,8 +1,6 @@
-from beartype.typing import Any
-
 import torch
+from beartype.typing import Any, Literal
 from jaxtyping import Float
-from beartype.typing import Literal
 
 from modelhub.data.rotation_augmentation import centre_random_augmentation
 from modelhub.utils.ddp import RankedLogger
