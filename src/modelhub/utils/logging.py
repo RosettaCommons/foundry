@@ -165,6 +165,6 @@ def safe_print(obj: Any, console_width = 100) -> None:
     ranked_logger.info(f"\n{capture.get()}")
 
 
-def print_df_as_table(df: pd.DataFrame, title: str) -> None:
+def print_df_as_table(df: pd.DataFrame, title: str, console_width: int = 100) -> None:
     """Pretty-print a DataFrame using Rich Table"""
-    safe_print(table_from_df(df=df, title=title))
+    safe_print(table_from_df(df=df, title=title), console_width=console_width)

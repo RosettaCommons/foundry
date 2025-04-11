@@ -263,9 +263,13 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
             final_means_df = final_means.to_frame(name="mean")
             final_means_df["Count"] = non_nan_counts
 
+            # ... sort, so the rows are alphabetical
+            final_means_df.sort_index(inplace=True)
+
             print_df_as_table(
                 final_means_df.reset_index(),
                 f"{dataset} — {trainer.state['current_epoch']} — General Validation Metrics",
+                console_width=150,
             )
 
             if trainer.fabric:

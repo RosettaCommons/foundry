@@ -16,7 +16,7 @@ tags:
 
 project: test
 
-ckpt_path: /projects/ml/modelhub/inference/rf2aa-af3-repro7_ep680.pt
+ckpt_path: /net/tukwila/ncorley/modelhub/inference/rf2aa-af3-repro7_ep680.pt
 
 datasets:
   train:
@@ -48,3 +48,5 @@ datasets:
         dataset:
           filters:
             - "n_tokens_total < 200"
+            # (We often want to debug with a ligand)
+            - "interfaces_to_score.str.contains('protein-ligand')"

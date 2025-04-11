@@ -1,16 +1,43 @@
-from beartype.typing import Any
+from beartype.typing import Any, Literal
 
 import torch.nn as nn
 
 from modelhub.loss.af3_losses import distogram_loss
 from modelhub.metrics.base import Metric
 import torch
-from jaxtyping import Float
+from jaxtyping import Float, Bool
 from biotite.structure import AtomArrayStack
 from datahub.utils.token import get_af3_token_representative_idxs
 import torch.nn.functional as F
 from einops import rearrange, repeat
 import numpy as np
+from dataclasses import dataclass
+
+@dataclass
+class ComparisonConfig:
+    """Configuration for token pair comparisons in distogram metrics."""
+    token_a: str = 'all'  # 'all', 'atomized', or 'non_atomized'
+    token_b: str = 'all'  # 'all', 'atomized', or 'non_atomized'
+    relationship: str = 'all'  # 'all', 'inter', or 'intra'
+
+    def __eq__(self, other):
+        """Equality that accounts for token_a/token_b symmetry."""
+        if not isinstance(other, type(self)):
+            return False
+
+        return (self.relationship == other.relationship and 
+                {self.token_a, self.token_b} == {other.token_a, other.token_b})
+                
+    def __hash__(self):
+        """Hash function compatible with the equality definition."""
+        return hash((frozenset([self.token_a, self.token_b]), self.relationship))
+    
+    def __str__(self):
+        """String representation of the comparison config."""
+        name = f"{self.token_a}_by_{self.token_b}"
+        if self.relationship != 'all':
+            name += f"_{self.relationship}"
+        return name
 
 
 class DistogramLoss(Metric):
@@ -78,7 +105,7 @@ def masked_distogram_cross_entropy_loss(
     input: Float[torch.Tensor, "D I I n_bins"],
     target: Float[torch.Tensor, "D I I"],
     mask: Float[torch.Tensor, "I I"] = None,
-) -> torch.Tensor:
+) -> Float[torch.Tensor, "D"]:
     # TODO: Refactor loss to use this function instead (more re-usable)
     """Computes the masked cross-entropy between two distograms.
 
@@ -104,7 +131,7 @@ class DistogramComparisons(Metric):
         - The representation from the TRUNK vs. GROUND TRUTH
         - The representation from the TRUNK vs. PREDICTED COORDINATES
     
-    Optionally, we also subset to intra-ligand (atomized) distances.
+    We subset to specific token pairs based on the provided ComparisonConfig.
     """
     @property
     def kwargs_to_compute_args(self) -> dict[str, Any]:
@@ -116,14 +143,66 @@ class DistogramComparisons(Metric):
             "ground_truth_atom_array_stack": "ground_truth_atom_array_stack", 
         }
 
-    def __init__(self, separate_atomized_tokens: bool = True):
+    def __init__(self, comparison_configs: list[ComparisonConfig] | Literal["all"] = None):
         """
         Args:
-            separate_atomized: Whether to log separate comparisons for atomized tokens
+            comparison_configs: List of ComparisonConfig objects defining which comparisons to compute.
         """
         super().__init__()
-        self.separate_atomized_tokens = separate_atomized_tokens
 
+        if comparison_configs is None:
+            comparison_configs = [
+                ComparisonConfig('atomized', 'atomized', 'intra'),
+                ComparisonConfig('atomized', 'non_atomized', 'inter'),
+                ComparisonConfig('non_atomized', 'non_atomized', 'intra'),
+                ComparisonConfig('all', 'all', 'all'),
+            ]
+        elif comparison_configs == "all":
+            # Generate all possible combinations
+            token_types = ['all', 'atomized', 'non_atomized']
+            relationships = ['all', 'inter', 'intra']
+            
+            comparison_configs = [
+                ComparisonConfig(type_a, type_b, rel)
+                for type_a in token_types
+                for type_b in token_types
+                for rel in relationships
+            ]
+
+        # Deduplicate (handle symmetries in token_a/token_b)
+        self.comparison_configs = list(set(comparison_configs))
+    
+    def _create_distogram_mask_from_comparison_config(self, token_rep_atom_array: AtomArrayStack, config: ComparisonConfig) -> Bool[np.ndarray, "I I"]:
+        """Create a token-by-token mask indiciating which 2D pairs satisfy the ComparisonConfig's conditions."""
+        type_masks = {
+            'all': np.ones(len(token_rep_atom_array), dtype=bool),
+            'atomized': token_rep_atom_array.atomize,
+            'non_atomized': ~token_rep_atom_array.atomize,
+        }
+        
+        # Create token pair mask
+        if config.token_a == config.token_b:
+            # (Both same)
+            token_pair_mask = np.outer(type_masks[config.token_a], type_masks[config.token_b])
+        else:
+            # (Different - must be symmetric)
+            token_pair_mask = (
+                np.outer(type_masks[config.token_a], type_masks[config.token_b]) | 
+                np.outer(type_masks[config.token_b], type_masks[config.token_a])
+            )
+        
+        # Apply relationship constraint
+        if config.relationship != 'all':
+            intra_mask = np.equal.outer(token_rep_atom_array.pn_unit_iid, token_rep_atom_array.pn_unit_iid)
+            if config.relationship == 'intra':
+                # Same chain ("intra")
+                token_pair_mask = token_pair_mask & intra_mask
+            else:  
+                # Different chains ("inter")
+                token_pair_mask = token_pair_mask & (~intra_mask)
+        
+        return token_pair_mask
+    
     def compute(
         self,
         X_L: Float[torch.Tensor, "D L 3"],
@@ -143,7 +222,8 @@ class DistogramComparisons(Metric):
             crd_mask_rep_atoms_I: A boolean mask indicating which representative atoms are present. Shape: [D, I]
             ground_truth_atom_array_stack: The ground-truth atom array stack, one model per diffusion sample. Shape: [D, L]
         """
-        MIN_ATOMIZED = 5
+        MIN_PAIRS = 15
+        results = {}
 
         # ... choose the first model, as we only care about 2D distance (frame-invariant)
         ground_truth_atom_array = ground_truth_atom_array_stack[0]
@@ -154,56 +234,39 @@ class DistogramComparisons(Metric):
         # Create 2D coordinate mask for valid pairs of representative atoms
         crd_mask_rep_atom_II = crd_mask_rep_atoms_I.unsqueeze(-1) * crd_mask_rep_atoms_I.unsqueeze(-2)
 
-        results = {}
-
-        # ... trunk vs. ground truth
+        # Prepare distograms
+        # (From the ground truth)
         binned_distogram_from_ground_truth = bin_distances(X_rep_atoms_I, n_bins=64)
-        results["trunk_vs_ground_truth_cce"] = masked_distogram_cross_entropy_loss(
-            trunk_pred_distogram.unsqueeze(0), binned_distogram_from_ground_truth.unsqueeze(0), crd_mask_rep_atom_II
-        ).detach().item()
-
-        # ... trunk vs. predicted coordinates
         # (Predicted coordinates are batched, so we build the distogram for each predicted structure)
         binned_distogram_from_pred_coords = bin_distances(X_L[:, _token_rep_idxs], n_bins=64)
-        losses = masked_distogram_cross_entropy_loss(
-            repeat(trunk_pred_distogram, "i j n_bins -> d i j n_bins", d=binned_distogram_from_pred_coords.shape[0]), 
-            binned_distogram_from_pred_coords, 
-            crd_mask_rep_atom_II
-        )
 
-        results.update({
-            f"trunk_vs_pred_coords_cce_{i}": loss.detach().item()
-            for i, loss in enumerate(losses)
-        })
+        for config in self.comparison_configs:
+            # ... create a token-by-token mask for this config, specifying which 2D pairs to compare
+            token_pair_mask = self._create_distogram_mask_from_comparison_config(token_rep_atom_array, config)
+            mask = torch.from_numpy(token_pair_mask).to(X_L.device) & crd_mask_rep_atom_II
+            if mask.sum() < MIN_PAIRS:
+                # (Skip if not enough pairs so we do not dilute our average)
+                 continue
 
-        if self.separate_atomized_tokens and np.sum(token_rep_atom_array.atomize) > MIN_ATOMIZED:
-            # ... trunk vs. ground truth (atomized)
+            # ... generate a descriptive name for this config
+            name = str(config)
 
-            # Create a mask that is both atomized and intra-residue
-            same_pn_unit_mask_LL = np.equal.outer(token_rep_atom_array.pn_unit_iid, token_rep_atom_array.pn_unit_iid)
-            same_res_id_mask_LL = np.equal.outer(token_rep_atom_array.res_id, token_rep_atom_array.res_id)
-            atomized_mask_LL = np.outer(token_rep_atom_array.atomize, token_rep_atom_array.atomize)
-            atomized_intra_mask = torch.from_numpy(same_pn_unit_mask_LL * same_res_id_mask_LL * atomized_mask_LL).to(X_L.device) * crd_mask_rep_atom_II
-
-            # Compute the losses, applying the mask
-            results["trunk_vs_ground_truth_cce_ligand_intra"] = masked_distogram_cross_entropy_loss(
-                trunk_pred_distogram.unsqueeze(0), binned_distogram_from_ground_truth.unsqueeze(0), atomized_intra_mask
+            # Compute trunk vs. ground truth
+            results[f"trunk_vs_ground_truth_cce_{name}"] = masked_distogram_cross_entropy_loss(
+                trunk_pred_distogram.unsqueeze(0), 
+                binned_distogram_from_ground_truth.unsqueeze(0), 
+                mask
             ).detach().item()
-
-            # ... trunk vs. predicted coordinates (atomized)
+            
+            # Compute trunk vs. predicted coordinates
             losses = masked_distogram_cross_entropy_loss(
                 repeat(trunk_pred_distogram, "i j n_bins -> d i j n_bins", d=binned_distogram_from_pred_coords.shape[0]), 
                 binned_distogram_from_pred_coords, 
-                atomized_intra_mask
+                mask
             )
             results.update({
-                f"trunk_vs_pred_coords_cce_ligand_intra_{i}": loss.detach().item()
+                f"trunk_vs_pred_coords_cce_{name}_{i}": loss.detach().item()
                 for i, loss in enumerate(losses)
             })
-
+        
         return results
-
-
-    
-
-    

@@ -57,9 +57,10 @@ add_to_pythonpath() {
     fi
 }
 
-# Add the src directory to PYTHONPATH if not already present
+# Add the root directory and src directory to PYTHONPATH if not already present
 echo
-echo "Checking and adding 'src' directory to PYTHONPATH..."
+echo "Checking and adding root and 'src' directory to PYTHONPATH..."
+add_to_pythonpath "$REPO_ROOT"
 SRC_PATH="$REPO_ROOT/src"
 add_to_pythonpath "$SRC_PATH"
 
