@@ -1,6 +1,6 @@
 [submodule "lib/cifutils"]
 	path = lib/cifutils
-	url = https://github.com/baker-laboratory/cifutils
+	url = git@github.com:baker-laboratory/cifutils
 [submodule "lib/datahub"]
 	path = lib/datahub
-	url = https://github.com/baker-laboratory/datahub
+	url = git@github.com:baker-laboratory/datahub

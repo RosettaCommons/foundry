@@ -1,0 +1,40 @@
+na_complex_distillation:
+  dataset:
+    _target_: datahub.datasets.datasets.StructuralDatasetWrapper
+    save_failed_examples_to_dir: null
+
+    # cif parser
+    cif_parser_args:
+      #assume_residues_all_resolved: true
+      cache_dir: null
+      load_from_cache: false
+      save_to_cache: false
+
+    # metadata parser
+    dataset_parser:
+      _target_: datahub.datasets.parsers.GenericDFParser
+      pn_unit_iid_colnames: null #[]
+
+    # metadata dataset
+    dataset:
+      _target_: datahub.datasets.datasets.PandasDataset
+      name: tf_distillation
+      id_column: example_id
+      data: /projects/ml/prot_dna/transcriptionFactor_distillation_rf3.newDL.csv
+      columns_to_load:
+        - example_id
+        - path
+    return_key: null
+    transform:
+      _target_: ${datasets.pipeline_target}
+      is_inference: False
+      protein_msa_dirs: [{"dir": "/projects/ml/prot_dna/rf3_newDL/a3m/", "extension": ".a3m", "directory_depth": 1}]
+      rna_msa_dirs: []
+      n_recycles: ${datasets.n_recycles_train}
+      crop_size: ${datasets.crop_size}
+      n_msa: ${datasets.n_msa}
+      diffusion_batch_size: ${datasets.diffusion_batch_size_train}
+      max_atoms_in_crop: ${datasets.max_atoms_in_crop}
+      crop_contiguous_probability: 0.25
+      crop_spatial_probability: 0.75
+      pad_dna_p_skip: 0.0

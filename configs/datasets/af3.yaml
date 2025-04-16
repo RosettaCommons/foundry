@@ -7,6 +7,7 @@ defaults:
   - train/pdb/af3_train_pn_unit@train.pdb.sub_datasets.pn_unit
   - train:
     - monomer_distillation
+    - na_complex_distillation
   - val/af3_validation@val.af3_validation
   - _self_
 
@@ -16,6 +17,8 @@ pipeline_target: datahub.pipelines.af3.build_af3_transform_pipeline
 # Dataset weighting
 train: 
   pdb:
-    probability: 0.5
+    probability: 0.50
   monomer_distillation:
-    probability: 0.5
+    probability: 0.48
+  na_complex_distillation:
+    probability: 0.02
