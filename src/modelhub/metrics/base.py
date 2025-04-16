@@ -103,7 +103,7 @@ class MetricManager:
 
         # Initialize results dictionary
         results = {"example_id": example_id}
-
+        
         for name, metric in self.metrics.items():
             assert name not in results, f"Duplicate metric name: {name}"
 
