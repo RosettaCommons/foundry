@@ -32,7 +32,8 @@ class UnresolvedRegionRASA(Metric):
         Compute the RASA score for unresolved regions in a protein structure.
 
         Args:
-            atom_array (AtomArray): The input atom array representing the protein structure.
+            predicted_atom_array (AtomArray): The input atom array representing the  predicted protein structure.
+            ground_truth_atom_array (AtomArray): The input atom array representing the ground truth protein structure.
             probe_radius (float, optional): Van-der-Waals radius of the probe in Angstrom. Defaults to 1.4 (for water).
             atom_radii (str | np.ndarray, optional): Atom radii set to use for calculation. Defaults to "ProtOr".
             point_number (int, optional): Number of points in the Shrake-Rupley algorithm to sample for calculating SASA. Defaults to 100.
