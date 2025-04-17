@@ -13,6 +13,12 @@ class UnresolvedRegionRASA(Metric):
     of a residue in a protein structure to the SASA of the same residue in an extended conformation.
     """
 
+    def __init__(self, probe_radius: float = 1.4, atom_radii: str | np.ndarray = "ProtOr", point_number: int = 100):
+        super().__init__()
+        self.probe_radius = probe_radius
+        self.atom_radii = atom_radii
+        self.point_number = point_number
+
     @property
     def kwargs_to_compute_args(self) -> dict[str, Any]:
         return {
@@ -24,9 +30,6 @@ class UnresolvedRegionRASA(Metric):
         self,
         predicted_atom_array_stack: AtomArrayStack,
         ground_truth_atom_array_stack: AtomArrayStack,
-        probe_radius: float = 1.4,
-        atom_radii: str | np.ndarray = "ProtOr",
-        point_number: int = 100,
     ) -> dict[str, Any]:
         """
         Compute the RASA score for unresolved regions in a protein structure.
@@ -52,9 +55,9 @@ class UnresolvedRegionRASA(Metric):
         for atom_array in predicted_atom_array_stack:
             rasa = calculate_atomwise_rasa(
                 atom_array=atom_array,
-                probe_radius=probe_radius,
-                atom_radii=atom_radii,
-                point_number=point_number,
+                probe_radius=self.probe_radius,
+                atom_radii=self.atom_radii,
+                point_number=self.point_number,
             )
             rasas.append(rasa[atoms_to_score].mean())
         # Calculate the mean RASA score
