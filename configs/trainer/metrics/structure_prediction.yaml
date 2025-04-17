@@ -8,4 +8,5 @@ distogram_comparisons:
   _target_: modelhub.metrics.distogram.DistogramComparisons
 chiral_loss:
   _target_: modelhub.metrics.chiral.ChiralLoss
-
+unresolved_rasa:
+  _target_: modelhub.metrics.rasa.UnresolvedRegionRASA
