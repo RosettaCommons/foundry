@@ -72,7 +72,7 @@ from datahub.transforms.template import (
     OneHotTemplateRestype,
     RandomSubsampleTemplates,
 )
-from modelhub.data.bfactor_trimming import TrimOnBfactor
+from modelhub.data.bfactor_conditioned_transforms import SetOccToZeroOnBfactor
 
 
 def build_af3_transform_pipeline(
@@ -171,7 +171,7 @@ def build_af3_transform_pipeline(
             extra_info_key_with_pn_unit_iids_to_keep="all_pn_unit_iids_after_processing"
         ),  # Filter to non-clashing PN units
         RemoveTerminalOxygen(),
-        TrimOnBfactor(b_factor_range_to_keep),
+        SetOccToZeroOnBfactor(b_factor_range_to_keep),
         RemoveUnresolvedPNUnits(),
         RemovePolymersWithTooFewResolvedResidues(min_residues=4),
         MaskPolymerResiduesWithUnresolvedFrameAtoms(),
