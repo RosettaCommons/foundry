@@ -117,7 +117,8 @@ def build_af3_transform_pipeline(
     return_atom_array: bool = True,
     # DNA
     pad_dna_p_skip: float = 0.0,
-    b_factor_range_to_keep: list[float] = [-1.0,999.0]
+    b_factor_min: float | None = None,
+    b_factor_max: float | None = None,
 ):
     """Build the AF3 pipeline with specified parameters.
 
@@ -171,7 +172,7 @@ def build_af3_transform_pipeline(
             extra_info_key_with_pn_unit_iids_to_keep="all_pn_unit_iids_after_processing"
         ),  # Filter to non-clashing PN units
         RemoveTerminalOxygen(),
-        SetOccToZeroOnBfactor(b_factor_range_to_keep),
+        SetOccToZeroOnBfactor(b_factor_min,b_factor_max),
         RemoveUnresolvedPNUnits(),
         RemovePolymersWithTooFewResolvedResidues(min_residues=4),
         MaskPolymerResiduesWithUnresolvedFrameAtoms(),

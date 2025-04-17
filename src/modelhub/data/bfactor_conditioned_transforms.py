@@ -27,10 +27,11 @@ class SetOccToZeroOnBfactor(Transform):
 
     def __init__(
         self,
-        brange,
+        bmin = None,
+        bmax = None,
     ):
-        self.bmin = brange[0]
-        self.bmax = brange[1]
+        self.bmin = bmin
+        self.bmax = bmax
 
     def check_input(self, data: dict):
         check_contains_keys(data, ["atom_array"])
@@ -42,10 +43,20 @@ class SetOccToZeroOnBfactor(Transform):
     def forward(self, data: dict) -> dict:
         atom_array = data["atom_array"]
 
+        if self.bmin is None and self.bmax is None:
+            return data
+
         bfact = atom_array.get_annotation('b_factor')
-        mask = (bfact<self.bmin) | (bfact>self.bmax)
+        if self.bmin is not None:
+            mask = (bfact<self.bmin) 
+            if self.bmax is not None:
+                mask = mask | (bfact>self.bmax) 
+        else:
+            mask = (bfact>self.bmax)
+
         occ = atom_array.get_annotation('occupancy')
         occ[mask] = 0.0
+
         atom_array.set_annotation('occupancy',occ)
 
         data["atom_array"] = atom_array
