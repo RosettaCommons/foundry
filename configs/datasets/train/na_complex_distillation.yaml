@@ -20,7 +20,7 @@ na_complex_distillation:
       _target_: datahub.datasets.datasets.PandasDataset
       name: tf_distillation
       id_column: example_id
-      data: /projects/ml/prot_dna/transcriptionFactor_distillation_rf3.newDL.csv
+      data: ${paths.data.na_complex_distillation_parquet_dir}/transcriptionFactor_distillation_rf3.newDL.csv
       columns_to_load:
         - example_id
         - path
@@ -28,7 +28,7 @@ na_complex_distillation:
     transform:
       _target_: ${datasets.pipeline_target}
       is_inference: False
-      protein_msa_dirs: [{"dir": "/projects/ml/prot_dna/rf3_newDL/a3m/", "extension": ".a3m", "directory_depth": 1}]
+      protein_msa_dirs: [{"dir": "${paths.data.na_complex_distillation_data_dir}/a3m/", "extension": ".a3m", "directory_depth": 1}]
       rna_msa_dirs: []
       n_recycles: ${datasets.n_recycles_train}
       crop_size: ${datasets.crop_size}

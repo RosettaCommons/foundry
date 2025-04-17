@@ -12,7 +12,7 @@ defaults:
   - _self_
 
 # Dataloading pipeline to use
-pipeline_target: datahub.pipelines.af3.build_af3_transform_pipeline
+pipeline_target: modelhub.data.pipelines.build_af3_transform_pipeline
 
 # Dataset weighting
 train: 

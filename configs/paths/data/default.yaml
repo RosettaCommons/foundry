@@ -9,6 +9,10 @@ pdb_data_dir: /projects/ml/datahub/dfs/af3_splits/2024_12_16/
 monomer_distillation_data_dir: /squash/af2_distillation_facebook/
 monomer_distillation_parquet_dir: /projects/ml/datahub/dfs/distillation/af2_distillation_facebook
 
+# na complex distill set
+na_complex_distillation_data_dir: /projects/ml/prot_dna/rf3_newDL/
+na_complex_distillation_parquet_dir: /projects/ml/prot_dna/
+
 ########################
 # MSAs
 ########################

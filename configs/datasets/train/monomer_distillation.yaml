@@ -36,3 +36,4 @@ monomer_distillation:
       max_atoms_in_crop: ${datasets.max_atoms_in_crop}
       crop_contiguous_probability: 0.25
       crop_spatial_probability: 0.75
+      b_factor_range_to_keep: [70.0,999.0]
