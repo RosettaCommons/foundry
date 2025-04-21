@@ -2,6 +2,7 @@
 
 wandb:
   _target_: wandb.integration.lightning.fabric.WandbLogger
+  name: ${name} # name of the run
   save_dir: ${paths.output_dir}
   offline: False
   id: null # pass correct id (along with checkpoint path, and resume='allow' or 'must') to resume a run
