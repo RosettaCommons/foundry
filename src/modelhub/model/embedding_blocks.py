@@ -162,7 +162,7 @@ class RF2_embedding(nn.Module):
 class RF2_embedding_no_ptwise(RF2_embedding):
     def __init__(self, global_params, block_params):
         super(RF2_embedding_no_ptwise, self).__init__(global_params, block_params)
-        d_msa, d_msa_full, d_pair, d_state = (
+        _d_msa, _d_msa_full, d_pair, d_state = (
             global_params["d_msa"],
             global_params["d_msa_full"],
             global_params["d_pair"],
@@ -188,7 +188,7 @@ class RF2_embedding_no_ptwise(RF2_embedding):
 class RF2_embedding_nostate(RF2_embedding):
     def __init__(self, global_params, block_params):
         super(RF2_embedding_nostate, self).__init__(global_params, block_params)
-        d_msa, d_msa_full, d_pair, d_state = (
+        d_msa, _d_msa_full, d_pair, d_state = (
             global_params["d_msa"],
             global_params["d_msa_full"],
             global_params["d_pair"],

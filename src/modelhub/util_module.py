@@ -87,7 +87,7 @@ class Dropout(nn.Module):
         if not self.training:  # no drophead during evaluation mode
             return x
         shape = list(x.shape)
-        if not self.broadcast_dim == None:
+        if self.broadcast_dim is not None:
             shape[self.broadcast_dim] = 1
         mask = self.sampler.sample(shape).to(x.device).view(shape)
 
@@ -764,13 +764,10 @@ class XYZConverter(nn.Module):
 
     def get_tor_mask(self, seq, mask_in=None):
         B, L = seq.shape[:2]
-        dna_mask = is_nucleic(seq)
-        prot_mask = ~dna_mask
 
         tors_mask = self.torsion_indices[seq, :, -1] > 0
 
-        if mask_in != None:
-            N = mask_in.shape[2]
+        if mask_in is not None:
             ts = self.torsion_indices[seq]
             bs = torch.arange(B, device=seq.device)[:, None, None, None]
             rs = (

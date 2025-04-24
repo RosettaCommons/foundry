@@ -13,7 +13,12 @@ class UnresolvedRegionRASA(Metric):
     of a residue in a protein structure to the SASA of the same residue in an extended conformation.
     """
 
-    def __init__(self, probe_radius: float = 1.4, atom_radii: str | np.ndarray = "ProtOr", point_number: int = 100):
+    def __init__(
+        self,
+        probe_radius: float = 1.4,
+        atom_radii: str | np.ndarray = "ProtOr",
+        point_number: int = 100,
+    ):
         super().__init__()
         self.probe_radius = probe_radius
         self.atom_radii = atom_radii

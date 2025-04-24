@@ -12,7 +12,7 @@ from scipy.spatial.transform import Rotation
 
 from modelhub.chemical import ChemicalData as ChemData
 from modelhub.kinematics import generate_Cbeta, get_atomize_protein_chirals
-from modelhub.scoring import *
+from modelhub.scoring import *  # noqa: F403
 
 
 def replace_missing_with_nearest_neighbors(
@@ -415,7 +415,6 @@ def superimpose(pred, true, atom_mask):
     # Rotation matrix U
     U = torch.matmul(d * V, W.permute(0, 2, 1))  # (IB, 3, 3)
     pred_rms = pred - cp
-    true_rms = true - ct
 
     # Rotate pred
     rP = torch.matmul(pred_rms, U)  # (IB, L*3, 3)
@@ -656,7 +655,7 @@ def writepdb_file(
                     )
                 )
                 ctr += 1
-    if bond_feats != None:
+    if bond_feats is not None:
         atom_bonds = (bond_feats > 0) * (bond_feats < 5)
         atom_bonds = atom_bonds.cpu()
         b, i, j = atom_bonds.nonzero(as_tuple=True)
@@ -808,7 +807,6 @@ def get_protein_bond_feats(protein_L):
 def get_protein_bond_feats_from_idx(protein_L, idx_protein):
     """creates protein residue connectivity graphs"""
     bond_feats = torch.zeros((protein_L, protein_L))
-    residues = torch.arange(protein_L - 1)
     mask = idx_protein[:, None] == idx_protein[None, :] + 1
     bond_feats[mask] = 5
     bond_feats[mask.T] = 5
@@ -1313,7 +1311,6 @@ def cif_poly_to_xyz(ch, ch_xf, modres=dict()):
     chid = ["-"] * L
     resi = ["-"] * L
 
-    unrec_elements = set()
     residues_to_atomize = set()
     for (ch_letter, res_num, res_name, atom_name), atom_val in ch.atoms.items():
         i_res = int(res_num) - i_min

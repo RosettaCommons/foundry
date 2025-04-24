@@ -213,11 +213,6 @@ class AtomTransformer(nn.Module):
     ):
         super().__init__()
         self.l_max = l_max
-        subset_centers = torch.arange(0, l_max, n_queries) + (n_queries - 1) / 2
-
-        l = torch.arange(l_max).unsqueeze(-1).unsqueeze(-1)  # [l_max, 1, 1]
-        m = torch.arange(l_max).unsqueeze(0).unsqueeze(-1)  # [1, l_max, 1]
-        c = subset_centers.unsqueeze(0).unsqueeze(0)  # [1, 1, S]
 
         self.diffusion_transformer = DiffusionTransformer(
             c_token=c_atom, c_s=c_atom, c_tokenpair=c_atompair, **diffusion_transformer

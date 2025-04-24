@@ -3,9 +3,14 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from cifutils.constants import AF3_EXCLUDED_LIGANDS, GAP, STANDARD_AA, STANDARD_DNA, STANDARD_RNA
+from cifutils.constants import (
+    AF3_EXCLUDED_LIGANDS,
+    GAP,
+    STANDARD_AA,
+    STANDARD_DNA,
+    STANDARD_RNA,
+)
 from cifutils.enums import ChainType
-
 from datahub.common import exists
 from datahub.encoding_definitions import RF2AA_ATOM36_ENCODING, AF3SequenceEncoding
 from datahub.transforms.af3_reference_molecule import GetAF3ReferenceMoleculeFeatures
@@ -35,9 +40,13 @@ from datahub.transforms.base import (
 from datahub.transforms.bonds import AddAF3TokenBondFeatures
 from datahub.transforms.center_random_augmentation import CenterRandomAugmentation
 from datahub.transforms.chirals import AddAF3ChiralFeatures
-from datahub.transforms.covalent_modifications import FlagAndReassignCovalentModifications
+from datahub.transforms.covalent_modifications import (
+    FlagAndReassignCovalentModifications,
+)
 from datahub.transforms.crop import CropContiguousLikeAF3, CropSpatialLikeAF3
-from datahub.transforms.diffusion.batch_structures import BatchStructuresForDiffusionNoising
+from datahub.transforms.diffusion.batch_structures import (
+    BatchStructuresForDiffusionNoising,
+)
 from datahub.transforms.diffusion.edm import SampleEDMNoise
 from datahub.transforms.dna.pad_dna import PadDNA
 from datahub.transforms.encoding import EncodeAF3TokenLevelFeatures, EncodeAtomArray
@@ -72,6 +81,7 @@ from datahub.transforms.template import (
     OneHotTemplateRestype,
     RandomSubsampleTemplates,
 )
+
 from modelhub.data.bfactor_conditioned_transforms import SetOccToZeroOnBfactor
 
 
@@ -101,7 +111,10 @@ def build_af3_transform_pipeline(
     template_max_seq_similarity: float = 60.0,
     template_min_seq_similarity: float = 10.0,
     template_min_length: int = 10,
-    template_allowed_chain_types: list[ChainType] = [ChainType.POLYPEPTIDE_L, ChainType.RNA],
+    template_allowed_chain_types: list[ChainType] = [
+        ChainType.POLYPEPTIDE_L,
+        ChainType.RNA,
+    ],
     template_distogram_bins: torch.Tensor = torch.linspace(3.25, 50.75, 38),
     template_default_token: str = GAP,
     # MSA parameters
@@ -155,29 +168,37 @@ def build_af3_transform_pipeline(
           https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-024-07487-w/MediaObjects/41586_2024_7487_MOESM1_ESM.pdf
     """
 
-    if (crop_contiguous_probability > 0 or crop_spatial_probability > 0) and not is_inference:
+    if (
+        crop_contiguous_probability > 0 or crop_spatial_probability > 0
+    ) and not is_inference:
         assert np.isclose(
             crop_contiguous_probability + crop_spatial_probability, 1.0, atol=1e-6
         ), "Crop probabilities must sum to 1.0"
         assert crop_size > 0, "Crop size must be greater than 0"
-        assert crop_center_cutoff_distance > 0, "Crop center cutoff distance must be greater than 0"
+        assert (
+            crop_center_cutoff_distance > 0
+        ), "Crop center cutoff distance must be greater than 0"
 
     af3_sequence_encoding = AF3SequenceEncoding()
     rf2aa_sequence_encoding = RF2AA_ATOM36_ENCODING
 
     transforms = [
-        AddData({"is_inference": is_inference, "run_confidence_head": run_confidence_head}),
+        AddData(
+            {"is_inference": is_inference, "run_confidence_head": run_confidence_head}
+        ),
         RemoveHydrogens(),
         FilterToSpecifiedPNUnits(
             extra_info_key_with_pn_unit_iids_to_keep="all_pn_unit_iids_after_processing"
         ),  # Filter to non-clashing PN units
         RemoveTerminalOxygen(),
-        SetOccToZeroOnBfactor(b_factor_min,b_factor_max),
+        SetOccToZeroOnBfactor(b_factor_min, b_factor_max),
         RemoveUnresolvedPNUnits(),
         RemovePolymersWithTooFewResolvedResidues(min_residues=4),
         MaskPolymerResiduesWithUnresolvedFrameAtoms(),
         # NOTE: For inference, we must keep UNL to support ligands that are not in the CCD
-        HandleUndesiredResTokens(undesired_res_tokens=undesired_res_names),  # e.g., non-standard residues
+        HandleUndesiredResTokens(
+            undesired_res_tokens=undesired_res_names
+        ),  # e.g., non-standard residues
         ConditionalRoute(
             condition_func=lambda data: data.get("is_inference", False),
             transform_map={
@@ -290,7 +311,10 @@ def build_af3_transform_pipeline(
         ),
         PairAndMergePolymerMSAs(dense=dense_msa),
         # ... encode MSA to AF-3 format
-        EncodeMSA(encoding=af3_sequence_encoding, token_to_use_for_gap=af3_sequence_encoding.token_to_idx["<G>"]),
+        EncodeMSA(
+            encoding=af3_sequence_encoding,
+            token_to_use_for_gap=af3_sequence_encoding.token_to_idx["<G>"],
+        ),
         # ... fill MSA, indexing into only the portions of the polymers that are present in the cropped structure
         FillFullMSAFromEncoded(pad_token=af3_sequence_encoding.token_to_idx["<G>"]),
         AddAF3TokenBondFeatures(),
@@ -311,9 +335,12 @@ def build_af3_transform_pipeline(
         # ... add placeholder coordinates for noising
         CopyAnnotation(annotation_to_copy="coord", new_annotation="coord_to_be_noised"),
         # ... handling of unresolved residues (note that these Transforms create the "atom_array_to_noise" dictionary, if not already present)
-        PlaceUnresolvedTokenAtomsOnRepresentativeAtom(annotation_to_update="coord_to_be_noised"),
+        PlaceUnresolvedTokenAtomsOnRepresentativeAtom(
+            annotation_to_update="coord_to_be_noised"
+        ),
         PlaceUnresolvedTokenOnClosestResolvedTokenInSequence(
-            annotation_to_update="coord_to_be_noised", annotation_to_copy="coord_to_be_noised"
+            annotation_to_update="coord_to_be_noised",
+            annotation_to_copy="coord_to_be_noised",
         ),
         # Feature aggregation
         AggregateFeaturesLikeAF3(),
@@ -321,7 +348,9 @@ def build_af3_transform_pipeline(
         # ... batching and noise sampling for diffusion
         BatchStructuresForDiffusionNoising(batch_size=diffusion_batch_size),
         CenterRandomAugmentation(batch_size=diffusion_batch_size),
-        SampleEDMNoise(sigma_data=sigma_data, diffusion_batch_size=diffusion_batch_size),
+        SampleEDMNoise(
+            sigma_data=sigma_data, diffusion_batch_size=diffusion_batch_size
+        ),
     ]
 
     confidence_transforms = Compose(

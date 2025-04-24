@@ -1,4 +1,4 @@
-from itertools import chain, combinations
+import itertools
 from typing import List
 
 import numpy as np
@@ -117,7 +117,7 @@ def compile_af3_confidence_outputs(
     # Generate DataFrame rows
     num_batches = plddt.shape[0]
     chains = np.unique(chain_iid_token_lvl)
-    chain_pairs = list(combinations(chains, 2))
+    chain_pairs = list(itertools.combinations(chains, 2))
 
     # For every batch, chain, and interface (chain pair), generate a dataframe row
     chain_rows = [
@@ -159,7 +159,7 @@ def compile_af3_confidence_outputs(
     ]
 
     return {
-        "confidence_df": pd.DataFrame(chain([*chain_rows, *interface_rows])),
+        "confidence_df": pd.DataFrame(itertools.chain([*chain_rows, *interface_rows])),
         "plddt": plddt,
         "pae": pae,
         "pde": pde,

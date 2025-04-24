@@ -94,4 +94,6 @@ extend-select = ["I"]
 
 ignore = [
     "F722", # for jaxtyping shape annotation
+    "F821", # for jaxtyping shape annotation
+    "E741", # for ambiguous variable names (I, l)
 ]

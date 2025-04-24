@@ -5,9 +5,8 @@ import os
 
 import hydra
 import rootutils
-from omegaconf import DictConfig
-
 from dotenv import load_dotenv
+from omegaconf import DictConfig
 
 load_dotenv(override=True)
 

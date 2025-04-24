@@ -8,7 +8,7 @@ from modelhub.model.layers.Attention_module import (
     Attention,
 )
 from modelhub.model.Track_module import PairStr2Pair, PositionalEncoding2D
-from modelhub.util import *
+from modelhub.util import *  # noqa: F403
 from modelhub.util_module import (
     create_custom_forward,
     init_lecun_normal,
@@ -104,7 +104,7 @@ class MSA_emb(nn.Module):
         #   - msa: Initial MSA embedding (B, N, L, d_msa)
         #   - pair: Initial Pair embedding (B, L, L, d_pair)
 
-        if self.enable_same_chain == False:
+        if not self.enable_same_chain:
             same_chain = None
 
         msa = self._msa_emb(msa, seq)
@@ -741,7 +741,7 @@ class Recycling(nn.Module):
         Ca = xyz[:, :, 1]
         dist_CA = rbf(torch.cdist(Ca, Ca)).reshape(B, L, L, -1)
 
-        if mask_recycle != None:
+        if mask_recycle is not None:
             dist_CA = mask_recycle[..., None].float() * dist_CA
 
         pair = pair + self.proj_dist(dist_CA)
@@ -776,7 +776,7 @@ class RecyclingAllFeatures(nn.Module):
         Ca_or_P = xyz[:, :, 1].contiguous()
 
         dist = rbf(torch.cdist(Ca_or_P, Ca_or_P))
-        if mask_recycle != None:
+        if mask_recycle is not None:
             dist = mask_recycle[..., None].float() * dist
         dist = torch.cat((dist, left, right), dim=-1)
         dist = self.proj_dist(dist)

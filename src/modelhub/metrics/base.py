@@ -167,7 +167,7 @@ class Metric(ABC):
         If you need added flexibility (e.g. by passing certain defaults), you can override this method.
         """
         if self.kwargs_to_compute_args:
-            _get = lambda key: nested_dict.getitem(kwargs, key=key)
+            _get = lambda key: nested_dict.getitem(kwargs, key=key)  # noqa: E731
             compute_inputs = valmap(_get, self.kwargs_to_compute_args)
         else:
             # If kwargs_to_compute_args is not defined, use kwargs directly

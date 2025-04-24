@@ -21,8 +21,8 @@ clean:
 
 ## Format src directory using black
 format:
-	ruff format .
-	ruff check --fix .
+	ruff format src tests scripts notebooks
+	ruff check --fix src tests scripts notebooks
 
 _github_token_error:
 	@echo "==============================================================================="; \

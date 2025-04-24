@@ -100,7 +100,6 @@ class SubunitSymmetryResolution(nn.Module):
         # returns:
         #    best_xform      tensor [i]->transform number
         #    best_assignment dict{pred_iid:[native_iids]} (batch)
-        mapping = {}
         nTransforms = dist.shape[0]
         nIid = dist.shape[1]
         nBatch = dist.shape[-1]
@@ -108,7 +107,6 @@ class SubunitSymmetryResolution(nn.Module):
 
         # sort equiv groups by # resolved residues
         # first make that list
-        nEquiv = len(iids_by_entity)
         nmodel_by_equiv = {
             int(i): 0 for i in entity_to_index.keys()
         }  # torch.zeros(nEquiv,dtype=torch.long,device=dist.device)

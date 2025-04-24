@@ -1,0 +1,36 @@
+name: lint_trunk
+
+on:
+  push:
+    branches: [main, trunk]
+  pull_request:
+    branches: [main, trunk]
+  pull_request_target:
+    types: [ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: ruff (check code style)
+    # NOTE: We use an ubuntu runner to not be dependent on possibly limited digs infra
+    #   for this tiny linting job. This means we can have many lint jobs accross repos in parallel.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+      - name: Extract ruff version from environment.yaml
+        run: |
+          echo "RUFF_VERSION=$(grep 'ruff==' environment.yaml | sed 's/.*ruff==\(.*\)/\1/')" >> $GITHUB_ENV
+      - name: Install ruff
+        run: pip install ruff==${{ env.RUFF_VERSION }}
+      - name: Ruff format
+        run: ruff format --diff src tests scripts notebooks
+      - name: Ruff check
+        run: ruff check src tests scripts notebooks

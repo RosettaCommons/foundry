@@ -267,9 +267,6 @@ def xyz_to_t2d(xyz_t, mask, has_rotation=None, params=PARAMS):
 
 
 def xyz_to_bbtor(xyz, params=PARAMS):
-    batch = xyz.shape[0]
-    nres = xyz.shape[1]
-
     # three anchor atoms
     N = xyz[:, :, 0]
     Ca = xyz[:, :, 1]

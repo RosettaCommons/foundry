@@ -1,15 +1,8 @@
-from collections import defaultdict
-from typing import Any, Literal
-
-import numpy as np
-import toolz
-import torch
 from biotite.structure import AtomArray
 from datahub.transforms._checks import (
     check_atom_array_annotation,
     check_contains_keys,
     check_is_instance,
-    check_nonzero_length,
 )
 from datahub.transforms.base import Transform
 
@@ -27,8 +20,8 @@ class SetOccToZeroOnBfactor(Transform):
 
     def __init__(
         self,
-        bmin = None,
-        bmax = None,
+        bmin=None,
+        bmax=None,
     ):
         self.bmin = bmin
         self.bmax = bmax
@@ -36,9 +29,7 @@ class SetOccToZeroOnBfactor(Transform):
     def check_input(self, data: dict):
         check_contains_keys(data, ["atom_array"])
         check_is_instance(data, "atom_array", AtomArray)
-        check_atom_array_annotation(
-            data, ["b_factor", "occupancy"]
-        )
+        check_atom_array_annotation(data, ["b_factor", "occupancy"])
 
     def forward(self, data: dict) -> dict:
         atom_array = data["atom_array"]
@@ -46,20 +37,19 @@ class SetOccToZeroOnBfactor(Transform):
         if self.bmin is None and self.bmax is None:
             return data
 
-        bfact = atom_array.get_annotation('b_factor')
+        bfact = atom_array.get_annotation("b_factor")
         if self.bmin is not None:
-            mask = (bfact<self.bmin) 
+            mask = bfact < self.bmin
             if self.bmax is not None:
-                mask = mask | (bfact>self.bmax) 
+                mask = mask | (bfact > self.bmax)
         else:
-            mask = (bfact>self.bmax)
+            mask = bfact > self.bmax
 
-        occ = atom_array.get_annotation('occupancy')
+        occ = atom_array.get_annotation("occupancy")
         occ[mask] = 0.0
 
-        atom_array.set_annotation('occupancy',occ)
+        atom_array.set_annotation("occupancy", occ)
 
         data["atom_array"] = atom_array
 
         return data
-

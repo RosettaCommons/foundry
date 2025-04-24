@@ -1298,7 +1298,7 @@ def calc_atom_bond_loss(
     else:
         skip_bond_dist_loss = torch.tensor(0, device=pred.device)
     rigid_groups = find_all_rigid_groups(bond_feats)
-    if rigid_groups != None:
+    if rigid_groups is not None:
         nat_dist = torch.sum(
             torch.square(
                 true[:, rigid_groups[:, 0], 1] - true[:, rigid_groups[:, 1], 1]
@@ -1399,9 +1399,9 @@ def calc_cart_bonded(seq, pred, idx, len_param, ang_param, tor_param, eps=1e-4):
         + 0.5 * offset
     ) % offset - 0.5 * offset
 
-    dihs = get_dih(
-        tor_all[..., 0, :], tor_all[..., 1, :], tor_all[..., 2, :], tor_all[..., 3, :]
-    )
+    # dihs = get_dih(
+    #     tor_all[..., 0, :], tor_all[..., 1, :], tor_all[..., 2, :], tor_all[..., 3, :]
+    # )
 
     E_cb_tor = (tor_mask[None, ...] * cbtors[None, ..., 5] * boundfunc(tor_deltas)).sum(
         dim=(0, 2, 3)
@@ -1531,14 +1531,14 @@ class LJLoss(torch.autograd.Function):
         N, L, A = xs.shape[:3]
         assert N == 1  # see comment below
 
-        ds_res = torch.sqrt(
-            torch.sum(
-                torch.square(
-                    xs.detach()[:, :, None, 1, :] - xs.detach()[:, None, :, 1, :]
-                ),
-                dim=-1,
-            )
-        )
+        # ds_res = torch.sqrt(
+        #     torch.sum(
+        #         torch.square(
+        #             xs.detach()[:, :, None, 1, :] - xs.detach()[:, None, :, 1, :]
+        #         ),
+        #         dim=-1,
+        #     )
+        # )
         rs = torch.triu_indices(L, L, 0, device=xs.device)
         ri, rj = rs[0], rs[1]
 
@@ -1794,7 +1794,7 @@ def calc_hb(
 
     rh, ah = (hbts[..., 0] >= 0).nonzero(as_tuple=True)
     ra, aa = (hbts[..., 1] >= 0).nonzero(as_tuple=True)
-    D_xs = xs[rh, hbba[rh, ah, 0]][:, None, :]
+    # D_xs = xs[rh, hbba[rh, ah, 0]][:, None, :]
     H_xs = xs[rh, ah][:, None, :]
     A_xs = xs[ra, aa][None, :, :]
     B_xs = xs[ra, hbba[ra, aa, 0]][None, :, :]
@@ -1877,7 +1877,7 @@ def calc_hb(
     mask2 *= ~mask1
     outer_rise = torch.cos(np.pi - (np.pi * 2 / 3 - BAH[mask2]) / l)
     F = m / 2 * outer_rise + m / 2 - 0.5
-    G = (m - d) / 2 * outer_rise + (m - d) / 2 + d - 0.5
+    # G = (m - d) / 2 * outer_rise + (m - d) / 2 + d - 0.5
     Echi[mask2] = H[mask2] * F + (1 - H[mask2]) * d - 0.5
 
     Es[:, hyb == HbHybType.SP2] += polys[:, hyb == HbHybType.SP2, 2, 0] * Echi
@@ -2094,7 +2094,7 @@ def calc_ddihedralmse_dxyz(a, b, c, d, true_dih, eps=1e-6):
 
     # Compute MSE loss and manual gradients
     # mse_loss = torch.mean(torch.square(dih - true_dih))
-    mse_loss = torch.sum(torch.square(dih - true_dih))
+    # mse_loss = torch.sum(torch.square(dih - true_dih))
 
     # Define matrices and gradients, adapted for batch
     db0_db = -I

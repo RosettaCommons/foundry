@@ -380,7 +380,7 @@ class Rotation:
         Returns:
             The indexed rotation
         """
-        if type(index) != tuple:
+        if not isinstance(index, tuple):
             index = (index,)
 
         if self._rot_mats is not None:
@@ -393,7 +393,7 @@ class Rotation:
             raise ValueError("Both rotations are None")
 
     def __setitem__(self, index: Any, new: Any):
-        if type(index) != tuple:
+        if not isinstance(index, tuple):
             index = (index,)
 
         if self._rot_mats is not None:
@@ -956,7 +956,7 @@ class Rigid:
         Returns:
             The indexed tensor
         """
-        if type(index) != tuple:
+        if not isinstance(index, tuple):
             index = (index,)
 
         return Rigid(
@@ -1366,7 +1366,7 @@ class Rigid:
         Returns:
             A transformation object with a scaled translation.
         """
-        fn = lambda t: t * trans_scale_factor
+        fn = lambda t: t * trans_scale_factor  # noqa: E731
         return self.apply_trans_fn(fn)
 
     def stop_rot_gradient(self):
@@ -1376,7 +1376,7 @@ class Rigid:
         Returns:
             A transformation object with detached rotations
         """
-        fn = lambda r: r.detach()
+        fn = lambda r: r.detach()  # noqa: E731
         return self.apply_rot_fn(fn)
 
     @staticmethod
@@ -1407,8 +1407,6 @@ class Rigid:
         norm = torch.sqrt(eps + c_x**2 + c_y**2)
         sin_c1 = -c_y / norm
         cos_c1 = c_x / norm
-        zeros = sin_c1.new_zeros(sin_c1.shape)
-        ones = sin_c1.new_ones(sin_c1.shape)
 
         c1_rots = sin_c1.new_zeros((*sin_c1.shape, 3, 3))
         c1_rots[..., 0, 0] = cos_c1

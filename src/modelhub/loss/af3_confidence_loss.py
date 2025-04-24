@@ -237,7 +237,6 @@ class ConfidenceLoss(nn.Module):
 
         I = is_real_atom.shape[0]
         B = X_pred_L.shape[0]
-        L = X_pred_L.shape[1]
 
         # If structure is too big, split the batches to deal with a memory issue
         if I > 384:
