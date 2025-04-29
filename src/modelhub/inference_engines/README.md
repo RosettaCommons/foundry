@@ -104,7 +104,7 @@ Arguments to `inference.py` (which the apptainer calls behind-the-scenes):
 - `inference_engine` *(required)*: The inference configuration to use. For example, `af3`, to use the standard structure prediction model. We will introduce other configurations down-the-line, each with unique use cases.
 - `ckpt_path` *(optional)*: Path to checkpoint file. Defaults to the current "best model", which is stored in a symlink in `/net/software`
 - `residue_renaming_dict` *(optional)* Dictionary of residues to rename to avoid CCD clashes, given in Hydra format (e.g., `foo="{'ALA': 'L:1'}`). When parsing files, we use the given residue names to help identify any missing atoms. Thus, if a custom ligand overlaps with a ligand in the CCD, the prediction will be catastrophically wrong. To circumvent this issue, we accept a dictionary of ligands to rename. We suggest renaming all custom ligands to begin with `L:` to avoid all clashes with the CCD. WARNING: This command uses brute-force find a replace; please ensure that there are no other possible matches (e.g., atom names). Additionally, avoid `#` to mitigate possible CIF-parsing errors from PyMol. Defaults to None.
-- `skip_existing` *(optional)*: Whether to skip predictions where appropriately-named output structures already exist in the `cif_out_dir`. Defaults to False (do not skip; overwrite instead).
+- `skip_existing` *(optional)*: Whether to skip predictions where appropriately-named output structures already exist in the `out_dir`. Defaults to False (do not skip; overwrite instead).
 
 #### Arguments to control the model trunk and diffusion sampling
 - `early_stopping_plddt_threshold` *(optional)*. The average all-atom pLDDT value estimated after a single recycle that will trigger early-exit for that prediction. Defaults to `0.5`. Using this flag can **significantly** increase structure throughput (10-20x). If we early exit:
@@ -116,7 +116,7 @@ Arguments to `inference.py` (which the apptainer calls behind-the-scenes):
 - `seed`  *(optional)* Model seed. Running inference multiple times with different model seeds is the best, and most expensive, way to generate output diversity. Defaults to the training seed (usually 42).
 
 #### Arguments to control output dumping
-- `cif_out_dir` *(optional)*: Where to save predicted structures. The output files will be named the same as the input structures, or use the `name` field in the specification, if present. Defaults to the current directory (`./`).
+- `out_dir` *(optional)*: Where to save predicted structures. The output files will be named the same as the input structures, or use the `name` field in the specification, if present. Defaults to the current directory (`./`).
 - `dump_predictions` *(optional)*: Whether to save outputs as CIF files (vs. only the `.score` file). Defaults to True.
 - `dump_trajectories` *(optional)*: Whether to dump the denoising trajectories. Defaults to False. Denoising trajectories are memory- and CPU-intensive to save to disk; we do not suggest dumping them except for a select few structures, if needed.
 - `one_model_per_file` *(optional)*: Whether to save multiple structures from one diffusion batch as separate models within the same file or separate files. Defaults to False (one file with multiple models).
