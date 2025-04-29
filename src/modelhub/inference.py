@@ -6,8 +6,11 @@ from pathlib import Path
 
 import hydra
 import rootutils
+from dotenv import load_dotenv
 from hydra.utils import instantiate
 from omegaconf import DictConfig
+
+load_dotenv(override=True)
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)

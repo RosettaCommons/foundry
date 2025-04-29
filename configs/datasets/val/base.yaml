@@ -23,4 +23,5 @@ dataset:
     diffusion_batch_size: ${datasets.diffusion_batch_size_inference}
     max_atoms_in_crop: null # do not crop for inference
     return_atom_array: True # return atom array for inference
+    run_confidence_head: ${datasets.run_confidence_head}
 key_to_balance: ${datasets.key_to_balance}

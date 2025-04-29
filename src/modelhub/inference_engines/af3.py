@@ -4,13 +4,16 @@ from pathlib import Path
 
 import hydra
 import numpy as np
+import pandas as pd
 import torch
 from biotite.structure import AtomArray
 from cifutils import parse
+from cifutils.utils.selection import AtomSelectionStack
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
 from modelhub.inference_engines.base import InferenceEngine
+from modelhub.model.AF3 import ShouldEarlyStopFn
 from modelhub.utils.datasets import (
     assemble_distributed_inference_loader_from_list_of_paths,
 )
@@ -25,10 +28,30 @@ from modelhub.utils.logging import print_config_tree
 from modelhub.utils.predicted_error import (
     annotate_atom_array_b_factor_with_plddt,
     compile_af3_confidence_outputs,
+    get_mean_atomwise_plddt,
 )
 
 logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
+
+
+def should_early_stop_by_mean_plddt(
+    threshold: float, is_real_atom: torch.Tensor, max_value_of_plddt: float
+) -> ShouldEarlyStopFn:
+    """Returns a closure that triggers early stopping when mean pLDDT falls below the specified threshold."""
+
+    def fn(confidence_outputs: dict, **kwargs):
+        mean_plddt = get_mean_atomwise_plddt(
+            plddt_logits=confidence_outputs["plddt_logits"].unsqueeze(0),
+            is_real_atom=is_real_atom,
+            max_value=max_value_of_plddt,
+        )
+        return (mean_plddt < threshold).item(), {
+            "mean_plddt": mean_plddt.item(),
+            "threshold": threshold,
+        }
+
+    return fn
 
 
 class AF3InferenceEngine(InferenceEngine):
@@ -47,6 +70,7 @@ class AF3InferenceEngine(InferenceEngine):
         n_recycles: int,
         diffusion_batch_size: int,
         residue_renaming_dict: str | dict,
+        template_selection_syntax: str | None,
         num_steps: int,
         solver: str,
         print_config: bool,
@@ -56,6 +80,8 @@ class AF3InferenceEngine(InferenceEngine):
         dump_predictions: bool,
         dump_trajectories: bool,
         one_model_per_file: bool,
+        annotate_b_factor_with_plddt: bool,
+        early_stopping_plddt_threshold: float | None,
     ):
         """Initialize the Inference Engine for AF3.
 
@@ -66,12 +92,13 @@ class AF3InferenceEngine(InferenceEngine):
             ckpt_path: Path to the checkpoint file.
             out_dir: Directory for output files. If None, the current directory will be used.
             skip_existing: If True, only predict the structures that are not already in the output directory.
-            num_nodes: Number of nodes for distributed inference. The default is 1.
-            devices_per_node: Number of devices per node for distributed inference. The default is 1.
+            num_nodes: Number of nodes for distributed inference.
+            devices_per_node: Number of devices per node for distributed inference.
 
             n_recycles (int): Number of recycles for AF3.
             diffusion_batch_size (int): Diffusion batch size for AF3. Each predicted structure will be saved as a separate model within the same CIF file.
             residue_renaming_dict (dict): Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': 'L:1'}.
+            template_selection_syntax (str): Selection syntax for template selection. If None, no residues will be selected.
             num_steps (int): Number of steps for sampling of the diffusion model. AF-3 uses 200; we see no degradation in performance with 50.
             solver (str): Solver to use for inference. Options are 'af3', 'simple', 'euler', and 'heun'.
             print_config (bool): Pretty-print the Hydra configs.
@@ -82,6 +109,10 @@ class AF3InferenceEngine(InferenceEngine):
             dump_trajectories (bool): Whether to dump denoising trajectories.
             one_model_per_file (bool): If True, write each structure within a diffusion batch to its own CIF files.
                 If False, include each structure within a diffusion batch as a separate model within one CIF file.
+            annotate_b_factor_with_plddt (bool): If True, annotate the B-factor of the predicted structures with the atom-wise pLDDT scores.
+            early_stopping_plddt_threshold (float | None): The value for average all-atom pLDDT after a single recycle that will trigger early-exit for that prediction.
+                If the average pLDDT is below this value, the model will stop recycling and note in the output score file that early stopping was triggered.
+                If None, early stopping will not be used (which may marginally speed up prediction times).
         """
         if solver != "af3":
             # TODO: Port over additional solvers (Frank already coded; need to modify for new framework)
@@ -139,19 +170,25 @@ class AF3InferenceEngine(InferenceEngine):
             _recursive_=False,
         )
 
-        self.ckpt_path = ckpt_path
+        # Early stopping
+        self.early_stopping_plddt_threshold = early_stopping_plddt_threshold
 
-        # Set the output directory for the CIF files (e.g., predicted structures)
+        # Paths
         self.cif_out_dir = Path(out_dir) if out_dir else Path("./")
+        self.ckpt_path = ckpt_path
 
         # Rename residues
         self.residue_renaming_dict = residue_renaming_dict
         self.temp_dir = Path(temp_dir)
 
+        # Set the template selection syntax
+        self.template_selection_syntax = template_selection_syntax
+
         # Structure dumping
         self.dump_predictions = dump_predictions
         self.dump_trajectories = dump_trajectories
         self.one_model_per_file = one_model_per_file
+        self.annotate_b_factor_with_plddt = annotate_b_factor_with_plddt
 
     def construct_pipeline(self):
         """Construct the AF3 inference pipeline.
@@ -203,19 +240,45 @@ class AF3InferenceEngine(InferenceEngine):
             with open(path_to_structure, "w") as f:
                 f.write(content)
 
-        return parse(path_to_structure, remove_hydrogens=True)
+        return parse(path_to_structure, hydrogen_policy="remove")
 
-    def prepare_atom_array(self, atom_array: AtomArray) -> AtomArray:
+    def prepare_atom_array(
+        self, atom_array: AtomArray, template_selection_syntax: str = None
+    ) -> AtomArray:
         """Prepare the AtomArray for inference.
 
         By default, we set NaN coordinates to random values to avoid unexpected behavior in the pipeline.
         """
+        if template_selection_syntax is not None:
+            selector = AtomSelectionStack.from_contig_string(template_selection_syntax)
+            is_input_file_templated = selector.get_mask(atom_array)
+            ranked_logger.info(
+                f"Selected {np.sum(is_input_file_templated)} atoms for templating"
+            )
+        else:
+            is_input_file_templated = np.zeros(len(atom_array), dtype=bool)
+
+        # assert that none of the selected atoms are NaN
+        # brittle until better selection syntax is implemented
+        assert (
+            not np.all(np.isnan(atom_array.coord[is_input_file_templated]))
+            or len(atom_array.coord[is_input_file_templated]) == 0
+        ), f"Selected atoms with NaN coordinates to templated: {atom_array.coord[is_input_file_templated]}. Make sure you provided in input structure for templating."
+
+        # assert that people are not trying to template non-protein atoms
+        assert np.all(
+            atom_array[is_input_file_templated].is_polymer
+        ), f"Selected atoms with non-polymer atoms to templated: {atom_array[(is_input_file_templated) & (~atom_array.is_polymer)]}. Make sure you provided in input structure for templating."
+
         # HACK: Set NaN coordinates to random values to avoid unexpected behavior in the pipeline
         # TODO: Hunt down why NaN coordinates lead to this behavior
         atom_array.coord[np.isnan(atom_array.coord)] = np.random.rand(
             *atom_array.coord[np.isnan(atom_array.coord)].shape
         )
-
+        atom_array.set_annotation(
+            "is_input_file_templated",
+            is_input_file_templated,
+        )
         return atom_array
 
     def eval(self):
@@ -282,7 +345,9 @@ class AF3InferenceEngine(InferenceEngine):
                 else out["asym_unit"][0]
             )
 
-            atom_array = self.prepare_atom_array(atom_array)
+            atom_array = self.prepare_atom_array(
+                atom_array, template_selection_syntax=self.template_selection_syntax
+            )
 
             # ... assemble the pipeline input in a format compatible with the DataHub pipeline
             pipeline_input = {
@@ -294,6 +359,17 @@ class AF3InferenceEngine(InferenceEngine):
             # ... run dataloading and featurization
             pipeline_output = pipeline(pipeline_input)
 
+            should_early_stop_fn = None
+            if (
+                self.early_stopping_plddt_threshold
+                and self.early_stopping_plddt_threshold > 0
+            ):
+                should_early_stop_fn = should_early_stop_by_mean_plddt(
+                    self.early_stopping_plddt_threshold,
+                    pipeline_output["confidence_feats"]["is_real_atom"],
+                    self.cfg.trainer.loss.confidence_loss.plddt.max_value,
+                )
+
             # Model inference
             with torch.no_grad():
                 pipeline_output = self.trainer.fabric.to_device(pipeline_output)
@@ -301,14 +377,37 @@ class AF3InferenceEngine(InferenceEngine):
                     batch=pipeline_output,
                     batch_idx=0,
                     compute_metrics=False,
+                    should_early_stop_fn=should_early_stop_fn,
                 )["network_output"]
 
                 # TODO: Log `metrics_output` to a file (or store directly within the CIF file)
+
+            if network_output.get("early_stopped", False):
+                # TODO: Rework how we save outputs so it's easy for users
+                ranked_logger.warning(
+                    f"Early stopping triggered for {example_id} with mean pLDDT {network_output['mean_plddt']:.2f} < {self.early_stopping_plddt_threshold:.2f}!"
+                )
+                # Prune keys with null values...
+                dict_to_save = {
+                    k: v for k, v in network_output.items() if v is not None
+                }
+                # ... then convert to a DataFrame and save to CSV
+                df_to_save = pd.DataFrame([dict_to_save])
+                df_to_save.to_csv(
+                    self.cif_out_dir / f"{example_id}.score",
+                    index=False,
+                )
+
+                # (Skip to the next example that we will predict)
+                continue
 
             # ... build the predicted AtomArrayStack
             atom_array_stack = build_stack_from_atom_array_and_batched_coords(
                 network_output["X_L"], pipeline_output["atom_array"]
             )
+
+            # (Sometimes we will instead need a list of AtomArrays, e.g., for B-factor annotation)
+            atom_array_list = None
             if "plddt" in network_output:
                 confidence_outs = compile_af3_confidence_outputs(
                     plddt_logits=network_output["plddt"],
@@ -321,27 +420,31 @@ class AF3InferenceEngine(InferenceEngine):
                     example_id=example_id,
                     confidence_loss_cfg=self.cfg.trainer.loss.confidence_loss,
                 )
-                atom_array_list = annotate_atom_array_b_factor_with_plddt(
-                    atom_array_stack,
-                    confidence_outs["plddt"],
-                    pipeline_output["confidence_feats"]["is_real_atom"],
-                )
-                logging.info(
-                    f"Annotated PLDDT scores into B-factors for {example_id}. Forcing one model per file to accommodate separate b_factors in each model."
-                )
-                self.one_model_per_file = True
+
+                if self.annotate_b_factor_with_plddt:
+                    # Annotate the B-factors of the predicted structures with the pLDDT scores
+                    # (Forces one model per file, if `one_model_per_file` is False)
+                    atom_array_list = annotate_atom_array_b_factor_with_plddt(
+                        atom_array_stack,
+                        confidence_outs["plddt"],
+                        pipeline_output["confidence_feats"]["is_real_atom"],
+                    )
+                    logging.info(
+                        f"Annotated PLDDT scores into B-factors for {example_id}. Forcing one model per file to accommodate separate b_factors in each model."
+                    )
+                    self.one_model_per_file = True
+
                 confidence_outs["confidence_df"].to_csv(
                     self.cif_out_dir / f"{example_id}.score", index=False
                 )
+
                 ranked_logger.info(
                     f"Confidence metrics for {example_id} written to {self.cif_out_dir / example_id}.score."
                 )
 
             if self.dump_predictions:
                 dump_structures(
-                    atom_arrays=atom_array_stack
-                    if "plddt" not in network_output
-                    else atom_array_list,
+                    atom_arrays=atom_array_list or atom_array_stack,
                     base_path=self.cif_out_dir / example_id,
                     one_model_per_file=self.one_model_per_file,
                 )
@@ -359,5 +462,5 @@ class AF3InferenceEngine(InferenceEngine):
                 )
 
             ranked_logger.info(
-                f"Outputs for {example_id} written to {self.cif_out_dir / example_id}."
+                f"Outputs for {example_id} written to {self.cif_out_dir / example_id}!"
             )

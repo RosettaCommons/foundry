@@ -18,6 +18,54 @@ from modelhub.metrics.metric_utils import (
     spread_batch_into_dictionary,
     unbin_logits,
 )
+import einops
+
+
+def get_mean_atomwise_plddt(
+    plddt_logits: torch.Tensor,
+    is_real_atom: torch.Tensor,
+    max_value: float,
+) -> torch.Tensor:
+    """Aggregate plddts.
+
+    Args:
+        plddt_logits: Tensor of shape [B, n_token, max_atoms_in_a_token * n_bin] with logits
+        is_real_atom: Boolean mask of shape [B, n_token, max_atoms_in_a_token] indicating which atoms are real (i.e., not padding)
+        max_value: Maximum value for pLDDT (assigned to the last bin)
+
+    Returns:
+        plddt: Tensor of shape [B,] with the mean atom-wise pLDDT for each batch
+    """
+    assert plddt_logits.ndim == 3, "plddt_logits must be a 3D tensor (B, n_token, max_atoms_in_a_token * n_bins)"
+
+    # TODO: Replace with the last dimension of is_real_atom to remove reliance on ChemData; right now that number is too large (36) because it includes hydrogens
+    max_atoms_in_a_token = ChemData().NHEAVY
+
+    # Since the pLDDT logits have the last dimension (max_atoms_in_a_token * n_bins), we can calculate n_bins directly
+    assert plddt_logits.shape[-1] % max_atoms_in_a_token == 0, "The last dimension of plddt_logits must be divisible by max_atoms_in_a_token!"
+    n_bins = plddt_logits.shape[-1] // max_atoms_in_a_token
+
+    # ... reshape to match what unbin_logits expects
+    reshaped_plddt_logits = einops.rearrange(
+        plddt_logits,
+        '... n_token (max_atoms_in_a_token n_bins) -> ... n_bins n_token max_atoms_in_a_token',
+        max_atoms_in_a_token=max_atoms_in_a_token,
+        n_bins=n_bins
+    ).float() # [..., n_token, n_bins * max_atoms_in_a_token] -> [ ..., n_bins, n_token, max_atoms_in_a_token]
+
+    plddt = unbin_logits(
+        reshaped_plddt_logits,
+        max_value,
+        n_bins,
+    )
+
+    is_real_atom = is_real_atom.to(device=plddt.device)
+
+    #  ... create mask indicating which atoms are "real" (i.e., not padding) and calculate the mean
+    mask = is_real_atom[:, :max_atoms_in_a_token].unsqueeze(0)
+    atomwise_plddt_mean = (plddt * mask).sum(dim=(1, 2)) / mask.sum(dim=(1, 2))
+
+    return atomwise_plddt_mean
 
 
 def compile_af3_confidence_outputs(
@@ -30,6 +78,8 @@ def compile_af3_confidence_outputs(
     confidence_loss_cfg: DictConfig | dict,
 ) -> dict[str, Any]:
     # TODO: Refactor to accept an AtomArray
+    # TODO: Taking the confidence_loss_cfg does not align with functional programming best-practices; we should instead take  the max_value and n_bins as arguments
+    # TODO: Remove ChemData at all costs (can we just take NHEAVY as an argument?)
 
     """Given the confidence logits, computes the confidence metrics for the model's predictions.
 

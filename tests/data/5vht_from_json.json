@@ -1,0 +1,15 @@
+[
+    {
+        "name": "5vht_from_json",
+        "components": [
+            {
+                "seq": "MTSENPLLALREKISALDEKLLALFAERRELAVEVGKAKLLSHRPVRDIDRERDLLERLITLGKAHHLDAH(PBF)ITRTFQLGIEYSVLTQQALLEHHHHHH",
+                "chain_id": "A"
+            },
+            {
+                "seq": "MTSENPLLALREKISALDEKLLALFAERRELAVEVGKAKLLSHRPVRDIDRERDLLERLITLGKAHHLDAH(PBF)ITRTFQLGIEYSVLTQQALLEHHHHHH",
+                "chain_id": "B"
+            }
+        ]
+    }
+]

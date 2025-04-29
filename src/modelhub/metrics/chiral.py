@@ -13,13 +13,15 @@ from modelhub.kinematics import get_dih
 from modelhub.metrics.base import Metric
 
 
-def calc_chiral_loss_masked(
+def calc_chiral_metrics_masked(
     pred: Float[torch.Tensor, "B L ... 3"],
     chirals: Float[torch.Tensor, "n_chiral 5"],
     mask: Bool[torch.Tensor, "I"],
-    ground_truth_atom_array: AtomArray,
 ):
-    """Calculate error in dihedral angles for chiral atoms
+    """Calculate metrics for chiral centers, including:
+        - number of chiral centers
+        - mean squared error in dihedral angles
+        - percentage of correctly predicted chirality
 
     Args:
         pred: predicted coords (B, L, :, 3)
@@ -48,26 +50,109 @@ def calc_chiral_loss_masked(
         chiral_dih[..., 3, :],
     )  # [B, n_chiral]
 
-    chiral_center_is_valid = mask[chirals[..., :-1].long()].all(
-        dim=-1
-    )  # [L] -> [n_chiral] (a chiral center is valid iff ALL atoms are included)
-
     # ... total chiral loss (sum of squared errors)
     diff = pred_dih - chirals[..., -1]  # [B, n_chiral]
     is_correct_chirality = torch.sign(pred_dih) == torch.sign(
         chirals[..., -1]
     )  # [B, n_chiral]
-    percent_correct_chirality = (is_correct_chirality[:, chiral_center_is_valid]).sum(
-        dim=-1
-    ) / chiral_center_is_valid.sum(dim=-1)  # [B]
 
-    l = torch.square(diff[:, chiral_center_is_valid]).sum(dim=-1)  # [B]
+    # To avoid over-counting chirals, we should only keep one "row" for each chiral center (rather than enumerating all orderings)
+    inf_tensor = torch.tensor(
+        [-float("inf")], device=chirals.device, dtype=chirals.dtype
+    )
+    shifted = torch.cat([inf_tensor, chirals[:-1, 0]], dim=0)  # Shape [24]
+    first_occurence_mask = chirals[:, 0] != shifted
+
+    is_valid_chiral_center = mask[chirals[..., :-1].long()].all(
+        dim=-1
+    )  # [L] -> [n_chiral] (a chiral center is valid iff ALL atoms are included)
+    # ... and only keep the first occurrence of each chiral center
+    is_valid_chiral_center = is_valid_chiral_center & first_occurence_mask
+
+    percent_correct_chirality = (is_correct_chirality[:, is_valid_chiral_center]).sum(
+        dim=-1
+    ) / is_valid_chiral_center.sum(dim=-1)  # [B]
+
+    l = torch.square(diff[:, is_valid_chiral_center]).sum(dim=-1)  # [B]
 
     return {
         "chiral_loss_sum": l,  # [B]
-        "n_chiral_centers": chiral_center_is_valid.sum(dim=-1),  # [B]
+        "n_chiral_centers": is_valid_chiral_center.sum(dim=-1),  # [B]
         "percent_correct_chirality": percent_correct_chirality,  # [B]
     }
+
+
+def compute_chiral_metrics(
+    predicted_atom_array_stack: AtomArrayStack | AtomArray,
+    ground_truth_atom_array_stack: AtomArrayStack | AtomArray,
+    chiral_feats: Float[torch.Tensor, "n_chiral 5"] = None,
+):
+    """Compute chiral metrics from the predicted and ground truth atom arrays.
+
+    If chiral features are not directly provided, they will be re-computed from the AtomArrays.
+
+    Returns:
+        dict: Dictionary containing chiral metrics, separated for polymers and non-polymers. The metrics are:
+            - n_chiral_centers: number of chiral centers in the structure
+            - chiral_loss_mean: mean of the squared errors of chiral angles
+            - percent_correct_chirality: percentage of correctly predicted chiral centers
+    """
+    predicted_atom_array_stack = ensure_atom_array_stack(predicted_atom_array_stack)
+    ground_truth_atom_array_stack = ensure_atom_array_stack(
+        ground_truth_atom_array_stack
+    )
+
+    chiral_metrics = {}
+    # (Choose the first model  - chirality does not depend on our data augmentation)
+    ground_truth_atom_array = ground_truth_atom_array_stack[0]
+
+    if chiral_feats is None:
+        # Generate chiral features if not provided
+        _, rdkit_mols = get_af3_reference_molecule_features(ground_truth_atom_array)
+        chiral_centers = get_rdkit_chiral_centers(rdkit_mols)
+        chiral_feats = add_af3_chiral_features(
+            ground_truth_atom_array, chiral_centers, rdkit_mols
+        )
+
+    X_L = torch.from_numpy(predicted_atom_array_stack.coord).to(
+        device=chiral_feats.device
+    )
+
+    categories = ["polymer", "non_polymer"]
+    _polymer_mask = torch.from_numpy(ground_truth_atom_array.is_polymer).to(
+        device=chiral_feats.device
+    )
+    # (Only consider non-NaN coordinates in the ground truth, since otherwise we can't compare dihedral angles)
+    _valid_coord_mask = ~torch.isnan(
+        torch.from_numpy(ground_truth_atom_array.coord)
+    ).any(dim=1).to(device=chiral_feats.device)
+    masks = [_polymer_mask, ~_polymer_mask]
+
+    for category, mask in zip(categories, masks):
+        # ... compute the chiral loss, given the mask
+        result = calc_chiral_metrics_masked(
+            X_L,
+            chiral_feats,
+            mask=mask & _valid_coord_mask,
+        )
+
+        if not result:
+            # No chiral centers - skip
+            continue
+
+        # ... store the metric results, meaned over the diffusion batch
+        if result["n_chiral_centers"] > 0:
+            chiral_metrics[f"{category}_n_chiral_centers"] = result[
+                "n_chiral_centers"
+            ].item()
+            chiral_metrics[f"{category}_chiral_loss_mean"] = (
+                (result["chiral_loss_sum"] / result["n_chiral_centers"]).mean().item()
+            )
+            chiral_metrics[f"{category}_percent_correct_chirality"] = (
+                result["percent_correct_chirality"].mean().item()
+            )
+
+    return chiral_metrics
 
 
 class ChiralLoss(Metric):
@@ -85,66 +170,10 @@ class ChiralLoss(Metric):
         ground_truth_atom_array_stack: AtomArrayStack | AtomArray,
         chiral_feats: Float[torch.Tensor, "n_chiral 5"] = None,
     ):
-        """Compute the chiral loss for the predicted and ground truth atom arrays.
-
-        If chiral features are not directly provided, they will be re-computed from the AtomArrays.
-        """
-        predicted_atom_array_stack = ensure_atom_array_stack(predicted_atom_array_stack)
-        ground_truth_atom_array_stack = ensure_atom_array_stack(
-            ground_truth_atom_array_stack
+        chiral_metrics = compute_chiral_metrics(
+            predicted_atom_array_stack,
+            ground_truth_atom_array_stack,
+            chiral_feats=chiral_feats,
         )
 
-        chiral_loss = {}
-        # (Choose the first model  - chirality does not depend on our data augmentation)
-        ground_truth_atom_array = ground_truth_atom_array_stack[0]
-
-        if chiral_feats is None:
-            # Generate chiral features if not provided
-            _, rdkit_mols = get_af3_reference_molecule_features(ground_truth_atom_array)
-            chiral_centers = get_rdkit_chiral_centers(rdkit_mols)
-            chiral_feats = add_af3_chiral_features(
-                ground_truth_atom_array, chiral_centers, rdkit_mols
-            )
-
-        X_L = torch.from_numpy(predicted_atom_array_stack.coord).to(
-            device=chiral_feats.device
-        )
-
-        categories = ["polymer", "non_polymer"]
-        _polymer_mask = torch.from_numpy(ground_truth_atom_array.is_polymer).to(
-            device=chiral_feats.device
-        )
-        # (Only consider non-NaN coordinates in the ground truth, since otherwise we can't compare dihedral angles)
-        _valid_coord_mask = ~torch.isnan(
-            torch.from_numpy(ground_truth_atom_array.coord)
-        ).any(dim=1).to(device=chiral_feats.device)
-        masks = [_polymer_mask, ~_polymer_mask]
-
-        for category, mask in zip(categories, masks):
-            # ... compute the chiral loss, given the mask
-            result = calc_chiral_loss_masked(
-                X_L,
-                chiral_feats,
-                mask=mask & _valid_coord_mask,
-                ground_truth_atom_array=ground_truth_atom_array,
-            )
-
-            if not result:
-                # No chiral centers - skip
-                continue
-
-            # ... store the metric results, meaned over the diffusion batch
-            if result["n_chiral_centers"] > 0:
-                chiral_loss[f"{category}_n_chiral_centers"] = result[
-                    "n_chiral_centers"
-                ].item()
-                chiral_loss[f"{category}_chiral_loss_mean"] = (
-                    (result["chiral_loss_sum"] / result["n_chiral_centers"])
-                    .mean()
-                    .item()
-                )
-                chiral_loss[f"{category}_percent_correct_chirality"] = (
-                    result["percent_correct_chirality"].mean().item()
-                )
-
-        return chiral_loss
+        return chiral_metrics

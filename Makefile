@@ -80,16 +80,16 @@ install:
 	@python -m biotite.setup_ccd
 
 ## Build the apptainer image
+# (For development)
 base_apptainer:
 	$(eval DATE := $(shell date +%Y-%m-%d))
 	bash ./scripts/build_base_apptainer.sh
 
-# Set INSTALL_PROJECT to true to install modelhub within the apptainer (much slower)
-# e.g., `make INSTALL_PROJECT=true freeze_apptainer` or `make freeze_apptainer INSTALL_PROJECT=true`
-INSTALL_PROJECT ?= false
-freeze_apptainer: 
+# (For inference)
+# Installs modelhub, datahub, and cifutils into the apptainer image
+inference_apptainer: 
 	$(eval DATE := $(shell date +%Y-%m-%d))
-	bash ./scripts/freeze_apptainer.sh $(INSTALL_PROJECT)
+	bash ./scripts/inference_apptainer.sh
 
 ## Run pytest and generate coverage report
 test:

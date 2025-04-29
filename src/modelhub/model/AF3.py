@@ -1,7 +1,9 @@
+from collections import deque
 from contextlib import ExitStack
 
 import torch
 import torch.utils.checkpoint as checkpoint
+from beartype.typing import Any, Generator, Protocol
 from omegaconf import DictConfig
 from torch import nn
 
@@ -34,6 +36,20 @@ Tensor Name Glossary:
     Q: Atom-level single representation (L, C_atom)
     P: Atom-level pair representation (L, L, C_atompair)
 """
+
+
+class ShouldEarlyStopFn(Protocol):
+    def __call__(
+        self, confidence_outputs: dict[str, Any], first_recycle_outputs: dict[str, Any]
+    ) -> tuple[bool, dict[str, Any]]:
+        """Duck-typed function Protocol for early stopping based on confidence outputs.
+
+        Returns:
+            tuple: A pair containing:
+                - should_stop (bool): Whether to stop early.
+                - additional_data (dict): Metadata for the user, if any
+        """
+        ...
 
 
 class AF3(nn.Module):
@@ -135,9 +151,15 @@ class AF3(nn.Module):
         """
         # ... recycling
         # Gives dictionary of outputs S_inputs_I, S_init_I, Z_init_II, S_I, Z_II
-        recycling_outputs = self.trunk_forward_with_recycling(
-            f=input["f"], n_recycles=n_cycle
-        )
+        # (We use `deque` with maxlen=1 to ensure that we only keep the last output in memory)
+        try:
+            recycling_outputs = deque(
+                self.trunk_forward_with_recycling(f=input["f"], n_recycles=n_cycle),
+                maxlen=1,
+            ).pop()
+        except IndexError:
+            # Handle the case where the generator is empty
+            raise RuntimeError("Recycling generator produced no outputs")
 
         # Predict the distogram from the pair representation
         distogram_pred = self.distogram_head(recycling_outputs["Z_II"])
@@ -177,14 +199,17 @@ class AF3(nn.Module):
                 t_hats=sample_diffusion_outs["t_hats"],
             )
 
-    def trunk_forward_with_recycling(self, f: dict, n_recycles: int):
-        """Forward pass of the AF-3 trunk
+    def trunk_forward_with_recycling(
+        self, f: dict, n_recycles: int
+    ) -> Generator[dict[str, torch.Tensor]]:
+        """Forward pass of the AF-3 trunk.
 
         (e.g., the recycling process, including the MSAModule, PairfomerStack, etc.).
 
         Notes:
             - We run with gradients ONLY on the final recycle
             - All recycles use shared weights (ResNet-style)
+            - We yield results after reach recycle to support use cases such as e.g., early stopping during inference
 
         Args:
             f: Feature dictionary
@@ -218,13 +243,14 @@ class AF3(nn.Module):
                 # We alter the S_I and Z_II in place such that the next iteration uses the updated values
                 recycling_inputs = self.recycle(**recycling_inputs)
 
-        return {
-            "S_inputs_I": recycling_inputs["S_inputs_I"],
-            "S_init_I": recycling_inputs["S_init_I"],
-            "Z_init_II": recycling_inputs["Z_init_II"],
-            "S_I": recycling_inputs["S_I"],
-            "Z_II": recycling_inputs["Z_II"],
-        }
+                # Yield after each recycle
+                yield {
+                    "S_inputs_I": recycling_inputs["S_inputs_I"],
+                    "S_init_I": recycling_inputs["S_init_I"],
+                    "Z_init_II": recycling_inputs["Z_init_II"],
+                    "S_I": recycling_inputs["S_I"],
+                    "Z_II": recycling_inputs["Z_II"],
+                }
 
     def pre_recycle(self, f: dict) -> dict:
         """Prepare feature inputs for recycling.
@@ -309,7 +335,8 @@ class AF3WithConfidence(AF3):
         self,
         input: dict,
         n_cycle: int,
-        coord_atom_lvl_to_be_noised: torch.Tensor = None,
+        coord_atom_lvl_to_be_noised: torch.Tensor | None = None,
+        should_early_stop_fn: ShouldEarlyStopFn | None = None,
     ) -> dict:
         """Complete forward pass of the model with confidence head.
 
@@ -325,6 +352,9 @@ class AF3WithConfidence(AF3):
             n_cycle (int): Number of recycling cycles for the trunk
             coord_atom_lvl_to_be_noised (torch.Tensor): Atom-level coordinates to be noised further. Optional;
                 only used during inference for partial denoising.
+            should_early_stop_fn(Callable): Function that takes the confidence and trunk outputs after the first recycle and returns a boolean
+                indicating whether to stop early and a dictionary with additional information (e.g., value and threshold).
+                If None, no early stopping is performed. Optional; only used during inference.
 
         Returns:
             dict: Dictionary of model outputs, including:
@@ -337,10 +367,44 @@ class AF3WithConfidence(AF3):
         diffusion_batch_size = input["t"].shape[0]
         with torch.no_grad():
             # ... recycling
-            # Gives dictionary of outputs S_inputs_I, S_init_I, Z_init_II, S_I, Z_II
-            recycling_outputs = self.trunk_forward_with_recycling(
+            recycling_output_generator = self.trunk_forward_with_recycling(
                 f=input["f"], n_recycles=n_cycle
             )
+            if should_early_stop_fn:
+                assert (
+                    not self.training
+                ), "Early stopping is not supported during training!"
+                # ... get the recycling outputs after the first recycle
+                first_recycle_outputs = next(recycling_output_generator)
+
+                # ... compute confidence metrics (without structure)
+                confidence_outputs = checkpoint.checkpoint(
+                    create_custom_forward(
+                        self.confidence_head, frame_atom_idxs=input["frame_atom_idxs"]
+                    ),
+                    first_recycle_outputs["S_inputs_I"],
+                    first_recycle_outputs["S_I"],
+                    first_recycle_outputs["Z_II"],
+                    None,  # Omit structure
+                    input["seq"],
+                    input["rep_atom_idxs"],
+                    use_reentrant=False,
+                )
+
+                should_early_stop, early_stop_data = should_early_stop_fn(
+                    confidence_outputs=confidence_outputs,
+                    first_recycle_outputs=first_recycle_outputs,
+                )
+                if should_early_stop:
+                    result = {"early_stopped": True}
+                    return result | early_stop_data
+
+            # (We use `deque` with maxlen=1 to ensure that we only keep the last output in memory)
+            try:
+                recycling_outputs = deque(recycling_output_generator, maxlen=1).pop()
+            except IndexError:
+                # Handle the case where the generator is empty
+                raise RuntimeError("Recycling generator produced no outputs")
 
             # Predict the distogram from the pair representation
             # (NOTE: Not necessary for confidence head training, but helpful for reporting)
@@ -348,7 +412,7 @@ class AF3WithConfidence(AF3):
 
             # ... post-recycling (diffusion module)
             if self.training:
-                # Mini-rollout
+                # Mini-rollout (no gradients still)
                 sample_diffusion_outs = (
                     self.mini_rollout_sampler.sample_diffusion_like_af3(
                         f=input["f"],
@@ -361,7 +425,7 @@ class AF3WithConfidence(AF3):
                     )
                 )
             else:
-                # Full diffusion rollout (no gradients, or will OOM)
+                # Full diffusion rollout (no gradients still)
                 sample_diffusion_outs = (
                     self.inference_sampler.sample_diffusion_like_af3(
                         f=input["f"],
@@ -388,8 +452,10 @@ class AF3WithConfidence(AF3):
             use_reentrant=False,
         )
 
+        # TODO: Return outputs in a more structured way (e.g., a dataclass)
         return dict(
-            # We return X_L as X_pred_rollout_L to support future joint training with the confidence head (where we would have both X_L and X_pred_rollout_L)
+            early_stopped=False,
+            # We return X_L from diffusion sampling as X_pred_rollout_L to support future joint training with the confidence head (where we would have both X_L and X_pred_rollout_L)
             X_L=None,
             distogram=distogram_pred,
             # For reporting, inference (validation or testing) only

@@ -15,7 +15,7 @@ echo '################## Start shebang info ##################'
 echo "The file $SCRIPT_PATH is being run as a shebang executable.
     It will...
 
-    1. Add the 'modelhub' and 'src/modelhub' repo directories to your PYTHONPATH.
+    1. Add the 'modelhub', 'src/modelhub', 'lib/cifutils/src', and 'lib/datahub/src' repo directories to your PYTHONPATH.
     2. Run your python script from the right container, which contains all dependencies.
     3. Launch the container with slurm and nvidia gpu support."
 

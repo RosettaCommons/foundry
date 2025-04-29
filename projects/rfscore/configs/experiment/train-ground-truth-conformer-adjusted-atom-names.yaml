@@ -24,7 +24,7 @@ model:
         # For concatenated encoding, raw_template_dim: 66
         raw_template_dim: 66
 
-ckpt_path: /projects/ml/modelhub/inference/weights_with_no_confidence_2025_1_21_new_modelhub.ckpt
+ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt
 
 datasets:
   # Dataloading pipeline to use

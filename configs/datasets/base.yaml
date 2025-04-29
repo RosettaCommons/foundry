@@ -5,6 +5,8 @@ diffusion_batch_size_inference: 5
 n_recycles_train: 4
 n_recycles_validation: 10
 
+run_confidence_head: false
+
 n_msa: 1024
 crop_size: 384
 max_atoms_in_crop: 5000 

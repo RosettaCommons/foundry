@@ -55,6 +55,7 @@ def dump_structures(
     base_path: PathLike,
     one_model_per_file: bool,
     extra_fields: list[str] | Literal["all"] = [],
+    file_type: str = "cif.gz",
 ) -> None:
     """Dump structures to CIF files, given the coordinates and input AtomArray.
 
@@ -78,7 +79,7 @@ def dump_structures(
             to_cif_file(
                 atom_arrays[i],
                 path,
-                file_type="cif.gz",
+                file_type=file_type,
                 include_entity_poly=False,
                 extra_fields=extra_fields,
             )
@@ -87,7 +88,7 @@ def dump_structures(
         to_cif_file(
             atom_arrays,
             base_path,
-            file_type="cif.gz",
+            file_type=file_type,
             include_entity_poly=False,
             extra_fields=extra_fields,
         )

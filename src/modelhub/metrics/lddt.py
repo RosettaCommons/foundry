@@ -200,21 +200,11 @@ class ByTypeInterfaceLDDT(Metric):
                 pae_idx = network_output["confidence"]["pae_idx"]
                 pde_idx = network_output["confidence"]["pde_idx"]
                 plddt_idx = network_output["confidence"]["plddt_idx"]
-                # TODO: This lookup would be best implemented as a sorted Tuple of PN Unit IIDs or a symmetric 2D lookup table rather than with non-symmeterized strings
-                af3_style_ipae_idx = network_output["confidence"]["best_interface_idx"][
-                    f"{pn_unit_i}-{pn_unit_j}"
-                ]
                 result.update(
                     {
                         "oracle_by_pae": lddt[pae_idx].item(),
                         "oracle_by_pde": lddt[pde_idx].item(),
                         "oracle_by_plddt": lddt[plddt_idx].item(),
-                        "oracle_by_af3_style_ipae": lddt[af3_style_ipae_idx].item(),
-                        "oracle_by_af3_style_lig_ipae": lddt[
-                            network_output["confidence"]["best_lig_ipae_idx"][
-                                f"{pn_unit_i}-{pn_unit_j}"
-                            ]
-                        ].item(),
                     }
                 )
 
@@ -295,14 +285,6 @@ class ChainLDDTByType(Metric):
                         ].item(),
                         "oracle_by_plddt": lddt[
                             network_output["confidence"]["plddt_idx"]
-                        ].item(),
-                        "oracle_by_af3_style_chain": lddt[
-                            network_output["confidence"]["best_chain_to_all_idx"][chain]
-                        ].item(),
-                        "oracle_by_af3_style_single_chain": lddt[
-                            network_output["confidence"]["best_chain_to_self_idx"][
-                                chain
-                            ]
                         ].item(),
                     }
                 )

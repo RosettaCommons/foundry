@@ -12,6 +12,7 @@ from modelhub.loss.af3_losses import (
     SubunitSymmetryResolution,
 )
 from modelhub.metrics.base import MetricManager
+from modelhub.model.AF3 import ShouldEarlyStopFn
 from modelhub.trainers.fabric import FabricTrainer
 from modelhub.training.EMA import EMA
 from modelhub.utils.ddp import RankedLogger
@@ -144,7 +145,6 @@ class AF3Trainer(FabricTrainer):
         ]:
             if x in network_input["f"]:
                 network_input["f"][x] = network_input["f"][x].to(torch.bfloat16)
-
         return network_input
 
     def _assemble_loss_extra_info(self, example: dict) -> dict:
@@ -343,10 +343,9 @@ class AF3Trainer(FabricTrainer):
                     metrics_output, torch.Tensor, lambda x: x.detach()
                 )
 
-        if network_output is not None:
-            network_output = apply_to_collection(
-                network_output, torch.Tensor, lambda x: x.detach()
-            )
+        network_output = apply_to_collection(
+            network_output, torch.Tensor, lambda x: x.detach()
+        )
 
         return {"metrics_output": metrics_output, "network_output": network_output}
 
@@ -362,13 +361,67 @@ class AF3TrainerWithConfidence(AF3Trainer):
             if "model.confidence_head" not in name:
                 param.requires_grad = False
 
+    def _assemble_network_inputs(self, example):
+        # assemble the base network inputs...
+        network_input = super()._assemble_network_inputs(example)
+        #  ... and then add the confidence-specific inputs
+        network_input.update(
+            {
+                "seq": example["confidence_feats"]["rf2aa_seq"],
+                "rep_atom_idxs": example["ground_truth"]["rep_atom_idxs"],
+                "frame_atom_idxs": example["confidence_feats"][
+                    "pae_frame_idx_token_lvl_from_atom_lvl"
+                ],
+            }
+        )
+
+        return network_input
+
+    def _assemble_loss_extra_info(self, example):
+        # assemble the base loss extra info...
+        loss_extra_info = super()._assemble_loss_extra_info(example)
+        # ... and then add the confidence-specific inputs
+        loss_extra_info.update(
+            {
+                # TODO: We are duplicating network_input here; we should be able to significantly trim this dictionary
+                "seq": example["confidence_feats"]["rf2aa_seq"],
+                "atom_frames": example["confidence_feats"]["atom_frames"],
+                "tok_idx": example["feats"]["atom_to_token_map"],
+                "is_real_atom": example["confidence_feats"]["is_real_atom"],
+                "rep_atom_idxs": example["ground_truth"]["rep_atom_idxs"],
+                "frame_atom_idxs": example["confidence_feats"][
+                    "pae_frame_idx_token_lvl_from_atom_lvl"
+                ],
+            }
+        )
+
+        return loss_extra_info
+
+    def _assemble_metrics_extra_info(self, example, network_output):
+        # assemble the base metrics extra info...
+        metrics_extra_info = super()._assemble_metrics_extra_info(
+            example, network_output
+        )
+        # ... and then add the confidence-specific inputs
+        # TODO: Refactor; we should not need pass confidence log config through metrics extra info, it should be a property of the Metric (e.g., passed at `_init_` using Hydra interpolation from the relevant loss config)
+        metrics_extra_info.update(
+            {
+                "is_real_atom": example["confidence_feats"]["is_real_atom"],
+                "is_ligand": example["feats"]["is_ligand"],
+                # TODO: Refactor so that we pass the relevant values from the config direclty to the Metric upon instantiation (reference in Hydra through interpolation)
+                "confidence_loss": self.state["train_cfg"].trainer.loss.confidence_loss,
+            }
+        )
+
+        return metrics_extra_info
+
     def training_step(
         self,
         batch: Any,
         batch_idx: int,
         is_accumulating: bool,
     ) -> None:
-        """Perform mini-rollout and assess confidence losses on forward pass"""
+        """Perform mini-rollout and assess gradient of the confidence head parameters with respect to the confidence loss."""
         model = self.state["model"]
         assert model.training, "Model must be training!"
 
@@ -380,48 +433,29 @@ class AF3TrainerWithConfidence(AF3Trainer):
             # (We assume batch size of 1 for structure predictions)
             example = batch[0] if not isinstance(batch, dict) else batch
 
-            # Build the base network inputs and add confidence-specific inputs
             network_input = self._assemble_network_inputs(example)
-            network_input.update(
-                {
-                    "seq": example["confidence_feats"]["rf2aa_seq"],
-                    "rep_atom_idxs": example["ground_truth"]["rep_atom_idxs"],
-                    "frame_atom_idxs": example["confidence_feats"][
-                        "pae_frame_idx_token_lvl_from_atom_lvl"
-                    ],
-                }
-            )
 
-            # Forward pass
+            # Forward pass (with mini-rollout)
+            # NOTE: We use the non-EMA weights for structure prediction; this approach is theoretically sub-optimal, since
+            # we should be using the EMA weights for structure prediction (given those parameters are frozen) and the non-EMA weights
+            # for the confidence head, to better match the inference-time task
             network_output = model.forward(
                 input=network_input,
                 n_cycle=n_cycle,
                 coord_atom_lvl_to_be_noised=example["coord_atom_lvl_to_be_noised"],
             )
-
             assert_no_nans(
                 network_output,
                 msg=f"network_output for example_id: {example['example_id']}",
             )
 
             loss_extra_info = self._assemble_loss_extra_info(example)
-            loss_extra_info.update(
-                {
-                    "seq": example["confidence_feats"]["rf2aa_seq"],
-                    "atom_frames": example["confidence_feats"]["atom_frames"],
-                    "tok_idx": example["feats"]["atom_to_token_map"],
-                    "is_real_atom": example["confidence_feats"]["is_real_atom"],
-                    "rep_atom_idxs": example["ground_truth"]["rep_atom_idxs"],
-                    "frame_atom_idxs": example["confidence_feats"][
-                        "pae_frame_idx_token_lvl_from_atom_lvl"
-                    ],
-                }
-            )
 
-            # Remap X_L to the rollout X_L so grounud truth matches rollout batch dimension during the symmetry resolution
-            # NOTE: Since `X_L` derives from the rollout, we cannot compute standard training loss and perform gradient updates
+            # Remap X_L to the rollout X_L so ground truth matches rollout batch dimension during the symmetry resolution
+            # NOTE: Since `X_L` derives from the mini-rollout, we cannot compute standard training loss and perform gradient updates
             network_output["X_L"] = network_output["X_pred_rollout_L"]
 
+            # (Symmetry resolution)
             loss_extra_info = self.subunit_symm_resolve(
                 network_output, loss_extra_info, example["symmetry_resolution"]
             )
@@ -452,34 +486,19 @@ class AF3TrainerWithConfidence(AF3Trainer):
         batch: Any,
         batch_idx: int,
         compute_metrics: bool = True,
+        should_early_stop_fn: ShouldEarlyStopFn | None = None,
     ) -> dict:
-        """Validation step, running forward pass and computing validation metrics.
-
-        Args:
-            batch: The current batch; can be of any form.
-            batch_idx: The index of the current batch.
-            compute_metrics: Whether to compute metrics. If False, we will not compute metrics, and the output will be None.
-                Set to False during the inference pipeline, where we need the network output but cannot compute metrics (since we
-                do not have the ground truth).
-
-        Returns:
-            dict: Output dictionary containing the validation metrics.
-        """
+        """Validation step, running forward pass (with full rollout) and computing validation metrics, including confidence."""
         model = self.state["model"]
         assert not model.training, "Model must be in evaluation mode during validation!"
 
         example = batch[0] if not isinstance(batch, dict) else batch
 
-        # Build the base network inputs and add confidence-specific inputs
         network_input = self._assemble_network_inputs(example)
-        network_input.update(
-            {
-                "seq": example["confidence_feats"]["rf2aa_seq"],
-                "rep_atom_idxs": example["ground_truth"]["rep_atom_idxs"],
-                "frame_atom_idxs": example["confidence_feats"][
-                    "pae_frame_idx_token_lvl_from_atom_lvl"
-                ],
-            }
+
+        assert_no_nans(
+            network_input,
+            msg=f"network_input for example_id: {example['example_id']}",
         )
 
         # ... forward pass (with FULL rollout)
@@ -490,37 +509,27 @@ class AF3TrainerWithConfidence(AF3Trainer):
                 0
             ],  # Determine the number of recycles from the MSA stack shape
             coord_atom_lvl_to_be_noised=example["coord_atom_lvl_to_be_noised"],
+            should_early_stop_fn=should_early_stop_fn,
         )
-
-        # Remap X_L to the rollout X_L
-        network_output["X_L"] = network_output["X_pred_rollout_L"]
 
         assert_no_nans(
             network_output,
             msg=f"network_output for example_id: {example['example_id']}",
         )
 
+        # Remap X_L to the rollout X_L
+        network_output["X_L"] = network_output.get("X_pred_rollout_L")
+
         metrics_output = {}
-        if compute_metrics:
+        if compute_metrics and not network_output.get("early_stopped", False):
             assert self.metrics is not None, "Metrics are not defined!"
 
             # Assemble the base metrics extra info and add confidence-specific inputs
-            metrics_extra_info = self._assemble_metrics_extra_info(example)
-            # TODO: Refactor; we should not need pass confidence log config through metrics extra info, it should be a property of the Metric (e.g., passed at `_init_` using Hydra interpolation from the relevant loss config)
-            metrics_extra_info.update(
-                {
-                    "is_real_atom": example["confidence_feats"]["is_real_atom"],
-                    "is_ligand": example["feats"]["is_ligand"],
-                    # TODO: Refactor so that we pass the relevant values from the config direclty to the Metric upon instantiation (reference in Hydra through interpolation)
-                    "confidence_loss": self.state[
-                        "train_cfg"
-                    ].trainer.loss.confidence_loss,
-                }
+            metrics_extra_info = self._assemble_metrics_extra_info(
+                example, network_output
             )
 
             # Symmetry resolution
-            # TODO: Refactor such that symmetry returns the ideal coordinate permutation, we apply permutation, and pass adjusted prediction to metrics
-            # (without needing to use `extra_info` as we are now)
             metrics_extra_info = self.subunit_symm_resolve(
                 network_output,
                 metrics_extra_info,
@@ -534,6 +543,7 @@ class AF3TrainerWithConfidence(AF3Trainer):
             )
 
             # Store in `metrics_extra_info` details about which structures have the lowest confidence
+            # TODO: Move into `_assemble_metrics_extra_info`
             network_output["confidence"] = (
                 compute_batch_indices_with_lowest_predicted_error(
                     plddt=network_output["plddt"],
@@ -555,20 +565,20 @@ class AF3TrainerWithConfidence(AF3Trainer):
                 network_input=network_input,
                 network_output=network_output,
                 extra_info=metrics_extra_info,
+                # (Uses the permuted ground truth after symmetry resolution)
+                ground_truth_atom_array_stack=build_stack_from_atom_array_and_batched_coords(
+                    metrics_extra_info["X_gt_L"], example.get("atom_array", None)
+                ),
+                predicted_atom_array_stack=build_stack_from_atom_array_and_batched_coords(
+                    network_output["X_L"], example.get("atom_array", None)
+                ),
             )
-
-            if "X_gt_index_to_X" in metrics_extra_info:
-                # Remap outputs to minimize error with ground truth
-                # TODO: Remap before computing metrics, so that we can avoid pass `extra_info` to metrics (we instead just pass the remapped prediction)
-                mapping = metrics_extra_info["X_gt_index_to_X"]  # [D, L]
-                network_output["X_L"] = _remap_outputs(network_output["X_L"], mapping)
 
             # Avoid gradients in stored values to prevent memory leaks
-            metrics_output = (
-                apply_to_collection(metrics_output, torch.Tensor, lambda x: x.detach())
-                if metrics_output is not None
-                else None
-            )
+            if metrics_output is not None:
+                metrics_output = apply_to_collection(
+                    metrics_output, torch.Tensor, lambda x: x.detach()
+                )
 
         network_output = (
             apply_to_collection(network_output, torch.Tensor, lambda x: x.detach())

@@ -3,6 +3,7 @@
 #SBATCH --nodes 2
 #SBATCH --gres=gpu:l40:8
 #SBATCH --ntasks-per-node 8
+#SBATCH -c 4
 #SBATCH --mem=512g
 #SBATCH -t 7-00:00:00
 #SBATCH -J none-00-dummy

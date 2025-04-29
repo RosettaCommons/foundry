@@ -13,7 +13,7 @@ tags:
 
 project: af3
 
-ckpt_path: /net/tukwila/ncorley/modelhub/inference/rf2aa-af3-repro7_ep680.pt
+ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt
 
 model:
   lr_scheduler:

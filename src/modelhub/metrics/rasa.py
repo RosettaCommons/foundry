@@ -68,8 +68,10 @@ class UnresolvedRegionRASA(Metric):
         # Calculate the mean RASA score
 
         rasa = np.nanmean(rasas)
+        # Pattern-match other metrics by appending "_i" to the metric name to represent multiple batches
+        # (e.g., "unresolved_polymer_rasa_0", "unresolved_polymer_rasa_1", etc.)
         output_dictionary = {
-            f"unresolved_polymer_rasa_batch{i}": rasa for i, rasa in enumerate(rasas)
+            f"unresolved_polymer_rasa_{i}": rasa for i, rasa in enumerate(rasas)
         }
         output_dictionary["mean_unresolved_polymer_rasa"] = rasa
         return output_dictionary

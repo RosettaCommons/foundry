@@ -37,3 +37,4 @@ monomer_distillation:
       crop_contiguous_probability: 0.25
       crop_spatial_probability: 0.75
       b_factor_min: 70.0
+      run_confidence_head: ${datasets.run_confidence_head}

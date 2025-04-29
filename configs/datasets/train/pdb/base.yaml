@@ -22,6 +22,7 @@ dataset:
     n_msa: ${datasets.n_msa}
     diffusion_batch_size: ${datasets.diffusion_batch_size_train}
     max_atoms_in_crop: ${datasets.max_atoms_in_crop}
+    run_confidence_head: ${datasets.run_confidence_head}
 
 weights:
   _target_: datahub.samplers.calculate_weights_for_pdb_dataset_df

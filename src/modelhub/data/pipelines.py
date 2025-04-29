@@ -76,6 +76,7 @@ from datahub.transforms.msa.msa import (
 from datahub.transforms.rdkit_utils import GetRDKitChiralCenters
 from datahub.transforms.symmetry import FindAutomorphismsWithNetworkX
 from datahub.transforms.template import (
+    AddInputFileTemplate,
     AddRFTemplates,
     FeaturizeTemplatesLikeAF3,
     OneHotTemplateRestype,
@@ -265,12 +266,22 @@ def build_af3_transform_pipeline(
             RandomSubsampleTemplates(n_template=n_template),
         ]
     )
-    inference_template_loading_transforms = AddRFTemplates(
+
+    inference_template_loading_from_disk = AddRFTemplates(
         max_n_template=n_template,  # return at most n_template (e.g., 4 in AF-3) from our template search (no subsampling)
         pick_top=True,
         max_seq_similarity=template_max_seq_similarity,
         min_seq_similarity=template_min_seq_similarity,
         min_template_length=template_min_length,
+    )
+    inference_template_load_from_structure = AddInputFileTemplate()
+    inference_template_loading_transforms = ConditionalRoute(
+        condition_func=lambda data: "is_input_file_templated"
+        in data["atom_array"].get_annotation_categories(),
+        transform_map={
+            True: inference_template_load_from_structure,
+            False: inference_template_loading_from_disk,
+        },
     )
 
     transforms += [

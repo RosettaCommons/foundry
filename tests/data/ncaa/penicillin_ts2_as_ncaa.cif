@@ -1,0 +1,143 @@
+data_penicillin_ts2_R_PTM
+#
+_entry.id       penicillin_ts2_R_PTM
+_entry.author   ssalike
+_entry.date     2025-04-14
+_entry.time     20:50:04
+#
+loop_
+_chem_comp_bond.pdbx_ordinal 
+_chem_comp_bond.comp_id 
+_chem_comp_bond.atom_id_1 
+_chem_comp_bond.atom_id_2 
+_chem_comp_bond.value_order 
+_chem_comp_bond.pdbx_aromatic_flag 
+_chem_comp_bond.pdbx_stereo_config 
+1  L:0 S0  C2  SING N ?
+2  L:0 S0  C15 SING N ?
+3  L:0 O1  C11 DOUB N ?
+4  L:0 O2  C14 SING N ?
+5  L:0 O4  C14 DOUB N ?
+6  L:0 O3  C8  SING N ?
+7  L:0 N5  C2  SING N ?
+8  L:0 N5  C3  SING N ?
+9  L:0 N5  C11 SING N ?
+10 L:0 N1  C1  SING N ?
+11 L:0 N1  C8  SING N ?
+12 L:0 C2  C1  SING N ?
+13 L:0 C15 C3  SING N ?
+14 L:0 C15 C12 SING N ?
+15 L:0 C15 C13 SING N ?
+16 L:0 C3  C14 SING N ?
+17 L:0 C1  C11 SING N ?
+18 L:0 C8  C16 SING N ?
+19 L:0 C16 C17 SING N ?
+20 L:0 C17 C18 DOUB Y ?
+21 L:0 C17 C19 SING Y ?
+22 L:0 C18 C20 SING Y ?
+23 L:0 C19 C21 DOUB Y ?
+24 L:0 C20 C22 DOUB Y ?
+25 L:0 C21 C22 SING Y ?
+26 L:0 C8  SG  SING N ?
+27 L:0 SG  CB  SING N ?
+28 L:0 CB  CA  SING N ?
+29 L:0 CA  N   SING N ?
+30 L:0 CA  C   SING N ?
+31 L:0 C   O   DOUB N ?
+32 L:0 N1  H29 SING N ?
+33 L:0 C2  H30 SING N ?
+34 L:0 C3  H31 SING N ?
+35 L:0 C1  H32 SING N ?
+36 L:0 C12 H33 SING N ?
+37 L:0 C12 H34 SING N ?
+38 L:0 C12 H35 SING N ?
+39 L:0 C13 H36 SING N ?
+40 L:0 C13 H37 SING N ?
+41 L:0 C13 H38 SING N ?
+42 L:0 C16 H39 SING N ?
+43 L:0 C16 H40 SING N ?
+44 L:0 C18 H41 SING N ?
+45 L:0 C19 H42 SING N ?
+46 L:0 C20 H43 SING N ?
+47 L:0 C21 H44 SING N ?
+48 L:0 C22 H45 SING N ?
+49 L:0 CB  H46 SING N ?
+50 L:0 CB  H47 SING N ?
+51 L:0 CA  H48 SING N ?
+52 L:0 N   H49 SING N ?
+53 L:0 N   H50 SING N ?
+54 L:0 C   H51 SING N ?
+#
+loop_
+_atom_site.group_PDB 
+_atom_site.type_symbol 
+_atom_site.label_atom_id 
+_atom_site.label_alt_id 
+_atom_site.label_comp_id 
+_atom_site.label_asym_id 
+_atom_site.label_entity_id 
+_atom_site.label_seq_id 
+_atom_site.pdbx_PDB_ins_code 
+_atom_site.auth_seq_id 
+_atom_site.auth_comp_id 
+_atom_site.auth_asym_id 
+_atom_site.auth_atom_id 
+_atom_site.pdbx_formal_charge 
+_atom_site.Cartn_x 
+_atom_site.Cartn_y 
+_atom_site.Cartn_z 
+_atom_site.pdbx_PDB_model_num 
+_atom_site.id 
+HETATM S S0  . L:0 B 1 1 . 1 L:0 B S0  ?  2.7883995    -0.06909274  1.6524241     1 1
+HETATM O O1  . L:0 B 1 1 . 1 L:0 B O1  ?  0.70115113   1.2880311    -2.2012346    1 2
+HETATM O O2  . L:0 B 1 1 . 1 L:0 B O2  -1 5.262406     2.077924     0.12670363    1 3
+HETATM O O4  . L:0 B 1 1 . 1 L:0 B O4  ?  5.890556     0.9800635    -1.7812364    1 4
+HETATM O O3  . L:0 B 1 1 . 1 L:0 B O3  -1 -1.6707386   0.81898975   -0.84997106   1 5
+HETATM N N5  . L:0 B 1 1 . 1 L:0 B N5  ?  2.643117     1.2403278    -0.58316845   1 6
+HETATM N N1  . L:0 B 1 1 . 1 L:0 B N1  ?  -0.035422347 0.2892911    0.76620173    1 7
+HETATM C C2  . L:0 B 1 1 . 1 L:0 B C2  ?  2.160429     1.4017364    0.75325304    1 8
+HETATM C C15 . L:0 B 1 1 . 1 L:0 B C15 ?  3.6612868    -0.75446403  0.1635829     1 9
+HETATM C C3  . L:0 B 1 1 . 1 L:0 B C3  ?  3.7391796    0.3696495    -0.91685665   1 10
+HETATM C C1  . L:0 B 1 1 . 1 L:0 B C1  ?  0.76738554   1.4554648    0.34893543    1 11
+HETATM C C11 . L:0 B 1 1 . 1 L:0 B C11 ?  1.247995     1.3369373    -1.0686908    1 12
+HETATM C C12 . L:0 B 1 1 . 1 L:0 B C12 ?  2.81142      -1.9196928   -0.3727589    1 13
+HETATM C C13 . L:0 B 1 1 . 1 L:0 B C13 ?  5.0360565    -1.3024956   0.5921068     1 14
+HETATM C C14 . L:0 B 1 1 . 1 L:0 B C14 ?  5.017448     1.1654546    -0.8931772    1 15
+HETATM C C8  . L:0 B 1 1 . 1 L:0 B C8  ?  -1.4791291   0.44049355   0.48309535    1 16
+HETATM C C16 . L:0 B 1 1 . 1 L:0 B C16 ?  -2.18258     -0.91250926  0.7238781     1 17
+HETATM C C17 . L:0 B 1 1 . 1 L:0 B C17 ?  -1.5143553   -2.0479221   -0.0143210115 1 18
+HETATM C C18 . L:0 B 1 1 . 1 L:0 B C18 ?  -1.7662536   -2.2521722   -1.3816408    1 19
+HETATM C C19 . L:0 B 1 1 . 1 L:0 B C19 ?  -0.61315     -2.895827    0.65246475    1 20
+HETATM C C20 . L:0 B 1 1 . 1 L:0 B C20 ?  -1.1308857   -3.2916377   -2.0678113    1 21
+HETATM C C21 . L:0 B 1 1 . 1 L:0 B C21 ?  0.011433019  -3.9408233   -0.03529523   1 22
+HETATM C C22 . L:0 B 1 1 . 1 L:0 B C22 ?  -0.24391721  -4.136127    -1.3949697    1 23
+HETATM S SG  . L:0 B 1 1 . 1 L:0 B SG  ?  -2.2030795   1.7180697    1.6068434     1 24
+HETATM C CB  . L:0 B 1 1 . 1 L:0 B CB  ?  -3.8135352   1.9645973    0.7651021     1 25
+HETATM C CA  . L:0 B 1 1 . 1 L:0 B CA  ?  -4.5979214   3.1101854    1.4302026     1 26
+HETATM N N   . L:0 B 1 1 . 1 L:0 B N   ?  -5.9538536   3.205859     0.8854693     1 27
+HETATM C C   . L:0 B 1 1 . 1 L:0 B C   ?  -3.8931897   4.429705     1.2616668     1 28
+HETATM O O   . L:0 B 1 1 . 1 L:0 B O   ?  -3.7073069   4.9015408    0.15058044    1 29
+HETATM H H29 . L:0 B 1 1 . 1 L:0 B H29 ?  0.059410013  0.18018058   1.8035965     1 30
+HETATM H H30 . L:0 B 1 1 . 1 L:0 B H30 ?  2.5252697    2.3554087    1.1947311     1 31
+HETATM H H31 . L:0 B 1 1 . 1 L:0 B H31 ?  3.5899923    -0.035461854 -1.9430802    1 32
+HETATM H H32 . L:0 B 1 1 . 1 L:0 B H32 ?  0.2937752    2.4398892    0.5585868     1 33
+HETATM H H33 . L:0 B 1 1 . 1 L:0 B H33 ?  2.675513     -2.6952677   0.41105065    1 34
+HETATM H H34 . L:0 B 1 1 . 1 L:0 B H34 ?  1.8070505    -1.5610526   -0.68384093   1 35
+HETATM H H35 . L:0 B 1 1 . 1 L:0 B H35 ?  3.3025234    -2.3910565   -1.2512151    1 36
+HETATM H H36 . L:0 B 1 1 . 1 L:0 B H36 ?  5.6311493    -0.5195169   1.1074615     1 37
+HETATM H H37 . L:0 B 1 1 . 1 L:0 B H37 ?  4.913714     -2.1484272   1.3023032     1 38
+HETATM H H38 . L:0 B 1 1 . 1 L:0 B H38 ?  5.603013     -1.6632075   -0.29289314   1 39
+HETATM H H39 . L:0 B 1 1 . 1 L:0 B H39 ?  -3.2414856   -0.8578442   0.3965242     1 40
+HETATM H H40 . L:0 B 1 1 . 1 L:0 B H40 ?  -2.1973994   -1.1321131   1.8142916     1 41
+HETATM H H41 . L:0 B 1 1 . 1 L:0 B H41 ?  -2.4536226   -1.6073412   -1.9147791    1 42
+HETATM H H42 . L:0 B 1 1 . 1 L:0 B H42 ?  -0.3930285   -2.747051    1.7023098     1 43
+HETATM H H43 . L:0 B 1 1 . 1 L:0 B H43 ?  -1.3272605   -3.4432611   -3.1212819    1 44
+HETATM H H44 . L:0 B 1 1 . 1 L:0 B H44 ?  0.7022751    -4.592552    0.4836794     1 45
+HETATM H H45 . L:0 B 1 1 . 1 L:0 B H45 ?  0.24653696   -4.9407578   -1.9273325    1 46
+HETATM H H46 . L:0 B 1 1 . 1 L:0 B H46 ?  -3.6594195   2.19512      -0.31005773   1 47
+HETATM H H47 . L:0 B 1 1 . 1 L:0 B H47 ?  -4.4090133   1.0327655    0.84734786    1 48
+HETATM H H48 . L:0 B 1 1 . 1 L:0 B H48 ?  -4.6746664   2.8985124    2.520013      1 49
+HETATM H H49 . L:0 B 1 1 . 1 L:0 B H49 ?  -5.9077463   3.2593973    -0.15882477   1 50
+HETATM H H50 . L:0 B 1 1 . 1 L:0 B H50 ?  -6.4745083   2.3315752    1.1285077     1 51
+HETATM H H51 . L:0 B 1 1 . 1 L:0 B H51 ?  -3.5450172   4.9705043    2.135861      1 52
+#

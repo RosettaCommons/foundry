@@ -42,6 +42,7 @@ datasets:
                 - "cluster.notnull()"
     # Datasets set to null are ignored
     monomer_distillation: null
+    na_complex_distillation: null
   val: 
     af3_validation:
       dataset:

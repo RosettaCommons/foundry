@@ -65,6 +65,10 @@ exclude = [
     "*.ipynb",
     "dev.py",
     "archive",
+    "src/modelhub/chemical.py", # TEMPORARY
+    "src/modelhub/util_module.py", # TEMPORARY
+    "src/modelhub/utils/predicted_error.py", # TEMPORARY
+    "src/modelhub/util.py", # TEMPORARY
 ]
 
 [tool.ruff.format]
@@ -94,6 +98,6 @@ extend-select = ["I"]
 
 ignore = [
     "F722", # for jaxtyping shape annotation
-    "F821", # for jaxtyping shape annotation
-    "E741", # for ambiguous variable names (I, l)
+    "F821", # temporary to avoid jaxtyping warnings, see: https://github.com/astral-sh/ruff/issues/17386
+    "E741",  # enable us to use variables like "L"
 ]

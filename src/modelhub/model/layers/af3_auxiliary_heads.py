@@ -101,7 +101,8 @@ class ConfidenceHead(nn.Module):
             # stopgrad on S_trunk_I, Z_trunk_II, X_pred_L but not S_inputs_I (4.3.5)
             S_trunk_I = S_trunk_I.detach().float()  # B, L, 384
             Z_trunk_II = Z_trunk_II.detach().float()  # B, L, L, 128
-            X_pred_L = X_pred_L.detach().float()  # B, n_atoms, 3
+            if X_pred_L is not None:
+                X_pred_L = X_pred_L.detach().float()  # B, n_atoms, 3
             S_inputs_I = S_inputs_I.detach().float()  # B, L, 384
             seq = seq.detach()
 
@@ -137,53 +138,54 @@ class ConfidenceHead(nn.Module):
             )
 
             # embed distances of representative atom from every token
-            # in the pair representation
-            X_pred_rep_I = X_pred_L.index_select(1, rep_atoms)
-
-            dist = torch.cdist(X_pred_rep_I, X_pred_rep_I)
-
-            if not self.use_af3_style_binning_and_final_layer_norms:
-                # bins are 3.375 to 20.375 in 1.75 increments according to pseudocode
-                dist_one_hot = F.one_hot(
-                    discretize_distance_matrix(
-                        dist, min_distance=3.375, max_distance=20.875, num_bins=10
-                    ),
-                    num_classes=11,
-                )
-            else:
-                # published code is 3.25 to 50.75, with 39 bins
-                dist_one_hot = F.one_hot(
-                    discretize_distance_matrix(
-                        dist, min_distance=3.25, max_distance=50.75, num_bins=39
-                    ),
-                    num_classes=40,
-                )
-
-            Z_trunk_II = Z_trunk_II + self.process_pred_distances(dist_one_hot.float())
-
-            if self.use_Cb_distances:
-                # embed difference between observed cb and ideal cb positions
-                Cb_distances = calc_Cb_distances(
-                    X_pred_L, seq, rep_atoms, frame_atom_idxs
-                )
-                Cb_distances_one_hot = F.one_hot(
-                    discretize_distance_matrix(
-                        Cb_distances,
-                        min_distance=0.0001,
-                        max_distance=0.25,
-                        num_bins=24,
-                    ),
-                    num_classes=25,
-                )
-                Cb_logits = self.process_Cb_distances(Cb_distances_one_hot.float())
-                # symmetrize the logits
-                if self.symmetrize_Cb_logits:
-                    Cb_logits = Cb_logits[:, None, :, :] + Cb_logits[:, :, None, :]
+            #    in the pair representation
+            # if no coords are input, skip this connection
+            if X_pred_L is not None:
+                X_pred_rep_I = X_pred_L.index_select(1, rep_atoms)
+                dist = torch.cdist(X_pred_rep_I, X_pred_rep_I)
+                if not self.use_af3_style_binning_and_final_layer_norms:
+                    # bins are 3.375 to 20.375 in 1.75 increments according to pseudocode
+                    dist_one_hot = F.one_hot(
+                        discretize_distance_matrix(
+                            dist, min_distance=3.375, max_distance=20.875, num_bins=10
+                        ),
+                        num_classes=11,
+                    )
                 else:
-                    Cb_logits = Cb_logits[:, None, :, :]
+                    # published code is 3.25 to 50.75, with 39 bins
+                    dist_one_hot = F.one_hot(
+                        discretize_distance_matrix(
+                            dist, min_distance=3.25, max_distance=50.75, num_bins=39
+                        ),
+                        num_classes=40,
+                    )
 
-                # Z_trunk_II = Z_trunk_II + self.process_Cb_distances(Cb_distances_one_hot.float())
-                Z_trunk_II = Z_trunk_II + Cb_logits
+                Z_trunk_II = Z_trunk_II + self.process_pred_distances(
+                    dist_one_hot.float()
+                )
+
+                if self.use_Cb_distances:
+                    # embed difference between observed cb and ideal cb positions
+                    Cb_distances = calc_Cb_distances(
+                        X_pred_L, seq, rep_atoms, frame_atom_idxs
+                    )
+                    Cb_distances_one_hot = F.one_hot(
+                        discretize_distance_matrix(
+                            Cb_distances,
+                            min_distance=0.0001,
+                            max_distance=0.25,
+                            num_bins=24,
+                        ),
+                        num_classes=25,
+                    )
+                    Cb_logits = self.process_Cb_distances(Cb_distances_one_hot.float())
+                    # symmetrize the logits
+                    if self.symmetrize_Cb_logits:
+                        Cb_logits = Cb_logits[:, None, :, :] + Cb_logits[:, :, None, :]
+                    else:
+                        Cb_logits = Cb_logits[:, None, :, :]
+
+                    Z_trunk_II = Z_trunk_II + Cb_logits
 
             # process with pairformer stack
             S_trunk_residual_I = S_trunk_I.clone()

@@ -11,7 +11,7 @@
   - [Setup](#setup)
     - [Apptainers](#apptainers)
       - [Base Apptainer](#base-apptainer)
-      - [Frozen Apptainer](#frozen-apptainer)
+      - [Inference Apptainer](#inference-apptainer)
     - [Shebang](#shebang)
       - [General Use](#general-use)
       - [Debugging](#debugging)
@@ -137,7 +137,7 @@ More details can be found in the [inference README](src/modelhub/inference_engin
 ### Apptainers
 To accelerate development and better contain dependencies, we offer two apptainers:
 - `base_apptainer`: Contains all of the development dependencies, pre-compiled DeepSpeed, but *NOT* `cifutils` or `datahub`. The rationale for the base apptainer is that you expose these libraries via your PYTHONPATH/PATH to allow you to develop & pull updates for these libraries without having to re-build any apptainer.
-- `freeze_apptainer`: Takes the `base_apptainer` as its image, and adds versioned `cifutils`, `datahub`, and (optionally) pip-installs `modelhub` as well (useful for releasing self-contained inference code). The rationale for these apptainers is to provide designers with a stable environment to tackle design problems in.
+- `inference_apptainer`: Takes the `base_apptainer` as its image, and adds versioned `cifutils`, `datahub`, and (optionally) pip-installs `modelhub` as well (useful for releasing self-contained inference code). The rationale for these apptainers is to provide designers with a stable environment to tackle design problems in.
 
 #### Base Apptainer
 
@@ -147,25 +147,25 @@ make base_apptainer
 ```
 from the project root. This container will **not** contain `cifutils` or `datahub`; those paths must be exported explicitly during development (e.g., the paths to their respective submodules or clones elsewhere). 
 
-Building this apptainer pre-compiles DeepSpeed, among other actions, and is slow. You **should not** need to re-build this apptainer often; changes to `datahub` and `cifutils` can be addressed much more efficiently through the `freeze_apptainer` command specified below.
+Building this apptainer pre-compiles DeepSpeed, among other actions, and is slow. You **should not** need to re-build this apptainer often; changes to `datahub` and `cifutils` can be addressed much more efficiently through the `inference_apptainer` command specified below.
 
 > NOTE: Since we pre-compile CUDA-specific DeepSpeed, you must run `make base_apptainer` on a GPU node
 
 > NOTE: You will need to adjust the IPD-speciifc paths to frozen copies of the PDB and the CCD
 
-#### Frozen Apptainer
+#### Inference Apptainer
 
 To make a container that contains `cifutils` and `datahub`, but not `modelhub`, run:
 ```
-make freeze_apptainer
+make inference_apptainer
 ```
-This will use the `base_apptainer` pointed to by the `shebang` symlink as a base. Note that by default the versions of `cifutils` and `datahub` are fixed; update the `freeze_apptainer.spec` file to adjust the version numbers and/or add dependencies.
+This will use the `base_apptainer` pointed to by the `shebang` symlink as a base. Note that by default the versions of `cifutils` and `datahub` are fixed; update the `inference_apptainer.spec` file to adjust the version numbers and/or add dependencies.
 
 To make a container that contains `modelhub`, `datahub`, and `cifutils` (e.g., for production usage across the lab), run 
 ```
-make INSTALL_PROJECT=true freeze_apptainer
+make inference_apptainer
 ```
-> NOTE: Since we build from the `base_apptainer` image, which contains pre-compiled DeepSpeed, `make freeze_apptainer` does NOT need to be run from a GPU
+> NOTE: Since we build from the `base_apptainer` image, which contains pre-compiled DeepSpeed, `make inference_apptainer` does NOT need to be run from a GPU
 
 ### Shebang
 

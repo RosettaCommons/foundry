@@ -11,4 +11,7 @@ defaults:
   - override /trainer: af3_with_confidence
   - _self_
 
-ckpt_path: /projects/ml/modelhub/inference/weights_with_confidence_2025_2_27_new_modelhub.ckpt
+datasets:
+  run_confidence_head: true
+
+ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt

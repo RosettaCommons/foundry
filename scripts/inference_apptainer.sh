@@ -24,25 +24,19 @@ echo "Base SIF path to build from: $SIF_PATH"
 # Generate the image name with today's date
 DATE=$(date +%Y-%m-%d)
 IMAGE_NAME="frozen_modelhub_${DATE}.sif"
-echo "Building apptainer from image with frozen dependencies: $IMAGE_NAME"
+echo "Building apptainer from image with frozen modelhub, datahub, and cifutils: $IMAGE_NAME"
 
-# Check if INSTALL_PROJECT is set to true and set the image name accordingly
-if ${INSTALL_PROJECT}; then
-    echo "Modelhub WILL be installed in the apptainer! Ensure that this is intentional."
-    IMAGE_NAME="frozen_modelhub_datahub_cifutils_${DATE}.sif"
-else
-    IMAGE_NAME="frozen_datahub_cifutils_${DATE}.sif"
-fi
+IMAGE_NAME="frozen_modelhub_datahub_cifutils_${DATE}.sif"
 
 # Build Phase
 echo
 echo "=== Starting Build Phase ==="
-echo "Running: $APPTAINER_BINARY build --notest '$IMAGE_NAME' freeze_apptainer.spec"
+echo "Running: $APPTAINER_BINARY build --notest '$IMAGE_NAME' inference_apptainer.spec"
 echo "----------------------------------------"
-INSTALL_PROJECT=$INSTALL_PROJECT $APPTAINER_BINARY build \
+$APPTAINER_BINARY build \
     --nv \
     --notest \
-    "$IMAGE_NAME" freeze_apptainer.spec
+    "$IMAGE_NAME" inference_apptainer.spec
 echo "----------------------------------------"
 
 echo
