@@ -6,8 +6,7 @@ defaults:
 
 _target_: modelhub.inference_engines.af3.AF3InferenceEngine
 
-# ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt
-ckpt_path: /home/ncorley/projects/modelhub_dev/logs/train/quick-af3-with-confidence/2025-04-23_21-46/ckpt/epoch-0831.ckpt # only until sync
+ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_ep804.ckpt
 
 # Transform arguments
 n_recycles: 10
