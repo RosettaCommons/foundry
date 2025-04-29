@@ -6,7 +6,7 @@ defaults:
 
 _target_: modelhub.inference_engines.af3.AF3InferenceEngine
 
-ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_ep804.ckpt
+ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt
 
 # Transform arguments
 n_recycles: 10
