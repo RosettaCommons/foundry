@@ -29,7 +29,7 @@ class SetOccToZeroOnBfactor(Transform):
     def check_input(self, data: dict):
         check_contains_keys(data, ["atom_array"])
         check_is_instance(data, "atom_array", AtomArray)
-        check_atom_array_annotation(data, ["b_factor", "occupancy"])
+        check_atom_array_annotation(data, ["occupancy"])
 
     def forward(self, data: dict) -> dict:
         atom_array = data["atom_array"]
@@ -37,6 +37,9 @@ class SetOccToZeroOnBfactor(Transform):
         if self.bmin is None and self.bmax is None:
             return data
 
+        assert (
+            "b_factor" in atom_array.get_annotation_categories()
+        ), "B factor annotation not found"
         bfact = atom_array.get_annotation("b_factor")
         if self.bmin is not None:
             mask = bfact < self.bmin

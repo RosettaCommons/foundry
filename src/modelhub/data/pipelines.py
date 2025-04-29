@@ -208,7 +208,6 @@ def build_af3_transform_pipeline(
             },
         ),
         FlagAndReassignCovalentModifications(),
-        FlagAndReassignCovalentModifications(),
         FlagNonPolymersForAtomization(),
         AddGlobalAtomIdAnnotation(),
         AtomizeByCCDName(
