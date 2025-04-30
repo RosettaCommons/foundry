@@ -154,7 +154,7 @@ def compile_af3_confidence_outputs(
     # Aggregate confidence data
     confidence_data = {
         "example_id": example_id,
-        "mean_plddt": spread_batch_into_dictionary(plddt.mean(dim=(-1, -2))),
+        "mean_plddt": spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(plddt, is_real_atom[..., : ChemData().NHEAVY])),
         "mean_pae": spread_batch_into_dictionary(pae.mean(dim=(-1, -2))),
         "mean_pde": spread_batch_into_dictionary(pde.mean(dim=(-1, -2))),
         "chain_wise_mean_plddt": plddt_chainwise,
