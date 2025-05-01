@@ -24,7 +24,9 @@ def test_prior_pipeline_bugs_af3(pdb_id: str):
         rna_msa_dirs=RNA_MSA_DIRS,
         is_inference=False,
         use_element_for_atom_names_of_atomized_tokens=True,
-        p_use_ground_truth_conformer=0.5,
+        p_unconditional=0.2,  # 20% of the time, show NO conditioning
+        p_use_ground_truth_conformer=0.5,  # Each eligible token has a 50% chance of being displayed as a condition (unmasked)
+        p_provide_inter_molecule_distances=0.5,  # 50% of the time, show inter-molecule distances
     )
     output = pipe(input)
 

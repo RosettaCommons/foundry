@@ -6,6 +6,8 @@ distogram:
   _target_: modelhub.metrics.distogram.DistogramLoss
 distogram_comparisons:
   _target_: modelhub.metrics.distogram.DistogramComparisons
+distogram_entropy:
+  _target_: modelhub.metrics.distogram.DistogramEntropy
 chiral_loss:
   _target_: modelhub.metrics.chiral.ChiralLoss
 unresolved_rasa:

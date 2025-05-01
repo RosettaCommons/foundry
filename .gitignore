@@ -212,4 +212,5 @@ logs/
 **/notebooks/
 **/scratch/
 **/outputs/
+**/scripts/slurm/
 

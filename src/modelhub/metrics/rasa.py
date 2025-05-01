@@ -36,8 +36,7 @@ class UnresolvedRegionRASA(Metric):
         predicted_atom_array_stack: AtomArrayStack,
         ground_truth_atom_array_stack: AtomArrayStack,
     ) -> dict[str, Any]:
-        """
-        Compute the RASA score for unresolved regions in a protein structure.
+        """Compute the RASA score for unresolved regions in a protein structure.
 
         Args:
             predicted_atom_array (AtomArray): The input atom array representing the  predicted protein structure.
@@ -56,17 +55,21 @@ class UnresolvedRegionRASA(Metric):
             ground_truth_atom_array_stack.occupancy == 0.0
         )
         rasas = []
+
         # Calculate RASA
         for atom_array in predicted_atom_array_stack:
-            rasa = calculate_atomwise_rasa(
-                atom_array=atom_array,
-                probe_radius=self.probe_radius,
-                atom_radii=self.atom_radii,
-                point_number=self.point_number,
-            )
-            rasas.append(rasa[atoms_to_score].mean())
-        # Calculate the mean RASA score
+            try:
+                rasa = calculate_atomwise_rasa(
+                    atom_array=atom_array,
+                    probe_radius=self.probe_radius,
+                    atom_radii=self.atom_radii,
+                    point_number=self.point_number,
+                )
+                rasas.append(rasa[atoms_to_score].mean())
+            except KeyError:
+                rasas.append(np.nan)
 
+        # Calculate the mean RASA score
         rasa = np.nanmean(rasas)
         # Pattern-match other metrics by appending "_i" to the metric name to represent multiple batches
         # (e.g., "unresolved_polymer_rasa_0", "unresolved_polymer_rasa_1", etc.)
@@ -74,4 +77,5 @@ class UnresolvedRegionRASA(Metric):
             f"unresolved_polymer_rasa_{i}": rasa for i, rasa in enumerate(rasas)
         }
         output_dictionary["mean_unresolved_polymer_rasa"] = rasa
+
         return output_dictionary

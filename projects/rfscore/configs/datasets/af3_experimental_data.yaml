@@ -1,7 +1,7 @@
 # Standard AF-3 training with experimental data validation
 
 defaults:
-  - af3
+  - af3_pdb_only
 
   # (Experimental data validation)
   - val/af3_validation@val.ts1_unconditional

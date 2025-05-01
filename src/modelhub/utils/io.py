@@ -1,14 +1,17 @@
 import re
 from os import PathLike
 from pathlib import Path
-from typing import Literal
 
 import numpy as np
 import torch
+from beartype.typing import Literal
 from biotite.structure import AtomArray, AtomArrayStack, stack
 from cifutils.utils.io_utils import to_cif_file
 
 from modelhub.alignment import weighted_rigid_align
+from modelhub.utils.ddp import RankedLogger
+
+ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 DICTIONARY_LIKE_EXTENSIONS = {".json", ".yaml", ".yml", ".pkl"}
 CIF_LIKE_EXTENSIONS = {".cif", ".pdb", ".bcif", ".cif.gz", ".pdb.gz", ".bcif.gz"}

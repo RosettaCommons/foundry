@@ -58,64 +58,6 @@ class RFScoreTemplateEmbedder(nn.Module):
         Z_II,
     ):
         @activation_checkpointing
-        def embed_templates_like_af3(
-            template_backbone_frame_mask,
-            template_pseudo_beta_mask,
-            template_distogram,
-            template_unit_vector,
-            template_restype,
-            asym_id,
-        ):
-            with torch.amp.autocast(
-                device_type=device_of(self).type, enabled=True, dtype=torch.bfloat16
-            ):
-                I = Z_II.shape[0]
-                template_frame_mask = (
-                    template_backbone_frame_mask[:, None]
-                    * template_backbone_frame_mask[:, :, None]
-                )
-                template_pseudo_beta_mask = (
-                    template_pseudo_beta_mask[:, None, :]
-                    * template_pseudo_beta_mask[:, :, None]
-                )
-
-                template_feats = torch.cat(
-                    [
-                        template_distogram,
-                        template_frame_mask[..., None],
-                        template_unit_vector,
-                        template_pseudo_beta_mask[..., None],
-                    ],
-                    dim=-1,
-                )
-                template_feats = (
-                    template_feats * (asym_id[None, :] == asym_id[:, None])[..., None]
-                )
-                template_restype_left = template_restype[:, None, :, :].expand(
-                    -1, I, -1, -1
-                )
-                template_restype_right = template_restype[:, :, None, :].expand(
-                    -1, -1, I, -1
-                )
-
-                template_feats = torch.cat(
-                    [template_feats, template_restype_left, template_restype_right],
-                    dim=-1,
-                )
-                T = template_feats.shape[0]
-                u_II = torch.zeros(I, I, self.c, device=Z_II.device)
-                for i in range(T):
-                    v_II = self.emb_pair(
-                        self.norm_pair_before_pairformer(Z_II)
-                    ) + self.emb_templ(template_feats[i])
-                    for block in self.pairformer:
-                        _, v_II = block(None, v_II)
-                    u_II = u_II + self.norm_after_pairformer(v_II)
-                u_II = u_II / T
-
-            return self.agg_emb(relu(u_II))
-
-        @activation_checkpointing
         def embed_templates_like_rfscore(
             has_distogram_condition,  # [I, I]
             distogram_condition_noise_scale,  # [I]
@@ -186,24 +128,13 @@ class RFScoreTemplateEmbedder(nn.Module):
 
             return self.agg_emb(relu(u_II))
 
-        if "template_backbone_frame_mask" in f:
-            # Standard AF3 template embedding
-            return embed_templates_like_af3(
-                template_backbone_frame_mask=f["template_backbone_frame_mask"],
-                template_pseudo_beta_mask=f["template_pseudo_beta_mask"],
-                template_distogram=f["template_distogram"],
-                template_unit_vector=f["template_unit_vector"],
-                template_restype=f["template_restype"],
-                asym_id=f["asym_id"],
-            )
-        elif "has_distogram_condition" in f:
-            # rfscore template embedding (noisy ground-truth template as input)
-            return embed_templates_like_rfscore(
-                has_distogram_condition=f["has_distogram_condition"],  # [I, I]
-                distogram_condition_noise_scale=f[
-                    "distogram_condition_noise_scale"
-                ],  # [I]
-                distogram_condition=f[
-                    "distogram_condition"
-                ],  # [I, I, 64], where 64 is the number of distogram bins
-            )
+        # rfscore template embedding (noisy ground-truth template as input)
+        embedded_templates = embed_templates_like_rfscore(
+            has_distogram_condition=f["has_distogram_condition"],  # [I, I]
+            distogram_condition_noise_scale=f["distogram_condition_noise_scale"],  # [I]
+            distogram_condition=f[
+                "distogram_condition"
+            ],  # [I, I, 64], where 64 is the number of distogram bins
+        )
+
+        return embedded_templates

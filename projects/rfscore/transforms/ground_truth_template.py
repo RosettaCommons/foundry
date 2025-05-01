@@ -218,8 +218,9 @@ def featurize_noised_ground_truth_as_template_distogram(
     noise_scale: Float[Tensor, "n_token"] | float,  # noqa: F821
     distogram_bins: Float[Tensor, "n_bin_edges"],  # noqa: F821
     allowed_chain_types: list[ChainType],
-    mask_inter_molecule_distances: bool = True,
-    p_unconditional: float = 0.0,
+    is_unconditional: bool = False,
+    p_condition_per_token: float = 0.7,
+    p_provide_inter_molecule_distances: float = 0.0,
 ) -> dict[str, Tensor]:  # noqa: F821
     """Add and featurize noised ground truth as a template.
 
@@ -235,10 +236,11 @@ def featurize_noised_ground_truth_as_template_distogram(
             tokens have a chain type in this list will have a distogram condition.
         distogram_bins (Tensor): Bins for discretizing distances in the distogram (in Angstrom).
             Shape: [n_bin].
-        mask_inter_molecule_distances (bool): Whether to mask inter-molecule (inter-chain) distances.
-            Default is True.
-        p_unconditional (float): Probability of discarding all conditioning. Tunable hyperparameter;
-            see Classifier-Free Diffusion Guidance (Ho et al., 2022) for details.
+        is_unconditional (bool): Whether we are sampling unconditionally.
+            See Classifier-Free Diffusion Guidance (Ho et al., 2022) for details.
+        p_condition_per_token (float): Per-token probability of conditioning, for those tokens that satisfy all other conditions.
+        p_provide_inter_molecule_distances (float): Probability of providing inter-molecule (inter-chain) distances.
+            Default is 0.0 (no inter-molecule distances provided).
 
     Returns:
         - distogram_condition_features (dict): A dictionary containing the following features:
@@ -288,9 +290,13 @@ def featurize_noised_ground_truth_as_template_distogram(
         & torch.isfinite(noise).all(dim=-1).numpy()
     )  # [n_token] (bool)
 
-    # With probability `p_unconditional`, discard all conditioning
-    if p_unconditional > 0.0 and np.random.rand() < p_unconditional:
+    # If unconditional, discard all conditioning...
+    if is_unconditional:
         token_to_fill_mask = np.full_like(token_to_fill_mask, False)
+    else:
+        # Probability of masking each token
+        _should_apply_condition = np.random.rand(_n_token) < p_condition_per_token
+        token_to_fill_mask = token_to_fill_mask & _should_apply_condition
 
     token_idxs_to_fill = np.where(token_to_fill_mask)[0]  # [n_token_to_fill] (int)
 
@@ -306,7 +312,7 @@ def featurize_noised_ground_truth_as_template_distogram(
     token_to_fill_mask_II = token_to_fill_mask[:, None] & token_to_fill_mask[None, :]
 
     # ... mask inter-molecule distances, if required
-    if mask_inter_molecule_distances:
+    if np.random.rand() > p_provide_inter_molecule_distances:
         # Create a mask of tokens that belong to different molecules
         is_inter_molecule = (
             atom_array.molecule_id[center_token_mask][:, None]
@@ -359,16 +365,17 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
     distogram.
 
     Args:
-        - noise_scale_distribution (Callable): Function that returns the standard
+        noise_scale_distribution (Callable): Function that returns the standard
             deviation of noise to add to the ground truth coordinates. Should take
             a sequence of dimensions and return a tensor or float. Default is
             af3_noise_scale_distribution.
-        - distogram_bins (Tensor): Bin boundaries for discretizing distances in
+        distogram_bins (Tensor): Bin boundaries for discretizing distances in
             the distogram. Shape [n_bins-1].
-        - allowed_chain_types (list): List of allowed chain types. Default is all chain types.
-        - mask_inter_molecule_distances (bool): Whether to mask inter-molecule (inter-chain)
-            distances. Default is True.
-        - p_unconditional (float): Probability of discarding all conditioning. Default is 0.0.
+        allowed_chain_types (list): List of allowed chain types. Default is all chain types.
+        p_condition_per_token (float): Per-token probability of conditioning, for those tokens that satisfy all other conditions.
+            Default is 1.0 (all tokens have conditions).
+        p_provide_inter_molecule_distances (float): Probability of providing inter-molecule (inter-chain) distances.
+            Default is 0.0 (no inter-molecule distances provided).
 
     Adds the following features to the `feats` dict:
         - "distogram_condition_noise_scale": Noise scale for each
@@ -387,14 +394,14 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
         | TokenGroupNoiseScaleSampler = af3_noise_scale_distribution,
         distogram_bins: torch.Tensor = DEFAULT_DISTOGRAM_BINS,
         allowed_chain_types: list[ChainType] = ChainType.get_all_types(),
-        mask_inter_molecule_distances: bool = True,
-        p_unconditional: float = 0.0,
+        p_condition_per_token: float = 0.7,
+        p_provide_inter_molecule_distances: float = 0.0,
     ):
         self.distogram_bins = distogram_bins
         self.noise_scale_distribution = noise_scale_distribution
-        self.mask_inter_molecule_distances = mask_inter_molecule_distances
+        self.p_provide_inter_molecule_distances = p_provide_inter_molecule_distances
         self.allowed_chain_types = allowed_chain_types
-        self.p_unconditional = p_unconditional
+        self.p_condition_per_token = p_condition_per_token
 
         if not self.allowed_chain_types:
             logger.warning("No chain types allowed; no conditioning will be given.")
@@ -419,8 +426,10 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
             noise_scale=noise_scale,
             allowed_chain_types=self.allowed_chain_types,
             distogram_bins=self.distogram_bins,
-            mask_inter_molecule_distances=self.mask_inter_molecule_distances,
-            p_unconditional=self.p_unconditional,
+            p_provide_inter_molecule_distances=self.p_provide_inter_molecule_distances,
+            is_unconditional=data.get("is_unconditional", False)
+            and data.get("is_inference", False),
+            p_condition_per_token=self.p_condition_per_token,
         )
 
         # Add the template features to the `feats` dict

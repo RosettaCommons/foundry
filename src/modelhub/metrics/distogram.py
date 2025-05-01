@@ -12,15 +12,16 @@ from jaxtyping import Bool, Float
 
 from modelhub.loss.af3_losses import distogram_loss
 from modelhub.metrics.base import Metric
+from modelhub.utils.torch_utils import assert_no_nans
 
 
 @dataclass
 class ComparisonConfig:
     """Configuration for token pair comparisons in distogram metrics."""
 
-    token_a: str = "all"  # 'all', 'atomized', or 'non_atomized'
-    token_b: str = "all"  # 'all', 'atomized', or 'non_atomized'
-    relationship: str = "all"  # 'all', 'inter', or 'intra'
+    token_a: Literal["all", "atomized", "non_atomized"] = "all"
+    token_b: Literal["all", "atomized", "non_atomized"] = "all"
+    relationship: Literal["all", "inter", "intra"] = "all"
 
     def __eq__(self, other):
         """Equality that accounts for token_a/token_b symmetry."""
@@ -42,6 +43,41 @@ class ComparisonConfig:
         if self.relationship != "all":
             name += f"_{self.relationship}"
         return name
+
+    def create_distogram_mask(
+        self, token_rep_atom_array: AtomArrayStack
+    ) -> Bool[np.ndarray, "I I"]:
+        """Create a token-by-token mask indiciating which 2D pairs satisfy the ComparisonConfig's conditions."""
+        type_masks = {
+            "all": np.ones(len(token_rep_atom_array), dtype=bool),
+            "atomized": token_rep_atom_array.atomize,
+            "non_atomized": ~token_rep_atom_array.atomize,
+        }
+        # Create token pair mask
+        if self.token_a == self.token_b:
+            # (Both same)
+            token_pair_mask = np.outer(
+                type_masks[self.token_a], type_masks[self.token_b]
+            )
+        else:
+            # (Different - must be symmetric)
+            token_pair_mask = np.outer(
+                type_masks[self.token_a], type_masks[self.token_b]
+            ) | np.outer(type_masks[self.token_b], type_masks[self.token_a])
+
+        # Apply relationship constraint
+        if self.relationship != "all":
+            intra_mask = np.equal.outer(
+                token_rep_atom_array.pn_unit_iid, token_rep_atom_array.pn_unit_iid
+            )
+            if self.relationship == "intra":
+                # Same chain ("intra")
+                token_pair_mask = token_pair_mask & intra_mask
+            else:
+                # Different chains ("inter")
+                token_pair_mask = token_pair_mask & (~intra_mask)
+
+        return token_pair_mask
 
 
 class DistogramLoss(Metric):
@@ -152,14 +188,12 @@ class DistogramComparisons(Metric):
                 "network_output",
                 "distogram",
             ),  # [I, I, 65], where 65 is the number of bins (64 + 1)
+            "ground_truth_atom_array_stack": "ground_truth_atom_array_stack",
             "X_rep_atoms_I": ("extra_info", "X_rep_atoms_I"),  # [D, I, 3]
             "crd_mask_rep_atoms_I": ("extra_info", "crd_mask_rep_atoms_I"),  # [D, I]
-            "ground_truth_atom_array_stack": "ground_truth_atom_array_stack",
         }
 
-    def __init__(
-        self, comparison_configs: list[ComparisonConfig] | Literal["all"] = None
-    ):
+    def __init__(self, comparison_configs: list[ComparisonConfig] = None):
         """
         Args:
             comparison_configs: List of ComparisonConfig objects defining which comparisons to compute.
@@ -167,70 +201,24 @@ class DistogramComparisons(Metric):
         super().__init__()
 
         if comparison_configs is None:
+            # Default comparisons
             comparison_configs = [
                 ComparisonConfig("atomized", "atomized", "intra"),
                 ComparisonConfig("atomized", "non_atomized", "inter"),
                 ComparisonConfig("non_atomized", "non_atomized", "intra"),
                 ComparisonConfig("all", "all", "all"),
             ]
-        elif comparison_configs == "all":
-            # Generate all possible combinations
-            token_types = ["all", "atomized", "non_atomized"]
-            relationships = ["all", "inter", "intra"]
-
-            comparison_configs = [
-                ComparisonConfig(type_a, type_b, rel)
-                for type_a in token_types
-                for type_b in token_types
-                for rel in relationships
-            ]
 
         # Deduplicate (handle symmetries in token_a/token_b)
         self.comparison_configs = list(set(comparison_configs))
-
-    def _create_distogram_mask_from_comparison_config(
-        self, token_rep_atom_array: AtomArrayStack, config: ComparisonConfig
-    ) -> Bool[np.ndarray, "I I"]:
-        """Create a token-by-token mask indiciating which 2D pairs satisfy the ComparisonConfig's conditions."""
-        type_masks = {
-            "all": np.ones(len(token_rep_atom_array), dtype=bool),
-            "atomized": token_rep_atom_array.atomize,
-            "non_atomized": ~token_rep_atom_array.atomize,
-        }
-
-        # Create token pair mask
-        if config.token_a == config.token_b:
-            # (Both same)
-            token_pair_mask = np.outer(
-                type_masks[config.token_a], type_masks[config.token_b]
-            )
-        else:
-            # (Different - must be symmetric)
-            token_pair_mask = np.outer(
-                type_masks[config.token_a], type_masks[config.token_b]
-            ) | np.outer(type_masks[config.token_b], type_masks[config.token_a])
-
-        # Apply relationship constraint
-        if config.relationship != "all":
-            intra_mask = np.equal.outer(
-                token_rep_atom_array.pn_unit_iid, token_rep_atom_array.pn_unit_iid
-            )
-            if config.relationship == "intra":
-                # Same chain ("intra")
-                token_pair_mask = token_pair_mask & intra_mask
-            else:
-                # Different chains ("inter")
-                token_pair_mask = token_pair_mask & (~intra_mask)
-
-        return token_pair_mask
 
     def compute(
         self,
         X_L: Float[torch.Tensor, "D L 3"],
         trunk_pred_distogram: Float[torch.Tensor, "I I n_bins"],
-        X_rep_atoms_I: Float[torch.Tensor, "D I 3"],
-        crd_mask_rep_atoms_I: Float[torch.Tensor, "D I"],
         ground_truth_atom_array_stack: AtomArrayStack,
+        X_rep_atoms_I: Float[torch.Tensor, "D I 3"] | None = None,
+        crd_mask_rep_atoms_I: Float[torch.Tensor, "D I"] | None = None,
     ) -> dict[str, Any]:
         """Computes the distogram loss for the trunk vs. ground truth and trunk vs. predicted coordinates.
 
@@ -239,9 +227,9 @@ class DistogramComparisons(Metric):
         Args:
             X_L: The predicted coordinates. Shape: [D, L, 3]
             trunk_pred_distogram: The prediction from the DistogramHead, which linearly projects the trunk features. Shape: [I, I, n_bins]
-            X_rep_atoms_I: The ground-truth coordinates of the representative atoms for each token. Shape: [D, I, 3]
-            crd_mask_rep_atoms_I: A boolean mask indicating which representative atoms are present. Shape: [D, I]
             ground_truth_atom_array_stack: The ground-truth atom array stack, one model per diffusion sample. Shape: [D, L]
+            X_rep_atoms_I: The ground-truth coordinates of the representative atoms for each token. Shape: [D, I, 3]. If None, will be inferred from the ground_truth_atom_array_stack.
+            crd_mask_rep_atoms_I: A boolean mask indicating which representative atoms are present. Shape: [D, I]. If None, will be inferred from the ground_truth_atom_array_stack.
         """
         MIN_PAIRS = 15
         results = {}
@@ -249,31 +237,35 @@ class DistogramComparisons(Metric):
         # ... choose the first model, as we only care about 2D distance (frame-invariant)
         ground_truth_atom_array = ground_truth_atom_array_stack[0]
 
-        _token_rep_idxs = torch.from_numpy(
-            get_af3_token_representative_idxs(ground_truth_atom_array)
-        ).to(X_L.device)
-        token_rep_atom_array = ground_truth_atom_array[
-            get_af3_token_representative_idxs(ground_truth_atom_array)
-        ]
+        _token_rep_idxs = get_af3_token_representative_idxs(ground_truth_atom_array)
+        token_rep_idxs = torch.from_numpy(_token_rep_idxs).to(X_L.device)
+        token_rep_atom_array = ground_truth_atom_array[_token_rep_idxs]
 
         # Create 2D coordinate mask for valid pairs of representative atoms
+        if crd_mask_rep_atoms_I is None:
+            # (If not provided, we will use the occupancy mask)
+            crd_mask_rep_atoms_I = torch.from_numpy(
+                token_rep_atom_array.occupancy > 0
+            ).to(X_L.device)
+
         crd_mask_rep_atom_II = crd_mask_rep_atoms_I.unsqueeze(
             -1
         ) * crd_mask_rep_atoms_I.unsqueeze(-2)
 
         # Prepare distograms
         # (From the ground truth)
+        if X_rep_atoms_I is None:
+            # (If not provided, we will use the coordinates of the representative atoms)
+            X_rep_atoms_I = torch.from_numpy(token_rep_atom_array.coord).to(X_L.device)
         binned_distogram_from_ground_truth = bin_distances(X_rep_atoms_I, n_bins=64)
         # (Predicted coordinates are batched, so we build the distogram for each predicted structure)
         binned_distogram_from_pred_coords = bin_distances(
-            X_L[:, _token_rep_idxs], n_bins=64
+            X_L[:, token_rep_idxs], n_bins=64
         )
 
         for config in self.comparison_configs:
             # ... create a token-by-token mask for this config, specifying which 2D pairs to compare
-            token_pair_mask = self._create_distogram_mask_from_comparison_config(
-                token_rep_atom_array, config
-            )
+            token_pair_mask = config.create_distogram_mask(token_rep_atom_array)
             mask = (
                 torch.from_numpy(token_pair_mask).to(X_L.device) & crd_mask_rep_atom_II
             )
@@ -311,5 +303,115 @@ class DistogramComparisons(Metric):
                     for i, loss in enumerate(losses)
                 }
             )
+
+        return results
+
+
+class DistogramEntropy(Metric):
+    """Computes the entropy of the predicted distogram, subset to specific token pairs."""
+
+    @property
+    def kwargs_to_compute_args(self) -> dict[str, Any]:
+        return {
+            "trunk_pred_distogram": (
+                "network_output",
+                "distogram",
+            ),  # [I, I, 65], where 65 is the number of bins (64 + 1)
+            "ground_truth_atom_array_stack": "ground_truth_atom_array_stack",
+            "crd_mask_rep_atoms_I": ("extra_info", "crd_mask_rep_atoms_I"),  # [D, I]
+        }
+
+    def __init__(self, comparison_configs: list[ComparisonConfig] | None = None):
+        """
+        Args:
+            comparison_configs: List of ComparisonConfig objects defining which comparisons to compute.
+                If None, uses predefined configurations for atomized and non-atomized pairs.
+        """
+        super().__init__()
+
+        if comparison_configs is None:
+            # Default comparisons
+            self.comparison_configs = [
+                ComparisonConfig(
+                    token_a="atomized", token_b="atomized", relationship="intra"
+                ),  # Atomized-Atomized Intra
+                ComparisonConfig(
+                    token_a="non_atomized", token_b="non_atomized", relationship="intra"
+                ),  # Non-Atomized-Non-Atomized Intra
+                ComparisonConfig(
+                    token_a="all", token_b="all", relationship="inter"
+                ),  # All-All Inter
+                ComparisonConfig(
+                    token_a="all", token_b="all", relationship="all"
+                ),  # All-All (everything)
+            ]
+        else:
+            # Use provided comparison configurations
+            self.comparison_configs = comparison_configs
+
+    def compute(
+        self,
+        trunk_pred_distogram: Float[torch.Tensor, "I I n_bins"],
+        ground_truth_atom_array_stack: AtomArrayStack,
+        crd_mask_rep_atoms_I: Float[torch.Tensor, "D I"] | None = None,
+    ) -> dict[str, Any]:
+        """Computes the entropy of the predicted distogram distributions for different token pair subsets."""
+        MIN_PAIRS = 15
+        results = {}
+
+        # Get the first model from the atom array stack
+        ground_truth_atom_array = ground_truth_atom_array_stack[0]
+        token_rep_atom_array = ground_truth_atom_array[
+            get_af3_token_representative_idxs(ground_truth_atom_array)
+        ]
+
+        # Create 2D coordinate mask for valid pairs of representative atoms
+        if crd_mask_rep_atoms_I is None:
+            crd_mask_rep_atoms_I = torch.from_numpy(
+                token_rep_atom_array.occupancy > 0
+            ).to(trunk_pred_distogram.device)
+        crd_mask_rep_atom_II = crd_mask_rep_atoms_I.unsqueeze(
+            -1
+        ) * crd_mask_rep_atoms_I.unsqueeze(-2)
+
+        # Compute entropy for each comparison configuration
+        for config in self.comparison_configs:
+            # Create a token-by-token mask for this config, specifying which 2D pairs to analyze
+            token_pair_mask = config.create_distogram_mask(
+                token_rep_atom_array
+            )  # [I, I]
+            mask = (
+                torch.from_numpy(token_pair_mask).to(trunk_pred_distogram.device)
+                & crd_mask_rep_atom_II
+            )  # [I, I]
+
+            if mask.sum() < MIN_PAIRS:
+                # Skip if not enough pairs to avoid diluting our average
+                continue
+
+            # Generate a descriptive name for this config
+            name = str(config)
+
+            # ... convert to probabilities via softmax
+            trunk_pred_distogram_probs = torch.nn.functional.softmax(
+                trunk_pred_distogram, dim=-1
+            )
+
+            # Compute entropy: -sum(p * log(p)) for each distribution
+            # Add small epsilon to avoid log(0)
+            epsilon = 1e-10
+            entropy = -torch.sum(
+                trunk_pred_distogram_probs
+                * torch.log(trunk_pred_distogram_probs + epsilon),
+                dim=-1,
+            )  # [I, I]
+
+            # Apply mask and compute average entropy
+            masked_entropy = entropy * mask
+            assert_no_nans(masked_entropy)
+
+            avg_entropy = masked_entropy.sum() / (mask.sum() + 1e-6)
+
+            results[f"distogram_entropy_{name}"] = avg_entropy.detach().item()
 
         return results

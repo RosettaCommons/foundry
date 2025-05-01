@@ -3,7 +3,7 @@
 name: af3
 
 defaults:
-  - override /datasets: af3
+  - override /datasets: af3_with_distillation
   - override /model: af3
   - override /trainer: af3
 

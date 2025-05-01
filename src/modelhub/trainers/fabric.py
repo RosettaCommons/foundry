@@ -31,6 +31,11 @@ from modelhub.callbacks.base import BaseCallback
 from modelhub.training.EMA import EMA
 from modelhub.training.schedulers import SchedulerConfig
 from modelhub.utils.ddp import RankedLogger
+from modelhub.utils.weights import (
+    CheckpointConfig,
+    WeightLoadingConfig,
+    load_weights_with_policies,
+)
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
@@ -251,18 +256,22 @@ class FabricTrainer(ABC):
         self,
         train_loader: torch.utils.data.DataLoader,
         val_loaders: dict[str, torch.utils.data.DataLoader] | None = None,
-        ckpt_path: Path | str | None = None,
+        ckpt_config: CheckpointConfig | None = None,
     ) -> None:
         """Main entry point for training a model.
 
         Args:
             train_loader: Dataloader for training. Must have an iterable returning batches.
             val_loaders: Dictionary of dataloaders for validation. The keys are the names of the loaders, and the values are the loaders themselves.
-            ckpt_path: Path to either:
-                (a) A previous checkpoint directory from which to resume training from. In this case, we will automatically load
-                    the latest checkpoint using `self.get_latest_checkpoint()`.
-                (b) A specific checkpoint file to load. In this case, we will load the checkpoint from the specified file.
-                If None, no checkpoint is loaded, and the model will be trained from scratch.
+            ckpt_config: Configuration for loading a checkpoint. May contain:
+                - ckpt_path: Path to either:
+                    (a) A previous checkpoint directory from which to resume training from. In this case, we will automatically load
+                        the latest checkpoint using `self.get_latest_checkpoint()`.
+                    (b) A specific checkpoint file to load. In this case, we will load the checkpoint from the specified file.
+                    If None, no checkpoint is loaded, and the model will be trained from scratch.
+                - weight_loading_config: Weight loading policies to apply to the checkpoint weights. If None, default policies are used (copy weights with re-initialization as a fallback
+                    if shapes do not match)
+                - reset_optimizer: Whether to reset the optimizer state when loading a checkpoint. If True, the optimizer will not be loaded from the checkpoint.
         """
         assert (
             hasattr(self, "state") and "model" in self.state
@@ -294,17 +303,29 @@ class FabricTrainer(ABC):
 
         self.setup_model_optimizers_and_schedulers()
 
-        if ckpt_path is not None:
-            ckpt_path = Path(ckpt_path)
+        if ckpt_config is not None:
+            assert hasattr(
+                ckpt_config, "path"
+            ), "Checkpoint path not found in checkpoint configuration!"
+            ckpt_path = Path(ckpt_config.path)
+
             if ckpt_path.is_dir():
                 # If given a directory, load the latest checkpoint from the directory
                 ranked_logger.info(
                     f"Loading latest checkpoint within the directory {ckpt_path}..."
                 )
-                self.load_checkpoint(self.get_latest_checkpoint(ckpt_path))
+                self.load_checkpoint(
+                    self.get_latest_checkpoint(ckpt_path),
+                    weight_loading_config=ckpt_config.weight_loading_config,
+                    reset_optimizer=ckpt_config.reset_optimizer,
+                )
             else:
                 # If given a specific checkpoint file, load that checkpoint
-                self.load_checkpoint(ckpt_path)
+                self.load_checkpoint(
+                    ckpt_path,
+                    weight_loading_config=ckpt_config.weight_loading_config,
+                    reset_optimizer=ckpt_config.reset_optimizer,
+                )
 
             # Increment the global epoch (e.g., if we loaded a checkpoint from [the end of] epoch 5, we should start training at epoch 6)
             self.state["current_epoch"] += 1
@@ -692,48 +713,39 @@ class FabricTrainer(ABC):
         else:
             ranked_logger.warning("Skipping scheduler loading...")
 
-    def _load_model(self, ckpt: Mapping) -> None:
+    def _load_model(
+        self, ckpt: Mapping, weight_loading_config: WeightLoadingConfig | None = None
+    ) -> None:
         """Loads the model state from the checkpoint, handling EMA and size mismatches."""
-
-        def _subset_state_dict_to_valid_params(
-            current_dict: Mapping, ckpt_dict: Mapping, log_prefix: str = ""
-        ) -> dict:
-            """Subset checkpoint to parameters with matching sizes, warn on mismatches."""
-            valid_state_dict = {}
-            for key, ckpt_tensor in ckpt_dict.items():
-                if key not in current_dict:
-                    continue  # Let strict=False handle missing keys
-
-                if ckpt_tensor.size() != current_dict[key].size():
-                    ranked_logger.warning(
-                        f"{log_prefix}Size mismatch for '{key}': "
-                        f"model size {tuple(current_dict[key].size())} vs "
-                        f"checkpoint size {tuple(ckpt_tensor.size())}. "
-                        "Skipping this parameter."
-                    )
-                else:
-                    valid_state_dict[key] = ckpt_tensor
-
-            return valid_state_dict
-
-        # ... load the model, subsetting to parameters with matching sizes
+        # ... load pre-trained weights from the CHECKPOINT into the MODEL (that at this point has random weights)
         model = self.state["model"]
         model.load_state_dict(
-            _subset_state_dict_to_valid_params(model.state_dict(), ckpt["model"]),
-            strict=False,
+            load_weights_with_policies(
+                model=self.state["model"],
+                ckpt=ckpt["model"],
+                config=weight_loading_config,
+            ),
+            strict=True,
         )
 
-    def load_checkpoint(self, ckpt_path: Path | str) -> None:
+    def load_checkpoint(
+        self,
+        ckpt_path: Path | str,
+        weight_loading_config: WeightLoadingConfig | None = None,
+        reset_optimizer: bool = False,
+    ) -> None:
         """Loads a checkpoint from the specified path."""
         # ... load the checkpoint (replaces the state dictionary in-place)
         ranked_logger.info(f"Loading checkpoint from: {ckpt_path}...")
         ckpt = self.fabric.load(ckpt_path)
 
         try:
-            # ... optimize, scheduler, model
-            self._load_optimizer(ckpt)
-            self._load_scheduler(ckpt)
-            self._load_model(ckpt)
+            # ... optimize, scheduler
+            if not reset_optimizer:
+                self._load_optimizer(ckpt)
+                self._load_scheduler(ckpt)
+            # ... model
+            self._load_model(ckpt, weight_loading_config)
 
             # ... stateless keys
             # (We do not want to load the `train_cfg` in this instance, as it may contain different configurations)

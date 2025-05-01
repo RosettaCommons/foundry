@@ -3,7 +3,7 @@
 name: af3-with-confidence
 
 defaults:
-  - override /datasets: af3
+  - override /datasets: af3_with_distillation
   - override /model: af3_with_confidence
   - override /trainer: af3_with_confidence
 

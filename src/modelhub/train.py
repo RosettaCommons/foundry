@@ -8,6 +8,8 @@ import rootutils
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 
+from modelhub.utils.weights import CheckpointConfig
+
 load_dotenv(override=True)
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
@@ -172,13 +174,19 @@ def train(cfg: DictConfig) -> None:
         trainer=trainer, cfg=cfg, model=trainer.state["model"]
     )
 
+    # ... load the checkpoint configuration
+    ckpt_config = None
+    if "ckpt_config" in cfg:
+        ckpt_config = hydra.utils.instantiate(cfg.ckpt_config)
+    elif "ckpt_path" in cfg:
+        # Just a checkpoint path
+        ckpt_config = CheckpointConfig(path=cfg.ckpt_path)
+
     # ... train the model
     ranked_logger.info("Training model...")
-    ckpt_path = cfg.ckpt_path if "ckpt_path" in cfg else None
+
     trainer.fit(
-        train_loader=train_loader,
-        val_loaders=val_loaders,
-        ckpt_path=ckpt_path,
+        train_loader=train_loader, val_loaders=val_loaders, ckpt_config=ckpt_config
     )
 
 

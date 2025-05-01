@@ -13,7 +13,11 @@ from cifutils.constants import (
 from cifutils.enums import ChainType
 from datahub.common import exists
 from datahub.encoding_definitions import RF2AA_ATOM36_ENCODING, AF3SequenceEncoding
-from datahub.transforms.af3_reference_molecule import GetAF3ReferenceMoleculeFeatures
+from datahub.transforms.af3_reference_molecule import (
+    GetAF3ReferenceMoleculeFeatures,
+    GroundTruthConformerPolicy,
+    RandomApplyGroundTruthConformerByChainType,
+)
 from datahub.transforms.atom_array import (
     AddGlobalAtomIdAnnotation,
     AddGlobalTokenIdAnnotation,
@@ -120,17 +124,25 @@ def build_rfscore_transform_pipeline(
     # DNA
     pad_dna_p_skip: float = 0.0,
     # Conditioning
+    p_unconditional: float = 0.2,
+    # (Templates)
     train_template_noise_scales: dict | DictConfig = {
-        "atomized": 10.0,
-        "not_atomized": 10.0,
+        "atomized": 1e-4,
+        "not_atomized": 1.0,
     },
     allowed_chain_types_for_conditioning: list[int | str | ChainType]
     | None = None,  # None = no conditioning
     inference_template_noise_scales: dict | DictConfig = {
-        "atomized": 1.0,
-        "not_atomized": 5.0,
+        "atomized": 1e-4,
+        "not_atomized": 1e-4,
     },
-    p_unconditional: float = 0.0,
+    p_condition_per_token: float = 0.5,
+    p_provide_inter_molecule_distances: float = 0.0,
+    # (Reference Conformer)
+    p_give_non_polymer_ref_conf: float = 0.2,
+    p_give_polymer_ref_conf: float = 0.05,
+    # (Skip MSA)
+    p_skip_msa: float = 0.3,
 ):
     """Build the AF3 pipeline with specified parameters.
 
@@ -185,6 +197,14 @@ def build_rfscore_transform_pipeline(
         AddData(
             {"is_inference": is_inference, "run_confidence_head": run_confidence_head}
         ),
+        # Set the "unconditional" key stochastically to True or False
+        RandomRoute(
+            transforms=[
+                AddData({"is_unconditional": True}),
+                AddData({"is_unconditional": False}),
+            ],
+            probs=[p_unconditional, 1 - p_unconditional],
+        ),
         RemoveHydrogens(),
         FilterToSpecifiedPNUnits(
             extra_info_key_with_pn_unit_iids_to_keep="all_pn_unit_iids_after_processing"
@@ -218,7 +238,9 @@ def build_rfscore_transform_pipeline(
         AddWithinPolyResIdxAnnotation(),
     ]
 
-    # Crop
+    # +----------------------------------------------+
+    # +------------------ CROPPING ------------------+
+    # +----------------------------------------------+
 
     # ... crop around our query pn_unit(s) early, since we don't need the full structure moving forward
     cropping_transform = RandomRoute(
@@ -249,6 +271,10 @@ def build_rfscore_transform_pipeline(
         )
     )
 
+    # +-----------------------------------------------------------+
+    # +------------------ GROUND TRUTH TEMPLATE ------------------+
+    # +-----------------------------------------------------------+
+
     # Ground truth template noising
     training_featurize_noised_ground_truth_as_template_distogram = FeaturizeNoisedGroundTruthAsTemplateDistogram(
         noise_scale_distribution=TokenGroupNoiseScaleSampler(
@@ -278,7 +304,8 @@ def build_rfscore_transform_pipeline(
             )
         ),
         allowed_chain_types=allowed_chain_types_for_conditioning,
-        p_unconditional=p_unconditional,
+        p_condition_per_token=p_condition_per_token,
+        p_provide_inter_molecule_distances=p_provide_inter_molecule_distances,
     )
 
     inference_mask_and_sampling_fns = []
@@ -307,7 +334,8 @@ def build_rfscore_transform_pipeline(
                 mask_and_sampling_fns=inference_mask_and_sampling_fns,
             ),
             allowed_chain_types=allowed_chain_types_for_conditioning,
-            p_unconditional=p_unconditional,
+            p_condition_per_token=1.0,  # always condition during inference
+            p_provide_inter_molecule_distances=p_provide_inter_molecule_distances,
         )
     )
 
@@ -318,6 +346,20 @@ def build_rfscore_transform_pipeline(
                 True: inference_featurize_noised_ground_truth_as_template_distogram,
                 False: training_featurize_noised_ground_truth_as_template_distogram,
             },
+        )
+    )
+
+    # +----------------------------------------------------------------------+
+    # +------------------ GROUND TRUTH REFERENCE CONFORMER ------------------+
+    # +----------------------------------------------------------------------+
+
+    transforms.append(
+        RandomApplyGroundTruthConformerByChainType(
+            chain_type_probabilities={
+                tuple(ChainType.get_polymers()): p_give_polymer_ref_conf,
+                tuple(ChainType.get_non_polymers()): p_give_non_polymer_ref_conf,
+            },
+            policy=GroundTruthConformerPolicy.ADD,
         )
     )
 
@@ -337,12 +379,25 @@ def build_rfscore_transform_pipeline(
 
     transforms += [
         # ... load and pair MSAs
-        LoadPolymerMSAs(
-            protein_msa_dirs=protein_msa_dirs,
-            rna_msa_dirs=rna_msa_dirs,
-            max_msa_sequences=max_msa_sequences,  # maximum number of sequences to load (we later subsample further)
-            msa_cache_dir=Path(msa_cache_dir) if exists(msa_cache_dir) else None,
-            use_paths_in_chain_info=True,  # if there are paths specified in the `chain_info` for a given chain, use them
+        # (With probability p_skip_msa, if `is_unconditional` is False, skip loading MSAs)
+        ConditionalRoute(
+            condition_func=lambda data: not data["is_unconditional"] and not data["is_inference"] and np.random.rand() < p_skip_msa,
+            transform_map={
+                True: LoadPolymerMSAs(
+                    protein_msa_dirs=None,
+                    rna_msa_dirs=None,
+                    use_paths_in_chain_info=False,
+                ),
+                False: LoadPolymerMSAs(
+                    protein_msa_dirs=protein_msa_dirs,
+                    rna_msa_dirs=rna_msa_dirs,
+                    max_msa_sequences=max_msa_sequences,  # maximum number of sequences to load (we later subsample further)
+                    msa_cache_dir=Path(msa_cache_dir)
+                    if exists(msa_cache_dir)
+                    else None,
+                    use_paths_in_chain_info=True,  # if there are paths specified in the `chain_info` for a given chain, use them
+                ),
+            },
         ),
         PairAndMergePolymerMSAs(dense=dense_msa),
         # ... encode MSA to AF-3 format
@@ -422,7 +477,7 @@ def build_rfscore_transform_pipeline(
     ]
     if run_confidence_head:
         keys_to_keep.append("confidence_feats")
-    if return_atom_array:
+    if return_atom_array and is_inference:
         keys_to_keep.append("atom_array")
 
     transforms += [

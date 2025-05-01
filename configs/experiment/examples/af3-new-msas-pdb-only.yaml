@@ -5,7 +5,7 @@ name: af3-new-msas-pdb-only
 # For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
 defaults:
   - override /trainer: af3
-  - override /datasets: af3
+  - override /datasets: af3_pdb_only
   - override /model: af3
 
 tags:
@@ -23,12 +23,6 @@ paths:
       - {"dir": "/projects/msa/rf2aa_af3/missing_msas_through_2024_08_12", "extension": ".msa0.a3m.gz", "directory_depth": 2}
 
 datasets:
-  train: 
-    pdb:
-      # We must adjust the probability, since we set the monomer distillation dataset to null
-      probability: 1.0
-    # Datasets set to null are ignored
-    monomer_distillation: null
   val: 
     af3_validation:
       dataset:

@@ -7,7 +7,7 @@ name: quick-af3
 # For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
 defaults:
   - override /trainer: af3
-  - override /datasets: af3
+  - override /datasets: af3_pdb_only
   - override /model: af3
 
 tags:
@@ -40,9 +40,6 @@ datasets:
               filters:
                 - "num_polymer_pn_units <= 2" 
                 - "cluster.notnull()"
-    # Datasets set to null are ignored
-    monomer_distillation: null
-    na_complex_distillation: null
   val: 
     af3_validation:
       dataset:
