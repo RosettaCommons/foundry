@@ -77,7 +77,7 @@ IncludeCmd: yes
    pip uninstall deepspeed -y # Avoid interactive prompts
 
    # (Flags for building the Evoformer attention)
-   export TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9"
+   export TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9;9.0"
    export DS_BUILD_EVOFORMER_ATTN=1
    export CUTLASS_PATH=/opt/cutlass/
 
