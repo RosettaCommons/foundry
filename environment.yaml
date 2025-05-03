@@ -48,7 +48,7 @@ dependencies:
     - biopython>=1.83,<2  # Collection of Python modules for bioinformatics
     - py3Dmol>=2.2.1,<3  # Python wrapper for 3Dmol.js
     - pymol-remote>=0.0.5  # Remote access to PyMOL from Python (has no dependencies)
-    - git+https://github.com/biotite-dev/biotite.git@fab175e7ba4608d9613f092ad4e080661c6cc816
+    - git+https://github.com/biotite-dev/biotite.git@v1.2.0  # Biotite is a Python library for bioinformatics
     - hydride==1.2.3 #biotite supported hydrogen addition
     # ... logging
     - wandb>=0.15.10,<1

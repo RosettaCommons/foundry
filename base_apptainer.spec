@@ -106,6 +106,13 @@ IncludeCmd: yes
 
    export PATH=$PATH:/usr/local/cuda/bin
    export CUTLASS_PATH=/opt/cutlass/
+   
+   # (Flags to increase accessible GPU memory)
+   export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+   # (Turn off NVLink)
+   export NCCL_P2P_DISABLE=1
+
 
 %runscript
    # NOTE: The %runscript is invoked when the container is run without specifying a different command. 
