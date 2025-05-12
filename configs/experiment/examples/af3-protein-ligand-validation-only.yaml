@@ -21,6 +21,3 @@ datasets:
         dataset:
             filters:
               - "interfaces_to_score.str.contains('protein-ligand')"
-              # Exclude example where RDKit errors
-              - example_id not in ["{['validation']}{7qbs}{1}{[]}"]
-

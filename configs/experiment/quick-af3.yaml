@@ -16,7 +16,10 @@ tags:
 
 project: test
 
-ckpt_path: /net/tukwila/ncorley/modelhub/inference/rf2aa-af3-repro7_ep680.pt
+ckpt_config:
+  _target_: modelhub.utils.weights.CheckpointConfig
+  path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt
+  reset_optimizer: true
 
 datasets:
   train:
@@ -30,7 +33,7 @@ datasets:
               # A small dataframe that loads quickly
               data: /projects/ml/datahub/dfs/pdb/test_dfs/interfaces_df.parquet
               filters:
-                - "num_polymer_pn_units <= 2" 
+                - "total_num_atoms_in_unprocessed_assembly <= 3000" 
                 - "cluster.notnull()"
         pn_unit:
           dataset:
@@ -38,7 +41,7 @@ datasets:
               # A small dataframe that loads quickly
               data: /projects/ml/datahub/dfs/pdb/test_dfs/pn_units_df.parquet
               filters:
-                - "num_polymer_pn_units <= 2" 
+                - "total_num_atoms_in_unprocessed_assembly <= 3000" 
                 - "cluster.notnull()"
   val: 
     af3_validation:

@@ -10,7 +10,7 @@ defaults:
   - gpu
 
 datasets: 
-  # you can add specific example IDs here to load a subset of the dataset (training)
+  # you can add specific example IDs here to load a subset of the dataset (only training supported; PR's welcome to generalize to validation)
   subset_to_example_ids:
     - "{['pdb', 'pn_units']}{3px1}{1}{['A_3']}"
   val: null

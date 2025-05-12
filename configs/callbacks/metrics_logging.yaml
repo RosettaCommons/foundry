@@ -5,11 +5,6 @@ store_validation_metrics_in_df_callback:
 
 log_af3_validation_metrics_callback:
     _target_: modelhub.callbacks.metrics_logging.LogAF3ValidationMetricsCallback
-    metrics_to_log: 
-        # Only logs if present in the metric output dictionary
-        # Must be subset of metrics_to_save
-        - by_type_lddt
-        - all_atom_lddt
-        - distogram_loss
-        - distogram_comparisons
-        - chiral_loss
+    # Only logs if present in the metric output dictionary
+    # Must be subset of metrics_to_save
+    metrics_to_log:  "all"

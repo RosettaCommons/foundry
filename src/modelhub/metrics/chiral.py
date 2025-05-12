@@ -19,9 +19,9 @@ def calc_chiral_metrics_masked(
     mask: Bool[torch.Tensor, "I"],
 ):
     """Calculate metrics for chiral centers, including:
-        - number of chiral centers
-        - mean squared error in dihedral angles
-        - percentage of correctly predicted chirality
+        - n_chiral_centers (B): number of chiral centers in the structure
+        - chiral_loss_mean (B): mean of the squared errors of chiral angles
+        - percent_correct_chirality (B): percentage of correctly predicted chiral centers
 
     Args:
         pred: predicted coords (B, L, :, 3)
@@ -76,7 +76,7 @@ def calc_chiral_metrics_masked(
     l = torch.square(diff[:, is_valid_chiral_center]).sum(dim=-1)  # [B]
 
     return {
-        "chiral_loss_sum": l,  # [B]
+        "chiral_loss_mean": l / mask.sum(),  # [B]
         "n_chiral_centers": is_valid_chiral_center.sum(dim=-1),  # [B]
         "percent_correct_chirality": percent_correct_chirality,  # [B]
     }
@@ -85,7 +85,7 @@ def calc_chiral_metrics_masked(
 def compute_chiral_metrics(
     predicted_atom_array_stack: AtomArrayStack | AtomArray,
     ground_truth_atom_array_stack: AtomArrayStack | AtomArray,
-    chiral_feats: Float[torch.Tensor, "n_chiral 5"] = None,
+    chiral_feats: Float[torch.Tensor, "n_chiral 5"] | None = None,
 ):
     """Compute chiral metrics from the predicted and ground truth atom arrays.
 
@@ -146,7 +146,7 @@ def compute_chiral_metrics(
                 "n_chiral_centers"
             ].item()
             chiral_metrics[f"{category}_chiral_loss_mean"] = (
-                (result["chiral_loss_sum"] / result["n_chiral_centers"]).mean().item()
+                result["chiral_loss_mean"].mean().item()
             )
             chiral_metrics[f"{category}_percent_correct_chirality"] = (
                 result["percent_correct_chirality"].mean().item()

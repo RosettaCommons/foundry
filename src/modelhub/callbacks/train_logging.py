@@ -37,6 +37,9 @@ class PrintExampleIDBeforeForwardPassCallback(BaseCallback):
     WARNING: Spams the console. Use only for debugging purposes.
     """
 
+    def __init__(self, rank_zero_only: bool = True):
+        self.logger = RankedLogger(__name__, rank_zero_only=rank_zero_only)
+
     def on_train_batch_start(self, batch: Any, batch_idx: int, trainer: Any):
         example_id = batch[0]["example_id"]
 
@@ -49,6 +52,7 @@ class PrintExampleIDBeforeForwardPassCallback(BaseCallback):
 
         safe_print(
             f"{rank_info} {epoch_batch_info} - {example_id_info}",
+            logger=self.logger,
         )
 
 

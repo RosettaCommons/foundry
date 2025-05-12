@@ -162,12 +162,15 @@ class AF3Trainer(FabricTrainer):
             d=diffusion_batch_size,
         )  # [L] -> [D, L] with broadcasting
 
-        return {
+        loss_extra_info = {
             "X_gt_L": X_gt_L,  # [D, L, 3]
             "crd_mask_L": crd_mask_L,  # [D, L]
-            "X_rep_atoms_I": example["ground_truth"]["coord_token_lvl"],  # [D, I, 3]
-            "crd_mask_rep_atoms_I": example["ground_truth"]["mask_token_lvl"],  # [D, I]
         }
+
+        # ... merge with ground_truth key
+        loss_extra_info.update(example["ground_truth"])
+
+        return loss_extra_info
 
     def _assemble_metrics_extra_info(self, example: dict, network_output: dict) -> dict:
         """Prepares the extra info for the metrics"""

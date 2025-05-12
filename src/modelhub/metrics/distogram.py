@@ -87,8 +87,8 @@ class DistogramLoss(Metric):
     def kwargs_to_compute_args(self) -> dict[str, Any]:
         return {
             "pred_distogram": ("network_output", "distogram"),
-            "X_rep_atoms_I": ("extra_info", "X_rep_atoms_I"),
-            "crd_mask_rep_atoms_I": ("extra_info", "crd_mask_rep_atoms_I"),
+            "X_rep_atoms_I": ("extra_info", "coord_token_lvl"),
+            "crd_mask_rep_atoms_I": ("extra_info", "mask_token_lvl"),
         }
 
     def __init__(self):
@@ -189,11 +189,11 @@ class DistogramComparisons(Metric):
                 "distogram",
             ),  # [I, I, 65], where 65 is the number of bins (64 + 1)
             "ground_truth_atom_array_stack": "ground_truth_atom_array_stack",
-            "X_rep_atoms_I": ("extra_info", "X_rep_atoms_I"),  # [D, I, 3]
-            "crd_mask_rep_atoms_I": ("extra_info", "crd_mask_rep_atoms_I"),  # [D, I]
+            "X_rep_atoms_I": ("extra_info", "coord_token_lvl"),  # [D, I, 3]
+            "crd_mask_rep_atoms_I": ("extra_info", "mask_token_lvl"),  # [D, I]
         }
 
-    def __init__(self, comparison_configs: list[ComparisonConfig] = None):
+    def __init__(self, comparison_configs: list[ComparisonConfig] | None = None):
         """
         Args:
             comparison_configs: List of ComparisonConfig objects defining which comparisons to compute.
@@ -318,7 +318,7 @@ class DistogramEntropy(Metric):
                 "distogram",
             ),  # [I, I, 65], where 65 is the number of bins (64 + 1)
             "ground_truth_atom_array_stack": "ground_truth_atom_array_stack",
-            "crd_mask_rep_atoms_I": ("extra_info", "crd_mask_rep_atoms_I"),  # [D, I]
+            "crd_mask_rep_atoms_I": ("extra_info", "mask_token_lvl"),  # [D, I]
         }
 
     def __init__(self, comparison_configs: list[ComparisonConfig] | None = None):

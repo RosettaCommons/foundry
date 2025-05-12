@@ -31,6 +31,7 @@ dataset:
       - n_nuc
       - n_ligand
       - n_peptide
+      - total_num_atoms_in_unprocessed_assembly
       # interface specific columns
       - pn_unit_1_iid
       - pn_unit_2_iid

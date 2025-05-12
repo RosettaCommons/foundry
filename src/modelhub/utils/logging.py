@@ -7,7 +7,6 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.tree import Tree
 from torch import nn
-from wandb.integration.lightning.fabric import WandbLogger
 
 from modelhub.utils.ddp import RankedLogger
 
@@ -92,12 +91,6 @@ def log_hyperparameters_with_all_loggers(
         except NotImplementedError:
             pass
 
-        # ... if the logger is a WandbLogger, `watch` the model so that we can track gradients, utilization, etc.
-        # (NOTE: W&B ensures only rank 0 watches the model internally)
-        # See: https://docs.wandb.ai/ref/python/watch/
-        if isinstance(logger, WandbLogger):
-            logger.watch(model)
-
 
 def condense_count_columns_of_grouped_df(df: pd.DataFrame) -> pd.DataFrame:
     """Returns modified DF with single Count column if valid, otherwise original DF.
@@ -155,14 +148,20 @@ def table_from_df(df: pd.DataFrame, title: str) -> Table:
     return table
 
 
-def safe_print(obj: Any, console_width=100) -> None:
+def safe_print(obj: Any, console_width=100, logger: Any | None = None) -> None:
     """Print a Rich object in a console- and logger-safe manner."""
     console = Console(force_terminal=False, color_system=None, width=console_width)
 
     # Capture the table as a string and log it
     with console.capture() as capture:
         console.print(obj)
-    ranked_logger.info(f"\n{capture.get()}")
+
+    if logger:
+        # Use the provided logger
+        logger.info(f"\n{capture.get()}")
+    else:
+        # Use the default ranked logger
+        ranked_logger.info(f"\n{capture.get()}")
 
 
 def print_df_as_table(df: pd.DataFrame, title: str, console_width: int = 100) -> None:
