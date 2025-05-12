@@ -660,8 +660,8 @@ class DistogramLoss(nn.Module):
 
     def forward(self, network_input, network_output, loss_input):
         pred_distogram = network_output["distogram"]
-        X_rep_atoms_I = loss_input["X_rep_atoms_I"]
-        crd_mask_rep_atoms_I = loss_input["crd_mask_rep_atoms_I"]
+        X_rep_atoms_I = loss_input["coord_token_lvl"]
+        crd_mask_rep_atoms_I = loss_input["mask_token_lvl"]
         loss = distogram_loss(
             pred_distogram, X_rep_atoms_I, crd_mask_rep_atoms_I, self.cce_loss
         )
