@@ -215,41 +215,44 @@ def af3_noise_scale_distribution_wrapped(
 def featurize_noised_ground_truth_as_template_distogram(
     atom_array: AtomArray,
     *,
-    noise_scale: Float[Tensor, "n_token"] | float,  # noqa: F821
-    distogram_bins: Float[Tensor, "n_bin_edges"],  # noqa: F821
+    noise_scale: Float[Tensor, "n_token"] | float,
+    distogram_bins: Float[Tensor, "n_bin_edges"],
     allowed_chain_types: list[ChainType],
     is_unconditional: bool = False,
     p_condition_per_token: float = 0.7,
     p_provide_inter_molecule_distances: float = 0.0,
-) -> dict[str, Tensor]:  # noqa: F821
-    """Add and featurize noised ground truth as a template.
+) -> dict[str, Tensor]:
+    """Featurize noised ground truth as a template distogram for conditioning.
 
     Used to leak ground-truth information into the model.
 
     Args:
-        atom_array (AtomArray): The input atom array.
+        atom_array (AtomArray): The input atom array. Must have 'chain_type', 'occupancy', and 'molecule_id' annotations.
         noise_scale (Tensor | float): Standard deviation of the noise to add to the ground truth.
             Different tokens may have different noise scales (e.g. one noise scale for
             side-chains, one for ligand atoms and one for backbone atoms).
             Units are in Angstrom. If given as tensor, must be of shape [n_token] (float).
-        allowed_chain_types (list): List of allowed chain types. Only token pairs where both
+        allowed_chain_types (list): List of allowed chain types. Only token pairs where BOTH
             tokens have a chain type in this list will have a distogram condition.
         distogram_bins (Tensor): Bins for discretizing distances in the distogram (in Angstrom).
             Shape: [n_bin].
         is_unconditional (bool): Whether we are sampling unconditionally.
             See Classifier-Free Diffusion Guidance (Ho et al., 2022) for details.
-        p_condition_per_token (float): Per-token probability of conditioning, for those tokens that satisfy all other conditions.
-        p_provide_inter_molecule_distances (float): Probability of providing inter-molecule (inter-chain) distances.
-            Default is 0.0 (no inter-molecule distances provided).
+        p_condition_per_token (float, optional):
+            Probability of conditioning each eligible token. Default: 0.7.
+        p_provide_inter_molecule_distances (float, optional):
+            Probability of providing inter-molecule (inter-chain) distances. Default: 0.0 (mask all inter-molecule pairs).
 
     Returns:
-        - distogram_condition_features (dict): A dictionary containing the following features:
-            - "distogram_condition_noise_scale": The noise scale for each token.
-                Shape: [n_token] (float).
-            - "has_distogram_condition": A mask indicating which pairs of tokens have a distogram condition.
-                Shape: [n_token, n_token] (bool).
-            - "distogram_condition": The distogram condition for each pair of tokens.
-                Shape: [n_token, n_token, n_bin] (float).
+        dict[str, Tensor]:
+            Dictionary with the following keys:
+                - 'distogram_condition_noise_scale': Float[Tensor, "n_token"]. Noise scale for each token (0 for unconditioned tokens).
+                - 'has_distogram_condition': Bool[Tensor, "n_token n_token"]. Mask indicating which token pairs are conditioned.
+                - 'distogram_condition': Float[Tensor, "n_token n_token n_bins"]. One-hot encoded distogram for each token pair.
+
+    NOTE:
+        - We use the center atom for each token (CA for proteins, C1' for nucleic acids) in the token-level conditioning.
+        - If a token is not conditioned, its noise scale is set to 0 and its pairwise distances are masked.
     """
     MASK_VALUE = float("nan")
 
@@ -323,33 +326,28 @@ def featurize_noised_ground_truth_as_template_distogram(
         token_to_fill_mask_II[is_inter_molecule] = False
         template_distogram[is_inter_molecule] = MASK_VALUE
 
-    # ... bucketize the distogram (NOTE: `nan`s get grouped into the last (highest) bin)
-    template_distogram = torch.bucketize(
-        template_distogram,
-        boundaries=distogram_bins,
-    )
-    n_bins = len(distogram_bins) + 1
-    template_distogram = torch.nn.functional.one_hot(
-        template_distogram, num_classes=n_bins
-    ).to(torch.float32)  # We don't need int64 precision
+    # Discretize distances into bins (NaNs go to last bin)
+    template_distogram_binned: Tensor = torch.bucketize(
+        template_distogram, boundaries=distogram_bins
+    )  # (n_token, n_token)
+    n_bins: int = len(distogram_bins) + 1
+    template_distogram_onehot: Float[Tensor, "n_token n_token n_bins"] = torch.nn.functional.one_hot(
+        template_distogram_binned, num_classes=n_bins
+    ).to(torch.float32)
 
-    # ... expand noise scale to provide it for embedding in the model
-    noise_scale = (
+    # Expand noise_scale to (n_token,) if needed
+    expanded_noise_scale: Float[Tensor, "n_token"] = (
         noise_scale.expand(_n_token)
         if isinstance(noise_scale, Tensor)
         else torch.full_like(noise, fill_value=noise_scale)
     )
+    # Set noise scale to 0 for unconditioned tokens
+    expanded_noise_scale[~token_to_fill_mask] = 0.0
 
-    # ... set noise scale to zero for tokens without distogram condition
-    # (That way, we can at least be consistent with the noise scale for the tokens that are masked)
-    noise_scale[~token_to_fill_mask] = 0.0
-
-    out = {
-        "distogram_condition_noise_scale": noise_scale,  # [n_token] (float)
-        "has_distogram_condition": torch.as_tensor(
-            token_to_fill_mask_II, dtype=torch.bool
-        ),  # [n_token, n_token] (bool)
-        "distogram_condition": template_distogram,  # [n_token, n_token, n_bins] (float)
+    out: dict[str, Tensor] = {
+        "distogram_condition_noise_scale": expanded_noise_scale,  # (n_token,)
+        "has_distogram_condition": torch.as_tensor(token_to_fill_mask_II, dtype=torch.bool),  # (n_token, n_token)
+        "distogram_condition": template_distogram_onehot,  # (n_token, n_token, n_bins)
     }
 
     assert_no_nans(out, msg="Conditioning features contain NaNs!")

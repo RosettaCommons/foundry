@@ -81,12 +81,7 @@ from datahub.transforms.rdkit_utils import GetRDKitChiralCenters
 from datahub.transforms.symmetry import FindAutomorphismsWithNetworkX
 from omegaconf import DictConfig
 
-from projects.rfscore.transforms.ground_truth_template import (
-    FeaturizeNoisedGroundTruthAsTemplateDistogram,
-    TokenGroupNoiseScaleSampler,
-    af3_noise_scale_distribution_wrapped,
-    af3_noise_scale_to_noise_level,
-)
+from projects.rfscore.pipelines.composed import build_ground_truth_distogram_transform
 
 
 def build_rfscore_transform_pipeline(
@@ -276,76 +271,13 @@ def build_rfscore_transform_pipeline(
     # +-----------------------------------------------------------+
 
     # Ground truth template noising
-    training_featurize_noised_ground_truth_as_template_distogram = FeaturizeNoisedGroundTruthAsTemplateDistogram(
-        noise_scale_distribution=TokenGroupNoiseScaleSampler(
-            mask_and_sampling_fns=(
-                (
-                    # For each atomized token, sample up to train_template_noise_scales["atomized"] noise
-                    # from the wrapped AF-3 noise scale distribution
-                    lambda arr: arr.atomize,
-                    partial(
-                        af3_noise_scale_distribution_wrapped,
-                        upper_noise_level=af3_noise_scale_to_noise_level(
-                            train_template_noise_scales["atomized"]
-                        ).item(),
-                    ),
-                ),
-                (
-                    # For each non-atomized token, sample up to train_template_noise_scales["not_atomized"] noise
-                    # from the wrapped AF-3 noise scale distribution
-                    lambda arr: ~arr.atomize,
-                    partial(
-                        af3_noise_scale_distribution_wrapped,
-                        upper_noise_level=af3_noise_scale_to_noise_level(
-                            train_template_noise_scales["not_atomized"]
-                        ).item(),
-                    ),
-                ),
-            )
-        ),
-        allowed_chain_types=allowed_chain_types_for_conditioning,
-        p_condition_per_token=p_condition_per_token,
-        p_provide_inter_molecule_distances=p_provide_inter_molecule_distances,
-    )
-
-    inference_mask_and_sampling_fns = []
-
-    if inference_template_noise_scales["atomized"] is not None:
-        inference_mask_and_sampling_fns.append(
-            (
-                lambda arr: arr.atomize,
-                lambda size: torch.ones(size)
-                * inference_template_noise_scales["atomized"],
-            )
-        )
-
-    if inference_template_noise_scales["not_atomized"] is not None:
-        inference_mask_and_sampling_fns.append(
-            (
-                lambda arr: ~arr.atomize,
-                lambda size: torch.ones(size)
-                * inference_template_noise_scales["not_atomized"],
-            )
-        )
-
-    inference_featurize_noised_ground_truth_as_template_distogram = (
-        FeaturizeNoisedGroundTruthAsTemplateDistogram(
-            noise_scale_distribution=TokenGroupNoiseScaleSampler(
-                mask_and_sampling_fns=inference_mask_and_sampling_fns,
-            ),
-            allowed_chain_types=allowed_chain_types_for_conditioning,
-            p_condition_per_token=1.0,  # always condition during inference
-            p_provide_inter_molecule_distances=p_provide_inter_molecule_distances,
-        )
-    )
-
     transforms.append(
-        ConditionalRoute(
-            condition_func=lambda data: data.get("is_inference", False),
-            transform_map={
-                True: inference_featurize_noised_ground_truth_as_template_distogram,
-                False: training_featurize_noised_ground_truth_as_template_distogram,
-            },
+        build_ground_truth_distogram_transform(
+            template_noise_scales=train_template_noise_scales,
+            allowed_chain_types_for_conditioning=allowed_chain_types_for_conditioning,
+            p_condition_per_token=p_condition_per_token,
+            p_provide_inter_molecule_distances=p_provide_inter_molecule_distances,
+            is_inference=is_inference,
         )
     )
 
