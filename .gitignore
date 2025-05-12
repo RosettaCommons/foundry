@@ -165,12 +165,8 @@ cython_debug/
 
 # VS Code
 .vscode
+.cursor
 .history/
-
-# Slurm
-*/slurm_logs/
-*.err
-*.log
 
 # Ruff
 ruff.toml

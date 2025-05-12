@@ -18,7 +18,7 @@ dependencies:
   - rdkit>=2024.3.5
   - openbabel=3.1.1 
   - pip:
-    # Project-related dependencies
+    # Project-related dependencies
     # ... generic tools
     - GitPython>=3.0.0,<4  # GitPython is a Python library used to interact with Git repositories
     - cython>=3.0.0,<4  # Cython compiler for C extensions

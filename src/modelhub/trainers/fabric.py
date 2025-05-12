@@ -34,6 +34,7 @@ from modelhub.utils.ddp import RankedLogger
 from modelhub.utils.weights import (
     CheckpointConfig,
     WeightLoadingConfig,
+    freeze_parameters_with_config,
     load_weights_with_policies,
 )
 
@@ -62,6 +63,7 @@ class FabricTrainer(ABC):
         limit_val_batches: int | float = float("inf"),
         prevalidate: bool = False,
         nccl_timeout: int = 3200,
+        find_unused_parameters: bool = False,
     ) -> None:
         """Base Trainer class built around Lightning Fabric.
 
@@ -93,6 +95,8 @@ class FabricTrainer(ABC):
                 Helpful for debugging; should NOT be used when training production models.
             prevalidate: Whether to run validation before training starts (default: False).
             nccl_timeout: Timeout for NCCL operations (default: 3200). Only used with DDP strategy.
+            find_unused_parameters: Whether to let DDP find and skip gradient synchronization for unused parameters in the model (default: False). NOTE: Setting to True will incur a performance penalty,
+                but allow for training for bespoke use cases where parts of the model are frozen.
 
         References:
             (1) Fabric Arguments (https://lightning.ai/docs/fabric/stable/api/fabric_args.html)
@@ -102,7 +106,10 @@ class FabricTrainer(ABC):
         """
         # DDP strategy requires a manual timeout higher than the default
         if strategy == "ddp":
-            strategy = DDPStrategy(timeout=timedelta(seconds=nccl_timeout))
+            strategy = DDPStrategy(
+                timeout=timedelta(seconds=nccl_timeout),
+                find_unused_parameters=find_unused_parameters,
+            )
 
         # See (1) for initialization arguments for Fabric()
         self.fabric = L.Fabric(
@@ -325,6 +332,17 @@ class FabricTrainer(ABC):
                     ckpt_path,
                     weight_loading_config=ckpt_config.weight_loading_config,
                     reset_optimizer=ckpt_config.reset_optimizer,
+                )
+
+            # Apply parameter freezing if a freezing config is provided
+            if getattr(ckpt_config, "parameter_freezing_config", None) is not None:
+                ranked_logger.info(
+                    "Applying parameter freezing according to CheckpointConfig..."
+                )
+                freeze_parameters_with_config(
+                    # We must access the model through "module", since the model may be wrapped
+                    self.state["model"].module,
+                    ckpt_config.parameter_freezing_config,
                 )
 
             # Increment the global epoch (e.g., if we loaded a checkpoint from [the end of] epoch 5, we should start training at epoch 6)

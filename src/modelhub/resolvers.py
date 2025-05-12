@@ -1,9 +1,28 @@
-"""Resolvers for Hydra configuration files."""
+"""Resolvers for Hydra configuration files.
+
+Documentation on custom resolvers:
+- https://omegaconf.readthedocs.io/en/latest/custom_resolvers.html
+"""
 
 import importlib
 
 from beartype.typing import Any
 from cifutils.enums import ChainType, ChainTypeInfo
+from omegaconf import OmegaConf
+
+from .common import run_once
+
+
+#  (Custom resolvers)
+@run_once
+def register_resolvers():
+    resolvers = {
+        "resolve_import": resolve_import,
+        "chain_type_info_to_regex": chain_type_info_to_regex,
+    }
+
+    for name, resolver in resolvers.items():
+        OmegaConf.register_new_resolver(name, resolver)
 
 
 def resolve_import(module_path: str, attribute_path: str = None) -> Any:

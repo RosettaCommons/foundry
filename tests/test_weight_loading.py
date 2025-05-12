@@ -4,8 +4,10 @@ import torch.nn as nn
 
 # Import your code here
 from modelhub.utils.weights import (
+    ParameterFreezingConfig,
     WeightLoadingConfig,
     WeightLoadingPolicy,
+    freeze_parameters_with_config,
     load_weights_with_policies,
 )
 
@@ -143,6 +145,64 @@ def test_mixed_policies_and_fallbacks(simple_model):
 
     # Check direct copy for 2.bias
     assert torch.allclose(updated_state["2.bias"], checkpoint["2.bias"])
+
+
+def test_freeze_parameters_by_name_and_pattern(simple_model):
+    """Test freezing parameters by exact name and pattern."""
+    # Get parameter names
+    param_names = list(simple_model.state_dict().keys())
+    # Freeze only the first parameter by exact name
+    config1 = ParameterFreezingConfig(param_policies={param_names[0]: True})
+    freeze_parameters_with_config(simple_model, config1)
+    for name, param in simple_model.named_parameters():
+        if name == param_names[0]:
+            assert not param.requires_grad  # frozen
+        else:
+            assert param.requires_grad  # not frozen
+
+    # Freeze all bias parameters using pattern
+    config2 = ParameterFreezingConfig(param_policies={"*.bias": True})
+    freeze_parameters_with_config(simple_model, config2)
+    for name, param in simple_model.named_parameters():
+        if name.endswith("bias"):
+            assert not param.requires_grad
+        else:
+            assert param.requires_grad
+
+    # Freeze all parameters by default
+    config3 = ParameterFreezingConfig(freeze_by_default=True)
+    freeze_parameters_with_config(simple_model, config3)
+    for _, param in simple_model.named_parameters():
+        assert not param.requires_grad
+
+    # Unfreeze all parameters by default
+    config4 = ParameterFreezingConfig(freeze_by_default=False)
+    freeze_parameters_with_config(simple_model, config4)
+    for _, param in simple_model.named_parameters():
+        assert param.requires_grad
+
+
+def test_load_weights_with_freezing(simple_model):
+    """Test that load_weights_with_policies can freeze parameters after loading."""
+    # Create a checkpoint with matching shapes
+    ckpt = {k: v.clone() + 1.0 for k, v in simple_model.state_dict().items()}
+    # Freeze all weights
+    freezing_config = ParameterFreezingConfig(freeze_by_default=True)
+    config = WeightLoadingConfig(default_policy=WeightLoadingPolicy.COPY)
+    _ = load_weights_with_policies(simple_model, ckpt, config)
+    freeze_parameters_with_config(simple_model, freezing_config)
+    for _, param in simple_model.named_parameters():
+        assert not param.requires_grad
+
+    # Freeze only biases using pattern
+    freezing_config2 = ParameterFreezingConfig(param_policies={"*.bias": True})
+    _ = load_weights_with_policies(simple_model, ckpt, config)
+    freeze_parameters_with_config(simple_model, freezing_config2)
+    for name, param in simple_model.named_parameters():
+        if name.endswith("bias"):
+            assert not param.requires_grad
+        else:
+            assert param.requires_grad
 
 
 if __name__ == "__main__":

@@ -176,9 +176,9 @@ def train(cfg: DictConfig) -> None:
 
     # ... load the checkpoint configuration
     ckpt_config = None
-    if "ckpt_config" in cfg:
+    if "ckpt_config" in cfg and cfg.ckpt_config:
         ckpt_config = hydra.utils.instantiate(cfg.ckpt_config)
-    elif "ckpt_path" in cfg:
+    elif "ckpt_path" in cfg and cfg.ckpt_path:
         # Just a checkpoint path
         ckpt_config = CheckpointConfig(path=cfg.ckpt_path)
 

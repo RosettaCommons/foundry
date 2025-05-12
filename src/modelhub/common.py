@@ -1,5 +1,27 @@
+from functools import wraps
+
 from beartype.typing import Any, Callable, Iterable
 from toolz import merge_with
+
+
+def run_once(fn: Callable) -> Callable:
+    """Decorator to ensure a function is only executed once per process.
+
+    Args:
+        fn (Callable): The function to decorate.
+
+    Returns:
+        Callable: A wrapped function that only executes once.
+    """
+
+    @wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        if getattr(wrapper, "_has_run", False):
+            return
+        wrapper._has_run = True
+        return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def do_nothing(*args: Any, **kwargs: Any) -> None:

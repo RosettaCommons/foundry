@@ -36,28 +36,68 @@ class WeightLoadingPolicy(StrEnum):
     COPY_AND_ZERO_PAD = auto()
 
 
+class _PatternPolicyMixin:
+    """Mixin for handling glob-to-regex pattern compilation and matching for parameter policies.
+
+    Patterns can use the following wildcards:
+        - * matches any sequence of characters
+        - ? matches any single character
+        - [abc] matches any character in the brackets
+        - . matches a literal dot
+
+    Examples:
+        - "model.*.weight" matches any weight parameter in the model
+        - "model.encoder?.weight" matches encoder1.weight, encoder2.weight, etc.
+        - "model.encoder[12].weight" matches encoder1.weight and encoder2.weight
+        - "model.encoder.*.bias" matches any bias parameter in encoder submodules
+    """
+
+    _compiled_patterns: dict[Pattern, any]
+
+    @staticmethod
+    def _glob_to_regex(pattern: str) -> str:
+        # Convert glob pattern to regex string
+        return (
+            pattern.replace(".", r"\.")
+            .replace("*", ".*")
+            .replace("?", ".")
+            .replace("[", "[")
+            .replace("]", "]")
+        )
+
+    def _compile_patterns(self, policy_dict: dict[str, any]) -> dict[Pattern, any]:
+        compiled = {}
+        for pattern, value in list(policy_dict.items()):
+            if any(c in pattern for c in ["*", "?", "[", "]"]):
+                regex = self._glob_to_regex(pattern)
+                compiled[re.compile(f"^{regex}$")] = value
+        return compiled
+
+    def _get_policy_by_pattern(
+        self, param_name: str, policy_dict: dict[str, any], default: any
+    ) -> any:
+        # Exact match first
+        if policy_dict and param_name in policy_dict:
+            return policy_dict[param_name]
+        # Pattern match
+        for pattern, value in self._compiled_patterns.items():
+            if pattern.match(param_name):
+                return value
+        return default
+
+
 @dataclass
-class WeightLoadingConfig:
+class WeightLoadingConfig(_PatternPolicyMixin):
     """Configuration for handling weights when loading a checkpoint."""
 
-    # Default policy to apply when no pre-defined rule matches
     default_policy: WeightLoadingPolicy | str = WeightLoadingPolicy.COPY
-
-    # Fallback policy to apply when the primary policy cannot be applied
-    # (e.g., when COPY fails due to shape mismatch or parameter not found)
     fallback_policy: WeightLoadingPolicy | str = WeightLoadingPolicy.REINIT
-
-    # Dictionary mapping parameter names or patterns to policies
     param_policies: dict[str, WeightLoadingPolicy | str] = field(default_factory=dict)
-
-    # Compiled regex patterns (populated internally)
     _compiled_patterns: dict[Pattern, WeightLoadingPolicy] = field(
         default_factory=dict, repr=False
     )
 
     def __post_init__(self):
-        """Compile regex patterns after initialization."""
-        # If any policies are provided as strings, convert them to WeightLoadingPolicy
         if isinstance(self.default_policy, str):
             self.default_policy = WeightLoadingPolicy(self.default_policy)
         if isinstance(self.fallback_policy, str):
@@ -65,39 +105,66 @@ class WeightLoadingConfig:
         for key, value in self.param_policies.items():
             if isinstance(value, str):
                 self.param_policies[key] = WeightLoadingPolicy(value)
-
-        # Compile patterns
-        if self.param_policies:
-            for pattern, policy in list(self.param_policies.items()):
-                if any(c in pattern for c in ["*", "?", "[", "]"]):
-                    # Convert glob-style pattern to regex
-                    regex = (
-                        pattern.replace(".", r"\.")
-                        .replace("*", ".*")
-                        .replace("?", ".")
-                        .replace("[", "[")
-                        .replace("]", "]")
-                    )
-                    self._compiled_patterns[re.compile(f"^{regex}$")] = policy
+        self._compiled_patterns = self._compile_patterns(self.param_policies)
 
     def get_policy(self, param_name: str) -> WeightLoadingPolicy:
-        """Get the policy for a specific parameter name."""
-        # First check exact matches
-        if self.param_policies and param_name in self.param_policies:
-            return self.param_policies[param_name]
+        policy = self._get_policy_by_pattern(
+            param_name, self.param_policies, self.default_policy
+        )
+        assert isinstance(policy, WeightLoadingPolicy)
+        return policy
 
-        # Then check pattern matches
-        for pattern, policy in self._compiled_patterns.items():
-            if pattern.match(param_name):
-                return policy
 
-        return self.default_policy
+@dataclass
+class ParameterFreezingConfig(_PatternPolicyMixin):
+    """Configuration for freezing model parameters after loading weights.
+
+    Allows specifying which parameters to freeze (set requires_grad=False) by exact name or pattern.
+    Patterns use glob-style wildcards (*, ?).
+
+    Attributes:
+        param_policies: Dict mapping parameter names or patterns to True (freeze) or False (do not freeze).
+        freeze_by_default: Whether to freeze parameters not matched by any pattern (default: False).
+    """
+
+    param_policies: dict[str, bool] = field(default_factory=dict)
+    freeze_by_default: bool = False
+    _compiled_patterns: dict[Pattern, bool] = field(default_factory=dict, repr=False)
+
+    def __post_init__(self):
+        self._compiled_patterns = self._compile_patterns(self.param_policies)
+
+    def is_frozen(self, param_name: str) -> bool:
+        """Get whether a parameter is frozen according to the config."""
+        is_frozen = self._get_policy_by_pattern(
+            param_name, self.param_policies, self.freeze_by_default
+        )
+        assert isinstance(is_frozen, bool)
+        return is_frozen
+
+
+def freeze_parameters_with_config(
+    model: nn.Module, config: ParameterFreezingConfig, verbose: bool = True
+) -> None:
+    """Freeze (set requires_grad=False) or unfreeze parameters according to config.
+
+    Args:
+        model: The model whose parameters to freeze/unfreeze.
+        config: ParameterFreezingConfig specifying which parameters to freeze.
+        verbose: Whether to log which parameters have non-default policies applied.
+    """
+    for name, param in model.named_parameters():
+        is_frozen = config.is_frozen(name)
+        param.requires_grad = not is_frozen
+
+        if is_frozen != config.freeze_by_default and verbose:
+            ranked_logger.info(f"Non-default freezing applied to {name}: {is_frozen}")
 
 
 def load_weights_with_policies(
     model: nn.Module,
     ckpt: dict[str, torch.Tensor],
-    config: WeightLoadingConfig = None,
+    config: WeightLoadingConfig | None = None,
 ) -> dict:
     """Load checkpoint weights into model according to the specified configuration.
 
@@ -108,9 +175,8 @@ def load_weights_with_policies(
             with the checkpoint weights where appropriate
         ckpt: Dictionary mapping parameter names to tensors (loaded from checkpoint on disk)
         config: Configuration for handling weight loading. If None, uses default config
-
     Returns:
-        nn.Module: The model with loaded weights
+        dict: The updated state_dict (not loaded into model yet)
     """
     if config is None:
         # (Initialize default config if not provided)
@@ -202,3 +268,4 @@ class CheckpointConfig:
     path: PathLike
     reset_optimizer: bool = False
     weight_loading_config: WeightLoadingConfig | None = None
+    parameter_freezing_config: ParameterFreezingConfig | None = None

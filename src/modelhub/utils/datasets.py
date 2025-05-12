@@ -13,7 +13,7 @@ from datahub.samplers import (
     LoadBalancedDistributedSampler,
     MixedSampler,
 )
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig
 from torch.utils.data import (
     DataLoader,
     Dataset,
@@ -25,14 +25,12 @@ from torch.utils.data import (
 )
 from torch.utils.data.distributed import DistributedSampler
 
-from modelhub.resolvers import chain_type_info_to_regex, resolve_import
+from modelhub.resolvers import register_resolvers
 from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
-#  (Custom resolvers)
-OmegaConf.register_new_resolver("resolve_import", resolve_import)
-OmegaConf.register_new_resolver("chain_type_info_to_regex", chain_type_info_to_regex)
+register_resolvers()
 
 
 def wrap_dataset_and_sampler_with_fallbacks(
@@ -210,7 +208,7 @@ def recursively_instantiate_datasets_and_samplers(
 
 def assemble_distributed_loader(
     dataset: Dataset,
-    sampler: Sampler,
+    sampler: Sampler | None = None,
     rank: int | None = None,
     world_size: int | None = None,
     n_examples_per_epoch: int | None = None,
@@ -273,6 +271,9 @@ def assemble_distributed_loader(
             shuffle=shuffle,
             drop_last=drop_last,
         )
+    elif sampler is None and isinstance(dataset, Subset):
+        # We are subsetting the dataset to a specific set of example IDs
+        ranked_logger.info(f"Subsetting dataset to {len(dataset)} examples!")
     else:
         # (We assume we are already given a DistributedSampler or DistributedMixedSampler)
         assert (
@@ -283,7 +284,11 @@ def assemble_distributed_loader(
         ), "Invalid sampler type for distributed training."
 
     # ... wrap the composed dataset and sampler with a fallback mechanism, if needed
-    if "n_fallback_retries" in loader_cfg and loader_cfg.n_fallback_retries > 0:
+    if (
+        "n_fallback_retries" in loader_cfg
+        and loader_cfg.n_fallback_retries > 0
+        and sampler is not None
+    ):
         ranked_logger.info(
             f"Wrapping train dataset and sampler with {loader_cfg.n_fallback_retries} fallbacks..."
         )

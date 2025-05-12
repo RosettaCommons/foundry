@@ -10,6 +10,5 @@ dataset:
     filters:
       # Only score examples with protein-ligand interfaces
       - "interfaces_to_score.str.contains('protein-ligand')"
-      - example_id not in ["{['validation']}{7qbs}{1}{[]}"]
       # Small examples, since we have many validation datasets with varying conditions
       - "n_tokens_total < 400"
