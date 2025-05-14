@@ -4,6 +4,8 @@ defaults:
 dataset: 
   dataset_parser:
     _target_: datahub.datasets.parsers.PNUnitsDFParser
+    base_dir: /projects/ml/frozen_pdb_copies/2024_12_01_pdb
+
   dataset:
     name: pn_unit
     data: ${paths.data.pdb_data_dir}/pn_units_df_train.parquet

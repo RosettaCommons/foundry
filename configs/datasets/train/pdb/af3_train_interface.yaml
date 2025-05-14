@@ -4,6 +4,7 @@ defaults:
 dataset:
   dataset_parser:
     _target_: datahub.datasets.parsers.InterfacesDFParser
+    base_dir: /projects/ml/frozen_pdb_copies/2024_12_01_pdb
   dataset:
     name: interface
     data: ${paths.data.pdb_data_dir}/interfaces_df_train.parquet
