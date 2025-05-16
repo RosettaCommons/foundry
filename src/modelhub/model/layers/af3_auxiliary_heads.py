@@ -60,7 +60,7 @@ class ConfidenceHead(nn.Module):
 
         self.pairformer = nn.ModuleList(
             [
-                PairformerBlock(c_s=c_s, c_z=c_z, use_deepspeed_evo=False, **pairformer)
+                PairformerBlock(c_s=c_s, c_z=c_z, use_deepspeed_evo=True, **pairformer)
                 for _ in range(n_pairformer_layers)
             ]
         )

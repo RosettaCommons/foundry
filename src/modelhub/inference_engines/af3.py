@@ -334,7 +334,7 @@ class AF3InferenceEngine(InferenceEngine):
 
             # ... parse into an AtomArray (`parse` handles all valid formats)
             ranked_logger.info(f"Parsing from path: {path_to_structure}")
-            example_id = path_to_structure.name.split(".")[0]
+            example_id = path_to_structure.name[: path_to_structure.name.rfind(".")]
 
             out = self.parse_from_path(path_to_structure)
 
