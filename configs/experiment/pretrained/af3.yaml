@@ -12,4 +12,7 @@ tags:
 
 project: af3
 
-ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt
+ckpt_config:
+  _target_: modelhub.utils.weights.CheckpointConfig
+  path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt
+  reset_optimizer: true

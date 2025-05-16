@@ -43,7 +43,3 @@ callbacks:
     dump_predictions: True
     one_model_per_file: False
     dump_trajectories: False
-
-# passing checkpoint path required for validation
-# DO NOT set here; set in the experiment config file
-ckpt_path: ???

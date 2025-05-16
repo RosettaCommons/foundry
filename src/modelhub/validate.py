@@ -118,12 +118,20 @@ def validate(cfg: DictConfig) -> None:
         loader_cfg=cfg.dataloader["val"],
     )
 
+    # ... load the checkpoint configuration, regardless of whether it's a path or a config
+    if "ckpt_path" in cfg and cfg.ckpt_path:
+        ckpt_path = cfg.ckpt_path
+    elif "ckpt_config" in cfg and cfg.ckpt_config:
+        assert (
+            "path" in cfg.ckpt_config
+        ), "No checkpoint path provided in `ckpt_config`!"
+        ckpt_path = cfg.ckpt_config.path
+
     # ... validate the model
     ranked_logger.info("Validating model...")
-    assert cfg.ckpt_path is not None, "No checkpoint path provided for validation!"
     trainer.validate(
         val_loaders=val_loaders,
-        ckpt_path=cfg.ckpt_path,
+        ckpt_path=ckpt_path,
     )
 
     ranked_logger.info("Validation complete!")
