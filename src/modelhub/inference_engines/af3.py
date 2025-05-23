@@ -363,6 +363,7 @@ class AF3InferenceEngine(InferenceEngine):
             if (
                 self.early_stopping_plddt_threshold
                 and self.early_stopping_plddt_threshold > 0
+                and "confidence_feats" in pipeline_output
             ):
                 should_early_stop_fn = should_early_stop_by_mean_plddt(
                     self.early_stopping_plddt_threshold,
@@ -373,13 +374,19 @@ class AF3InferenceEngine(InferenceEngine):
             # Model inference
             with torch.no_grad():
                 pipeline_output = self.trainer.fabric.to_device(pipeline_output)
-                network_output = self.trainer.validation_step(
-                    batch=pipeline_output,
-                    batch_idx=0,
-                    compute_metrics=False,
-                    should_early_stop_fn=should_early_stop_fn,
-                )["network_output"]
-
+                if should_early_stop_fn:
+                    network_output = self.trainer.validation_step(
+                        batch=pipeline_output,
+                        batch_idx=0,
+                        compute_metrics=False,
+                        should_early_stop_fn=should_early_stop_fn,
+                    )["network_output"]
+                else:
+                    network_output = self.trainer.validation_step(
+                        batch=pipeline_output,
+                        batch_idx=0,
+                        compute_metrics=False,
+                    )["network_output"]
                 # TODO: Log `metrics_output` to a file (or store directly within the CIF file)
 
             if network_output.get("early_stopped", False):
