@@ -218,7 +218,7 @@ def featurize_noised_ground_truth_as_template_distogram(
     noise_scale: Float[Tensor, "n_token"] | float,
     distogram_bins: Float[Tensor, "n_bin_edges"],
     allowed_chain_types: list[ChainType],
-    is_unconditional: bool = False,
+    is_unconditional: bool = True,
     p_condition_per_token: float = 0.7,
     p_provide_inter_molecule_distances: float = 0.0,
 ) -> dict[str, Tensor]:
@@ -425,8 +425,7 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
             allowed_chain_types=self.allowed_chain_types,
             distogram_bins=self.distogram_bins,
             p_provide_inter_molecule_distances=self.p_provide_inter_molecule_distances,
-            is_unconditional=data.get("is_unconditional", False)
-            and data.get("is_inference", False),
+            is_unconditional=data.get("is_unconditional", True),
             p_condition_per_token=self.p_condition_per_token,
         )
 
