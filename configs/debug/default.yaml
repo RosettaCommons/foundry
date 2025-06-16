@@ -26,6 +26,9 @@ hydra:
 callbacks:
   print_example_id_before_forward_pass:
       _target_: modelhub.callbacks.train_logging.PrintExampleIDBeforeForwardPassCallback
+  timing_logging:
+      _target_: modelhub.callbacks.timing_logging.TimingCallback
+      log_every_n: 5
 
 dataloader:
   train:
@@ -55,7 +58,7 @@ datasets:
 
 trainer:
   devices_per_node: 1
-  limit_train_batches: 1
+  limit_train_batches: 5
   limit_val_batches: 1
   validate_every_n_epochs: 1
 

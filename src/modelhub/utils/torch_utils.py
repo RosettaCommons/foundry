@@ -2,6 +2,7 @@
 
 __all__ = ["map_to", "assert_no_nans", "assert_shape", "assert_same_shape"]
 
+import time
 import warnings
 from contextlib import contextmanager
 
@@ -205,3 +206,112 @@ def device_of(obj: Any) -> torch.device:
         return next(obj.parameters()).device
     else:
         raise ValueError(f"Unsupported type: {type(obj)}")
+
+
+class Timer:
+    """
+    A simple timer class for measuring elapsed time.
+
+    This class provides functionality to start, stop, reset, and measure elapsed time.
+    It can optionally use CUDA or MPS synchronization barriers for more accurate timing
+    when working with GPU operations.
+
+    Attributes:
+        name_ (str): The name of the timer.
+        elapsed_ (float): The total elapsed time.
+        started_ (bool): Flag indicating if the timer is currently running.
+        start_time (float): The start time of the current timing session.
+        use_barrier (bool): Whether to use CUDA or MPS synchronization barriers.
+
+    Args:
+        name (str): The name of the timer.
+        use_barrier (bool, optional): Whether to use synchronization barriers. Defaults to True.
+    """
+
+    def __init__(self, name, use_barrier: bool = True):
+        self.name_ = name
+        self.elapsed_ = 0.0
+        self.started_ = False
+        self.start_time = time.time()
+        self.use_barrier = use_barrier
+
+    def start(self) -> None:
+        """Start the timer."""
+        assert not self.started_, f"timer {self.name_} has already been started"
+        if self.use_barrier and torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elif self.use_barrier and torch.backends.mps.is_available():
+            torch.mps.synchronize()
+        self.start_time = time.time()
+        self.started_ = True
+
+    def stop(self) -> None:
+        """Stop the timer."""
+        assert self.started_, f"timer {self.name_} is not started"
+        if self.use_barrier and torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elif self.use_barrier and torch.backends.mps.is_available():
+            torch.mps.synchronize()
+        self.elapsed_ += time.time() - self.start_time
+        self.started_ = False
+
+    def reset(self) -> None:
+        """Reset timer."""
+        self.elapsed_ = 0.0
+        self.started_ = False
+
+    def elapsed(self, reset: bool = True) -> float:
+        """Calculate the elapsed time."""
+        started_ = self.started_
+        # If the timing in progress, end it first.
+        if self.started_:
+            self.stop()
+        # Get the elapsed time.
+        elapsed_ = self.elapsed_
+        # Reset the elapsed time
+        if reset:
+            self.reset()
+        # If timing was in progress, set it back.
+        if started_:
+            self.start()
+        return elapsed_
+
+
+class Timers:
+    """
+    A collection of named Timer objects.
+
+    This class manages multiple Timer instances, allowing for easy creation,
+    starting, stopping, resetting, and querying of elapsed times for multiple timers.
+
+    Attributes:
+        timers (dict): A dictionary of Timer objects, keyed by their names.
+    """
+
+    def __init__(self):
+        self.timers = {}
+
+    def __call__(self, name, use_barrier: bool = True) -> Timer:
+        """Get or create a Timer object."""
+        if name not in self.timers:
+            self.timers[name] = Timer(name, use_barrier=use_barrier)
+        return self.timers[name]
+
+    def start(self, *names) -> None:
+        """Start the specified timers."""
+        for name in names:
+            self(name).start()
+
+    def stop(self, *names) -> None:
+        """Stop the specified timers."""
+        for name in names:
+            self.timers[name].stop()
+
+    def reset(self, *names) -> None:
+        """Reset the specified timers."""
+        for name in names:
+            self.timers[name].reset()
+
+    def elapsed(self, *names, reset: bool = True) -> dict[str, float]:
+        """Get the elapsed time for the specified timers."""
+        return {name: self.timers[name].elapsed(reset=reset) for name in names}
