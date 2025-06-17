@@ -1,24 +1,22 @@
 name: modelhub
 channels:
-  - nvidia/label/cuda-12.4.0
-  - pytorch
-  - pyg
+  - nvidia/label/cuda-12.6.0
   - conda-forge
   - defaults
 dependencies:
   # Core dependencies
   - pip
-  - python=3.11
+  - python=3.12
   - cuda
-  - pytorch=2.4
-  - pytorch-cuda=12.4
-  - pytorch-scatter>=2.1.0,<3
-  - lightning>=2.4.0,<2.5
+  
   # Small molecule libraries
   - rdkit>=2024.3.5
-  - openbabel=3.1.1 
+  - openbabel=3.1.1
   - pip:
-    # Project-related dependencies
+    # Core dependencies
+    - torch==2.7
+    - lightning>=2.4.0,<2.5
+    # Project-related dependencies 
     # ... generic tools
     - GitPython>=3.0.0,<4  # GitPython is a Python library used to interact with Git repositories
     - cython>=3.0.0,<4  # Cython compiler for C extensions
@@ -38,7 +36,10 @@ dependencies:
     - einops>=0.8.0,<1
     - einx>=0.1.0,<1
     - opt_einsum>=3.4.0,<4
-    - deepspeed>=0.15.1 # will be uninstalled by the apptainer's `spec` file, if pre-compiling
+    # ... kernels
+    - cuequivariance_ops_cu12>=0.5.0
+    - cuequivariance_ops_torch_cu12>=0.5.0
+    - cuequivariance_torch>=0.5.0
     # ... data tools
     - pandas>=2.2,<2.3  # Data manipulation and analysis
     - pyarrow==17.0.0  # Columnar data format for efficient data storage and processing
@@ -48,8 +49,8 @@ dependencies:
     - biopython>=1.83,<2  # Collection of Python modules for bioinformatics
     - py3Dmol>=2.2.1,<3  # Python wrapper for 3Dmol.js
     - pymol-remote>=0.0.5  # Remote access to PyMOL from Python (has no dependencies)
-    - git+https://github.com/biotite-dev/biotite.git@v1.2.0  # Biotite is a Python library for bioinformatics
-    - hydride==1.2.3 #biotite supported hydrogen addition
+    - biotite==1.3.0
+    - hydride==1.2.3 # Biotite-supported hydrogen addition
     # ... logging
     - wandb>=0.15.10,<1
     - rich>=13.9.4,<14
@@ -79,7 +80,3 @@ dependencies:
 
 # NOTE: After navigating to the datahub / cifutils / modelhub directories, you can install the local package in editable mode with:
 #   pip install -e .
-
-# NOTE: By default, DeepSpeed just-in-time compiles, which may take 3-4 minutes when first running the code on a new machine.
-# It may be possible to pre-compile DeepSpeed within a `conda` environment; see: https://www.deepspeed.ai/tutorials/advanced-install/
-# By default, the apptainers will have DeepSpeed pre-compiled, so when performance is a concern, it is recommended to use the apptainers.

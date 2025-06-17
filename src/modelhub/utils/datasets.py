@@ -144,6 +144,10 @@ def recursively_instantiate_datasets_and_samplers(
         # ... create a list of dictionaries for each sub-dataset
         datasets_info = []
         for sub_dataset_name, sub_dataset_cfg in cfg.sub_datasets.items():
+            if sub_dataset_cfg is None:
+                # (Skip any None sub-datasets; e.g., those overrode by the experiment config)
+                continue
+
             datasets_info.append(
                 recursively_instantiate_datasets_and_samplers(
                     sub_dataset_cfg, name=sub_dataset_name

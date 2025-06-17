@@ -1,5 +1,7 @@
 import logging
+import os
 
+import torch
 from beartype.claw import beartype_this_package
 from environs import Env
 from jaxtyping import install_import_hook
@@ -24,3 +26,22 @@ logger.debug("NAN checking mode: %s", should_check_nans)
 if should_typecheck:
     beartype_this_package()
     install_import_hook("modelhub", "beartype.beartype")
+
+# Global flag for cuEquivariance availability
+SHOULD_USE_CUEQUIVARIANCE = False
+
+try:
+    if torch.cuda.is_available():
+        import cuequivariance_torch as cuet  # noqa: I001, F401
+
+        SHOULD_USE_CUEQUIVARIANCE = True
+        os.environ["CUEQ_DISABLE_AOT_TUNING"] = _env.str(
+            "CUEQ_DISABLE_AOT_TUNING", default="1"
+        )
+        os.environ["CUEQ_DEFAULT_CONFIG"] = _env.str("CUEQ_DEFAULT_CONFIG", default="1")
+
+except ImportError:
+    logger.debug("cuEquivariance unavailable: import failed")
+
+# Export for easy access
+__all__ = ["SHOULD_USE_CUEQUIVARIANCE", "silence_warnings"]

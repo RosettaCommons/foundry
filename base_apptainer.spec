@@ -1,9 +1,10 @@
 Bootstrap: docker
 From: ubuntu:24.04
 IncludeCmd: yes
+
 # NOTE: This apptainer was written using apptainer version `1.1.6+2-g6808b5172-ipd`
 # To build this apptainer, use:
-#     make apptainer
+#     make base_apptainer
 
 %setup
    # Create a directory in the container to bind the host's current working directory
@@ -12,7 +13,7 @@ IncludeCmd: yes
    mkdir ${APPTAINER_ROOTFS}/projects
    # ... for mounting `/databases` with --bind
    mkdir ${APPTAINER_ROOTFS}/net
-   # ... for mounting `/squash` with --bind
+   # ... for mounting `/squash` with --bind
    mkdir ${APPTAINER_ROOTFS}/squash
 
 %files
@@ -28,7 +29,7 @@ IncludeCmd: yes
 
    ## GENERAL SETUP
    # Switch shell to bash
-   ln -sf /bin/bash /bin/sh
+   export SHELL=/bin/bash
 
    # Common symlinks (within container)
    ln -s /net/databases /databases
@@ -39,19 +40,14 @@ IncludeCmd: yes
 
    ## PACKAGE INSTALLATION
    apt-get update
-   # Install build essentials and other required packages (needed for compiling biotite cython files)
-   apt-get install -y build-essential gcc g++
    # Install make (so we can run `make format`, `make clean`, etc.)
    apt-get install -y make git wget libaio-dev
+   # Install build tools (needed for cuEquivariance JIT compilation)
+   apt-get install -y build-essential gcc g++
    # required X libs
    apt-get install -y libx11-6 libxau6 libxext6 libxrender1
    apt-get clean
 
-   # Clone CUTLASS (for DeepSpeed)
-   git clone https://github.com/NVIDIA/cutlass.git /opt/cutlass
-
-   # Clone DeepSpeed (so we can pre-install the wheel)
-   git clone --branch v0.16.2 https://github.com/deepspeedai/DeepSpeed.git /opt/deepspeed
 
    ## ENVIRONMENT CREATION & DEPENDENCY INSTALLATION
    # Download miniconda
@@ -60,52 +56,31 @@ IncludeCmd: yes
    # Install conda
    bash /opt/miniconda.sh -b -u -p /usr
 
-   # install everything
+   # Install everything
    # ... the environment in the container is at `/usr/envs/modelhub-apptainer`
    conda install -c conda-forge mamba
    mamba env create --file /opt/environment.yaml --name modelhub-apptainer
 
-   # Set up conda
-   conda init bash
-   # Add conda environment to PATH
-   export PATH=/usr/envs/modelhub-apptainer/bin:$PATH
-
-   echo "Proceeding with DeepSpeed reinstallation."
-
-   ## PRE-COMPILE DEEPSPEED FROM WHEEL 
-   # (Overwrite deepspeed installation from the `environment.yaml`)
-   pip uninstall deepspeed -y # Avoid interactive prompts
-
-   # (Flags for building the Evoformer attention)
-   export TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9;9.0"
-   export DS_BUILD_EVOFORMER_ATTN=1
-   export CUTLASS_PATH=/opt/cutlass/
-
-   # Reinstall DeepSpeed, pre-compiling the evoformer attentino kernel
-   pip wheel /opt/deepspeed -w /opt/deepspeed
-   pip install /opt/deepspeed/deepspeed-0.16.2+b344c04d-cp311-cp311-linux_x86_64.whl
-
-   # Run the biotite setup command
-   # (Temporary measure until we switch to released Biotite version)
-   . /usr/etc/profile.d/conda.sh
-   conda activate modelhub-apptainer
-   python -m biotite.setup_ccd
-
-   # clean up files to reduce size
+   # Clean up files to reduce size
    # ... remove conda
    mamba clean -a -y
    # ... remove other apt packages that are no longer needed
-   apt-get -y purge build-essential wget
+   apt-get -y purge wget
    apt-get -y autoremove
-   apt-get clean
+   apt-get clean && rm -rf /var/lib/apt/lists/*
    rm /opt/miniconda.sh
 
 %environment
-   source /usr/etc/profile.d/conda.sh
-   conda activate modelhub-apptainer
-
+   # Skip conda activation routines entirely and set PATH directly
+   # This approach avoids all conda activation script issues
+   export PATH=/usr/envs/modelhub-apptainer/bin:/usr/bin:$PATH
+   
+   # (Path to CUDA)
    export PATH=$PATH:/usr/local/cuda/bin
-   export CUTLASS_PATH=/opt/cutlass/
+
+   # (For NVIDIA Kernels)
+   export CC=gcc
+   export CXX=g++
    
    # (Flags to increase accessible GPU memory)
    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True

@@ -16,26 +16,33 @@ Create a JSON file with each component; e.g.,
 ```json
 [
     {
-        "seq": "SMNPPPPETSNPNKPKRQTNQLQYLLRVVLKTLWKHQFAWPFQQPVDAVKLNLPDYYKIIKTPMDMGTIKKRLENNYYWNAQECIQDFNTMFTNCYIYNKPGDDIVLMAEALEKLFLQKINELPTEE",
-        "msa_path": "/path/to/msa", // optional
-        "chain_id": "A"
-    },
-    {
-        // We will automatically name the atoms
-        // If no `chain_id` is specified, we will deterministically generate one (e.g., "B", since "A" exists above)
-        "smiles": "NCCCCN1N=C(C[C@@H](C1=O)c2cccc3ncccc23)c4ccc(NC(=O)N5Cc6ccncc6C5)cc4"
-    },
-    {
-        // We will use atom names from the CCD
-        "ccd_code": "HEM"
-    },
-    {
-        // We will automatically name the atoms (SDF files do not specify atom names)
-        "path": "/path/to/sdf.sdf"
-    },
-    {
-        // We will use atom names from the CIF file
-        "path": "/path/to/cif.cif"
+        "name": "my_example",
+        "components": [
+            {
+                "seq": "SMNPPPPETSNPNKPKRQTNQLQYLLRVVLKTLWKHQFAWPFQQPVDAVKLNLPDYYKIIKTPMDMGTIKKRLENNYYWNAQECIQDFNTMFTNCYIYNKPGDDIVLMAEALEKLFLQKINELPTEE",
+                "msa_path": "/path/to/msa", // optional
+                "chain_id": "A"
+            },
+            {
+                // We will automatically name the atoms
+                // If no `chain_id` is specified, we will deterministically generate one (e.g., "B", since "A" exists above)
+                "smiles": "NCCCCN1N=C(C[C@@H](C1=O)c2cccc3ncccc23)c4ccc(NC(=O)N5Cc6ccncc6C5)cc4"
+            },
+            {
+                // We will use atom names from the CCD
+                "ccd_code": "HEM"
+            },
+            {
+                // We will automatically name the atoms (SDF files do not specify atom names)
+                "path": "/path/to/sdf.sdf", 
+                "override_reference_conformer": true // We will replace the RDKit-generated conformer with the ground-truth
+            },
+            {
+                // We will use atom names from the CIF file
+                "path": "/path/to/cif.cif"
+            }
+
+        ]
     }
 ]
 ```
@@ -47,7 +54,7 @@ Supported input options:
 -   `ccd_code`: If your small molecule is already in the CCD.
 -   `path`: If you have a `.sdf` or `.cif` file.
 
-Coming soon: support for `cif` files and `mol` files as components.
+Coming soon: support for `mol` files as components.
 
 ### Option 2: Using a Spoofed CIF *(more complicated, more customizable)*
 

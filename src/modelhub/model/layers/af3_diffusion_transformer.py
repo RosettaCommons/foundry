@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
 
 from modelhub.loss.loss import calc_chiral_grads_flat_impl
 from modelhub.model.layers.layer_utils import (
@@ -481,6 +480,8 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
             # Q, K, V: [Batch, N_seq, N_res, Head, Dim]
             # res_mask: [Batch, N_seq, 1, 1, N_res]
             # pair_bias: [Batch, 1, Head, N_res, N_res]
+            from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
+
             Q_IH = Q_IH[:, None]
             K_IH = K_IH[:, None]
             V_IH = V_IH[:, None]

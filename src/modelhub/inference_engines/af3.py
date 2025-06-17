@@ -8,7 +8,8 @@ import pandas as pd
 import torch
 from biotite.structure import AtomArray
 from cifutils import parse
-from cifutils.utils.selection import AtomSelectionStack
+from cifutils.utils.selection import AtomSelection, AtomSelectionStack
+from datahub.enums import GroundTruthConformerPolicy
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
@@ -71,6 +72,7 @@ class AF3InferenceEngine(InferenceEngine):
         diffusion_batch_size: int,
         residue_renaming_dict: str | dict,
         template_selection_syntax: str | None,
+        ground_truth_conformer_selection: str | None,
         num_steps: int,
         solver: str,
         print_config: bool,
@@ -99,6 +101,8 @@ class AF3InferenceEngine(InferenceEngine):
             diffusion_batch_size (int): Diffusion batch size for AF3. Each predicted structure will be saved as a separate model within the same CIF file.
             residue_renaming_dict (dict): Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': 'L:1'}.
             template_selection_syntax (str): Selection syntax for template selection. If None, no residues will be selected.
+            ground_truth_conformer_selection (str): Selection syntax for residues that should use ground truth conformers instead of generated ones.
+                Uses AtomSelection format (e.g., "*/LIG" for all ligands, "A1-10" for residues 1-10 in chain A). If None, no residues will use ground truth conformers.
             num_steps (int): Number of steps for sampling of the diffusion model. AF-3 uses 200; we see no degradation in performance with 50.
             solver (str): Solver to use for inference. Options are 'af3', 'simple', 'euler', and 'heun'.
             print_config (bool): Pretty-print the Hydra configs.
@@ -124,7 +128,7 @@ class AF3InferenceEngine(InferenceEngine):
         # TODO: Load checkpoint only once (instead of twice)
         ranked_logger.info(f"Loading checkpoint from {Path(ckpt_path).resolve()}...")
         checkpoint = torch.load(
-            ckpt_path, "cpu"
+            ckpt_path, "cpu", weights_only=False
         )  # We only extract the `train_cfg` from the checkpoint initially
         self.cfg = OmegaConf.create(checkpoint["train_cfg"])
 
@@ -184,6 +188,9 @@ class AF3InferenceEngine(InferenceEngine):
         # Set the template selection syntax
         self.template_selection_syntax = template_selection_syntax
 
+        # Set the ground truth conformer selection syntax
+        self.ground_truth_conformer_selection = ground_truth_conformer_selection
+
         # Structure dumping
         self.dump_predictions = dump_predictions
         self.dump_trajectories = dump_trajectories
@@ -242,12 +249,12 @@ class AF3InferenceEngine(InferenceEngine):
 
         return parse(path_to_structure, hydrogen_policy="remove")
 
-    def prepare_atom_array(
-        self, atom_array: AtomArray, template_selection_syntax: str = None
+    def apply_template_selection(
+        self, atom_array: AtomArray, template_selection_syntax: str | None = None
     ) -> AtomArray:
-        """Prepare the AtomArray for inference.
+        """Apply template selection to the atom array.
 
-        By default, we set NaN coordinates to random values to avoid unexpected behavior in the pipeline.
+        Sets the 'is_input_file_templated' annotation for atoms selected by the template_selection_syntax.
         """
         if template_selection_syntax is not None:
             selector = AtomSelectionStack.from_contig_string(template_selection_syntax)
@@ -270,15 +277,73 @@ class AF3InferenceEngine(InferenceEngine):
             atom_array[is_input_file_templated].is_polymer
         ), f"Selected atoms with non-polymer atoms to templated: {atom_array[(is_input_file_templated) & (~atom_array.is_polymer)]}. Make sure you provided in input structure for templating."
 
-        # HACK: Set NaN coordinates to random values to avoid unexpected behavior in the pipeline
-        # TODO: Hunt down why NaN coordinates lead to this behavior
-        atom_array.coord[np.isnan(atom_array.coord)] = np.random.rand(
-            *atom_array.coord[np.isnan(atom_array.coord)].shape
-        )
         atom_array.set_annotation(
             "is_input_file_templated",
             is_input_file_templated,
         )
+        return atom_array
+
+    def prepare_atom_array(
+        self, atom_array: AtomArray, template_selection_syntax: str | None = None
+    ) -> AtomArray:
+        """Prepare the AtomArray for inference.
+
+        Applies template selection, ground truth conformer selection, and other preprocessing.
+        By default, we set NaN coordinates to random values to avoid unexpected behavior in the pipeline.
+        """
+        atom_array = self.apply_template_selection(
+            atom_array, template_selection_syntax
+        )
+        atom_array = self.apply_ground_truth_conformer_policy(atom_array)
+
+        # HACK: Set NaN coordinates to -1 to avoid unexpected behavior in the pipeline
+        # TODO: Hunt down why NaN coordinates lead to strange behavior
+        atom_array.coord[np.isnan(atom_array.coord)] = -1
+
+        return atom_array
+
+    def apply_ground_truth_conformer_policy(self, atom_array: AtomArray) -> AtomArray:
+        """Apply ground truth conformer policy to selected residues.
+
+        Sets the ground_truth_conformer_policy annotation to REPLACE for residues
+        specified by the ground_truth_conformer_selection parameter.
+        """
+        if self.ground_truth_conformer_selection is None:
+            return atom_array
+
+        # Initialize the ground_truth_conformer_policy annotation if it doesn't exist
+        if (
+            "ground_truth_conformer_policy"
+            not in atom_array.get_annotation_categories()
+        ):
+            atom_array.set_annotation(
+                "ground_truth_conformer_policy",
+                np.full(
+                    len(atom_array), GroundTruthConformerPolicy.IGNORE, dtype=np.int8
+                ),
+            )
+
+        try:
+            # Parse as a atom selection string (e.g., "*/LIG", "*/ATP")
+            selector = AtomSelection.from_str(self.ground_truth_conformer_selection)
+            selection_mask = selector.get_mask(atom_array)
+
+            # Set the policy to REPLACE for selected atoms
+            atom_array.ground_truth_conformer_policy[selection_mask] = (
+                GroundTruthConformerPolicy.REPLACE
+            )
+
+            ranked_logger.info(
+                f"Applied ground truth conformer policy to {np.sum(selection_mask)} atoms "
+                f"using selection: {self.ground_truth_conformer_selection}"
+            )
+
+        except Exception as e:
+            ranked_logger.warning(
+                f"Failed to parse ground truth conformer selection '{self.ground_truth_conformer_selection}': {e}. "
+                f"Skipping ground truth conformer application."
+            )
+
         return atom_array
 
     def eval(self):

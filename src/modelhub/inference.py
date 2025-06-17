@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
+from modelhub.utils.logging import suppress_warnings
+
 load_dotenv(override=True)
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
@@ -35,7 +37,8 @@ def run_inference(cfg: DictConfig) -> None:
 
         inference_engine = instantiate(cfg, temp_dir=temp_dir, _convert_="partial")
         inference_engine.trainer.fabric.launch()
-        inference_engine.eval()
+        with suppress_warnings():
+            inference_engine.eval()
 
 
 if __name__ == "__main__":

@@ -8,9 +8,11 @@ import rootutils
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 
+from modelhub.utils.logging import suppress_warnings
 from modelhub.utils.weights import CheckpointConfig
 
 load_dotenv(override=True)
+
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
@@ -185,9 +187,10 @@ def train(cfg: DictConfig) -> None:
     # ... train the model
     ranked_logger.info("Training model...")
 
-    trainer.fit(
-        train_loader=train_loader, val_loaders=val_loaders, ckpt_config=ckpt_config
-    )
+    with suppress_warnings():
+        trainer.fit(
+            train_loader=train_loader, val_loaders=val_loaders, ckpt_config=ckpt_config
+        )
 
 
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
 import torch
-from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
 from torch import nn
 from torch.nn.functional import one_hot, relu
 
@@ -149,8 +148,7 @@ class AtomAttentionEncoderPairformer(nn.Module):
                 * V_LL
             )  # [L, L, 1] -> [L, L, C_atompair]
 
-            # TODO: Directly casting to `torch.float` hinders our ability to train with mixed precision; better to match the dtype of an existing tensor
-            P_LL = P_LL + self.process_valid_mask(V_LL.to(torch.float)) * V_LL
+            P_LL = P_LL + self.process_valid_mask(V_LL.to(P_LL.dtype)) * V_LL
 
             # Initialise the atom single representation as the single conditioning.
             # NOTE: We create a new view on the tensor, so that the original tensor is not modified (unless we perform an in-place operation)
@@ -265,7 +263,8 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
             # Q, K, V: [Batch, N_seq, N_res, Head, Dim]
             # res_mask: [Batch, N_seq, 1, 1, N_res]
             # pair_bias: [Batch, 1, Head, N_res, N_res]
-            # from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
+            from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
+
             assert Q_IH.shape[0] != 1, "this code assumes your structure is not batched"
             batch = 1
             n_res = Q_IH.shape[0]
@@ -315,7 +314,7 @@ class PairformerBlock(nn.Module):
         triangle_attention,
         attention_pair_bias,
         n_transition=4,
-        use_deepspeed_evo=True,
+        **kwargs,  # Catch-all for backwards compatibility
     ):
         super().__init__()
 
@@ -328,17 +327,18 @@ class PairformerBlock(nn.Module):
         self.tri_mul_incoming = TriangleMultiplication(
             c_z, **triangle_multiplication, outgoing=False, bias=False
         )
+
         self.tri_attn_start = TriangleAttention(
             c_z,
             **triangle_attention,
             start_node=True,
-            use_deepspeed_evo=use_deepspeed_evo,
+            use_cuequivariance=True,
         )
         self.tri_attn_end = TriangleAttention(
             c_z,
             **triangle_attention,
             start_node=False,
-            use_deepspeed_evo=use_deepspeed_evo,
+            use_cuequivariance=True,
         )
 
         self.z_transition = Transition(c=c_z, n=n_transition)
@@ -548,10 +548,10 @@ class MSAModule(nn.Module):
             **triangle_multiplication_incoming, outgoing=False
         )
         self.tri_attn_start = TriangleAttention(
-            **triangle_attention_starting, start_node=True
+            **triangle_attention_starting, start_node=True, use_cuequivariance=True
         )
         self.tri_attn_end = TriangleAttention(
-            **triangle_attention_ending, start_node=False
+            **triangle_attention_ending, start_node=False, use_cuequivariance=True
         )
         self.pair_transition = Transition(**pair_transition)
 
@@ -694,7 +694,7 @@ class TemplateEmbedder(nn.Module):
                     dim=-1,
                 )
                 T = template_feats.shape[0]
-                u_II = torch.zeros(I, I, self.c, device=Z_II.device)
+                u_II = torch.zeros(I, I, self.c, device=Z_II.device, dtype=Z_II.dtype)
                 for i in range(T):
                     v_II = self.emb_pair(
                         self.norm_pair_before_pairformer(Z_II)

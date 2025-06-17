@@ -442,10 +442,15 @@ class FabricTrainer(ABC):
         # Set sampler epochs
         set_sampler_epoch(train_loader.sampler, self.state["current_epoch"])
 
-        for batch_idx, batch in enumerate(train_loader):
+        train_iter = iter(train_loader)
+        self.fabric.call("on_after_train_loader_iter", trainer=self)
+        for batch_idx in range(len(train_loader)):
             # (End epoch if stopping training completely or maximum desired batches for this epoch reached)
             if self.should_stop or batch_idx >= limit_batches:
                 break
+
+            self.fabric.call("on_before_train_loader_next", trainer=self)
+            batch = next(train_iter)
 
             self.fabric.call(
                 "on_train_batch_start", batch=batch, batch_idx=batch_idx, trainer=self
@@ -457,22 +462,8 @@ class FabricTrainer(ABC):
             self.training_step(
                 batch=batch,
                 batch_idx=batch_idx,
-                is_accumulating=not should_optimizer_step,
+                is_accumulating=not should_optimizer_step,  # triggers gradient syncing
             )
-
-            if should_optimizer_step:
-                self.fabric.call(
-                    "on_before_optimizer_step",
-                    optimizer=self.state["optimizer"],
-                    trainer=self,
-                )
-
-                # ... step the optimizer, clipping gradients and updating EMA parameters if applicable
-                self.step_optimizer()
-
-                self.fabric.call(
-                    "optimizer_step", optimizer=self.state["optimizer"], trainer=self
-                )
 
             self.fabric.call(
                 "on_train_batch_end",
@@ -483,6 +474,20 @@ class FabricTrainer(ABC):
             )
 
             if should_optimizer_step:
+                self.fabric.call(
+                    "on_before_optimizer_step",
+                    optimizer=self.state["optimizer"],
+                    trainer=self,
+                )
+
+                # ... step the optimizer, clipping gradients and updating EMA parameters if applicable
+                # NOTE: 'step_optimizer' automatically calls the 'on_after_optimizer_step' callback in fabric
+                self.step_optimizer()
+
+                self.fabric.call(
+                    "optimizer_step", optimizer=self.state["optimizer"], trainer=self
+                )
+
                 # ... step the scheduler, if we're adjusting the learning rate at the optimizer step-level
                 self.step_scheduler(
                     level="step", current_value=self.state["global_step"]

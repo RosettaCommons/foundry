@@ -21,20 +21,25 @@ def _spoof_cif_from_dictionary(item: dict, temp_dir: PathLike) -> Path:
     """Unpacks a dictionary to create a CIF file from its components.
 
     Args:
-        item (dict): A dictionary containing 'name' and 'components', optionally 'bonds'.
+        item (dict): A dictionary containing 'name' and either 'components' or 'sequences', optionally 'bonds'.
         temp_dir (Path): Path to the temporary directory for storing CIF files.
 
     Returns:
         Path: The path to the created CIF file, saved in the temporary directory.
 
     Raises:
-        NotImplementedError: If 'bonds' is present in the dictionary.
-        ValueError: If 'name' or 'components' are missing from the dictionary.
+        ValueError: If 'name' or neither 'components' nor 'sequences' are present in the dictionary.
     """
-    # Validate the dictionary structure ("name" and "components" are required, "bonds" is optional)
+    # Validate the dictionary structure ("name" is required, either "components" or "sequences" is required)
+    assert "name" in item, "The input dictionary must contain a 'name' key."
     assert (
-        "name" in item and "components" in item
-    ), "The input dictionary must contain 'name' and 'components' keys."
+        "components" in item or "sequences" in item
+    ), "The input dictionary must contain either 'components' or 'sequences' keys."
+
+    # Use sequences if components not present
+    if "components" not in item and "sequences" in item:
+        # Rename sequences to components
+        item["components"] = [{"sequence": seq} for seq in item.pop("sequences")]
 
     # Build components
     atom_array, component_list = components_to_atom_array(

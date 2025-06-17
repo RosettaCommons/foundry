@@ -8,6 +8,8 @@ import rootutils
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 
+from modelhub.utils.logging import suppress_warnings
+
 load_dotenv(override=True)
 
 
@@ -129,10 +131,11 @@ def validate(cfg: DictConfig) -> None:
 
     # ... validate the model
     ranked_logger.info("Validating model...")
-    trainer.validate(
-        val_loaders=val_loaders,
-        ckpt_path=ckpt_path,
-    )
+    with suppress_warnings():
+        trainer.validate(
+            val_loaders=val_loaders,
+            ckpt_path=ckpt_path,
+        )
 
     ranked_logger.info("Validation complete!")
 

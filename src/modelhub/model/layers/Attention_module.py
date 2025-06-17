@@ -3,12 +3,15 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
 from einops import rearrange
 from opt_einsum import contract as einsum
 
+from modelhub import SHOULD_USE_CUEQUIVARIANCE
 from modelhub.training.checkpoint import activation_checkpointing
 from modelhub.util_module import init_lecun_normal
+
+if SHOULD_USE_CUEQUIVARIANCE:
+    import cuequivariance_torch as cuet
 
 
 class FeedForwardLayer(nn.Module):
@@ -556,7 +559,6 @@ class OldMSAColGlobalAttention(nn.Module):
 # return out
 
 
-# triangle attention with deepspeed
 class TriangleAttention(nn.Module):
     def __init__(
         self,
@@ -565,7 +567,7 @@ class TriangleAttention(nn.Module):
         d_hidden=32,
         p_drop=0.1,
         start_node=True,
-        use_deepspeed_evo=True,
+        use_cuequivariance=False,
     ):
         super(TriangleAttention, self).__init__()
         self.norm = nn.LayerNorm(d_pair)
@@ -584,10 +586,7 @@ class TriangleAttention(nn.Module):
         self.dim = d_hidden
         self.start_node = start_node
 
-        self.use_deepspeed_evo = use_deepspeed_evo
-
-        if not torch.cuda.is_available():
-            self.use_deepspeed_evo = False
+        self.use_cuequivariance = use_cuequivariance
 
         self.reset_parameter()
 
@@ -613,43 +612,16 @@ class TriangleAttention(nn.Module):
         B, L = pair.shape[:2]
 
         pair = self.norm(pair)
-
-        if self.use_deepspeed_evo:
-            pair = pair.to(torch.bfloat16)
-
         bias = self.to_b(pair)  # (B, L, L, h)
 
         if not self.start_node:
             pair = rearrange(pair, "b i j d -> b j i d")
 
-        # input projection
-        query = self.to_q(pair).reshape(B, L, L, self.h, -1)
-        key = self.to_k(pair).reshape(B, L, L, self.h, -1)
-        value = self.to_v(pair).reshape(B, L, L, self.h, -1)
-        gate = torch.sigmoid(self.to_g(pair))  # (B, L, L, h*dim)
-
-        if not self.use_deepspeed_evo or L <= 16:  # fd hack
-            query = query * self.scaling
-            attn = einsum("bijhd,bikhd->bijkh", query, key)
-            attn = attn + bias.unsqueeze(1).expand(-1, L, -1, -1, -1)  # (bijkh)
-            attn = F.softmax(attn, dim=-2)
-            out = einsum("bijkh,bikhd->bijhd", attn, value).reshape(B, L, L, -1)
-            out = gate * out  # gated attention
+        # Route to appropriate implementation
+        if self.use_cuequivariance and SHOULD_USE_CUEQUIVARIANCE:
+            out = self._forward_cuequivariance(pair, bias)
         else:
-            # DS4Sci_EvoformerAttention
-            # Q, K, V: [Batch, N_res, N_res, Head, Dim]
-            # res_mask: [Batch, N_res, 1, 1, N_res]
-            # right_edges: [Batch, 1, Head, N_res, N_res]
-            # from deepspeed.ops.deepspeed4science import DS4Sci_EvoformerAttention
-            bias = bias.unsqueeze(1)
-            bias = bias.permute(0, 1, 4, 2, 3)
-            mask = torch.zeros(
-                [B, L, 1, 1, L], dtype=torch.bfloat16, device=bias.device
-            )
-            out = DS4Sci_EvoformerAttention(query, key, value, [mask, bias]).reshape(
-                B, L, L, -1
-            )
-            out = gate * out
+            out = self._forward_vanilla(pair, bias)
 
         if not self.start_node:
             out = rearrange(out, "b i j d -> b j i d")
@@ -658,21 +630,73 @@ class TriangleAttention(nn.Module):
         out = self.to_out(out)
         return out
 
+    def _forward_cuequivariance(self, pair, bias):
+        """cuEquivariance triangle attention implementation."""
+        # Cast to bfloat16 for optimal performance
+        # TODO: Trace back why we aren't already using bfloat16
+        if pair.dtype != torch.bfloat16:
+            pair = pair.to(torch.bfloat16)
+        if bias.dtype != torch.bfloat16:
+            bias = bias.to(torch.bfloat16)
+        assert (
+            pair.dtype == torch.bfloat16 and bias.dtype == torch.bfloat16
+        ), "cuEquivariance requires bfloat16 inputs for optimal performance"
+
+        # Gate computation
+        gate = torch.sigmoid(self.to_g(pair))  # (B, L, L, h*dim)
+
+        # Project and reshape to cuEquivariance format: (B, L, H, L, D)
+        query = rearrange(self.to_q(pair), "b i j (h d) -> b i h j d", h=self.h)
+        key = rearrange(self.to_k(pair), "b i k (h d) -> b i h k d", h=self.h)
+        value = rearrange(self.to_v(pair), "b i k (h d) -> b i h k d", h=self.h)
+
+        # Bias: (B, L, L, H) -> (B, 1, H, L, L)
+        bias_cueq = rearrange(bias, "b i j h -> b 1 h i j")
+
+        # Call cuEquivariance triangle attention
+        out_cueq = cuet.triangle_attention(
+            query, key, value, bias=bias_cueq, scale=self.scaling
+        )
+
+        # Reshape back: (B, L, H, L, D) -> (B, L, L, H*D)
+        out = rearrange(out_cueq, "b i h j d -> b i j (h d)")
+        out = gate * out  # gated attention
+        return out
+
+    def _forward_vanilla(self, pair, bias):
+        """Vanilla PyTorch triangle attention implementation."""
+        B, L = pair.shape[:2]
+
+        # Gate computation
+        gate = torch.sigmoid(self.to_g(pair))  # (B, L, L, h*dim)
+
+        # Project and reshape to vanilla format: (B, L, L, H, D)
+        query = self.to_q(pair).reshape(B, L, L, self.h, -1)
+        key = self.to_k(pair).reshape(B, L, L, self.h, -1)
+        value = self.to_v(pair).reshape(B, L, L, self.h, -1)
+
+        query = query * self.scaling
+        attn = einsum("bijhd,bikhd->bijkh", query, key)
+        attn = attn + bias.unsqueeze(1).expand(-1, L, -1, -1, -1)  # (bijkh)
+        attn = F.softmax(attn, dim=-2)
+        out = einsum("bijkh,bikhd->bijhd", attn, value).reshape(B, L, L, -1)
+        out = gate * out  # gated attention
+
+        return out
+
 
 class TriangleMultiplication(nn.Module):
     def __init__(self, d_pair, d_hidden=128, outgoing=True, bias=True):
         super(TriangleMultiplication, self).__init__()
+        self.outgoing = outgoing
         self.norm = nn.LayerNorm(d_pair, bias=bias)
         self.left_proj = nn.Linear(d_pair, d_hidden)
         self.right_proj = nn.Linear(d_pair, d_hidden)
         self.left_gate = nn.Linear(d_pair, d_hidden)
         self.right_gate = nn.Linear(d_pair, d_hidden)
-        #
         self.gate = nn.Linear(d_pair, d_pair)
         self.norm_out = nn.LayerNorm(d_hidden, bias=bias)
         self.out_proj = nn.Linear(d_hidden, d_pair)
-
-        self.outgoing = outgoing
 
         self.reset_parameter()
 
