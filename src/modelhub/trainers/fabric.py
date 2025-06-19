@@ -17,7 +17,6 @@ import hydra
 import lightning as L
 import torch
 from beartype.typing import Any, Literal, Mapping
-from datahub.samplers import set_sampler_epoch
 from lightning.fabric.accelerators import Accelerator
 from lightning.fabric.loggers import Logger
 from lightning.fabric.strategies import DDPStrategy, Strategy
@@ -356,6 +355,11 @@ class FabricTrainer(ABC):
         else:
             ranked_logger.info("No checkpoint provided; training from scratch.")
 
+        # Set the _num_iter_calls internal attribute of the wrapped loader to the current epoch
+        # (NOTE: This addresses a bug in Lightning Fabric, where there the iter() method calls the `_set_sampler_epoch()` method,
+        # relying on the _num_iter_calls attribute to determine the current epoch)
+        train_loader._num_iter_calls = self.state["current_epoch"]
+
         self.fabric.call("on_fit_start", trainer=self, model=self.state["model"])
 
         # Prevalidate
@@ -439,11 +443,10 @@ class FabricTrainer(ABC):
 
         assert self.state["model"].training
 
-        # Set sampler epochs
-        set_sampler_epoch(train_loader.sampler, self.state["current_epoch"])
-
+        # NOTE: When we call iter(), Fabric calls the `set_sampler_epoch()` method on the sampler behind the scenes, so we don't need to call it explicitly
         train_iter = iter(train_loader)
         self.fabric.call("on_after_train_loader_iter", trainer=self)
+
         for batch_idx in range(len(train_loader)):
             # (End epoch if stopping training completely or maximum desired batches for this epoch reached)
             if self.should_stop or batch_idx >= limit_batches:
