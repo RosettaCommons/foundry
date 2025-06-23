@@ -34,8 +34,7 @@ Create a JSON file with each component; e.g.,
             },
             {
                 // We will automatically name the atoms (SDF files do not specify atom names)
-                "path": "/path/to/sdf.sdf", 
-                "override_reference_conformer": true // We will replace the RDKit-generated conformer with the ground-truth
+                "path": "/path/to/sdf.sdf"
             },
             {
                 // We will use atom names from the CIF file
@@ -121,6 +120,10 @@ Arguments to `inference.py` (which the apptainer calls behind-the-scenes):
 - `diffusion_batch_size` *(optional)*: Number of output structures in the ensemble, drawn from the same model seed and forward pass of the Pairformer. Defaults to 5.
 - `num_steps` *(optional)* Number of steps for sampling of the diffusion module. The standard is 200; we see no deterioration in performance with 50 steps, but significant (>2x) speed improvements. Defaults to 200.
 - `seed`  *(optional)* Model seed. Running inference multiple times with different model seeds is the best, and most expensive, way to generate output diversity. Defaults to the training seed (usually 42).
+
+#### Advanced structural control arguments
+- `template_selection_syntax` *(optional)*: Selection syntax for template selection using contigs format (e.g., "A1-71,B1-1"). If provided, selected residues will be used as template coordinates that constrain the model prediction. Only works for proteins currently. If None, no residues will be selected for templating.
+- `ground_truth_conformer_selection` *(optional)*: Selection syntax for residues that should use ground truth conformers instead of generated ones. Uses AtomSelection format (e.g., "*/LIG" for all ligands, "A1-10" for residues 1-10 in chain A, "*/ATP" for all ATP molecules). If None, no residues will use ground truth conformers. This is useful for keeping known ligand conformations while allowing the model to predict protein structure around them.
 
 #### Arguments to control output dumping
 - `out_dir` *(optional)*: Where to save predicted structures. The output files will be named the same as the input structures, or use the `name` field in the specification, if present. Defaults to the current directory (`./`).

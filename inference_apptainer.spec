@@ -6,7 +6,7 @@ IncludeCmd: yes
 %setup
    # Create all required directories at once
    echo "Creating directory structure in container..."
-   mkdir -p ${APPTAINER_ROOTFS}/opt/modelhub/{src,configs,lib}
+   mkdir -p ${APPTAINER_ROOTFS}/opt/modelhub/{src,configs,lib/cifutils/src,lib/datahub/src}
    
    echo "Copying project files into the container..."
    
@@ -19,7 +19,8 @@ IncludeCmd: yes
    # Copy directories with rsync
    rsync -av --info=progress2 ./src/ ${APPTAINER_ROOTFS}/opt/modelhub/src/
    rsync -av --info=progress2 ./configs/ ${APPTAINER_ROOTFS}/opt/modelhub/configs/
-   rsync -av --info=progress2 ./lib/ ${APPTAINER_ROOTFS}/opt/modelhub/lib/
+   rsync -av --info=progress2 ./lib/cifutils/src/ ${APPTAINER_ROOTFS}/opt/modelhub/lib/cifutils/src/
+   rsync -av --info=progress2 ./lib/datahub/src/ ${APPTAINER_ROOTFS}/opt/modelhub/lib/datahub/src/
    
    echo "All files copied successfully."
 
