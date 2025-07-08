@@ -1,0 +1,76 @@
+# Core ML dependencies
+# NOTE: torch, torchvision, torchaudio are already included in NGC container
+lightning>=2.4.0,<2.5
+
+# Small molecule libraries
+rdkit>=2024.3.5
+# TODO: Remove OpenBabel dependency
+# openbabel will be installed via apt-get (pip installation fails due to C++ build dependencies)
+
+# Project-related dependencies
+# ... generic tools
+GitPython>=3.0.0,<4
+cython>=3.0.0,<4
+cytoolz>=0.12.3,<1
+assertpy>=1.1.0,<2 # TODO: remove this dependency
+tqdm>=4.65.0,<5
+rootutils>=1.0.7,<1.1
+dm-tree>=0.1.6,<1 # TODO: remove this dependency
+deepdiff>=8.0.0,<9 # TODO: remove this dependency
+
+# ... configuration & CLI
+fire>=0.6.0,<1
+hydra-core>=1.3.0,<1.4
+environs>=11.0.0,<12
+
+# ... linear algebra, maths & ml
+numpy>=1.25.0,<2
+scipy>=1.13.1,<2
+einops>=0.8.0,<1
+einx>=0.1.0,<1
+opt_einsum>=3.4.0,<4
+
+# ... kernels
+cuequivariance_ops_cu12>=0.5.0
+cuequivariance_ops_torch_cu12>=0.5.0
+cuequivariance_torch>=0.5.0
+
+# ... data tools
+pandas>=2.2,<2.3
+pyarrow>=17.0.0
+fastparquet>=2024.5.0
+seaborn>=0.13.0,<1
+
+# ... bioinformatics
+biopython>=1.83,<2
+py3Dmol>=2.2.1,<3
+pymol-remote>=0.0.5
+biotite==1.3.0 # Fixed version - updating may involve breaking changes
+hydride==1.2.3 # Fixed version - updating may involve breaking changes
+
+# ... logging
+wandb>=0.15.10,<1
+rich>=13.9.4,<14
+
+# Formatting & linting (only needed for development)
+ruff==0.8.3
+pre-commit==3.7.1
+
+# Debugger & interactive tools (only needed for development)
+debugpy>=1.8.5,<2
+ipykernel>=6.29.4,<7
+icecream>=2.0.0,<3
+pymol-remote>=0.1.0
+ipdb>=0.13.9
+
+# Pytest plugins (only needed for development)
+pytest>=8.2.0,<9
+pytest-testmon>=2.1.1,<3
+pytest-xdist>=3.6.1,<4
+pytest-dotenv>=0.5.2,<1
+pytest-cov>=4.1.0,<5
+pytest-benchmark>=5.0.0,<6
+
+# Typing & documentation (only needed for development)
+jaxtyping>=0.2.17,<1
+beartype>=0.18.0,<1 

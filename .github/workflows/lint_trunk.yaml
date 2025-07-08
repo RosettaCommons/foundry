@@ -25,9 +25,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: 'pip'
-      - name: Extract ruff version from environment.yaml
+      - name: Extract ruff version from requirements.txt
         run: |
-          echo "RUFF_VERSION=$(grep 'ruff==' environment.yaml | sed 's/.*ruff==\(.*\)/\1/')" >> $GITHUB_ENV
+          echo "RUFF_VERSION=$(grep 'ruff==' requirements.txt | sed 's/.*ruff==\(.*\)/\1/')" >> $GITHUB_ENV
       - name: Install ruff
         run: pip install ruff==${{ env.RUFF_VERSION }}
       - name: Ruff format

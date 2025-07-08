@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: ubuntu:24.04
+From: nvcr.io/nvidia/pytorch:25.04-py3
 IncludeCmd: yes
 
 # NOTE: This apptainer was written using apptainer version `1.1.6+2-g6808b5172-ipd`
@@ -19,17 +19,10 @@ IncludeCmd: yes
 %files
    /etc/localtime
    /etc/hosts
-   environment.yaml /opt/environment.yaml
+   requirements.txt /opt/requirements.txt
 
 %post
-   # get os name
-   echo "Running on OS name $(lsb_release -i | awk '{ print $3 }')"
-   # get os version
-   echo "... in OS version $(lsb_release -r | awk '{ print $2 }')"
-
    ## GENERAL SETUP
-   # Switch shell to bash
-   export SHELL=/bin/bash
 
    # Common symlinks (within container)
    ln -s /net/databases /databases
@@ -39,56 +32,36 @@ IncludeCmd: yes
    ln -s /net /mnt/net
 
    ## PACKAGE INSTALLATION
+
    apt-get update
-   # Install make (so we can run `make format`, `make clean`, etc.)
-   apt-get install -y make git wget libaio-dev
-   # Install build tools (needed for cuEquivariance JIT compilation)
-   apt-get install -y build-essential gcc g++
-   # required X libs
-   apt-get install -y libx11-6 libxau6 libxext6 libxrender1
+   apt-get install -y make git libaio-dev
+   # Install OpenBabel (pip installation fails due to C++ build dependencies)
+   apt-get install -y openbabel libopenbabel-dev python3-openbabel
    apt-get clean
 
-
-   ## ENVIRONMENT CREATION & DEPENDENCY INSTALLATION
-   # Download miniconda
-   wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /opt/miniconda.sh
+   ## PYTHON DEPENDENCY INSTALLATION
    
-   # Install conda
-   bash /opt/miniconda.sh -b -u -p /usr
+   # Fix NGC constraints that conflict with our required packages
+   # ... remove packaging constraint to allow biotite 1.3.0 installation
+   sed -i '/packaging==/d' /etc/pip/constraint.txt
 
-   # Install everything
-   # ... the environment in the container is at `/usr/envs/modelhub-apptainer`
-   conda install -c conda-forge mamba
-   mamba env create --file /opt/environment.yaml --name modelhub-apptainer
-
-   # Clean up files to reduce size
-   # ... remove conda
-   mamba clean -a -y
-   # ... remove other apt packages that are no longer needed
-   apt-get -y purge wget
-   apt-get -y autoremove
+   # ... remove pytest constraint
+   sed -i '/pytest==/d' /etc/pip/constraint.txt
+   
+   # Install all other Python dependencies using requirements.txt
+   # (Installs into the default NGC Python environment)
+   pip install -r /opt/requirements.txt
+   
+   # Clean up
    apt-get clean && rm -rf /var/lib/apt/lists/*
-   rm /opt/miniconda.sh
 
 %environment
-   # Skip conda activation routines entirely and set PATH directly
-   # This approach avoids all conda activation script issues
-   export PATH=/usr/envs/modelhub-apptainer/bin:/usr/bin:$PATH
-   
-   # (Path to CUDA)
-   export PATH=$PATH:/usr/local/cuda/bin
-
-   # (For NVIDIA Kernels)
-   export CC=gcc
-   export CXX=g++
-   
-   # (Flags to increase accessible GPU memory)
+   # (Flag to increase accessible GPU memory)
    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
    # (Turn off NVLink)
    export NCCL_P2P_DISABLE=1
-
-
+   
 %runscript
    # NOTE: The %runscript is invoked when the container is run without specifying a different command. 
    exec python "$@"
