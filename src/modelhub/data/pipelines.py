@@ -224,22 +224,24 @@ def build_af3_transform_pipeline(
     # Crop
 
     # ... crop around our query pn_unit(s) early, since we don't need the full structure moving forward
-    cropping_transform = RandomRoute(
-        transforms=[
-            CropContiguousLikeAF3(
-                crop_size=crop_size,
-                keep_uncropped_atom_array=True,
-                max_atoms_in_crop=max_atoms_in_crop,
-            ),
-            CropSpatialLikeAF3(
-                crop_size=crop_size,
-                crop_center_cutoff_distance=crop_center_cutoff_distance,
-                keep_uncropped_atom_array=True,
-                max_atoms_in_crop=max_atoms_in_crop,
-            ),
-        ],
-        probs=[crop_contiguous_probability, crop_spatial_probability],
-    )
+    cropping_transform = Identity()
+    if crop_size is not None:
+        cropping_transform = RandomRoute(
+            transforms=[
+                CropContiguousLikeAF3(
+                    crop_size=crop_size,
+                    keep_uncropped_atom_array=True,
+                    max_atoms_in_crop=max_atoms_in_crop,
+                ),
+                CropSpatialLikeAF3(
+                    crop_size=crop_size,
+                    crop_center_cutoff_distance=crop_center_cutoff_distance,
+                    keep_uncropped_atom_array=True,
+                    max_atoms_in_crop=max_atoms_in_crop,
+                ),
+            ],
+            probs=[crop_contiguous_probability, crop_spatial_probability],
+        )
 
     transforms.append(
         ConditionalRoute(
