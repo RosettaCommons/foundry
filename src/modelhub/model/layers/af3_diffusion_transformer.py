@@ -27,6 +27,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         atom_transformer,
         broadcast_trunk_feats_on_1dim_old,
         use_chiral_features,
+        use_inv_dist_squared,
     ):
         super().__init__()
         self.c_atom = c_atom
@@ -80,6 +81,8 @@ class AtomAttentionEncoderDiffusion(nn.Module):
             c_atom=c_atom, c_atompair=c_atompair, **atom_transformer
         )
 
+        self.use_inv_dist_squared = use_inv_dist_squared
+
     def reset_parameters(self):
         super().reset_parameters()
         if self.use_chiral_features:
@@ -121,19 +124,46 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         def embed_atom_feats(R_L, C_L, D_LL, V_LL, P_LL, tok_idx):
             # Embed pairwise inverse squared distances, and the valid mask
             if self.training:
-                P_LL = (
-                    P_LL
-                    + self.process_inverse_dist(
-                        1 / (1 + torch.linalg.norm(D_LL, dim=-1, keepdim=True))
+                if self.use_inv_dist_squared:
+                    P_LL = (
+                        P_LL
+                        + self.process_inverse_dist(
+                            1 / (1 + torch.sum(D_LL * D_LL, dim=-1, keepdim=True))
+                        )
+                        * V_LL
                     )
-                    * V_LL
-                )
+                else:
+                    P_LL = (
+                        P_LL
+                        + self.process_inverse_dist(
+                            1 / (1 + torch.linalg.norm(D_LL, dim=-1, keepdim=True))
+                        )
+                        * V_LL
+                    )
                 P_LL = P_LL + self.process_valid_mask(V_LL.to(P_LL.dtype)) * V_LL
             else:
-                P_LL[V_LL[..., 0]] += self.process_inverse_dist(
-                    1
-                    / (1 + torch.linalg.norm(D_LL[V_LL[..., 0]], dim=-1, keepdim=True))
-                )
+                if self.use_inv_dist_squared:
+                    P_LL[V_LL[..., 0]] += self.process_inverse_dist(
+                        1
+                        / (
+                            1
+                            + torch.sum(
+                                D_LL[V_LL[..., 0]] * D_LL[V_LL[..., 0]],
+                                dim=-1,
+                                keepdim=True,
+                            )
+                        )
+                    )
+                else:
+                    P_LL[V_LL[..., 0]] += self.process_inverse_dist(
+                        1
+                        / (
+                            1
+                            + torch.linalg.norm(
+                                D_LL[V_LL[..., 0]], dim=-1, keepdim=True
+                            )
+                        )
+                    )
                 P_LL[V_LL[..., 0]] += self.process_valid_mask(
                     V_LL[V_LL[..., 0]].to(P_LL.dtype)
                 )

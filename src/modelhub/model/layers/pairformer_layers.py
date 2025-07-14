@@ -34,6 +34,7 @@ class AtomAttentionEncoderPairformer(nn.Module):
         atom_1d_features,
         c_atom_1d_features,
         atom_transformer,
+        use_inv_dist_squared,
     ):
         super().__init__()
         self.c_atom = c_atom
@@ -83,6 +84,8 @@ class AtomAttentionEncoderPairformer(nn.Module):
         self.atom_transformer = AtomTransformer(
             c_atom=c_atom, c_atompair=c_atompair, **atom_transformer
         )
+
+        self.use_inv_dist_squared = use_inv_dist_squared
 
     def forward(
         self,
@@ -140,13 +143,21 @@ class AtomAttentionEncoderPairformer(nn.Module):
             P_LL = self.process_d(D_LL) * V_LL  # [L, L, 3] -> [L, L, C_atompair]
 
             # Embed pairwise inverse squared distances, and the valid mask
-            P_LL = (
-                P_LL
-                + self.process_inverse_dist(
-                    1 / (1 + torch.linalg.norm(D_LL, dim=-1, keepdim=True))
-                )
-                * V_LL
-            )  # [L, L, 1] -> [L, L, C_atompair]
+            if self.use_inv_dist_squared:
+                P_LL += (
+                    self.process_inverse_dist(
+                        1 / (1 + torch.sum(D_LL * D_LL, dim=-1, keepdim=True))
+                    )
+                    * V_LL
+                )  # [L, L, 1] -> [L, L, C_atompair]
+            else:
+                P_LL = (
+                    P_LL
+                    + self.process_inverse_dist(
+                        1 / (1 + torch.linalg.norm(D_LL, dim=-1, keepdim=True))
+                    )
+                    * V_LL
+                )  # [L, L, 1] -> [L, L, C_atompair]
 
             P_LL = P_LL + self.process_valid_mask(V_LL.to(P_LL.dtype)) * V_LL
 

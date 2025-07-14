@@ -20,6 +20,7 @@ feature_initializer:
       c_token: 384
       c_atom_1d_features: 389
       c_tokenpair: ${model.net.c_z}
+      use_inv_dist_squared: false
       atom_1d_features:
         - ref_pos
         - ref_charge
@@ -123,6 +124,7 @@ diffusion_module:
   atom_attention_encoder:
     c_tokenpair: ${model.net.c_z}
     c_atom_1d_features: 389
+    use_inv_dist_squared: false
     atom_1d_features:
         - ref_pos
         - ref_charge
