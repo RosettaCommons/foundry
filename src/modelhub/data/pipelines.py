@@ -82,24 +82,22 @@ from datahub.transforms.msa.msa import (
     EncodeMSA,
     FeaturizeMSALikeAF3,
     FillFullMSAFromEncoded,
-    # LoadPolymerMSAs,
     PairAndMergePolymerMSAs,
 )
 from datahub.transforms.rdkit_utils import GetRDKitChiralCenters
 from datahub.transforms.symmetry import FindAutomorphismsWithNetworkX
+from datahub.transforms.msa.msa import LoadPolymerMSAs
 from omegaconf import DictConfig
 
-from modelhub.data.bfactor_conditioned_transforms import SetOccToZeroOnBfactor
+from datahub.transforms.bfactor_conditioned_transforms import SetOccToZeroOnBfactor
+from datahub.transforms.random_atomize_residues import RandomAtomizeResidues
+from datahub.transforms.mirror_transform import RandomlyMirrorInputs
 from modelhub.data.extra_xforms import CheckForNaNsInInputs
-from modelhub.data.mirror_transform import RandomlyMirrorInputs
-from modelhub.data.msa_rna_fix import LoadPolymerMSAsFixedRNA
-from modelhub.data.paired_msa import LoadPairedMSAs
 from modelhub.data.pipeline_utils import (
     annotate_post_crop_hash,
     annotate_pre_crop_hash,
     set_to_occupancy_0_where_crop_hashes_differ,
 )
-from modelhub.data.random_atomize_residues import RandomAtomizeResidues
 from projects.rfscore.pipelines.composed import build_ground_truth_distogram_transform
 
 
@@ -416,7 +414,7 @@ def build_af3_transform_pipeline(
 
     transforms += [
         # ... load and pair MSAs
-        LoadPolymerMSAsFixedRNA(
+        LoadPolymerMSAs(
             protein_msa_dirs=protein_msa_dirs,
             rna_msa_dirs=rna_msa_dirs,
             max_msa_sequences=max_msa_sequences,  # maximum number of sequences to load (we later subsample further)
@@ -430,10 +428,6 @@ def build_af3_transform_pipeline(
         PairAndMergePolymerMSAs(dense=dense_msa),
         # ... encode MSA to AF-3 format
     ]
-
-    if input_contains_explicit_msa:
-        # load pre-paired MSA
-        transforms += [LoadPairedMSAs()]
 
     transforms += [
         EncodeMSA(

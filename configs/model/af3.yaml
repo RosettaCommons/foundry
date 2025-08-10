@@ -1,7 +1,0 @@
-defaults:
-  - optimizers/adam@optimizer
-  - schedulers/af3@lr_scheduler
-  - components/ema@ema
-  - components/af3_net@net
-
-

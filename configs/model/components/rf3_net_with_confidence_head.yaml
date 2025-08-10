@@ -1,5 +1,5 @@
 defaults:
-  - af3_net
+  - rf3_net
 
 # Model architecture
 _target_: modelhub.model.AF3.AF3WithConfidence

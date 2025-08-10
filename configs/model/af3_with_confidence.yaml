@@ -1,5 +1,0 @@
-defaults:
-  - af3
-  - components/af3_net_with_confidence_head@net
-
-

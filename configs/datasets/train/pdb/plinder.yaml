@@ -1,3 +1,5 @@
+# PLINDER is a subset of the PDB, so we inherit from the base PDB config
+
 defaults:
   - base
 

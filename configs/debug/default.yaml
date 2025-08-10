@@ -46,7 +46,6 @@ dataloader:
       pin_memory: False
       prefetch_factor: null # must be null for num_workers=0
 
-
 datasets:
   crop_size: 100  # set small crop size for quick debugging
   diffusion_batch_size_train: 1
@@ -58,7 +57,7 @@ datasets:
 
 trainer:
   devices_per_node: 1
-  limit_train_batches: 5
+  limit_train_batches: 2
   limit_val_batches: 1
   validate_every_n_epochs: 1
 

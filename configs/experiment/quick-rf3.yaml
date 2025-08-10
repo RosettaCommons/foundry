@@ -6,19 +6,14 @@ name: quick-af3
 
 # For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
 defaults:
-  - rf3
-  - override /datasets: af3_pdb_only
+  - pretrained/rf3
+  - override /datasets: pdb_only
 
 tags:
   # list of tags to add to the run ( & on wandb to easily find & filter runs)
   - quick
 
 project: test
-
-ckpt_config:
-  _target_: modelhub.utils.weights.CheckpointConfig
-  path: /projects/ml/modelhub/inference/af3-run9-w-conf-newdatecut_ep688.pt
-  reset_optimizer: true
 
 paths:
   data:

@@ -1,3 +1,5 @@
+# TODO: Inherit from common config with default Transform pipeline
+
 na_complex_distillation:
   dataset:
     _target_: datahub.datasets.datasets.StructuralDatasetWrapper

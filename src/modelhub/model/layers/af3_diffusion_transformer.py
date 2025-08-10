@@ -266,10 +266,8 @@ class AtomTransformer(nn.Module):
         diffusion_transformer,
         n_queries,
         n_keys,
-        l_max,
     ):
         super().__init__()
-        self.l_max = l_max
 
         self.diffusion_transformer = DiffusionTransformer(
             c_token=c_atom, c_s=c_atom, c_tokenpair=c_atompair, **diffusion_transformer
@@ -282,7 +280,6 @@ class AtomTransformer(nn.Module):
         Plm,  # [B, L, L, C_atompair]
     ):
         L = Ql.shape[-2]
-        assert L < self.l_max
         Beta_lm = True
         return self.diffusion_transformer(Ql, Cl, Plm, Beta_lm)
 

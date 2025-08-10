@@ -1,16 +1,16 @@
 # @package _global_
 
+name: rf3
+
 defaults:
-  - af3_with_disorder_distill
+  - override /datasets: pdb_and_distillation
+  - override /model: rf3
+  - override /trainer: af3
 
 ckpt_config:
+  _target_: modelhub.utils.weights.CheckpointConfig
+  path: /projects/ml/modelhub/inference/af3-run9-w-conf-newdatecut_ep688.pt
   reset_optimizer: true
-  weight_loading_config:
-    _target_: modelhub.utils.weights.WeightLoadingConfig
-    fallback_policy: reinit
-    param_policies:
-      "*.feature_initializer.input_feature_embedder.atom_attention_encoder.process_input_features.*": copy_and_zero_pad
-      "*.diffusion_module.atom_attention_encoder.process_input_features.*": copy_and_zero_pad
 
 model:
   lr_scheduler:

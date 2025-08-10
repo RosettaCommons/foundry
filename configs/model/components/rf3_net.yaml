@@ -6,7 +6,7 @@ c_s: 384
 c_z: 128
 c_atom: 128
 c_atompair: 16
-c_s_inputs: 449 # TODO: What is this?
+c_s_inputs: 449
 
 # +---------- Feature embedding ----------+
 feature_initializer:
@@ -30,7 +30,6 @@ feature_initializer:
       atom_transformer:
         n_queries: 32
         n_keys: 128
-        l_max: 40_000 # does not matter
         diffusion_transformer:
           n_block: 3
           diffusion_transformer_block:
@@ -134,7 +133,6 @@ diffusion_module:
     atom_transformer:
       n_queries: 32
       n_keys: 128
-      l_max: ${model.net.feature_initializer.input_feature_embedder.atom_attention_encoder.atom_transformer.l_max}
       diffusion_transformer:
         n_block: 3
         diffusion_transformer_block:
@@ -154,7 +152,6 @@ diffusion_module:
     atom_transformer:
       n_queries: 32
       n_keys: 128
-      l_max: ${model.net.feature_initializer.input_feature_embedder.atom_attention_encoder.atom_transformer.l_max}
       diffusion_transformer:
         n_block: 3
         diffusion_transformer_block:

@@ -1,3 +1,0 @@
-defaults:
-  - af3_pdb_only
-  - train/pdb/plinder@train.plinder

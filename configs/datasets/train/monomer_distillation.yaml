@@ -1,3 +1,5 @@
+# TODO: Inherit from common config with default Transform pipeline
+
 monomer_distillation:
   dataset:
     _target_: datahub.datasets.datasets.StructuralDatasetWrapper

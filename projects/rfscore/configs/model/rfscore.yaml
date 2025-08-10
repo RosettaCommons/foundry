@@ -23,7 +23,6 @@ model:
     recycler:
       template_embedder:
         raw_template_dim: 66
-        use_fourier_encoding: false
 
     diffusion_module:
       atom_attention_encoder:

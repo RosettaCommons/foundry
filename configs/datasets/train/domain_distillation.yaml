@@ -1,3 +1,5 @@
+# TODO: Inherit from common config with default Transform pipeline
+
 multidomain_distillation:
   dataset:
     _target_: modelhub.data.paired_msa.MultiInputDatasetWrapper
