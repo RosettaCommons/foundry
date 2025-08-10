@@ -2,10 +2,8 @@ from os import PathLike
 from pathlib import Path
 
 import numpy as np
-import torch
 from cifutils.constants import (
     AF3_EXCLUDED_LIGANDS,
-    GAP,
     STANDARD_AA,
     STANDARD_DNA,
     STANDARD_RNA,
@@ -13,9 +11,14 @@ from cifutils.constants import (
 from cifutils.enums import ChainType
 from datahub.common import exists
 from datahub.encoding_definitions import RF2AA_ATOM36_ENCODING, AF3SequenceEncoding
-from datahub.transforms.af3_reference_molecule import GetAF3ReferenceMoleculeFeatures
+from datahub.transforms.af3_reference_molecule import (
+    GetAF3ReferenceMoleculeFeatures,
+    GroundTruthConformerPolicy,
+    RandomApplyGroundTruthConformerByChainType,
+)
 from datahub.transforms.atom_array import (
     AddGlobalAtomIdAnnotation,
+    AddGlobalResIdAnnotation,
     AddGlobalTokenIdAnnotation,
     AddWithinChainInstanceResIdx,
     AddWithinPolyResIdxAnnotation,
@@ -27,9 +30,11 @@ from datahub.transforms.atom_frames import (
     AddIsRealAtom,
     AddPolymerFrameIndices,
 )
+from datahub.transforms.atom_level_embeddings import FeaturizeAtomLevelEmbeddings
 from datahub.transforms.atomize import AtomizeByCCDName, FlagNonPolymersForAtomization
 from datahub.transforms.base import (
     AddData,
+    ApplyFunction,
     Compose,
     ConditionalRoute,
     ConvertToTorch,
@@ -37,7 +42,13 @@ from datahub.transforms.base import (
     RandomRoute,
     SubsetToKeys,
 )
-from datahub.transforms.bonds import AddAF3TokenBondFeatures
+from datahub.transforms.bonds import (
+    AddAF3TokenBondFeatures,
+)
+from datahub.transforms.cached_residue_data import (
+    LoadCachedResidueLevelData,
+    RandomSubsampleCachedConformers,
+)
 from datahub.transforms.center_random_augmentation import CenterRandomAugmentation
 from datahub.transforms.chirals import AddAF3ChiralFeatures
 from datahub.transforms.covalent_modifications import (
@@ -60,6 +71,7 @@ from datahub.transforms.featurize_unresolved_residues import (
 from datahub.transforms.filters import (
     FilterToSpecifiedPNUnits,
     HandleUndesiredResTokens,
+    RandomlyRemoveLigands,
     RemoveHydrogens,
     RemoveNucleicAcidTerminalOxygen,
     RemovePolymersWithTooFewResolvedResidues,
@@ -70,20 +82,39 @@ from datahub.transforms.msa.msa import (
     EncodeMSA,
     FeaturizeMSALikeAF3,
     FillFullMSAFromEncoded,
-    LoadPolymerMSAs,
+    # LoadPolymerMSAs,
     PairAndMergePolymerMSAs,
 )
 from datahub.transforms.rdkit_utils import GetRDKitChiralCenters
 from datahub.transforms.symmetry import FindAutomorphismsWithNetworkX
-from datahub.transforms.template import (
-    AddInputFileTemplate,
-    AddRFTemplates,
-    FeaturizeTemplatesLikeAF3,
-    OneHotTemplateRestype,
-    RandomSubsampleTemplates,
-)
+from omegaconf import DictConfig
 
 from modelhub.data.bfactor_conditioned_transforms import SetOccToZeroOnBfactor
+from modelhub.data.extra_xforms import CheckForNaNsInInputs
+from modelhub.data.mirror_transform import RandomlyMirrorInputs
+from modelhub.data.msa_rna_fix import LoadPolymerMSAsFixedRNA
+from modelhub.data.paired_msa import LoadPairedMSAs
+from modelhub.data.pipeline_utils import (
+    annotate_post_crop_hash,
+    annotate_pre_crop_hash,
+    set_to_occupancy_0_where_crop_hashes_differ,
+)
+from modelhub.data.random_atomize_residues import RandomAtomizeResidues
+from projects.rfscore.pipelines.composed import build_ground_truth_distogram_transform
+
+
+def TrainingRoute(transform):
+    return ConditionalRoute(
+        condition_func=lambda data: data["is_inference"],
+        transform_map={True: Identity(), False: transform},
+    )
+
+
+def InferenceRoute(transform):
+    return ConditionalRoute(
+        condition_func=lambda data: data["is_inference"],
+        transform_map={False: Identity(), True: transform},
+    )
 
 
 def build_af3_transform_pipeline(
@@ -106,24 +137,16 @@ def build_af3_transform_pipeline(
     # Conformer generation params
     conformer_generation_timeout: float = 5.0,  # seconds
     use_element_for_atom_names_of_atomized_tokens: bool = False,
-    # Template params
-    max_n_template: int = 20,  # Maximum number of templates to return from our template search (distinct from n_template)
-    n_template: int = 4,
-    template_max_seq_similarity: float = 60.0,
-    template_min_seq_similarity: float = 10.0,
-    template_min_length: int = 10,
-    template_allowed_chain_types: list[ChainType] = [
-        ChainType.POLYPEPTIDE_L,
-        ChainType.RNA,
-    ],
-    template_distogram_bins: torch.Tensor = torch.linspace(3.25, 50.75, 38),
-    template_default_token: str = GAP,
     # MSA parameters
     max_msa_sequences: int = 10_000,  # Paper: 16,000, but we only have 10K stored on disk
     n_msa: int = 10_000,  # Paper: ?? I think ~12K?
     dense_msa: bool = True,  # True for AF3
     # Cache paths
     msa_cache_dir: PathLike | str | None = None,
+    residue_cache_dir: PathLike
+    | str
+    | None = "/net/tukwila/lschaaf/datahub/MACE-Egret-3-noH/mace_embeddings",
+    # Diffusion parameters
     sigma_data: float = 16.0,
     diffusion_batch_size: int = 48,
     # Whether to include features for confidence head
@@ -133,6 +156,30 @@ def build_af3_transform_pipeline(
     pad_dna_p_skip: float = 0.0,
     b_factor_min: float | None = None,
     b_factor_max: float | None = None,
+    # ------ Atom-level conditioning ------ #
+    p_unconditional: float = 1.0,  # Show no conditioning, anywhere (i.e., unconditional)
+    template_noise_scales: dict | DictConfig = {
+        "atomized": 1e-5,  # No noise (for atomized tokens)
+        "not_atomized": 0.2,  # Up to 0.2A of noise (for non-atomized tokens)
+    },
+    allowed_chain_types_for_conditioning: list[int | str | ChainType]
+    | None = ChainType.get_all_types(),  # All chain types (None = no conditioning)
+    p_condition_per_token: float = 0.4,  # When sampling with conditions, X% of tokens are conditioned (e.g., X^2% of pairs have conditions)
+    p_provide_inter_molecule_distances: float = 0.05,  # When sampling with conditions, X% of the time, show any inter-molecule distances
+    # (Reference Conformer)
+    p_give_non_polymer_ref_conf: float = 0.6,  # When sampling with conditions, X% of non-polymer chains get a ground-truth reference conformer
+    p_give_polymer_ref_conf: float = 0.1,  # When sampling with conditions, X% of polymer chains get a ground-truth reference conformer
+    # -------------------------------------- #
+    take_first_chiral_subordering: bool = False,
+    mirror_prob: float = 0.0,
+    input_contains_explicit_msa: bool = False,
+    atomization_prob: float = 0.0,
+    ligand_dropout_prob: float = 0.0,
+    raise_if_missing_msa_for_protein_of_length_n: int | None = None,
+    mask_crop_edges: bool = False,
+    p_dropout_atom_level_embeddings: float = 0.0,
+    embedding_dim: int = 384,
+    n_conformers: int = 8,
 ):
     """Build the AF3 pipeline with specified parameters.
 
@@ -187,28 +234,78 @@ def build_af3_transform_pipeline(
         AddData(
             {"is_inference": is_inference, "run_confidence_head": run_confidence_head}
         ),
+        # ... unconditional vs. conditional
+        RandomRoute(
+            transforms=[
+                AddData({"is_unconditional": True}),
+                AddData({"is_unconditional": False}),
+            ],
+            probs=[p_unconditional, 1 - p_unconditional],
+        ),
         RemoveHydrogens(),
-        FilterToSpecifiedPNUnits(
-            extra_info_key_with_pn_unit_iids_to_keep="all_pn_unit_iids_after_processing"
-        ),  # Filter to non-clashing PN units
-        RemoveTerminalOxygen(),
-        SetOccToZeroOnBfactor(b_factor_min, b_factor_max),
-        RemoveUnresolvedPNUnits(),
-        RemovePolymersWithTooFewResolvedResidues(min_residues=4),
-        MaskPolymerResiduesWithUnresolvedFrameAtoms(),
-        # NOTE: For inference, we must keep UNL to support ligands that are not in the CCD
-        HandleUndesiredResTokens(
-            undesired_res_tokens=undesired_res_names
-        ),  # e.g., non-standard residues
+        TrainingRoute(
+            FilterToSpecifiedPNUnits(
+                extra_info_key_with_pn_unit_iids_to_keep="all_pn_unit_iids_after_processing"
+            ),
+        ),
+    ]
+
+    transforms.append(
         ConditionalRoute(
             condition_func=lambda data: data.get("is_inference", False),
             transform_map={
                 True: Identity(),
-                False: PadDNA(p_skip=pad_dna_p_skip),
+                False: RandomlyMirrorInputs(mirror_prob),
             },
+        )
+    )
+
+    transforms += [
+        RemoveTerminalOxygen(),
+        TrainingRoute(
+            SetOccToZeroOnBfactor(b_factor_min, b_factor_max),
+        ),
+        RemoveUnresolvedPNUnits(),
+        RemovePolymersWithTooFewResolvedResidues(min_residues=4),
+        MaskPolymerResiduesWithUnresolvedFrameAtoms(),
+        ConditionalRoute(
+            condition_func=lambda data: data.get("is_inference", False),
+            transform_map={
+                # UNX causes RDKit to crash (element is "X"), so we exclude even at inference
+                True: HandleUndesiredResTokens(undesired_res_tokens=["UNX"]),
+                False: HandleUndesiredResTokens(
+                    undesired_res_tokens=undesired_res_names
+                ),
+            },
+        ),
+        TrainingRoute(
+            PadDNA(p_skip=pad_dna_p_skip),
         ),
         FlagAndReassignCovalentModifications(),
         FlagNonPolymersForAtomization(),
+    ]
+
+    transforms.append(
+        ConditionalRoute(
+            condition_func=lambda data: data.get("is_inference", False),
+            transform_map={
+                True: Identity(),
+                False: RandomAtomizeResidues(atomization_prob),
+            },
+        )
+    )
+
+    transforms.append(
+        ConditionalRoute(
+            condition_func=lambda data: data.get("is_inference", False),
+            transform_map={
+                True: Identity(),
+                False: RandomlyRemoveLigands(ligand_dropout_prob),
+            },
+        )
+    )
+
+    transforms += [
         AddGlobalAtomIdAnnotation(),
         AtomizeByCCDName(
             atomize_by_default=True,
@@ -243,7 +340,8 @@ def build_af3_transform_pipeline(
             probs=[crop_contiguous_probability, crop_spatial_probability],
         )
 
-    transforms.append(
+    transforms += [
+        ApplyFunction(annotate_pre_crop_hash),
         ConditionalRoute(
             condition_func=lambda data: data.get("is_inference", False),
             transform_map={
@@ -251,78 +349,93 @@ def build_af3_transform_pipeline(
                 False: cropping_transform,
                 # Default to Identity during inference (`is_inference == True`)
             },
+        ),
+        ApplyFunction(annotate_post_crop_hash),
+    ]
+
+    if mask_crop_edges:
+        transforms += [
+            ApplyFunction(set_to_occupancy_0_where_crop_hashes_differ),
+        ]
+
+    # +-----------------------------------------------------------+
+    # +------------------ GROUND TRUTH TEMPLATE ------------------+
+    # +-----------------------------------------------------------+
+
+    # Ground truth template noising (for training)
+    transforms.append(
+        build_ground_truth_distogram_transform(
+            template_noise_scales=template_noise_scales,
+            allowed_chain_types_for_conditioning=allowed_chain_types_for_conditioning,
+            p_condition_per_token=p_condition_per_token,
+            p_provide_inter_molecule_distances=p_provide_inter_molecule_distances,
+            is_inference=is_inference,
         )
     )
 
-    training_template_loading_transforms = Compose(
-        [
-            AddRFTemplates(
-                max_n_template=max_n_template,  # return at most max_n_template (e.g., 20 in AF-3) from our template search (we will then subsample)
-                pick_top=False,
-                max_seq_similarity=template_max_seq_similarity,
-                min_seq_similarity=template_min_seq_similarity,
-                min_template_length=template_min_length,
-            ),
-            # Subsample templates to n_template (from 20)
-            RandomSubsampleTemplates(n_template=n_template),
-        ]
-    )
+    # +----------------------------------------------------------------------+
+    # +------------------ GROUND TRUTH REFERENCE CONFORMER ------------------+
+    # +----------------------------------------------------------------------+
 
-    inference_template_loading_from_disk = AddRFTemplates(
-        max_n_template=n_template,  # return at most n_template (e.g., 4 in AF-3) from our template search (no subsampling)
-        pick_top=True,
-        max_seq_similarity=template_max_seq_similarity,
-        min_seq_similarity=template_min_seq_similarity,
-        min_template_length=template_min_length,
-    )
-    inference_template_load_from_structure = AddInputFileTemplate()
-    inference_template_loading_transforms = ConditionalRoute(
-        condition_func=lambda data: "is_input_file_templated"
-        in data["atom_array"].get_annotation_categories(),
-        transform_map={
-            True: inference_template_load_from_structure,
-            False: inference_template_loading_from_disk,
-        },
+    transforms.append(
+        RandomApplyGroundTruthConformerByChainType(
+            chain_type_probabilities={
+                tuple(ChainType.get_polymers()): p_give_polymer_ref_conf,
+                tuple(ChainType.get_non_polymers()): p_give_non_polymer_ref_conf,
+            },
+            policy=GroundTruthConformerPolicy.ADD,
+        )
     )
 
     transforms += [
         AddGlobalTokenIdAnnotation(),  # required for reference molecule features and TokenToAtomMap
+        AddGlobalResIdAnnotation(),
+        LoadCachedResidueLevelData(
+            dir=Path(residue_cache_dir) if exists(residue_cache_dir) else None,
+            sharding_depth=1,
+        ),
+        RandomSubsampleCachedConformers(n_conformers=n_conformers),
         EncodeAF3TokenLevelFeatures(sequence_encoding=af3_sequence_encoding),
         GetAF3ReferenceMoleculeFeatures(
             conformer_generation_timeout=conformer_generation_timeout,
-            should_generate_automorphisms_with_rdkit=False,  # We use NetworkX for automorphisms instead of RDKit
             use_element_for_atom_names_of_atomized_tokens=use_element_for_atom_names_of_atomized_tokens,
+        ),
+        FeaturizeAtomLevelEmbeddings(
+            mask_rdkit_conformers=False,
+            p_dropout_atom_level_embeddings=p_dropout_atom_level_embeddings,
+            embedding_dim=embedding_dim,
+            n_conformers=n_conformers,
         ),
         FindAutomorphismsWithNetworkX(),  # Adds the  "automorphisms" key to the data dictionary
         ComputeAtomToTokenMap(),
         GetRDKitChiralCenters(),
-        AddAF3ChiralFeatures(),
-        ConditionalRoute(
-            condition_func=lambda data: data["is_inference"],
-            transform_map={
-                False: training_template_loading_transforms,
-                True: inference_template_loading_transforms,
-            },
-        ),
-        FeaturizeTemplatesLikeAF3(
-            sequence_encoding=af3_sequence_encoding,
-            gap_token=template_default_token,
-            allowed_chain_type=template_allowed_chain_types,
-            distogram_bins=template_distogram_bins,
+        AddAF3ChiralFeatures(
+            take_first_chiral_subordering=take_first_chiral_subordering
         ),
     ]
 
     transforms += [
         # ... load and pair MSAs
-        LoadPolymerMSAs(
+        LoadPolymerMSAsFixedRNA(
             protein_msa_dirs=protein_msa_dirs,
             rna_msa_dirs=rna_msa_dirs,
             max_msa_sequences=max_msa_sequences,  # maximum number of sequences to load (we later subsample further)
             msa_cache_dir=Path(msa_cache_dir) if exists(msa_cache_dir) else None,
             use_paths_in_chain_info=True,  # if there are paths specified in the `chain_info` for a given chain, use them
+            raise_if_missing_msa_for_protein_of_length_n=raise_if_missing_msa_for_protein_of_length_n,
         ),
+    ]
+
+    transforms += [
         PairAndMergePolymerMSAs(dense=dense_msa),
         # ... encode MSA to AF-3 format
+    ]
+
+    if input_contains_explicit_msa:
+        # load pre-paired MSA
+        transforms += [LoadPairedMSAs()]
+
+    transforms += [
         EncodeMSA(
             encoding=af3_sequence_encoding,
             token_to_use_for_gap=af3_sequence_encoding.token_to_idx["<G>"],
@@ -356,13 +469,13 @@ def build_af3_transform_pipeline(
         ),
         # Feature aggregation
         AggregateFeaturesLikeAF3(),
-        OneHotTemplateRestype(encoding=af3_sequence_encoding),
         # ... batching and noise sampling for diffusion
         BatchStructuresForDiffusionNoising(batch_size=diffusion_batch_size),
         CenterRandomAugmentation(batch_size=diffusion_batch_size),
         SampleEDMNoise(
             sigma_data=sigma_data, diffusion_batch_size=diffusion_batch_size
         ),
+        CheckForNaNsInInputs(),
     ]
 
     confidence_transforms = Compose(
@@ -402,7 +515,7 @@ def build_af3_transform_pipeline(
     if run_confidence_head:
         keys_to_keep.append("confidence_feats")
 
-    if return_atom_array and is_inference:
+    if return_atom_array:  # and is_inference:
         keys_to_keep.append("atom_array")
 
     transforms += [

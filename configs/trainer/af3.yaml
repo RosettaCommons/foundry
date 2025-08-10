@@ -17,4 +17,4 @@ clip_grad_max_norm: 10.0
 output_dir: ${paths.output_dir}
 checkpoint_every_n_epochs: 1
 
-# precision: bf16-mixed # Mixed precision training with bfloat16 (currently does not work)
+precision: bf16-mixed

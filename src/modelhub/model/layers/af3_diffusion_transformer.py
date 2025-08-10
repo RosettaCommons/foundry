@@ -10,6 +10,7 @@ from modelhub.model.layers.layer_utils import (
     collapse,
     linearNoBias,
 )
+from modelhub.model.layers.mlff import ConformerEmbeddingWeightedAverage
 from modelhub.training.checkpoint import activation_checkpointing
 from modelhub.utils.torch_utils import device_of
 
@@ -27,7 +28,10 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         atom_transformer,
         broadcast_trunk_feats_on_1dim_old,
         use_chiral_features,
+        no_grad_on_chiral_center,
         use_inv_dist_squared,
+        use_atom_level_embedding: bool = False,
+        atom_level_embedding_dim: int = 384,
     ):
         super().__init__()
         self.c_atom = c_atom
@@ -38,6 +42,9 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         self.atom_1d_features = atom_1d_features
         self.broadcast_trunk_feats_on_1dim_old = broadcast_trunk_feats_on_1dim_old
         self.use_chiral_features = use_chiral_features
+        self.no_grad_on_chiral_center = no_grad_on_chiral_center
+        self.use_atom_level_embedding = use_atom_level_embedding
+        self.atom_level_embedding_dim = atom_level_embedding_dim
 
         self.process_input_features = linearNoBias(c_atom_1d_features, c_atom)
 
@@ -83,6 +90,13 @@ class AtomAttentionEncoderDiffusion(nn.Module):
 
         self.use_inv_dist_squared = use_inv_dist_squared
 
+        if self.use_atom_level_embedding:
+            self.process_atom_level_embedding = ConformerEmbeddingWeightedAverage(
+                atom_level_embedding_dim=self.atom_level_embedding_dim,
+                c_atompair=c_atompair,
+                c_atom=c_atom,
+            )
+
     def reset_parameters(self):
         super().reset_parameters()
         if self.use_chiral_features:
@@ -112,6 +126,10 @@ class AtomAttentionEncoderDiffusion(nn.Module):
                 dim=-1,
             )
         )
+
+        if self.use_atom_level_embedding:
+            assert "atom_level_embedding" in f
+            C_L = C_L + self.process_atom_level_embedding(f["atom_level_embedding"])
 
         # Embed offsets between atom reference positions
         D_LL = f["ref_pos"].unsqueeze(-2) - f["ref_pos"].unsqueeze(-3)
@@ -188,12 +206,18 @@ class AtomAttentionEncoderDiffusion(nn.Module):
                 # Add the noisy positions.
                 Q_L = self.process_r(R_L) + Q_L
 
-                # add chirality gradients
+                # Add chirality gradients
                 if self.use_chiral_features:
-                    # do not pass grads through grad calc
-                    R_L = calc_chiral_grads_flat_impl(
-                        R_L.detach(), f["chiral_feats"]
-                    ).nan_to_num()
+                    with torch.autocast(
+                        device_type=device_of(self).type, enabled=False
+                    ):
+                        # Do not pass grads through grad calc
+                        R_L = calc_chiral_grads_flat_impl(
+                            R_L.detach(),
+                            f["chiral_centers"],
+                            f["chiral_center_dihedral_angles"],
+                            self.no_grad_on_chiral_center,
+                        ).nan_to_num()
                     Q_L = self.process_ch(R_L) + Q_L
 
             # Add the combined single conditioning to the pair representation.
@@ -213,12 +237,16 @@ class AtomAttentionEncoderDiffusion(nn.Module):
                 self.c_token,
             )
             # Aggregate per-atom representation to per-token representation
+            processed_Q_L = self.process_q(Q_L)  # [L, C_atom] -> [L, C_token]
+            # Ensure dtype consistency for index_reduce
+            processed_Q_L = processed_Q_L.to(Q_L.dtype)
+
             A_I = (
                 torch.zeros(A_I_shape, device=Q_L.device, dtype=Q_L.dtype)
                 .index_reduce(
                     -2,
                     f["atom_to_token_map"].long(),
-                    self.process_q(Q_L),
+                    processed_Q_L,
                     "mean",
                     include_self=False,
                 )
@@ -315,15 +343,13 @@ class DiffusionTransformerBlock(nn.Module):
         Z_II,  # [..., I, I, C_tokenpair]
         Beta_II,  # [I, I]
     ):
-        with torch.amp.autocast(
-            device_type=device_of(self).type, enabled=True, dtype=torch.bfloat16
-        ):
-            if self.no_residual_connection_between_attention_and_transition:
-                B_I = self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
-                A_I = A_I + B_I + self.conditioned_transition_block(A_I, S_I)
-            else:
-                A_I = A_I + self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
-                A_I = A_I + self.conditioned_transition_block(A_I, S_I)
+        if self.no_residual_connection_between_attention_and_transition:
+            B_I = self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
+            A_I = A_I + B_I + self.conditioned_transition_block(A_I, S_I)
+        else:
+            A_I = A_I + self.attention_pair_bias(A_I, S_I, Z_II, Beta_II)
+            A_I = A_I + self.conditioned_transition_block(A_I, S_I)
+
         return A_I
 
 

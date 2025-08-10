@@ -1,0 +1,45 @@
+# @package _global_
+
+defaults:
+  - af3_with_disorder_distill
+
+ckpt_config:
+  reset_optimizer: true
+  weight_loading_config:
+    _target_: modelhub.utils.weights.WeightLoadingConfig
+    fallback_policy: reinit
+    param_policies:
+      "*.feature_initializer.input_feature_embedder.atom_attention_encoder.process_input_features.*": copy_and_zero_pad
+      "*.diffusion_module.atom_attention_encoder.process_input_features.*": copy_and_zero_pad
+
+model:
+  lr_scheduler:
+    base_lr: 0.9e-3 # 1/2 of original learning rate (1.8e-3)
+  net:
+    feature_initializer:
+      input_feature_embedder:
+        atom_attention_encoder:
+          c_atom_1d_features: 393 # 392 + 1 has_atom_level_embedding = 393
+          atom_1d_features: 
+             - ref_pos                                                                             
+             - ref_charge                                                                          
+             - ref_mask                                                                            
+             - ref_element                                                                         
+             - ref_atom_name_chars                                                                 
+             - ref_pos_ground_truth 
+             - has_atom_level_embedding
+          use_atom_level_embedding: true
+          atom_level_embedding_dim: 384
+    diffusion_module:
+      atom_attention_encoder:
+        c_atom_1d_features: 393 # 392 + 1 has_atom_level_embedding = 393
+        atom_1d_features:
+          - ref_pos                                                                             
+          - ref_charge                                                                          
+          - ref_mask                                                                            
+          - ref_element                                                                         
+          - ref_atom_name_chars                                                                 
+          - ref_pos_ground_truth 
+          - has_atom_level_embedding
+        use_atom_level_embedding: true
+        atom_level_embedding_dim: 384

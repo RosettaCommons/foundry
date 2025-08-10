@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from einops import einsum
 from jaxtyping import Float
 
 from modelhub import SHOULD_USE_CUEQUIVARIANCE
@@ -132,9 +131,9 @@ class FusedTriangleMultiplication(nn.Module):
 
         # Triangle multiplication based on direction
         if self.direction == "outgoing":
-            out = einsum("bikd,bjkd->bijd", left, right / float(L))
+            out = torch.einsum("bikd,bjkd->bijd", left, right / float(L))
         else:  # incoming
-            out = einsum("bkid,bkjd->bijd", left, right / float(L))
+            out = torch.einsum("bkid,bkjd->bijd", left, right / float(L))
 
         # Output normalization
         out = self.norm_out(out)

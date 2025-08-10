@@ -61,7 +61,7 @@ class FabricTrainer(ABC):
         limit_train_batches: int | float = float("inf"),
         limit_val_batches: int | float = float("inf"),
         prevalidate: bool = False,
-        nccl_timeout: int = 3200,
+        nccl_timeout: int = 3_200,
         find_unused_parameters: bool = False,
     ) -> None:
         """Base Trainer class built around Lightning Fabric.

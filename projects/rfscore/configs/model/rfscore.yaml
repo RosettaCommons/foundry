@@ -22,8 +22,6 @@ model:
 
     recycler:
       template_embedder:
-        # Concatenated encoding: 66
-        # Fourier encoding: 64
         raw_template_dim: 66
         use_fourier_encoding: false
 

@@ -63,68 +63,65 @@ class RFScoreTemplateEmbedder(nn.Module):
             distogram_condition_noise_scale,  # [I]
             distogram_condition,  # [I, I, 64], where 64 is the number of distogram bins
         ):
-            with torch.amp.autocast(
-                device_type=device_of(self).type, enabled=True, dtype=torch.bfloat16
-            ):
-                I = Z_II.shape[0]  # n_tokens
+            I = Z_II.shape[0]  # n_tokens
 
-                # Transform noise scale to reasonable range
-                joint_noise_scale = (
-                    distogram_condition_noise_scale[None, :] ** 2
-                    + distogram_condition_noise_scale[:, None] ** 2
-                ).sqrt()
-                joint_noise_level = af3_noise_scale_to_noise_level(joint_noise_scale)
+            # Transform noise scale to reasonable range
+            joint_noise_scale = (
+                distogram_condition_noise_scale[None, :] ** 2
+                + distogram_condition_noise_scale[:, None] ** 2
+            ).sqrt()
+            joint_noise_level = af3_noise_scale_to_noise_level(joint_noise_scale)
 
-                # ---------------------------- #
+            # ---------------------------- #
 
-                if not self.use_fourier_encoding:
-                    # OPTION 1: CONCATENATED ENCODING
-                    # ... concatenate along the channel dimension
-                    template_feats = torch.cat(
-                        [
-                            distogram_condition,  # [I, I, 64]
-                            has_distogram_condition.unsqueeze(-1),  # [I, I, 1]
-                            joint_noise_level.unsqueeze(-1),  # [I, I, 1]
-                        ],
-                        dim=-1,
-                    )  # [I, I, 66]
+            if not self.use_fourier_encoding:
+                # OPTION 1: CONCATENATED ENCODING
+                # ... concatenate along the channel dimension
+                template_feats = torch.cat(
+                    [
+                        distogram_condition,  # [I, I, 64]
+                        has_distogram_condition.unsqueeze(-1),  # [I, I, 1]
+                        joint_noise_level.unsqueeze(-1),  # [I, I, 1]
+                    ],
+                    dim=-1,
+                )  # [I, I, 66]
 
-                    # ... remove any invalid interactions
-                    template_feats = template_feats * has_distogram_condition.unsqueeze(
-                        -1
-                    )  # [I, I, 66], where 66 = 64 + 1 + 1
+                # ... remove any invalid interactions
+                template_feats = template_feats * has_distogram_condition.unsqueeze(
+                    -1
+                )  # [I, I, 66], where 66 = 64 + 1 + 1
 
-                    # ... embed template features
-                    template_channels = self.emb_templ(template_feats)  # [I, I, c]
-                else:
-                    # OPTION 2: FOURIER ENCODING
-                    # ... embed noise scale
-                    noise_level_emb = self.emb_noise_level(
-                        joint_noise_level.view(-1)
-                    ).view(I, I, -1)  # [I, I, c]
-                    noise_level_emb = (
-                        noise_level_emb * has_distogram_condition.unsqueeze(-1)
-                    )
+                # ... embed template features
+                template_channels = self.emb_templ(template_feats)  # [I, I, c]
+            else:
+                # OPTION 2: FOURIER ENCODING
+                # ... embed noise scale
+                noise_level_emb = self.emb_noise_level(
+                    joint_noise_level.view(-1)
+                ).view(I, I, -1)  # [I, I, c]
+                noise_level_emb = (
+                    noise_level_emb * has_distogram_condition.unsqueeze(-1)
+                )
 
-                    # ... embed distogram condition
-                    template_channels = self.emb_templ(
-                        distogram_condition * has_distogram_condition.unsqueeze(-1)
-                    )  # [I, I, c]
-
-                    # ... combine embeddings
-                    template_channels = template_channels + noise_level_emb  # [I, I, c]
-
-                # ---------------------------- #
-
-                # ... pass through pairformer
-                u_II = torch.zeros(I, I, self.c, device=Z_II.device)
-                v_II = (
-                    self.emb_pair(self.norm_pair_before_pairformer(Z_II))
-                    + template_channels
+                # ... embed distogram condition
+                template_channels = self.emb_templ(
+                    distogram_condition * has_distogram_condition.unsqueeze(-1)
                 )  # [I, I, c]
-                for block in self.pairformer:
-                    _, v_II = block(None, v_II)
-                u_II = u_II + self.norm_after_pairformer(v_II)
+
+                # ... combine embeddings
+                template_channels = template_channels + noise_level_emb  # [I, I, c]
+
+            # ---------------------------- #
+
+            # ... pass through pairformer
+            u_II = torch.zeros(I, I, self.c, device=Z_II.device)
+            v_II = (
+                self.emb_pair(self.norm_pair_before_pairformer(Z_II))
+                + template_channels
+            )  # [I, I, c]
+            for block in self.pairformer:
+                _, v_II = block(None, v_II)
+            u_II = u_II + self.norm_after_pairformer(v_II)
 
             return self.agg_emb(relu(u_II))
 

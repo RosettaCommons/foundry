@@ -20,7 +20,7 @@ feature_initializer:
       c_token: 384
       c_atom_1d_features: 389
       c_tokenpair: ${model.net.c_z}
-      use_inv_dist_squared: false
+      use_inv_dist_squared: true
       atom_1d_features:
         - ref_pos
         - ref_charge
@@ -36,7 +36,7 @@ feature_initializer:
           diffusion_transformer_block:
             n_head: 4
             no_residual_connection_between_attention_and_transition: true
-            kq_norm: false
+            kq_norm: true
 
   # RelativePositionEncoding
   relative_position_encoding:
@@ -124,7 +124,7 @@ diffusion_module:
   atom_attention_encoder:
     c_tokenpair: ${model.net.c_z}
     c_atom_1d_features: 389
-    use_inv_dist_squared: false
+    use_inv_dist_squared: true
     atom_1d_features:
         - ref_pos
         - ref_charge
@@ -140,9 +140,10 @@ diffusion_module:
         diffusion_transformer_block:
           n_head: 4
           no_residual_connection_between_attention_and_transition: true
-          kq_norm: false
+          kq_norm: true
     broadcast_trunk_feats_on_1dim_old: false
     use_chiral_features: true
+    no_grad_on_chiral_center: false
   diffusion_transformer:
     n_block: 24
     diffusion_transformer_block:
@@ -159,7 +160,7 @@ diffusion_module:
         diffusion_transformer_block:
           n_head: 4
           no_residual_connection_between_attention_and_transition: true
-          kq_norm: false
+          kq_norm: true
 distogram_head:
   bins: 65 
 

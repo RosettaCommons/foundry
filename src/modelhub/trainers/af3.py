@@ -6,6 +6,7 @@ from jaxtyping import Float, Int
 from lightning_utilities import apply_to_collection
 from omegaconf import DictConfig
 
+from modelhub.common import exists
 from modelhub.loss.af3_losses import Loss as AF3Loss
 from modelhub.loss.af3_losses import (
     ResidueSymmetryResolution,
@@ -17,9 +18,6 @@ from modelhub.trainers.fabric import FabricTrainer
 from modelhub.training.EMA import EMA
 from modelhub.utils.ddp import RankedLogger
 from modelhub.utils.io import build_stack_from_atom_array_and_batched_coords
-from modelhub.utils.predicted_error import (
-    compute_batch_indices_with_lowest_predicted_error,
-)
 from modelhub.utils.recycling import get_recycle_schedule
 from modelhub.utils.torch_utils import assert_no_nans, assert_same_shape
 
@@ -304,9 +302,7 @@ class AF3Trainer(FabricTrainer):
         )
 
         metrics_output = {}
-        if compute_metrics:
-            assert self.metrics is not None, "Metrics are not defined!"
-
+        if compute_metrics and exists(self.metrics):
             metrics_extra_info = self._assemble_metrics_extra_info(
                 example, network_output
             )
@@ -524,9 +520,11 @@ class AF3TrainerWithConfidence(AF3Trainer):
         network_output["X_L"] = network_output.get("X_pred_rollout_L")
 
         metrics_output = {}
-        if compute_metrics and not network_output.get("early_stopped", False):
-            assert self.metrics is not None, "Metrics are not defined!"
-
+        if (
+            compute_metrics
+            and exists(self.metrics)
+            and not network_output.get("early_stopped", False)
+        ):
             # Assemble the base metrics extra info and add confidence-specific inputs
             metrics_extra_info = self._assemble_metrics_extra_info(
                 example, network_output
@@ -543,25 +541,6 @@ class AF3TrainerWithConfidence(AF3Trainer):
                 network_output,
                 metrics_extra_info,
                 example["automorphisms"],
-            )
-
-            # Store in `metrics_extra_info` details about which structures have the lowest confidence
-            # TODO: Move into `_assemble_metrics_extra_info`
-            network_output["confidence"] = (
-                compute_batch_indices_with_lowest_predicted_error(
-                    plddt=network_output["plddt"],
-                    is_real_atom=metrics_extra_info["is_real_atom"],
-                    pae=network_output["pae"],
-                    confidence_loss_cfg=self.state[
-                        "train_cfg"
-                    ].trainer.loss.confidence_loss,
-                    chain_iid_token_lvl=metrics_extra_info["chain_iid_token_lvl"],
-                    is_ligand=metrics_extra_info["is_ligand"],
-                    interfaces_to_score=metrics_extra_info.get(
-                        "interfaces_to_score", []
-                    ),
-                    pn_units_to_score=metrics_extra_info.get("pn_units_to_score", []),
-                )
             )
 
             metrics_output = self.metrics(

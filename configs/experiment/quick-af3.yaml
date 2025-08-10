@@ -6,9 +6,8 @@ name: quick-af3
 
 # For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
 defaults:
-  - override /trainer: af3
+  - rf3
   - override /datasets: af3_pdb_only
-  - override /model: af3
 
 tags:
   # list of tags to add to the run ( & on wandb to easily find & filter runs)
@@ -18,8 +17,16 @@ project: test
 
 ckpt_config:
   _target_: modelhub.utils.weights.CheckpointConfig
-  path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt
+  path: /projects/ml/modelhub/inference/af3-run9-w-conf-newdatecut_ep688.pt
   reset_optimizer: true
+
+paths:
+  data:
+    pdb_data_dir: /projects/ml/datahub/dfs/af3_splits/2024_12_16
+
+trainer:
+  limit_train_batches: 4
+  limit_val_batches: 4
 
 datasets:
   train:
@@ -48,6 +55,12 @@ datasets:
       dataset:
         dataset:
           filters:
-            - "n_tokens_total < 200"
+            - "n_tokens_total < 500"
             # (We often want to debug with a ligand)
             - "interfaces_to_score.str.contains('protein-ligand')"
+            - example_id  in ["{['validation']}{7psi}{1}{[]}", "{['validation']}{7lo1}{2}{[]}", "{['validation']}{6zg9}{1}{[]}", "{['validation']}{7vhy}{1}{[]}"]
+
+model:
+  net:
+    inference_sampler:
+      num_timesteps: 50

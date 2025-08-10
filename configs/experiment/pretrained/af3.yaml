@@ -3,8 +3,8 @@
 name: af3
 
 defaults:
-  - override /datasets: af3_with_distillation
-  - override /model: af3
+  - override /datasets: af3_with_disorder_distill
+  - override /model: af3_with_arbitrary_templating
   - override /trainer: af3
 
 tags:
@@ -14,5 +14,10 @@ project: af3
 
 ckpt_config:
   _target_: modelhub.utils.weights.CheckpointConfig
-  path: /net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_latest.ckpt
+  path: /projects/ml/modelhub/inference/af3-run9-w-conf-ep670.pt
   reset_optimizer: true
+
+# For fine-tuning
+model:
+  lr_scheduler:
+    base_lr: 0.9e-3 # 1/2 of original learning rate (1.8e-3)

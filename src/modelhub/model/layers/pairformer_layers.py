@@ -6,7 +6,9 @@ from modelhub.model.AF3_blocks import MsaPairWeightedAverage, MsaSubsampleEmbedd
 from modelhub.model.layers.af3_diffusion_transformer import AtomTransformer
 from modelhub.model.layers.Attention_module import (
     TriangleAttention,
-    TriangleMultiplication,
+)
+from modelhub.model.layers.FusedTriangleMultiplication import (
+    FusedTriangleMultiplication,
 )
 from modelhub.model.layers.layer_utils import (
     MultiDimLinear,
@@ -15,12 +17,12 @@ from modelhub.model.layers.layer_utils import (
     create_batch_dimension_if_not_present,
     linearNoBias,
 )
+from modelhub.model.layers.mlff import ConformerEmbeddingWeightedAverage
 from modelhub.model.layers.outer_product import (
     OuterProductMean_AF3,
-)  # need to code this correctly
+)
 from modelhub.training.checkpoint import activation_checkpointing
 from modelhub.util_module import Dropout
-from modelhub.utils.torch_utils import device_of
 
 
 class AtomAttentionEncoderPairformer(nn.Module):
@@ -35,6 +37,8 @@ class AtomAttentionEncoderPairformer(nn.Module):
         c_atom_1d_features,
         atom_transformer,
         use_inv_dist_squared,
+        use_atom_level_embedding: bool = False,
+        atom_level_embedding_dim: int = 384,
     ):
         super().__init__()
         self.c_atom = c_atom
@@ -49,6 +53,8 @@ class AtomAttentionEncoderPairformer(nn.Module):
         self.process_d = linearNoBias(3, c_atompair)
         self.process_inverse_dist = linearNoBias(1, c_atompair)
         self.process_valid_mask = linearNoBias(1, c_atompair)
+
+        self.use_atom_level_embedding = use_atom_level_embedding
 
         # self.process_s_trunk = nn.Sequential(
         # nn.LayerNorm(c_s),
@@ -87,6 +93,13 @@ class AtomAttentionEncoderPairformer(nn.Module):
 
         self.use_inv_dist_squared = use_inv_dist_squared
 
+        if self.use_atom_level_embedding:
+            self.process_atom_level_embedding = ConformerEmbeddingWeightedAverage(
+                atom_level_embedding_dim=atom_level_embedding_dim,
+                c_atompair=c_atompair,
+                c_atom=c_atom,
+            )
+
     def forward(
         self,
         f,  # Dict (Input feature dictionary)
@@ -120,6 +133,10 @@ class AtomAttentionEncoderPairformer(nn.Module):
                 dim=-1,
             )
         )  # [L, C_atom]
+
+        if self.use_atom_level_embedding:
+            assert "atom_level_embedding" in f
+            C_L = C_L + self.process_atom_level_embedding(f["atom_level_embedding"])
 
         # Now, we have the single conditioning (C_L) for each atom. We will:
         # 1. Use C_L to initialize the pair atom representation
@@ -189,6 +206,10 @@ class AtomAttentionEncoderPairformer(nn.Module):
 
             # Aggregate per-atom representation to per-token representation
             # (Set the per-token representation to be the mean activation of all atoms in the token)
+            processed_Q_L = self.process_q(Q_L)  # [L, C_atom] -> [L, C_token]
+            # Ensure dtype consistency for index_reduce
+            processed_Q_L = processed_Q_L.to(Q_L.dtype)
+
             A_I = torch.zeros(
                 A_I_shape, device=Q_L.device, dtype=Q_L.dtype
             ).index_reduce(
@@ -196,7 +217,7 @@ class AtomAttentionEncoderPairformer(nn.Module):
                 f[
                     "atom_to_token_map"
                 ].long(),  # [L], mapping from atom index to token index. Must be a torch.int64 or torch.int32 tensor.
-                self.process_q(Q_L),  # [L, C_atom] -> [L, C_token]
+                processed_Q_L,  # [L, C_atom] -> [L, C_token]
                 "mean",
                 include_self=False,  # Do not use the original values in A_I (all zeros) when aggregating
             )  # [L, C_atom] -> [I, C_token]
@@ -332,11 +353,19 @@ class PairformerBlock(nn.Module):
         self.drop_row = Dropout(broadcast_dim=-2, p_drop=p_drop)
         self.drop_col = Dropout(broadcast_dim=-3, p_drop=p_drop)
 
-        self.tri_mul_outgoing = TriangleMultiplication(
-            c_z, **triangle_multiplication, outgoing=True, bias=False
+        self.tri_mul_outgoing = FusedTriangleMultiplication(
+            d_pair=c_z,
+            d_hidden=triangle_multiplication["d_hidden"],
+            direction="outgoing",
+            bias=True,
+            use_cuequivariance=True,
         )
-        self.tri_mul_incoming = TriangleMultiplication(
-            c_z, **triangle_multiplication, outgoing=False, bias=False
+        self.tri_mul_incoming = FusedTriangleMultiplication(
+            d_pair=c_z,
+            d_hidden=triangle_multiplication["d_hidden"],
+            direction="incoming",
+            bias=True,
+            use_cuequivariance=True,
         )
 
         self.tri_attn_start = TriangleAttention(
@@ -367,27 +396,21 @@ class PairformerBlock(nn.Module):
 
     @activation_checkpointing
     def forward(self, S_I, Z_II):
-        with torch.amp.autocast(
-            device_type=device_of(self).type, enabled=True, dtype=torch.bfloat16
-        ):
-            Z_II = Z_II + self.drop_row(
-                self.maybe_make_batched(self.tri_mul_outgoing)(Z_II)
+        Z_II = Z_II + self.drop_row(
+            self.maybe_make_batched(self.tri_mul_outgoing)(Z_II)
+        )
+        Z_II = Z_II + self.drop_row(
+            self.maybe_make_batched(self.tri_mul_incoming)(Z_II)
+        )
+        Z_II = Z_II + self.drop_row(self.maybe_make_batched(self.tri_attn_start)(Z_II))
+        Z_II = Z_II + self.drop_col(self.maybe_make_batched(self.tri_attn_end)(Z_II))
+        Z_II = Z_II + self.z_transition(Z_II)
+        if S_I is not None:
+            S_I = S_I + self.attention_pair_bias(
+                S_I, None, Z_II, Beta_II=torch.tensor([0.0], device=Z_II.device)
             )
-            Z_II = Z_II + self.drop_row(
-                self.maybe_make_batched(self.tri_mul_incoming)(Z_II)
-            )
-            Z_II = Z_II + self.drop_row(
-                self.maybe_make_batched(self.tri_attn_start)(Z_II)
-            )
-            Z_II = Z_II + self.drop_col(
-                self.maybe_make_batched(self.tri_attn_end)(Z_II)
-            )
-            Z_II = Z_II + self.z_transition(Z_II)
-            if S_I is not None:
-                S_I = S_I + self.attention_pair_bias(
-                    S_I, None, Z_II, Beta_II=torch.tensor([0.0], device=Z_II.device)
-                )
-                S_I = S_I + self.s_transition(S_I)
+            S_I = S_I + self.s_transition(S_I)
+
         return S_I, Z_II
 
 
@@ -552,11 +575,19 @@ class MSAModule(nn.Module):
         self.drop_row_pair = Dropout(broadcast_dim=-2, p_drop=p_drop_pair)
         self.drop_col_pair = Dropout(broadcast_dim=-3, p_drop=p_drop_pair)
 
-        self.tri_mult_outgoing = TriangleMultiplication(
-            **triangle_multiplication_outgoing, outgoing=True
+        self.tri_mult_outgoing = FusedTriangleMultiplication(
+            d_pair=triangle_multiplication_outgoing["d_pair"],
+            d_hidden=triangle_multiplication_outgoing["d_hidden"],
+            direction="outgoing",
+            bias=True,
+            use_cuequivariance=True,
         )
-        self.tri_mult_incoming = TriangleMultiplication(
-            **triangle_multiplication_incoming, outgoing=False
+        self.tri_mult_incoming = FusedTriangleMultiplication(
+            d_pair=triangle_multiplication_incoming["d_pair"],
+            d_hidden=triangle_multiplication_incoming["d_hidden"],
+            direction="incoming",
+            bias=True,
+            use_cuequivariance=True,
         )
         self.tri_attn_start = TriangleAttention(
             **triangle_attention_starting, start_node=True, use_cuequivariance=True
@@ -584,36 +615,34 @@ class MSAModule(nn.Module):
         S_inputs_I,
     ):
         msa = f["msa"]
-        with torch.amp.autocast(
-            device_type=device_of(self).type, enabled=True, dtype=torch.bfloat16
-        ):
-            msa_SI = self.msa_subsampler(msa, S_inputs_I)
+        msa_SI = self.msa_subsampler(msa, S_inputs_I)
 
-            for i in range(self.n_block):
-                # update MSA features
-                Z_II = Z_II + self.maybe_make_batched_outer_product(self.outer_product)(
-                    msa_SI
-                )
-                msa_SI = msa_SI + self.drop_row_msa(
-                    self.msa_pair_weighted_averaging(msa_SI, Z_II)
-                )
-                msa_SI = msa_SI + self.msa_transition(msa_SI)
+        for i in range(self.n_block):
+            # update MSA features
+            Z_II = Z_II + self.maybe_make_batched_outer_product(self.outer_product)(
+                msa_SI
+            )
+            msa_SI = msa_SI + self.drop_row_msa(
+                self.msa_pair_weighted_averaging(msa_SI, Z_II)
+            )
+            msa_SI = msa_SI + self.msa_transition(msa_SI)
 
-                # update pair features
-                Z_II = Z_II + self.drop_row_pair(
-                    self.maybe_make_batched_triangle_ops(self.tri_mult_outgoing)(Z_II)
-                )
-                Z_II = Z_II + self.drop_row_pair(
-                    self.maybe_make_batched_triangle_ops(self.tri_mult_incoming)(Z_II)
-                )
+            # update pair features
+            Z_II = Z_II + self.drop_row_pair(
+                self.maybe_make_batched_triangle_ops(self.tri_mult_outgoing)(Z_II)
+            )
+            Z_II = Z_II + self.drop_row_pair(
+                self.maybe_make_batched_triangle_ops(self.tri_mult_incoming)(Z_II)
+            )
 
-                Z_II = Z_II + self.drop_row_pair(
-                    self.maybe_make_batched_triangle_ops(self.tri_attn_start)(Z_II)
-                )
-                Z_II = Z_II + self.drop_col_pair(
-                    self.maybe_make_batched_triangle_ops(self.tri_attn_end)(Z_II)
-                )
-                Z_II = Z_II + self.pair_transition(Z_II)
+            Z_II = Z_II + self.drop_row_pair(
+                self.maybe_make_batched_triangle_ops(self.tri_attn_start)(Z_II)
+            )
+            Z_II = Z_II + self.drop_col_pair(
+                self.maybe_make_batched_triangle_ops(self.tri_attn_end)(Z_II)
+            )
+            Z_II = Z_II + self.pair_transition(Z_II)
+
         return Z_II
 
 
@@ -668,52 +697,49 @@ class TemplateEmbedder(nn.Module):
             template_restype,
             asym_id,
         ):
-            with torch.amp.autocast(
-                device_type=device_of(self).type, enabled=True, dtype=torch.bfloat16
-            ):
-                I = Z_II.shape[0]
-                template_frame_mask = (
-                    template_backbone_frame_mask[:, None]
-                    * template_backbone_frame_mask[:, :, None]
-                )
-                template_pseudo_beta_mask = (
-                    template_pseudo_beta_mask[:, None, :]
-                    * template_pseudo_beta_mask[:, :, None]
-                )
+            I = Z_II.shape[0]
+            template_frame_mask = (
+                template_backbone_frame_mask[:, None]
+                * template_backbone_frame_mask[:, :, None]
+            )
+            template_pseudo_beta_mask = (
+                template_pseudo_beta_mask[:, None, :]
+                * template_pseudo_beta_mask[:, :, None]
+            )
 
-                template_feats = torch.cat(
-                    [
-                        template_distogram,
-                        template_frame_mask[..., None],
-                        template_unit_vector,
-                        template_pseudo_beta_mask[..., None],
-                    ],
-                    dim=-1,
-                )
-                template_feats = (
-                    template_feats * (asym_id[None, :] == asym_id[:, None])[..., None]
-                )
-                template_restype_left = template_restype[:, None, :, :].expand(
-                    -1, I, -1, -1
-                )
-                template_restype_right = template_restype[:, :, None, :].expand(
-                    -1, -1, I, -1
-                )
+            template_feats = torch.cat(
+                [
+                    template_distogram,
+                    template_frame_mask[..., None],
+                    template_unit_vector,
+                    template_pseudo_beta_mask[..., None],
+                ],
+                dim=-1,
+            )
+            template_feats = (
+                template_feats * (asym_id[None, :] == asym_id[:, None])[..., None]
+            )
+            template_restype_left = template_restype[:, None, :, :].expand(
+                -1, I, -1, -1
+            )
+            template_restype_right = template_restype[:, :, None, :].expand(
+                -1, -1, I, -1
+            )
 
-                template_feats = torch.cat(
-                    [template_feats, template_restype_left, template_restype_right],
-                    dim=-1,
-                )
-                T = template_feats.shape[0]
-                u_II = torch.zeros(I, I, self.c, device=Z_II.device, dtype=Z_II.dtype)
-                for i in range(T):
-                    v_II = self.emb_pair(
-                        self.norm_pair_before_pairformer(Z_II)
-                    ) + self.emb_templ(template_feats[i])
-                    for block in self.pairformer:
-                        _, v_II = block(None, v_II)
-                    u_II = u_II + self.norm_after_pairformer(v_II)
-                u_II = u_II / T
+            template_feats = torch.cat(
+                [template_feats, template_restype_left, template_restype_right],
+                dim=-1,
+            )
+            T = template_feats.shape[0]
+            u_II = torch.zeros(I, I, self.c, device=Z_II.device, dtype=Z_II.dtype)
+            for i in range(T):
+                v_II = self.emb_pair(
+                    self.norm_pair_before_pairformer(Z_II)
+                ) + self.emb_templ(template_feats[i])
+                for block in self.pairformer:
+                    _, v_II = block(None, v_II)
+                u_II = u_II + self.norm_after_pairformer(v_II)
+            u_II = u_II / T
 
             return self.agg_emb(relu(u_II))
 

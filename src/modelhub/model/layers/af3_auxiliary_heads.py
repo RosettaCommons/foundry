@@ -60,7 +60,7 @@ class ConfidenceHead(nn.Module):
 
         self.pairformer = nn.ModuleList(
             [
-                PairformerBlock(c_s=c_s, c_z=c_z, use_deepspeed_evo=True, **pairformer)
+                PairformerBlock(c_s=c_s, c_z=c_z, **pairformer)
                 for _ in range(n_pairformer_layers)
             ]
         )
@@ -91,142 +91,133 @@ class ConfidenceHead(nn.Module):
         S_trunk_I,
         Z_trunk_II,
         X_pred_L,
-        # f,
         seq,
         rep_atoms,
-        use_amp=True,
         frame_atom_idxs=None,
     ):
-        with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16):
-            # stopgrad on S_trunk_I, Z_trunk_II, X_pred_L but not S_inputs_I (4.3.5)
-            S_trunk_I = S_trunk_I.detach().float()  # B, L, 384
-            Z_trunk_II = Z_trunk_II.detach().float()  # B, L, L, 128
-            if X_pred_L is not None:
-                X_pred_L = X_pred_L.detach().float()  # B, n_atoms, 3
-            S_inputs_I = S_inputs_I.detach().float()  # B, L, 384
-            seq = seq.detach()
+        # stopgrad on S_trunk_I, Z_trunk_II, X_pred_L but not S_inputs_I (4.3.5)
+        S_trunk_I = S_trunk_I.detach().float()  # B, L, 384
+        Z_trunk_II = Z_trunk_II.detach().float()  # B, L, L, 128
+        if X_pred_L is not None:
+            X_pred_L = X_pred_L.detach().float()  # B, n_atoms, 3
+        S_inputs_I = S_inputs_I.detach().float()  # B, L, 384
+        seq = seq.detach()
 
-            if self.layer_norm_along_feature_dimension:
-                # do a layer norm on S_trunk_I
-                S_trunk_I = F.layer_norm(
-                    S_trunk_I, normalized_shape=(S_trunk_I.shape[-1])
-                )
-                # do a layer norm on Z_trunk_II
-                Z_trunk_II = F.layer_norm(
-                    Z_trunk_II, normalized_shape=(Z_trunk_II.shape[-1])
-                )
-                # do a layer norm on S_inputs_I
-                S_inputs_I = F.layer_norm(
-                    S_inputs_I, normalized_shape=(S_inputs_I.shape[-1])
+        if self.layer_norm_along_feature_dimension:
+            # do a layer norm on S_trunk_I
+            S_trunk_I = F.layer_norm(S_trunk_I, normalized_shape=(S_trunk_I.shape[-1]))
+            # do a layer norm on Z_trunk_II
+            Z_trunk_II = F.layer_norm(
+                Z_trunk_II, normalized_shape=(Z_trunk_II.shape[-1])
+            )
+            # do a layer norm on S_inputs_I
+            S_inputs_I = F.layer_norm(
+                S_inputs_I, normalized_shape=(S_inputs_I.shape[-1])
+            )
+        else:
+            S_trunk_I = F.layer_norm(S_trunk_I, normalized_shape=(S_trunk_I.shape))
+            Z_trunk_II = F.layer_norm(Z_trunk_II, normalized_shape=(Z_trunk_II.shape))
+            S_inputs_I = F.layer_norm(S_inputs_I, normalized_shape=(S_inputs_I.shape))
+
+        # embed S_inputs_I twice
+        S_inputs_I_right = self.process_s_inputs_right(S_inputs_I)
+        S_inputs_I_left = self.process_s_inputs_left(S_inputs_I)
+        # add outer product of two linear embeddings of S_inputs_I  to Z_II
+        # TODO: check the unsqueezed dimension is the correct one
+        Z_trunk_II = Z_trunk_II + (
+            S_inputs_I_right.unsqueeze(-2) + S_inputs_I_left.unsqueeze(-3)
+        )
+
+        # embed distances of representative atom from every token
+        #    in the pair representation
+        # if no coords are input, skip this connection
+        if X_pred_L is not None:
+            X_pred_rep_I = X_pred_L.index_select(1, rep_atoms)
+            dist = torch.cdist(X_pred_rep_I, X_pred_rep_I)
+            if not self.use_af3_style_binning_and_final_layer_norms:
+                # bins are 3.375 to 20.375 in 1.75 increments according to pseudocode
+                dist_one_hot = F.one_hot(
+                    discretize_distance_matrix(
+                        dist, min_distance=3.375, max_distance=20.875, num_bins=10
+                    ),
+                    num_classes=11,
                 )
             else:
-                S_trunk_I = F.layer_norm(S_trunk_I, normalized_shape=(S_trunk_I.shape))
-                Z_trunk_II = F.layer_norm(
-                    Z_trunk_II, normalized_shape=(Z_trunk_II.shape)
-                )
-                S_inputs_I = F.layer_norm(
-                    S_inputs_I, normalized_shape=(S_inputs_I.shape)
+                # published code is 3.25 to 50.75, with 39 bins
+                dist_one_hot = F.one_hot(
+                    discretize_distance_matrix(
+                        dist, min_distance=3.25, max_distance=50.75, num_bins=39
+                    ),
+                    num_classes=40,
                 )
 
-            # embed S_inputs_I twice
-            S_inputs_I_right = self.process_s_inputs_right(S_inputs_I)
-            S_inputs_I_left = self.process_s_inputs_left(S_inputs_I)
-            # add outer product of two linear embeddings of S_inputs_I  to Z_II
-            # TODO: check the unsqueezed dimension is the correct one
-            Z_trunk_II = Z_trunk_II + (
-                S_inputs_I_right.unsqueeze(-2) + S_inputs_I_left.unsqueeze(-3)
-            )
+            Z_trunk_II = Z_trunk_II + self.process_pred_distances(dist_one_hot.float())
 
-            # embed distances of representative atom from every token
-            #    in the pair representation
-            # if no coords are input, skip this connection
-            if X_pred_L is not None:
-                X_pred_rep_I = X_pred_L.index_select(1, rep_atoms)
-                dist = torch.cdist(X_pred_rep_I, X_pred_rep_I)
-                if not self.use_af3_style_binning_and_final_layer_norms:
-                    # bins are 3.375 to 20.375 in 1.75 increments according to pseudocode
-                    dist_one_hot = F.one_hot(
-                        discretize_distance_matrix(
-                            dist, min_distance=3.375, max_distance=20.875, num_bins=10
-                        ),
-                        num_classes=11,
-                    )
+            if self.use_Cb_distances:
+                # embed difference between observed cb and ideal cb positions
+                Cb_distances = calc_Cb_distances(
+                    X_pred_L, seq, rep_atoms, frame_atom_idxs
+                )
+                Cb_distances_one_hot = F.one_hot(
+                    discretize_distance_matrix(
+                        Cb_distances,
+                        min_distance=0.0001,
+                        max_distance=0.25,
+                        num_bins=24,
+                    ),
+                    num_classes=25,
+                )
+                Cb_logits = self.process_Cb_distances(Cb_distances_one_hot.float())
+                # symmetrize the logits
+                if self.symmetrize_Cb_logits:
+                    Cb_logits = Cb_logits[:, None, :, :] + Cb_logits[:, :, None, :]
                 else:
-                    # published code is 3.25 to 50.75, with 39 bins
-                    dist_one_hot = F.one_hot(
-                        discretize_distance_matrix(
-                            dist, min_distance=3.25, max_distance=50.75, num_bins=39
-                        ),
-                        num_classes=40,
-                    )
+                    Cb_logits = Cb_logits[:, None, :, :]
 
-                Z_trunk_II = Z_trunk_II + self.process_pred_distances(
-                    dist_one_hot.float()
-                )
+                Z_trunk_II = Z_trunk_II + Cb_logits
 
-                if self.use_Cb_distances:
-                    # embed difference between observed cb and ideal cb positions
-                    Cb_distances = calc_Cb_distances(
-                        X_pred_L, seq, rep_atoms, frame_atom_idxs
-                    )
-                    Cb_distances_one_hot = F.one_hot(
-                        discretize_distance_matrix(
-                            Cb_distances,
-                            min_distance=0.0001,
-                            max_distance=0.25,
-                            num_bins=24,
-                        ),
-                        num_classes=25,
-                    )
-                    Cb_logits = self.process_Cb_distances(Cb_distances_one_hot.float())
-                    # symmetrize the logits
-                    if self.symmetrize_Cb_logits:
-                        Cb_logits = Cb_logits[:, None, :, :] + Cb_logits[:, :, None, :]
-                    else:
-                        Cb_logits = Cb_logits[:, None, :, :]
-
-                    Z_trunk_II = Z_trunk_II + Cb_logits
-
-            # process with pairformer stack
+        if not self.use_af3_style_binning_and_final_layer_norms:
             S_trunk_residual_I = S_trunk_I.clone()
             Z_trunk_residual_II = Z_trunk_II.clone()
-            for n in range(len(self.pairformer)):
-                S_trunk_I, Z_trunk_II = self.pairformer[n](S_trunk_I, Z_trunk_II)
 
-            # despite doing so in their pseudocode, af3's published code does not add the residual back
-            if not self.use_af3_style_binning_and_final_layer_norms:
-                S_trunk_I = S_trunk_residual_I + S_trunk_I
-                Z_trunk_II = Z_trunk_residual_II + Z_trunk_II
+        # process with pairformer stack
+        for n in range(len(self.pairformer)):
+            S_trunk_I, Z_trunk_II = self.pairformer[n](S_trunk_I, Z_trunk_II)
 
-                # linearly project for each prediction task
-                pde_logits = self.predict_pde(
-                    Z_trunk_II + Z_trunk_II.transpose(-2, -3)
-                )  # BUG: needs to be symmetrized correctly
+        # despite doing so in their pseudocode, af3's published code does not add the residual back
+        if not self.use_af3_style_binning_and_final_layer_norms:
+            S_trunk_I = S_trunk_residual_I + S_trunk_I
+            Z_trunk_II = Z_trunk_residual_II + Z_trunk_II
 
-                pae_logits = self.predict_pae(Z_trunk_II)
+            # linearly project for each prediction task
+            pde_logits = self.predict_pde(
+                Z_trunk_II + Z_trunk_II.transpose(-2, -3)
+            )  # BUG: needs to be symmetrized correctly
 
-                plddt_logits = self.predict_plddt(S_trunk_I)
-                exp_resolved_logits = self.predict_exp_resolved(S_trunk_I)
+            pae_logits = self.predict_pae(Z_trunk_II)
 
-            # af3's published code does not add the residual back and has some additional layernorms before the linear projections
-            # they also do the pde slightly differently, adding the transpose after the linear projection
-            else:
-                left_distance_logits = self.predict_pde(self.layernorm_pde(Z_trunk_II))
-                right_distance_logits = left_distance_logits.transpose(-2, -3)
-                pde_logits = left_distance_logits + right_distance_logits
+            plddt_logits = self.predict_plddt(S_trunk_I)
+            exp_resolved_logits = self.predict_exp_resolved(S_trunk_I)
 
-                pae_logits = self.predict_pae(self.layernorm_pae(Z_trunk_II))
-                plddt_logits = self.predict_plddt(self.layernorm_plddt(S_trunk_I))
-                exp_resolved_logits = self.predict_exp_resolved(
-                    self.layernorm_exp_resolved(S_trunk_I)
-                )
+        # af3's published code does not add the residual back and has some additional layernorms before the linear projections
+        # they also do the pde slightly differently, adding the transpose after the linear projection
+        else:
+            left_distance_logits = self.predict_pde(self.layernorm_pde(Z_trunk_II))
+            right_distance_logits = left_distance_logits.transpose(-2, -3)
+            pde_logits = left_distance_logits + right_distance_logits
 
-            return dict(
-                pde_logits=pde_logits,
-                pae_logits=pae_logits,
-                plddt_logits=plddt_logits,
-                exp_resolved_logits=exp_resolved_logits,
+            pae_logits = self.predict_pae(self.layernorm_pae(Z_trunk_II))
+            plddt_logits = self.predict_plddt(self.layernorm_plddt(S_trunk_I))
+            exp_resolved_logits = self.predict_exp_resolved(
+                self.layernorm_exp_resolved(S_trunk_I)
             )
+
+        return dict(
+            pde_logits=pde_logits,
+            pae_logits=pae_logits,
+            plddt_logits=plddt_logits,
+            exp_resolved_logits=exp_resolved_logits,
+        )
 
 
 def calc_Cb_distances(X_pred_L, seq, rep_atoms, frame_atom_idxs):

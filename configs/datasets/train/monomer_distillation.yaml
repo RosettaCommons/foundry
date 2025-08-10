@@ -38,3 +38,10 @@ monomer_distillation:
       crop_spatial_probability: 0.75
       b_factor_min: 70.0
       run_confidence_head: ${datasets.run_confidence_head}
+      take_first_chiral_subordering: ${datasets.take_first_chiral_subordering}
+      use_element_for_atom_names_of_atomized_tokens: ${datasets.use_element_for_atom_names_of_atomized_tokens}
+      mirror_prob: ${datasets.mirror_prob}
+      atomization_prob: ${datasets.atomization_prob}
+      ligand_dropout_prob: ${datasets.ligand_dropout_prob}
+      p_unconditional: ${datasets.p_unconditional}
+      p_dropout_atom_level_embeddings: ${datasets.p_dropout_atom_level_embeddings}

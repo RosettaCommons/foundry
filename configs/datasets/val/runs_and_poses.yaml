@@ -6,6 +6,6 @@ dataset:
     _target_: datahub.datasets.parsers.ValidationDFParserLikeAF3
   dataset:
     _target_: datahub.datasets.datasets.PandasDataset
-    data: ${paths.data.pdb_data_dir}/runs_n_poses_entry_level_df.parquet
+    data: /projects/ml/datahub/dfs/af3_splits/2024_12_16/runs_n_poses_entry_level_df.parquet
     filters:
       - "n_tokens_total < 1000" # Subset to reasonably-sized examples for efficiency

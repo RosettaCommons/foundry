@@ -1,0 +1,15 @@
+defaults:
+  - base
+  - val/af3_validation@val.af3_val_set
+  - _self_
+
+# Dataloading pipeline to use
+pipeline_target: modelhub.data.pipelines.build_af3_transform_pipeline
+
+val:
+  af3_val_set:
+    dataset:
+      dataset_parser:
+        base_dir: /projects/ml/frozen_pdb_copies/2024_12_01_pdb
+      dataset:
+        data: /projects/ml/datahub/dfs/af3_splits/2024_12_16/entry_level_val_df.parquet

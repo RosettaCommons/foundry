@@ -236,6 +236,11 @@ class AF3(nn.Module):
                 if i_cycle < n_recycles - 1:
                     stack.enter_context(torch.no_grad())
 
+                # Clear the autocast cache if gradients are enabled (workaround for autocast bug)
+                # See: https://github.com/pytorch/pytorch/issues/65766
+                if torch.is_grad_enabled():
+                    torch.clear_autocast_cache()
+
                 # Select the MSA for the current recycle (we sample an i.i.d. MSA for each recycle)
                 recycling_inputs["f"]["msa"] = f["msa_stack"][i_cycle]
 
@@ -438,19 +443,44 @@ class AF3WithConfidence(AF3):
                     )
                 )
 
+        # ... run non-batched confidence head
+        D = sample_diffusion_outs["X_L"].shape[0]
+        confidence_stack = {}
+        for i in range(D):
+            confidence = checkpoint.checkpoint(
+                create_custom_forward(
+                    self.confidence_head, frame_atom_idxs=input["frame_atom_idxs"]
+                ),
+                recycling_outputs["S_inputs_I"],
+                recycling_outputs["S_I"],
+                recycling_outputs["Z_II"],
+                sample_diffusion_outs["X_L"][i].unsqueeze(0),
+                input["seq"],
+                input["rep_atom_idxs"],
+                use_reentrant=False,
+            )
+
+            for k, v in confidence.items():
+                if k in confidence_stack:
+                    confidence_stack[k] = torch.cat((confidence_stack[k], v), dim=0)
+                else:
+                    confidence_stack[k] = v
+        confidence = confidence_stack
+
         # ... run batched confidence head
-        confidence = checkpoint.checkpoint(
-            create_custom_forward(
-                self.confidence_head, frame_atom_idxs=input["frame_atom_idxs"]
-            ),
-            recycling_outputs["S_inputs_I"],
-            recycling_outputs["S_I"],
-            recycling_outputs["Z_II"],
-            sample_diffusion_outs["X_L"],
-            input["seq"],
-            input["rep_atom_idxs"],
-            use_reentrant=False,
-        )
+        # fd too much memory use at training time...
+        # confidence = checkpoint.checkpoint(
+        #    create_custom_forward(
+        #        self.confidence_head, frame_atom_idxs=input["frame_atom_idxs"]
+        #    ),
+        #    recycling_outputs["S_inputs_I"],
+        #    recycling_outputs["S_I"],
+        #    recycling_outputs["Z_II"],
+        #    sample_diffusion_outs["X_L"],
+        #    input["seq"],
+        #    input["rep_atom_idxs"],
+        #    use_reentrant=False,
+        # )
 
         # TODO: Return outputs in a more structured way (e.g., a dataclass)
         return dict(

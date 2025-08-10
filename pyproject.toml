@@ -101,3 +101,6 @@ ignore = [
     "F821", # temporary to avoid jaxtyping warnings, see: https://github.com/astral-sh/ruff/issues/17386
     "E741",  # enable us to use variables like "L"
 ]
+
+[tool.pyright]
+typeCheckingMode = "off"

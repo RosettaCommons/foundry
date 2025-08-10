@@ -1,5 +1,6 @@
 from functools import wraps
 
+import torch
 from beartype.typing import Any, Callable, Iterable
 from toolz import merge_with
 
@@ -100,3 +101,8 @@ def listmap_with_idx(fn: Callable[[int, Any], Any], lst: Iterable[Any]) -> list:
         ['0_a', '1_b', '2_c']
     """
     return [fn(idx, x) for idx, x in enumerate(lst)]
+
+
+def ensure_dtype(tensor: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
+    """Convert tensor to target dtype if it's not already that dtype."""
+    return tensor if tensor.dtype == dtype else tensor.to(dtype)

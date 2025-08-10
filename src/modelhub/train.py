@@ -182,7 +182,8 @@ def train(cfg: DictConfig) -> None:
         ckpt_config = hydra.utils.instantiate(cfg.ckpt_config)
     elif "ckpt_path" in cfg and cfg.ckpt_path:
         # Just a checkpoint path
-        ckpt_config = CheckpointConfig(path=cfg.ckpt_path)
+        if cfg.ckpt_path is not None:
+            ckpt_config = CheckpointConfig(path=cfg.ckpt_path)
 
     # ... train the model
     ranked_logger.info("Training model...")

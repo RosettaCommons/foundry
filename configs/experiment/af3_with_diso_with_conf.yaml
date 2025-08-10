@@ -1,0 +1,21 @@
+# @package _global_
+
+name: af3
+
+defaults:
+  - override /datasets: af3_with_disorder_distill
+  - override /model: af3_with_conf_templ
+  - override /trainer: af3_with_confidence
+
+tags:
+  - af3
+
+project: af3
+
+datasets:
+  run_confidence_head: true
+
+ckpt_config:
+  _target_: modelhub.utils.weights.CheckpointConfig
+  path: /projects/ml/modelhub/inference/af3-run9-w-conf-ep670.pt
+  reset_optimizer: true

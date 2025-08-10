@@ -1,0 +1,57 @@
+defaults:
+  - base
+  - val/af3_ab_set@val.af3_ab_set_0
+  - val/af3_ab_set@val.af3_ab_set_1
+  - val/af3_ab_set@val.af3_ab_set_2
+  - val/af3_ab_set@val.af3_ab_set_3
+  - val/af3_ab_set@val.af3_ab_set_4
+  - val/af3_ab_set@val.af3_ab_set_5
+  - val/af3_ab_set@val.af3_ab_set_6
+  - val/af3_ab_set@val.af3_ab_set_7
+  - val/af3_ab_set@val.af3_ab_set_8
+  - val/af3_ab_set@val.af3_ab_set_9
+  - val/af3_ab_set@val.af3_ab_set_10
+  - val/af3_ab_set@val.af3_ab_set_11
+  - val/af3_ab_set@val.af3_ab_set_12
+  - val/af3_ab_set@val.af3_ab_set_13
+  - val/af3_ab_set@val.af3_ab_set_14
+  - val/af3_ab_set@val.af3_ab_set_15
+  - val/af3_ab_set@val.af3_ab_set_16
+  - val/af3_ab_set@val.af3_ab_set_17
+  - val/af3_ab_set@val.af3_ab_set_18
+  - val/af3_ab_set@val.af3_ab_set_19
+  - val/af3_ab_set@val.af3_ab_set_20
+  - val/af3_ab_set@val.af3_ab_set_21
+  - val/af3_ab_set@val.af3_ab_set_22
+  - val/af3_ab_set@val.af3_ab_set_23
+  - val/af3_ab_set@val.af3_ab_set_24
+  - val/af3_ab_set@val.af3_ab_set_25
+  - val/af3_ab_set@val.af3_ab_set_26
+  - val/af3_ab_set@val.af3_ab_set_27
+  - val/af3_ab_set@val.af3_ab_set_28
+  - val/af3_ab_set@val.af3_ab_set_29
+  - val/af3_ab_set@val.af3_ab_set_30
+  - val/af3_ab_set@val.af3_ab_set_31
+  - val/af3_ab_set@val.af3_ab_set_32
+  - val/af3_ab_set@val.af3_ab_set_33
+  - val/af3_ab_set@val.af3_ab_set_34
+  - val/af3_ab_set@val.af3_ab_set_35
+  - val/af3_ab_set@val.af3_ab_set_36
+  - val/af3_ab_set@val.af3_ab_set_37
+  - val/af3_ab_set@val.af3_ab_set_38
+  - val/af3_ab_set@val.af3_ab_set_39
+  - val/af3_ab_set@val.af3_ab_set_40
+  - val/af3_ab_set@val.af3_ab_set_41
+  - val/af3_ab_set@val.af3_ab_set_42
+  - val/af3_ab_set@val.af3_ab_set_43
+  - val/af3_ab_set@val.af3_ab_set_44
+  - val/af3_ab_set@val.af3_ab_set_45
+  - val/af3_ab_set@val.af3_ab_set_46
+  - val/af3_ab_set@val.af3_ab_set_47
+  - val/af3_ab_set@val.af3_ab_set_48
+  - val/af3_ab_set@val.af3_ab_set_49
+  - val/af3_ab_set@val.af3_ab_set_50
+  - _self_
+
+# Dataloading pipeline to use
+pipeline_target: modelhub.data.pipelines.build_af3_transform_pipeline

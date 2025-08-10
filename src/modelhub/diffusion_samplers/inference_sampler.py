@@ -186,8 +186,9 @@ class SampleDiffusion:
             # Update the coordinates, scaled by the step size
             X_L = X_noisy_L + self.step_scale * d_t * delta_L
 
+            X_noisy_L_scaled =  (X_noisy_L / (torch.sqrt(t_hat[...,None, None]**2 + self.sigma_data**2))) * self.sigma_data
             # Append the results to the trajectory (for visualization of the diffusion process)
-            X_noisy_L_traj.append(X_noisy_L)
+            X_noisy_L_traj.append(X_noisy_L_scaled)
             X_denoised_L_traj.append(X_denoised_L)
             t_hats.append(t_hat)
 

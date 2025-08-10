@@ -300,7 +300,6 @@ def build_rfscore_transform_pipeline(
         EncodeAF3TokenLevelFeatures(sequence_encoding=af3_sequence_encoding),
         GetAF3ReferenceMoleculeFeatures(
             conformer_generation_timeout=conformer_generation_timeout,
-            should_generate_automorphisms_with_rdkit=False,  # We use NetworkX for automorphisms instead of RDKit
             use_element_for_atom_names_of_atomized_tokens=use_element_for_atom_names_of_atomized_tokens,
         ),
         FindAutomorphismsWithNetworkX(),  # Adds the  "automorphisms" key to the data dictionary

@@ -78,6 +78,7 @@ class AF3InferenceEngine(InferenceEngine):
         print_config: bool,
         temp_dir: PathLike,
         seed: int,
+        metrics_cfg: dict | OmegaConf,
         # Structure dumping arguments
         dump_predictions: bool,
         dump_trajectories: bool,
@@ -144,6 +145,10 @@ class AF3InferenceEngine(InferenceEngine):
         self.cfg.model.net.inference_sampler.solver = solver
         self.cfg.trainer.num_nodes = num_nodes
         self.cfg.trainer.devices_per_node = devices_per_node
+        self.cfg.trainer.precision = "bf16-mixed"  # HACK: Temporary hack until our checkpoint configs are updated
+
+        # We don't want to compute all of the training metrics, since they may error during inference
+        self.cfg.trainer["metrics"] = {}
 
         set_accelerator_based_on_availability(self.cfg)
 
@@ -167,6 +172,8 @@ class AF3InferenceEngine(InferenceEngine):
                 self.cfg.trainer, resolve=True, title="INFERENCE TRAINER CONFIGURATION"
             )
 
+        if metrics_cfg is not None:
+            self.cfg.trainer["metrics"].update(metrics_cfg)
         # ... instantiate the trainer with the (modified) configuration
         self.trainer = hydra.utils.instantiate(
             self.cfg.trainer,
@@ -361,11 +368,15 @@ class AF3InferenceEngine(InferenceEngine):
         # ==============================================================================
         # Construct the model and load the checkpoint
         # ==============================================================================
-
         self.trainer.initialize_or_update_trainer_state({"train_cfg": self.cfg})
         self.trainer.construct_model()
         self.trainer.load_checkpoint(ckpt_path=self.ckpt_path)
 
+        # Ensure optimizer isn't loaded
+        self.trainer.state["optimizer"] = None
+        self.trainer.state["train_cfg"].model.optimizer = None
+
+        self.trainer.setup_model_optimizers_and_schedulers()
         self.trainer.state["model"].eval()
 
         # ==============================================================================
@@ -426,7 +437,8 @@ class AF3InferenceEngine(InferenceEngine):
 
             should_early_stop_fn = None
             if (
-                self.early_stopping_plddt_threshold
+                "confidence_feats" in pipeline_output
+                and self.early_stopping_plddt_threshold
                 and self.early_stopping_plddt_threshold > 0
                 and "confidence_feats" in pipeline_output
             ):
@@ -440,20 +452,26 @@ class AF3InferenceEngine(InferenceEngine):
             with torch.no_grad():
                 pipeline_output = self.trainer.fabric.to_device(pipeline_output)
                 if should_early_stop_fn:
-                    network_output = self.trainer.validation_step(
+                    valid_step_outs = self.trainer.validation_step(
                         batch=pipeline_output,
                         batch_idx=0,
-                        compute_metrics=False,
+                        compute_metrics=True,
                         should_early_stop_fn=should_early_stop_fn,
-                    )["network_output"]
+                    )
                 else:
-                    network_output = self.trainer.validation_step(
+                    valid_step_outs = self.trainer.validation_step(
                         batch=pipeline_output,
                         batch_idx=0,
-                        compute_metrics=False,
-                    )["network_output"]
+                        compute_metrics=True,
+                    )
+                network_output = valid_step_outs["network_output"]
+                metrics_output = valid_step_outs["metrics_output"]
                 # TODO: Log `metrics_output` to a file (or store directly within the CIF file)
-
+                df_to_save = pd.DataFrame([metrics_output])
+                df_to_save.to_csv(
+                    self.cif_out_dir / f"{example_id}_metrics.csv",
+                    index=False,
+                )
             if network_output.get("early_stopped", False):
                 # TODO: Rework how we save outputs so it's easy for users
                 ranked_logger.warning(

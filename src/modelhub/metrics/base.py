@@ -6,7 +6,7 @@ import hydra
 from beartype.typing import Any
 from datahub.utils import error, nested_dict
 from omegaconf import DictConfig
-from toolz import keymap, valmap
+from toolz import keymap
 
 from modelhub.utils.ddp import RankedLogger
 
@@ -141,11 +141,18 @@ class Metric(ABC):
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        # Check that the 'keys' of the compute_from_kwargs method are a subset of the 'compute' methods signature
+        # Check that the 'keys' of the kwargs_to_compute_args are a subset of the 'compute' method signature
         if self.kwargs_to_compute_args:
             assert self.kwargs_to_compute_args.keys() <= self.required_compute_args, (
-                f"The keys of the compute_from_kwargs method must be a subset of the 'compute' methods signature. "
+                f"The keys of kwargs_to_compute_args must be a subset of the 'compute' method signature. "
                 f"{self.kwargs_to_compute_args.keys()} is not a subset of {self.required_compute_args}"
+            )
+
+        # Check that optional_kwargs are also in the kwargs_to_compute_args
+        if self.kwargs_to_compute_args and self.optional_kwargs:
+            assert self.optional_kwargs <= set(self.kwargs_to_compute_args.keys()), (
+                f"All optional_kwargs must be defined in kwargs_to_compute_args. "
+                f"{self.optional_kwargs} is not a subset of {set(self.kwargs_to_compute_args.keys())}"
             )
 
     @cached_property
@@ -156,6 +163,9 @@ class Metric(ABC):
     @cached_property
     def required_kwargs(self) -> frozenset[str]:
         """Required input keys for this metric"""
+        if self.kwargs_to_compute_args is None:
+            return frozenset()
+
         return frozenset(self.kwargs_to_compute_args.values())
 
     def compute_from_kwargs(self, **kwargs: Any) -> dict[str, Any]:
@@ -164,11 +174,24 @@ class Metric(ABC):
         The 'kwargs_to_compute_args' property here will determine
         where in the kwargs we will look for the values to pass to the compute method.
 
-        If you need added flexibility (e.g. by passing certain defaults), you can override this method.
+        Parameters marked in 'optional_kwargs' will only be passed if present in kwargs.
         """
         if self.kwargs_to_compute_args:
-            _get = lambda key: nested_dict.getitem(kwargs, key=key)  # noqa: E731
-            compute_inputs = valmap(_get, self.kwargs_to_compute_args)
+            compute_inputs = {}
+            for compute_arg, kwargs_key in self.kwargs_to_compute_args.items():
+                if compute_arg in self.optional_kwargs:
+                    # Optional parameter - only add if present
+                    try:
+                        compute_inputs[compute_arg] = nested_dict.getitem(
+                            kwargs, key=kwargs_key
+                        )
+                    except KeyError:
+                        pass  # Don't pass this parameter to compute()
+                else:
+                    # Required parameter - use getitem (will raise if missing)
+                    compute_inputs[compute_arg] = nested_dict.getitem(
+                        kwargs, key=kwargs_key
+                    )
         else:
             # If kwargs_to_compute_args is not defined, use kwargs directly
             compute_inputs = kwargs
@@ -192,6 +215,22 @@ class Metric(ABC):
         ```
         """
         return None
+
+    @property
+    def optional_kwargs(self) -> frozenset[str]:
+        """Set of compute argument names that are optional.
+
+        Optional parameters will only be passed to compute() if present in kwargs.
+        The compute() method should have sensible defaults for these parameters.
+
+        Override e.g. as:
+        ```python
+        @property
+        def optional_kwargs(self) -> frozenset[str]:
+            return frozenset(["confidence_indices", "interfaces_to_score"])
+        ```
+        """
+        return frozenset()
 
     @abstractmethod
     def compute(self, **kwargs: Any) -> dict[str, Any] | list[dict[str, Any]]:

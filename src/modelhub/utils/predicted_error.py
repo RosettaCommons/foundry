@@ -334,7 +334,6 @@ def compute_batch_indices_with_lowest_predicted_error(
     return_dict["best_lig_ipae_idx"] = _get_lowest_error_ligand_indices(
         interface_chain_paes, interfaces, lig_chains
     )
-
     return return_dict
 
 

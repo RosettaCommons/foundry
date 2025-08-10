@@ -105,8 +105,9 @@ def instantiate_single_dataset_and_sampler(cfg: DictConfig | dict) -> dict[str, 
         # ... instantiate the sampler with the number of samples
         sampler = hydra.utils.instantiate(cfg.sampler)
     else:
+        dataset_name = getattr(getattr(cfg.dataset, "dataset", None), "name", None)
         ranked_logger.warning(
-            "No weights or sampler provided for dataset, using uniform weights with replacement."
+            f"No weights or sampler provided for dataset: {dataset_name}, using uniform weights with replacement."
         )
         sampler = WeightedRandomSampler(
             weights=torch.ones(len(dataset)),

@@ -209,4 +209,5 @@ logs/
 **/scratch/
 **/outputs/
 **/scripts/slurm/
+**/benchmarks/
 

@@ -35,7 +35,9 @@ def run_inference(cfg: DictConfig) -> None:
         temp_dir = Path(temp_dir)
         temp_dir.mkdir(parents=True, exist_ok=True)
 
-        inference_engine = instantiate(cfg, temp_dir=temp_dir, _convert_="partial")
+        inference_engine = instantiate(
+            cfg, temp_dir=temp_dir, _convert_="partial", _recursive_=False
+        )
         inference_engine.trainer.fabric.launch()
         with suppress_warnings():
             inference_engine.eval()

@@ -2178,58 +2178,50 @@ def calc_ddihedralmse_dxyz(a, b, c, d, true_dih, eps=1e-6):
     return grads
 
 
-def calc_chiral_grads_flat_impl(xyz, chirals):
+def calc_chiral_grads_flat_impl(
+    xyz, chiral_centers, chiral_center_dihedral_angles, no_grad_on_chiral_center
+):
     """
     Calculates the gradient of the chiral centers with respect to the xyz coordinates using the closed form derivative.
     Args:
     xyz: torch.Tensor, shape (batch, n_atoms, 3)
-    chirals: torch.Tensor, shape (n_centers, 5)
+    chiral_centers: torch.Tensor, shape (long) (n_centers, 4)
+    chiral_center_dihedral_angles: torch.Tensor, shape (float) (n_centers, 1)
+
     Returns:
     grads: torch.Tensor, shape (batch, n_atoms, 3)
     """
+    # (We want to track the gradient of the dihedral angle loss with respect to the xyz coordinates)
     xyz.requires_grad_(True)
-    if chirals.shape[0] == 0:
+
+    # Edge case: No chiral centers, return zero gradients
+    if chiral_centers.shape[0] == 0:
         return torch.zeros(xyz.shape, device=xyz.device)
-    chiral_dih = xyz[:, chirals[..., :-1].long(), :]
+
+    # Get the coordinates of the four atoms that make up the chiral center
+    chiral_dih = xyz[:, chiral_centers, :]
+
+    # Calculate the gradient of the dihedral angle loss with respect to the xyz coordinates
     grads = torch.zeros_like(xyz).to(xyz.device)
     chiral_grads = calc_ddihedralmse_dxyz(
         chiral_dih[..., 0, :],
         chiral_dih[..., 1, :],
         chiral_dih[..., 2, :],
         chiral_dih[..., 3, :],
-        chirals[..., -1],
+        chiral_center_dihedral_angles,
     )  # n_center, 4, 3
+
+    if no_grad_on_chiral_center:
+        chiral_grads[:, :, 0] = 0.0  # no gradient on chiral center
 
     # back to atom
     grads.index_add_(
         1,
-        chirals[..., :-1].long().flatten(),
+        chiral_centers.flatten(),
         chiral_grads.flatten(start_dim=1, end_dim=2),
     )
 
     return grads
-
-
-def calc_pseudo_dih(pred, true, eps=1e-4):
-    """
-    calculate pseudo CA dihedral angle and put loss on them
-    Input:
-    - predicted & true CA coordinates (I,B,L,3) / (B, L, 3)
-    Output:
-    - dihedral angle loss
-    """
-    I, B, L = pred.shape[:3]
-    pred = pred.reshape(I * B, L, -1)
-    true_dih = torsion(
-        true[:, :-3, :], true[:, 1:-2, :], true[:, 2:-1, :], true[:, 3:, :]
-    )  # (B, L', 2)
-    pred_dih = torsion(
-        pred[:, :-3, :], pred[:, 1:-2, :], pred[:, 2:-1, :], pred[:, 3:, :]
-    )  # (I*B, L', 2)
-    pred_dih = pred_dih.reshape(I, B, -1, 2)
-    dih_loss = torch.square(pred_dih - true_dih).sum(dim=-1).mean()
-    dih_loss = torch.sqrt(dih_loss + eps)
-    return dih_loss
 
 
 def calc_lddt(

@@ -1,12 +1,13 @@
 #!/bin/bash
 #SBATCH -p gpu-train
-#SBATCH --nodes 2
+#SBATCH --nodes 4
 #SBATCH --gres=gpu:l40:8
 #SBATCH --ntasks-per-node 8
 #SBATCH -c 4
+#SBATCH -C L40S
 #SBATCH --mem=512g
-#SBATCH -t 7-00:00:00
-#SBATCH -J none-00-dummy
+#SBATCH -t 1-00:00:00
+#SBATCH -J benchmarks/af3_ab_test_set_2024_model
 #SBATCH -o slurm_logs/%x_%j.out
 #SBATCH -e slurm_logs/%x_%j.err
 #SBATCH --no-kill=off
@@ -21,13 +22,6 @@ unset PROJECT_PATH
 # (SLURM setup, ensuring we have a unique port per job, and setting the master address to Rank 0)
 export MASTER_PORT=$((1024 + RANDOM % 64512))
 export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-
-### Set custom paths
-# (Projects, if not using src/modelhub)
-# export PROJECT_PATH="/home/<USER>/projects/modelhub/projects/rfscore"  
-# (Triton kernels)
-# ... cache directory for Triton kernels (e.g., DeepSpeed4Science fused kernels)
-export TRITON_CACHE_DIR="/home/<USER>/.triton" # Change this to a directory with write permissions
 
 ### Environment flags
 
@@ -59,7 +53,7 @@ echo "Running on $SLURM_NNODES nodes with $DEVICES_PER_NODE tasks per node"
 GRAD_ACCUM_STEPS=$((EFFECTIVE_BATCH_SIZE / (DEVICES_PER_NODE * SLURM_NNODES)))
 echo "Grad Accumulation Steps: $GRAD_ACCUM_STEPS"
 
-command="srun --kill-on-bad-exit ../../src/modelhub/train.py \
+command="srun --kill-on-bad-exit ../../src/modelhub/validate.py \
     experiment=$SLURM_JOB_NAME \
     ++trainer.devices_per_node=$DEVICES_PER_NODE \
     ++trainer.num_nodes=$SLURM_NNODES \
