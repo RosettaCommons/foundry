@@ -4,4 +4,4 @@ defaults:
   - _self_
 
 net:
-  _target_: projects.rfscore.model.RFScore.RFScoreWithConfidence
+  _target_: modelhub.model.RF3.RF3WithConfidence

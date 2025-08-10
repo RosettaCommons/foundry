@@ -11,7 +11,7 @@ from modelhub.diffusion_samplers.inference_sampler import (
     SampleDiffusion,
     SamplePartialDiffusion,
 )
-from modelhub.model.AF3_structure import DiffusionModule, DistogramHead, Recycler
+from modelhub.model.RF3_structure import DiffusionModule, DistogramHead, Recycler
 from modelhub.model.layers.pairformer_layers import (
     FeatureInitializer,
 )
@@ -52,8 +52,8 @@ class ShouldEarlyStopFn(Protocol):
         ...
 
 
-class AF3(nn.Module):
-    """AF3 Network module.
+class RF3(nn.Module):
+    """RF3 Network module.
 
     We adhere to the PyTorch Lightning Style Guide; see (1).
 
@@ -89,14 +89,11 @@ class AF3(nn.Module):
             c_z: Token-level pair reprentation channel dimension
             c_atom: Atom-level single reprentation channel dimension
             c_atompair: Atom-level pair reprentation channel dimension
-            c_s_inputs: TBD what the heck this is
-            loss: Arguments for the loss function
-            partial_optimizer: Optimizer (partially initialized) to be used for training. The "configure_optimizers" method will finish instantiating the optimizer.
-            partial_lr_scheduler: Learning rate scheduler (partially initialized) to be used for training. The "configure_optimizers" method will finish instantiating the scheduler.
+            c_s_inputs: Output dimension of the InputFeatureEmbedder
         """
         super().__init__()
 
-        # ... initialize the FeatureInitializer, which creates the initial token- and atom-level representations and conditioning
+        # ... initialize the FeatureInitializer, which creates the initial token-level representations and conditioning
         self.feature_initializer = FeatureInitializer(
             c_s=c_s,
             c_z=c_z,
@@ -286,6 +283,7 @@ class AF3(nn.Module):
 
     def recycle(
         self,
+        # TODO: Jax typing
         S_inputs_I,
         S_init_I,
         Z_init_II,
@@ -311,7 +309,7 @@ class AF3(nn.Module):
         )
 
 
-class AF3WithConfidence(AF3):
+class RF3WithConfidence(RF3):
     """Model for training and inference with confidence metric computation"""
 
     def __init__(
@@ -444,6 +442,8 @@ class AF3WithConfidence(AF3):
                 )
 
         # ... run non-batched confidence head
+        # TODO: Write a version of the confidence head that splits into batches based on memory available
+        # (Currently, we OOM with the full batch size, so we loop, which is slow)
         D = sample_diffusion_outs["X_L"].shape[0]
         confidence_stack = {}
         for i in range(D):

@@ -2,11 +2,11 @@ defaults:
   - rf3_net
 
 # Model architecture
-_target_: modelhub.model.AF3.AF3WithConfidence
+_target_: modelhub.model.RF3.RF3WithConfidence
 
 # +---------- Mini rollout sampler ----------+
 # From the AF-3 main text:
-# > ...To remedy this, we developed a diffusion ‘rollout’ procedure for the full-structure prediction generation during training (using a larger step size than normal)
+# > ... To remedy this, we developed a diffusion ‘rollout’ procedure for the full-structure prediction generation during training (using a larger step size than normal)
 # They do not further elaborate on how they adjusted the step size during diffusion rollout, but this may be a fruitful area of exploration moving forwards
 mini_rollout_sampler:
   solver: "af3"

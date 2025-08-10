@@ -6,7 +6,7 @@ from opt_einsum import contract as einsum
 
 from modelhub.chemical import ChemicalData as ChemData
 from modelhub.flow_matching import data_utils as du
-from modelhub.model.AF3_structure import FourierEmbedding
+from modelhub.model.RF3_structure import FourierEmbedding
 from modelhub.model.layers.Attention_module import FeedForwardLayer
 from modelhub.model.layers.SE3_network import (
     SE3TransformerWrapper,

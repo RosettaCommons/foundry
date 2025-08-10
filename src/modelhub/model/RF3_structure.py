@@ -13,7 +13,7 @@ from modelhub.model.layers.pairformer_layers import (
     MSAModule,
     PairformerBlock,
     RelativePositionEncoding,
-    TemplateEmbedder,
+    RF3TemplateEmbedder,
 )
 from modelhub.training.checkpoint import activation_checkpointing
 
@@ -292,7 +292,7 @@ class Recycler(nn.Module):
             nn.LayerNorm(c_z),
             linearNoBias(c_z, c_z),
         )
-        self.template_embedder = TemplateEmbedder(c_z=c_z, **template_embedder)
+        self.template_embedder = RF3TemplateEmbedder(c_z=c_z, **template_embedder)
         self.msa_module = MSAModule(**msa_module)
         self.process_sh = nn.Sequential(
             nn.LayerNorm(c_s),

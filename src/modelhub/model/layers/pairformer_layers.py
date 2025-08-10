@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn.functional import one_hot, relu
 
-from modelhub.model.AF3_blocks import MsaPairWeightedAverage, MsaSubsampleEmbedder
+from modelhub.model.RF3_blocks import MsaPairWeightedAverage, MsaSubsampleEmbedder
 from modelhub.model.layers.af3_diffusion_transformer import AtomTransformer
 from modelhub.model.layers.Attention_module import (
     TriangleAttention,
@@ -23,6 +23,9 @@ from modelhub.model.layers.outer_product import (
 )
 from modelhub.training.checkpoint import activation_checkpointing
 from modelhub.util_module import Dropout
+from modelhub.data.ground_truth_template import (
+    af3_noise_scale_to_noise_level,
+)
 
 
 class AtomAttentionEncoderPairformer(nn.Module):
@@ -646,7 +649,11 @@ class MSAModule(nn.Module):
         return Z_II
 
 
-class TemplateEmbedder(nn.Module):
+class AF3TemplateEmbedder(nn.Module):
+    """ 
+    AF3-like TemplateEmbedding (e.g., protein-only, etc.)
+    Unused in RF3.
+    """
     def __init__(self, n_block, raw_template_dim, c_z, c, p_drop):
         super().__init__()
         self.c = c
@@ -751,3 +758,110 @@ class TemplateEmbedder(nn.Module):
             template_restype,
             asym_id,
         )
+
+class RF3TemplateEmbedder(nn.Module):
+    """
+    Template track that enables conditioning on noisy ground-truth templates at the token level.
+    Supports all chain types.
+    """
+    def __init__(
+        self,
+        n_block,
+        raw_template_dim,
+        c_z,
+        c,
+        p_drop,
+    ):
+        super().__init__()
+        self.c = c
+        self.emb_pair = nn.Linear(c_z, c, bias=False)
+        self.norm_pair_before_pairformer = nn.LayerNorm(c_z)
+        self.norm_after_pairformer = nn.LayerNorm(c)
+        self.emb_templ = nn.Linear(raw_template_dim, c, bias=False)
+
+        # template pairformer does not operate on sequence representation
+        self.pairformer = nn.ModuleList(
+            [
+                PairformerBlock(
+                    c_s=0,
+                    c_z=c,
+                    p_drop=p_drop,
+                    triangle_multiplication=dict(d_hidden=c),
+                    triangle_attention=dict(d_hidden=c),
+                    attention_pair_bias={},
+                    n_transition=4,
+                )
+                for _ in range(n_block)
+            ]
+        )
+
+        # NOTE: this is not consistent with AF3 paper which outputs this tensor in the template_channel dimension
+        # In Algorithm 1, line 9, the outputs of this function are added to the Z_II tensor which has dimensions [B, I, I, C_z]
+        # so we make the outputs of this module also has those dimensions
+        self.agg_emb = nn.Linear(c, c_z, bias=False)
+
+    def forward(
+        self,
+        f,
+        Z_II,
+    ):
+        @activation_checkpointing
+        def embed_templates_like_rfscore(
+            has_distogram_condition,  # [I, I]
+            distogram_condition_noise_scale,  # [I]
+            distogram_condition,  # [I, I, 64], where 64 is the number of distogram bins
+        ):
+            I = Z_II.shape[0]  # n_tokens
+
+            # Transform noise scale to reasonable range
+            joint_noise_scale = (
+                distogram_condition_noise_scale[None, :] ** 2
+                + distogram_condition_noise_scale[:, None] ** 2
+            ).sqrt()
+            joint_noise_level = af3_noise_scale_to_noise_level(joint_noise_scale)
+
+            # ---------------------------- #
+
+            # ... concatenate along the channel dimension
+            template_feats = torch.cat(
+                [
+                    distogram_condition,  # [I, I, 64]
+                    has_distogram_condition.unsqueeze(-1),  # [I, I, 1]
+                    joint_noise_level.unsqueeze(-1),  # [I, I, 1]
+                ],
+                dim=-1,
+            )  # [I, I, 66]
+
+            # ... remove any invalid interactions
+            template_feats = template_feats * has_distogram_condition.unsqueeze(
+                -1
+            )  # [I, I, 66], where 66 = 64 + 1 + 1
+
+            # ... embed template features
+            template_channels = self.emb_templ(template_feats)  # [I, I, c]
+
+            # ---------------------------- #
+
+            # ... pass through pairformer
+            u_II = torch.zeros(I, I, self.c, device=Z_II.device)
+            v_II = (
+                self.emb_pair(self.norm_pair_before_pairformer(Z_II))
+                + template_channels
+            )  # [I, I, c]
+            for block in self.pairformer:
+                _, v_II = block(None, v_II)
+            u_II = u_II + self.norm_after_pairformer(v_II)
+
+            return self.agg_emb(relu(u_II))
+
+        # rfscore template embedding (noisy ground-truth template as input)
+        embedded_templates = embed_templates_like_rfscore(
+            has_distogram_condition=f["has_distogram_condition"],  # [I, I]
+            distogram_condition_noise_scale=f["distogram_condition_noise_scale"],  # [I]
+            distogram_condition=f[
+                "distogram_condition"
+            ],  # [I, I, 64], where 64 is the number of distogram bins
+        )
+
+        return embedded_templates
+

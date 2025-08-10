@@ -4,14 +4,12 @@ from torch.nn.functional import relu
 
 from modelhub.model.layers.pairformer_layers import PairformerBlock
 from modelhub.training.checkpoint import activation_checkpointing
-from modelhub.utils.torch_utils import device_of
-from projects.rfscore.model.embeddings import FourierEmbedding
-from projects.rfscore.transforms.ground_truth_template import (
+from modelhub.data.ground_truth_template import (
     af3_noise_scale_to_noise_level,
 )
 
 
-class RFScoreTemplateEmbedder(nn.Module):
+class RF3TemplateEmbedder(nn.Module):
     def __init__(
         self,
         n_block,

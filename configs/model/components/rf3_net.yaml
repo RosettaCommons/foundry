@@ -1,5 +1,5 @@
 # Model architecture
-_target_: modelhub.model.AF3.AF3
+_target_: modelhub.model.RF3.RF3
 
 # +---------- Channel dimensions ----------+
 c_s: 384

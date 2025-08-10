@@ -98,7 +98,7 @@ from modelhub.data.pipeline_utils import (
     annotate_pre_crop_hash,
     set_to_occupancy_0_where_crop_hashes_differ,
 )
-from projects.rfscore.pipelines.composed import build_ground_truth_distogram_transform
+from modelhub.data.pipeline_utils import build_ground_truth_distogram_transform
 
 
 def TrainingRoute(transform):

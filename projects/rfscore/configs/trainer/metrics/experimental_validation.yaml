@@ -1,8 +1,0 @@
-defaults:
-  - structure_prediction
-
-extra_info:
-  _target_: projects.rfscore.metrics.metadata.ExtraInfo
-
-selected_atom_by_atom_distances:
-  _target_: projects.rfscore.metrics.distances.SelectedAtomByAtomDistances

@@ -13,7 +13,7 @@ from modelhub.loss.af3_losses import (
     SubunitSymmetryResolution,
 )
 from modelhub.metrics.base import MetricManager
-from modelhub.model.AF3 import ShouldEarlyStopFn
+from modelhub.model.RF3 import ShouldEarlyStopFn
 from modelhub.trainers.fabric import FabricTrainer
 from modelhub.training.EMA import EMA
 from modelhub.utils.ddp import RankedLogger

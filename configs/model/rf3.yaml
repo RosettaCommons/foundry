@@ -6,7 +6,6 @@ defaults:
   - _self_
 
 net:
-  _target_: projects.rfscore.model.RFScore.RFScore
   feature_initializer:
     input_feature_embedder:
       atom_attention_encoder:

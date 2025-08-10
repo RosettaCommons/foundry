@@ -1,4 +1,4 @@
-from modelhub.model.AF3 import AF3, AF3WithConfidence
+from modelhub.model.RF3 import AF3, AF3WithConfidence
 from projects.rfscore.model.recycler import RFScoreRecycler
 
 

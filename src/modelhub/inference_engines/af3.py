@@ -14,7 +14,7 @@ from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
 from modelhub.inference_engines.base import InferenceEngine
-from modelhub.model.AF3 import ShouldEarlyStopFn
+from modelhub.model.RF3 import ShouldEarlyStopFn
 from modelhub.utils.datasets import (
     assemble_distributed_inference_loader_from_list_of_paths,
 )
