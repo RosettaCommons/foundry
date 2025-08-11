@@ -279,7 +279,6 @@ class AtomTransformer(nn.Module):
         Cl,  # [B, L, C_atom]
         Plm,  # [B, L, L, C_atompair]
     ):
-        L = Ql.shape[-2]
         Beta_lm = True
         return self.diffusion_transformer(Ql, Cl, Plm, Beta_lm)
 
@@ -350,8 +349,9 @@ class DiffusionTransformerBlock(nn.Module):
         return A_I
 
 
-# SwiGLU transition block with adaptive layernorm
 class ConditionedTransitionBlock(nn.Module):
+    """SwiGLU transition block with adaptive layernorm"""
+
     def __init__(self, c_token, c_s, n=2):
         super().__init__()
         self.ada_ln = AdaLN(c_a=c_token, c_s=c_s)
@@ -400,7 +400,6 @@ class AttentionPairBiasDiffusion(nn.Module):
         )
         self.ln_0 = nn.LayerNorm((c_pair,))
         self.ada_ln_1 = AdaLN(c_a=c_a, c_s=c_s)
-        # self.ln_1 = nn.LayerNorm((c_a,))
 
     def reset_parameters(self) -> None:
         super().reset_parameters()
@@ -470,7 +469,6 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         )
         self.ln_0 = nn.LayerNorm((c_pair,))
         self.ada_ln_1 = AdaLN(c_a=c_a, c_s=c_s)
-        # self.ln_1 = nn.LayerNorm((c_a,))
         self.use_deepspeed_evo = False
         self.force_bfloat16 = True
 

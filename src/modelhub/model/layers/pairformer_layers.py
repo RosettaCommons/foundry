@@ -2,7 +2,9 @@ import torch
 from torch import nn
 from torch.nn.functional import one_hot, relu
 
-from modelhub.model.RF3_blocks import MsaPairWeightedAverage, MsaSubsampleEmbedder
+from modelhub.data.ground_truth_template import (
+    af3_noise_scale_to_noise_level,
+)
 from modelhub.model.layers.af3_diffusion_transformer import AtomTransformer
 from modelhub.model.layers.Attention_module import (
     TriangleAttention,
@@ -21,11 +23,9 @@ from modelhub.model.layers.mlff import ConformerEmbeddingWeightedAverage
 from modelhub.model.layers.outer_product import (
     OuterProductMean_AF3,
 )
+from modelhub.model.RF3_blocks import MSAPairWeightedAverage, MSASubsampleEmbedder
 from modelhub.training.checkpoint import activation_checkpointing
 from modelhub.util_module import Dropout
-from modelhub.data.ground_truth_template import (
-    af3_noise_scale_to_noise_level,
-)
 
 
 class AtomAttentionEncoderPairformer(nn.Module):
@@ -567,9 +567,9 @@ class MSAModule(nn.Module):
     ):
         super().__init__()
         self.n_block = n_block
-        self.msa_subsampler = MsaSubsampleEmbedder(**msa_subsample_embedder)
+        self.msa_subsampler = MSASubsampleEmbedder(**msa_subsample_embedder)
         self.outer_product = OuterProductMean_AF3(**outer_product)
-        self.msa_pair_weighted_averaging = MsaPairWeightedAverage(
+        self.msa_pair_weighted_averaging = MSAPairWeightedAverage(
             **msa_pair_weighted_averaging
         )
         self.msa_transition = Transition(**msa_transition)
@@ -650,10 +650,11 @@ class MSAModule(nn.Module):
 
 
 class AF3TemplateEmbedder(nn.Module):
-    """ 
+    """
     AF3-like TemplateEmbedding (e.g., protein-only, etc.)
     Unused in RF3.
     """
+
     def __init__(self, n_block, raw_template_dim, c_z, c, p_drop):
         super().__init__()
         self.c = c
@@ -759,11 +760,13 @@ class AF3TemplateEmbedder(nn.Module):
             asym_id,
         )
 
+
 class RF3TemplateEmbedder(nn.Module):
     """
     Template track that enables conditioning on noisy ground-truth templates at the token level.
     Supports all chain types.
     """
+
     def __init__(
         self,
         n_block,
@@ -864,4 +867,3 @@ class RF3TemplateEmbedder(nn.Module):
         )
 
         return embedded_templates
-

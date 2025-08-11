@@ -15,6 +15,9 @@ from modelhub.metrics.metric_utils import (
 from modelhub.utils.predicted_error import compile_af3_confidence_outputs
 
 
+@pytest.mark.skip(
+    reason="ChemData configs broken; we cannot be relying on ChemData here"
+)
 def test_compile_af3_confidence_outputs():
     L = 100
     init = partial(initialize_chemdata)
@@ -93,6 +96,9 @@ def test_compile_af3_confidence_outputs():
     ), "Dataframe shape not set correctly"
 
 
+@pytest.mark.skip(
+    reason="ChemData configs broken; we cannot be relying on ChemData here"
+)
 def test_unbin_pae_logits():
     L = 100
     max_distance = 32
@@ -123,6 +129,9 @@ def test_unbin_pae_logits():
     assert pae_unbinned.shape == (1, L, L)
 
 
+@pytest.mark.skip(
+    reason="ChemData configs broken; we cannot be relying on ChemData here"
+)
 def test_unbin_pde_logits():
     L = 100
     max_distance = 32
@@ -154,6 +163,9 @@ def test_unbin_pde_logits():
     assert pde_unbinned.shape == (1, L, L)
 
 
+@pytest.mark.skip(
+    reason="ChemData configs broken; we cannot be relying on ChemData here"
+)
 def test_unbin_plddt_logits():
     L = 100
     max_distance = 1.0
@@ -183,6 +195,9 @@ def test_unbin_plddt_logits():
     assert plddt_unbinned.shape == (1, L, ChemData().NHEAVY)
 
 
+@pytest.mark.skip(
+    reason="ChemData configs broken; we cannot be relying on ChemData here"
+)
 def test_bin_midpoints():
     max_distance = 32
     num_bins = 64

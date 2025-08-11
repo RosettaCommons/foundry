@@ -9,7 +9,7 @@ defaults:
 
 ckpt_config:
   _target_: modelhub.utils.weights.CheckpointConfig
-  path: /projects/ml/modelhub/inference/af3-run9-w-conf-newdatecut_ep688.pt
+  path: /net/scratch/ncorley/training/logs/validate/quick-rf3-with-confidence/2025-08-11_08-16_JOB_38133542/ckpt/epoch-0688.ckpt
   reset_optimizer: true
 
 model:

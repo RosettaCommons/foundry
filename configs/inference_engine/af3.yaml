@@ -6,7 +6,7 @@ defaults:
 
 _target_: modelhub.inference_engines.af3.AF3InferenceEngine
 
-ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/af3-run9-w-conf-newdatecut_ep688.pt
+ckpt_path: /net/scratch/ncorley/training/logs/validate/quick-rf3-with-confidence/2025-08-11_08-16_JOB_38133542/ckpt/epoch-0688.ckpt
 
 # Transform arguments
 n_recycles: 10
@@ -33,6 +33,7 @@ annotate_b_factor_with_plddt: true
 
 # Metrics
 metrics_cfg:
+  # (For confidence outputs)
   ptm:
     _target_: modelhub.metrics.predicted_error.ComputePTM
   iptm:

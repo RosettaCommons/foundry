@@ -11,10 +11,10 @@ from modelhub.diffusion_samplers.inference_sampler import (
     SampleDiffusion,
     SamplePartialDiffusion,
 )
-from modelhub.model.RF3_structure import DiffusionModule, DistogramHead, Recycler
 from modelhub.model.layers.pairformer_layers import (
     FeatureInitializer,
 )
+from modelhub.model.RF3_structure import DiffusionModule, DistogramHead, Recycler
 from modelhub.training.checkpoint import create_custom_forward
 
 """

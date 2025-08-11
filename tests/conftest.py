@@ -1,7 +1,12 @@
 import os
+from pathlib import Path
 
 import pytest
+import rootutils
+import torch
 from dotenv import load_dotenv
+
+TEST_DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
 def pytest_configure(config):
@@ -20,3 +25,14 @@ def pytest_configure(config):
 
     # Load the environment variables
     load_dotenv(dotenv_path)
+
+    # Set PROJECT_ROOT
+    rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+
+
+@pytest.fixture(scope="session")
+def gpu():
+    """Fixture to check GPU availability for tests that require CUDA."""
+    if not torch.cuda.is_available():
+        pytest.skip("GPU not available")
+    return True

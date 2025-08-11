@@ -1,15 +1,18 @@
+from functools import partial
+
+import torch
+from cifutils.enums import ChainType
 from datahub.transforms._checks import check_atom_array_annotation
 from datahub.transforms.crop import compute_local_hash
+from omegaconf import DictConfig
+
 from modelhub.data.ground_truth_template import (
     FeaturizeNoisedGroundTruthAsTemplateDistogram,
     TokenGroupNoiseScaleSampler,
     af3_noise_scale_distribution_wrapped,
     af3_noise_scale_to_noise_level,
 )
-from omegaconf import DictConfig
-from cifutils.enums import ChainType
-from functools import partial
-import torch
+
 
 def annotate_pre_crop_hash(data: dict) -> dict:
     hash_pre = compute_local_hash(data["atom_array"])
@@ -38,6 +41,7 @@ def set_to_occupancy_0_where_crop_hashes_differ(data: dict) -> dict:
     atom_array.occupancy[mask] = 0
 
     return data
+
 
 def build_ground_truth_distogram_transform(
     *,
@@ -84,10 +88,11 @@ def build_ground_truth_distogram_transform(
             mask_and_sampling_fns.append(
                 (
                     lambda arr: ~arr.atomize,
-                    lambda size: torch.ones(size) * template_noise_scales["not_atomized"],
+                    lambda size: torch.ones(size)
+                    * template_noise_scales["not_atomized"],
                 )
             )
-        p_condition = 1.0 # Always condition for inference (no stochasticity)
+        p_condition = 1.0  # Always condition for inference (no stochasticity)
     else:
         # Use noise scale distributions for training
         if template_noise_scales["atomized"] is not None:
@@ -114,7 +119,7 @@ def build_ground_truth_distogram_transform(
                     ),
                 )
             )
-        p_condition = p_condition_per_token # Apply conditioning to only some tokens during training
+        p_condition = p_condition_per_token  # Apply conditioning to only some tokens during training
 
     return FeaturizeNoisedGroundTruthAsTemplateDistogram(
         noise_scale_distribution=TokenGroupNoiseScaleSampler(
@@ -123,4 +128,4 @@ def build_ground_truth_distogram_transform(
         allowed_chain_types=allowed_chain_types_for_conditioning,
         p_condition_per_token=p_condition,
         p_provide_inter_molecule_distances=p_provide_inter_molecule_distances,
-    ) 
+    )

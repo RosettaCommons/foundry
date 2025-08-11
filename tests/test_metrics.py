@@ -39,12 +39,12 @@ def test_chiral_metrics(pdb_id: str):
     # Compare the two outputs
     # (Perfect vs. terrible)
     assert (
-        perfect_output["polymer_chiral_loss_sum"] * 10
-        < terrible_output["polymer_chiral_loss_sum"]
+        perfect_output["polymer_chiral_loss_mean"] * 10
+        < terrible_output["polymer_chiral_loss_mean"]
     )
     assert (
-        perfect_output["non_polymer_chiral_loss_sum"] * 10
-        < terrible_output["non_polymer_chiral_loss_sum"]
+        perfect_output["non_polymer_chiral_loss_mean"] * 10
+        < terrible_output["non_polymer_chiral_loss_mean"]
     )
     # (Same number of chiral centers)
     assert (

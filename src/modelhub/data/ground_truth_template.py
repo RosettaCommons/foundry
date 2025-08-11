@@ -238,6 +238,7 @@ def featurize_noised_ground_truth_as_template_distogram(
             Shape: [n_bin].
         is_unconditional (bool): Whether we are sampling unconditionally.
             See Classifier-Free Diffusion Guidance (Ho et al., 2022) for details.
+            Default: True (no conditioning).
         p_condition_per_token (float, optional):
             Probability of conditioning each eligible token. Default: 0.7.
         p_provide_inter_molecule_distances (float, optional):
@@ -331,9 +332,11 @@ def featurize_noised_ground_truth_as_template_distogram(
         template_distogram, boundaries=distogram_bins
     )  # (n_token, n_token)
     n_bins: int = len(distogram_bins) + 1
-    template_distogram_onehot: Float[Tensor, "n_token n_token n_bins"] = torch.nn.functional.one_hot(
-        template_distogram_binned, num_classes=n_bins
-    ).to(torch.float32)
+    template_distogram_onehot: Float[Tensor, "n_token n_token n_bins"] = (
+        torch.nn.functional.one_hot(
+            template_distogram_binned, num_classes=n_bins
+        ).to(torch.float32)
+    )
 
     # Expand noise_scale to (n_token,) if needed
     expanded_noise_scale: Float[Tensor, "n_token"] = (
@@ -346,7 +349,9 @@ def featurize_noised_ground_truth_as_template_distogram(
 
     out: dict[str, Tensor] = {
         "distogram_condition_noise_scale": expanded_noise_scale,  # (n_token,)
-        "has_distogram_condition": torch.as_tensor(token_to_fill_mask_II, dtype=torch.bool),  # (n_token, n_token)
+        "has_distogram_condition": torch.as_tensor(
+            token_to_fill_mask_II, dtype=torch.bool
+        ),  # (n_token, n_token)
         "distogram_condition": template_distogram_onehot,  # (n_token, n_token, n_bins)
     }
 

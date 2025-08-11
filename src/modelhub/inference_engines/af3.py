@@ -9,6 +9,7 @@ import torch
 from biotite.structure import AtomArray
 from cifutils import parse
 from cifutils.utils.selection import AtomSelection, AtomSelectionStack
+from datahub.common import as_list
 from datahub.enums import GroundTruthConformerPolicy
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
@@ -71,8 +72,8 @@ class AF3InferenceEngine(InferenceEngine):
         n_recycles: int,
         diffusion_batch_size: int,
         residue_renaming_dict: str | dict,
-        template_selection_syntax: str | None,
-        ground_truth_conformer_selection: str | None,
+        template_selection_syntax: list[str] | str | None,
+        ground_truth_conformer_selection: list[str] | str | None,
         num_steps: int,
         solver: str,
         print_config: bool,
@@ -103,9 +104,9 @@ class AF3InferenceEngine(InferenceEngine):
             residue_renaming_dict (dict): Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': 'L:1'}.
             template_selection_syntax (str): Selection syntax for template selection. If None, no residues will be selected.
             ground_truth_conformer_selection (str): Selection syntax for residues that should use ground truth conformers instead of generated ones.
-                Uses AtomSelection format (e.g., "*/LIG" for all ligands, "A1-10" for residues 1-10 in chain A). If None, no residues will use ground truth conformers.
+                Uses AtomSelection format (e.g., "*/HEM" for all heme groups, "A1-10" for residues 1-10 in chain A). If None, no residues will use ground truth conformers.
             num_steps (int): Number of steps for sampling of the diffusion model. AF-3 uses 200; we see no degradation in performance with 50.
-            solver (str): Solver to use for inference. Options are 'af3', 'simple', 'euler', and 'heun'.
+            solver (str): Solver to use for inference. We only support 'af3' for now.
             print_config (bool): Pretty-print the Hydra configs.
             temp_dir (PathLike): Temporary directory to store intermediate files.
             seed (int): Random seed for reproducibility / augmentation. If None, the default seed from the config will be used.
@@ -174,6 +175,7 @@ class AF3InferenceEngine(InferenceEngine):
 
         if metrics_cfg is not None:
             self.cfg.trainer["metrics"].update(metrics_cfg)
+
         # ... instantiate the trainer with the (modified) configuration
         self.trainer = hydra.utils.instantiate(
             self.cfg.trainer,
@@ -192,11 +194,15 @@ class AF3InferenceEngine(InferenceEngine):
         self.residue_renaming_dict = residue_renaming_dict
         self.temp_dir = Path(temp_dir)
 
-        # Set the template selection syntax
-        self.template_selection_syntax = template_selection_syntax
-
-        # Set the ground truth conformer selection syntax
-        self.ground_truth_conformer_selection = ground_truth_conformer_selection
+        # Set the templating syntax
+        self.template_selection_syntax = (
+            as_list(template_selection_syntax) if template_selection_syntax else []
+        )
+        self.ground_truth_conformer_selection = (
+            as_list(ground_truth_conformer_selection)
+            if ground_truth_conformer_selection
+            else []
+        )
 
         # Structure dumping
         self.dump_predictions = dump_predictions
@@ -257,23 +263,36 @@ class AF3InferenceEngine(InferenceEngine):
         return parse(path_to_structure, hydrogen_policy="remove")
 
     def apply_template_selection(
-        self, atom_array: AtomArray, template_selection_syntax: str | None = None
+        self,
+        atom_array: AtomArray,
+        template_selection_syntax_list: list[str] | None = None,
     ) -> AtomArray:
         """Apply template selection to the atom array.
 
+        TODO: Move to helper function, does not need to be a class method
+
         Sets the 'is_input_file_templated' annotation for atoms selected by the template_selection_syntax.
         """
-        if template_selection_syntax is not None:
-            selector = AtomSelectionStack.from_contig_string(template_selection_syntax)
-            is_input_file_templated = selector.get_mask(atom_array)
-            ranked_logger.info(
-                f"Selected {np.sum(is_input_file_templated)} atoms for templating"
-            )
-        else:
-            is_input_file_templated = np.zeros(len(atom_array), dtype=bool)
+        is_input_file_templated = np.zeros(len(atom_array), dtype=bool)
+        if template_selection_syntax_list and len(template_selection_syntax_list) > 0:
+            for template_selection_syntax in template_selection_syntax_list:
+                if not template_selection_syntax:
+                    continue
 
-        # assert that none of the selected atoms are NaN
-        # brittle until better selection syntax is implemented
+                selector = AtomSelectionStack.from_contig_string(
+                    template_selection_syntax
+                )
+                _selection_mask = selector.get_mask(atom_array)
+                ranked_logger.info(
+                    f"Selected {np.sum(_selection_mask)} atoms for templating with syntax: {template_selection_syntax}"
+                )
+                is_input_file_templated = is_input_file_templated | _selection_mask
+            ranked_logger.info(
+                f"Selected {np.sum(is_input_file_templated)} atoms for templating with {len(template_selection_syntax_list)} syntaxes"
+            )
+
+        # Assert that none of the selected atoms are NaN
+        # (Brittle until better selection syntax is implemented)
         assert (
             not np.all(np.isnan(atom_array.coord[is_input_file_templated]))
             or len(atom_array.coord[is_input_file_templated]) == 0
@@ -291,17 +310,25 @@ class AF3InferenceEngine(InferenceEngine):
         return atom_array
 
     def prepare_atom_array(
-        self, atom_array: AtomArray, template_selection_syntax: str | None = None
+        self,
+        atom_array: AtomArray,
+        template_selection_syntax: list[str] | None = None,
+        ground_truth_conformer_selection: list[str] | None = None,
     ) -> AtomArray:
         """Prepare the AtomArray for inference.
 
+        TODO: Move to helper function, does not need to be a class method
+
         Applies template selection, ground truth conformer selection, and other preprocessing.
-        By default, we set NaN coordinates to random values to avoid unexpected behavior in the pipeline.
+        By default, we set NaN coordinates to -1 to avoid unexpected behavior in the pipeline.
         """
         atom_array = self.apply_template_selection(
             atom_array, template_selection_syntax
         )
-        atom_array = self.apply_ground_truth_conformer_policy(atom_array)
+        atom_array = self.apply_ground_truth_conformer_policy(
+            atom_array,
+            ground_truth_conformer_selection=ground_truth_conformer_selection,
+        )
 
         # HACK: Set NaN coordinates to -1 to avoid unexpected behavior in the pipeline
         # TODO: Hunt down why NaN coordinates lead to strange behavior
@@ -309,13 +336,19 @@ class AF3InferenceEngine(InferenceEngine):
 
         return atom_array
 
-    def apply_ground_truth_conformer_policy(self, atom_array: AtomArray) -> AtomArray:
+    def apply_ground_truth_conformer_policy(
+        self,
+        atom_array: AtomArray,
+        ground_truth_conformer_selection: list[str] | None = None,
+    ) -> AtomArray:
         """Apply ground truth conformer policy to selected residues.
+
+        TODO: Move to helper function, does not need to be a class method
 
         Sets the ground_truth_conformer_policy annotation to REPLACE for residues
         specified by the ground_truth_conformer_selection parameter.
         """
-        if self.ground_truth_conformer_selection is None:
+        if ground_truth_conformer_selection is None:
             return atom_array
 
         # Initialize the ground_truth_conformer_policy annotation if it doesn't exist
@@ -331,23 +364,30 @@ class AF3InferenceEngine(InferenceEngine):
             )
 
         try:
-            # Parse as a atom selection string (e.g., "*/LIG", "*/ATP")
-            selector = AtomSelection.from_str(self.ground_truth_conformer_selection)
-            selection_mask = selector.get_mask(atom_array)
+            selection_mask = np.zeros(len(atom_array), dtype=bool)
+            for selection in ground_truth_conformer_selection:
+                # Parse as a atom selection string (e.g., "*/LIG", "*/ATP")
+                selector = AtomSelection.from_str(selection)
+                _mask = selector.get_mask(atom_array)
+                ranked_logger.info(
+                    f"Selected {np.sum(_mask)} atoms for ground truth conformer policy with syntax: {selection}"
+                )
+                selection_mask = selection_mask | _mask
 
-            # Set the policy to REPLACE for selected atoms
+            if selection_mask.any():
+                ranked_logger.info(
+                    f"Selected {np.sum(selection_mask)} atoms for ground truth conformer policy with {len(ground_truth_conformer_selection)} syntaxes"
+                )
+
+            # Set the policy to ADD for selected atoms
+            # (In RF3, we use a separate track for the ground-truth reference conformers)
             atom_array.ground_truth_conformer_policy[selection_mask] = (
-                GroundTruthConformerPolicy.REPLACE
-            )
-
-            ranked_logger.info(
-                f"Applied ground truth conformer policy to {np.sum(selection_mask)} atoms "
-                f"using selection: {self.ground_truth_conformer_selection}"
+                GroundTruthConformerPolicy.ADD
             )
 
         except Exception as e:
             ranked_logger.warning(
-                f"Failed to parse ground truth conformer selection '{self.ground_truth_conformer_selection}': {e}. "
+                f"Failed to parse ground truth conformer selection '{ground_truth_conformer_selection}': {e}. "
                 f"Skipping ground truth conformer application."
             )
 
@@ -422,7 +462,9 @@ class AF3InferenceEngine(InferenceEngine):
             )
 
             atom_array = self.prepare_atom_array(
-                atom_array, template_selection_syntax=self.template_selection_syntax
+                atom_array,
+                template_selection_syntax=self.template_selection_syntax,
+                ground_truth_conformer_selection=self.ground_truth_conformer_selection,
             )
 
             # ... assemble the pipeline input in a format compatible with the DataHub pipeline

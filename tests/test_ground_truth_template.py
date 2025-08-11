@@ -17,14 +17,14 @@ from datahub.utils.token import get_af3_token_center_masks
 from jaxtyping import Float
 from torch import Tensor
 
-from modelhub.utils.torch_utils import assert_no_nans, assert_same_shape
-from projects.rfscore.transforms.ground_truth_template import (
+from modelhub.data.ground_truth_template import (
     DEFAULT_DISTOGRAM_BINS,
     FeaturizeNoisedGroundTruthAsTemplateDistogram,
     TokenGroupNoiseScaleSampler,
     af3_noise_scale_distribution_wrapped,
     af3_noise_scale_to_noise_level,
 )
+from modelhub.utils.torch_utils import assert_no_nans, assert_same_shape
 
 TEST_CASES = ["6wtf", "5ocm"]
 
@@ -81,7 +81,7 @@ def setup_data_and_pipeline():
                 *ChainType.get_polymers(),
                 *ChainType.get_non_polymers(),
             ],
-            "mask_inter_molecule_distances": False,
+            "p_provide_inter_molecule_distances": 1.0,
         },
         {
             # All chain types supported, but non-polymers have low noise, and polymers have high noise
@@ -124,6 +124,7 @@ def test_distogram_featurization(
 
     with rng_state(create_rng_state_from_seeds(12345)):
         atom_array = out["atom_array"]
+        out["is_unconditional"] = False
 
         # Build ground-truth distogram
         token_center_mask = get_af3_token_center_masks(atom_array)
@@ -136,7 +137,10 @@ def test_distogram_featurization(
         # Featurize with the given arguments
         pipeline_output = transform(out)["feats"]
         has_distogram_condition = pipeline_output["has_distogram_condition"]
+
         output = torch.argmax(pipeline_output["distogram_condition"], dim=-1)
+
+        assert has_distogram_condition.any(), "No distogram conditions found!"
 
         # Uncomment the code below to visualize the distogram and has_distogram_condition
         # _, axes = plt.subplots(1, 2, figsize=(12, 6))
@@ -163,7 +167,7 @@ def test_distogram_featurization(
         )
 
         if noise_sum == 0:
-            if transform_args.get("mask_inter_molecule_distances", True):
+            if transform_args.get("p_provide_inter_molecule_distances", 0.0) == 0.0:
                 # ... except for inter-molecule distances
                 assert (output[is_inter_molecule] == len(DEFAULT_DISTOGRAM_BINS)).all()
                 assert not has_distogram_condition[is_inter_molecule].any()
@@ -215,7 +219,7 @@ def test_distogram_featurization(
             ).any(), "Unsupported chain types should not be noised"
 
         # Inter-molecule distances should be the maximum distance bin and have no distogram condition
-        if transform_args.get("mask_inter_molecule_distances", True):
+        if transform_args.get("p_provide_inter_molecule_distances", 0.0) == 0.0:
             assert (output[is_inter_molecule] == len(DEFAULT_DISTOGRAM_BINS)).all()
             assert not has_distogram_condition[is_inter_molecule].any()
 
