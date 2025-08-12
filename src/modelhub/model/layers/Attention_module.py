@@ -414,6 +414,7 @@ class OldMSAColGlobalAttention(nn.Module):
         out = self.to_out(out)
         return out
 
+
 class TriangleAttention(nn.Module):
     def __init__(
         self,
