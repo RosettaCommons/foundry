@@ -8,7 +8,6 @@ from modelhub.model.layers.Attention_module import (
     Attention,
 )
 from modelhub.model.Track_module import PairStr2Pair, PositionalEncoding2D
-from modelhub.util import *  # noqa: F403
 from modelhub.util_module import (
     create_custom_forward,
     init_lecun_normal,
