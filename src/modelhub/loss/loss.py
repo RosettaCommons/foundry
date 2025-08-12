@@ -16,56 +16,6 @@ logger = logging.getLogger(__name__)
 # 4. predicted lddt loss
 
 
-# Resolve rotationally equivalent sidechains
-def resolve_symmetry(xs, Rsnat_all, xsnat, Rsnat_all_alt, xsnat_alt, atm_mask):
-    # This function compares each side chain atom to its local N-CA-C-O backbone
-    # and computes all local distances and picks the rotation that best fits
-    # the given distances. Note that theoretically, you don't need all four points
-    # to resolve the symmetry - you only need a single non-axial reference point.
-    # Using only the nitrogen atom should be enough. The CA is the worst point to use
-    # because it is by definition axial, but the off-axis N or C should suffice.
-    backbone_pred = xs[:, :4]
-    sidechains_pred = xs[:, 4:]
-
-    backbone_true = xsnat[:, :4]
-    sidechains_true = xsnat[:, 4:]
-
-    backbone_alt = xsnat_alt[:, :4]
-    sidechains_alt = xsnat_alt[:, 4:]
-
-    valid_distance_mask = atm_mask[:, :4, None] * atm_mask[:, None, 4:]
-    distances_pred = torch.cdist(
-        backbone_pred, sidechains_pred, compute_mode="donot_use_mm_for_euclid_dist"
-    )
-    distances_true = torch.cdist(
-        backbone_true, sidechains_true, compute_mode="donot_use_mm_for_euclid_dist"
-    )
-    distances_alt = torch.cdist(
-        backbone_alt, sidechains_alt, compute_mode="donot_use_mm_for_euclid_dist"
-    )
-
-    distances_true_to_pred = (
-        torch.abs(distances_true - distances_pred) * valid_distance_mask
-    )
-    distances_alt_to_pred = (
-        torch.abs(distances_alt - distances_pred) * valid_distance_mask
-    )
-
-    distance_scores_true_to_pred = torch.sum(distances_true_to_pred, dim=(1, 2))
-    distance_scores_alt_to_pred = torch.sum(distances_alt_to_pred, dim=(1, 2))
-    is_better_alt = distance_scores_alt_to_pred < distance_scores_true_to_pred
-    is_better_alt_crds = is_better_alt[:, None, None].repeat(1, ChemData().NTOTAL, 3)
-    is_better_alt_tors = is_better_alt[:, None, None, None].repeat(
-        1, ChemData().NTOTALTORS, 4, 4
-    )
-
-    symmetry_resolved_true_crds = torch.where(is_better_alt_crds, xsnat_alt, xsnat)
-    symmetry_resolved_true_tors = torch.where(
-        is_better_alt_tors, Rsnat_all_alt, Rsnat_all
-    )
-    return symmetry_resolved_true_tors, symmetry_resolved_true_crds
-
-
 # resolve "equivalent" natives
 def resolve_equiv_natives(xs, natstack, maskstack):
     if len(natstack.shape) == 4:
@@ -450,68 +400,6 @@ def calc_rmsd(pred, true, mask):
     rpred = torch.matmul(pred, U)  # (IB, L*3, 3)
     rms = rmsd(rpred, true).reshape(N)
     return rms, U, cP, cT
-
-
-def resolve_symmetry_predictions(pred, true, mask, Lasu):
-    # pred (N,B,Lpred,natom,3)
-    # true (B,Ltrue,natom,3)
-    # mask (B,Ltrue,natom)
-    # symmR (S,3,3)
-
-    N, B, Lpred = pred.shape[:3]
-    Ltrue = true.shape[1]
-    Opred = Lpred // Lasu
-    Otrue = Ltrue // Lasu
-    # if (Opred < Otrue):
-    #    print (Opred,Otrue,Lpred,Ltrue,Lasu)
-
-    # U[i] rotates layer i pred to native[0]
-    r, U, cP, cT = calc_rmsd(
-        pred[:, :, :Lasu].detach(), true[:, :Lasu], mask[:, :Lasu]
-    )  # no grads through RMSd
-
-    # get com for each subunit in pred, align to true
-    pcoms = torch.sum(
-        pred[:, :, :, 1].view(N, Opred, Lasu, 3).detach()
-        * mask[0, :Lasu, 1].view(1, 1, Lasu, 1),
-        dim=-2,
-    ) / torch.sum(mask[0, :Lasu, 1].view(1, 1, Lasu, 1), dim=-2)
-    pcoms = torch.einsum("lij,lsj->lsi", U, pcoms - cP) + cT
-
-    # get com for each subunit in true
-    ncoms = torch.sum(
-        true[0, :, 1].view(-1, Lasu, 3).detach()
-        * mask[0, :, 1, None].view(-1, Lasu, 1),
-        dim=-2,
-    ) / torch.sum(mask[0, :, 1].view(-1, Lasu, 1), dim=-2)
-    ds = torch.linalg.norm(
-        pcoms[:, None] - ncoms[None, :, None], dim=-1
-    )  # (N,Otrue,Opred)
-
-    # find correspondance P->T
-    mapping_T_to_P = torch.full((N, Otrue), -1, device=ds.device)
-    for i in range(Otrue):
-        minj, dj = torch.min(ds, dim=2)
-        di = torch.argmin(minj, dim=1)
-        dj = dj.gather(1, di[:, None]).squeeze(1)
-        mapping_T_to_P.scatter_(1, di[:, None], dj[:, None])
-        ds.scatter_(
-            1,
-            di[:, None, None].repeat(1, 1, Opred),
-            torch.full((N, 1, Opred), 9999.0, device=ds.device),
-        )
-        ds.scatter_(
-            2,
-            dj[:, None, None].repeat(1, Otrue, 1),
-            torch.full((N, Otrue, 1), 9999.0, device=ds.device),
-        )
-
-    # convert subunit indices to residue indices
-    mapping_T_to_P = torch.repeat_interleave(mapping_T_to_P, Lasu, dim=1)
-    mapping_T_to_P = mapping_T_to_P * Lasu + torch.arange(
-        Lasu, device=ds.device
-    ).repeat(1, Otrue)
-    return mapping_T_to_P
 
 
 # torsion angle predictor loss
