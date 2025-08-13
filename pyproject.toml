@@ -65,10 +65,7 @@ exclude = [
     "*.ipynb",
     "dev.py",
     "archive",
-    "src/modelhub/chemical.py", # TEMPORARY
-    "src/modelhub/util_module.py", # TEMPORARY
     "src/modelhub/utils/predicted_error.py", # TEMPORARY
-    "src/modelhub/util.py", # TEMPORARY
 ]
 
 [tool.ruff.format]
@@ -94,7 +91,7 @@ docstring-code-line-length = 88
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 # Sort imports
-extend-select = ["I"]
+extend-select = ["I", "F401"]
 
 ignore = [
     "F722", # for jaxtyping shape annotation
