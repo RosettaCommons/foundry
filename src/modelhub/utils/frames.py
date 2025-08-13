@@ -1,12 +1,12 @@
-# TODO: REFACTOR; COPIED FROM RF2AA. WE NEED TO REMOVE CHEMDATA, ADD DOCSTRINGS, EXAMPLES, HOPEFULLY TESTS, AND CLEAN UP
+# TODO: REFACTOR; COPIED FROM RF2AA. WE NEED TO ADD DOCSTRINGS, EXAMPLES, HOPEFULLY TESTS, AND CLEAN UP
 
 import torch
 
-from modelhub.chemical import ChemicalData as ChemData
+from modelhub.chemical import NFRAMES, NNAPROTAAS, costgtNA
 
 
 def is_atom(seq):
-    return seq > ChemData().NNAPROTAAS
+    return seq > NNAPROTAAS
 
 
 def get_frames(xyz_in, xyz_mask, seq, frame_indices, atom_frames=None):
@@ -46,7 +46,7 @@ def rigid_from_3_points(N, Ca, C, is_na=None, eps=1e-4):
 
     costgt = torch.full(dims, -0.3616, device=N.device)
     if is_na is not None:
-        costgt[is_na] = ChemData().costgtNA
+        costgt[is_na] = costgtNA
 
     cos2del = torch.clamp(
         cosref * costgt
@@ -102,7 +102,7 @@ def mask_unresolved_frames_batched(frames, frame_mask, atom_mask):
         torch.gather(
             atom_mask.reshape(B, L * natoms),
             1,
-            frames_reindex.reshape(B, L * ChemData().NFRAMES * 3),
+            frames_reindex.reshape(B, L * NFRAMES * 3),
         ).reshape(B, L, -1, 3),
         axis=-1,
     )

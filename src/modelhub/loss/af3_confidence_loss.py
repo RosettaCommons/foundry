@@ -1,11 +1,10 @@
 import torch
 import torch.nn as nn
-from omegaconf import DictConfig
 from scipy.stats import spearmanr
 
-# TODO: REFACTOR; COPIED FROM RF2AA. WE NEED TO REMOVE CHEMDATA, ADD DOCSTRINGS, EXAMPLES, HOPEFULLY TESTS, AND CLEAN UP
-# HACK: Initialize ChemData without dependence on legacy configs
-from modelhub.chemical import ChemicalData as ChemData
+from modelhub.chemical import NFRAMES, NHEAVY, frame_indices
+
+# TODO: REFACTOR; COPIED FROM RF2AA. WE NEED TO ADD DOCSTRINGS, EXAMPLES, HOPEFULLY TESTS, AND CLEAN UP
 from modelhub.metrics.metric_utils import (
     compute_mean_over_subsampled_pairs,
     unbin_logits,
@@ -14,12 +13,6 @@ from modelhub.utils.frames import (
     get_frames,
     mask_unresolved_frames_batched,
     rigid_from_3_points,
-)
-
-chemdata = ChemData(
-    params=DictConfig(
-        {"use_phospate_frames_for_NA": False, "use_lj_params_for_atoms": True}
-    )
 )
 
 
@@ -63,15 +56,15 @@ class ConfidenceLoss(nn.Module):
 
         plddt_logits = (
             network_output["plddt"]
-            .reshape(-1, I, ChemData().NHEAVY, self.plddt.n_bins)
+            .reshape(-1, I, NHEAVY, self.plddt.n_bins)
             .permute(0, 3, 1, 2)
         )
         plddt_loss = (
             self.cce(
                 plddt_logits,
-                true_lddt_binned[..., : ChemData().NHEAVY].long(),
+                true_lddt_binned[..., :NHEAVY].long(),
             )
-            * is_resolved_I[..., : ChemData().NHEAVY]
+            * is_resolved_I[..., :NHEAVY]
         )
         plddt_loss = plddt_loss.sum() / (is_resolved_I.sum() + self.eps)
 
@@ -98,14 +91,14 @@ class ConfidenceLoss(nn.Module):
         exp_resolved_loss = (
             self.cce(
                 exp_resolved_logits.reshape(
-                    B, I, ChemData().NHEAVY, self.exp_resolved.n_bins
+                    B, I, NHEAVY, self.exp_resolved.n_bins
                 ).permute(0, 3, 1, 2),
-                is_resolved_I[:, :, : ChemData().NHEAVY].long(),
+                is_resolved_I[:, :, :NHEAVY].long(),
             )
-            * loss_input["is_real_atom"][:, : ChemData().NHEAVY]
+            * loss_input["is_real_atom"][:, :NHEAVY]
         )
         exp_resolved_loss = exp_resolved_loss.sum() / (
-            loss_input["is_real_atom"][:, : ChemData().NHEAVY].sum() + self.eps
+            loss_input["is_real_atom"][:, :NHEAVY].sum() + self.eps
         )
         exp_resolved_loss = exp_resolved_loss / B
 
@@ -143,7 +136,7 @@ class ConfidenceLoss(nn.Module):
                 plddt_logit_stack.reshape(
                     -1,
                     I,
-                    ChemData().NHEAVY,
+                    NHEAVY,
                     self.plddt.n_bins,
                 )
                 .permute(0, 3, 1, 2)
@@ -162,7 +155,7 @@ class ConfidenceLoss(nn.Module):
                 [
                     compute_mean_over_subsampled_pairs(
                         plddt_per_structure[i][None],
-                        is_resolved_I[i, ..., : ChemData().NHEAVY],
+                        is_resolved_I[i, ..., :NHEAVY],
                     )
                     for i in range(plddt_logit_stack.shape[0])
                 ],
@@ -356,19 +349,15 @@ class ConfidenceLoss(nn.Module):
             0,
             0,
             seq.unsqueeze(0).repeat(B, 1),
-            ChemData().frame_indices.to(seq.device),
+            frame_indices.to(seq.device),
             atom_frames,
         )
 
         N, L, natoms, _ = X_pred_I.shape
 
         # flatten middle dims so can gather across residues
-        X_prime = X_pred_I.reshape(N, L * natoms, -1, 3).repeat(
-            1, 1, ChemData().NFRAMES, 1
-        )
-        Y_prime = X_gt_I.reshape(N, L * natoms, -1, 3).repeat(
-            1, 1, ChemData().NFRAMES, 1
-        )
+        X_prime = X_pred_I.reshape(N, L * natoms, -1, 3).repeat(1, 1, NFRAMES, 1)
+        Y_prime = X_gt_I.reshape(N, L * natoms, -1, 3).repeat(1, 1, NFRAMES, 1)
         frames_reindex_batched, frame_mask_batched = mask_unresolved_frames_batched(
             frames, frame_mask, atom_mask
         )

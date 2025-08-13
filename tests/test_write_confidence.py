@@ -1,13 +1,10 @@
-from functools import partial
-
 import numpy as np
 import pytest
 import torch
 from lightning.fabric import seed_everything
 from omegaconf import DictConfig
 
-from modelhub.chemical import ChemicalData as ChemData
-from modelhub.chemical import initialize_chemdata
+from modelhub.chemical import NHEAVY, heavyatom_mask
 from modelhub.metrics.metric_utils import (
     find_bin_midpoints,
     unbin_logits,
@@ -15,26 +12,21 @@ from modelhub.metrics.metric_utils import (
 from modelhub.utils.predicted_error import compile_af3_confidence_outputs
 
 
-@pytest.mark.skip(
-    reason="ChemData configs broken; we cannot be relying on ChemData here"
-)
 def test_compile_af3_confidence_outputs():
     L = 100
-    init = partial(initialize_chemdata)
-    init()
 
     # Spoofing the outputs from the model
     seed_everything(42)
     outputs = {
         "confidence": {
             "rf2aa_seq": torch.randint(0, 21, (L,)),
-            "plddt_logits": torch.rand(2, L, ChemData().NHEAVY, 50),
+            "plddt_logits": torch.rand(2, L, NHEAVY, 50),
             "pae_logits": torch.rand(2, L, L, 64),
             "pde_logits": torch.rand(2, L, L, 64),
             "chain_iid_token_lvl": torch.randint(0, 10, (L,)).numpy(),
         }
     }
-    is_real_atom = ChemData().heavyatom_mask[outputs["confidence"]["rf2aa_seq"]]
+    is_real_atom = heavyatom_mask[outputs["confidence"]["rf2aa_seq"]]
     outputs["confidence"]["is_real_atom"] = is_real_atom
 
     # Spoof the confidence loss Hydra configuration
@@ -96,27 +88,22 @@ def test_compile_af3_confidence_outputs():
     ), "Dataframe shape not set correctly"
 
 
-@pytest.mark.skip(
-    reason="ChemData configs broken; we cannot be relying on ChemData here"
-)
 def test_unbin_pae_logits():
     L = 100
     max_distance = 32
     n_bins = 64
-    init = partial(initialize_chemdata)
-    init()
 
     seed_everything(42)
     outputs = {
         "confidence": {
             "rf2aa_seq": torch.randint(0, 21, (L,)),
-            "plddt_logits": torch.rand(1, L, ChemData().NHEAVY, 50),
+            "plddt_logits": torch.rand(1, L, NHEAVY, 50),
             "pae_logits": torch.rand(1, L, L, 64),
             "pde_logits": torch.rand(1, L, L, 64),
             "chain_iid_token_lvl": torch.randint(0, 10, (L,)).numpy(),
         }
     }
-    is_real_atom = ChemData().heavyatom_mask[outputs["confidence"]["rf2aa_seq"]]
+    is_real_atom = heavyatom_mask[outputs["confidence"]["rf2aa_seq"]]
     outputs["confidence"]["is_real_atom"] = is_real_atom
 
     pae_unbinned = unbin_logits(
@@ -129,27 +116,22 @@ def test_unbin_pae_logits():
     assert pae_unbinned.shape == (1, L, L)
 
 
-@pytest.mark.skip(
-    reason="ChemData configs broken; we cannot be relying on ChemData here"
-)
 def test_unbin_pde_logits():
     L = 100
     max_distance = 32
     n_bins = 64
-    init = partial(initialize_chemdata)
-    init()
 
     seed_everything(42)
     outputs = {
         "confidence": {
             "rf2aa_seq": torch.randint(0, 21, (L,)),
-            "plddt_logits": torch.rand(1, L, ChemData().NHEAVY, 50),
+            "plddt_logits": torch.rand(1, L, NHEAVY, 50),
             "pae_logits": torch.rand(1, L, L, 64),
             "pde_logits": torch.rand(1, L, L, 64),
             "chain_iid_token_lvl": torch.randint(0, 10, (L,)).numpy(),
         }
     }
-    is_real_atom = ChemData().heavyatom_mask[outputs["confidence"]["rf2aa_seq"]]
+    is_real_atom = heavyatom_mask[outputs["confidence"]["rf2aa_seq"]]
     outputs["confidence"]["is_real_atom"] = is_real_atom
 
     pde_unbinned = unbin_logits(
@@ -163,27 +145,22 @@ def test_unbin_pde_logits():
     assert pde_unbinned.shape == (1, L, L)
 
 
-@pytest.mark.skip(
-    reason="ChemData configs broken; we cannot be relying on ChemData here"
-)
 def test_unbin_plddt_logits():
     L = 100
     max_distance = 1.0
     n_bins = 50
-    init = partial(initialize_chemdata)
-    init()
 
     seed_everything(42)
     outputs = {
         "confidence": {
             "rf2aa_seq": torch.randint(0, 21, (L,)),
-            "plddt_logits": torch.rand(1, L, ChemData().NHEAVY, 50),
+            "plddt_logits": torch.rand(1, L, NHEAVY, 50),
             "pae_logits": torch.rand(1, L, L, 64),
             "pde_logits": torch.rand(1, L, L, 64),
             "chain_iid_token_lvl": torch.randint(0, 10, (L,)).numpy(),
         }
     }
-    is_real_atom = ChemData().heavyatom_mask[outputs["confidence"]["rf2aa_seq"]]
+    is_real_atom = heavyatom_mask[outputs["confidence"]["rf2aa_seq"]]
     outputs["confidence"]["is_real_atom"] = is_real_atom
 
     plddt_unbinned = unbin_logits(
@@ -192,12 +169,9 @@ def test_unbin_plddt_logits():
         n_bins,
     )
 
-    assert plddt_unbinned.shape == (1, L, ChemData().NHEAVY)
+    assert plddt_unbinned.shape == (1, L, NHEAVY)
 
 
-@pytest.mark.skip(
-    reason="ChemData configs broken; we cannot be relying on ChemData here"
-)
 def test_bin_midpoints():
     max_distance = 32
     num_bins = 64

@@ -9,7 +9,7 @@ from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack
 from omegaconf import DictConfig
 
-from modelhub.chemical import ChemicalData as ChemData
+from modelhub.chemical import NHEAVY
 from modelhub.metrics.metric_utils import (
     compute_mean_over_subsampled_pairs,
     create_chainwise_masks_1d,
@@ -38,8 +38,8 @@ def get_mean_atomwise_plddt(
     """
     assert plddt_logits.ndim == 3, "plddt_logits must be a 3D tensor (B, n_token, max_atoms_in_a_token * n_bins)"
 
-    # TODO: Replace with the last dimension of is_real_atom to remove reliance on ChemData; right now that number is too large (36) because it includes hydrogens
-    max_atoms_in_a_token = ChemData().NHEAVY
+    # TODO: Replace with the last dimension of is_real_atom; right now that number is too large (36) because it includes hydrogens
+    max_atoms_in_a_token = NHEAVY
 
     # Since the pLDDT logits have the last dimension (max_atoms_in_a_token * n_bins), we can calculate n_bins directly
     assert plddt_logits.shape[-1] % max_atoms_in_a_token == 0, "The last dimension of plddt_logits must be divisible by max_atoms_in_a_token!"
@@ -79,7 +79,6 @@ def compile_af3_confidence_outputs(
 ) -> dict[str, Any]:
     # TODO: Refactor to accept an AtomArray
     # TODO: Taking the confidence_loss_cfg does not align with functional programming best-practices; we should instead take  the max_value and n_bins as arguments
-    # TODO: Remove ChemData at all costs (can we just take NHEAVY as an argument?)
 
     """Given the confidence logits, computes the confidence metrics for the model's predictions.
 
@@ -96,7 +95,7 @@ def compile_af3_confidence_outputs(
         plddt_logits.reshape(
             -1,
             plddt_logits.shape[1],
-            ChemData().NHEAVY,
+            NHEAVY,
             confidence_loss_cfg.plddt.n_bins,
         )
         .permute(0, 3, 1, 2)
@@ -145,7 +144,7 @@ def compile_af3_confidence_outputs(
     plddt_chainwise = {
         k: spread_batch_into_dictionary(
             compute_mean_over_subsampled_pairs(
-                plddt, is_real_atom[..., : ChemData().NHEAVY] * v[:, None]
+                plddt, is_real_atom[..., : NHEAVY] * v[:, None]
             )
         )
         for k, v in chain_masks_1d.items()
@@ -154,7 +153,7 @@ def compile_af3_confidence_outputs(
     # Aggregate confidence data
     confidence_data = {
         "example_id": example_id,
-        "mean_plddt": spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(plddt, is_real_atom[..., : ChemData().NHEAVY])),
+        "mean_plddt": spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(plddt, is_real_atom[..., : NHEAVY])),
         "mean_pae": spread_batch_into_dictionary(pae.mean(dim=(-1, -2))),
         "mean_pde": spread_batch_into_dictionary(pde.mean(dim=(-1, -2))),
         "chain_wise_mean_plddt": plddt_chainwise,
@@ -279,7 +278,7 @@ def compute_batch_indices_with_lowest_predicted_error(
         plddt.reshape(
             -1,
             plddt.shape[1],
-            ChemData().NHEAVY,
+            NHEAVY,
             confidence_loss_cfg.plddt.n_bins,
         )
         .permute(0, 3, 1, 2)
@@ -302,8 +301,8 @@ def compute_batch_indices_with_lowest_predicted_error(
     complex_pae = pae_logits_unbinned.mean(dim=(1, 2))
     complex_pde = pde_logits_unbinned.mean(dim=(1, 2))
     complex_plddt = (
-        plddt_logits_unbinned * is_real_atom[..., : ChemData().NHEAVY]
-    ).sum(dim=(1, 2)) / is_real_atom[..., : ChemData().NHEAVY].sum()
+        plddt_logits_unbinned * is_real_atom[..., : NHEAVY]
+    ).sum(dim=(1, 2)) / is_real_atom[..., : NHEAVY].sum()
 
     return_dict["pae_idx"] = torch.argmin(complex_pae)
     return_dict["pde_idx"] = torch.argmin(complex_pde)
@@ -354,7 +353,7 @@ def annotate_atom_array_b_factor_with_plddt(
             because the AtomArray class does not support setting different values as annotations
             other than the coordinate feature.
     """
-    atom_wise_plddt = plddt[:, is_real_atom[..., : ChemData().NHEAVY]]
+    atom_wise_plddt = plddt[:, is_real_atom[..., : NHEAVY]]
     assert atom_wise_plddt.shape[1] == atom_array.array_length()
     atom_array_list = []
     # bitotite's AtomArray does not support setting different values as annotations other than
