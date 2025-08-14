@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import torch
 from conftest import TEST_DATA_DIR
-from datahub.utils.rng import (
+from atomworks.ml.utils.rng import (
     create_rng_state_from_seeds,
     rng_state,
 )
@@ -56,7 +56,8 @@ def compare_csv_files(
 @pytest.mark.gpu
 def test_inference_regression():
     print("GPU available: ", torch.cuda.is_available())
-    inputs = "/home/ncorley/projects/modelhub_dev/tests/data/5vht_from_file.cif"
+    # inputs = "/home/ncorley/projects/modelhub_dev/tests/data/5vht_from_file.cif"
+    inputs = TEST_DATA_DIR / "5vht_from_file.cif"
     data_dir = TEST_DATA_DIR / "inference_regression_tests" / "5vht_from_file"
 
     with (

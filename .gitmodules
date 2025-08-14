@@ -1,6 +1,3 @@
-[submodule "lib/cifutils"]
-	path = lib/cifutils
-	url = git@github.com:baker-laboratory/cifutils
-[submodule "lib/datahub"]
-	path = lib/datahub
-	url = git@github.com:baker-laboratory/datahub
+[submodule "lib/atomworks-dev"]
+	path = lib/atomworks-dev
+	url = https://github.com/baker-laboratory/atomworks-dev.git

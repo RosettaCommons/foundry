@@ -45,7 +45,7 @@ Create a JSON file with each component; e.g.,
     }
 ]
 ```
-The full API for inference via dictionaries of chemical components is specified in [CIFUtils](https://github.com/baker-laboratory/atomworks.ml/blob/main/src/atomworks.ml/tools/inference.py); additional contributions to support further formats (e.g., `MOL` files , as components) are welcome and relatively straight-forward to implement.
+The full API for inference via dictionaries of chemical components is specified in `atomworks`, additional contributions to support further formats (e.g., `MOL` files , as components) are welcome and relatively straight-forward to implement.
 
 Supported input options:
 -   `seq`: For proteins and nucleic acids using non-canonical one-letter codes as they appear in a CIF file.
@@ -185,7 +185,7 @@ Use the following code to view the predicted structures with `atomworks.ml`:
 from atomworks.ml.utils.visualize import view
 from atomworks.ml import parse
 
-# View in CIFUtils (or PyMol, etc.)
+# View in atomworks (or PyMol, etc.)
 out = parse("path/to/prediction.cif.gz")
 atom_array = out["assemblies"]["1"][0]
 view(atom_array)
