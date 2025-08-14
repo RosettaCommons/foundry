@@ -1,11 +1,4 @@
-.PHONY: init clean format
-
-#################################################################################
-# GLOBALS                                                                       #
-#################################################################################
-
-# Set the project directory
-PROJECT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+.PHONY: format
 
 #################################################################################
 # COMMANDS                                                                      #
@@ -13,28 +6,8 @@ PROJECT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
 ## Format src directory using black
 format:
-	ruff format src tests scripts notebooks
-	ruff check --fix src tests scripts notebooks
-
-## Build the apptainer image
-# (For development)
-base_apptainer:
-	$(eval DATE := $(shell date +%Y-%m-%d))
-	bash ./scripts/build_base_apptainer.sh
-
-# (For inference)
-# Installs modelhub, datahub, and cifutils into the apptainer image
-inference_apptainer: 
-	$(eval DATE := $(shell date +%Y-%m-%d))
-	bash ./scripts/inference_apptainer.sh
-
-## Run pytest and generate coverage report
-test:
-	pytest --cov=modelhub --cov-report=term-missing --cov-report=html --cov-report=xml tests -m "not very_slow"
-
-## Run the contribute script to set you up for contributing to modelhub
-contribute:
-	@sh scripts/contribute.sh
+	ruff format src tests scripts
+	ruff check --fix src tests scripts
 
 #################################################################################
 # Self Documenting Commands                                                     #
