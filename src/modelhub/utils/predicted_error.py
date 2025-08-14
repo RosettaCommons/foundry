@@ -1,6 +1,7 @@
 import itertools
 from typing import List
 
+import einops
 import numpy as np
 import pandas as pd
 import torch
@@ -18,7 +19,6 @@ from modelhub.metrics.metric_utils import (
     spread_batch_into_dictionary,
     unbin_logits,
 )
-import einops
 
 
 def get_mean_atomwise_plddt(
@@ -36,22 +36,26 @@ def get_mean_atomwise_plddt(
     Returns:
         plddt: Tensor of shape [B,] with the mean atom-wise pLDDT for each batch
     """
-    assert plddt_logits.ndim == 3, "plddt_logits must be a 3D tensor (B, n_token, max_atoms_in_a_token * n_bins)"
+    assert (
+        plddt_logits.ndim == 3
+    ), "plddt_logits must be a 3D tensor (B, n_token, max_atoms_in_a_token * n_bins)"
 
     # TODO: Replace with the last dimension of is_real_atom; right now that number is too large (36) because it includes hydrogens
     max_atoms_in_a_token = NHEAVY
 
     # Since the pLDDT logits have the last dimension (max_atoms_in_a_token * n_bins), we can calculate n_bins directly
-    assert plddt_logits.shape[-1] % max_atoms_in_a_token == 0, "The last dimension of plddt_logits must be divisible by max_atoms_in_a_token!"
+    assert (
+        plddt_logits.shape[-1] % max_atoms_in_a_token == 0
+    ), "The last dimension of plddt_logits must be divisible by max_atoms_in_a_token!"
     n_bins = plddt_logits.shape[-1] // max_atoms_in_a_token
 
     # ... reshape to match what unbin_logits expects
     reshaped_plddt_logits = einops.rearrange(
         plddt_logits,
-        '... n_token (max_atoms_in_a_token n_bins) -> ... n_bins n_token max_atoms_in_a_token',
+        "... n_token (max_atoms_in_a_token n_bins) -> ... n_bins n_token max_atoms_in_a_token",
         max_atoms_in_a_token=max_atoms_in_a_token,
-        n_bins=n_bins
-    ).float() # [..., n_token, n_bins * max_atoms_in_a_token] -> [ ..., n_bins, n_token, max_atoms_in_a_token]
+        n_bins=n_bins,
+    ).float()  # [..., n_token, n_bins * max_atoms_in_a_token] -> [ ..., n_bins, n_token, max_atoms_in_a_token]
 
     plddt = unbin_logits(
         reshaped_plddt_logits,
@@ -144,7 +148,7 @@ def compile_af3_confidence_outputs(
     plddt_chainwise = {
         k: spread_batch_into_dictionary(
             compute_mean_over_subsampled_pairs(
-                plddt, is_real_atom[..., : NHEAVY] * v[:, None]
+                plddt, is_real_atom[..., :NHEAVY] * v[:, None]
             )
         )
         for k, v in chain_masks_1d.items()
@@ -153,7 +157,9 @@ def compile_af3_confidence_outputs(
     # Aggregate confidence data
     confidence_data = {
         "example_id": example_id,
-        "mean_plddt": spread_batch_into_dictionary(compute_mean_over_subsampled_pairs(plddt, is_real_atom[..., : NHEAVY])),
+        "mean_plddt": spread_batch_into_dictionary(
+            compute_mean_over_subsampled_pairs(plddt, is_real_atom[..., :NHEAVY])
+        ),
         "mean_pae": spread_batch_into_dictionary(pae.mean(dim=(-1, -2))),
         "mean_pde": spread_batch_into_dictionary(pde.mean(dim=(-1, -2))),
         "chain_wise_mean_plddt": plddt_chainwise,
@@ -300,9 +306,9 @@ def compute_batch_indices_with_lowest_predicted_error(
 
     complex_pae = pae_logits_unbinned.mean(dim=(1, 2))
     complex_pde = pde_logits_unbinned.mean(dim=(1, 2))
-    complex_plddt = (
-        plddt_logits_unbinned * is_real_atom[..., : NHEAVY]
-    ).sum(dim=(1, 2)) / is_real_atom[..., : NHEAVY].sum()
+    complex_plddt = (plddt_logits_unbinned * is_real_atom[..., :NHEAVY]).sum(
+        dim=(1, 2)
+    ) / is_real_atom[..., :NHEAVY].sum()
 
     return_dict["pae_idx"] = torch.argmin(complex_pae)
     return_dict["pde_idx"] = torch.argmin(complex_pde)
@@ -353,7 +359,7 @@ def annotate_atom_array_b_factor_with_plddt(
             because the AtomArray class does not support setting different values as annotations
             other than the coordinate feature.
     """
-    atom_wise_plddt = plddt[:, is_real_atom[..., : NHEAVY]]
+    atom_wise_plddt = plddt[:, is_real_atom[..., :NHEAVY]]
     assert atom_wise_plddt.shape[1] == atom_array.array_length()
     atom_array_list = []
     # bitotite's AtomArray does not support setting different values as annotations other than
