@@ -1,7 +1,7 @@
 import torch
 from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack
-from cifutils.transforms.atom_array import ensure_atom_array_stack
+from atomworks.ml.transforms.atom_array import ensure_atom_array_stack
 from atomworks.ml.transforms.af3_reference_molecule import (
     get_af3_reference_molecule_features,
 )

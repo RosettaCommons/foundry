@@ -7,7 +7,7 @@ Documentation on custom resolvers:
 import importlib
 
 from beartype.typing import Any
-from cifutils.enums import ChainType, ChainTypeInfo
+from atomworks.enums import ChainType, ChainTypeInfo
 from omegaconf import OmegaConf
 
 from .common import run_once

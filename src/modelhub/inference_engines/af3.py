@@ -7,10 +7,10 @@ import numpy as np
 import pandas as pd
 import torch
 from biotite.structure import AtomArray
-from cifutils import parse
-from cifutils.utils.selection import AtomSelection, AtomSelectionStack
+from atomworks.io import parse
+from atomworks.io.utils.selection import AtomSelection, AtomSelectionStack
 from atomworks.ml.common import as_list
-from atomworks.ml.enums import GroundTruthConformerPolicy
+from atomworks.enums import GroundTruthConformerPolicy
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 

@@ -45,7 +45,7 @@ Create a JSON file with each component; e.g.,
     }
 ]
 ```
-The full API for inference via dictionaries of chemical components is specified in [CIFUtils](https://github.com/baker-laboratory/cifutils/blob/main/src/cifutils/tools/inference.py); additional contributions to support further formats (e.g., `MOL` files , as components) are welcome and relatively straight-forward to implement.
+The full API for inference via dictionaries of chemical components is specified in [CIFUtils](https://github.com/baker-laboratory/atomworks.ml/blob/main/src/atomworks.ml/tools/inference.py); additional contributions to support further formats (e.g., `MOL` files , as components) are welcome and relatively straight-forward to implement.
 
 Supported input options:
 -   `seq`: For proteins and nucleic acids using non-canonical one-letter codes as they appear in a CIF file.
@@ -57,7 +57,7 @@ Coming soon: support for `mol` files as components.
 
 ### Option 2: Using a Spoofed CIF *(more complicated, more customizable)*
 
-If you can get your inputs into an `AtomArray`, use `to_cif_file` to convert the `AtomArray` to a `CIF`. Use the pre-built inference tools in `cifutils` to convert arbitrary biological inputs (e.g., FASTA, CIFs, SMILES) into an `AtomArray`. See [cifutils tests](https://github.com/baker-laboratory/cifutils/blob/main/tests/tools/test_inference_processing.py) for examples.
+If you can get your inputs into an `AtomArray`, use `to_cif_file` to convert the `AtomArray` to a `CIF`. Use the pre-built inference tools in `atomworks.ml` to convert arbitrary biological inputs (e.g., FASTA, CIFs, SMILES) into an `AtomArray`. See [atomworks.ml tests](https://github.com/baker-laboratory/atomworks.ml/blob/main/tests/tools/test_inference_processing.py) for examples.
 
 #### Example Code
 
@@ -66,8 +66,8 @@ import os
 os.environ['CCD_MIRROR_PATH'] = "/projects/ml/frozen_pdb_copies/2024_12_11_ccd"
 os.environ['PDB_MIRROR_PATH'] = "/projects/ml/frozen_pdb_copies/2024_12_01_pdb"
 
-from cifutils.tools.inference import components_to_atom_array
-from cifutils.utils.io_utils import to_cif_file
+from atomworks.ml.tools.inference import components_to_atom_array
+from atomworks.ml.utils.io_utils import to_cif_file
 
 # Define inputs as a list of dictionaries
 monomer = {
@@ -96,7 +96,7 @@ to_cif_file(atom_array_from_smiles, "example_from_smiles.cif")
 
 ## Step 2: Run `inference.py`
 
-The apptainers that we release pre-install `modelhub`, `atomworks.ml`, and `cifutils`. Note that this abstraction also means that these apptainers are not "hackable" — if you would like to modify `modelhub`, you'll need to clone the repository, and use the development apptainer (see the main `README`).
+The apptainers that we release pre-install `modelhub`, `atomworks.ml`, and `atomworks.ml`. Note that this abstraction also means that these apptainers are not "hackable" — if you would like to modify `modelhub`, you'll need to clone the repository, and use the development apptainer (see the main `README`).
 
 For our inference API, we use [hydra](https://hydra.cc/docs/tutorials/basic/your_first_app/simple_cli/) to prepare arguments; the [documentation](https://hydra.cc/docs/advanced/override_grammar/basic/) describes the command-line override syntax that we use below. Note that Hydra syntax differes from typical CLI or `argparse` syntax in that we don't use `--arg value`, but instead `arg=value`. See below for examples.
 
@@ -132,7 +132,7 @@ Arguments to `inference.py` (which the apptainer calls behind-the-scenes):
 - `one_model_per_file` *(optional)*: Whether to save multiple structures from one diffusion batch as separate models within the same file or separate files. Defaults to False (one file with multiple models).
 - `annotate_b_factor_with_plddt` *(optional)*: Whether to annotate atom-level pLDDT, overwriting the `b_factor` column in the CIF output (full name is `b_iso_or_equiv` in mmCIF files). Defaults to False. NOTE: If set to True, then `one_model_per_file` will be automatically set to True (since our CIF-saving software `biotite` does not support variable `b_factors` across models within the same file).
 
-> *NOTE:* The CIF files are saved in a compressed format, `.cif.gz`. These compressed files can be directly loaded by PyMol or parsed by `cifutils`. If you need to inspect the uncompressed file, you can use `gunzip <PATH>`. 
+> *NOTE:* The CIF files are saved in a compressed format, `.cif.gz`. These compressed files can be directly loaded by PyMol or parsed by `atomworks.ml`. If you need to inspect the uncompressed file, you can use `gunzip <PATH>`. 
 
 > *NOTE:* The CIF output file will contain multiple **models**, one for each diffusion outputs (e.g., 5 by default). PyMol will hide secondary structure by default with multiple models; the command `dss` will display it again.
 
@@ -179,11 +179,11 @@ Multiple checkpoints are available for inference, each with their own strengths 
 
 ## Step 3: View the Predicted Structure(s)
 
-Use the following code to view the predicted structures with `cifutils`:
+Use the following code to view the predicted structures with `atomworks.ml`:
 
 ```python
-from cifutils.utils.visualize import view
-from cifutils import parse
+from atomworks.ml.utils.visualize import view
+from atomworks.ml import parse
 
 # View in CIFUtils (or PyMol, etc.)
 out = parse("path/to/prediction.cif.gz")

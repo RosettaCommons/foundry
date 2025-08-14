@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from beartype.typing import Any, Callable, Final, Sequence
 from biotite.structure import AtomArray
-from cifutils.enums import ChainType
+from atomworks.enums import ChainType
 from atomworks.ml.transforms._checks import (
     check_atom_array_annotation,
     check_contains_keys,

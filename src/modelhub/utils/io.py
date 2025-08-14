@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from beartype.typing import Literal
 from biotite.structure import AtomArray, AtomArrayStack, stack
-from cifutils.utils.io_utils import to_cif_file
+from atomworks.io.utils.io_utils import to_cif_file
 
 from modelhub.alignment import weighted_rigid_align
 from modelhub.utils.ddp import RankedLogger

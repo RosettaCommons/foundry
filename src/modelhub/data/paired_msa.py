@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 from biotite.structure import AtomArray, concatenate
-from cifutils.enums import ChainType
+from atomworks.ml.enums import ChainType
 from atomworks.ml.common import exists
 from atomworks.ml.datasets import logger
 from atomworks.ml.datasets.datasets import StructuralDatasetWrapper

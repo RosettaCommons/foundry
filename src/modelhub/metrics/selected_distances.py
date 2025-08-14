@@ -1,7 +1,7 @@
 import numpy as np
 from beartype.typing import Any
 from biotite.structure import AtomArrayStack
-from cifutils.utils.selection import (
+from atomworks.ml.utils.selection import (
     get_mask_from_atom_selection,
     parse_selection_string,
 )

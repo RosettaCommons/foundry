@@ -3,11 +3,11 @@ import pickle
 from os import PathLike
 from pathlib import Path
 
-from cifutils.tools.inference import (
+from atomworks.io.tools.inference import (
     build_msa_paths_by_chain_id_from_component_list,
     components_to_atom_array,
 )
-from cifutils.utils.io_utils import to_cif_file
+from atomworks.io.utils.io_utils import to_cif_file
 
 from modelhub.utils.io import (
     CIF_LIKE_EXTENSIONS,
