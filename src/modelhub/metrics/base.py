@@ -3,8 +3,8 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 
 import hydra
-from beartype.typing import Any
 from atomworks.ml.utils import error, nested_dict
+from beartype.typing import Any
 from omegaconf import DictConfig
 from toolz import keymap
 

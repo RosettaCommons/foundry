@@ -11,7 +11,7 @@ NAATOKENS = 20 + 2 + 10 + 1 + 47  # 20 AAs, UNK, MASK, 8 NAs,HIS_D, 47 atoms
 costgtNA = -0.2744
 
 aa2long = [
-    ( # 0 ala
+    (  # 0 ala
         " N  ",
         " CA ",
         " C  ",
@@ -49,7 +49,7 @@ aa2long = [
         None,
         None,
     ),  # 0  ala
-    ( # 1 arg
+    (  # 1 arg
         " N  ",
         " CA ",
         " C  ",
@@ -87,7 +87,7 @@ aa2long = [
         "1HH2",
         "2HH2",
     ),  # 1  arg
-    ( # 2  asn
+    (  # 2  asn
         " N  ",
         " CA ",
         " C  ",

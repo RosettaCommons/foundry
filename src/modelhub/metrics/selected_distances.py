@@ -1,11 +1,11 @@
 import numpy as np
-from beartype.typing import Any
-from biotite.structure import AtomArrayStack
+from atomworks.ml.utils import nested_dict
 from atomworks.ml.utils.selection import (
     get_mask_from_atom_selection,
     parse_selection_string,
 )
-from atomworks.ml.utils import nested_dict
+from beartype.typing import Any
+from biotite.structure import AtomArrayStack
 
 from modelhub.metrics.base import Metric
 

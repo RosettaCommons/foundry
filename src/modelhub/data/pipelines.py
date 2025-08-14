@@ -2,13 +2,13 @@ from os import PathLike
 from pathlib import Path
 
 import numpy as np
+from atomworks.enums import ChainType
 from atomworks.io.constants import (
     AF3_EXCLUDED_LIGANDS,
     STANDARD_AA,
     STANDARD_DNA,
     STANDARD_RNA,
 )
-from atomworks.enums import ChainType
 from atomworks.ml.common import exists
 from atomworks.ml.encoding_definitions import RF2AA_ATOM36_ENCODING, AF3SequenceEncoding
 from atomworks.ml.transforms.af3_reference_molecule import (
@@ -31,7 +31,10 @@ from atomworks.ml.transforms.atom_frames import (
     AddPolymerFrameIndices,
 )
 from atomworks.ml.transforms.atom_level_embeddings import FeaturizeAtomLevelEmbeddings
-from atomworks.ml.transforms.atomize import AtomizeByCCDName, FlagNonPolymersForAtomization
+from atomworks.ml.transforms.atomize import (
+    AtomizeByCCDName,
+    FlagNonPolymersForAtomization,
+)
 from atomworks.ml.transforms.base import (
     AddData,
     ApplyFunction,
@@ -61,9 +64,14 @@ from atomworks.ml.transforms.diffusion.batch_structures import (
 )
 from atomworks.ml.transforms.diffusion.edm import SampleEDMNoise
 from atomworks.ml.transforms.dna.pad_dna import PadDNA
-from atomworks.ml.transforms.encoding import EncodeAF3TokenLevelFeatures, EncodeAtomArray
+from atomworks.ml.transforms.encoding import (
+    EncodeAF3TokenLevelFeatures,
+    EncodeAtomArray,
+)
 from atomworks.ml.transforms.feature_aggregation.af3 import AggregateFeaturesLikeAF3
-from atomworks.ml.transforms.feature_aggregation.confidence import PackageConfidenceFeats
+from atomworks.ml.transforms.feature_aggregation.confidence import (
+    PackageConfidenceFeats,
+)
 from atomworks.ml.transforms.featurize_unresolved_residues import (
     MaskPolymerResiduesWithUnresolvedFrameAtoms,
     PlaceUnresolvedTokenAtomsOnRepresentativeAtom,

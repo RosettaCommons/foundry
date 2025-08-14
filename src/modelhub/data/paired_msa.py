@@ -5,12 +5,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from biotite.structure import AtomArray, concatenate
 from atomworks.enums import ChainType
 from atomworks.ml.common import exists
 from atomworks.ml.datasets import logger
 from atomworks.ml.datasets.datasets import StructuralDatasetWrapper
-from atomworks.ml.datasets.parsers import MetadataRowParser, load_example_from_metadata_row
+from atomworks.ml.datasets.parsers import (
+    MetadataRowParser,
+    load_example_from_metadata_row,
+)
 from atomworks.ml.transforms._checks import (
     check_contains_keys,
     check_is_instance,
@@ -19,6 +21,7 @@ from atomworks.ml.transforms._checks import (
 from atomworks.ml.transforms.base import Transform, TransformedDict
 from atomworks.ml.transforms.msa._msa_loading_utils import load_msa_data_from_path
 from atomworks.ml.utils.rng import capture_rng_states
+from biotite.structure import AtomArray, concatenate
 
 
 # input data wrapper that allows multiple input files separated by ':'

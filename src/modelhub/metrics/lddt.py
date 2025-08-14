@@ -1,12 +1,14 @@
 import numpy as np
 import torch
-from beartype.typing import Any
-from biotite.structure import AtomArray, AtomArrayStack, stack
-from atomworks.ml.transforms.atom_array import ensure_atom_array_stack
-from atomworks.ml.transforms.atom_array import AddGlobalTokenIdAnnotation
+from atomworks.ml.transforms.atom_array import (
+    AddGlobalTokenIdAnnotation,
+    ensure_atom_array_stack,
+)
 from atomworks.ml.transforms.atomize import AtomizeByCCDName
 from atomworks.ml.transforms.base import Compose
 from atomworks.ml.utils.token import get_token_starts
+from beartype.typing import Any
+from biotite.structure import AtomArray, AtomArrayStack, stack
 from jaxtyping import Bool, Float, Int
 
 from modelhub.metrics.base import Metric

@@ -64,13 +64,10 @@ add_to_pythonpath "$REPO_ROOT"
 SRC_PATH="$REPO_ROOT/src"
 add_to_pythonpath "$SRC_PATH"
 
-# Add datahub and cifutils from `/lib` to the PYTHONPATH
+# Add atomworks from `/lib` to the PYTHONPATH
 echo
-echo "Checking and adding 'datahub' and 'cifutils' directories to PYTHONPATH..."
-DATAHUB_PATH="$REPO_ROOT/lib/datahub/src"
-CIFUTILS_PATH="$REPO_ROOT/lib/cifutils/src"
-add_to_pythonpath "$DATAHUB_PATH"
-add_to_pythonpath "$CIFUTILS_PATH"
+echo "Checking and adding 'atomworks' directory to PYTHONPATH..."
+add_to_pythonpath "$REPO_ROOT/lib/atomworks-dev/src"
 
 # Load the .env file environment variables from the repo root
 echo

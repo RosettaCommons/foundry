@@ -3,8 +3,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from beartype.typing import Any, Callable, Final, Sequence
-from biotite.structure import AtomArray
 from atomworks.enums import ChainType
 from atomworks.ml.transforms._checks import (
     check_atom_array_annotation,
@@ -17,6 +15,8 @@ from atomworks.ml.utils.token import (
     get_af3_token_center_masks,
     get_token_starts,
 )
+from beartype.typing import Any, Callable, Final, Sequence
+from biotite.structure import AtomArray
 from jaxtyping import Bool, Float, Shaped
 from torch import Tensor
 

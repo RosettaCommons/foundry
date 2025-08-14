@@ -1,6 +1,5 @@
 import hydra
 import torch
-from beartype.typing import Any
 from atomworks.ml.datasets.datasets import (
     ConcatDatasetWithID,
     FallbackDatasetWrapper,
@@ -13,6 +12,7 @@ from atomworks.ml.samplers import (
     LoadBalancedDistributedSampler,
     MixedSampler,
 )
+from beartype.typing import Any
 from omegaconf import DictConfig, ListConfig
 from torch.utils.data import (
     DataLoader,
