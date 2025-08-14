@@ -6,14 +6,14 @@ import torch
 from beartype.typing import Any, Callable, Final, Sequence
 from biotite.structure import AtomArray
 from cifutils.enums import ChainType
-from datahub.transforms._checks import (
+from atomworks.ml.transforms._checks import (
     check_atom_array_annotation,
     check_contains_keys,
     check_is_instance,
 )
-from datahub.transforms.atomize import AtomizeByCCDName
-from datahub.transforms.base import Transform
-from datahub.utils.token import (
+from atomworks.ml.transforms.atomize import AtomizeByCCDName
+from atomworks.ml.transforms.base import Transform
+from atomworks.ml.utils.token import (
     get_af3_token_center_masks,
     get_token_starts,
 )

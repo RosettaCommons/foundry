@@ -1,7 +1,7 @@
 import numpy as np
 from beartype.typing import Any
 from biotite.structure import AtomArrayStack
-from datahub.transforms.sasa import calculate_atomwise_rasa
+from atomworks.ml.transforms.sasa import calculate_atomwise_rasa
 
 from modelhub.metrics.base import Metric
 

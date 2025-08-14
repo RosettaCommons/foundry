@@ -1,7 +1,7 @@
 import math
 
 import torch
-from datahub.utils.rng import create_rng_state_from_seeds, rng_state
+from atomworks.ml.utils.rng import create_rng_state_from_seeds, rng_state
 
 
 def get_recycle_schedule(

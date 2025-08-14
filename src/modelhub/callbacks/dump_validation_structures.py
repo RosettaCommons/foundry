@@ -2,7 +2,7 @@ from os import PathLike
 from pathlib import Path
 
 from beartype.typing import Any
-from datahub.common import parse_example_id
+from atomworks.ml.common import parse_example_id
 
 from modelhub.callbacks.base import BaseCallback
 from modelhub.utils.io import (

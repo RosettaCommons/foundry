@@ -4,7 +4,7 @@ from functools import cached_property
 
 import hydra
 from beartype.typing import Any
-from datahub.utils import error, nested_dict
+from atomworks.ml.utils import error, nested_dict
 from omegaconf import DictConfig
 from toolz import keymap
 

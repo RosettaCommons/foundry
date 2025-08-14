@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from beartype.typing import Any, Literal
 from biotite.structure import AtomArrayStack
-from datahub.utils.token import get_af3_token_representative_idxs
+from atomworks.ml.utils.token import get_af3_token_representative_idxs
 from einops import rearrange, repeat
 from jaxtyping import Bool, Float
 

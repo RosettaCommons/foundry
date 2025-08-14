@@ -3,10 +3,10 @@ import torch
 from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack, stack
 from cifutils.transforms.atom_array import ensure_atom_array_stack
-from datahub.transforms.atom_array import AddGlobalTokenIdAnnotation
-from datahub.transforms.atomize import AtomizeByCCDName
-from datahub.transforms.base import Compose
-from datahub.utils.token import get_token_starts
+from atomworks.ml.transforms.atom_array import AddGlobalTokenIdAnnotation
+from atomworks.ml.transforms.atomize import AtomizeByCCDName
+from atomworks.ml.transforms.base import Compose
+from atomworks.ml.utils.token import get_token_starts
 from jaxtyping import Bool, Float, Int
 
 from modelhub.metrics.base import Metric

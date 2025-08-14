@@ -1,9 +1,9 @@
 import numpy as np
 from beartype.typing import Any
 from biotite.structure import AtomArray
-from datahub.enums import GroundTruthConformerPolicy
-from datahub.transforms._checks import check_atom_array_annotation, check_contains_keys
-from datahub.transforms.base import Transform
+from atomworks.ml.enums import GroundTruthConformerPolicy
+from atomworks.ml.transforms._checks import check_atom_array_annotation, check_contains_keys
+from atomworks.ml.transforms.base import Transform
 from jaxtyping import Bool, Float
 
 

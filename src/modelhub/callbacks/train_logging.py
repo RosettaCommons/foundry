@@ -3,7 +3,7 @@ from collections import defaultdict
 
 import pandas as pd
 from beartype.typing import Any
-from datahub.common import parse_example_id
+from atomworks.ml.common import parse_example_id
 from lightning.fabric.wrappers import (
     _FabricOptimizer,
 )

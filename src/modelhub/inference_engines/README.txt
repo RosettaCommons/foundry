@@ -97,7 +97,7 @@ to_cif_file(atom_array_from_smiles, "example_from_smiles.cif")
 
 ===== Step 2: Run inference.py =====
 
-The apptainers that we release pre-install ''modelhub'', ''datahub'', and ''cifutils''. Note that this abstraction also means that these apptainers are not "hackable" — if you would like to modify ''modelhub'', you'll need to clone the repository, and use the development apptainer (see the main ''README'').
+The apptainers that we release pre-install ''modelhub'', ''atomworks.ml'', and ''cifutils''. Note that this abstraction also means that these apptainers are not "hackable" — if you would like to modify ''modelhub'', you'll need to clone the repository, and use the development apptainer (see the main ''README'').
 
 For our inference API, we use [[https://hydra.cc/docs/tutorials/basic/your_first_app/simple_cli/|hydra]] to prepare arguments; the [[https://hydra.cc/docs/advanced/override_grammar/basic/|documentation]] describes the command-line override syntax that we use below. Note that Hydra syntax differes from typical CLI or ''argparse'' syntax in that we don't use ''--arg value'', but instead ''arg=value''. See below for examples.
 

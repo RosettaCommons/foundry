@@ -2,11 +2,11 @@ import torch
 from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack
 from cifutils.transforms.atom_array import ensure_atom_array_stack
-from datahub.transforms.af3_reference_molecule import (
+from atomworks.ml.transforms.af3_reference_molecule import (
     get_af3_reference_molecule_features,
 )
-from datahub.transforms.chirals import add_af3_chiral_features
-from datahub.transforms.rdkit_utils import get_rdkit_chiral_centers
+from atomworks.ml.transforms.chirals import add_af3_chiral_features
+from atomworks.ml.transforms.rdkit_utils import get_rdkit_chiral_centers
 from jaxtyping import Bool, Float
 
 from modelhub.kinematics import get_dih

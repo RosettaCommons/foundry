@@ -7,10 +7,10 @@ import numpy as np
 import torch
 from biotite.structure import AtomArray, AtomArrayStack
 from cifutils.transforms.atom_array import ensure_atom_array_stack
-from datahub.transforms.atom_array import AddGlobalTokenIdAnnotation
-from datahub.transforms.atomize import AtomizeByCCDName
-from datahub.transforms.base import Compose, convert_to_torch
-from datahub.transforms.symmetry import FindAutomorphismsWithNetworkX
+from atomworks.ml.transforms.atom_array import AddGlobalTokenIdAnnotation
+from atomworks.ml.transforms.atomize import AtomizeByCCDName
+from atomworks.ml.transforms.base import Compose, convert_to_torch
+from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
 from jaxtyping import Bool, Float, Int
 
 from modelhub.loss.af3_losses import (

@@ -65,7 +65,7 @@ def validate(cfg: DictConfig) -> None:
     # We will still see messages from Rank 0; they are identical, since all ranks load and sample from the same datasets
     if not is_rank_zero():
         dataset_logger = logging.getLogger("datasets")
-        sampler_logger = logging.getLogger("datahub.samplers")
+        sampler_logger = logging.getLogger("atomworks.ml.samplers")
         dataset_logger.setLevel(logging.WARNING)
         sampler_logger.setLevel(logging.ERROR)
 

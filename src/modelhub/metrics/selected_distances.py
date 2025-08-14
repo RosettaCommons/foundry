@@ -5,7 +5,7 @@ from cifutils.utils.selection import (
     get_mask_from_atom_selection,
     parse_selection_string,
 )
-from datahub.utils import nested_dict
+from atomworks.ml.utils import nested_dict
 
 from modelhub.metrics.base import Metric
 

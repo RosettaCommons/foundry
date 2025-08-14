@@ -7,18 +7,18 @@ from typing import Any
 import numpy as np
 from biotite.structure import AtomArray, concatenate
 from cifutils.enums import ChainType
-from datahub.common import exists
-from datahub.datasets import logger
-from datahub.datasets.datasets import StructuralDatasetWrapper
-from datahub.datasets.parsers import MetadataRowParser, load_example_from_metadata_row
-from datahub.transforms._checks import (
+from atomworks.ml.common import exists
+from atomworks.ml.datasets import logger
+from atomworks.ml.datasets.datasets import StructuralDatasetWrapper
+from atomworks.ml.datasets.parsers import MetadataRowParser, load_example_from_metadata_row
+from atomworks.ml.transforms._checks import (
     check_contains_keys,
     check_is_instance,
     check_nonzero_length,
 )
-from datahub.transforms.base import Transform, TransformedDict
-from datahub.transforms.msa._msa_loading_utils import load_msa_data_from_path
-from datahub.utils.rng import capture_rng_states
+from atomworks.ml.transforms.base import Transform, TransformedDict
+from atomworks.ml.transforms.msa._msa_loading_utils import load_msa_data_from_path
+from atomworks.ml.utils.rng import capture_rng_states
 
 
 # input data wrapper that allows multiple input files separated by ':'

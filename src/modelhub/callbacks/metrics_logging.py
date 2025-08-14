@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 from beartype.typing import Any, Literal
-from datahub.utils import nested_dict
+from atomworks.ml.utils import nested_dict
 from omegaconf import ListConfig
 
 from modelhub.callbacks.base import BaseCallback
