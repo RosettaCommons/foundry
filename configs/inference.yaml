@@ -3,5 +3,5 @@
 # For more information about overriding configs, see: https://hydra.cc/docs/advanced/overriding_packages/#overriding-packages-using-the-defaults-list
 
 defaults:
-  - inference_engine: ???
+  - inference_engine: rf3
   - _self_
