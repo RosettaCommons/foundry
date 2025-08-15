@@ -2,7 +2,7 @@ defaults:
   - af3
   - override loss: structure_prediction_with_confidence
 
-_target_: modelhub.trainers.af3.AF3TrainerWithConfidence
+_target_: modelhub.trainers.rf3.RF3TrainerWithConfidence
 
 metrics:
   ptm:

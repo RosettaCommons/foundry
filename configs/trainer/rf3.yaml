@@ -3,7 +3,7 @@ defaults:
   - loss: structure_prediction
   - metrics: structure_prediction
 
-_target_: modelhub.trainers.af3.AF3Trainer
+_target_: modelhub.trainers.rf3.RF3Trainer
 validate_every_n_epochs: 1
 max_epochs: 10_000
 n_examples_per_epoch: 24000

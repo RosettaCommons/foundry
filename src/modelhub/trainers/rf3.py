@@ -33,7 +33,7 @@ def _remap_outputs(
     return xyz
 
 
-class AF3Trainer(FabricTrainer):
+class RF3Trainer(FabricTrainer):
     """Standard Trainer for AF3-style models"""
 
     def __init__(
@@ -349,7 +349,7 @@ class AF3Trainer(FabricTrainer):
         return {"metrics_output": metrics_output, "network_output": network_output}
 
 
-class AF3TrainerWithConfidence(AF3Trainer):
+class RF3TrainerWithConfidence(RF3Trainer):
     """AF-3 trainer with rollout and confidence prediction"""
 
     def construct_model(self):
