@@ -56,8 +56,8 @@ def should_early_stop_by_mean_plddt(
     return fn
 
 
-class AF3InferenceEngine(InferenceEngine):
-    """Class for inference with AF3. Evaluates a trained AF3 model on a set of spoofed CIFs."""
+class RF3InferenceEngine(InferenceEngine):
+    """Class for inference with RF3. Evaluates a trained RF3 model on a set of spoofed CIFs."""
 
     def __init__(
         self,
@@ -87,7 +87,7 @@ class AF3InferenceEngine(InferenceEngine):
         annotate_b_factor_with_plddt: bool,
         early_stopping_plddt_threshold: float | None,
     ):
-        """Initialize the Inference Engine for AF3.
+        """Initialize the Inference Engine for RF3.
 
         Note that for inference, we initialize the Hydra configuration from the checkpoint; we then override specific parameters based on the input arguments
         and inference-specific considerations.
@@ -99,8 +99,8 @@ class AF3InferenceEngine(InferenceEngine):
             num_nodes: Number of nodes for distributed inference.
             devices_per_node: Number of devices per node for distributed inference.
 
-            n_recycles (int): Number of recycles for AF3.
-            diffusion_batch_size (int): Diffusion batch size for AF3. Each predicted structure will be saved as a separate model within the same CIF file.
+            n_recycles (int): Number of recycles for RF3.
+            diffusion_batch_size (int): Diffusion batch size for RF3. Each predicted structure will be saved as a separate model within the same CIF file.
             residue_renaming_dict (dict): Dictionary of residue names to rename to avoid CCD clashes, e.g., {'ALA': 'L:1'}.
             template_selection_syntax (str): Selection syntax for template selection. If None, no residues will be selected.
             ground_truth_conformer_selection (str): Selection syntax for residues that should use ground truth conformers instead of generated ones.
@@ -211,7 +211,7 @@ class AF3InferenceEngine(InferenceEngine):
         self.annotate_b_factor_with_plddt = annotate_b_factor_with_plddt
 
     def construct_pipeline(self):
-        """Construct the AF3 inference pipeline.
+        """Construct the RF3 inference pipeline.
 
         By convention we use the "interface" dataset stored in the checkpoint to construct the pipeline.
         """
@@ -425,7 +425,7 @@ class AF3InferenceEngine(InferenceEngine):
 
         ranked_logger.info("Building Transform pipeline...")
 
-        # Construct the AF3 inference pipeline
+        # Construct the RF3 inference pipeline
         pipeline = self.construct_pipeline()
 
         ranked_logger.info(f"Found {len(self.paths)} structures to predict!")
