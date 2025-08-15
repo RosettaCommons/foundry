@@ -1,17 +1,49 @@
-# Inference with `modelhub-AF3` repository
+# Inference with RF3
 
-We have reproduced AF3 and are sharing the weights with the lab to use for various tasks. 
-This guide provides instructions on preparing inputs and running inference for our AF3 reproduction.
+> **⚠️ Notice:** We are currently finalizing some cleanup work on the inference API. Please expect the API (including input formats and confidence outputs) to stabilize within the next 2 weeks. Thank you for your patience!
+
+RF3 is an all-atom biomolecular structure prediction network competitive with leading open-source models. By including additional features at train-time – implicit chirality representations and atom-level geometric conditioning – we improve performance on tasks such as prediction of chiral ligands and fixed-backbone or fixed-conformer docking.
+
+For more information, please see our preprint, [Accelerating Biomolecular Modeling with AtomWorks and RF3](https://doi.org/10.1101/2025.08.14.670328).
+
+This guide provides instructions on preparing inputs and running inference for RF3. We will continue to update this document in the coming days and weeks, including support for arbitrary atom-level templating and more detailed examples of edge cases such as macrocyclic pepties, covalent modifications, and non-canonical amino acids.
+
+## Step 0: Installation and Setup
+### A. Installation using `uv`
+```bash
+git clone https://github.com/RosettaCommons/modelforge.git \
+  && cd modelforge \
+  && uv python install 3.12 \
+  && uv venv --python 3.12 \
+  && source .venv/bin/activate \
+  && uv pip install -e .
+```
+
+### B. Download model weights for RF3 
+```bash
+wget http://files.ipd.uw.edu/pub/rf3/rf3_latest.pt
+```
+
+### C. Run a test prediction
+```bash
+rf3 fold tests/data/5vht_from_json.json
+```
+
+Ensure that a `.score` and a predicted `.cif.gz` are created in the specified directory, without error.
 
 ## Step 1: Prepare Inputs
 
-> **Note:** If you already have a `CIF` or `PDB` file (e.g., from MPNN), and do not want to include MSAs, you may proceed directly to Step 2.
+RF3 accepts multiple input formats:
+- `PDB/mmCIF` files (e.g., from RCSB, or from Ligand/ProteinMPNN)
+- `json` file with each component specified within the RF3 input format (outlined below)
+- `json` file in the AlphaFold-3 format *(coming soon)*
+- Pickled `AtomArray` objects *(coming soon)*
 
-We enumerate two options for preparing inputs: one with a JSON API, one by creating an `AtomArray` to spoof a CIF.
+`mmCIF` format are preferred when available, as they unambiguously specify the model inputs, with all details included (e.g., covalent bonds).
 
-### Option 1: Prepare inputs using a combination of one-letter polymer sequences, SMILES strings, CCD codes, and SDF files
+> **Note:** If you already have a `CIF` or `PDB` file, and do not want to include MSAs, you may proceed directly to Step 2.
 
-Create a JSON file with each component; e.g.,
+If you do not have a pre-prepared CIF or PDB file, you may provide a combination of one-letter polymer sequences, SMILES strings, CCD codes, and SDF files through our JSON API. For example:
 
 ```json
 [
@@ -45,66 +77,27 @@ Create a JSON file with each component; e.g.,
     }
 ]
 ```
-The full API for inference via dictionaries of chemical components is specified in `atomworks`, additional contributions to support further formats (e.g., `MOL` files , as components) are welcome and relatively straight-forward to implement.
+The full API for inference via dictionaries of chemical components is specified in [atomworks.io](https://github.com/RosettaCommons/atomworks/blob/production/src/atomworks/io/tools/inference.py), additional contributions to support further formats (e.g., `mol` files as components) are welcome.
 
 Supported input options:
--   `seq`: For proteins and nucleic acids using non-canonical one-letter codes as they appear in a CIF file.
--   `smiles`: For small molecules (ensure correctness of SMILES).
--   `ccd_code`: If your small molecule is already in the CCD.
--   `path`: If you have a `.sdf` or `.cif` file.
+-   `seq`: For proteins and nucleic acids using non-canonical one-letter codes as they appear in a CIF file
+-   `smiles`: For small molecules (ensure correctness of SMILES, and proper indication of chirality when applicable)
+-   `ccd_code`: If your small molecule is already in the CCD
+-   `path`: If you have a `.sdf` or `.cif` file (including `.cif` files for small molecules)
 
-Coming soon: support for `mol` files as components.
+## Step 2: Run `rf3 fold`
 
-### Option 2: Using a Spoofed CIF *(more complicated, more customizable)*
-
-If you can get your inputs into an `AtomArray`, use `to_cif_file` to convert the `AtomArray` to a `CIF`. Use the pre-built inference tools in `atomworks.ml` to convert arbitrary biological inputs (e.g., FASTA, CIFs, SMILES) into an `AtomArray`. See [atomworks.ml tests](https://github.com/baker-laboratory/atomworks.ml/blob/main/tests/tools/test_inference_processing.py) for examples.
-
-#### Example Code
-
-```python
-import os
-os.environ['CCD_MIRROR_PATH'] = "/projects/ml/frozen_pdb_copies/2024_12_11_ccd"
-os.environ['PDB_MIRROR_PATH'] = "/projects/ml/frozen_pdb_copies/2024_12_01_pdb"
-
-from atomworks.ml.tools.inference import components_to_atom_array
-from atomworks.ml.utils.io_utils import to_cif_file
-
-# Define inputs as a list of dictionaries
-monomer = {
-    "seq": "SMNPPPPETSNPNKPKRQTNQLQYLLRVVLKTLWKHQFAWPFQQPVDAVKLNLPDYYKIIKTPMDMGTIKKRLENNYYWNAQECIQDFNTMFTNCYIYNKPGDDIVLMAEALEKLFLQKINELPTEE",
-    "chain_type": "polypeptide(l)",
-    "chain_id": "A",
-}
-
-ligand_from_smiles = {
-    "smiles": "NCCCCN1N=C(C[C@@H](C1=O)c2cccc3ncccc23)c4ccc(NC(=O)N5Cc6ccncc6C5)cc4",
-    "chain_id": "C",
-}
-
-ligand_from_ccd = {
-    "ccd_code": "7Z2",
-    "chain_id": "C",
-}
-
-# Convert to AtomArrays and write to CIF files
-atom_array_from_ccd = components_to_atom_array([monomer, ligand_from_ccd])
-atom_array_from_smiles = components_to_atom_array([monomer, ligand_from_smiles])
-
-to_cif_file(atom_array_from_ccd, "example_from_ccd.cif")
-to_cif_file(atom_array_from_smiles, "example_from_smiles.cif")
+We can now run inference with:
+```bash
+rf3 fold tests/data/5vht_from_file.cif
 ```
-
-## Step 2: Run `inference.py`
-
-The apptainers that we release pre-install `modelhub`, `atomworks.ml`, and `atomworks.ml`. Note that this abstraction also means that these apptainers are not "hackable" — if you would like to modify `modelhub`, you'll need to clone the repository, and use the development apptainer (see the main `README`).
+or, alternatively,
+```bash
+rf3 fold tests/data/5vh5_from_json.json
+```
 
 For our inference API, we use [hydra](https://hydra.cc/docs/tutorials/basic/your_first_app/simple_cli/) to prepare arguments; the [documentation](https://hydra.cc/docs/advanced/override_grammar/basic/) describes the command-line override syntax that we use below. Note that Hydra syntax differes from typical CLI or `argparse` syntax in that we don't use `--arg value`, but instead `arg=value`. See below for examples.
 
-### Using an Existing CIF or PDB File
-
-Run the apptainer with the appropriate apptainer, checkpoint, input directory, and output directory.
-
-Arguments to `inference.py` (which the apptainer calls behind-the-scenes):
 #### Basic Arguments
 - `inputs` *(required)*: Path to a file (CIF/PDB/JSON) or list of files for prediction; if given a directory, all CIF/PDB files in that directory will be predicted. To specify a list of files/directories, use Hydra's list grammar: `foo="[path_1.cif, path_2.json, path_3.pdb]"`
 - `inference_engine` *(required)*: The inference configuration to use. For example, `af3`, to use the standard structure prediction model. We will introduce other configurations down-the-line, each with unique use cases.
@@ -122,8 +115,8 @@ Arguments to `inference.py` (which the apptainer calls behind-the-scenes):
 - `seed`  *(optional)* Model seed. Running inference multiple times with different model seeds is the best, and most expensive, way to generate output diversity. Defaults to the training seed (usually 42).
 
 #### Advanced structural control arguments
-- `template_selection_syntax` *(optional)*: Selection syntax for template selection using contigs format (e.g., "A1-71,B1-1"). If provided, selected residues will be used as template coordinates that constrain the model prediction. Only works for proteins currently. If None, no residues will be selected for templating.
-- `ground_truth_conformer_selection` *(optional)*: Selection syntax for residues that should use ground truth conformers instead of generated ones. Uses AtomSelection format (e.g., "*/LIG" for all ligands, "A1-10" for residues 1-10 in chain A, "*/ATP" for all ATP molecules). If None, no residues will use ground truth conformers. This is useful for keeping known ligand conformations while allowing the model to predict protein structure around them.
+- `template_selection_syntax` *(optional)*: Coming soon.
+- `ground_truth_conformer_selection` *(optional)*: Selection syntax for residues that should use ground truth conformers instead of generated ones. Uses AtomSelection format (e.g., "*/HEM" for all heme residues, "A1-10" for residues 1-10 in chain A, "*/ATP" for all ATP molecules). If None, no residues will use ground truth conformers. This is useful for keeping known ligand conformations while allowing the model to predict protein structure around them.
 
 #### Arguments to control output dumping
 - `out_dir` *(optional)*: Where to save predicted structures. The output files will be named the same as the input structures, or use the `name` field in the specification, if present. Defaults to the current directory (`./`).
@@ -136,30 +129,23 @@ Arguments to `inference.py` (which the apptainer calls behind-the-scenes):
 
 > *NOTE:* The CIF output file will contain multiple **models**, one for each diffusion outputs (e.g., 5 by default). PyMol will hide secondary structure by default with multiple models; the command `dss` will display it again.
 
-Example commands (to be run from the `inference` working directory):
+Example commands:
 
 ### Using a JSON with multiple examples to predict
 ```bash
-apptainer -s run --nv /net/software/containers/versions/modelhub_inference/modelhub_latest.sif inference_engine=af3 inputs='/projects/ml/modelhub/inference/examples_from_json.json'
+rf3 fold inference_engine=af3 inputs='tests/data/multiple_examples_from_json.json'
 ```
 
-### Using a PDB, specifying a covalent modification in the `CONECT` record (*example from Meg)*
+### Using a PDB, specifying a covalent modification in the `CONECT` record
 See line `1672` for the manually-added bond; note as well the renaming of the ligand. Such renaming could be accomplished *a-priori* by modifying the file (as in this example), or with the `rename_residues` flag (see below).
 ```bash
-apptainer -s run --nv /net/software/containers/versions/modelhub_inference/modelhub_latest.sif inference_engine=af3 inputs='projects/ml/modelhub/inference/example_from_pdb_with_inter_chain_bond.pdb'
+rf3 fold inference_engine=af3 inputs='projects/ml/modelhub/inference/example_from_pdb_with_inter_chain_bond.pdb'
 ```
 
-### Using a PDB from MPNN, renaming custom ligand that overlaps with ligand names in the CCD *(example from Indrek)*
-Note that in this PDB file, the ligand "HGS" is a custom ligand, whose three-letter code overlaps with a real CCD ligand. Thus, we must rename.
+### Using a PDB from MPNN, renaming custom ligand that overlaps with ligand names in the CCD 
+Note that in this PDB file, the ligand "HGS" is a custom ligand, whose three-letter code overlaps with a real CCD ligand. Thus, we must rename in order to avoid errors.
 ```bash
-apptainer -s run --nv /net/software/containers/versions/modelhub_inference/modelhub_latest.sif inference_engine=af3 inputs='projects/ml/modelhub/inference/example_from_pdb_with_inter_chain_bond.pdb'
-apptainer -s run --nv /net/software/containers/versions/modelhub_inference/modelhub_latest.sif inference_engine=af3 inputs='/projects/ml/modelhub/inference/example_pdb_with_clashing_ligand_name.pdb' rename_residues="{'HGS': 'L:1'}"  
-```
-
-### Using a PDB, providing some fraction of the input structure as a template
-This feature uses similar syntax to contigs in RFdiffusion. You can select regions to be templated by specifying comma separated stretches of residues in your input PDB (e.g. "A1-71,B1-1"; only works for proteins right now).
-```bash
-apptainer -s run --nv /net/software/containers/users/ncorley/modelhub/inference_latest.sif inference_engine=af3 inputs='projects/ml/modelhub/tests/data/5vht_from_file.cif' template_selection_syntax="A1-71"
+rf3 fold inference_engine=af3 inputs='/projects/ml/modelhub/inference/example_pdb_with_clashing_ligand_name.pdb' rename_residues="{'HGS': 'L:1'}"  
 ```
 
 ## Chirality
@@ -168,14 +154,6 @@ If inputs are given in a form that specifies chirality, the model will receive t
 Chiral formats include:
 - SMILES strings (e.g., using `@`)
 - CIF, PDB, or SDF files with non-zero coordinates
-
-## Checkpoints
-Multiple checkpoints are available for inference, each with their own strengths and weaknesses. We provide a default option; however, the `ckpt_path` argument is exposed to provide additional control (`ckpt_path=/net/software...`).
-
-| Name | Path | Description |
-|:----------------|:-----|:------------|
-| Epoch 804 (Default) | `⁠/net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_ep804.ckpt` | Default checkpoint. Best protein-ligand performance. |
-| Epoch 826 | `⁠/net/software/containers/versions/modelhub_inference/ckpts/modelhub_af3_with_confidence_ep826.ckpt` | Subsequent checkpoint that exhibits stronger performance on protein-DNA structures, at the cost of protein-ligand metrics. |
 
 ## Step 3: View the Predicted Structure(s)
 
@@ -188,6 +166,7 @@ from atomworks.ml import parse
 # View in atomworks (or PyMol, etc.)
 out = parse("path/to/prediction.cif.gz")
 atom_array = out["assemblies"]["1"][0]
+# (If in a notebook)
 view(atom_array)
 ```
 

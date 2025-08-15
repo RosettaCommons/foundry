@@ -6,8 +6,8 @@
 
 ## Format src directory using black
 format:
-	ruff format src tests scripts
-	ruff check --fix src tests scripts
+	ruff format src tests
+	ruff check --fix src tests
 
 #################################################################################
 # Self Documenting Commands                                                     #

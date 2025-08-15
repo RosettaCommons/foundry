@@ -40,8 +40,6 @@ def weighted_rigid_align(
     X_gt_resolved = X_gt_resolved - u_X_gt.unsqueeze(-2)
 
     # Computation of the covariance matrix
-    # BUG:
-    # FIXED:
     C = torch.einsum("bji,bjk->bik", w_resolved[..., None] * X_gt_resolved, X_resolved)
 
     U, S, V = torch.linalg.svd(C)

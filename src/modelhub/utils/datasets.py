@@ -30,7 +30,7 @@ try:
         FallbackDatasetWrapper,
         get_row_and_index_by_example_id,
     )
-except:
+except (ImportError, ModuleNotFoundError):
     ranked_logger.warning(
         "Failed to import atomworks.ml.datasets.datasets. "
         "If training networks, the PDB_MIRROR environment variable must be set."

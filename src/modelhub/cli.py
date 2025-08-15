@@ -1,6 +1,8 @@
 import os
+
 import typer
 from hydra import compose, initialize_config_dir
+
 from modelhub.inference import run_inference
 
 app = typer.Typer()

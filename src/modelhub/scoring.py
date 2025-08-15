@@ -1,3 +1,6 @@
+# TODO: Many of these functions are unused; we will deprecate and delete
+# (They are holdovers from previous frameworks)
+
 import os
 
 script_dir = os.path.dirname(os.path.realpath(__file__)) + "/"

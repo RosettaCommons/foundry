@@ -63,7 +63,6 @@ from atomworks.ml.transforms.diffusion.batch_structures import (
     BatchStructuresForDiffusionNoising,
 )
 from atomworks.ml.transforms.diffusion.edm import SampleEDMNoise
-from atomworks.ml.transforms.dna.pad_dna import PadDNA
 from atomworks.ml.transforms.encoding import (
     EncodeAF3TokenLevelFeatures,
     EncodeAtomArray,

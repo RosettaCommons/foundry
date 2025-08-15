@@ -1,3 +1,6 @@
+# TODO: Deprecate in favor of AtomWorks
+# (This code is a holdover from previous frameworks)
+
 import os
 
 import torch
