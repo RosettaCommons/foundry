@@ -1,10 +1,5 @@
 import hydra
 import torch
-from atomworks.ml.datasets.datasets import (
-    ConcatDatasetWithID,
-    FallbackDatasetWrapper,
-    get_row_and_index_by_example_id,
-)
 from atomworks.ml.samplers import (
     DistributedMixedSampler,
     FallbackSamplerWrapper,
@@ -29,6 +24,18 @@ from modelhub.resolvers import register_resolvers
 from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
+try:
+    from atomworks.ml.datasets.datasets import (
+        ConcatDatasetWithID,
+        FallbackDatasetWrapper,
+        get_row_and_index_by_example_id,
+    )
+except:
+    ranked_logger.warning(
+        "Failed to import atomworks.ml.datasets.datasets. "
+        "If training networks, the PDB_MIRROR environment variable must be set."
+    )
+
 
 register_resolvers()
 
