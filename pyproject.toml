@@ -65,7 +65,7 @@ dev = [
     "pytest-benchmark>=5.0.0,<6", # benchmark tests for speed
 ]
 [project.scripts]
-rf3 = "modelhub.inference:app"
+rf3 = "modelhub.cli:app"
 # Build settings ----------------------------------------------------------------------
 [build-system]
 requires = [
