@@ -284,10 +284,10 @@ def build_af3_transform_pipeline(
                 ),
             },
         ),
-        #NOTE: this is used in training to pad DNA sequences, but we don't use it in inference
-        #TrainingRoute(
-            #PadDNA(p_skip=pad_dna_p_skip),
-        #),
+        # NOTE: this is used in training to pad DNA sequences, but we don't use it in inference
+        # TrainingRoute(
+        # PadDNA(p_skip=pad_dna_p_skip),
+        # ),
         FlagAndReassignCovalentModifications(),
         FlagNonPolymersForAtomization(),
     ]

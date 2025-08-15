@@ -17,6 +17,7 @@ def fold(inputs: str):
         cfg = compose(config_name="inference", overrides=overrides)
         run_inference(cfg)
 
+
 @app.command()
 def predict(inputs: str):
     """Alias for fold command."""
