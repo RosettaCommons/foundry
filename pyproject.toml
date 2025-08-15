@@ -9,6 +9,18 @@ authors = [
 ]
 license = { file = "LICENSE.md" }
 
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "License :: OSI Approved :: BSD License",
+]
 dependencies = [
     # ...ml tools
     "torch>=2.2.0,<3",
@@ -31,7 +43,11 @@ dependencies = [
     # ... typing & documentation
     "jaxtyping>=0.2.17,<1",
     "beartype>=0.18.0,<1",
+
+    # ... dataloading
+    "atomworks==1.0.0",
 ]
+
 
 [project.optional-dependencies]
 dev = [
@@ -48,7 +64,8 @@ dev = [
     "pytest-cov>=4.1.0,<5", # generate coverage report
     "pytest-benchmark>=5.0.0,<6", # benchmark tests for speed
 ]
-
+[project.scripts]
+rf3 = "modelhub.inference:app"
 # Build settings ----------------------------------------------------------------------
 [build-system]
 requires = [
