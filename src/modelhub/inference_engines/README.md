@@ -100,7 +100,7 @@ For our inference API, we use [hydra](https://hydra.cc/docs/tutorials/basic/your
 
 #### Basic Arguments
 - `inputs` *(required)*: Path to a file (CIF/PDB/JSON) or list of files for prediction; if given a directory, all CIF/PDB files in that directory will be predicted. To specify a list of files/directories, use Hydra's list grammar: `foo="[path_1.cif, path_2.json, path_3.pdb]"`
-- `inference_engine` *(required)*: The inference configuration to use. For example, `af3`, to use the standard structure prediction model. We will introduce other configurations down-the-line, each with unique use cases.
+- `inference_engine` *(required)*: The inference configuration to use. For example, `rf3`, to use the standard structure prediction model. We will introduce other configurations down-the-line, each with unique use cases.
 - `ckpt_path` *(optional)*: Path to checkpoint file. Defaults to the current "best model", which is stored in a symlink in `/net/software`
 - `residue_renaming_dict` *(optional)* Dictionary of residues to rename to avoid CCD clashes, given in Hydra format (e.g., `foo="{'ALA': 'L:1'}`). When parsing files, we use the given residue names to help identify any missing atoms. Thus, if a custom ligand overlaps with a ligand in the CCD, the prediction will be catastrophically wrong. To circumvent this issue, we accept a dictionary of ligands to rename. We suggest renaming all custom ligands to begin with `L:` to avoid all clashes with the CCD. WARNING: This command uses brute-force find a replace; please ensure that there are no other possible matches (e.g., atom names). Additionally, avoid `#` to mitigate possible CIF-parsing errors from PyMol. Defaults to None.
 - `skip_existing` *(optional)*: Whether to skip predictions where appropriately-named output structures already exist in the `out_dir`. Defaults to False (do not skip; overwrite instead).
@@ -133,19 +133,31 @@ Example commands:
 
 ### Using a JSON with multiple examples to predict
 ```bash
+<<<<<<< Updated upstream
 rf3 fold inference_engine=af3 inputs='tests/data/multiple_examples_from_json.json'
+=======
+rf3 fold inference_engine=rf3 inputs='tests/data/multiple_examples_from_json.json'
+>>>>>>> Stashed changes
 ```
 
 ### Using a PDB, specifying a covalent modification in the `CONECT` record
 See line `1672` for the manually-added bond; note as well the renaming of the ligand. Such renaming could be accomplished *a-priori* by modifying the file (as in this example), or with the `rename_residues` flag (see below).
 ```bash
+<<<<<<< Updated upstream
 rf3 fold inference_engine=af3 inputs='projects/ml/modelhub/inference/example_from_pdb_with_inter_chain_bond.pdb'
+=======
+rf3 fold inference_engine=rf3 inputs='tests/data/example_from_pdb_with_inter_chain_bond.pdb'
+>>>>>>> Stashed changes
 ```
 
 ### Using a PDB from MPNN, renaming custom ligand that overlaps with ligand names in the CCD 
 Note that in this PDB file, the ligand "HGS" is a custom ligand, whose three-letter code overlaps with a real CCD ligand. Thus, we must rename in order to avoid errors.
 ```bash
+<<<<<<< Updated upstream
 rf3 fold inference_engine=af3 inputs='/projects/ml/modelhub/inference/example_pdb_with_clashing_ligand_name.pdb' rename_residues="{'HGS': 'L:1'}"  
+=======
+rf3 fold inference_engine=rf3 inputs='tests/data/example_pdb_with_clashing_ligand_name.pdb' residue_renaming_dict="{HGS:L:1}"
+>>>>>>> Stashed changes
 ```
 
 ## Chirality
