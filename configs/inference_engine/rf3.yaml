@@ -6,7 +6,7 @@ defaults:
 
 _target_: modelhub.inference_engines.rf3.RF3InferenceEngine
 
-ckpt_path: /net/scratch/ncorley/training/logs/validate/quick-rf3-with-confidence/2025-08-11_08-16_JOB_38133542/ckpt/epoch-0688.ckpt
+ckpt_path: rf3_latest.pt
 
 # Transform arguments
 n_recycles: 10
