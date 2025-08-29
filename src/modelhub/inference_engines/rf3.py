@@ -167,8 +167,8 @@ class RF3InferenceEngine(InferenceEngine):
             "allowed_chain_types_for_conditioning": None,  # Avoid random conditioning
             "protein_msa_dirs": [],  # To be consistent with installing on non-IPD clusters
             "rna_msa_dirs": [],  # To be consistent with installing on non-IPD clusters
-            "p_give_polymer_ref_conf": 0.0, # Never randomly give ground truth conformers
-            "p_give_non_polymer_ref_conf": 0.0, # Never randomly give ground truth conformers
+            "p_give_polymer_ref_conf": 0.0,  # Never randomly give ground truth conformers
+            "p_give_non_polymer_ref_conf": 0.0,  # Never randomly give ground truth conformers
         }
 
         self.print_config = print_config

@@ -27,7 +27,7 @@ class CheckForNaNsInInputs(Transform):
             data["coord_atom_lvl_to_be_noised"] = torch.randn_like(
                 data["coord_atom_lvl_to_be_noised"]
             )
-        
+
         assert not torch.isnan(
             data["coord_atom_lvl_to_be_noised"]
         ).any(), "NaN found in network input"
