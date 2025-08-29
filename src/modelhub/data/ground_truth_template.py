@@ -221,6 +221,7 @@ def featurize_noised_ground_truth_as_template_distogram(
     is_unconditional: bool = True,
     p_condition_per_token: float = 0.7,
     p_provide_inter_molecule_distances: float = 0.0,
+    existing_annotation_to_check: str = "is_input_file_templated",
 ) -> dict[str, Tensor]:
     """Featurize noised ground truth as a template distogram for conditioning.
 
@@ -243,6 +244,9 @@ def featurize_noised_ground_truth_as_template_distogram(
             Probability of conditioning each eligible token. Default: 0.7.
         p_provide_inter_molecule_distances (float, optional):
             Probability of providing inter-molecule (inter-chain) distances. Default: 0.0 (mask all inter-molecule pairs).
+        existing_annotation_to_check (str):
+            If this annotation exists in the AtomArray, we ALWAYS template where it is True.
+            Useful for inference.
 
     Returns:
         dict[str, Tensor]:
@@ -294,13 +298,27 @@ def featurize_noised_ground_truth_as_template_distogram(
         & torch.isfinite(noise).all(dim=-1).numpy()
     )  # [n_token] (bool)
 
+    # Check if existing annotation exists and force templating where it's True
+    if (
+        existing_annotation_to_check
+        and existing_annotation_to_check in atom_array.get_annotation_categories()
+    ):
+        existing_annotation_values = atom_array.get_annotation(
+            existing_annotation_to_check
+        )[center_token_mask]
+        forced_template_mask = np.asarray(existing_annotation_values, dtype=bool)
+    else:
+        forced_template_mask = np.full(_n_token, False, dtype=bool)
+
     # If unconditional, discard all conditioning...
     if is_unconditional:
         token_to_fill_mask = np.full_like(token_to_fill_mask, False)
     else:
         # Probability of masking each token
         _should_apply_condition = np.random.rand(_n_token) < p_condition_per_token
-        token_to_fill_mask = token_to_fill_mask & _should_apply_condition
+        token_to_fill_mask = (
+            token_to_fill_mask & _should_apply_condition
+        ) | forced_template_mask
 
     token_idxs_to_fill = np.where(token_to_fill_mask)[0]  # [n_token_to_fill] (int)
 
@@ -379,6 +397,9 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
             Default is 1.0 (all tokens have conditions).
         p_provide_inter_molecule_distances (float): Probability of providing inter-molecule (inter-chain) distances.
             Default is 0.0 (no inter-molecule distances provided).
+        existing_annotation_to_check (str): Name of an annotation in the AtomArray that,
+            if present and True for a token, will force that token to be templated regardless of other conditions.
+            Default is "is_input_file_templated".
 
     Adds the following features to the `feats` dict:
         - "distogram_condition_noise_scale": Noise scale for each
@@ -399,12 +420,14 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
         allowed_chain_types: list[ChainType] = ChainType.get_all_types(),
         p_condition_per_token: float = 0.7,
         p_provide_inter_molecule_distances: float = 0.0,
+        existing_annotation_to_check: str = "is_input_file_templated",
     ):
         self.distogram_bins = distogram_bins
         self.noise_scale_distribution = noise_scale_distribution
         self.p_provide_inter_molecule_distances = p_provide_inter_molecule_distances
         self.allowed_chain_types = allowed_chain_types
         self.p_condition_per_token = p_condition_per_token
+        self.existing_annotation_to_check = existing_annotation_to_check
 
         if not self.allowed_chain_types:
             logger.warning("No chain types allowed; no conditioning will be given.")
@@ -430,8 +453,9 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
             allowed_chain_types=self.allowed_chain_types,
             distogram_bins=self.distogram_bins,
             p_provide_inter_molecule_distances=self.p_provide_inter_molecule_distances,
-            is_unconditional=data.get("is_unconditional", True),
+            is_unconditional=data.get("is_unconditional", False),
             p_condition_per_token=self.p_condition_per_token,
+            existing_annotation_to_check=self.existing_annotation_to_check,
         )
 
         # Add the template features to the `feats` dict

@@ -21,6 +21,13 @@ class CheckForNaNsInInputs(Transform):
         check_contains_keys(data, ["noise"])
 
     def forward(self, data: dict) -> dict:
+        # During inference, replace coordinates with true noise
+        # TODO: Move elsewhere in pipeline; placing it here is a short-term hack
+        if data.get("is_inference", False):
+            data["coord_atom_lvl_to_be_noised"] = torch.randn_like(
+                data["coord_atom_lvl_to_be_noised"]
+            )
+        
         assert not torch.isnan(
             data["coord_atom_lvl_to_be_noised"]
         ).any(), "NaN found in network input"

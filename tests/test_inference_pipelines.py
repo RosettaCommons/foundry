@@ -5,7 +5,7 @@ from pathlib import Path
 import hydra
 import numpy as np
 import pytest
-from cifutils import parse
+from atomworks.io import parse
 from hydra import compose, initialize
 
 from modelhub.utils.inference import build_file_paths_for_prediction
@@ -42,14 +42,14 @@ def test_build_file_paths_for_prediction(file_path: PathLike, tmp_path: Path):
     "inputs",
     ["tests/data/5vht_from_file.cif"],
 )
-@pytest.mark.parametrize("template_selection_syntax", ["A1-71"])
+@pytest.mark.parametrize("template_selection", ["A"])
 @pytest.mark.parametrize("ground_truth_conformer_selection", ["*/PBF"])
 @pytest.mark.slow
 @pytest.mark.skip(reason="TEST STILL BROKEN")
 def test_inference_engine(
     inference_engine: Path,
     inputs: PathLike,
-    template_selection_syntax: str,
+    template_selection: str,
     ground_truth_conformer_selection: str,
 ):
     # TODO: TEST STILL BROKEN
@@ -83,7 +83,7 @@ def test_inference_engine(
 
     atom_array_templated = inference_engine.prepare_atom_array(
         atom_array,
-        template_selection_syntax=template_selection_syntax,
+        template_selection=template_selection,
         ground_truth_conformer_selection=ground_truth_conformer_selection,
     )
     assert "is_input_file_templated" in atom_array_templated.get_annotation_categories()

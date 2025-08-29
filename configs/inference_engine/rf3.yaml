@@ -19,7 +19,7 @@ solver: "af3"
 # Inference arguments
 early_stopping_plddt_threshold: 0.5
 residue_renaming_dict: null
-template_selection_syntax: null
+template_selection: null
 ground_truth_conformer_selection: null
 seed: null
 skip_existing: false

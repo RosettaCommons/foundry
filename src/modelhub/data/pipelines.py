@@ -240,12 +240,14 @@ def build_af3_transform_pipeline(
             {"is_inference": is_inference, "run_confidence_head": run_confidence_head}
         ),
         # ... unconditional vs. conditional
-        RandomRoute(
-            transforms=[
-                AddData({"is_unconditional": True}),
-                AddData({"is_unconditional": False}),
-            ],
-            probs=[p_unconditional, 1 - p_unconditional],
+        TrainingRoute(
+            RandomRoute(
+                transforms=[
+                    AddData({"is_unconditional": True}),
+                    AddData({"is_unconditional": False}),
+                ],
+                probs=[p_unconditional, 1 - p_unconditional],
+            ),
         ),
         RemoveHydrogens(),
         TrainingRoute(
@@ -347,7 +349,7 @@ def build_af3_transform_pipeline(
         )
 
     transforms += [
-        ApplyFunction(annotate_pre_crop_hash),
+        TrainingRoute(ApplyFunction(annotate_pre_crop_hash)),
         ConditionalRoute(
             condition_func=lambda data: data.get("is_inference", False),
             transform_map={
@@ -356,12 +358,12 @@ def build_af3_transform_pipeline(
                 # Default to Identity during inference (`is_inference == True`)
             },
         ),
-        ApplyFunction(annotate_post_crop_hash),
+        TrainingRoute(ApplyFunction(annotate_post_crop_hash)),
     ]
 
     if mask_crop_edges:
         transforms += [
-            ApplyFunction(set_to_occupancy_0_where_crop_hashes_differ),
+            TrainingRoute(ApplyFunction(set_to_occupancy_0_where_crop_hashes_differ)),
         ]
 
     # +-----------------------------------------------------------+

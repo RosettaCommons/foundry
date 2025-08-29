@@ -19,7 +19,7 @@ For more information, please see our preprint, [Accelerating Biomolecular Modeli
   <img src="docs/_static/prot_dna.png" alt="Protein-DNA complex prediction" width="400">
 </div>
 
-Inference instructions for RF3 are provided [here](src/modelhub/inference_engines/README.md).
+Complete inference instructions for RF3 are provided [here](src/modelhub/inference_engines/README.md).
 
 ## Installation & Usage
 

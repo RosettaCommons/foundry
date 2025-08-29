@@ -1,4 +1,7 @@
 data_5VHT
+#
+_msa_paths_by_chain_id.A   tests/data/msas/5vht_A.a3m
+_msa_paths_by_chain_id.B   tests/data/msas/5vht_A.a3m
 # 
 _entry.id   5VHT 
 # 
@@ -3981,4 +3984,3 @@ _pdbx_struct_assembly_auth_evidence.id                     1
 _pdbx_struct_assembly_auth_evidence.assembly_id            1 
 _pdbx_struct_assembly_auth_evidence.experimental_support   'gel filtration' 
 _pdbx_struct_assembly_auth_evidence.details                ? 
-# 
