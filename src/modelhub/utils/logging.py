@@ -1,3 +1,4 @@
+import logging
 import warnings
 from contextlib import contextmanager
 
@@ -14,6 +15,16 @@ from torch import nn
 from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
+
+
+class CachedDataFilter(logging.Filter):
+    """Filter to suppress atomworks cached data logging messages."""
+
+    def filter(self, record):
+        # Filter out "Cached data not found" messages
+        if "Cached data not found" in record.getMessage():
+            return False
+        return True
 
 
 def silence_warnings():
@@ -56,14 +67,32 @@ def silence_warnings():
 
 
 @contextmanager
-def suppress_warnings():
+def suppress_warnings(is_inference: bool = False):
     """Context manager to suppress specific warnings within its scope.
+
+    Args:
+        is_inference: If True, also suppress inference-specific logging messages
+                     (e.g., atomworks cached data warnings).
 
     Required to suppress warnings within multiprocessing contexts; e.g., `torch.multiprocessing.spawn`.
     """
-    with warnings.catch_warnings():
-        silence_warnings()
-        yield
+    cached_data_filter = None
+
+    try:
+        with warnings.catch_warnings():
+            silence_warnings()
+            if is_inference:
+                # Add filter to suppress cached data messages
+                cached_data_filter = CachedDataFilter()
+                atomworks_ml_logger = logging.getLogger("atomworks.ml")
+                atomworks_ml_logger.addFilter(cached_data_filter)
+
+            yield
+    finally:
+        # Remove the filter
+        if cached_data_filter is not None:
+            atomworks_ml_logger = logging.getLogger("atomworks.ml")
+            atomworks_ml_logger.removeFilter(cached_data_filter)
 
 
 @rank_zero_only

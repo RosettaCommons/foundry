@@ -31,15 +31,15 @@ _config_path = os.path.join(
 )
 def run_inference(cfg: DictConfig) -> None:
     """Execute the specified inference pipeline"""
+
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir = Path(temp_dir)
         temp_dir.mkdir(parents=True, exist_ok=True)
-
         inference_engine = instantiate(
             cfg, temp_dir=temp_dir, _convert_="partial", _recursive_=False
         )
         inference_engine.trainer.fabric.launch()
-        with suppress_warnings():
+        with suppress_warnings(is_inference=True):
             inference_engine.eval()
 
 

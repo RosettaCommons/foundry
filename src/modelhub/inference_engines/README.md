@@ -6,7 +6,9 @@ RF3 is an all-atom biomolecular structure prediction network competitive with le
 
 For more information, please see our preprint, [Accelerating Biomolecular Modeling with AtomWorks and RF3](https://doi.org/10.1101/2025.08.14.670328).
 
-This guide provides instructions on preparing inputs and running inference for RF3. We will continue to update this document in the coming days and weeks, including support for arbitrary atom-level templating and more detailed examples of edge cases such as macrocyclic pepties, covalent modifications, and non-canonical amino acids.
+This guide provides instructions on preparing inputs and running inference for RF3. 
+
+We will continue to update this document in the coming days and weeks, including more detailed examples of edge cases such as macrocyclic pepties, covalent modifications, and non-canonical amino acids.
 
 ## Step 0: Installation and Setup
 ### A. Installation using `uv`
@@ -29,7 +31,7 @@ wget http://files.ipd.uw.edu/pub/rf3/rf3_latest.pt
 rf3 fold tests/data/5vht_from_json.json
 ```
 
-Ensure that a `.score` and a predicted `.cif.gz` are created in the specified directory, without error.
+Ensure that a `.score` and a predicted `.cif.gz` are created in the specified directory, without error. For this example, the chainwise pLDDT and pTMs should all be >0.8; if not, there may be something wrong with the setup.
 
 ## Step 1: Prepare Inputs
 
@@ -85,6 +87,8 @@ Supported input options:
 -   `ccd_code`: If your small molecule is already in the CCD
 -   `path`: If you have a `.sdf` or `.cif` file (including `.cif` files for small molecules)
 
+For a simple example using a pre-computed MSA, look at `tests/data/5vht_from_json.json`.
+
 ## Step 2: Run `rf3 fold`
 
 We can now run inference with:
@@ -100,7 +104,7 @@ For our inference API, we use [hydra](https://hydra.cc/docs/tutorials/basic/your
 
 #### Basic Arguments
 - `inputs` *(required)*: Path to a file (CIF/PDB/JSON) or list of files for prediction; if given a directory, all CIF/PDB files in that directory will be predicted. To specify a list of files/directories, use Hydra's list grammar: `foo="[path_1.cif, path_2.json, path_3.pdb]"`
-- `inference_engine` *(required)*: The inference configuration to use. For example, `rf3`, to use the standard structure prediction model. We will introduce other configurations down-the-line, each with unique use cases.
+- `inference_engine` *(required)*: The inference configuration to use. For example, `rf3`, to use the standard structure prediction model. We will introduce other configurations down-the-line, each with unique use cases. Defaults to `rf3` when using the `rf3 fold` command.
 - `ckpt_path` *(optional)*: Path to checkpoint file. Defaults to the current "best model", which is stored in a symlink in `/net/software`
 - `residue_renaming_dict` *(optional)* Dictionary of residues to rename to avoid CCD clashes, given in Hydra format (e.g., `foo="{'ALA': 'L:1'}`). When parsing files, we use the given residue names to help identify any missing atoms. Thus, if a custom ligand overlaps with a ligand in the CCD, the prediction will be catastrophically wrong. To circumvent this issue, we accept a dictionary of ligands to rename. We suggest renaming all custom ligands to begin with `L:` to avoid all clashes with the CCD. WARNING: This command uses brute-force find a replace; please ensure that there are no other possible matches (e.g., atom names). Additionally, avoid `#` to mitigate possible CIF-parsing errors from PyMol. Defaults to None.
 - `skip_existing` *(optional)*: Whether to skip predictions where appropriately-named output structures already exist in the `out_dir`. Defaults to False (do not skip; overwrite instead).
@@ -115,8 +119,8 @@ For our inference API, we use [hydra](https://hydra.cc/docs/tutorials/basic/your
 - `seed`  *(optional)* Model seed. Running inference multiple times with different model seeds is the best, and most expensive, way to generate output diversity. Defaults to the training seed (usually 42).
 
 #### Advanced structural control arguments
-- `template_selection_syntax` *(optional)*: Coming soon.
-- `ground_truth_conformer_selection` *(optional)*: Selection syntax for residues that should use ground truth conformers instead of generated ones. Uses AtomSelection format (e.g., "*/HEM" for all heme residues, "A1-10" for residues 1-10 in chain A, "*/ATP" for all ATP molecules). If None, no residues will use ground truth conformers. This is useful for keeping known ligand conformations while allowing the model to predict protein structure around them.
+- `ground_truth_conformer_selection` *(optional)*: Selection syntax for residues that should use ground truth conformers instead of generated ones. Uses `AtomSelection` format (e.g., "*/HEM" for all heme residues, "A1-10" for residues 1-10 in chain A, "*/ATP" for all ATP molecules). If None, no residues will use ground truth conformers. This is useful for keeping known ligand conformations while allowing the model to predict protein structure around them. For example, if chains `C` and `D` are two difficult ligands that are not predicted correctly unconditionally, we could run `rf3 fold ... ground_truth_conformer_selection="[C,D]"` to force a particular conformation (we would also need to provide these chains through a CIF, SDF, or MOL file)
+- `template_selection` *(optional)*: Selection syntax to provide token-level templates (for both polymers and non-polymers). Uses `AtomSelection` format. Similar to traditional homology-style templates, but also can be applied to small molecules (less rigidly adhered to than the `ground_truth_conformer_selection` approach)
 
 #### Arguments to control output dumping
 - `out_dir` *(optional)*: Where to save predicted structures. The output files will be named the same as the input structures, or use the `name` field in the specification, if present. Defaults to the current directory (`./`).
@@ -133,19 +137,19 @@ Example commands:
 
 ### Using a JSON with multiple examples to predict
 ```bash
-rf3 fold inference_engine=rf3 inputs='tests/data/multiple_examples_from_json.json'
+rf3 fold inputs='tests/data/multiple_examples_from_json.json'
 ```
 
 ### Using a PDB, specifying a covalent modification in the `CONECT` record
 See line `1672` for the manually-added bond; note as well the renaming of the ligand. Such renaming could be accomplished *a-priori* by modifying the file (as in this example), or with the `rename_residues` flag (see below).
 ```bash
-rf3 fold inference_engine=rf3 inputs='tests/data/example_from_pdb_with_inter_chain_bond.pdb'
+rf3 fold inputs='tests/data/example_from_pdb_with_inter_chain_bond.pdb'
 ```
 
 ### Using a PDB from MPNN, renaming custom ligand that overlaps with ligand names in the CCD 
 Note that in this PDB file, the ligand "HGS" is a custom ligand, whose three-letter code overlaps with a real CCD ligand. Thus, we must rename in order to avoid errors.
 ```bash
-rf3 fold inference_engine=rf3 inputs='tests/data/example_pdb_with_clashing_ligand_name.pdb' residue_renaming_dict="{HGS:L:1}"
+rf3 fold inputs='tests/data/example_pdb_with_clashing_ligand_name.pdb' residue_renaming_dict="{HGS:L:1}"
 ```
 
 ## Chirality
