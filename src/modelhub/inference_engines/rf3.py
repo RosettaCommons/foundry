@@ -342,11 +342,11 @@ class RF3InferenceEngine(InferenceEngine):
         Applies template selection, ground truth conformer selection, and other preprocessing.
         By default, we set NaN coordinates to -1 to avoid unexpected behavior in the pipeline.
         """
-        # atom_array = self.apply_template_selection(atom_array, template_selection)
-        # atom_array = self.apply_ground_truth_conformer_policy(
-        #     atom_array,
-        #     ground_truth_conformer_selection=ground_truth_conformer_selection,
-        # )
+        atom_array = self.apply_template_selection(atom_array, template_selection)
+        atom_array = self.apply_ground_truth_conformer_policy(
+            atom_array,
+            ground_truth_conformer_selection=ground_truth_conformer_selection,
+        )
 
         # HACK: Set NaN coordinates to -1 to avoid unexpected behavior in the pipeline
         # TODO: Hunt down why NaN coordinates lead to strange behavior
