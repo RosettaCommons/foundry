@@ -350,11 +350,8 @@ class RF3InferenceEngine(InferenceEngine):
 
         # HACK: Set NaN coordinates to -1 to avoid unexpected behavior in the pipeline
         # TODO: Hunt down why NaN coordinates lead to strange behavior
+        # UPDATE: This may no longer be needed, but keeping for the moment due to paranoia
         atom_array.coord[np.isnan(atom_array.coord)] = -1
-        # Fill all coordinates with nan
-        atom_array.coord[:] = -1
-        atom_array.occupancy[:] = 1.0
-        atom_array.b_factor[:] = 1.0
 
         return atom_array
 
