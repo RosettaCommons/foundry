@@ -6,7 +6,10 @@ All models within `ModelForge` share a common training harness and integrate wit
 
 For more information, please see our preprint, [Accelerating Biomolecular Modeling with AtomWorks and RF3](https://doi.org/10.1101/2025.08.14.670328).
 
+> **⚠️ Notice:** We fixed an inference bug on 8/29 that arose during codebase migration and impacted predictions from JSON and from mmCIF/PDB; the issue is now resolved but for the purposes of model benchmarking predictions should be re-run.
+
 > **⚠️ Notice:** We are currently finalizing some cleanup work within our repositories. Please expect the APIs (e.g., function and class names, inputs and outputs) to stabilize within the next two weeks. Thank you for your patience!
+
 > **⚠️ Notice:** Training code coming very soon, with documentation on how to fine-tune on new datasets! 
 
 ## Supported Networks
