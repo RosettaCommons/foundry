@@ -6,10 +6,10 @@ import hydra
 import numpy as np
 import pandas as pd
 import torch
+from atomworks.common import as_list
 from atomworks.enums import GroundTruthConformerPolicy
 from atomworks.io import parse
 from atomworks.io.utils.selection import AtomSelection
-from atomworks.ml.common import as_list
 from biotite.structure import AtomArray
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf

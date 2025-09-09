@@ -3,7 +3,7 @@ from functools import partial
 import numpy as np
 import pytest
 import torch
-from cifutils.constants import (
+from atomworks.constants import (
     STANDARD_AA,
     STANDARD_DNA,
     STANDARD_RNA,

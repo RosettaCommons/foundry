@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from atomworks.common import exists
 from atomworks.enums import ChainType
-from atomworks.ml.common import exists
 from atomworks.ml.datasets import logger
 from atomworks.ml.datasets.datasets import StructuralDatasetWrapper
 from atomworks.ml.datasets.parsers import (

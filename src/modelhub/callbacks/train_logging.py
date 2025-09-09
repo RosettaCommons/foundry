@@ -2,7 +2,7 @@ import time
 from collections import defaultdict
 
 import pandas as pd
-from atomworks.ml.common import parse_example_id
+from atomworks.ml.example_id import parse_example_id
 from beartype.typing import Any
 from lightning.fabric.wrappers import (
     _FabricOptimizer,

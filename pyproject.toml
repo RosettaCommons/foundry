@@ -26,7 +26,6 @@ dependencies = [
     "torch>=2.2.0,<3",
     "lightning>=2.4.0,<2.5",
     "einops>=0.8.0,<1",
-    "einx>=0.1.0,<1",
     "opt_einsum>=3.4.0,<4",
     "dm-tree>=0.1.6,<1",
     # ... kernels (Linux only)
@@ -43,13 +42,18 @@ dependencies = [
     # ... typing & documentation
     "jaxtyping>=0.2.17,<1",
     "beartype>=0.18.0,<1",
-
     # ... dataloading
     "atomworks==1.0.0",
 ]
 
-
 [project.optional-dependencies]
+cuda = [
+    # ... kernels
+    "cuequivariance_ops_cu12>=0.5.0",
+    "cuequivariance_ops_torch_cu12>=0.5.0",
+    "cuequivariance_torch>=0.5.0",
+]
+
 dev = [
     # Linters & formatters
     "ruff==0.8.3",

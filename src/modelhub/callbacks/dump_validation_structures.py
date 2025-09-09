@@ -1,7 +1,7 @@
 from os import PathLike
 from pathlib import Path
 
-from atomworks.ml.common import parse_example_id
+from atomworks.ml.example_id import parse_example_id
 from beartype.typing import Any
 
 from modelhub.callbacks.base import BaseCallback

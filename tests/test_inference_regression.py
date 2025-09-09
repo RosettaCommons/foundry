@@ -69,7 +69,7 @@ def test_inference_regression():
         cfg = compose(
             config_name="inference",
             overrides=[
-                "inference_engine=af3",
+                "inference_engine=rf3",
                 f"inputs={inputs}",
                 "annotate_b_factor_with_plddt=true",
                 "one_model_per_file=false",

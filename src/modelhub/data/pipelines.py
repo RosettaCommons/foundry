@@ -2,14 +2,14 @@ from os import PathLike
 from pathlib import Path
 
 import numpy as np
-from atomworks.enums import ChainType
-from atomworks.io.constants import (
+from atomworks.common import exists
+from atomworks.constants import (
     AF3_EXCLUDED_LIGANDS,
     STANDARD_AA,
     STANDARD_DNA,
     STANDARD_RNA,
 )
-from atomworks.ml.common import exists
+from atomworks.enums import ChainType
 from atomworks.ml.encoding_definitions import RF2AA_ATOM36_ENCODING, AF3SequenceEncoding
 from atomworks.ml.transforms.af3_reference_molecule import (
     GetAF3ReferenceMoleculeFeatures,
