@@ -2,14 +2,16 @@ from os import PathLike
 from pathlib import Path
 
 import numpy as np
-from atomworks.enums import ChainType
-from atomworks.io.constants import (
+from omegaconf import DictConfig
+
+from atomworks.common import exists
+from atomworks.constants import (
     AF3_EXCLUDED_LIGANDS,
     STANDARD_AA,
     STANDARD_DNA,
     STANDARD_RNA,
 )
-from atomworks.ml.common import exists
+from atomworks.enums import ChainType
 from atomworks.ml.encoding_definitions import RF2AA_ATOM36_ENCODING, AF3SequenceEncoding
 from atomworks.ml.transforms.af3_reference_molecule import (
     GetAF3ReferenceMoleculeFeatures,
@@ -97,8 +99,6 @@ from atomworks.ml.transforms.msa.msa import (
 from atomworks.ml.transforms.random_atomize_residues import RandomAtomizeResidues
 from atomworks.ml.transforms.rdkit_utils import GetRDKitChiralCenters
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
-from omegaconf import DictConfig
-
 from modelhub.data.extra_xforms import CheckForNaNsInInputs
 from modelhub.data.pipeline_utils import (
     annotate_post_crop_hash,

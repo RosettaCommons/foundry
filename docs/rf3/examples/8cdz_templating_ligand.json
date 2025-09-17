@@ -1,0 +1,12 @@
+{
+    "name": "8cdz_templating_ligand",
+    "components": [
+        {
+            "path": "docs/rf3/examples/8cdz.cif"
+        }
+    ],
+    "ground_truth_conformer_selection": ["E"],
+    "msa_paths": {
+        "A": "docs/rf3/examples/msas/8cdz_A.a3m.gz"
+    }
+}

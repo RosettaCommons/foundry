@@ -24,6 +24,7 @@ ground_truth_conformer_selection: null
 seed: null
 skip_existing: false
 print_config: true
+raise_if_missing_msa_for_protein_of_length_n: null
 
 # I/O
 dump_predictions: true

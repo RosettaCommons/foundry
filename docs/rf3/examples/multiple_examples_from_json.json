@@ -1,0 +1,26 @@
+[
+    {
+        "name": "multiple_examples_from_json(1)",
+        "components": [
+            {
+                "seq": "MNAKEIVVHALRLLENGDARGWCDLFHPEGVLEYPYPPPGYKTRFEGRETIWAHMRLFPEYMTIRFTDVQFYETADPDLAIGEFHGDGVHTVSGGKLAADYISVLRTRDGQILLYRLFFNPLRVLEPLGLEHHHHHH",
+                "chain_id": "A"
+            },
+            {
+                "smiles": "O=C1OCC(=C1)C5C4(C(O)CC3C(CCC2CC(O)CCC23C)C4(O)CC5)C"
+            }
+        ]
+    },
+    {
+        "name": "multiple_examples_from_json(2)",
+        "components": [
+            {
+                "seq": "GSGVSLGQALLILSVAALLGTTVEEAVKRALWLKTKLGVSLEQAARTLSVAAYLGTTVEEAVKRALKLKTKLGVSLEQALLILFAAAALGTTVEEAVKRALKLKTKLGVSLEQALLILWTAVELGTTVEEAVKRALKLKTKLGVSLGQAQAILVVAAELGTTVEEAVYRALKLKTKLGVSLGQALLILEVAAKLGTTVEEAVKRALKLTTKLG",
+                "chain_id": "A"
+            },
+            {
+                "ccd_code": "MG"
+            }
+        ]
+    }
+]

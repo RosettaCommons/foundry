@@ -6,9 +6,10 @@ Documentation on custom resolvers:
 
 import importlib
 
-from atomworks.enums import ChainType, ChainTypeInfo
 from beartype.typing import Any
 from omegaconf import OmegaConf
+
+from atomworks.enums import ChainType, ChainTypeInfo
 
 from .common import run_once
 

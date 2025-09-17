@@ -1,14 +1,21 @@
 import json
+import logging
 import pickle
 from os import PathLike
 from pathlib import Path
+from typing import Iterable
 
+import numpy as np
+from biotite.structure import AtomArray
+
+from atomworks.common import as_list
+from atomworks.enums import GroundTruthConformerPolicy
 from atomworks.io.tools.inference import (
     build_msa_paths_by_chain_id_from_component_list,
     components_to_atom_array,
 )
 from atomworks.io.utils.io_utils import to_cif_file
-
+from atomworks.io.utils.selection import AtomSelectionStack
 from modelhub.utils.io import (
     CIF_LIKE_EXTENSIONS,
     DICTIONARY_LIKE_EXTENSIONS,
@@ -45,18 +52,32 @@ def _spoof_cif_from_dictionary(item: dict, temp_dir: PathLike) -> Path:
     atom_array, component_list = components_to_atom_array(
         item["components"], return_components=True, bonds=item.get("bonds", None)
     )
+
     msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(
         component_list
     )
+
+    if item.get("msa_paths") and isinstance(item.get("msa_paths"), dict):
+        for chain_id, msa_path in item.get("msa_paths").items():
+            msa_paths_by_chain_id[chain_id] = msa_path
+
+    extra_categories = {}
+    if item.get("template_selection") or item.get("ground_truth_conformer_selection"):
+        extra_categories["templating"] = {
+            "template_selection": item.get("template_selection"),
+            "ground_truth_conformer_selection": item.get(
+                "ground_truth_conformer_selection"
+            ),
+        }
+    if msa_paths_by_chain_id:
+        extra_categories["msa_paths_by_chain_id"] = msa_paths_by_chain_id
 
     # Create a temporary CIF file from the JSON data
     cif_path = Path(temp_dir) / f"{item['name']}.cif"
     save_path = to_cif_file(
         atom_array,
         cif_path,
-        extra_categories={"msa_paths_by_chain_id": msa_paths_by_chain_id}
-        if msa_paths_by_chain_id
-        else None,
+        extra_categories=extra_categories,
         file_type="cif",  # Not zipped for efficiency (as it's a temporary directory anyways)
     )
 
@@ -145,3 +166,161 @@ def build_file_paths_for_prediction(
         ]
 
     return paths_to_cif_like_files
+
+
+def apply_atom_selection_mask(
+    atom_array: AtomArray, selection_list: Iterable[str]
+) -> np.ndarray:
+    """Return a combined boolean mask for a list of AtomSelectionStack queries.
+
+    Args:
+        atom_array: AtomArray to select from.
+        selection_list: Iterable of AtomSelectionStack queries (e.g., "*/LIG", "A1-10").
+
+    Returns:
+        A boolean numpy array of shape (num_atoms,) where True indicates a selected atom.
+    """
+    selection_mask = np.zeros(len(atom_array), dtype=bool)
+    for selection in selection_list:
+        if not selection:
+            continue
+        try:
+            selector = AtomSelectionStack.from_query(selection)
+            mask = selector.get_mask(atom_array)
+            selection_mask = selection_mask | mask
+        except Exception as exc:  # Defensive: keep going if one selection fails
+            logging.warning(
+                "Failed to parse selection '%s': %s. Skipping.", selection, exc
+            )
+    return selection_mask
+
+
+def apply_template_selection(
+    atom_array: AtomArray, template_selection: list[str] | str | None
+) -> AtomArray:
+    """Apply token-level template selection to `atom_array` with OR semantics.
+
+    If the `is_input_file_templated` annotation already exists, this function ORs
+    the new selection with the existing annotation. Otherwise, it creates it.
+
+    Args:
+        atom_array: AtomArray to annotate.
+        template_selection: Selection string(s). Single strings are converted to lists. If None/empty, no-op.
+
+    Returns:
+        The same AtomArray with `is_input_file_templated` updated.
+    """
+    # Convert to list if needed
+    template_selection_list = as_list(template_selection) if template_selection else []
+
+    if not template_selection_list:
+        # Ensure the annotation exists even if no selection provided
+        if "is_input_file_templated" not in atom_array.get_annotation_categories():
+            atom_array.set_annotation(
+                "is_input_file_templated", np.zeros(len(atom_array), dtype=bool)
+            )
+        return atom_array
+
+    # Build new mask
+    selection_mask = apply_atom_selection_mask(atom_array, template_selection_list)
+    logging.info(
+        "Selected %d atoms for token-level templating with %d syntaxes",
+        int(np.sum(selection_mask)),
+        len([s for s in template_selection_list if s]),
+    )
+
+    # OR with existing annotation if present
+    if "is_input_file_templated" in atom_array.get_annotation_categories():
+        existing = atom_array.get_annotation("is_input_file_templated").astype(bool)
+        selection_mask = existing | selection_mask
+    atom_array.set_annotation("is_input_file_templated", selection_mask)
+    return atom_array
+
+
+def apply_ground_truth_conformer_selection(
+    atom_array: AtomArray, ground_truth_conformer_selection: list[str] | str | None
+) -> AtomArray:
+    """Apply ground-truth conformer policy selection with union semantics.
+
+    Behavior:
+    - Creates `ground_truth_conformer_policy` if missing and initializes to IGNORE.
+    - For selected atoms, sets policy to at least ADD without downgrading any
+      existing policy (e.g., preserves REPLACE if present).
+
+    Args:
+        atom_array: AtomArray to annotate.
+        ground_truth_conformer_selection: Selection string(s). Single strings are converted to lists. If None/empty, no-op.
+
+    Returns:
+        The same AtomArray with `ground_truth_conformer_policy` updated.
+    """
+    # Convert to list if needed
+    ground_truth_conformer_selection_list = (
+        as_list(ground_truth_conformer_selection)
+        if ground_truth_conformer_selection
+        else []
+    )
+
+    if not ground_truth_conformer_selection_list:
+        if (
+            "ground_truth_conformer_policy"
+            not in atom_array.get_annotation_categories()
+        ):
+            atom_array.set_annotation(
+                "ground_truth_conformer_policy",
+                np.full(
+                    len(atom_array), GroundTruthConformerPolicy.IGNORE, dtype=np.int8
+                ),
+            )
+        return atom_array
+
+    # Ensure annotation exists
+    if "ground_truth_conformer_policy" not in atom_array.get_annotation_categories():
+        atom_array.set_annotation(
+            "ground_truth_conformer_policy",
+            np.full(len(atom_array), GroundTruthConformerPolicy.IGNORE, dtype=np.int8),
+        )
+
+    selection_mask = apply_atom_selection_mask(
+        atom_array, ground_truth_conformer_selection_list
+    )
+    logging.info(
+        "Selected %d atoms for ground-truth conformer policy with %d syntaxes",
+        int(np.sum(selection_mask)),
+        len([s for s in ground_truth_conformer_selection_list if s]),
+    )
+
+    existing = atom_array.get_annotation("ground_truth_conformer_policy")
+    existing[selection_mask] = GroundTruthConformerPolicy.ADD
+    atom_array.set_annotation("ground_truth_conformer_policy", existing)
+
+    return atom_array
+
+
+def apply_conformer_and_template_selections(
+    atom_array: AtomArray,
+    template_selection: list[str] | str | None = None,
+    ground_truth_conformer_selection: list[str] | str | None = None,
+) -> AtomArray:
+    """Apply template and conformer selections and basic preprocessing.
+
+    This function replaces the former class method `prepare_atom_array`.
+
+    - Applies `apply_template_selection` then `apply_ground_truth_conformer_selection`.
+    - Replaces NaN coordinates with -1 for safety.
+
+    Args:
+        atom_array: AtomArray to prepare.
+        template_selection: Template selection string(s). Single strings are converted to lists.
+        ground_truth_conformer_selection: Ground-truth conformer selection string(s). Single strings are converted to lists.
+
+    Returns:
+        The same AtomArray with `is_input_file_templated` and `ground_truth_conformer_policy` updated.
+    """
+    atom_array = apply_template_selection(atom_array, template_selection)
+    atom_array = apply_ground_truth_conformer_selection(
+        atom_array, ground_truth_conformer_selection
+    )
+    # Safety: avoid unexpected behavior downstream
+    atom_array.coord[np.isnan(atom_array.coord)] = -1
+    return atom_array
