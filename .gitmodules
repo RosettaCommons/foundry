@@ -1,6 +1,0 @@
-[submodule "lib/atomworks-dev"]
-	path = lib/atomworks-dev
-	url = https://github.com/baker-laboratory/atomworks-dev.git
-[submodule "atomworks"]
-	path = atomworks
-	url = git@github.com:RosettaCommons/atomworks.git
