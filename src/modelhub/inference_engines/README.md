@@ -67,7 +67,7 @@ For this example, the pTM in the `metrics.csv` should be `>0.8` (even without an
 
 RF3 supports `.a3m` and `.fasta` files as input MSA formats; `.a3m` is recommended. We do not at the moment support pre-paired MSAs (we will pair on-the-fly) or on-the-fly MSA computation, but both are on the roadmap. Please raise an issue if these limitations are critical for your project and we can prioritize accordingly.
 
-📝 **Example JSON configuration** (working example found at `docs/rf3/examples/3en2_from_json_with_msa.json`):
+📝 **Example JSON configuration** (full example found at `docs/rf3/examples/3en2_from_json_with_msa.json`):
 
 ```json
 {
@@ -93,7 +93,7 @@ rf3 fold inputs='docs/rf3/examples/3en2_from_json_with_msa.json'
 If performing inference from a prepared `.cif` file, MSAs can also be specified directly as a category within the raw CIF data.
 We will automatically extract the correct MSA paths during parsing.
 
-📝 **Example CIF header** (working example found at `docs/rf3/examples/3en2_from_file.cif`):
+📝 **Example CIF header** (full example found at `docs/rf3/examples/3en2_from_file.cif`):
 ```cif
 data_3EN2
 #
@@ -112,7 +112,7 @@ rf3 fold inputs='docs/rf3/3en2_from_file.cif
 > Without an MSA and using default settings, the above examples will trigger "early stopping." This means that if the model determines early on that a correct prediction is unlikely, it will stop computation and only output a `metrics.csv` and `.score` file to save compute resources. You can adjust this behavior using the `early_stopping_plddt_threshold` argument (see below). In our group, we find this argument can save wasted compute on erroneous inputs.
 
 > [!TIP]
-> To ensure that a provided MSA is loaded correctly, you may use the `raise_if_missing_msa_for_protein_of_length_n` command-line argument. For example, `rf3 fold inputs='docs/rf3/examples/3en2_from_json_with_msa.json raise_if_missing_msa_for_protein_of_length_n=10` would raise an error if there were any proteins >=10 residues without compatible MSAs.
+> To ensure that a provided MSA is loaded correctly, you may use the `raise_if_missing_msa_for_protein_of_length_n` command-line argument. For example, `rf3 fold inputs='docs/rf3/examples/3en2_from_json_with_msa.json' raise_if_missing_msa_for_protein_of_length_n=10` would raise an error if there were any proteins >=10 residues without compatible MSAs.
 
 > [!TIP]
 > For non-canonical amino acids, most MSA generation algorithms substitute `X` (unknown residue)! Ensure your MSAs adhere to this convention.
@@ -138,7 +138,7 @@ We will automatically distribute predictions across GPU's if running in a multi-
 
 ### 1️⃣ **Single JSON with Multiple Examples**
 
-📝 **Example JSON configuration** (working example found at `docs/rf3/examples/multiple_example_from_json.json`)
+📝 **Example JSON configuration** (full example found at `docs/rf3/examples/multiple_example_from_json.json`)
 
 ```json
 [
@@ -221,7 +221,7 @@ For convenience, we also support a `json` API analogous to that implemented by A
 > [!TIP]
 > **Performance Tip**: For small molecules, a general rule-of-thumb is that performance is best when using `CCD` codes directly, followed by `cif`/`sdf` files, and finally SMILES.
 
-📝 **Example JSON configuration with arbitrary biomolecules** (working example found at `docs/rf3/examples/7o1r_from_json.json`):
+📝 **Example JSON configuration with arbitrary biomolecules** (full example found at `docs/rf3/examples/7o1r_from_json.json`):
 ```json
 [
     {
@@ -292,7 +292,7 @@ Such `.cif` files complete with appropriate bonds can be composed with AtomWorks
 
 If you would prefer to use the JSON API, bonds can be explicitly given using PyMol-like strings of the form `chain_id/res_name/res_id/atom_name`. You will need to know the specific chain ID, residue name, residue ID, and atom name between the relevant pairs of atoms to unambiguously specify the bond.
 
-📝 **Example JSON configuration with covalent modifcations** (working example found at `docs/rf3/examples/7o1r_from_json.json`):
+📝 **Example JSON configuration with covalent modifcations** (full example found at `docs/rf3/examples/7o1r_from_json.json`):
 ```json
 [
     {
@@ -448,7 +448,7 @@ RF3 uses AtomWorks' flexible `AtomSelectionStack` query syntax for specifying st
 
 It is often helpful to template one or multiple polymer chains while allowing the other chain(s) to fold unconstrained. We demonstrate with an nanobody-antigen use case below how to apply templates.
 
-📝 **Example JSON configuration templating the antigen and the nanobody framework** (working example found at `docs/rf3/examples/7xli_template_antigen_and_framework.json`):
+📝 **Example JSON configuration templating the antigen and the nanobody framework** (full example found at `docs/rf3/examples/7xli_template_antigen_and_framework.json`):
 ```json
 [
     {
@@ -479,20 +479,29 @@ You may also specify templating directly via the CLI using `template_selection="
 
 #### Templating a Small Molecule
 
-We find that enforcing a particular small molecule conformation has various applications within fixed-ligand protein docking, enzyme activity filtering, and other biologically relevant tasks. RF3 natively enables encouraging a particular small molecule conformations via the ground truth reference conformer track. For the moment, such an approach is only effective if we want to template the *entire* small molecule. Partial templating of small molecules is still possible via the `template_selection` API described earlier rather than the `ground_truth_conformer_selection` track.
+We find that enforcing a particular small molecule conformation has various applications within fixed-ligand protein docking, enzyme activity filtering, and other biologically relevant tasks. RF3 natively enables encouraging a particular small molecule conformations via both the ground truth reference conformer track and the template selection track. 
 
-📝 **Example JSON configuration templating a small molecule** (working example found at `docs/rf3/examples/8cdz_templating_ligand.json`):
+For the moment, the ground truth conformer track is only effective if we want to template the *entire* small molecule. Partial templating of small molecules is still possible via the `template_selection` approach. We encourage exploration of both templating techniques to find what combination(s) are most effective for a given problem. Below we provide both, which represents the strongest possible conditioning.
+
+📝 **Example JSON configuration templating a small molecule and the corresponding protein** (full example found at `docs/rf3/examples/1eiz_template_ligand_and_protein.json`):
 ```json
-{
-    "name": "8cdz_templating_ligand",
-    "components": [
-        {
-            "path": "docs/rf3/examples/8cdz.cif"
-        }
-    ],
-    "ground_truth_conformer_selection": ["E"]
-}
+[
+    {
+        "name": "9dfn_template_ligand_and_protein",
+        "components": [
+            {
+                "path": "docs/rf3/examples/9dfn.cif"
+            }
+        ],
+        "template_selection": ["A", "C", "D"],
+        "ground_truth_conformer_selection": ["C", "D"]
+
+    }
+]
 ```
+
+> [!NOTE]
+> We template the protein above to avoid providing an MSA
 
 🚀 **Run the example:**
 
@@ -500,9 +509,7 @@ We find that enforcing a particular small molecule conformation has various appl
 rf3 fold inputs='docs/rf3/examples/8cdz_templating_ligand.json'
 ```
 
-You may also specify the ground truth conformer selection directly via the CLI, e.g., using `ground_truth_conformer_selection="[E]`
-
-*Content coming soon...*
+You may also specify the ground truth conformer selection directly via the CLI, e.g., using `ground_truth_conformer_selection="[E]"`
 
 #### Templating an Interface
 

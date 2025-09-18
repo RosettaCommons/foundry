@@ -5,11 +5,11 @@ from pathlib import Path
 import hydra
 import pandas as pd
 import torch
+from atomworks.io import parse
+from atomworks.io.transforms.categories import category_to_dict
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
-from atomworks.io import parse
-from atomworks.io.transforms.categories import category_to_dict
 from modelhub.inference_engines.base import InferenceEngine
 from modelhub.model.RF3 import ShouldEarlyStopFn
 from modelhub.utils.datasets import (
@@ -342,17 +342,28 @@ class RF3InferenceEngine(InferenceEngine):
                 else out["asym_unit"][0]
             )
 
-            # ... extract temlate information from the CIF file
-            templating_from_cif = category_to_dict(out["cif_block"], "templating")
+            # ... extract template information from the CIF file, if present
+            template_selection_from_CIF = (
+                category_to_dict(out["cif_block"], "template_selection")
+                if "cif_block" in out
+                else {}
+            )
+            ground_truth_conformer_selection_from_CIF = (
+                category_to_dict(out["cif_block"], "ground_truth_conformer_selection")
+                if "cif_block" in out
+                else {}
+            )
 
             # First, apply the template selection from the CIF file
             atom_array = apply_conformer_and_template_selections(
                 atom_array,
                 template_selection=list(
-                    templating_from_cif.get("template_selection", [])
+                    template_selection_from_CIF.get("template_selection", [])
                 ),
                 ground_truth_conformer_selection=list(
-                    templating_from_cif.get("ground_truth_conformer_selection", [])
+                    ground_truth_conformer_selection_from_CIF.get(
+                        "ground_truth_conformer_selection", []
+                    )
                 ),
             )
 

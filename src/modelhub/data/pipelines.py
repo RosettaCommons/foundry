@@ -2,8 +2,6 @@ from os import PathLike
 from pathlib import Path
 
 import numpy as np
-from omegaconf import DictConfig
-
 from atomworks.common import exists
 from atomworks.constants import (
     AF3_EXCLUDED_LIGANDS,
@@ -99,6 +97,8 @@ from atomworks.ml.transforms.msa.msa import (
 from atomworks.ml.transforms.random_atomize_residues import RandomAtomizeResidues
 from atomworks.ml.transforms.rdkit_utils import GetRDKitChiralCenters
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
+from omegaconf import DictConfig
+
 from modelhub.data.extra_xforms import CheckForNaNsInInputs
 from modelhub.data.pipeline_utils import (
     annotate_post_crop_hash,
@@ -272,7 +272,7 @@ def build_af3_transform_pipeline(
         TrainingRoute(
             SetOccToZeroOnBfactor(b_factor_min, b_factor_max),
         ),
-        RemoveUnresolvedPNUnits(),
+        TrainingRoute(RemoveUnresolvedPNUnits()),
         RemovePolymersWithTooFewResolvedResidues(min_residues=4),
         MaskPolymerResiduesWithUnresolvedFrameAtoms(),
         ConditionalRoute(

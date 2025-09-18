@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Iterable
 
 import numpy as np
-from biotite.structure import AtomArray
-
 from atomworks.common import as_list
 from atomworks.enums import GroundTruthConformerPolicy
 from atomworks.io.tools.inference import (
@@ -16,6 +14,8 @@ from atomworks.io.tools.inference import (
 )
 from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.io.utils.selection import AtomSelectionStack
+from biotite.structure import AtomArray
+
 from modelhub.utils.io import (
     CIF_LIKE_EXTENSIONS,
     DICTIONARY_LIKE_EXTENSIONS,
@@ -62,13 +62,17 @@ def _spoof_cif_from_dictionary(item: dict, temp_dir: PathLike) -> Path:
             msa_paths_by_chain_id[chain_id] = msa_path
 
     extra_categories = {}
-    if item.get("template_selection") or item.get("ground_truth_conformer_selection"):
-        extra_categories["templating"] = {
+    if item.get("template_selection"):
+        extra_categories["template_selection"] = {
             "template_selection": item.get("template_selection"),
+        }
+    if item.get("ground_truth_conformer_selection"):
+        extra_categories["ground_truth_conformer_selection"] = {
             "ground_truth_conformer_selection": item.get(
                 "ground_truth_conformer_selection"
             ),
         }
+
     if msa_paths_by_chain_id:
         extra_categories["msa_paths_by_chain_id"] = msa_paths_by_chain_id
 

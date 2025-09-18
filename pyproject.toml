@@ -45,7 +45,7 @@ dependencies = [
     "beartype>=0.18.0,<1",
 
     # ... dataloading
-    "atomworks==1.0.0",
+    "atomworks==1.0.2"
 ]
 
 
