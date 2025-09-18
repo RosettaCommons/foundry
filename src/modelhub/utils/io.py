@@ -4,10 +4,10 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from atomworks.io.utils.io_utils import to_cif_file
 from beartype.typing import Literal
 from biotite.structure import AtomArray, AtomArrayStack, stack
 
+from atomworks.io.utils.io_utils import to_cif_file
 from modelhub.alignment import weighted_rigid_align
 from modelhub.utils.ddp import RankedLogger
 

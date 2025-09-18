@@ -1,0 +1,14 @@
+[
+    {
+        "name": "7xli_template_antigen",
+        "components": [
+            {
+                "path": "docs/rf3/examples/templates/7xli_chain_A.cif"
+            },
+            {
+                "path": "docs/rf3/examples/templates/7xli_chain_B.cif"
+            }
+        ],
+        "template_selection": ["A", "B/*/1-42", "B/*/49-63", "B/*/71-102", "B/*/108-125"]
+    }
+]

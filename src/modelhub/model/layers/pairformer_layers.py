@@ -39,7 +39,7 @@ class AtomAttentionEncoderPairformer(nn.Module):
         atom_1d_features,
         c_atom_1d_features,
         atom_transformer,
-        use_inv_dist_squared,
+        use_inv_dist_squared: bool = False,  # HACK: For 9/21 checkpoint, default to False (as this argument was not present in the checkpoint config)
         use_atom_level_embedding: bool = False,
         atom_level_embedding_dim: int = 384,
     ):
@@ -774,6 +774,7 @@ class RF3TemplateEmbedder(nn.Module):
         c_z,
         c,
         p_drop,
+        use_fourier_encoding: bool = False,  # HACK: Unused, kept for backwards compatibility with 9/21 checkpoint
     ):
         super().__init__()
         self.c = c

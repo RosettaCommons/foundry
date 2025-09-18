@@ -6,15 +6,16 @@ All models within `ModelForge` share a common training harness and integrate wit
 
 For more information, please see our preprint, [Accelerating Biomolecular Modeling with AtomWorks and RF3](https://doi.org/10.1101/2025.08.14.670328).
 
-> **⚠️ Notice:** We fixed an inference bug on 8/29 that arose during codebase migration and impacted predictions from JSON and from mmCIF/PDB; the issue is now resolved but for the purposes of model benchmarking predictions should be re-run.
+> [!WARNING]
+> We fixed an inference bug on 8/29 that arose during codebase migration and impacted predictions from JSON and from mmCIF/PDB; the issue is now resolved but for the purposes of model benchmarking predictions should be re-run.
 
-> **⚠️ Notice:** We are currently finalizing some cleanup work within our repositories. Please expect the APIs (e.g., function and class names, inputs and outputs) to stabilize within the next two weeks. Thank you for your patience!
+> [!IMPORTANT]
+> We are currently finalizing some cleanup work within our repositories. Please expect the APIs (e.g., function and class names, inputs and outputs) to stabilize within the next two weeks. Thank you for your patience!
 
-> **⚠️ Notice:** Training code coming very soon, with documentation on how to fine-tune on new datasets! 
+> [!NOTE]
+> Training code coming very soon, with documentation on how to fine-tune on new datasets! 
 
-## Supported Networks
-
-### RosettaFold3 (RF3)
+## RosettaFold3 (RF3)
 
 [RF3](https://doi.org/10.1101/2025.08.14.670328) is a structure prediction neural network that narrows the gap between closed-source AF-3 and open-source alternatives.
 
@@ -22,15 +23,16 @@ For more information, please see our preprint, [Accelerating Biomolecular Modeli
   <img src="docs/_static/prot_dna.png" alt="Protein-DNA complex prediction" width="400">
 </div>
 
-Complete inference instructions for RF3 are provided [here](src/modelhub/inference_engines/README.md).
+> [!TIP]
+> Complete inference instructions for RF3 are provided [here](src/modelhub/inference_engines/README.md).
 
-## Installation & Usage
+### RF3 Quick Start - Installation & Usage
 
-Follow these steps to set up **ModelForge** and run a test prediction.
+Follow these steps to set up **ModelForge** and run a test prediction with **RF3**.
 
 ---
 
-### 1. Install the repository using `uv`
+#### 1. Install the repository using `uv`
 
 ```bash
 git clone https://github.com/RosettaCommons/modelforge.git \
@@ -41,12 +43,12 @@ git clone https://github.com/RosettaCommons/modelforge.git \
   && uv pip install -e .
 ```
 
-### 2. Download model weights for RF3 
+#### 2. Download model weights for RF3 
 ```bash
 wget http://files.ipd.uw.edu/pub/rf3/rf3_latest.pt
 ```
 
-### 3. Run a test prediction
+#### 3. Run a test prediction
 ```bash
 rf3 fold tests/data/5vht_from_json.json
 ```

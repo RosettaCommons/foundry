@@ -1,0 +1,32 @@
+[
+    {
+        "name": "7o1r_from_json",
+        "components": [
+            {
+                "seq": "MKSLSFSLALGFGSTLVYSAPSPSSGWQAPGPNDVRAPCPMLNTLANHGFLPHDGKGITVNKTIDALGSALNIDANLSTLLFGFAATTNPQPNATFFDLDHLSRHNILEHDASLSRQDSYFGPADVFNEAVFNQTKSFWTGDIIDVQMAANARIVRLLTSNLTNPEYSLSDLGSAFSIGESAAYIGILGDKKSATVPKSWVEYLFENERLPYELGFKRPNDPFTTDDLGDLSTQIINAQHFPQSPGKVEKRGDTRCPYGYH",
+                "msa_path": "docs/rf3/examples/msas/7o1r_A.a3m.gz",
+                "chain_id": "A"
+            },
+            {
+                "ccd_code": "MG"
+            },
+            {
+                "path": "docs/rf3/examples/ligands/NAG.cif"
+            },
+            {
+                "path": "docs/rf3/examples/ligands/HEM.sdf"
+            },
+            {
+                "smiles": "[nH]1cc[nH+]c1"
+            },
+            {
+                "ccd_code": "NAG",
+                "chain_id": "F"
+            }
+        ],
+        "bonds": [
+            ["A/ASN/133/ND2", "F/NAG/1/C1"],
+            ["A/ASN/161/ND2", "C/L:0/0/C1"]
+        ]
+    }
+]

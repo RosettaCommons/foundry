@@ -1,13 +1,14 @@
 import numpy as np
+from beartype.typing import Any
+from biotite.structure import AtomArray
+from jaxtyping import Bool, Float
+
 from atomworks.enums import GroundTruthConformerPolicy
 from atomworks.ml.transforms._checks import (
     check_atom_array_annotation,
     check_contains_keys,
 )
 from atomworks.ml.transforms.base import Transform
-from beartype.typing import Any
-from biotite.structure import AtomArray
-from jaxtyping import Bool, Float
 
 
 def add_ground_truth_reference_conformer(

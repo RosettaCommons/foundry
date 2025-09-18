@@ -29,7 +29,7 @@ class AtomAttentionEncoderDiffusion(nn.Module):
         broadcast_trunk_feats_on_1dim_old,
         use_chiral_features,
         no_grad_on_chiral_center,
-        use_inv_dist_squared,
+        use_inv_dist_squared: bool = False,
         use_atom_level_embedding: bool = False,
         atom_level_embedding_dim: int = 384,
     ):
@@ -266,6 +266,7 @@ class AtomTransformer(nn.Module):
         diffusion_transformer,
         n_queries,
         n_keys,
+        l_max: int = None,  # HACK: Unused, kept for backwards compatibility with 9/21 checkpoint
     ):
         super().__init__()
 

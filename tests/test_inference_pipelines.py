@@ -5,10 +5,13 @@ from pathlib import Path
 import hydra
 import numpy as np
 import pytest
-from atomworks.io import parse
 from hydra import compose, initialize
 
-from modelhub.utils.inference import build_file_paths_for_prediction
+from atomworks.io import parse
+from modelhub.utils.inference import (
+    apply_conformer_and_template_selections,
+    build_file_paths_for_prediction,
+)
 
 current_file_directory = Path(__file__).parent
 
@@ -75,13 +78,13 @@ def test_inference_engine(
     )
     assert atom_array is not None
 
-    atom_array_untemplated = inference_engine.prepare_atom_array(atom_array)
+    atom_array_untemplated = apply_conformer_and_template_selections(atom_array)
     assert (
         "is_input_file_templated" in atom_array_untemplated.get_annotation_categories()
     )
     assert np.sum(atom_array_untemplated.get_annotation("is_input_file_templated")) == 0
 
-    atom_array_templated = inference_engine.prepare_atom_array(
+    atom_array_templated = apply_conformer_and_template_selections(
         atom_array,
         template_selection=template_selection,
         ground_truth_conformer_selection=ground_truth_conformer_selection,

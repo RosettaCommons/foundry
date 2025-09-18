@@ -7,13 +7,14 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+from conftest import TEST_DATA_DIR
+from hydra import compose, initialize
+from hydra.utils import instantiate
+
 from atomworks.ml.utils.rng import (
     create_rng_state_from_seeds,
     rng_state,
 )
-from conftest import TEST_DATA_DIR
-from hydra import compose, initialize
-from hydra.utils import instantiate
 
 
 def compare_csv_files(

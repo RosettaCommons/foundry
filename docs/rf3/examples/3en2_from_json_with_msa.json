@@ -1,0 +1,15 @@
+{
+    "name": "3en2_from_json_with_msa",
+    "components": [
+        {
+            "seq": "AINRLQLVATLVEREV(MSE)RYTPAGVPIVNCLLSYSGQA(MSE)EAQAARQVEFSIEALGAGK(MSE)ASVLDRIAPGTVLECVGFLARKHRSSKALVFHISGLEHHHHHH",
+            "chain_id": "A",
+            "msa_path": "docs/rf3/examples/msas/3en2_A.a3m.gz"
+        },
+        {
+            "seq": "AINRLQLVATLVEREV(MSE)RYTPAGVPIVNCLLSYSGQA(MSE)EAQAARQVEFSIEALGAGK(MSE)ASVLDRIAPGTVLECVGFLARKHRSSKALVFHISGLEHHHHHH",
+            "chain_id": "B",
+            "msa_path": "docs/rf3/examples/msas/3en2_A.a3m.gz"
+        }
+    ]
+}
