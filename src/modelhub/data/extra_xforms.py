@@ -1,5 +1,4 @@
 import torch
-
 from atomworks.ml.transforms._checks import (
     check_contains_keys,
 )

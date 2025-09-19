@@ -1,9 +1,9 @@
 from os import PathLike
 from pathlib import Path
 
+from atomworks.common import parse_example_id
 from beartype.typing import Any
 
-from atomworks.common import parse_example_id
 from modelhub.callbacks.base import BaseCallback
 from modelhub.utils.io import (
     build_stack_from_atom_array_and_batched_coords,

@@ -107,8 +107,9 @@ class ComputeIPTM(Metric):
             protein_mask[None, :] & protein_mask[:, None] * to_calculate
         )
         protein_ligand_mask = (
-            protein_mask[None, :] & ligand_mask[:, None] * to_calculate
-        )
+            (protein_mask[None, :] & ligand_mask[:, None])
+            | (ligand_mask[None, :] & protein_mask[:, None])
+        ) * to_calculate
         ligand_ligand_mask = ligand_mask[None, :] & ligand_mask[:, None] * to_calculate
         # calculate iptm for each interface type
         iptm_protein_protein = compute_ptm(pae, protein_protein_mask)

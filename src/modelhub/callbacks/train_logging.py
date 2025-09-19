@@ -2,6 +2,7 @@ import time
 from collections import defaultdict
 
 import pandas as pd
+from atomworks.common import parse_example_id
 from beartype.typing import Any
 from lightning.fabric.wrappers import (
     _FabricOptimizer,
@@ -12,7 +13,6 @@ from rich.table import Table
 from torch import nn
 from torchmetrics.aggregation import MeanMetric
 
-from atomworks.common import parse_example_id
 from modelhub.callbacks.base import BaseCallback
 from modelhub.utils.ddp import RankedLogger
 from modelhub.utils.logging import (

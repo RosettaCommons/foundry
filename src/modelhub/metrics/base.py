@@ -3,11 +3,11 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 
 import hydra
+from atomworks.ml.utils import error, nested_dict
 from beartype.typing import Any
 from omegaconf import DictConfig
 from toolz import keymap
 
-from atomworks.ml.utils import error, nested_dict
 from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
