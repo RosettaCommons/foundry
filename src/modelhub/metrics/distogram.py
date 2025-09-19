@@ -4,12 +4,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from atomworks.ml.utils.token import get_af3_token_representative_idxs
 from beartype.typing import Any, Literal
 from biotite.structure import AtomArrayStack
 from einops import rearrange, repeat
 from jaxtyping import Bool, Float
 
-from atomworks.ml.utils.token import get_af3_token_representative_idxs
 from modelhub.loss.af3_losses import distogram_loss
 from modelhub.metrics.base import Metric
 from modelhub.utils.torch_utils import assert_no_nans

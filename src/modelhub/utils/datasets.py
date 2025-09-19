@@ -1,5 +1,12 @@
 import hydra
 import torch
+from atomworks.ml.samplers import (
+    DistributedMixedSampler,
+    FallbackSamplerWrapper,
+    LazyWeightedRandomSampler,
+    LoadBalancedDistributedSampler,
+    MixedSampler,
+)
 from beartype.typing import Any
 from omegaconf import DictConfig, ListConfig
 from torch.utils.data import (
@@ -13,13 +20,6 @@ from torch.utils.data import (
 )
 from torch.utils.data.distributed import DistributedSampler
 
-from atomworks.ml.samplers import (
-    DistributedMixedSampler,
-    FallbackSamplerWrapper,
-    LazyWeightedRandomSampler,
-    LoadBalancedDistributedSampler,
-    MixedSampler,
-)
 from modelhub.resolvers import register_resolvers
 from modelhub.utils.ddp import RankedLogger
 
