@@ -13,6 +13,7 @@ from omegaconf import DictConfig
 from modelhub.chemical import NHEAVY
 from modelhub.metrics.metric_utils import (
     compute_mean_over_subsampled_pairs,
+    compute_min_over_subsampled_pairs,
     create_chainwise_masks_1d,
     create_chainwise_masks_2d,
     create_interface_masks_2d,
@@ -131,6 +132,15 @@ def compile_af3_confidence_outputs(
         for k, v in interface_masks.items()
     }
 
+    pae_interface_min = {
+        k: spread_batch_into_dictionary(compute_min_over_subsampled_pairs(pae, v))
+        for k, v in interface_masks.items()
+    }
+
+    pde_interface_min = {
+        k: spread_batch_into_dictionary(compute_min_over_subsampled_pairs(pde, v))
+        for k, v in interface_masks.items()
+    }
     # Calculate chainwise metrics
     chain_masks_2d = create_chainwise_masks_2d(chain_iid_token_lvl, device=pae.device)
     pae_chainwise = {
@@ -167,6 +177,8 @@ def compile_af3_confidence_outputs(
         "chain_wise_mean_pde": pde_chainwise,
         "interface_wise_mean_pae": pae_interface,
         "interface_wise_mean_pde": pde_interface,
+        "interface_wise_min_pae": pae_interface_min,
+        "interface_wise_min_pde": pde_interface_min,
     }
 
     # Generate DataFrame rows
@@ -202,6 +214,12 @@ def compile_af3_confidence_outputs(
                 (chain_i, chain_j)
             ][batch_idx],
             "pde_interface": confidence_data["interface_wise_mean_pde"][
+                (chain_i, chain_j)
+            ][batch_idx],
+            "min_pae_interface": confidence_data["interface_wise_min_pae"][
+                (chain_i, chain_j)
+            ][batch_idx],
+            "min_pde_interface": confidence_data["interface_wise_min_pde"][
                 (chain_i, chain_j)
             ][batch_idx],
             "overall_plddt": confidence_data["mean_plddt"][batch_idx],

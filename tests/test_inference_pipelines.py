@@ -5,9 +5,9 @@ from pathlib import Path
 import hydra
 import numpy as np
 import pytest
+from atomworks.io import parse
 from hydra import compose, initialize
 
-from atomworks.io import parse
 from modelhub.utils.inference import (
     apply_conformer_and_template_selections,
     build_file_paths_for_prediction,
