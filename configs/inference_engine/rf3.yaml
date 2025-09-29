@@ -6,7 +6,7 @@ defaults:
 
 _target_: modelhub.inference_engines.rf3.RF3InferenceEngine
 
-ckpt_path: rf3_latest.pt
+ckpt_path: /software/containers/versions/modelhub_inference/ckpts/rf3_latest.ckpt
 
 # Transform arguments
 n_recycles: 10

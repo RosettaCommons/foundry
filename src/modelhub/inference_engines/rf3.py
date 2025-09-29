@@ -171,7 +171,23 @@ class RF3InferenceEngine(InferenceEngine):
                 "not_atomized": 1e-5,  # No noise (TODO: Make configurable)
             },
             "allowed_chain_types_for_conditioning": None,  # Avoid random conditioning
-            "protein_msa_dirs": [],  # To be consistent with installing on non-IPD clusters
+            "protein_msa_dirs": [
+                {
+                    "dir": "/projects/msa/hhblits",  
+                    "extension": ".a3m.gz",
+                    "directory_depth": 2,
+                },
+                {
+                    "dir": "/projects/msa/mmseqs_gpu",  
+                    "extension": ".a3m.gz",
+                    "directory_depth": 2,
+                },
+                {
+                    "dir": "/projects/msa/lab",  
+                    "extension": ".a3m.gz",
+                    "directory_depth": 2,
+                },
+            ],  # To be consistent with installing on non-IPD clusters
             "rna_msa_dirs": [],  # To be consistent with installing on non-IPD clusters
             "p_give_polymer_ref_conf": 0.0,  # Never randomly give ground truth conformers
             "p_give_non_polymer_ref_conf": 0.0,  # Never randomly give ground truth conformers
