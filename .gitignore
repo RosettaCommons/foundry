@@ -200,6 +200,10 @@ wandb/
 # Logs
 logs/
 
+# Models
+rf3_latest.pt
+rf3_921.pt
+
 # Other
 *.sif
 *.out
