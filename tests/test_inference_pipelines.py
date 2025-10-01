@@ -21,6 +21,7 @@ current_file_directory = Path(__file__).parent
     [
         "data/nested_examples",
         "data/multiple_examples_from_json.json",
+        "data/5vht_from_fasta.fasta",
     ],
 )
 def test_build_file_paths_for_prediction(file_path: PathLike, tmp_path: Path):

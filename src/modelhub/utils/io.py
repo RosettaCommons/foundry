@@ -15,6 +15,7 @@ ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 DICTIONARY_LIKE_EXTENSIONS = {".json", ".yaml", ".yml", ".pkl"}
 CIF_LIKE_EXTENSIONS = {".cif", ".pdb", ".bcif", ".cif.gz", ".pdb.gz", ".bcif.gz"}
+SEQUENCE_LIKE_EXTENSIONS = {".fas", ".fasta"}
 
 
 def build_stack_from_atom_array_and_batched_coords(
@@ -205,3 +206,24 @@ def extract_example_id_from_path(file_path: PathLike, extensions: set | list) ->
     """Extract example_id from file path with specified extensions."""
     extractor = create_example_id_extractor(extensions)
     return extractor(file_path)
+
+def parse_generalized_fasta(file_path: PathLike) -> list[ tuple[str, str] ]:
+    """A robust FASTA parser, where the sequence & label components can be arbitrary strings, not limited to a specific alphabet."""
+    parsed: list[ tuple[str, str] ] = []
+    current_header: str | None = None
+    current_body: list[str] = []
+    with open(file_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if len(line) == 0: continue
+            if line[0] == ">":
+                if current_header is not None:
+                    parsed.append( (current_header, ''.join(current_body) ) )
+                current_header = line[1:]
+                current_body = []
+            else:
+                current_body.append(line)
+    if current_header is not None:
+        parsed.append( (current_header, ''.join(current_body) ) )
+
+    return parsed

@@ -443,6 +443,56 @@ RF3 uses AtomWorks' flexible `AtomSelectionStack` query syntax for specifying st
 | All backbone atoms in chain A | `A/*/*/N, A/*/*/CA, A/*/*/C, A/*/*/O` |
 </details>
 
+<details>
+<summary><strong>Folding from a FASTA file</strong></summary>
+
+For convienience, RF3 supports input from FASTA files.
+Not all input features are supported, and for more complex use cases (e.g. covalent connectivity), the use of JSON or CIF input formats is recommended.
+
+The input format is (roughly) compatible with the Boltz FASTA format:
+```
+>CHAIN_ID|ENTITY_TYPE|MSA_PATH
+SEQUENCE
+```
+Where ENTITY_TYPE is one of `protein`, `dna`, `rna`, `ccd`, `smiles` or `path`.
+
+- Each FASTA represents a single combined prediction.
+- The name of the output files take their name from the name of the fasta file.
+- All field are optional. If ENTITY_TYPE is not present, it defaults to polymeric (protein/dna/rna).
+- Each entry type is handled in the same way a their corresponding entry in the JSON-style input. Including support for inline modified residues with the `(PBF)`-style CCD code designation syntax.
+- If present, CHAIN_ID must be a single character.
+- If present, MSA_PATH must include ".a3m" in its name.
+
+
+📝 **Example FASTA configuration** (full example found at `docs/rf3/examples/2FLD_from_fasta.fasta`):
+
+```
+>2FLD_1|Chain A[auth C]|5'-D(*GP*CP*AP*GP*AP*AP*GP*GP*TP*CP*GP*TP*GP*AP*GP*AP*CP*CP*GP*TP*TP*CP*CP*G)-3'|
+GCAGAAGGTCGTGAGACCGTTCCG
+>B|dna
+CGGAACGGTCTCACGACCTTCTGC
+>2FLD_3|Chains C[auth A], D[auth B]|DNA ENDONUCLEASE I-MSOI|Monomastix sp. (141716)|docs/rf3/examples/msas/2FLD_CD.a3m.gz
+TLQPTEAAYIAGFLDGDGSIYALLIPRPDYKDIKYQVSLAISFIQRKDKFPYLQDIYDQLGKRGNLRKDRGDGIADYRIIGSTHLSIILPDLVPYLRIKKKQANRILHIINLYPQAQKNPSKFLDLVKIVDDVQNLNKRADELKSTNYDRLLEEFLKAGKIESSP
+>D|protein|docs/rf3/examples/msas/2FLD_CD.a3m.gz
+TLQPTEAAYIAGFLDGDGSIYALLIPRPDYKDIKYQVSLAISFIQRKDKFPYLQDIYDQLGKRGNLRKDRGDGIADYRIIGSTHLSIILPDLVPYLRIKKKQANRILHIINLYPQAQKNPSKFLDLVKIVDDVQNLNKRADELKSTNYDRLLEEFLKAGKIESSP
+>E|ccd
+NA
+>ccd
+CA
+>smiles
+[Ca+2]
+```
+
+Note that chain A has the identical header as what comes from the RCSB-provided FASTA file, and chain C has the RCSB-provided header plus the appended MSA file path. The intent is that purely polymeric predictions should work with minimal pre-processing of header lines.
+
+🚀 **Run the example:**
+
+```bash
+rf3 fold inputs='docs/rf3/examples/2FLD_from_fasta.fasta'
+```
+
+</details>
+
 
 #### Templating a Polymer (Protein / DNA / RNA)
 
