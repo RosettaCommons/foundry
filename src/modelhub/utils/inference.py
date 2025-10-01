@@ -19,8 +19,10 @@ from biotite.structure import AtomArray
 from modelhub.utils.io import (
     CIF_LIKE_EXTENSIONS,
     DICTIONARY_LIKE_EXTENSIONS,
+    SEQUENCE_LIKE_EXTENSIONS,
     create_example_id_extractor,
     find_files_with_extension,
+    parse_generalized_fasta,
 )
 
 
@@ -87,6 +89,66 @@ def _spoof_cif_from_dictionary(item: dict, temp_dir: PathLike) -> Path:
 
     return Path(save_path)
 
+def _spoof_cif_from_sequences(sequencepath: PathLike, temp_dir: PathLike) -> Path:
+    """Parses and unpacks a sequence file to create a CIF file from its components.
+
+    Creates only one CIF file per sequence file (potentially containing multiple sequences).
+
+    The label of the sequence (roughly) follows the Boltz convention
+
+    >CHAIN_ID|ENTITY_TYPE|MSA_PATH
+
+    Where ENTITY_TYPE is in [protein, dna, rna, smiles, ccd, path] (last is non-Boltz)
+
+    However, both the CHAIN_ID and MSA_PATH are optional (if present the latter must have "a3m" in the name).
+    If the header does not follow the format, then it's assumed that it's a polymeric (protein) sequence
+
+    Args:
+        sequencepath (Path): The path to a sequence file.
+        temp_dir (Path): Path to the temporary directory for storing CIF files.
+
+    Returns:
+        Path: The path to the created CIF file, saved in the temporary directory.
+
+    """
+    seqs: list[ tuple[str, str] ] = parse_generalized_fasta(sequencepath);
+
+    components = []
+
+    for label, value in seqs:
+        entry = {}
+        cif_or_pdb_file = False
+
+        header_parts = label.split("|")
+        for hp in header_parts:
+            if "a3m" in hp:
+                entry["msa_path"] = hp
+                break
+        if "ccd" in header_parts:
+            entry["ccd_code"] = value
+        elif "path" in header_parts:
+            entry["path"] = value
+            if '.pdb' in value.lower() or '.cif' in value.lower():
+                cif_or_pdb_file = True
+        elif "smiles" in header_parts:
+            entry["smiles"] = value
+        elif "protein" in header_parts or "rna" in header_parts or "dna" in header_parts:
+            entry["seq"] = value
+        else:
+            logging.warning(f"Header for entry `{label}` in `{sequencepath}` omits an entity designation: assuming polymeric")
+            entry["seq"] = value
+
+        if len(header_parts) > 1 and len(header_parts[0]) == 1:
+            if cif_or_pdb_file:
+                logging.warning("Cannot reset chain_id for PDB or CIF in sequence file header -- chain letter is specified by structure file.")
+            else:
+                entry["chain_id"] = header_parts[0]
+
+        components.append(entry)
+
+    item = {"name":sequencepath.stem, "components":components}
+
+    return _spoof_cif_from_dictionary(item, temp_dir)
 
 def build_file_paths_for_prediction(
     input: PathLike | list[PathLike],
@@ -125,7 +187,7 @@ def build_file_paths_for_prediction(
         if Path(_path).is_dir():
             paths_to_raw_input_files.extend(
                 find_files_with_extension(
-                    _path, DICTIONARY_LIKE_EXTENSIONS | CIF_LIKE_EXTENSIONS
+                    _path, DICTIONARY_LIKE_EXTENSIONS | CIF_LIKE_EXTENSIONS | SEQUENCE_LIKE_EXTENSIONS
                 )
             )
         else:
@@ -156,6 +218,9 @@ def build_file_paths_for_prediction(
         elif _path.name.endswith(tuple(CIF_LIKE_EXTENSIONS)):
             # Directly use CIF-like files
             paths_to_cif_like_files.append(_path)
+        elif _path.name.endswith(tuple(SEQUENCE_LIKE_EXTENSIONS)):
+            # Spoof CIF files from sequence-like formats
+            paths_to_cif_like_files.append( _spoof_cif_from_sequences(_path, temp_dir) )
         else:
             raise ValueError(
                 f"Unsupported file extension: {_path.suffix} (path: {_path}; paths: {paths_to_raw_input_files})."
