@@ -1,12 +1,12 @@
 from copy import deepcopy
 
 import pytest
-from datahub.utils.testing import cached_parse
+from atomworks.ml.utils.testing import cached_parse
 
-from modelhub.metrics.chiral import ChiralLoss
+from metrics.chiral import ChiralLoss
 
 
-@pytest.mark.parametrize("pdb_id", ["5ocm", "6wtf"])
+@pytest.mark.parametrize("pdb_id", ["5ocm", "1ivo"])
 def test_chiral_metrics(pdb_id: str):
     # ... get the AtomArray
     ground_truth_atom_array = cached_parse(pdb_id, hydrogen_policy="remove")[

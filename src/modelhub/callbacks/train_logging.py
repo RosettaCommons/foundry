@@ -13,15 +13,15 @@ from rich.table import Table
 from torch import nn
 from torchmetrics.aggregation import MeanMetric
 
-from modelhub.callbacks.base import BaseCallback
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.logging import (
+from callbacks.base import BaseCallback
+from rf3.utils.ddp import RankedLogger
+from rf3.utils.logging import (
     print_df_as_table,
     print_model_parameters,
     safe_print,
     table_from_df,
 )
-from modelhub.utils.loss import convert_batched_losses_to_list_of_dicts, mean_losses
+from rf3.utils.loss import convert_batched_losses_to_list_of_dicts, mean_losses
 
 
 class LogModelParametersCallback(BaseCallback):

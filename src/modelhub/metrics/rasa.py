@@ -3,7 +3,7 @@ from atomworks.ml.transforms.sasa import calculate_atomwise_rasa
 from beartype.typing import Any
 from biotite.structure import AtomArrayStack
 
-from modelhub.metrics.base import Metric
+from metrics.base import Metric
 
 
 class UnresolvedRegionRASA(Metric):

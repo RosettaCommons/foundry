@@ -4,6 +4,14 @@
 # COMMANDS                                                                      #
 #################################################################################
 
+## Delete all compiled and cached files
+clean:
+	find . -type f -name "*.py[co]" -delete
+	find . -type d -name "__pycache__" -delete
+	rm -rf .pytest_cache
+	rm -rf .ruff_cache
+	rm -rf .benchmarks
+
 ## Format src directory using black
 format:
 	ruff format src tests

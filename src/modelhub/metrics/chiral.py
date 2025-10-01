@@ -1,16 +1,16 @@
 import torch
+from atomworks.io.transforms.atom_array import ensure_atom_array_stack
 from atomworks.ml.transforms.af3_reference_molecule import (
     get_af3_reference_molecule_features,
 )
-from atomworks.ml.transforms.atom_array import ensure_atom_array_stack
 from atomworks.ml.transforms.chirals import add_af3_chiral_features
 from atomworks.ml.transforms.rdkit_utils import get_rdkit_chiral_centers
 from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack
 from jaxtyping import Bool, Float
 
-from modelhub.kinematics import get_dih
-from modelhub.metrics.base import Metric
+from rf3.kinematics import get_dih
+from metrics.base import Metric
 
 
 def calc_chiral_metrics_masked(

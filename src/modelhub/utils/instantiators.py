@@ -2,7 +2,7 @@ import hydra
 from lightning.fabric.loggers import Logger
 from omegaconf import DictConfig
 
-from modelhub.callbacks.base import BaseCallback
+from callbacks.base import BaseCallback
 
 
 def _can_be_instantiated(cfg: DictConfig) -> bool:
