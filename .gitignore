@@ -210,6 +210,8 @@ logs/
 **/outputs/
 **/scripts/slurm/
 **/benchmarks/
+*.ckpt
+**/inference/
 
 # AI
 **/CLAUDE.md
