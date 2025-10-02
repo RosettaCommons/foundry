@@ -1,10 +1,7 @@
-import os
 from pathlib import Path
 
 import typer
 from hydra import compose, initialize_config_dir
-
-from rf3.inference import run_inference
 
 app = typer.Typer()
 
@@ -42,6 +39,9 @@ def fold(ctx: typer.Context):
 
     with initialize_config_dir(config_dir=config_path, version_base="1.3"):
         cfg = compose(config_name="inference", overrides=hydra_overrides)
+        # Lazy import to avoid loading heavy dependencies at CLI startup
+        from rf3.inference import run_inference
+
         run_inference(cfg)
 
 

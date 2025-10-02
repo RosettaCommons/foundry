@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
 from rf3.loss.loss import calc_chiral_grads_flat_impl
 from rf3.model.layers.layer_utils import (
     AdaLN,
@@ -12,6 +11,7 @@ from rf3.model.layers.layer_utils import (
 )
 from rf3.model.layers.mlff import ConformerEmbeddingWeightedAverage
 from rf3.training.checkpoint import activation_checkpointing
+
 from modelhub.utils.torch import device_of
 
 

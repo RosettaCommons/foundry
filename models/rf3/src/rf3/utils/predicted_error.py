@@ -9,7 +9,6 @@ import tree
 from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack
 from omegaconf import DictConfig
-
 from rf3.chemical import NHEAVY
 from rf3.metrics.metric_utils import (
     compute_mean_over_subsampled_pairs,

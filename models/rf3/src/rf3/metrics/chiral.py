@@ -8,8 +8,8 @@ from atomworks.ml.transforms.rdkit_utils import get_rdkit_chiral_centers
 from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack
 from jaxtyping import Bool, Float
-
 from rf3.kinematics import get_dih
+
 from modelhub.metrics.metric import Metric
 
 

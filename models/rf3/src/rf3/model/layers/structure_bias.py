@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from opt_einsum import contract as einsum
-
 from rf3.util_module import init_lecun_normal, rbf
 
 

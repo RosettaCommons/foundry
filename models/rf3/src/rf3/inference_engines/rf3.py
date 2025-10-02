@@ -10,11 +10,12 @@ from atomworks.io.transforms.categories import category_to_dict
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
+from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
+from modelhub.utils.logging import print_config_tree
 from rf3.model.RF3 import ShouldEarlyStopFn
 from rf3.utils.datasets import (
     assemble_distributed_inference_loader_from_list_of_paths,
 )
-from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
 from rf3.utils.inference import (
     apply_conformer_and_template_selections,
     build_file_paths_for_prediction,
@@ -24,14 +25,17 @@ from rf3.utils.io import (
     dump_structures,
     dump_trajectories,
 )
-from modelhub.utils.logging import print_config_tree
 from rf3.utils.predicted_error import (
     annotate_atom_array_b_factor_with_plddt,
     compile_af3_confidence_outputs,
     get_mean_atomwise_plddt,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 

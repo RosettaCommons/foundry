@@ -2,7 +2,6 @@ import logging
 
 import torch
 import torch.nn as nn
-
 from rf3.model.layers.af3_diffusion_transformer import (
     AtomAttentionEncoderDiffusion,
     AtomTransformer,

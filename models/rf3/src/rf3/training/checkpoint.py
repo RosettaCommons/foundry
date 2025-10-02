@@ -13,7 +13,7 @@ from torch.utils.checkpoint import checkpoint
 def create_custom_forward(module, **kwargs):
     """Create a custom forward function for gradient checkpointing with fixed kwargs.
 
-    Enables passing keyword arguments to a module when using PyTorch's checkpoint function, 
+    Enables passing keyword arguments to a module when using PyTorch's checkpoint function,
     which only accepts positional arguments for the function to be checkpointed.
 
     Args:

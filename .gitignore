@@ -211,3 +211,5 @@ logs/
 **/scripts/slurm/
 **/benchmarks/
 
+# AI
+**/CLAUDE.md

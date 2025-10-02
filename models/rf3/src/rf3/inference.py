@@ -1,4 +1,4 @@
-#!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../scripts/shebang/modelhub_exec.sh" "$0" "$@"'
+#!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../../../.ipd/shebang/rf3_exec.sh" "$0" "$@"'
 
 import os
 import tempfile
@@ -6,23 +6,19 @@ from pathlib import Path
 
 import hydra
 import rootutils
-from dotenv import load_dotenv
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
+from modelhub.utils.env import load_ipd_dotenv
 from modelhub.utils.logging import suppress_warnings
-
-load_dotenv(override=True)
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-# Find the RF3 configs directory relative to this file
-# This file is at: models/rf3/src/rf3/inference.py
-# Configs are at: models/rf3/configs/
-rf3_package_dir = Path(__file__).parent.parent.parent  # Go up to models/rf3/
-_config_path = str(rf3_package_dir / "configs")
+load_ipd_dotenv(override=True)
+
+_config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rf3/configs")
 
 
 @hydra.main(

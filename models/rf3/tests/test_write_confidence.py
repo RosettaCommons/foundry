@@ -3,7 +3,6 @@ import pytest
 import torch
 from lightning.fabric import seed_everything
 from omegaconf import DictConfig
-
 from rf3.chemical import NHEAVY, heavyatom_mask
 from rf3.metrics.metric_utils import (
     find_bin_midpoints,

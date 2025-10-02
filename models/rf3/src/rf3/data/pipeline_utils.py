@@ -5,7 +5,6 @@ from atomworks.enums import ChainType
 from atomworks.ml.transforms._checks import check_atom_array_annotation
 from atomworks.ml.transforms.crop import compute_local_hash
 from omegaconf import DictConfig
-
 from rf3.data.ground_truth_template import (
     FeaturizeNoisedGroundTruthAsTemplateDistogram,
     TokenGroupNoiseScaleSampler,

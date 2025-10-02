@@ -3,9 +3,8 @@ from functools import partial
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn.functional import silu
-
 from rf3.training.checkpoint import activation_checkpointing
+from torch.nn.functional import silu
 
 linearNoBias = partial(torch.nn.Linear, bias=False)
 

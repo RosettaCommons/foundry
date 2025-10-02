@@ -1,0 +1,3 @@
+[submodule "lib/atomworks"]
+	path = lib/atomworks
+	url = git@github.com:baker-laboratory/atomworks-dev.git

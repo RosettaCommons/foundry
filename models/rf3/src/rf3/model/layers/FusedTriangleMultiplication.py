@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 from jaxtyping import Float
+from rf3.util_module import init_lecun_normal
 
 from modelhub import SHOULD_USE_CUEQUIVARIANCE
-from rf3.util_module import init_lecun_normal
 
 if SHOULD_USE_CUEQUIVARIANCE:
     import cuequivariance_torch as cuet

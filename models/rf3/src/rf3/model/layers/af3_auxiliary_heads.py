@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from rf3.model.RF3_structure import PairformerBlock, linearNoBias
 
 import src
-from rf3.model.RF3_structure import PairformerBlock, linearNoBias
 
 # TODO: Get from RF2AA encoding instead
 CHEM_DATA_LEGACY = {"NHEAVY": 23, "aa2num": {"UNK": 20, "GLY": 7, "MAS": 21}}

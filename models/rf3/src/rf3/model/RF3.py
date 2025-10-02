@@ -5,8 +5,6 @@ import torch
 import torch.utils.checkpoint as checkpoint
 from beartype.typing import Any, Generator, Protocol
 from omegaconf import DictConfig
-from torch import nn
-
 from rf3.diffusion_samplers.inference_sampler import (
     SampleDiffusion,
     SamplePartialDiffusion,
@@ -16,6 +14,7 @@ from rf3.model.layers.pairformer_layers import (
 )
 from rf3.model.RF3_structure import DiffusionModule, DistogramHead, Recycler
 from rf3.training.checkpoint import create_custom_forward
+from torch import nn
 
 """
 Shape Annotation Glossary:

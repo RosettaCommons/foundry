@@ -2,7 +2,6 @@ from copy import deepcopy
 
 import pytest
 from atomworks.ml.utils.testing import cached_parse
-
 from rf3.metrics.chiral import ChiralLoss
 
 

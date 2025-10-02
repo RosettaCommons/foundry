@@ -5,10 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from opt_einsum import contract as einsum
-
-from modelhub import SHOULD_USE_CUEQUIVARIANCE
 from rf3.training.checkpoint import activation_checkpointing
 from rf3.util_module import init_lecun_normal
+
+from modelhub import SHOULD_USE_CUEQUIVARIANCE
 
 if SHOULD_USE_CUEQUIVARIANCE:
     import cuequivariance_torch as cuet

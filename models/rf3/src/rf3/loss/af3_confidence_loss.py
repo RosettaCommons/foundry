@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-from scipy.stats import spearmanr
-
 from rf3.chemical import NFRAMES, NHEAVY, frame_indices
 
 # TODO: REFACTOR; COPIED FROM RF2AA. WE NEED TO ADD DOCSTRINGS, EXAMPLES, HOPEFULLY TESTS, AND CLEAN UP
@@ -14,6 +12,7 @@ from rf3.utils.frames import (
     mask_unresolved_frames_batched,
     rigid_from_3_points,
 )
+from scipy.stats import spearmanr
 
 
 class ConfidenceLoss(nn.Module):

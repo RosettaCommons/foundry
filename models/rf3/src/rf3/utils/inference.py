@@ -15,7 +15,6 @@ from atomworks.io.tools.inference import (
 from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.io.utils.selection import AtomSelectionStack
 from biotite.structure import AtomArray
-
 from rf3.utils.io import (
     CIF_LIKE_EXTENSIONS,
     DICTIONARY_LIKE_EXTENSIONS,

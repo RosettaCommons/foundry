@@ -1,22 +1,21 @@
-#!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../scripts/shebang/modelhub_exec.sh" "$0" "$@"'
+#!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../../../.ipd/shebang/rf3_exec.sh" "$0" "$@"'
 
 import logging
 import os
 
 import hydra
 import rootutils
-from dotenv import load_dotenv
 from omegaconf import DictConfig
 
+from modelhub.utils.env import load_ipd_dotenv
 from modelhub.utils.logging import suppress_warnings
 from modelhub.utils.weights import CheckpointConfig
-
-load_dotenv(override=True)
-
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+
+load_ipd_dotenv(override=True)
 
 _config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rf3/configs")
 

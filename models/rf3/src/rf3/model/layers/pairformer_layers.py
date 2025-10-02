@@ -1,7 +1,4 @@
 import torch
-from torch import nn
-from torch.nn.functional import one_hot, relu
-
 from rf3.data.ground_truth_template import (
     af3_noise_scale_to_noise_level,
 )
@@ -26,6 +23,8 @@ from rf3.model.layers.outer_product import (
 from rf3.model.RF3_blocks import MSAPairWeightedAverage, MSASubsampleEmbedder
 from rf3.training.checkpoint import activation_checkpointing
 from rf3.util_module import Dropout
+from torch import nn
+from torch.nn.functional import one_hot, relu
 
 
 class AtomAttentionEncoderPairformer(nn.Module):

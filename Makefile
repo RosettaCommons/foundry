@@ -14,8 +14,8 @@ clean:
 
 ## Format src directory using black
 format:
-	ruff format src tests
-	ruff check --fix src tests
+	ruff format src models tests
+	ruff check --fix src models tests
 
 #################################################################################
 # Self Documenting Commands                                                     #

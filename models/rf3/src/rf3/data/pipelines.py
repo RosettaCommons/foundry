@@ -98,7 +98,6 @@ from atomworks.ml.transforms.random_atomize_residues import RandomAtomizeResidue
 from atomworks.ml.transforms.rdkit_utils import GetRDKitChiralCenters
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
 from omegaconf import DictConfig
-
 from rf3.data.extra_xforms import CheckForNaNsInInputs
 from rf3.data.pipeline_utils import (
     annotate_post_crop_hash,

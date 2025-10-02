@@ -1,7 +1,6 @@
 import math
 
 import torch
-
 from rf3.flow_matching.rigid_utils import rot_vec_mul
 
 

@@ -14,7 +14,6 @@ from atomworks.ml.transforms.base import Compose, convert_to_torch
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
 from biotite.structure import AtomArray, AtomArrayStack
 from jaxtyping import Bool, Float, Int
-
 from rf3.loss.af3_losses import (
     ResidueSymmetryResolution,
     SubunitSymmetryResolution,

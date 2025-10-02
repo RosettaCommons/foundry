@@ -3,13 +3,13 @@ from pathlib import Path
 
 from atomworks.ml.example_id import parse_example_id
 from beartype.typing import Any
-
-from modelhub.callbacks.callback import BaseCallback
 from rf3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
     dump_structures,
     dump_trajectories,
 )
+
+from modelhub.callbacks.callback import BaseCallback
 
 
 class DumpValidationStructuresCallback(BaseCallback):

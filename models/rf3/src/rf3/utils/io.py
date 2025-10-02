@@ -7,8 +7,8 @@ import torch
 from atomworks.io.utils.io_utils import to_cif_file
 from beartype.typing import Literal
 from biotite.structure import AtomArray, AtomArrayStack, stack
-
 from rf3.alignment import weighted_rigid_align
+
 from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
