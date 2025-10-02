@@ -11,8 +11,8 @@ from einops import rearrange, repeat
 from jaxtyping import Bool, Float
 
 from rf3.loss.af3_losses import distogram_loss
-from metrics.base import Metric
-from utils.torch import assert_no_nans
+from modelhub.metrics.metric import Metric
+from modelhub.utils.torch import assert_no_nans
 
 
 @dataclass

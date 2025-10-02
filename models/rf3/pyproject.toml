@@ -1,0 +1,67 @@
+[project]
+name = "rf3"
+dynamic = ["version"]
+description = "RosettaFold3: Open-source biomolecular structure prediction for all molecules of life."
+readme = "README.md"
+requires-python = ">= 3.12"
+authors = [
+    { name = "Institute for Protein Design", email = "contact@ipd.uw.edu" },
+]
+license = { file = "../../LICENSE.md" }
+
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "License :: OSI Approved :: BSD License",
+]
+
+dependencies = [
+    # Core modelhub dependency
+    "modelhub",
+    # CLI
+    "typer>=0.9.0,<1",
+    # RF3-specific ML dependencies
+    "einops>=0.8.0,<1",
+    "einx>=0.1.0,<1",
+    "opt_einsum>=3.4.0,<4",
+    "dm-tree>=0.1.6,<1",
+    # ... kernels (Linux only)
+    "cuequivariance_ops_cu12>=0.5.0; sys_platform == 'linux'",
+    "cuequivariance_ops_torch_cu12>=0.5.0; sys_platform == 'linux'",
+    "cuequivariance_torch>=0.5.0; sys_platform == 'linux'",
+    # ... dataloading
+    "atomworks==1.0.2",
+]
+
+[project.scripts]
+rf3 = "rf3.cli:app"
+
+# Build settings ----------------------------------------------------------------------
+[build-system]
+requires = [
+    "hatchling",
+    "hatch-vcs == 0.4",
+]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+root = "../.."
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/rf3/_version.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rf3"]

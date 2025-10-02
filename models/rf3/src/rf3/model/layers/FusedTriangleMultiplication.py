@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from jaxtyping import Float
 
-from src import SHOULD_USE_CUEQUIVARIANCE
+from modelhub import SHOULD_USE_CUEQUIVARIANCE
 from rf3.util_module import init_lecun_normal
 
 if SHOULD_USE_CUEQUIVARIANCE:

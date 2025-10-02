@@ -1,8 +1,4 @@
-"""Utilities for gradient checkpointing to reduce memory usage during training.
-
-Gradient checkpointing (also called activation checkpointing) trades compute for memory
-by recomputing intermediate activations during the backward pass instead of storing them.
-This enables training larger models or using larger batch sizes within GPU memory constraints.
+"""Utilities for gradient checkpointing.
 
 References:
   * `PyTorch Checkpoint Documentation`_
@@ -17,9 +13,8 @@ from torch.utils.checkpoint import checkpoint
 def create_custom_forward(module, **kwargs):
     """Create a custom forward function for gradient checkpointing with fixed kwargs.
 
-    This helper enables passing keyword arguments to a module when using PyTorch's
-    checkpoint function, which only accepts positional arguments for the function to
-    be checkpointed.
+    Enables passing keyword arguments to a module when using PyTorch's checkpoint function, 
+    which only accepts positional arguments for the function to be checkpointed.
 
     Args:
       module: The callable (typically a nn.Module) to wrap.
@@ -28,15 +23,6 @@ def create_custom_forward(module, **kwargs):
     Returns:
       A callable that accepts only positional arguments and forwards them along
       with the fixed kwargs to the original module.
-
-    Examples:
-      Use with PyTorch checkpoint::
-
-        custom_fn = create_custom_forward(my_module, frame_atom_idxs=frame_idxs)
-        output = checkpoint(custom_fn, input_tensor, use_reentrant=False)
-
-    See Also:
-      :py:func:`activation_checkpointing`
     """
 
     def custom_forward(*inputs):
@@ -47,11 +33,6 @@ def create_custom_forward(module, **kwargs):
 
 def activation_checkpointing(function):
     """Decorator to enable gradient checkpointing for a function during training.
-
-    When gradients are enabled (training mode), this decorator wraps the function
-    with PyTorch's checkpoint to save memory by recomputing activations during
-    the backward pass. During inference (gradients disabled), the function runs
-    normally without checkpointing overhead.
 
     Args:
       function: The function to apply gradient checkpointing to.
@@ -67,11 +48,7 @@ def activation_checkpointing(function):
             return self.layer(x, mask)
 
     Notes:
-      Uses ``use_reentrant=False`` for better compatibility with modern PyTorch
-      features like autograd hooks and higher-order gradients.
-
-    See Also:
-      :py:func:`create_custom_forward`
+      Uses ``use_reentrant=False`` for compatibility with recent PyTorch versions.
     """
 
     def wrapper(*args, **kwargs):

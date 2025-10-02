@@ -3,7 +3,7 @@ from copy import deepcopy
 import pytest
 from atomworks.ml.utils.testing import cached_parse
 
-from metrics.chiral import ChiralLoss
+from rf3.metrics.chiral import ChiralLoss
 
 
 @pytest.mark.parametrize("pdb_id", ["5ocm", "1ivo"])

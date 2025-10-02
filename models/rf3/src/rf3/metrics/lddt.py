@@ -1,9 +1,7 @@
 import numpy as np
 import torch
-from atomworks.ml.transforms.atom_array import (
-    AddGlobalTokenIdAnnotation,
-    ensure_atom_array_stack,
-)
+from atomworks.io.transforms.atom_array import ensure_atom_array_stack
+from atomworks.ml.transforms.atom_array import AddGlobalTokenIdAnnotation
 from atomworks.ml.transforms.atomize import AtomizeByCCDName
 from atomworks.ml.transforms.base import Compose
 from atomworks.ml.utils.token import get_token_starts
@@ -11,8 +9,8 @@ from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack, stack
 from jaxtyping import Bool, Float, Int
 
-from metrics.base import Metric
-from utils.ddp import RankedLogger
+from modelhub.metrics.metric import Metric
+from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

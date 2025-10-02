@@ -1,4 +1,4 @@
-_target_: modelhub.loss.af3_losses.DiffusionLoss
+_target_: rf3.loss.af3_losses.DiffusionLoss
 weight: 4.0
 sigma_data: ${model.net.diffusion_module.sigma_data}
 alpha_dna: 5

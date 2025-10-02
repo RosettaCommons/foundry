@@ -3,8 +3,9 @@ defaults:
 
 dataset:
   dataset_parser:
-    _target_: datahub.datasets.parsers.ValidationDFParserLikeAF3
+    _target_: atomworks.ml.datasets.parsers.ValidationDFParserLikeAF3
     base_dir: /projects/ml/frozen_pdb_copies/2025_07_13_pdb
   dataset:
-    _target_: datahub.datasets.datasets.PandasDataset
+    _target_: atomworks.ml.datasets.datasets.PandasDataset
+    name: af3_validation
     data: ${paths.data.pdb_data_dir}/entry_level_val_df.parquet

@@ -1,10 +1,10 @@
 from os import PathLike
 from pathlib import Path
 
-from atomworks.common import parse_example_id
+from atomworks.ml.example_id import parse_example_id
 from beartype.typing import Any
 
-from callbacks.base import BaseCallback
+from modelhub.callbacks.callback import BaseCallback
 from rf3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
     dump_structures,

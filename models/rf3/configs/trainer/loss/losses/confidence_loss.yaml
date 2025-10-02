@@ -1,4 +1,4 @@
-_target_: modelhub.loss.af3_confidence_loss.ConfidenceLoss
+_target_: rf3.loss.af3_confidence_loss.ConfidenceLoss
 weight: 1.0
 
 plddt:

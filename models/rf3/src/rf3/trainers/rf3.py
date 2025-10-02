@@ -6,20 +6,20 @@ from jaxtyping import Float, Int
 from lightning_utilities import apply_to_collection
 from omegaconf import DictConfig
 
-from common import exists
+from modelhub.common import exists
 from rf3.loss.af3_losses import Loss as AF3Loss
 from rf3.loss.af3_losses import (
     ResidueSymmetryResolution,
     SubunitSymmetryResolution,
 )
-from metrics.base import MetricManager
+from modelhub.metrics.metric import MetricManager
 from rf3.model.RF3 import ShouldEarlyStopFn
-from trainers.fabric import FabricTrainer
+from modelhub.trainers.fabric import FabricTrainer
 from rf3.training.EMA import EMA
-from utils.ddp import RankedLogger
+from modelhub.utils.ddp import RankedLogger
 from rf3.utils.io import build_stack_from_atom_array_and_batched_coords
 from rf3.utils.recycling import get_recycle_schedule
-from utils.torch import assert_no_nans, assert_same_shape
+from modelhub.utils.torch import assert_no_nans, assert_same_shape
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

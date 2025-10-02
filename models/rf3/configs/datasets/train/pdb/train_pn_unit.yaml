@@ -4,7 +4,7 @@ defaults:
 
 dataset: 
   dataset_parser:
-    _target_: datahub.datasets.parsers.PNUnitsDFParser
+    _target_: atomworks.ml.datasets.parsers.PNUnitsDFParser
     base_dir: /projects/ml/frozen_pdb_copies/2025_07_13_pdb
   dataset:
     name: pn_unit

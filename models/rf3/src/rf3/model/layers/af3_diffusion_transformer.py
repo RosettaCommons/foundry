@@ -12,7 +12,7 @@ from rf3.model.layers.layer_utils import (
 )
 from rf3.model.layers.mlff import ConformerEmbeddingWeightedAverage
 from rf3.training.checkpoint import activation_checkpointing
-from utils.torch import device_of
+from modelhub.utils.torch import device_of
 
 
 class AtomAttentionEncoderDiffusion(nn.Module):

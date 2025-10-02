@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
-from utils.logging import suppress_warnings
+from modelhub.utils.logging import suppress_warnings
 
 load_dotenv(override=True)
 
@@ -18,10 +18,11 @@ load_dotenv(override=True)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-# If the user has set `PROJECT_PATH`, use it to build the config path; otherwise, fall back to `PROJECT_ROOT`
-_config_path = os.path.join(
-    os.environ.get("PROJECT_PATH", os.environ["PROJECT_ROOT"]), "configs"
-)
+# Find the RF3 configs directory relative to this file
+# This file is at: models/rf3/src/rf3/inference.py
+# Configs are at: models/rf3/configs/
+rf3_package_dir = Path(__file__).parent.parent.parent  # Go up to models/rf3/
+_config_path = str(rf3_package_dir / "configs")
 
 
 @hydra.main(

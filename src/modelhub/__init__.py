@@ -44,4 +44,4 @@ except ImportError:
     logger.debug("cuEquivariance unavailable: import failed")
 
 # Export for easy access
-__all__ = ["SHOULD_USE_CUEQUIVARIANCE", "silence_warnings"]
+__all__ = ["SHOULD_USE_CUEQUIVARIANCE"]

@@ -5,7 +5,7 @@ name: rf3
 defaults:
   - override /datasets: pdb_and_distillation
   - override /model: rf3
-  - override /trainer: af3
+  - override /trainer: rf3
 
 ckpt_config:
   _target_: modelhub.utils.weights.CheckpointConfig

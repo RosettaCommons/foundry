@@ -5,7 +5,7 @@ defaults:
 
 dataset:
   dataset_parser:
-    _target_: datahub.datasets.parsers.InterfacesDFParser
+    _target_: atomworks.ml.datasets.parsers.InterfacesDFParser
     base_dir: /projects/ml/frozen_pdb_copies/2025_07_13_pdb
   dataset:
     name: plinder
@@ -50,5 +50,5 @@ dataset:
     crop_spatial_probability: 1.0
   
 weights:
-  _target_: datahub.samplers.calculate_weights_by_inverse_cluster_size
+  _target_: atomworks.ml.samplers.calculate_weights_by_inverse_cluster_size
   cluster_column: pli_qcov__50__weak__component # Need to ablate

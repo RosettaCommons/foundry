@@ -2,7 +2,7 @@ from typing import Any
 
 import torch
 
-from metrics.base import Metric
+from modelhub.metrics.metric import Metric
 from rf3.metrics.metric_utils import find_bin_midpoints
 
 

@@ -8,7 +8,7 @@ from beartype.typing import Any
 from omegaconf import DictConfig
 from toolz import keymap
 
-from utils.ddp import RankedLogger
+from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

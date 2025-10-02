@@ -10,7 +10,7 @@ from biotite.structure import AtomArray, AtomArrayStack
 from jaxtyping import Bool, Float
 
 from rf3.kinematics import get_dih
-from metrics.base import Metric
+from modelhub.metrics.metric import Metric
 
 
 def calc_chiral_metrics_masked(

@@ -1,0 +1,61 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/pytorch:25.04-py3
+IncludeCmd: yes
+
+# RF3 Development Container - Dependencies only
+
+%labels
+    Author Institute for Protein Design
+    Version 1.0-dev
+    Description RosettaFold3 - Dependencies only (for development and model training)
+
+%setup
+    # Create a directory in the container to bind the host's current working directory
+    mkdir ${APPTAINER_ROOTFS}/modelhub_host
+    # ... for mounting `/projects` with --bind
+    mkdir ${APPTAINER_ROOTFS}/projects
+    # ... for mounting `/databases` with --bind
+    mkdir ${APPTAINER_ROOTFS}/net
+    # ... for mounting `/squash` with --bind
+    mkdir ${APPTAINER_ROOTFS}/squash
+
+%files
+    /etc/localtime
+    /etc/hosts
+    pyproject.toml /opt/pyproject.toml
+
+%post
+    ## GENERAL SETUP
+
+    # Common symlinks (within container)
+    ln -s /net/databases /databases
+    ln -s /net/software /software
+    ln -s /home /mnt/home
+    ln -s /projects /mnt/projects
+    ln -s /net /mnt/net
+
+    ## PYTHON DEPENDENCY INSTALLATION
+
+    # Install uv for fast package installation (10-100x faster than pip)
+    pip install uv
+
+    # Auto-generate a dependency list
+    uv pip compile /opt/pyproject.toml -o /opt/requirements.txt
+
+    # Install all Python dependencies using requirements.txt with uv
+    uv pip install --system --break-system-packages -r /opt/requirements.txt
+
+
+%environment
+    # (Flag to increase accessible GPU memory)
+    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+    # (Turn off NVLink)
+    export NCCL_P2P_DISABLE=1
+
+%runscript
+   # NOTE: The %runscript is invoked when the container is run without specifying a different command.
+   exec python "$@"
+
+%help
+    RosettaFold3 (RF3) development container with dependencies only.

@@ -6,7 +6,7 @@ name: rf3-with-confidence
 defaults:
   - rf3
   - override /model: rf3_with_confidence
-  - override /trainer: af3_with_confidence
+  - override /trainer: rf3_with_confidence
   - _self_
 
 datasets:

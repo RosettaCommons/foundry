@@ -10,12 +10,11 @@ from atomworks.io.transforms.categories import category_to_dict
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
-from inference_engines.base import InferenceEngine
 from rf3.model.RF3 import ShouldEarlyStopFn
 from rf3.utils.datasets import (
     assemble_distributed_inference_loader_from_list_of_paths,
 )
-from utils.ddp import RankedLogger, set_accelerator_based_on_availability
+from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
 from rf3.utils.inference import (
     apply_conformer_and_template_selections,
     build_file_paths_for_prediction,
@@ -25,7 +24,7 @@ from rf3.utils.io import (
     dump_structures,
     dump_trajectories,
 )
-from utils.logging import print_config_tree
+from modelhub.utils.logging import print_config_tree
 from rf3.utils.predicted_error import (
     annotate_atom_array_b_factor_with_plddt,
     compile_af3_confidence_outputs,
@@ -55,7 +54,7 @@ def should_early_stop_by_mean_plddt(
     return fn
 
 
-class RF3InferenceEngine(InferenceEngine):
+class RF3InferenceEngine:
     """Class for inference with RF3. Evaluates a trained RF3 model on a set of spoofed CIFs."""
 
     def __init__(
@@ -152,8 +151,6 @@ class RF3InferenceEngine(InferenceEngine):
         self.cfg.trainer.num_nodes = num_nodes
         self.cfg.trainer.devices_per_node = devices_per_node
         self.cfg.trainer.precision = "bf16-mixed"  # HACK: Temporary hack until our checkpoint configs are updated
-        self.cfg.trainer._target_ = "modelhub.trainers.rf3.RF3TrainerWithConfidence"  # HACK: Enables inference with 9/21 checkpoint for benchmarking
-        self.cfg.model.net._target_ = "modelhub.model.RF3.RF3WithConfidence"  # HACK: Enables inference with 9/21 checkpoint for benchmarking
 
         # We don't want to compute all of the training metrics, since they may error during inference
         self.cfg.trainer["metrics"] = {}

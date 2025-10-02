@@ -2,7 +2,7 @@ defaults:
   - rf3_net
 
 # Model architecture
-_target_: modelhub.model.RF3.RF3WithConfidence
+_target_: rf3.model.RF3.RF3WithConfidence
 
 # +---------- Mini rollout sampler ----------+
 # From the AF-3 main text:

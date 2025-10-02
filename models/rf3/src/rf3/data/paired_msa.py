@@ -125,11 +125,7 @@ class MultiInputDatasetWrapper(StructuralDatasetWrapper):
                     )
                 raise e
 
-        # Return the specified key or the entire data dict (i.e., only "feats" key from the Transform dictionary)
-        if exists(self.return_key):
-            return data[self.return_key]
-        else:
-            return data
+        return data
 
 
 class MultidomainDFParser(MetadataRowParser):

@@ -2,7 +2,7 @@
 
 # Experiment that loads a small dataset for quick testing
 
-name: quick-af3
+name: quick-rf3
 
 # For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
 defaults:

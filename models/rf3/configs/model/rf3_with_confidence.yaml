@@ -4,4 +4,4 @@ defaults:
   - _self_
 
 net:
-  _target_: modelhub.model.RF3.RF3WithConfidence
+  _target_: rf3.model.RF3.RF3WithConfidence

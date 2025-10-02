@@ -2,26 +2,26 @@ import time
 from collections import defaultdict
 
 import pandas as pd
-from atomworks.common import parse_example_id
+from atomworks.ml.example_id import parse_example_id
 from beartype.typing import Any
 from lightning.fabric.wrappers import (
     _FabricOptimizer,
 )
+from rf3.utils.loss import convert_batched_losses_to_list_of_dicts, mean_losses
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
 from torch import nn
 from torchmetrics.aggregation import MeanMetric
 
-from callbacks.base import BaseCallback
-from rf3.utils.ddp import RankedLogger
-from rf3.utils.logging import (
+from modelhub.callbacks.callback import BaseCallback
+from modelhub.utils.ddp import RankedLogger
+from modelhub.utils.logging import (
     print_df_as_table,
     print_model_parameters,
     safe_print,
     table_from_df,
 )
-from rf3.utils.loss import convert_batched_losses_to_list_of_dicts, mean_losses
 
 
 class LogModelParametersCallback(BaseCallback):

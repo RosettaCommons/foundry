@@ -5,12 +5,12 @@
             {
                 "seq": "MTSENPLLALREKISALDEKLLALFAERRELAVEVGKAKLLSHRPVRDIDRERDLLERLITLGKAHHLDAH(PBF)ITRTFQLGIEYSVLTQQALLEHHHHHH",
                 "chain_id": "A",
-                "msa_path": "tests/data/msas/5vht_A.a3m"
+                "msa_path": "models/rf3/tests/data/msas/5vht_A.a3m"
             },
             {
                 "seq": "MTSENPLLALREKISALDEKLLALFAERRELAVEVGKAKLLSHRPVRDIDRERDLLERLITLGKAHHLDAH(PBF)ITRTFQLGIEYSVLTQQALLEHHHHHH",
                 "chain_id": "B",
-                "msa_path": "tests/data/msas/5vht_A.a3m"
+                "msa_path": "models/rf3/tests/data/msas/5vht_A.a3m"
             }
         ]
     }

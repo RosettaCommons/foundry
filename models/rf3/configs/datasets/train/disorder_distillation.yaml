@@ -2,7 +2,7 @@
 
 disorder_distillation:
   dataset:
-    _target_: datahub.datasets.datasets.StructuralDatasetWrapper
+    _target_: atomworks.ml.datasets.datasets.StructuralDatasetWrapper
     save_failed_examples_to_dir: null
 
     # cif parser arguments
@@ -13,19 +13,18 @@ disorder_distillation:
 
     # metadata parser
     dataset_parser:
-      _target_: datahub.datasets.parsers.GenericDFParser
+      _target_: atomworks.ml.datasets.parsers.GenericDFParser
       pn_unit_iid_colnames: null
 
     # metadata dataset
     dataset:
-      _target_: datahub.datasets.datasets.PandasDataset
+      _target_: atomworks.ml.datasets.datasets.PandasDataset
       name: pdb_diso_distillation
       id_column: example_id
       data: ${paths.data.disorder_distill_parquet_dir}/disorderDistillation.csv
       columns_to_load:
         - example_id
         - path
-    return_key: null
     transform:
       _target_: ${datasets.pipeline_target}
       is_inference: False

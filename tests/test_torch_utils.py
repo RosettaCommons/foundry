@@ -4,7 +4,7 @@ import pytest
 import torch
 
 os.environ["NAN_CHECKING"] = "True"
-from utils.torch import assert_no_nans, map_to
+from modelhub.utils.torch import assert_no_nans, map_to
 
 
 def test_map_to():

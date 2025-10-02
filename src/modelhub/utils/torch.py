@@ -14,8 +14,8 @@ from torch import Tensor
 from torch._prims_common import DeviceLikeType
 from torch.types import _dtype
 
-from src import should_check_nans
-from common import at_least_one_exists, do_nothing
+from modelhub import should_check_nans
+from modelhub.common import at_least_one_exists, do_nothing
 
 
 def map_to(

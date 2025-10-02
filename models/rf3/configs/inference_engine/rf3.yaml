@@ -4,9 +4,9 @@ defaults:
   - base
   - _self_
 
-_target_: modelhub.inference_engines.rf3.RF3InferenceEngine
+_target_: rf3.inference_engines.rf3.RF3InferenceEngine
 
-ckpt_path: /software/containers/versions/modelhub_inference/ckpts/rf3_latest.ckpt
+ckpt_path: /home/ncorley/rf3-w-conf-newdatecut-ep688-refactored-fixed.ckpt
 
 # Transform arguments
 n_recycles: 10
@@ -36,8 +36,8 @@ annotate_b_factor_with_plddt: true
 metrics_cfg:
   # (For confidence outputs)
   ptm:
-    _target_: modelhub.metrics.predicted_error.ComputePTM
+    _target_: rf3.metrics.predicted_error.ComputePTM
   iptm:
-    _target_: modelhub.metrics.predicted_error.ComputeIPTM
+    _target_: rf3.metrics.predicted_error.ComputeIPTM
   count_clashing_chains:
-    _target_: modelhub.metrics.clashing_chains.CountClashingChains
+    _target_: rf3.metrics.clashing_chains.CountClashingChains

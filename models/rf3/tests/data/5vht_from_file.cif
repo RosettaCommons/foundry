@@ -1,7 +1,7 @@
 data_5VHT
 #
-_msa_paths_by_chain_id.A   tests/data/msas/5vht_A.a3m
-_msa_paths_by_chain_id.B   tests/data/msas/5vht_A.a3m
+_msa_paths_by_chain_id.A   models/rf3/tests/data/msas/5vht_A.a3m
+_msa_paths_by_chain_id.B   models/rf3/tests/data/msas/5vht_A.a3m
 # 
 _entry.id   5VHT 
 # 

@@ -2,13 +2,14 @@
 
 import logging
 import os
+from pathlib import Path
 
 import hydra
 import rootutils
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 
-from utils.logging import suppress_warnings
+from modelhub.utils.logging import suppress_warnings
 
 load_dotenv(override=True)
 
@@ -17,10 +18,7 @@ load_dotenv(override=True)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-# If the user has set `PROJECT_PATH`, use it to build the config path; otherwise, fall back to `PROJECT_ROOT`
-_config_path = os.path.join(
-    os.environ.get("PROJECT_PATH", os.environ["PROJECT_ROOT"]), "configs"
-)
+_config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rf3/configs")
 
 _spawning_process_logger = logging.getLogger(__name__)
 
@@ -42,11 +40,11 @@ def validate(cfg: DictConfig) -> None:
     # Reference: https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
     torch.set_float32_matmul_precision("medium")
 
-    from callbacks.base import BaseCallback  # noqa
-    from utils.instantiators import instantiate_loggers, instantiate_callbacks  # noqa
-    from utils.logging import print_config_tree  # noqa
-    from utils.ddp import RankedLogger, set_accelerator_based_on_availability  # noqa
-    from utils.ddp import is_rank_zero  # noqa
+    from modelhub.callbacks.callback import BaseCallback  # noqa
+    from modelhub.utils.instantiators import instantiate_loggers, instantiate_callbacks  # noqa
+    from modelhub.utils.logging import print_config_tree  # noqa
+    from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability  # noqa
+    from modelhub.utils.ddp import is_rank_zero  # noqa
     from rf3.utils.datasets import assemble_val_loader_dict  # noqa
 
     set_accelerator_based_on_availability(cfg)

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import typer
 from hydra import compose, initialize_config_dir
@@ -13,9 +14,11 @@ app = typer.Typer()
 )
 def fold(ctx: typer.Context):
     """Run structure prediction using hydra config overrides or simple input file."""
-    config_path = os.path.join(
-        os.environ.get("PROJECT_PATH", os.environ["PROJECT_ROOT"]), "configs"
-    )
+    # Find the RF3 configs directory relative to this file
+    # This file is at: models/rf3/src/rf3/cli.py
+    # Configs are at: models/rf3/configs/
+    rf3_package_dir = Path(__file__).parent.parent.parent  # Go up to models/rf3/
+    config_path = str(rf3_package_dir / "configs")
 
     # Get all arguments
     args = ctx.params.get("args", []) + ctx.args

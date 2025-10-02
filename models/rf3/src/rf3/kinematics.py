@@ -1,11 +1,8 @@
 # TODO: Many of these functions are unused; we will deprecate and delete
 # (They are holdovers from previous frameworks)
 
-from itertools import permutations
-
 import numpy as np
 import torch
-from openbabel import openbabel
 
 PARAMS = {
     "DMIN": 1,
@@ -355,36 +352,3 @@ def c6d_to_bins(c6d, same_chain, negative=False, params=PARAMS):
 def standardize_dihedral_retain_first(a, b, c, d):
     isomorphisms = [(a, b, c, d), (a, c, b, d)]
     return sorted(isomorphisms)[0]
-
-
-def get_chirals(obmol, xyz):
-    """
-    get all quadruples of atoms forming chiral centers and the expected ideal pseudodihedral between them
-    """
-    stereo = openbabel.OBStereoFacade(obmol)
-    angle = np.arcsin(1 / 3**0.5)
-    chiral_idx_set = set()
-    for i in range(obmol.NumAtoms()):
-        if not stereo.HasTetrahedralStereo(i):
-            continue
-        si = stereo.GetTetrahedralStereo(i)
-        config = si.GetConfig()
-
-        o = config.center
-        c = config.from_or_towards
-        i, j, k = list(config.refs)
-        for a, b, c in permutations((c, i, j, k), 3):
-            chiral_idx_set.add(standardize_dihedral_retain_first(o, a, b, c))
-
-    chiral_idx = list(chiral_idx_set)
-    chiral_idx.sort()
-    chiral_idx = torch.tensor(chiral_idx, dtype=torch.float32)
-    chiral_idx = chiral_idx[(chiral_idx < obmol.NumAtoms()).all(dim=-1)]
-
-    if chiral_idx.numel() == 0:
-        return torch.zeros((0, 5))
-
-    dih = get_dih(*xyz[chiral_idx.long()].split(split_size=1, dim=1))[:, 0]
-    chirals = torch.nn.functional.pad(chiral_idx, (0, 1), mode="constant", value=angle)
-    chirals[dih < 0.0, -1] *= -1
-    return chirals

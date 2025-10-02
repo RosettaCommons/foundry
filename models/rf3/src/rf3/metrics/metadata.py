@@ -2,7 +2,7 @@ import json
 
 from beartype.typing import Any, Literal
 
-from metrics.base import Metric
+from modelhub.metrics.metric import Metric
 
 
 class ExtraInfo(Metric):

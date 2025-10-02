@@ -4,7 +4,7 @@ from typing import Any
 import torch
 from biotite.structure import AtomArrayStack
 
-from metrics.base import Metric
+from modelhub.metrics.metric import Metric
 
 
 class CountClashingChains(Metric):

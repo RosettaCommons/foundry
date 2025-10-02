@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 # Import your code here
-from utils.weights import (
+from modelhub.utils.weights import (
     ParameterFreezingConfig,
     WeightLoadingConfig,
     WeightLoadingPolicy,

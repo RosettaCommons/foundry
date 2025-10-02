@@ -2,7 +2,7 @@
 
 rna_monomer_distillation:
   dataset:
-    _target_: datahub.datasets.datasets.StructuralDatasetWrapper
+    _target_: atomworks.ml.datasets.datasets.StructuralDatasetWrapper
     save_failed_examples_to_dir: ${paths.data.failed_examples_dir}
 
     # cif parser arguments
@@ -13,12 +13,12 @@ rna_monomer_distillation:
 
     # metadata parser
     dataset_parser:
-      _target_: datahub.datasets.parsers.GenericDFParser
+      _target_: atomworks.ml.datasets.parsers.GenericDFParser
       pn_unit_iid_colnames: null
 
     # metadata dataset
     dataset:
-      _target_: datahub.datasets.datasets.PandasDataset
+      _target_: atomworks.ml.datasets.datasets.PandasDataset
       name: rna_monomer_distillation
       id_column: example_id
       data: /projects/ml/afavor/rna_distillation/rna_distillation_filtered_df.parquet
@@ -31,7 +31,6 @@ rna_monomer_distillation:
         - overall_pde
         - overall_pae
 
-    return_key: null
     transform:
       _target_: ${datasets.pipeline_target}
       is_inference: False

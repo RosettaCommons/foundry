@@ -2,7 +2,7 @@
 
 multidomain_distillation:
   dataset:
-    _target_: modelhub.data.paired_msa.MultiInputDatasetWrapper
+    _target_: rf3.data.paired_msa.MultiInputDatasetWrapper
     save_failed_examples_to_dir: null
 
     # cif parser
@@ -14,11 +14,11 @@ multidomain_distillation:
 
     # metadata parser
     dataset_parser:
-      _target_: modelhub.data.paired_msa.MultidomainDFParser
+      _target_: rf3.data.paired_msa.MultidomainDFParser
 
     # metadata dataset
     dataset:
-      _target_: datahub.datasets.datasets.PandasDataset
+      _target_: atomworks.ml.datasets.datasets.PandasDataset
       name: multidomain_distillation
       id_column: example_id
       data: /projects/ml/datahub/dfs/domain_domain/domain_domain_dataset.DIGS.parquet
@@ -26,7 +26,6 @@ multidomain_distillation:
         - example_id
         - pdb_path
         - msa_path
-    return_key: null
     transform:
       _target_: ${datasets.pipeline_target}
       is_inference: False

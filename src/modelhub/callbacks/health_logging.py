@@ -10,7 +10,7 @@ from jaxtyping import Float, Int
 from lightning.fabric.utilities.rank_zero import rank_zero_only
 from torch import Tensor
 
-from callbacks.base import BaseCallback
+from modelhub.callbacks.callback import BaseCallback
 
 _DEFAULT_STATISTICS = types.MappingProxyType(
     {

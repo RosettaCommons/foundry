@@ -24,7 +24,7 @@ For more information, please see our preprint, [Accelerating Biomolecular Modeli
 </div>
 
 > [!TIP]
-> Complete inference instructions for RF3 are provided [here](src/modelhub/inference_engines/README.md).
+> Complete inference instructions for RF3 are provided [here](models/rf3/README.md).
 
 ### RF3 Quick Start - Installation & Usage
 
@@ -32,7 +32,7 @@ Follow these steps to set up **ModelForge** and run a test prediction with **RF3
 
 ---
 
-#### 1. Install the repository using `uv`
+#### 1. Install the source repository and RF3 model using `uv`
 
 ```bash
 git clone https://github.com/RosettaCommons/modelforge.git \
@@ -40,8 +40,11 @@ git clone https://github.com/RosettaCommons/modelforge.git \
   && uv python install 3.12 \
   && uv venv --python 3.12 \
   && source .venv/bin/activate \
-  && uv pip install -e .
+  && uv pip install -e ./models/rf3
 ```
+
+> [!NOTE]
+> Installing `rf3` automatically installs `modelhub` (shared utilities) as a dependency.
 
 #### 2. Download model weights for RF3 
 ```bash
@@ -53,4 +56,56 @@ wget http://files.ipd.uw.edu/pub/rf3/rf3_latest.pt
 rf3 fold tests/data/5vht_from_json.json
 ```
 
-Details on the exact formatting of the json files are available [here](src/modelhub/inference_engines/README.md).
+Details on the exact formatting of the json files are available [here](models/rf3/README.md).
+
+## Development
+
+### Package Structure
+
+ModelForge uses a multi-package architecture:
+
+- **`modelhub`**: Core package containing shared utilities, training infrastructure, and base classes
+- **`models/rf3/`**: RF3 model package with model-specific code and dependencies
+- **`models/<future>/`**: Additional models can be added as separate packages
+
+### Installation Options
+
+#### For Users (Single Model)
+
+Install only the model you need. Dependencies (including `modelhub`) are automatically installed:
+
+```bash
+# Install RF3 (includes modelhub automatically)
+uv pip install -e ./models/rf3
+
+# Future: Install other models
+# uv pip install -e ./models/other_model
+```
+
+#### For Core Developers (Multiple Packages)
+
+Install both `modelhub` and models in editable mode for development:
+
+```bash
+# Install modelhub and RF3 in editable mode
+uv pip install -e . -e ./models/rf3
+
+# Or install only modelhub (no models)
+uv pip install -e .
+```
+
+This approach allows you to:
+- Modify `modelhub` shared utilities and see changes immediately
+- Work on specific models without installing all models
+- Add new models as independent packages in `models/`
+
+### Adding New Models
+
+To add a new model:
+
+1. Create `models/<model_name>/` directory with its own `pyproject.toml`
+2. Add `modelhub` as a dependency
+3. Implement model-specific code in `models/<model_name>/src/`
+4. Users can install with: `uv pip install -e ./models/<model_name>`
+
+## Development
