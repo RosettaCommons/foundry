@@ -506,8 +506,8 @@ class RF3InferenceEngine(InferenceEngine):
                 )
 
             if self.dump_pae_matrix:
-                pae_np = confidence_outs["pae"].cpu().numpy()
-                np.save(self.cif_out_dir / f"{example_id}.pae", pae_np)
+                pae_np = confidence_outs["pae"].cpu().numpy().astype(np.float16)
+                np.save(self.cif_out_dir / f"{example_id}_pae", pae_np)
 
             ranked_logger.info(
                 f"Outputs for {example_id} written to {self.cif_out_dir / example_id}!"
