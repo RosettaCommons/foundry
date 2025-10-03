@@ -82,6 +82,7 @@ class RF3InferenceEngine(InferenceEngine):
         # Structure dumping arguments
         dump_predictions: bool,
         dump_trajectories: bool,
+        dump_pae_matrix: bool,
         one_model_per_file: bool,
         annotate_b_factor_with_plddt: bool,
         early_stopping_plddt_threshold: float | None,
@@ -116,6 +117,7 @@ class RF3InferenceEngine(InferenceEngine):
 
             dump_predictions (bool): Whether to dump structures (CIF files).
             dump_trajectories (bool): Whether to dump denoising trajectories.
+            dump_pae_matrix (bool): Whether to dump the full PAE matrix.
             one_model_per_file (bool): If True, write each structure within a diffusion batch to its own CIF files.
                 If False, include each structure within a diffusion batch as a separate model within one CIF file.
             annotate_b_factor_with_plddt (bool): If True, annotate the B-factor of the predicted structures with the atom-wise pLDDT scores.
@@ -217,6 +219,7 @@ class RF3InferenceEngine(InferenceEngine):
         # Structure dumping
         self.dump_predictions = dump_predictions
         self.dump_trajectories = dump_trajectories
+        self.dump_pae_matrix = dump_pae_matrix
         self.one_model_per_file = one_model_per_file
         self.annotate_b_factor_with_plddt = annotate_b_factor_with_plddt
 
@@ -499,6 +502,10 @@ class RF3InferenceEngine(InferenceEngine):
                     atom_array=pipeline_output["atom_array"],
                     base_path=self.cif_out_dir / f"{example_id}_noisy",
                 )
+
+            if self.dump_pae_matrix:
+                pae_np = confidence_outs["pae"].cpu().numpy()
+                np.save(self.cif_out_dir / f"{example_id}.pae", pae_np)
 
             ranked_logger.info(
                 f"Outputs for {example_id} written to {self.cif_out_dir / example_id}!"
