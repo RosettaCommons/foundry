@@ -32,6 +32,8 @@ from modelhub.utils.predicted_error import (
     get_mean_atomwise_plddt,
 )
 
+import numpy as np
+
 logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
