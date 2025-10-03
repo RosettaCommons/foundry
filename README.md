@@ -32,7 +32,7 @@ Follow these steps to set up **ModelForge** and run a test prediction with **RF3
 
 ---
 
-#### 1. Install the source repository and RF3 model using `uv`
+#### 1. Install the source repository and the RF3 model using `uv`
 
 ```bash
 git clone https://github.com/RosettaCommons/modelforge.git \
@@ -40,6 +40,7 @@ git clone https://github.com/RosettaCommons/modelforge.git \
   && uv python install 3.12 \
   && uv venv --python 3.12 \
   && source .venv/bin/activate \
+  && uv pip install -e .
   && uv pip install -e ./models/rf3
 ```
 
