@@ -5,12 +5,12 @@ import os
 
 import hydra
 import rootutils
+from dotenv import load_dotenv
 from omegaconf import DictConfig
 
-from modelhub.utils.env import load_ipd_dotenv
 from modelhub.utils.logging import suppress_warnings
 
-load_ipd_dotenv(override=True)
+load_dotenv(override=True)
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)

@@ -6,7 +6,7 @@ defaults:
 
 _target_: rf3.inference_engines.rf3.RF3InferenceEngine
 
-ckpt_path: /home/ncorley/rf3-w-conf-newdatecut-ep688-refactored-fixed.ckpt
+ckpt_path: /projects/ml/modelhub/inference/rf3-w-conf-newdatecut-ep688-refactored-fixed.ckpt
 
 # Transform arguments
 n_recycles: 10
