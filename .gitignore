@@ -208,7 +208,7 @@ logs/
 **/notebooks/
 **/scratch/
 **/outputs/
-**/scripts/slurm/
+**/slurm_logs/
 **/benchmarks/
 *.ckpt
 **/inference/

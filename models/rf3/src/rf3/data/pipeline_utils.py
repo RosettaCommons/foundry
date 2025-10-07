@@ -46,7 +46,7 @@ def build_ground_truth_distogram_transform(
     *,
     template_noise_scales: dict[str, float | None] | DictConfig,
     allowed_chain_types_for_conditioning: list[ChainType] | None = None,
-    p_condition_per_token: float = 1.0,
+    p_condition_per_token: float = 0.0,
     p_provide_inter_molecule_distances: float = 0.0,
     is_inference: bool = False,
 ) -> FeaturizeNoisedGroundTruthAsTemplateDistogram:
@@ -64,11 +64,11 @@ def build_ground_truth_distogram_transform(
         allowed_chain_types_for_conditioning (list[ChainType] | None):
             List of allowed chain types for conditioning. None disables conditioning.
         p_condition_per_token (float):
-            Probability of conditioning each eligible token. For inference, this is always 1.0.
+            Probability of conditioning each eligible token.
         p_provide_inter_molecule_distances (float):
             Probability of providing inter-molecule (inter-chain) distances.
         is_inference (bool):
-            If True, use constant noise scales and always condition. If False, use distributions and provided probability.
+            If True, use constant noise scales for conditioning. If False, sample from provided distributions.
 
     Returns:
         FeaturizeNoisedGroundTruthAsTemplateDistogram: The configured transform.
@@ -91,7 +91,6 @@ def build_ground_truth_distogram_transform(
                     * template_noise_scales["not_atomized"],
                 )
             )
-        p_condition = 1.0  # Always condition for inference (no stochasticity)
     else:
         # Use noise scale distributions for training
         if template_noise_scales["atomized"] is not None:
@@ -118,13 +117,12 @@ def build_ground_truth_distogram_transform(
                     ),
                 )
             )
-        p_condition = p_condition_per_token  # Apply conditioning to only some tokens during training
 
     return FeaturizeNoisedGroundTruthAsTemplateDistogram(
         noise_scale_distribution=TokenGroupNoiseScaleSampler(
             mask_and_sampling_fns=tuple(mask_and_sampling_fns),
         ),
         allowed_chain_types=allowed_chain_types_for_conditioning,
-        p_condition_per_token=p_condition,
+        p_condition_per_token=p_condition_per_token,
         p_provide_inter_molecule_distances=p_provide_inter_molecule_distances,
     )

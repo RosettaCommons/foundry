@@ -219,7 +219,7 @@ def featurize_noised_ground_truth_as_template_distogram(
     distogram_bins: Float[Tensor, "n_bin_edges"],
     allowed_chain_types: list[ChainType],
     is_unconditional: bool = True,
-    p_condition_per_token: float = 0.7,
+    p_condition_per_token: float = 0.0,
     p_provide_inter_molecule_distances: float = 0.0,
     existing_annotation_to_check: str = "is_input_file_templated",
 ) -> dict[str, Tensor]:
@@ -241,7 +241,7 @@ def featurize_noised_ground_truth_as_template_distogram(
             See Classifier-Free Diffusion Guidance (Ho et al., 2022) for details.
             Default: True (no conditioning).
         p_condition_per_token (float, optional):
-            Probability of conditioning each eligible token. Default: 0.7.
+            Probability of conditioning each eligible token. Default: 0.0 (no conditioning)
         p_provide_inter_molecule_distances (float, optional):
             Probability of providing inter-molecule (inter-chain) distances. Default: 0.0 (mask all inter-molecule pairs).
         existing_annotation_to_check (str):
@@ -394,7 +394,7 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
             the distogram. Shape [n_bins-1].
         allowed_chain_types (list): List of allowed chain types. Default is all chain types.
         p_condition_per_token (float): Per-token probability of conditioning, for those tokens that satisfy all other conditions.
-            Default is 1.0 (all tokens have conditions).
+            Default is 0.0 (no conditioning).
         p_provide_inter_molecule_distances (float): Probability of providing inter-molecule (inter-chain) distances.
             Default is 0.0 (no inter-molecule distances provided).
         existing_annotation_to_check (str): Name of an annotation in the AtomArray that,
@@ -418,7 +418,7 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
         | TokenGroupNoiseScaleSampler = af3_noise_scale_distribution,
         distogram_bins: torch.Tensor = DEFAULT_DISTOGRAM_BINS,
         allowed_chain_types: list[ChainType] = ChainType.get_all_types(),
-        p_condition_per_token: float = 0.7,
+        p_condition_per_token: float = 0.0,
         p_provide_inter_molecule_distances: float = 0.0,
         existing_annotation_to_check: str = "is_input_file_templated",
     ):

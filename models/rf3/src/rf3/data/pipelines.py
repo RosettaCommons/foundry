@@ -170,11 +170,11 @@ def build_af3_transform_pipeline(
     },
     allowed_chain_types_for_conditioning: list[int | str | ChainType]
     | None = ChainType.get_all_types(),  # All chain types (None = no conditioning)
-    p_condition_per_token: float = 0.4,  # When sampling with conditions, X% of tokens are conditioned (e.g., X^2% of pairs have conditions)
-    p_provide_inter_molecule_distances: float = 0.05,  # When sampling with conditions, X% of the time, show any inter-molecule distances
+    p_condition_per_token: float = 0.0,  # When sampling with conditions, X% of tokens are conditioned (e.g., X^2% of pairs have conditions)
+    p_provide_inter_molecule_distances: float = 0.0,  # When sampling with conditions, X% of the time, show any inter-molecule distances
     # (Reference Conformer)
-    p_give_non_polymer_ref_conf: float = 0.6,  # When sampling with conditions, X% of non-polymer chains get a ground-truth reference conformer
-    p_give_polymer_ref_conf: float = 0.1,  # When sampling with conditions, X% of polymer chains get a ground-truth reference conformer
+    p_give_non_polymer_ref_conf: float = 0.0,  # When sampling with conditions, X% of non-polymer chains get a ground-truth reference conformer
+    p_give_polymer_ref_conf: float = 0.0,  # When sampling with conditions, X% of polymer chains get a ground-truth reference conformer
     # -------------------------------------- #
     take_first_chiral_subordering: bool = False,
     mirror_prob: float = 0.0,
@@ -187,6 +187,7 @@ def build_af3_transform_pipeline(
     embedding_dim: int = 384,
     n_conformers: int = 8,
     add_cyclic_bonds: bool = False,
+    p_dropout_ref_conf: float = 0.0,  # Unused
 ):
     """Build the AF3 pipeline with specified parameters.
 
