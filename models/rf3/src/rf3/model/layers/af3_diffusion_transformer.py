@@ -322,7 +322,7 @@ class DiffusionTransformerBlock(nn.Module):
         kq_norm,
     ):
         super().__init__()
-        self.attention_pair_bias = AttentionPairBiasDiffusionDeepspeed(
+        self.attention_pair_bias = AttentionPairBiasDiffusion(
             c_a=c_token, c_s=c_s, c_pair=c_tokenpair, n_head=n_head, kq_norm=kq_norm
         )
         self.conditioned_transition_block = ConditionedTransitionBlock(
@@ -380,74 +380,6 @@ class ConditionedTransitionBlock(nn.Module):
 
 
 class AttentionPairBiasDiffusion(nn.Module):
-    def __init__(self, c_a, c_s, c_pair, n_head):
-        super().__init__()
-        self.c_a = c_a
-        self.c_pair = c_pair
-        self.c = c_a // n_head
-
-        self.to_q = MultiDimLinear(c_a, (n_head, self.c))
-        self.to_k = MultiDimLinear(c_a, (n_head, self.c), bias=False)
-        self.to_v = MultiDimLinear(c_a, (n_head, self.c), bias=False)
-        self.to_b = linearNoBias(c_pair, n_head)
-        self.to_g = nn.Sequential(
-            MultiDimLinear(c_a, (n_head, self.c), bias=False),
-            nn.Sigmoid(),
-        )
-        self.to_a = linearNoBias(c_a, c_a)
-        self.linear_output_project = nn.Sequential(
-            LinearBiasInit(c_s, c_a, biasinit=-2.0),
-            nn.Sigmoid(),
-        )
-        self.ln_0 = nn.LayerNorm((c_pair,))
-        self.ada_ln_1 = AdaLN(c_a=c_a, c_s=c_s)
-
-    def reset_parameters(self) -> None:
-        super().reset_parameters()
-
-    @activation_checkpointing
-    def forward(
-        self,
-        A_I,  # [B, I, C_a]
-        S_I,  # [B, I, C_a]
-        Z_II,  # [B, I, I, C_z]
-        Beta_II=None,  # [I, I]
-    ):
-        # Input projections
-        assert S_I is not None
-        if S_I is not None:
-            A_I = self.ada_ln_1(A_I, S_I)
-
-        Q_IH = self.to_q(A_I)
-        K_IH = self.to_k(A_I)
-        V_IH = self.to_v(A_I)
-        B_IIH = self.to_b(self.ln_0(Z_II)) + Beta_II[..., None]
-        G_IH = self.to_g(A_I)
-
-        # Attention
-        A_IIH = torch.softmax(
-            torch.tensor(self.c).pow(-1 / 2)
-            * torch.einsum("...ihd,...jhd->...ijh", Q_IH, K_IH)
-            + B_IIH,
-            dim=-2,
-        )  # softmax over j
-
-        ## G_IH: [B, I, H, C]
-        ## A_IIH: [B, I, I, H]
-        ## V_IH: [B, I, H, C]
-        head_I = torch.einsum("...ijh,...jhc->...ihc", A_IIH, V_IH)
-        head_I = G_IH * head_I  # [B, I, H, C]
-        A_I = head_I.flatten(start_dim=-2)  # [B, I, Ca]
-        A_I = self.to_a(A_I)
-
-        # Output projection (from adaLN-Zero)
-        if S_I is not None:
-            A_I = self.linear_output_project(S_I) * A_I
-
-        return A_I
-
-
-class AttentionPairBiasDiffusionDeepspeed(nn.Module):
     def __init__(self, c_a, c_s, c_pair, n_head, kq_norm):
         super().__init__()
         self.n_head = n_head
@@ -455,7 +387,7 @@ class AttentionPairBiasDiffusionDeepspeed(nn.Module):
         self.c_pair = c_pair
         self.c = c_a // n_head
 
-        self.to_q = MultiDimLinear(c_a, (n_head, self.c))
+        self.to_q = MultiDimLinear(c_a, (n_head, self.c), bias=False)
         self.to_k = MultiDimLinear(c_a, (n_head, self.c), bias=False)
         self.to_v = MultiDimLinear(c_a, (n_head, self.c), bias=False)
         self.to_b = linearNoBias(c_pair, n_head)

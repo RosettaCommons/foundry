@@ -40,12 +40,10 @@ git clone https://github.com/RosettaCommons/modelforge.git \
   && uv python install 3.12 \
   && uv venv --python 3.12 \
   && source .venv/bin/activate \
-  && uv pip install -e .
+  && uv pip install -e . \
   && uv pip install -e ./models/rf3
 ```
 
-> [!NOTE]
-> Installing `rf3` automatically installs `modelhub` (shared utilities) as a dependency.
 
 #### 2. Download model weights for RF3 
 ```bash
@@ -54,7 +52,7 @@ wget http://files.ipd.uw.edu/pub/rf3/rf3_latest.pt
 
 #### 3. Run a test prediction
 ```bash
-rf3 fold tests/data/5vht_from_json.json
+rf3 fold models/rf3/tests/data/5vht_from_json.json
 ```
 
 Details on the exact formatting of the json files are available [here](models/rf3/README.md).
@@ -73,15 +71,21 @@ ModelForge uses a multi-package architecture:
 
 #### For Users (Single Model)
 
-Install only the model you need. Dependencies (including `modelhub`) are automatically installed:
+To use a model, you must first install `modelhub` in editable mode, then install the specific model:
 
 ```bash
-# Install RF3 (includes modelhub automatically)
+# Install modelhub first (required)
+uv pip install -e .
+
+# Then install RF3
 uv pip install -e ./models/rf3
 
 # Future: Install other models
 # uv pip install -e ./models/other_model
 ```
+
+> [!IMPORTANT]
+> You must install `modelhub` with `-e` (editable mode) first, before installing any model packages. This ensures both packages are installed in editable mode for proper development workflow.
 
 #### For Core Developers (Multiple Packages)
 
@@ -108,5 +112,3 @@ To add a new model:
 2. Add `modelhub` as a dependency
 3. Implement model-specific code in `models/<model_name>/src/`
 4. Users can install with: `uv pip install -e ./models/<model_name>`
-
-## Development

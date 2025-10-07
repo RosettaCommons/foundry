@@ -58,16 +58,6 @@ class AtomAttentionEncoderPairformer(nn.Module):
 
         self.use_atom_level_embedding = use_atom_level_embedding
 
-        # self.process_s_trunk = nn.Sequential(
-        # nn.LayerNorm(c_s),
-        # linearNoBias(c_s, c_atom)
-        # )
-        # self.process_z = nn.Sequential(
-        # nn.LayerNorm(c_tokenpair),
-        # linearNoBias(c_tokenpair, c_atompair)
-        # )
-        # self.process_r = linearNoBias(3, c_atom)
-
         self.process_single_l = nn.Sequential(
             nn.ReLU(), linearNoBias(c_atom, c_atompair)
         )
@@ -237,7 +227,7 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
         self.c_pair = c_pair
         self.c = c_a // n_head
 
-        self.to_q = MultiDimLinear(c_a, (n_head, self.c))
+        self.to_q = MultiDimLinear(c_a, (n_head, self.c), bias=False)
         self.to_k = MultiDimLinear(c_a, (n_head, self.c), bias=False)
         self.to_v = MultiDimLinear(c_a, (n_head, self.c), bias=False)
         self.to_b = linearNoBias(c_pair, n_head)
@@ -498,17 +488,57 @@ class RelativePositionEncoding(nn.Module):
             "residue_index"
         ].unsqueeze(-2)
         b_same_entity_II = f["entity_id"].unsqueeze(-1) == f["entity_id"].unsqueeze(-2)
-        d_residue_II = torch.where(
-            b_samechain_II,
-            torch.clip(
-                f["residue_index"].unsqueeze(-1)
-                - f["residue_index"].unsqueeze(-2)
-                + self.r_max,
-                0,
-                2 * self.r_max,
-            ),
-            2 * self.r_max + 1,
-        )
+
+        # Handle cyclic chains
+        cyclic_asym_ids = f.get("cyclic_asym_ids", [])
+        if len(cyclic_asym_ids) > 0:
+            offset = f["residue_index"].unsqueeze(-1) - f["residue_index"].unsqueeze(-2)
+
+            for cyclic_asym_id in cyclic_asym_ids:
+                len_cyclic_chain = (
+                    f["residue_index"][f["asym_id"] == cyclic_asym_id].unique().shape[0]
+                )
+                cyclic_chain_mask = (f["asym_id"].unsqueeze(-1) == cyclic_asym_id) & (
+                    f["asym_id"].unsqueeze(-2) == cyclic_asym_id
+                )
+
+                # cyclic offset
+                if len_cyclic_chain > 0:
+                    offset_plus = offset + len_cyclic_chain
+                    offset_minus = offset - len_cyclic_chain
+                    abs_offset = offset.abs()
+                    abs_offset_plus = offset_plus.abs()
+                    abs_offset_minus = offset_minus.abs()
+
+                    choice_plus_or_minus = torch.where(
+                        abs_offset_plus <= abs_offset_minus, offset_plus, offset_minus
+                    )
+                    c_offset = torch.where(
+                        (abs_offset <= abs_offset_plus)
+                        & (abs_offset <= abs_offset_minus),
+                        offset,
+                        choice_plus_or_minus,
+                    )
+                    offset = torch.where(cyclic_chain_mask, c_offset, offset)
+
+            offset = (offset + self.r_max).clamp(0, 2 * self.r_max)
+            d_residue_II = torch.where(
+                b_samechain_II, offset, (2 * self.r_max + 1) * torch.ones_like(offset)
+            )
+
+        else:
+            d_residue_II = torch.where(
+                b_samechain_II,
+                torch.clip(
+                    f["residue_index"].unsqueeze(-1)
+                    - f["residue_index"].unsqueeze(-2)
+                    + self.r_max,
+                    0,
+                    2 * self.r_max,
+                ),
+                2 * self.r_max + 1,
+            )
+
         A_relpos_II = one_hot(d_residue_II.long(), 2 * self.r_max + 2)
         d_token_II = torch.where(
             b_samechain_II * b_sameresidue_II,
@@ -646,118 +676,6 @@ class MSAModule(nn.Module):
             Z_II = Z_II + self.pair_transition(Z_II)
 
         return Z_II
-
-
-class AF3TemplateEmbedder(nn.Module):
-    """
-    AF3-like TemplateEmbedding (e.g., protein-only, etc.)
-    Unused in RF3.
-    """
-
-    def __init__(self, n_block, raw_template_dim, c_z, c, p_drop):
-        super().__init__()
-        self.c = c
-        self.emb_pair = nn.Linear(c_z, c, bias=False)
-        self.norm_pair_before_pairformer = nn.LayerNorm(c_z)
-        self.norm_after_pairformer = nn.LayerNorm(c)
-        self.emb_templ = nn.Linear(raw_template_dim, c, bias=False)
-
-        # template pairformer does not operate on sequence representation
-        self.pairformer = nn.ModuleList(
-            [
-                PairformerBlock(
-                    c_s=0,
-                    c_z=c,
-                    p_drop=p_drop,
-                    triangle_multiplication=dict(d_hidden=c),
-                    triangle_attention=dict(d_hidden=c),
-                    attention_pair_bias={},
-                    n_transition=4,
-                )
-                for _ in range(n_block)
-            ]
-        )
-
-        # NOTE: this is not consistent with AF3 paper which outputs this tensor in the template_channel dimension
-        # In Algorithm 1, line 9, the outputs of this function are added to the Z_II tensor which has dimensions [B, I, I, C_z]
-        # so we make the outputs of this module also has those dimensions
-        self.agg_emb = nn.Linear(c, c_z, bias=False)
-
-    def forward(
-        self,
-        f,
-        Z_II,
-    ):
-        template_backbone_frame_mask = f["template_backbone_frame_mask"]
-        template_pseudo_beta_mask = f["template_pseudo_beta_mask"]
-        template_distogram = f["template_distogram"]
-        template_unit_vector = f["template_unit_vector"]
-        template_restype = f["template_restype"]
-        asym_id = f["asym_id"]
-
-        @activation_checkpointing
-        def embed_templates(
-            template_backbone_frame_mask,
-            template_pseudo_beta_mask,
-            template_distogram,
-            template_unit_vector,
-            template_restype,
-            asym_id,
-        ):
-            I = Z_II.shape[0]
-            template_frame_mask = (
-                template_backbone_frame_mask[:, None]
-                * template_backbone_frame_mask[:, :, None]
-            )
-            template_pseudo_beta_mask = (
-                template_pseudo_beta_mask[:, None, :]
-                * template_pseudo_beta_mask[:, :, None]
-            )
-
-            template_feats = torch.cat(
-                [
-                    template_distogram,
-                    template_frame_mask[..., None],
-                    template_unit_vector,
-                    template_pseudo_beta_mask[..., None],
-                ],
-                dim=-1,
-            )
-            template_feats = (
-                template_feats * (asym_id[None, :] == asym_id[:, None])[..., None]
-            )
-            template_restype_left = template_restype[:, None, :, :].expand(
-                -1, I, -1, -1
-            )
-            template_restype_right = template_restype[:, :, None, :].expand(
-                -1, -1, I, -1
-            )
-
-            template_feats = torch.cat(
-                [template_feats, template_restype_left, template_restype_right],
-                dim=-1,
-            )
-            T = template_feats.shape[0]
-            u_II = torch.zeros(I, I, self.c, device=Z_II.device, dtype=Z_II.dtype)
-            for i in range(T):
-                v_II = self.emb_pair(
-                    self.norm_pair_before_pairformer(Z_II)
-                ) + self.emb_templ(template_feats[i])
-                for block in self.pairformer:
-                    _, v_II = block(None, v_II)
-                u_II = u_II + self.norm_after_pairformer(v_II)
-            u_II = u_II / T
-
-            return self.agg_emb(relu(u_II))
-
-        return embed_templates(
-            template_backbone_frame_mask,
-            template_pseudo_beta_mask,
-            template_distogram,
-            template_unit_vector,
-            template_restype,
-            asym_id,
-        )
 
 
 class RF3TemplateEmbedder(nn.Module):

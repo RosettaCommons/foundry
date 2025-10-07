@@ -16,8 +16,8 @@ dataset:
       - "resolution < 9.0"
       - "num_polymer_pn_units <= 300" 
       # interface-specific filters
-      - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
-      - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:cifutils.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+      - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+      - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
     columns_to_load:
       # columns common across all PDB datasets
       - example_id

@@ -8,6 +8,9 @@ import torch
 import torch.nn as nn
 from jaxtyping import Float, Int
 from lightning.fabric.utilities.rank_zero import rank_zero_only
+from lightning.fabric.wrappers import (
+    _FabricOptimizer,
+)
 from torch import Tensor
 
 from modelhub.callbacks.callback import BaseCallback
@@ -87,34 +90,32 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
             self.log_histograms = {}
 
     @rank_zero_only
-    def on_fit_start(
-        self, *, model: nn.Module = None, trainer: Any | None = None, **kwargs
-    ):
+    def on_fit_start(self):
         """Initialize the callback and register activation hooks."""
         # Check that we either have loggers attached or keep_cache is True, otherwise the
         #  data will be computed but not logged.
-        if not self.keep_cache and not trainer.fabric.loggers:
+        if not self.keep_cache and not self.trainer.fabric.loggers:
             raise ValueError(
                 "TrainingHealthTracker requires loggers or keep_cache=True. "
                 "Otherwise the data will be computed but not logged."
             )
 
     @rank_zero_only
-    def on_train_batch_start(self, *, trainer, **kwargs):
-        step = trainer.state["global_step"]
-        model = trainer.state["model"]
+    def on_train_batch_start(self, batch: Any, batch_idx: int):
+        step = self.trainer.state["global_step"]
+        model = self.trainer.state["model"]
         if (self.log_activations or "activations" in self.log_histograms) and (
             step % self.log_freq == 0
         ):
-            self._register_activation_hooks(model, trainer, step)
+            self._register_activation_hooks(model, step)
 
     @rank_zero_only
-    def on_before_optimizer_step(self, trainer: Any | None = None, **kwargs):
+    def on_before_optimizer_step(self, optimizer: _FabricOptimizer, **kwargs):
         """Log gradients, weights, and activations before optimizer step."""
-        step = trainer.state["global_step"]
+        step = self.trainer.state["global_step"]
 
         if step % self.log_freq == 0:
-            model = trainer.state["model"]
+            model = self.trainer.state["model"]
 
             # Collect weight & gradient stats
             _should_log_some_grads = self.log_grads or ("grads" in self.log_histograms)
@@ -122,15 +123,11 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
                 "weights" in self.log_histograms
             )
             if _should_log_some_grads or _should_log_some_weights:
-                self._collect_parameter_stats(trainer, model, step)
+                self._collect_parameter_stats(model, step)
 
             # Log all collected stats at once using trainer's fabric instance
-            if (
-                len(self._temp_cache["scalars"]) > 0
-                and hasattr(trainer, "fabric")
-                and trainer.fabric.loggers
-            ):
-                trainer.fabric.log_dict(
+            if len(self._temp_cache["scalars"]) > 0 and self.trainer.fabric.loggers:
+                self.trainer.fabric.log_dict(
                     self._temp_cache["scalars"],
                     step=step,
                 )
@@ -153,17 +150,15 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
         """Clean up activation hooks at the end of training."""
         self._remove_activation_hooks()
 
-    def on_validation_epoch_start(self, *, trainer: Any, **kwargs):
+    def on_validation_epoch_start(self):
         # Temporarily remove any hooks for validation
         self._remove_activation_hooks()
 
     @rank_zero_only
-    def on_save_checkpoint(
-        self, *, state: dict[str, Any], trainer: Any | None = None, **kwargs
-    ):
+    def on_save_checkpoint(self, state: dict[str, Any]):
         self._remove_activation_hooks()
 
-    def _collect_parameter_stats(self, trainer, model, step: int):
+    def _collect_parameter_stats(self, model, step: int):
         """Collect gradient and weight statistics in a single parameter iteration."""
         cache = self._temp_cache  # alias
 
@@ -215,7 +210,7 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
             return True
         return self.filter_activations(name, module_type)
 
-    def _register_activation_hooks(self, model, trainer, step: int):
+    def _register_activation_hooks(self, model, step: int):
         """Register forward hooks to accumulate activations."""
         cache = self._temp_cache  # alias
 

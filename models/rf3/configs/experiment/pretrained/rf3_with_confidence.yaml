@@ -4,7 +4,7 @@ name: rf3-with-confidence
 
 # For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
 defaults:
-  - rf3
+  - pretrained/rf3
   - override /model: rf3_with_confidence
   - override /trainer: rf3_with_confidence
   - _self_

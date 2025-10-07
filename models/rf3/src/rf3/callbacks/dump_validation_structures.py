@@ -37,11 +37,9 @@ class DumpValidationStructuresCallback(BaseCallback):
 
     def on_validation_batch_end(
         self,
-        *,
         outputs: dict,
-        trainer: Any,
         batch: Any,
-        dataset_name: str,
+        dataset_name: str | None = None,
         **kwargs,
     ):
         if (not self.dump_predictions) and (not self.dump_trajectories):
@@ -64,7 +62,7 @@ class DumpValidationStructuresCallback(BaseCallback):
 
         def _build_path_from_example_id(dir: str, extra: str = "") -> Path:
             """Helper function to build a path from a training or validation example_id."""
-            path = self.save_dir / dir / f"epoch_{trainer.state['current_epoch']}"
+            path = self.save_dir / dir / f"epoch_{self.trainer.state['current_epoch']}"
 
             path = path / dataset_name
 

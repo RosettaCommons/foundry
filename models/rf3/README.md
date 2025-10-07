@@ -5,7 +5,7 @@
 </div>
 
 > [!IMPORTANT]
-> We are currently finalizing some cleanup work on the inference API. Please expect the API (including input formats and confidence outputs) to stabilize within the next week. Thank you for your patience!
+> We are currently finalizing some cleanup work on the inference API. Please expect the API (including input formats and confidence outputs) to stabilize in the upcoming weeks. Thank you for your patience!
 
 RF3 is an all-atom biomolecular structure prediction network competitive with leading open-source models. By including additional features at train-time – implicit chirality representations and atom-level geometric conditioning – we improve performance on tasks such as prediction of chiral ligands and fixed-backbone or fixed-conformer docking.
 
@@ -21,11 +21,12 @@ git clone https://github.com/RosettaCommons/modelforge.git \
   && uv python install 3.12 \
   && uv venv --python 3.12 \
   && source .venv/bin/activate \
+  && uv pip install -e . \
   && uv pip install -e ./models/rf3
 ```
 
-> [!NOTE]
-> Installing `rf3` automatically installs `modelhub` (shared utilities) as a dependency. For development on both packages, use: `uv pip install -e . -e ./models/rf3`
+> [!IMPORTANT]
+> You must install `modelhub` (the root package) with `-e` first, then install `rf3`. This ensures both packages are in editable mode for proper development workflow.
 
 ### B. Download model weights for RF3 
 ```bash

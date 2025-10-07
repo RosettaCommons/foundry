@@ -1,9 +1,9 @@
 import pandas as pd
 from lightning.fabric.utilities.rank_zero import rank_zero_only
-from rf3.utils.logging import print_df_as_table
-from rf3.utils.torch_utils import Timers
 
 from modelhub.callbacks.callback import BaseCallback
+from modelhub.utils.logging import print_df_as_table
+from modelhub.utils.torch import Timers
 
 
 class TimingCallback(BaseCallback):
@@ -45,9 +45,7 @@ class TimingCallback(BaseCallback):
     def on_after_optimizer_step(self, **kwargs):
         self.timers.stop("optimizer_step")
 
-    @rank_zero_only
-    def optimizer_step(self, *, trainer, **kwargs):
-        step = trainer.state["global_step"]
+        step = self.trainer.state["global_step"]
         self.n_steps_since_last_log += 1
         if step % self.log_every_n == 0:
             timings = self.timers.elapsed(*self.timers.timers.keys(), reset=True)
@@ -57,9 +55,9 @@ class TimingCallback(BaseCallback):
             }
 
             # Log timings
-            trainer.fabric.log_dict(timings, step=step)
+            self.trainer.fabric.log_dict(timings, step=step)
 
-            if trainer.fabric.is_global_zero:
+            if self.trainer.fabric.is_global_zero:
                 self._print_timings(timings)
 
     def _print_timings(self, timings: dict[str, float]):

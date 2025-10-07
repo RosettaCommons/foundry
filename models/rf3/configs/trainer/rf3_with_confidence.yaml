@@ -1,5 +1,5 @@
 defaults:
-  - af3
+  - rf3
   - override loss: structure_prediction_with_confidence
 
 _target_: rf3.trainers.rf3.RF3TrainerWithConfidence

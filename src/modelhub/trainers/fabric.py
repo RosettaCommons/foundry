@@ -504,12 +504,9 @@ class FabricTrainer(ABC):
                 )
 
                 # ... step the optimizer, clipping gradients and updating EMA parameters if applicable
+                # Note: step_optimizer() calls optimizer.step(), which internally triggers
+                # on_after_optimizer_step callbacks via _FabricOptimizer
                 self.step_optimizer()
-
-                # Call on_after_optimizer_step for callbacks (don't call "optimizer_step" as it triggers LightningModule hooks)
-                self.fabric.call(
-                    "on_after_optimizer_step", optimizer=self.state["optimizer"]
-                )
 
                 # ... step the scheduler, if we're adjusting the learning rate at the optimizer step-level
                 self.step_scheduler(

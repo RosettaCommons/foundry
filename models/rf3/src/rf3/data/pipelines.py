@@ -98,6 +98,7 @@ from atomworks.ml.transforms.random_atomize_residues import RandomAtomizeResidue
 from atomworks.ml.transforms.rdkit_utils import GetRDKitChiralCenters
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
 from omegaconf import DictConfig
+from rf3.data.cyclic_transorm import AddCyclicBonds
 from rf3.data.extra_xforms import CheckForNaNsInInputs
 from rf3.data.pipeline_utils import (
     annotate_post_crop_hash,
@@ -145,11 +146,12 @@ def build_af3_transform_pipeline(
     max_msa_sequences: int = 10_000,  # Paper: 16,000, but we only have 10K stored on disk
     n_msa: int = 10_000,  # Paper: ?? I think ~12K?
     dense_msa: bool = True,  # True for AF3
+    add_residue_is_paired_feature: bool = False,
     # Cache paths
     msa_cache_dir: PathLike | str | None = None,
     residue_cache_dir: PathLike
     | str
-    | None = "/net/tukwila/lschaaf/atomworks.ml/MACE-Egret-3-noH/mace_embeddings",
+    | None = "/net/tukwila/lschaaf/datahub/MACE-OMOL-Jul2025/mace_embeddings",
     # Diffusion parameters
     sigma_data: float = 16.0,
     diffusion_batch_size: int = 48,
@@ -184,6 +186,7 @@ def build_af3_transform_pipeline(
     p_dropout_atom_level_embeddings: float = 0.0,
     embedding_dim: int = 384,
     n_conformers: int = 8,
+    add_cyclic_bonds: bool = False,
 ):
     """Build the AF3 pipeline with specified parameters.
 
@@ -431,21 +434,31 @@ def build_af3_transform_pipeline(
             use_paths_in_chain_info=True,  # if there are paths specified in the `chain_info` for a given chain, use them
             raise_if_missing_msa_for_protein_of_length_n=raise_if_missing_msa_for_protein_of_length_n,
         ),
+        PairAndMergePolymerMSAs(
+            dense=dense_msa, add_residue_is_paired_feature=add_residue_is_paired_feature
+        ),
     ]
 
     transforms += [
-        PairAndMergePolymerMSAs(dense=dense_msa),
         # ... encode MSA to AF-3 format
-    ]
-
-    transforms += [
         EncodeMSA(
             encoding=af3_sequence_encoding,
             token_to_use_for_gap=af3_sequence_encoding.token_to_idx["<G>"],
         ),
         # ... fill MSA, indexing into only the portions of the polymers that are present in the cropped structure
-        FillFullMSAFromEncoded(pad_token=af3_sequence_encoding.token_to_idx["<G>"]),
+        FillFullMSAFromEncoded(
+            pad_token=af3_sequence_encoding.token_to_idx["<G>"],
+            add_residue_is_paired_feature=add_residue_is_paired_feature,
+        ),
         AddAF3TokenBondFeatures(),
+    ]
+
+    if add_cyclic_bonds:
+        transforms += [
+            AddCyclicBonds(),
+        ]
+
+    transforms += [
         # ... featurize MSA
         ConvertToTorch(
             keys=[

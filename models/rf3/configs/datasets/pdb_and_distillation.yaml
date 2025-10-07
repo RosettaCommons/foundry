@@ -13,7 +13,6 @@ defaults:
     # - rna_monomer_distillation
   - val/af3_validation@val.af3_validation
   - val/af3_validation@val.quick_af3_validation_with_templating
-  - val/runs_and_poses@val.runs_and_poses
   - _self_
 
 # Dataloading pipeline to use
@@ -51,7 +50,7 @@ val:
           not_atomized: 1e-4 # No noise on polymer atoms (epsilon to avoid division by zero)
           atomized: 1e-4 # No noise on ligand atoms (epsilon to avoid division by zero)
         allowed_chain_types_for_conditioning:
-          _target_: cifutils.enums.ChainType.get_all_types
+          _target_: atomworks.enums.ChainType.get_all_types
         p_condition_per_token: 1.0 # Always condition
         p_provide_inter_molecule_distances: 0.0 # No inter-chain distances
         # (Reference conformer)

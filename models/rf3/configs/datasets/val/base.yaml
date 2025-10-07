@@ -27,5 +27,6 @@ dataset:
     p_dropout_atom_level_embeddings: 0.0 # always use embeddings in inference
     take_first_chiral_subordering: ${datasets.take_first_chiral_subordering}
     use_element_for_atom_names_of_atomized_tokens: ${datasets.use_element_for_atom_names_of_atomized_tokens}
+    add_residue_is_paired_feature: ${datasets.add_residue_is_paired_feature}
 
 key_to_balance: ${datasets.key_to_balance}

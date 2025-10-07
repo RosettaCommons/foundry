@@ -47,3 +47,4 @@ multidomain_distillation:
       ligand_dropout_prob: 0.0
       p_unconditional: ${datasets.p_unconditional}
       p_dropout_atom_level_embeddings: ${datasets.p_dropout_atom_level_embeddings}
+      add_residue_is_paired_feature: ${datasets.add_residue_is_paired_feature}

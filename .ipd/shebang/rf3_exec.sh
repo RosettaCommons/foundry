@@ -104,7 +104,7 @@ if [ ! -z $SIF_PATH ]; then
     echo "Running $PYTHON_SCRIPT with apptainer: $SIF_PATH."
     echo '################## End shebang info ####################'
     echo
-    /usr/bin/apptainer exec --nv --slurm \
+    /usr/bin/apptainer exec --nv --nvccli --slurm \
         --bind "$REPO_ROOT:$REPO_ROOT" \
         --env PYTHONPATH="\$PYTHONPATH:$PYTHONPATH" \
         $SIF_PATH $python_cmd "$PYTHON_SCRIPT" "$@"

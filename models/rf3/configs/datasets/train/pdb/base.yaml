@@ -28,3 +28,4 @@ dataset:
     mirror_prob: ${datasets.mirror_prob}
     atomization_prob: ${datasets.atomization_prob}
     ligand_dropout_prob: ${datasets.ligand_dropout_prob}
+    add_residue_is_paired_feature: ${datasets.add_residue_is_paired_feature}

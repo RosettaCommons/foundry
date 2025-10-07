@@ -34,7 +34,8 @@ dependencies = [
     "beartype>=0.18.0,<1",
     # ... ml tools (core)
     "torch>=2.2.0,<3",
-    "lightning>=2.4.0,<2.5",
+    "lightning>=2.5.0",
+    "loralib>=0.1.1"
 ]
 
 
