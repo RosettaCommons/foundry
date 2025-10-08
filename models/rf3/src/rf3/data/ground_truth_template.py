@@ -429,9 +429,6 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
         self.p_condition_per_token = p_condition_per_token
         self.existing_annotation_to_check = existing_annotation_to_check
 
-        if not self.allowed_chain_types:
-            logger.warning("No chain types allowed; no conditioning will be given.")
-
     def check_input(self, data: dict[str, Any]) -> None:
         check_contains_keys(data, ["atom_array"])
         check_is_instance(data, "atom_array", AtomArray)

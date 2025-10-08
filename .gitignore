@@ -209,9 +209,9 @@ logs/
 **/scratch/
 **/outputs/
 **/slurm_logs/
-**/benchmarks/
 *.ckpt
 **/inference/
+**/benchmarks/
 
 # AI
 **/CLAUDE.md

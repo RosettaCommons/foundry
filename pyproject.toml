@@ -28,7 +28,7 @@ dependencies = [
     "environs>=11.0.0,<12",
     # ... logging
     "wandb>=0.15.10,<1",
-    "rich>=13.9.4,<14",
+    "rich>=13.9.4",
     # ... typing & documentation
     "jaxtyping>=0.2.17,<1",
     "beartype>=0.18.0,<1",

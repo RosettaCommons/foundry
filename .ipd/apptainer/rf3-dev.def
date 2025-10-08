@@ -1,5 +1,5 @@
-Bootstrap: docker
-From: nvcr.io/nvidia/pytorch:25.06-py3
+Bootstrap: localimage
+From: /net/software/containers/versions/modelhub/pytorch_25.06-py3.sif
 IncludeCmd: yes
 
 # RF3 Development Container - Dependencies only (excludes atomworks, which we expose through a submodule for development)
@@ -40,13 +40,6 @@ IncludeCmd: yes
 
     ## PYTHON DEPENDENCY INSTALLATION
 
-    # Fix NGC constraints that conflict with our required packages
-    # ... remove packaging constraint to allow biotite 1.3.0 installation
-    sed -i '/packaging==/d' /etc/pip/constraint.txt
-
-    # ... remove pytest constraint
-    sed -i '/pytest==/d' /etc/pip/constraint.txt
-
     # Install uv for fast dependency resolution
     pip install uv
 
@@ -61,16 +54,28 @@ IncludeCmd: yes
     uv pip compile /opt/pyproject.toml --output-file /opt/rf3_requirements.txt --all-extras
     rm /opt/pyproject.toml
 
-    # Install core dependencies (excluding torch packages and numpy from NGC container)
-    grep -vE "^(torch(|vision|audio)|numpy)==" /opt/core_requirements.txt > /opt/core_requirements_filtered.txt
-    uv pip install --system --break-system-packages -r /opt/core_requirements_filtered.txt
+    # Merge and dedupe requirements, excluding packages we don't want
+    # (atomworks is mounted from host; torch/numpy/nvidia-* provided by base image)
+    # (pynvml/packaging/pandas/markdown-it-py from NGC container to avoid conflicts)
+    cat /opt/core_requirements.txt /opt/rf3_requirements.txt | \
+        grep -vE "^(atomworks|torch(|vision|audio)|numpy|nvidia-.*|pynvml|packaging|pandas|markdown-it-py)==" | \
+        awk '!seen[$0]++' > /opt/combined_requirements.txt
 
-    # Install RF3 dependencies (excluding atomworks, torch packages, and numpy)
-    grep -vE "^(atomworks|torch(|vision|audio)|numpy)==" /opt/rf3_requirements.txt > /opt/rf3_requirements_filtered.txt
-    uv pip install --system --break-system-packages -r /opt/rf3_requirements_filtered.txt
+    # Print combined requirements for debugging
+    echo "=== Combined requirements to install ==="
+    cat /opt/combined_requirements.txt
+    echo "========================================"
 
-    # Downgrade NumPy to <2.0 (NVIDIA 25.06 is not compatible with NumPy >=2)
-    uv pip install --system --break-system-packages "numpy<2"
+    # Install the cleaned, combined requirements (use uv for better resolver)
+    uv pip install --system --break-system-packages -r /opt/combined_requirements.txt
+
+    # Clean up to minimize container size
+    uv cache clean
+    pip cache purge
+    apt-get clean
+    rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+    rm -rf /root/.cache 2>/dev/null || true
+    rm -rf /opt/*.txt 2>/dev/null || true
 
 %environment
     # (Flag to increase accessible GPU memory)

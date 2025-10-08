@@ -102,9 +102,22 @@ fi
 
 if [ ! -z $SIF_PATH ]; then
     echo "Running $PYTHON_SCRIPT with apptainer: $SIF_PATH."
+
+    # Determine GPU binding method: prefer --nvccli, fallback to --nv, then no GPU
+    GPU_FLAG=""
+    if command -v nvidia-container-cli &> /dev/null && [ -c /dev/nvidiactl ] 2>/dev/null; then
+        GPU_FLAG="--nvccli"
+        echo "Using --nvccli for GPU support"
+    elif [ -c /dev/nvidiactl ] 2>/dev/null; then
+        GPU_FLAG="--nv"
+        echo "Using --nv for GPU support"
+    else
+        echo "No GPU detected, running without GPU support"
+    fi
+
     echo '################## End shebang info ####################'
     echo
-    /usr/bin/apptainer exec --nv --nvccli --slurm \
+    /usr/bin/apptainer exec $GPU_FLAG --slurm \
         --bind "$REPO_ROOT:$REPO_ROOT" \
         --env PYTHONPATH="\$PYTHONPATH:$PYTHONPATH" \
         $SIF_PATH $python_cmd "$PYTHON_SCRIPT" "$@"
