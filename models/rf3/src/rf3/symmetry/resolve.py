@@ -5,10 +5,8 @@ from typing import Any, Dict
 
 import numpy as np
 import torch
-from atomworks.ml.transforms.atom_array import (
-    AddGlobalTokenIdAnnotation,
-    ensure_atom_array_stack,
-)
+from atomworks.io.transforms.atom_array import ensure_atom_array_stack
+from atomworks.ml.transforms.atom_array import AddGlobalTokenIdAnnotation
 from atomworks.ml.transforms.atomize import AtomizeByCCDName
 from atomworks.ml.transforms.base import Compose, convert_to_torch
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX

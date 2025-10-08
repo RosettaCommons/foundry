@@ -13,69 +13,54 @@ IncludeCmd: yes
     Description RosettaFold3 - Full production container with all packages installed
 
 %setup
-    # Copy minimal repo structure needed for building packages
-    echo "Copying repository structure for build..."
+    # Copy entire repository to container
+    echo "Copying repository..."
 
     # Create base directory
-    mkdir -p ${APPTAINER_ROOTFS}/opt/build
+    mkdir -p ${APPTAINER_ROOTFS}/opt/modelhub
 
-    # Copy .git for version detection
-    rsync -av --info=progress2 .git/ ${APPTAINER_ROOTFS}/opt/build/.git/
+    # Copy everything except large/unnecessary files
+    rsync -av --info=progress2 \
+        --exclude='.venv' \
+        --exclude='__pycache__' \
+        --exclude='*.pyc' \
+        --exclude='.pytest_cache' \
+        --exclude='*.egg-info' \
+        --exclude='.ruff_cache' \
+        --exclude='outputs' \
+        --exclude='logs' \
+        --exclude='*.sif' \
+        ./ ${APPTAINER_ROOTFS}/opt/modelhub/
 
-    # Copy LICENSE and README files
-    cp LICENSE.md ${APPTAINER_ROOTFS}/opt/build/
-    cp README.md ${APPTAINER_ROOTFS}/opt/build/
-
-    # Copy modelhub package (at repo root)
-    cp pyproject.toml ${APPTAINER_ROOTFS}/opt/build/
-    mkdir -p ${APPTAINER_ROOTFS}/opt/build/src/modelhub
-    rsync -av --info=progress2 src/modelhub/ ${APPTAINER_ROOTFS}/opt/build/src/modelhub/
-
-    # Copy rf3 package (in models/rf3/)
-    mkdir -p ${APPTAINER_ROOTFS}/opt/build/models/rf3/src/rf3
-    cp models/rf3/pyproject.toml ${APPTAINER_ROOTFS}/opt/build/models/rf3/
-    cp models/rf3/README.md ${APPTAINER_ROOTFS}/opt/build/models/rf3/
-    rsync -av --info=progress2 models/rf3/src/rf3/ ${APPTAINER_ROOTFS}/opt/build/models/rf3/src/rf3/
-
-    # Copy atomworks package (in lib/atomworks/)
-    mkdir -p ${APPTAINER_ROOTFS}/opt/build/lib/atomworks/src/atomworks
-    cp lib/atomworks/pyproject.toml ${APPTAINER_ROOTFS}/opt/build/lib/atomworks/
-    cp lib/atomworks/LICENSE.md ${APPTAINER_ROOTFS}/opt/build/lib/atomworks/
-    cp lib/atomworks/README.md ${APPTAINER_ROOTFS}/opt/build/lib/atomworks/
-    rsync -av --info=progress2 lib/atomworks/src/atomworks/ ${APPTAINER_ROOTFS}/opt/build/lib/atomworks/src/atomworks/
-
-    echo "Repository structure copied successfully."
+    echo "Repository copied successfully."
 
 %post
     echo "Installing packages into container..."
 
-    # Install modelhub from repo root (no dependencies - already in base image)
+    # Do editable installs so everything works as in development
+    cd /opt/modelhub
+
+    # Install modelhub (editable, no dependencies - already in base image)
     echo "Installing modelhub..."
-    cd /opt/build
-    uv pip install --system --break-system-packages --no-deps .
+    uv pip install --system --break-system-packages --no-deps -e .
 
-    # Install rf3 (no dependencies - already in base image)
+    # Install rf3 (editable, no dependencies - already in base image)
     echo "Installing rf3..."
-    cd /opt/build/models/rf3
-    uv pip install --system --break-system-packages --no-deps .
+    cd /opt/modelhub/models/rf3
+    uv pip install --system --break-system-packages --no-deps -e .
 
-    # Install atomworks (no dependencies - already in base image)
+    # Install atomworks (editable, no dependencies - already in base image)
     echo "Installing atomworks..."
-    cd /opt/build/lib/atomworks
-    uv pip install --system --break-system-packages --no-deps .
+    cd /opt/modelhub/lib/atomworks
+    uv pip install --system --break-system-packages --no-deps -e .
 
-    # Clean up build directory to minimize container size
-    echo "Cleaning up build files..."
-    cd /
-    rm -rf /opt/build
-
-    # Additional cleanup
+    # Cleanup caches only
+    echo "Cleaning up caches..."
     uv cache clean
     pip cache purge
     apt-get clean
     rm -rf /var/lib/apt/lists/* 2>/dev/null || true
     rm -rf /root/.cache 2>/dev/null || true
-    rm -rf /opt/*.txt 2>/dev/null || true
 
     echo "Package installation complete."
 
