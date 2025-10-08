@@ -27,8 +27,8 @@ disorder_distill_parquet_dir: /projects/ml/disorder_distill
 # e.g., {"dir": "/path/to/msas", "extension": ".a3m.gz", "directory_depth": 2}
 protein_msa_dirs:
   - {"dir": "/projects/msa/hhblits", "extension": ".a3m.gz", "directory_depth": 2}
-  - {"dir": "/projects/msa/mmseqs_gpu", "extension": ".a3m", "directory_depth": 2}
-  - {"dir": "/projects/msa/lab", "extension": ".a3m", "directory_depth": 2}
+  - {"dir": "/projects/msa/mmseqs_gpu", "extension": ".a3m.gz", "directory_depth": 2}
+  - {"dir": "/projects/msa/lab", "extension": ".a3m.gz", "directory_depth": 1}
 
 # path(s) to search for RNA MSAs
 # e.g., {"dir": "/path/to/msas", "extension": ".afa", "directory_depth": 0}
