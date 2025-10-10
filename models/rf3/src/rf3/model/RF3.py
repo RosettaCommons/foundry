@@ -145,6 +145,19 @@ class RF3(nn.Module):
                     * X_denoised_L_traj: List of denoised atomic coordinates at each timestep [D, L, 3]
                     * t_hats: List of tensor scalars representing the noise schedule at each timestep
         """
+        # Cast features to lower precision if autocast is enabled
+        if torch.is_autocast_enabled():
+            autocast_dtype = torch.get_autocast_dtype("cuda")
+            for x in [
+                "msa_stack",
+                "profile",
+                "template_distogram",
+                "template_restype",
+                "template_unit_vector",
+            ]:
+                if x in input["f"]:
+                    input["f"][x] = input["f"][x].to(autocast_dtype)
+
         # ... recycling
         # Gives dictionary of outputs S_inputs_I, S_init_I, Z_init_II, S_I, Z_II
         # (We use `deque` with maxlen=1 to ensure that we only keep the last output in memory)
@@ -366,6 +379,19 @@ class RF3WithConfidence(RF3):
                 - pde: TBD
                 - exp_resolved: TBD
         """
+        # Cast features to lower precision if autocast is enabled
+        if torch.is_autocast_enabled():
+            autocast_dtype = torch.get_autocast_dtype("cuda")
+            for x in [
+                "msa_stack",
+                "profile",
+                "template_distogram",
+                "template_restype",
+                "template_unit_vector",
+            ]:
+                if x in input["f"]:
+                    input["f"][x] = input["f"][x].to(autocast_dtype)
+
         diffusion_batch_size = input["t"].shape[0]
         with torch.no_grad():
             # ... recycling

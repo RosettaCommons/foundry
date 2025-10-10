@@ -132,17 +132,6 @@ class RF3Trainer(FabricTrainer):
             msg=f"NaN detected in `feats` for example_id: {example['example_id']}",
         )
 
-        # Force-cast some features to blfloat16 for mixed precision training
-        # TODO: Use Fabric's AMP instead
-        for x in [
-            "msa_stack",
-            "profile",
-            "template_distogram",
-            "template_restype",
-            "template_unit_vector",
-        ]:
-            if x in network_input["f"]:
-                network_input["f"][x] = network_input["f"][x].to(torch.bfloat16)
         return network_input
 
     def _assemble_loss_extra_info(self, example: dict) -> dict:

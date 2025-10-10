@@ -48,7 +48,7 @@ class FabricTrainer(ABC):
         strategy: str | Strategy = "ddp",
         devices_per_node: list[int] | int | str = "auto",
         num_nodes: int = 1,
-        precision: str | int = "32-true",
+        precision: str | int = "bf16-mixed",
         callbacks: BaseCallback | list[BaseCallback] | None = None,
         loggers: Logger | list[Logger] | None = None,
         max_epochs: int = 1000,
@@ -798,14 +798,24 @@ class FabricTrainer(ABC):
 
     def load_checkpoint(
         self,
-        ckpt_path: Path | str,
+        checkpoint: Path | str | dict,
         weight_loading_config: WeightLoadingConfig | None = None,
         reset_optimizer: bool = False,
     ) -> None:
-        """Loads a checkpoint from the specified path."""
-        # ... load the checkpoint (replaces the state dictionary in-place)
-        ranked_logger.info(f"Loading checkpoint from: {ckpt_path}...")
-        ckpt = self.fabric.load(ckpt_path)
+        """Loads a checkpoint from the specified path or uses a pre-loaded checkpoint dict.
+
+        Args:
+          checkpoint: Either a path to a checkpoint file or a pre-loaded checkpoint dict.
+          weight_loading_config: Weight loading policies to apply. Defaults to ``None``.
+          reset_optimizer: Whether to reset the optimizer state. Defaults to ``False``.
+        """
+        # ... load the checkpoint or use the provided dict
+        if isinstance(checkpoint, dict):
+            ranked_logger.info("Using pre-loaded checkpoint...")
+            ckpt = checkpoint
+        else:
+            ranked_logger.info(f"Loading checkpoint from: {checkpoint}...")
+            ckpt = self.fabric.load(checkpoint)
 
         try:
             # ... optimize, scheduler
@@ -843,72 +853,10 @@ class FabricTrainer(ABC):
                 f"Loaded checkpoint. Current epoch: {self.state['current_epoch']}, global step: {self.state['global_step']}"
             )
         except Exception as e:
-            ranked_logger.error(
-                f"Error loading checkpoint: {e}. Trying to load with legacy settings..."
+            ranked_logger.exception(
+                f"Error loading checkpoint: {e}. Please ensure that the model architecture matches the checkpoint."
             )
-            self.load_legacy_checkpoint(ckpt)
-
-    def load_legacy_checkpoint(self, ckpt: dict) -> dict:
-        # TODO: Remove when no longer needed
-        """Backwards-compatibility function to checkpoints with legacy state formats"""
-        new_model_state = {}
-        prefixes = {key.split(".")[0] for key in ckpt["final_state_dict"].keys()}
-
-        if "model" not in prefixes:
-            # (Model-only checkpoints from training, without confidence head)
-            model_state_dict = {
-                f"model.{k}": v for k, v in ckpt["final_state_dict"].items()
-            }
-            shadow_state_dict = {
-                f"shadow.{k}": v for k, v in ckpt["model_state_dict"].items()
-            }
-            full_state_dict = {**model_state_dict, **shadow_state_dict}
-
-        elif "confidence" in prefixes:
-            # (Checkpoints with confidence head)
-            ranked_logger.info("Detected confidence module in checkpoint...")
-
-            # ... replace confidence head keys with model and shadow prefixes
-            model_state_dict = {
-                f"model.confidence_head{key[len('confidence') :]}"
-                if key.startswith("confidence")
-                else key: value
-                for key, value in ckpt["final_state_dict"].items()
-            }
-
-            shadow_state_dict = {
-                (
-                    f"shadow.confidence_head{key[len('confidence') :]}"
-                    if key.startswith("confidence")
-                    else f"shadow{key[len('model') :]}"
-                    if key.startswith("model")
-                    else key
-                ): value
-                for key, value in ckpt["model_state_dict"].items()
-            }
-            full_state_dict = {**model_state_dict, **shadow_state_dict}
-        else:
-            raise ValueError("Unknown checkpoint format")
-
-        # ... check shapes (we only load matching shapes to support fine-tuning or adding channels)
-        state_dict = self.state["model"].state_dict()
-        for param in state_dict:
-            if param not in full_state_dict:
-                ranked_logger.error(f"missing: {param}")
-            elif full_state_dict[param].shape == state_dict[param].shape:
-                new_model_state[param] = full_state_dict[param]
-            else:
-                ranked_logger.error(
-                    f"wrong size: {param} {full_state_dict[param].shape} {state_dict[param].shape}"
-                )
-
-        # ... update the state
-        self.state["model"].load_state_dict(new_model_state, strict=False)
-        self.state["current_epoch"] = ckpt["epoch"]
-
-        ranked_logger.info(
-            f"Loaded internal AF3 clone checkpoint into model. Current epoch: {self.state['current_epoch']}, global step: {self.state['global_step']}"
-        )
+            raise
 
     @staticmethod
     def get_latest_checkpoint(ckpt_load_dir: Path) -> Path:

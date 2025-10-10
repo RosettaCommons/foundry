@@ -1,10 +1,11 @@
-import re
 from os import PathLike
 from pathlib import Path
 
 import numpy as np
 import torch
 from atomworks.io.utils.io_utils import to_cif_file
+from atomworks.ml.utils.io import apply_sharding_pattern
+from atomworks.ml.utils.misc import hash_sequence
 from beartype.typing import Literal
 from biotite.structure import AtomArray, AtomArrayStack, stack
 from rf3.alignment import weighted_rigid_align
@@ -15,6 +16,46 @@ ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 DICTIONARY_LIKE_EXTENSIONS = {".json", ".yaml", ".yml", ".pkl"}
 CIF_LIKE_EXTENSIONS = {".cif", ".pdb", ".bcif", ".cif.gz", ".pdb.gz", ".bcif.gz"}
+
+
+def get_sharded_output_path(
+    example_id: str,
+    base_dir: Path,
+    sharding_pattern: str | None = None,
+) -> Path:
+    """Get output directory path for an example with optional sharding.
+
+    Args:
+        example_id: Example identifier (used as final directory name).
+        base_dir: Base output directory.
+        sharding_pattern: Sharding pattern like ``/0:2/2:4/`` or ``None`` for no sharding.
+            Pattern defines how to split the hash of ``example_id`` into nested directories.
+
+    Returns:
+        Output directory path. If sharding is enabled, returns ``base_dir/shard1/shard2/.../example_id``.
+        Otherwise returns ``base_dir/example_id``.
+
+    Examples:
+        Without sharding::
+
+            get_sharded_output_path("entry_1", Path("/out"))
+            # Returns: /out/entry_1
+
+        With sharding pattern ``/0:2/2:4/``::
+
+            get_sharded_output_path("entry_1", Path("/out"), "/0:2/2:4/")
+            # Computes hash of "entry_1" (e.g., "a1b2c3d4e5f")
+            # Returns: /out/a1/b2/entry_1
+    """
+    if not sharding_pattern:
+        return base_dir / example_id
+
+    # Hash the example ID and apply sharding pattern
+    example_hash = hash_sequence(example_id)
+    sharded_path = apply_sharding_pattern(example_hash, sharding_pattern)
+
+    # Return base_dir / sharded_directories / example_id
+    return base_dir / sharded_path.parent / example_id
 
 
 def build_stack_from_atom_array_and_batched_coords(
@@ -153,55 +194,3 @@ def dump_trajectories(
         to_cif_file(
             atom_array_stack, path, file_type="cif.gz", include_entity_poly=False
         )
-
-
-def find_files_with_extension(path: PathLike, supported_file_types: list) -> list[Path]:
-    """Recursively find all files with the given extensions in the specified path.
-
-    Args:
-        path (PathLike): Path to the directory containing the files.
-        supported_file_types (list): List of supported file extensions.
-
-    Returns:
-        list[Path]: List of files with the given extensions.
-    """
-    files_with_supported_types = []
-    path = Path(path)
-
-    # Check if the path is a directory
-    if path.is_dir():
-        # Search for files with each supported extension
-        for file_type in supported_file_types:
-            files_with_supported_types.extend(path.glob(f"*{file_type}"))
-    elif path.is_file() and path.suffix in supported_file_types:
-        # If it's a file and has a supported extension, add to the list
-        files_with_supported_types.append(path)
-
-    return files_with_supported_types
-
-
-def create_example_id_extractor(extensions: set | list = CIF_LIKE_EXTENSIONS) -> str:
-    """Create a function with closure that extracts example_ids from file paths with specified extensions.
-
-    Example:
-        >>> extractor = create_example_id_extractor({".cif", ".cif.gz"})
-        >>> extractor("example.path.example_id.cif.gz")
-        'example_id'
-    """
-    pattern = re.compile(
-        "(" + "|".join(re.escape(ext) + "$" for ext in extensions) + ")"
-    )
-
-    def extract_id(file_path: PathLike) -> str:
-        """Extract example_id from file path."""
-        # Remove extension and get last part after splitting by dots
-        without_ext = pattern.sub("", Path(file_path).name)
-        return without_ext.split(".")[-1]
-
-    return extract_id
-
-
-def extract_example_id_from_path(file_path: PathLike, extensions: set | list) -> str:
-    """Extract example_id from file path with specified extensions."""
-    extractor = create_example_id_extractor(extensions)
-    return extractor(file_path)

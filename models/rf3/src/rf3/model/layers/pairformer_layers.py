@@ -3,12 +3,7 @@ from rf3.data.ground_truth_template import (
     af3_noise_scale_to_noise_level,
 )
 from rf3.model.layers.af3_diffusion_transformer import AtomTransformer
-from rf3.model.layers.Attention_module import (
-    TriangleAttention,
-)
-from rf3.model.layers.FusedTriangleMultiplication import (
-    FusedTriangleMultiplication,
-)
+from rf3.model.layers.attention import TriangleAttention, TriangleMultiplication
 from rf3.model.layers.layer_utils import (
     MultiDimLinear,
     Transition,
@@ -345,14 +340,14 @@ class PairformerBlock(nn.Module):
         self.drop_row = Dropout(broadcast_dim=-2, p_drop=p_drop)
         self.drop_col = Dropout(broadcast_dim=-3, p_drop=p_drop)
 
-        self.tri_mul_outgoing = FusedTriangleMultiplication(
+        self.tri_mul_outgoing = TriangleMultiplication(
             d_pair=c_z,
             d_hidden=triangle_multiplication["d_hidden"],
             direction="outgoing",
             bias=True,
             use_cuequivariance=True,
         )
-        self.tri_mul_incoming = FusedTriangleMultiplication(
+        self.tri_mul_incoming = TriangleMultiplication(
             d_pair=c_z,
             d_hidden=triangle_multiplication["d_hidden"],
             direction="incoming",
@@ -607,14 +602,14 @@ class MSAModule(nn.Module):
         self.drop_row_pair = Dropout(broadcast_dim=-2, p_drop=p_drop_pair)
         self.drop_col_pair = Dropout(broadcast_dim=-3, p_drop=p_drop_pair)
 
-        self.tri_mult_outgoing = FusedTriangleMultiplication(
+        self.tri_mult_outgoing = TriangleMultiplication(
             d_pair=triangle_multiplication_outgoing["d_pair"],
             d_hidden=triangle_multiplication_outgoing["d_hidden"],
             direction="outgoing",
             bias=True,
             use_cuequivariance=True,
         )
-        self.tri_mult_incoming = FusedTriangleMultiplication(
+        self.tri_mult_incoming = TriangleMultiplication(
             d_pair=triangle_multiplication_incoming["d_pair"],
             d_hidden=triangle_multiplication_incoming["d_hidden"],
             direction="incoming",
@@ -727,7 +722,7 @@ class RF3TemplateEmbedder(nn.Module):
         Z_II,
     ):
         @activation_checkpointing
-        def embed_templates_like_rfscore(
+        def embed_templates_like_rf3(
             has_distogram_condition,  # [I, I]
             distogram_condition_noise_scale,  # [I]
             distogram_condition,  # [I, I, 64], where 64 is the number of distogram bins
@@ -775,8 +770,8 @@ class RF3TemplateEmbedder(nn.Module):
 
             return self.agg_emb(relu(u_II))
 
-        # rfscore template embedding (noisy ground-truth template as input)
-        embedded_templates = embed_templates_like_rfscore(
+        #  Ground-truth template embedding (noisy ground-truth template as input)
+        embedded_templates = embed_templates_like_rf3(
             has_distogram_condition=f["has_distogram_condition"],  # [I, I]
             distogram_condition_noise_scale=f["distogram_condition_noise_scale"],  # [I]
             distogram_condition=f[

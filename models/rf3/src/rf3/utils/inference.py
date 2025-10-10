@@ -1,6 +1,6 @@
 import json
 import logging
-import pickle
+from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
 from typing import Iterable
@@ -8,167 +8,348 @@ from typing import Iterable
 import numpy as np
 from atomworks.common import as_list
 from atomworks.enums import GroundTruthConformerPolicy
+from atomworks.io import parse
+from atomworks.io.parser import parse_atom_array
 from atomworks.io.tools.inference import (
     build_msa_paths_by_chain_id_from_component_list,
     components_to_atom_array,
 )
-from atomworks.io.utils.io_utils import to_cif_file
+from atomworks.io.transforms.categories import category_to_dict
 from atomworks.io.utils.selection import AtomSelectionStack
 from biotite.structure import AtomArray
 from rf3.utils.io import (
     CIF_LIKE_EXTENSIONS,
     DICTIONARY_LIKE_EXTENSIONS,
-    create_example_id_extractor,
-    find_files_with_extension,
+    get_sharded_output_path,
 )
 
-
-def _spoof_cif_from_dictionary(item: dict, temp_dir: PathLike) -> Path:
-    """Unpacks a dictionary to create a CIF file from its components.
-
-    Args:
-        item (dict): A dictionary containing 'name' and either 'components' or 'sequences', optionally 'bonds'.
-        temp_dir (Path): Path to the temporary directory for storing CIF files.
-
-    Returns:
-        Path: The path to the created CIF file, saved in the temporary directory.
-
-    Raises:
-        ValueError: If 'name' or neither 'components' nor 'sequences' are present in the dictionary.
-    """
-    # Validate the dictionary structure ("name" is required, either "components" or "sequences" is required)
-    assert "name" in item, "The input dictionary must contain a 'name' key."
-    assert (
-        "components" in item or "sequences" in item
-    ), "The input dictionary must contain either 'components' or 'sequences' keys."
-
-    # Use sequences if components not present
-    if "components" not in item and "sequences" in item:
-        # Rename sequences to components
-        item["components"] = [{"sequence": seq} for seq in item.pop("sequences")]
-
-    # Build components
-    atom_array, component_list = components_to_atom_array(
-        item["components"], return_components=True, bonds=item.get("bonds", None)
-    )
-
-    msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(
-        component_list
-    )
-
-    if item.get("msa_paths") and isinstance(item.get("msa_paths"), dict):
-        for chain_id, msa_path in item.get("msa_paths").items():
-            msa_paths_by_chain_id[chain_id] = msa_path
-
-    extra_categories = {}
-    if item.get("template_selection"):
-        extra_categories["template_selection"] = {
-            "template_selection": item.get("template_selection"),
-        }
-    if item.get("ground_truth_conformer_selection"):
-        extra_categories["ground_truth_conformer_selection"] = {
-            "ground_truth_conformer_selection": item.get(
-                "ground_truth_conformer_selection"
-            ),
-        }
-
-    if msa_paths_by_chain_id:
-        extra_categories["msa_paths_by_chain_id"] = msa_paths_by_chain_id
-
-    # Create a temporary CIF file from the JSON data
-    cif_path = Path(temp_dir) / f"{item['name']}.cif"
-    save_path = to_cif_file(
-        atom_array,
-        cif_path,
-        extra_categories=extra_categories,
-        file_type="cif",  # Not zipped for efficiency (as it's a temporary directory anyways)
-    )
-
-    return Path(save_path)
+logger = logging.getLogger(__name__)
 
 
-def build_file_paths_for_prediction(
-    input: PathLike | list[PathLike],
-    temp_dir: PathLike,
-    existing_outputs_dir: PathLike | None = None,
-) -> list[Path]:
-    """Prepare files for prediction based on the input paths.
+def _resolve_override(override_value, source_value, param_name: str, example_id: str):
+    """Resolve CLI override vs source value with warning."""
+    if override_value is not None and source_value:
+        logger.warning(f"CLI {param_name} overriding source value for {example_id}")
+        return override_value
+    return override_value if override_value is not None else source_value
 
-    Input path may be dictionary-like format (e.g., JSON, YAML, Pickle), CIF/PDB files, or a directory containing these files.
-    Processes directories to find supported file types and converts dictionary-like formats to CIF files.
 
-    Args:
-        input (PathLike): Input paths (JSON, YAML, Pickle, or CIF/PDB) or a directory containing these files.
-        temp_dir (Path): Path to the temporary directory for storing CIF files.
-        existing_outputs_dir(Path): Directory for existing outputs (optional). If provided, we not predict files with matching example_ids.
+def extract_example_id_from_path(path: Path) -> str:
+    """Extract example ID from file path."""
+    path_str = str(path.name)
+    # Check for known extensions (longer matches first to handle .cif.gz before .gz)
+    for ext in sorted(CIF_LIKE_EXTENSIONS | {".json"}, key=len, reverse=True):
+        if path_str.endswith(ext):
+            return path_str[: -len(ext)]
+    # Fallback to simple stem
+    return path.stem
 
-    Returns:
-        list[Path]: List of file paths for prediction.
-    """
-    # Collect all files from inputs, handling directories, individual files, and lists of directories/files
-    input_paths = [input] if not isinstance(input, list) else input
 
-    example_id_extractor = create_example_id_extractor(CIF_LIKE_EXTENSIONS)
+@dataclass
+class InferenceInput:
+    """Input specification for RF3 inference."""
 
-    existing_example_ids = None
-    if existing_outputs_dir:
-        existing_example_ids = set(
-            example_id_extractor(path)
-            for path in find_files_with_extension(
-                existing_outputs_dir, CIF_LIKE_EXTENSIONS
-            )
+    atom_array: AtomArray
+    chain_info: dict
+    example_id: str
+    template_selection: list[str] | None = None
+    ground_truth_conformer_selection: list[str] | None = None
+
+    @classmethod
+    def from_cif_path(
+        cls,
+        path: PathLike,
+        example_id: str | None = None,
+        template_selection: list[str] | str | None = None,
+        ground_truth_conformer_selection: list[str] | str | None = None,
+    ) -> "InferenceInput":
+        """Load from CIF/PDB file.
+
+        Args:
+          path: Path to CIF/PDB file.
+          example_id: Example ID. Defaults to filename stem.
+          template_selection: Template selection override.
+          ground_truth_conformer_selection: Conformer selection override.
+
+        Returns:
+          InferenceInput object.
+        """
+        parsed = parse(path, hydrogen_policy="remove", keep_cif_block=True)
+
+        atom_array = (
+            parsed["assemblies"]["1"][0]
+            if "assemblies" in parsed
+            else parsed["asym_unit"][0]
         )
 
+        example_id = example_id or extract_example_id_from_path(Path(path))
+
+        # Extract from CIF
+        cif_template_sel = None
+        cif_conformer_sel = None
+        if "cif_block" in parsed:
+            template_dict = category_to_dict(parsed["cif_block"], "template_selection")
+            if template_dict:
+                cif_template_sel = list(template_dict.get("template_selection", []))
+
+            conformer_dict = category_to_dict(
+                parsed["cif_block"], "ground_truth_conformer_selection"
+            )
+            if conformer_dict:
+                cif_conformer_sel = list(
+                    conformer_dict.get("ground_truth_conformer_selection", [])
+                )
+
+        # Resolve overrides (CLI priority)
+        final_template_sel = _resolve_override(
+            template_selection, cif_template_sel, "template_selection", example_id
+        )
+        final_conformer_sel = _resolve_override(
+            ground_truth_conformer_selection,
+            cif_conformer_sel,
+            "ground_truth_conformer_selection",
+            example_id,
+        )
+
+        return cls(
+            atom_array=atom_array,
+            chain_info=parsed["chain_info"],
+            example_id=example_id,
+            template_selection=final_template_sel,
+            ground_truth_conformer_selection=final_conformer_sel,
+        )
+
+    @classmethod
+    def from_json_dict(
+        cls,
+        data: dict,
+        template_selection: list[str] | str | None = None,
+        ground_truth_conformer_selection: list[str] | str | None = None,
+    ) -> "InferenceInput":
+        """Create from JSON dict with components.
+
+        CLI args override JSON metadata.
+
+        Args:
+          data: JSON dictionary with components.
+          template_selection: Template selection override.
+          ground_truth_conformer_selection: Conformer selection override.
+
+        Returns:
+          InferenceInput object.
+        """
+        # Build atom_array from components
+        atom_array, component_list = components_to_atom_array(
+            data["components"],
+            bonds=data.get("bonds"),
+            return_components=True,
+        )
+
+        parsed = parse_atom_array(
+            atom_array,
+            build_assembly="_spoof",
+            hydrogen_policy="keep",
+        )
+
+        chain_info = parsed.get("chain_info", {})
+        atom_array = (
+            parsed["assemblies"]["1"][0]
+            if "assemblies" in parsed
+            else parsed["asym_unit"][0]
+        )
+
+        # Merge MSA paths into chain_info
+        msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(
+            component_list
+        )
+        if data.get("msa_paths") and isinstance(data.get("msa_paths"), dict):
+            msa_paths_by_chain_id.update(data.get("msa_paths"))
+
+        for chain_id, msa_path in msa_paths_by_chain_id.items():
+            if chain_id in chain_info:
+                chain_info[chain_id]["msa_path"] = msa_path
+
+        # Resolve overrides (CLI priority)
+        final_template_sel = _resolve_override(
+            template_selection,
+            data.get("template_selection"),
+            "template_selection",
+            data["name"],
+        )
+        final_conformer_sel = _resolve_override(
+            ground_truth_conformer_selection,
+            data.get("ground_truth_conformer_selection"),
+            "ground_truth_conformer_selection",
+            data["name"],
+        )
+
+        return cls(
+            atom_array=atom_array,
+            chain_info=chain_info,
+            example_id=data["name"],
+            template_selection=final_template_sel,
+            ground_truth_conformer_selection=final_conformer_sel,
+        )
+
+    @classmethod
+    def from_atom_array(
+        cls,
+        atom_array: AtomArray,
+        chain_info: dict | None = None,
+        example_id: str | None = None,
+        template_selection: list[str] | str | None = None,
+        ground_truth_conformer_selection: list[str] | str | None = None,
+    ) -> "InferenceInput":
+        """Create from AtomArray.
+
+        Args:
+          atom_array: Input AtomArray.
+          chain_info: Chain info dict. Defaults to extracted from atom_array.
+          example_id: Example ID. Defaults to generated ID.
+          template_selection: Template selection.
+          ground_truth_conformer_selection: Conformer selection.
+
+        Returns:
+          InferenceInput object.
+        """
+        # Use parse_atom_array
+        parsed = parse_atom_array(
+            atom_array,
+            build_assembly="_spoof",
+            hydrogen_policy="keep",
+            extra_fields="all",
+        )
+
+        extracted_chain_info = parsed.get("chain_info", {})
+
+        # Merge with provided chain_info (provided takes priority)
+        if chain_info is not None:
+            for chain_id, chain_data in chain_info.items():
+                if chain_id in extracted_chain_info:
+                    extracted_chain_info[chain_id].update(chain_data)
+                else:
+                    extracted_chain_info[chain_id] = chain_data
+
+        final_atom_array = (
+            parsed["assemblies"]["1"][0]
+            if "assemblies" in parsed
+            else parsed["asym_unit"][0]
+        )
+
+        return cls(
+            atom_array=final_atom_array,
+            chain_info=extracted_chain_info,
+            example_id=example_id or f"inference_{id(atom_array)}",
+            template_selection=template_selection,
+            ground_truth_conformer_selection=ground_truth_conformer_selection,
+        )
+
+    def to_pipeline_input(self) -> dict:
+        """Apply transformations and return input for Transform pipeline.
+
+        Returns:
+          Pipeline input dict with example_id, atom_array, and chain_info.
+        """
+        atom_array = self.atom_array.copy()
+
+        # Apply template and conformer selections
+        atom_array = apply_conformer_and_template_selections(
+            atom_array,
+            template_selection=self.template_selection,
+            ground_truth_conformer_selection=self.ground_truth_conformer_selection,
+        )
+
+        return {
+            "example_id": self.example_id,
+            "atom_array": atom_array,
+            "chain_info": self.chain_info,
+        }
+
+
+def prepare_inference_inputs_from_paths(
+    inputs: PathLike | list[PathLike],
+    existing_outputs_dir: PathLike | None = None,
+    sharding_pattern: str | None = None,
+    template_selection: list[str] | str | None = None,
+    ground_truth_conformer_selection: list[str] | str | None = None,
+) -> list[InferenceInput]:
+    """Load InferenceInput objects from file paths.
+
+    Handles CIF, PDB, and JSON files. Filters out existing outputs if requested.
+
+    Args:
+      inputs: File path(s) or directory path(s).
+      existing_outputs_dir: If set, skip examples with existing outputs.
+      sharding_pattern: Sharding pattern for output paths.
+      template_selection: Override for template selection (applied to all inputs).
+      ground_truth_conformer_selection: Override for conformer selection (applied to all inputs).
+
+    Returns:
+      List of InferenceInput objects.
+    """
+    input_paths = as_list(inputs)
+
+    def example_exists(example_id: str) -> bool:
+        """Check if example already has predictions (sharding-aware)."""
+        if not existing_outputs_dir:
+            return False
+        example_dir = get_sharded_output_path(
+            example_id, Path(existing_outputs_dir), sharding_pattern
+        )
+        return (example_dir / f"{example_id}_metrics.csv").exists()
+
+    # Collect all raw input files (reusing logic from build_file_paths_for_prediction)
     paths_to_raw_input_files = []
     for _path in input_paths:
         if Path(_path).is_dir():
-            paths_to_raw_input_files.extend(
-                find_files_with_extension(
-                    _path, DICTIONARY_LIKE_EXTENSIONS | CIF_LIKE_EXTENSIONS
-                )
-            )
+            # Scan directory for supported file types (JSON + CIF-like)
+            for file_type in CIF_LIKE_EXTENSIONS | DICTIONARY_LIKE_EXTENSIONS:
+                paths_to_raw_input_files.extend(Path(_path).glob(f"*{file_type}"))
         else:
             paths_to_raw_input_files.append(Path(_path))
 
-    paths_to_cif_like_files = []
-    for _path in paths_to_raw_input_files:
-        if _path.name.endswith(tuple(DICTIONARY_LIKE_EXTENSIONS)):
-            # Spoof CIF files from dictionary-like formats
-            with open(_path, "rb" if _path.suffix == ".pkl" else "r") as file:
-                # Load data based on file extension
-                if _path.suffix == ".json":
-                    data = json.load(file)
-                elif _path.suffix in {".yaml", ".yml"}:
-                    raise NotImplementedError("YAML files are not yet supported.")
-                elif _path.suffix == ".pkl":
-                    data = pickle.load(file)
+    # Convert files to InferenceInput objects
+    inference_inputs = []
+    for path in paths_to_raw_input_files:
+        if path.suffix == ".json":
+            # Load JSON and convert each entry
+            with open(path, "r") as f:
+                data = json.load(f)
 
-                if isinstance(data, dict):
-                    data = [
-                        data
-                    ]  # Convert single dictionary to list for uniform processing
+            # Normalize to list
+            if isinstance(data, dict):
+                data = [data]
 
-                for item in data:
-                    paths_to_cif_like_files.append(
-                        _spoof_cif_from_dictionary(item, temp_dir)
+            for item in data:
+                example_id = item["name"]
+                if not example_exists(example_id):
+                    inference_inputs.append(
+                        InferenceInput.from_json_dict(
+                            item,
+                            template_selection=template_selection,
+                            ground_truth_conformer_selection=ground_truth_conformer_selection,
+                        )
                     )
-        elif _path.name.endswith(tuple(CIF_LIKE_EXTENSIONS)):
-            # Directly use CIF-like files
-            paths_to_cif_like_files.append(_path)
+
+        elif path.suffix in CIF_LIKE_EXTENSIONS:
+            # CIF/PDB file
+            example_id = extract_example_id_from_path(path)
+            if not example_exists(example_id):
+                inference_inputs.append(
+                    InferenceInput.from_cif_path(
+                        path,
+                        example_id=example_id,
+                        template_selection=template_selection,
+                        ground_truth_conformer_selection=ground_truth_conformer_selection,
+                    )
+                )
         else:
             raise ValueError(
-                f"Unsupported file extension: {_path.suffix} (path: {_path}; paths: {paths_to_raw_input_files})."
+                f"Unsupported file type: {path.suffix} (path: {path}). "
+                f"Supported: {CIF_LIKE_EXTENSIONS | DICTIONARY_LIKE_EXTENSIONS}"
             )
 
-    # Filter out existing example_ids if provided
-    if existing_example_ids:
-        paths_to_cif_like_files = [
-            path
-            for path in paths_to_cif_like_files
-            if example_id_extractor(path) not in existing_example_ids
-        ]
-
-    return paths_to_cif_like_files
+    return inference_inputs
 
 
 def apply_atom_selection_mask(
