@@ -41,4 +41,4 @@ metrics_cfg:
   iptm:
     _target_: modelhub.metrics.predicted_error.ComputeIPTM
   count_clashing_chains:
-
+    _target_: modelhub.metrics.clashing_chains.CountClashingChains
