@@ -29,6 +29,7 @@ raise_if_missing_msa_for_protein_of_length_n: null
 # I/O
 dump_predictions: true
 dump_trajectories: false
+dump_pae_matrix: false
 one_model_per_file: false
 annotate_b_factor_with_plddt: true
 
