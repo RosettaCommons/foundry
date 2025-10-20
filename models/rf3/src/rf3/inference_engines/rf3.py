@@ -5,13 +5,24 @@ from pathlib import Path
 import hydra
 import pandas as pd
 import torch
+import torch.distributed as dist
+from atomworks.ml.preprocessing.msa.finding import (
+    get_msa_depth_and_ext_from_folder,
+    get_msa_dirs_from_env,
+)
+from atomworks.ml.samplers import LoadBalancedDistributedSampler
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
+from torch.utils.data import DataLoader
 
 from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
 from modelhub.utils.logging import print_config_tree
 from rf3.model.RF3 import ShouldEarlyStopFn
-from rf3.utils.inference import InferenceInput, prepare_inference_inputs_from_paths
+from rf3.utils.inference import (
+    InferenceInput,
+    InferenceInputDataset,
+    prepare_inference_inputs_from_paths,
+)
 from rf3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
     dump_structures,
@@ -117,6 +128,20 @@ class RF3InferenceEngine:
 
         set_accelerator_based_on_availability(self.cfg)
 
+        # set MSA directories
+        if env_var_msa_dirs := get_msa_dirs_from_env(raise_if_not_set=False):
+            override_msa_dirs = [str(msa_dir) for msa_dir in env_var_msa_dirs]
+            ranked_logger.info(
+                f"Using MSA directories from environment variable: {override_msa_dirs}"
+            )
+        else:
+            override_msa_dirs = [
+                "/projects/msa/hhblits",
+                "/projects/msa/mmseqs_gpu",
+                "/projects/msa/lab",
+            ]
+            ranked_logger.info(f"Using default MSA directories: {override_msa_dirs}")
+
         # Dataset overrides
         self.dataset_overrides = {
             "diffusion_batch_size": diffusion_batch_size,
@@ -130,20 +155,14 @@ class RF3InferenceEngine:
             "allowed_chain_types_for_conditioning": None,
             "protein_msa_dirs": [
                 {
-                    "dir": "/projects/msa/hhblits",
-                    "extension": ".a3m.gz",
-                    "directory_depth": 2,
-                },
-                {
-                    "dir": "/projects/msa/mmseqs_gpu",
-                    "extension": ".a3m.gz",
-                    "directory_depth": 2,
-                },
-                {
-                    "dir": "/projects/msa/lab",
-                    "extension": ".a3m.gz",
-                    "directory_depth": 2,
-                },
+                    "dir": msa_dir,
+                    "extension": extension.value,
+                    "directory_depth": depth,
+                }
+                for msa_dir, depth, extension in [
+                    (msa_dir, *get_msa_depth_and_ext_from_folder(Path(msa_dir)))
+                    for msa_dir in override_msa_dirs
+                ]
             ],
             "rna_msa_dirs": [],
             "p_give_polymer_ref_conf": 0.0,
@@ -283,15 +302,39 @@ class RF3InferenceEngine:
         else:
             raise ValueError(f"Unsupported inputs type: {type(inputs)}")
 
-        ranked_logger.info(f"Found {len(inference_inputs)} structures to predict!")
+        # make InferenceInputDataset
+        inference_dataset = InferenceInputDataset(inference_inputs)
+        ranked_logger.info(f"Found {len(inference_dataset)} structures to predict!")
+
+        # make LoadBalancedDistributedSampler
+        sampler = LoadBalancedDistributedSampler(
+            dataset=inference_dataset,
+            key_to_balance=inference_dataset.key_to_balance,
+            num_replicas=self.trainer.fabric.world_size,
+            rank=self.trainer.fabric.global_rank,
+            drop_last=False,
+        )
+
+        loader = DataLoader(
+            dataset=inference_dataset,
+            sampler=sampler,
+            batch_size=1,
+            num_workers=0,  # multiprocessing is disabled since it shouldn't be hard to read InferenceInput objects
+            collate_fn=lambda x: x,  # no collation since we're not batching
+            pin_memory=True,
+            drop_last=False,
+        )
 
         # Prepare results dict (if returning in-memory)
         results = {} if out_dir is None else None
 
         # Main inference loop
-        for batch_idx, input_spec in enumerate(inference_inputs):
+        for batch_idx, input_spec in enumerate(loader):
+            input_spec = input_spec[
+                0
+            ]  # since we're not batching, the loader returns a list of length 1
             ranked_logger.info(
-                f"Predicting structure {batch_idx + 1}/{len(inference_inputs)}: {input_spec.example_id}"
+                f"Predicting structure {batch_idx + 1}/{len(loader)}: {input_spec.example_id}"
             )
 
             # Create output directory for this example if saving to disk
@@ -445,5 +488,17 @@ class RF3InferenceEngine:
                     "metrics": metrics_output,
                     "confidence_scores": confidence_df,
                 }
+
+        # merge results across ranks
+        self.trainer.fabric.barrier()
+        if results is not None and dist.is_initialized():
+            gathered_results = [None] * self.trainer.fabric.world_size
+            dist.all_gather_object(
+                gathered_results, results
+            )  # returns a list of dicts, need to combine them
+            gathered_results = {
+                k: v for result in gathered_results for k, v in result.items()
+            }  # combine the dicts into a single dict
+            results = gathered_results
 
         return results

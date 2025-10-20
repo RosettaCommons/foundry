@@ -1,11 +1,14 @@
 import json
 import logging
+import os
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
 from typing import Iterable
 
 import numpy as np
+import pandas as pd
 from atomworks.common import as_list
 from atomworks.enums import GroundTruthConformerPolicy
 from atomworks.io import parse
@@ -16,12 +19,14 @@ from atomworks.io.tools.inference import (
 )
 from atomworks.io.transforms.categories import category_to_dict
 from atomworks.io.utils.selection import AtomSelectionStack
+from atomworks.ml.transforms.atom_array import add_global_token_id_annotation
 from biotite.structure import AtomArray
 from rf3.utils.io import (
     CIF_LIKE_EXTENSIONS,
     DICTIONARY_LIKE_EXTENSIONS,
     get_sharded_output_path,
 )
+from torch.utils.data import Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -266,6 +271,80 @@ class InferenceInput:
         }
 
 
+def _process_single_path(
+    path: Path,
+    existing_outputs_dir: Path | None,
+    sharding_pattern: str | None,
+    template_selection: list[str] | str | None,
+    ground_truth_conformer_selection: list[str] | str | None,
+) -> list[InferenceInput]:
+    """Worker function to process a single input file path.
+
+    This function is defined at module level to be picklable for multiprocessing.
+
+    Args:
+      path: Path to a single input file.
+      existing_outputs_dir: If set, skip examples with existing outputs.
+      sharding_pattern: Sharding pattern for output paths.
+      template_selection: Override for template selection.
+      ground_truth_conformer_selection: Override for conformer selection.
+
+    Returns:
+      List of InferenceInput objects (may be empty if file is skipped).
+    """
+
+    def example_exists(example_id: str) -> bool:
+        """Check if example already has predictions (sharding-aware)."""
+        if not existing_outputs_dir:
+            return False
+        example_dir = get_sharded_output_path(
+            example_id, existing_outputs_dir, sharding_pattern
+        )
+        return (example_dir / f"{example_id}_metrics.csv").exists()
+
+    inference_inputs = []
+
+    if path.suffix == ".json":
+        # Load JSON and convert each entry
+        with open(path, "r") as f:
+            data = json.load(f)
+
+        # Normalize to list
+        if isinstance(data, dict):
+            data = [data]
+
+        for item in data:
+            example_id = item["name"]
+            if not example_exists(example_id):
+                inference_inputs.append(
+                    InferenceInput.from_json_dict(
+                        item,
+                        template_selection=template_selection,
+                        ground_truth_conformer_selection=ground_truth_conformer_selection,
+                    )
+                )
+
+    elif path.suffix in CIF_LIKE_EXTENSIONS:
+        # CIF/PDB file
+        example_id = extract_example_id_from_path(path)
+        if not example_exists(example_id):
+            inference_inputs.append(
+                InferenceInput.from_cif_path(
+                    path,
+                    example_id=example_id,
+                    template_selection=template_selection,
+                    ground_truth_conformer_selection=ground_truth_conformer_selection,
+                )
+            )
+    else:
+        raise ValueError(
+            f"Unsupported file type: {path.suffix} (path: {path}). "
+            f"Supported: {CIF_LIKE_EXTENSIONS | DICTIONARY_LIKE_EXTENSIONS}"
+        )
+
+    return inference_inputs
+
+
 def prepare_inference_inputs_from_paths(
     inputs: PathLike | list[PathLike],
     existing_outputs_dir: PathLike | None = None,
@@ -276,6 +355,7 @@ def prepare_inference_inputs_from_paths(
     """Load InferenceInput objects from file paths.
 
     Handles CIF, PDB, and JSON files. Filters out existing outputs if requested.
+    Uses multiprocessing to parallelize file loading across all available CPUs.
 
     Args:
       inputs: File path(s) or directory path(s).
@@ -289,15 +369,6 @@ def prepare_inference_inputs_from_paths(
     """
     input_paths = as_list(inputs)
 
-    def example_exists(example_id: str) -> bool:
-        """Check if example already has predictions (sharding-aware)."""
-        if not existing_outputs_dir:
-            return False
-        example_dir = get_sharded_output_path(
-            example_id, Path(existing_outputs_dir), sharding_pattern
-        )
-        return (example_dir / f"{example_id}_metrics.csv").exists()
-
     # Collect all raw input files (reusing logic from build_file_paths_for_prediction)
     paths_to_raw_input_files = []
     for _path in input_paths:
@@ -308,47 +379,39 @@ def prepare_inference_inputs_from_paths(
         else:
             paths_to_raw_input_files.append(Path(_path))
 
-    # Convert files to InferenceInput objects
+    # Determine number of CPUs to use
+    num_cpus = min(os.cpu_count() or 1, len(paths_to_raw_input_files))
+    logger.info(
+        f"Processing {len(paths_to_raw_input_files)} files using {num_cpus} CPUs"
+    )
+
+    # Convert existing_outputs_dir to Path if needed
+    existing_outputs_dir_path = (
+        Path(existing_outputs_dir) if existing_outputs_dir else None
+    )
+
+    # Process files in parallel using all available CPUs
     inference_inputs = []
-    for path in paths_to_raw_input_files:
-        if path.suffix == ".json":
-            # Load JSON and convert each entry
-            with open(path, "r") as f:
-                data = json.load(f)
-
-            # Normalize to list
-            if isinstance(data, dict):
-                data = [data]
-
-            for item in data:
-                example_id = item["name"]
-                if not example_exists(example_id):
-                    inference_inputs.append(
-                        InferenceInput.from_json_dict(
-                            item,
-                            template_selection=template_selection,
-                            ground_truth_conformer_selection=ground_truth_conformer_selection,
-                        )
-                    )
-
-        elif path.suffix in CIF_LIKE_EXTENSIONS:
-            # CIF/PDB file
-            example_id = extract_example_id_from_path(path)
-            if not example_exists(example_id):
-                inference_inputs.append(
-                    InferenceInput.from_cif_path(
-                        path,
-                        example_id=example_id,
-                        template_selection=template_selection,
-                        ground_truth_conformer_selection=ground_truth_conformer_selection,
-                    )
-                )
-        else:
-            raise ValueError(
-                f"Unsupported file type: {path.suffix} (path: {path}). "
-                f"Supported: {CIF_LIKE_EXTENSIONS | DICTIONARY_LIKE_EXTENSIONS}"
+    with ProcessPoolExecutor(max_workers=num_cpus) as executor:
+        # Submit all tasks
+        futures = [
+            executor.submit(
+                _process_single_path,
+                path,
+                existing_outputs_dir_path,
+                sharding_pattern,
+                template_selection,
+                ground_truth_conformer_selection,
             )
+            for path in paths_to_raw_input_files
+        ]
 
+        # Collect results as they complete
+        for future in futures:
+            result = future.result()
+            inference_inputs.extend(result)
+
+    logger.info(f"Loaded {len(inference_inputs)} inference inputs")
     return inference_inputs
 
 
@@ -508,3 +571,43 @@ def apply_conformer_and_template_selections(
     # Safety: avoid unexpected behavior downstream
     atom_array.coord[np.isnan(atom_array.coord)] = -1
     return atom_array
+
+
+class InferenceInputDataset(Dataset):
+    """
+    Dataset for inference inputs. Also has a length key telling you the number of tokens in each example for LoadBalancedDistributedSampler.
+
+    To calculate the length of each example, we need to add the token_id annotation to the atom_array. If it doesn't exist yet, we add it,
+    calculate the length, and then remove it since the downstream pipeline may not be expecting it. That means the num_tokens key may not ultimately
+    be the same as what's actually used in the model, but this is a close enough approximation for load balancing.
+
+    Args:
+      inference_inputs: List of InferenceInput objects to wrap in a Dataset.
+    """
+
+    def __init__(self, inference_inputs: list[InferenceInput]):
+        self.inference_inputs = inference_inputs
+        self.key_to_balance = "num_tokens_approximate"
+
+        # LoadBalancedDistributedSampler checks in dataset.data[key_to_balance] to determine balancing.
+        # That means we need to make a dataframe in self.data that has a column with the key_to_balance.
+        atom_array_token_lens = []
+        for inf_input in self.inference_inputs:
+            if "token_id" not in inf_input.atom_array.get_annotation_categories():
+                inf_input.atom_array = add_global_token_id_annotation(
+                    inf_input.atom_array
+                )
+                num_tokens = len(np.unique(inf_input.atom_array.token_id))
+
+                # remove the token_id annotation since the pipeline may not be expecting it
+                inf_input.atom_array.del_annotation("token_id")
+            else:
+                num_tokens = len(np.unique(inf_input.atom_array.token_id))
+            atom_array_token_lens.append(num_tokens)
+        self.data = pd.DataFrame({self.key_to_balance: atom_array_token_lens})
+
+    def __len__(self):
+        return len(self.inference_inputs)
+
+    def __getitem__(self, idx):
+        return self.inference_inputs[idx]
