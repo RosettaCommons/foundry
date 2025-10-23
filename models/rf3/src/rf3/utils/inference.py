@@ -50,6 +50,13 @@ def extract_example_id_from_path(path: Path) -> str:
     return path.stem
 
 
+def extract_example_ids_from_json(path: Path) -> list[str]:
+    """Extract example IDs from a JSON file containing one or more examples."""
+    with open(path, "r") as f:
+        data = json.load(f)
+    return [ex["name"] for ex in data]
+
+
 @dataclass
 class InferenceInput:
     """Input specification for RF3 inference."""
@@ -324,7 +331,7 @@ def _process_single_path(
                     )
                 )
 
-    elif path.suffix in CIF_LIKE_EXTENSIONS:
+    elif any(path.name.endswith(ext) for ext in CIF_LIKE_EXTENSIONS):
         # CIF/PDB file
         example_id = extract_example_id_from_path(path)
         if not example_exists(example_id):

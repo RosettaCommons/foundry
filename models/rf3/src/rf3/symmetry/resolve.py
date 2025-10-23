@@ -266,6 +266,7 @@ def apply_symmetry_resolution(
         network_output: Dict[str, torch.Tensor] = {"X_L": X_pred}
 
         # Apply subunit resolution
+        logger.info("Applying subunit symmetry resolution")
         loss_input = subunit_resolver(network_output, loss_input, symmetry_resolution)
 
     # Apply residue symmetry resolution
