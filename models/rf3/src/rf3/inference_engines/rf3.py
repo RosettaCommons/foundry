@@ -87,7 +87,7 @@ class RF3InferenceEngine:
         n_recycles: int = 10,
         diffusion_batch_size: int = 5,
         num_steps: int = 50,
-        seed: int = 0,
+        seed: int | None = None,
         template_noise_scale: float = 1e-5,
         early_stopping_plddt_threshold: float | None = None,
         metrics_cfg: dict | OmegaConf | None = None,
@@ -106,7 +106,7 @@ class RF3InferenceEngine:
           n_recycles: Number of recycles. Defaults to ``10``.
           diffusion_batch_size: Number of structures to generate per input. Defaults to ``5``.
           num_steps: Number of diffusion steps. Defaults to ``50``.
-          seed: Random seed. Defaults to ``0``.
+          seed: Random seed. If None, uses external RNG state. Defaults to ``None``.
           template_noise_scale: Noise scale for template coordinates. Defaults to ``1e-5``.
           early_stopping_plddt_threshold: Stop early if pLDDT below threshold. Defaults to ``None``.
           metrics_cfg: Additional metrics configuration. Defaults to ``None``.
@@ -165,16 +165,21 @@ class RF3InferenceEngine:
                 ]
             ],
             "rna_msa_dirs": [],
+            # (Paranoia - in validation, these should be set correctly anyhow)
             "p_give_polymer_ref_conf": 0.0,
             "p_give_non_polymer_ref_conf": 0.0,
+            "p_dropout_ref_conf": 0.0,
         }
 
         self.print_config = print_config
 
-        # Set random seed
-        seed = seed or self.cfg.seed
-        ranked_logger.info(f"Seeding everything with seed={seed}...")
-        seed_everything(seed, workers=True, verbose=True)
+        # Set random seed (only if seed is not None)
+        if seed is not None or self.cfg.seed is not None:
+            seed = seed or self.cfg.seed
+            ranked_logger.info(f"Seeding everything with seed={seed}...")
+            seed_everything(seed, workers=True, verbose=True)
+        else:
+            ranked_logger.info("Seed is None - using external RNG state")
 
         # Instantiate trainer
         ranked_logger.info("Instantiating trainer...")

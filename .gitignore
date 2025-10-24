@@ -210,7 +210,7 @@ logs/
 **/outputs/
 **/slurm_logs/
 *.ckpt
-**/inference/
+**/distillation/
 **/benchmarks/
 
 # AI

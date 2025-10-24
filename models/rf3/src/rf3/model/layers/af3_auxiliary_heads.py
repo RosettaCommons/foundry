@@ -3,8 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from rf3.model.RF3_structure import PairformerBlock, linearNoBias
 
-import src
-
 # TODO: Get from RF2AA encoding instead
 CHEM_DATA_LEGACY = {"NHEAVY": 23, "aa2num": {"UNK": 20, "GLY": 7, "MAS": 21}}
 
@@ -239,7 +237,11 @@ def calc_Cb_distances(X_pred_L, seq, rep_atoms, frame_atom_idxs):
         & (seq != CHEM_DATA_LEGACY.aa2num["GLY"])
         & (seq != CHEM_DATA_LEGACY.aa2num["MAS"])
     )
-    is_valid_Cb = is_valid_Cb & src.util.is_protein(seq)
+
+    def _legacy_is_protein(seq):
+        return (seq >= 0).all() & (seq < 20).all()
+
+    is_valid_Cb = is_valid_Cb & _legacy_is_protein(seq)
 
     b = Ca - N
     c = C - Ca
