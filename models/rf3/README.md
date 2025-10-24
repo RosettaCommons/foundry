@@ -575,6 +575,8 @@ If inputs are given in a form that specifies chirality, the model will receive t
 
 - **`template_selection`** *(optional)*: Selection syntax to provide token-level templates (for both polymers and non-polymers). Uses `AtomSelection` format. Similar to traditional homology-style templates, but also can be applied to small molecules (less rigidly adhered to than the `ground_truth_conformer_selection` approach). See <a>TODO: HREF TO TEMPLATING, SET ID</a> for more information.
 
+- **`cyclic_chains`** *(optional)*: List of strings of chain ids that should be cyclized. If given a cif, the model will automatically detect cyclization.
+
 </details>
 
 <details>

@@ -98,7 +98,7 @@ from atomworks.ml.transforms.random_atomize_residues import RandomAtomizeResidue
 from atomworks.ml.transforms.rdkit_utils import GetRDKitChiralCenters
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
 from omegaconf import DictConfig
-from rf3.data.cyclic_transorm import AddCyclicBonds
+from rf3.data.cyclic_transform import AddCyclicBonds
 from rf3.data.extra_xforms import CheckForNaNsInInputs
 from rf3.data.pipeline_utils import (
     annotate_post_crop_hash,
@@ -186,7 +186,7 @@ def build_af3_transform_pipeline(
     p_dropout_atom_level_embeddings: float = 0.0,
     embedding_dim: int = 384,
     n_conformers: int = 8,
-    add_cyclic_bonds: bool = False,
+    add_cyclic_bonds: bool = True,
     p_dropout_ref_conf: float = 0.0,  # Unused
 ):
     """Build the AF3 pipeline with specified parameters.

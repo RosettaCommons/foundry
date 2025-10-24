@@ -93,6 +93,7 @@ class RF3InferenceEngine:
         metrics_cfg: dict | OmegaConf | None = None,
         num_nodes: int = 1,
         devices_per_node: int = 1,
+        cyclic_chains: list[str] = [],
         # Debug
         print_config: bool = False,
         raise_if_missing_msa_for_protein_of_length_n: int | None = None,
@@ -170,6 +171,8 @@ class RF3InferenceEngine:
             "p_give_non_polymer_ref_conf": 0.0,
             "p_dropout_ref_conf": 0.0,
         }
+
+        self.cyclic_chains = cyclic_chains
 
         self.print_config = print_config
 
@@ -306,6 +309,11 @@ class RF3InferenceEngine:
             )
         else:
             raise ValueError(f"Unsupported inputs type: {type(inputs)}")
+
+        # Flag chains for cyclization if specified
+        if self.cyclic_chains:
+            for input_spec in inference_inputs:
+                input_spec.cyclic_chains = self.cyclic_chains
 
         # make InferenceInputDataset
         inference_dataset = InferenceInputDataset(inference_inputs)

@@ -27,3 +27,5 @@ ligand_dropout_prob: 0.0
 
 add_residue_is_paired_feature: true
 
+add_cyclic_bonds: true
+

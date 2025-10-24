@@ -66,6 +66,7 @@ class InferenceInput:
     example_id: str
     template_selection: list[str] | None = None
     ground_truth_conformer_selection: list[str] | None = None
+    cyclic_chains: list[str] | None = None
 
     @classmethod
     def from_cif_path(
@@ -270,6 +271,9 @@ class InferenceInput:
             template_selection=self.template_selection,
             ground_truth_conformer_selection=self.ground_truth_conformer_selection,
         )
+
+        if self.cyclic_chains:
+            atom_array = cyclize_atom_array(atom_array, self.cyclic_chains)
 
         return {
             "example_id": self.example_id,
@@ -577,6 +581,47 @@ def apply_conformer_and_template_selections(
     )
     # Safety: avoid unexpected behavior downstream
     atom_array.coord[np.isnan(atom_array.coord)] = -1
+    return atom_array
+
+
+def cyclize_atom_array(atom_array: AtomArray, cyclic_chains: list[str]) -> AtomArray:
+    """Cyclize the atom array by positioining the termini properly if not already done.
+
+    Behavior:
+    - Positions the last carbon atom in the chain to be 1.3 Angstroms away from the first nitrogen atom if they are not already close.
+    - Adds a bond between the termini for proper cif output.
+
+    Args:
+        atom_array: AtomArray to cyclize.
+        cyclic_chains: List of chain IDs to cyclize.
+
+    Returns:
+        The same AtomArray with the specified chains cyclized.
+    """
+    for chain in cyclic_chains:
+        # Find the first nitrogen atom in the chain
+        nitrogen_mask = (atom_array.chain_id == chain) & (atom_array.atom_name == "N")
+        nitrogen_mask_indices = np.where(nitrogen_mask)[0]
+        first_nitrogen_index = nitrogen_mask_indices[0]
+        nitrogen_coord = atom_array.coord[first_nitrogen_index]
+
+        # move the last carbon atom in the chain to be 1.3 Angstroms away from the nitrogen
+        carbon_mask = (atom_array.chain_id == chain) & (atom_array.atom_name == "C")
+        carbon_mask_indices = np.where(carbon_mask)[0]
+        last_carbon_index = carbon_mask_indices[-1]
+        # check if the last carbon is already close to the nitrogen
+        termini_distance = np.linalg.norm(
+            atom_array.coord[last_carbon_index] - nitrogen_coord
+        )
+        if not (termini_distance < 1.5 and termini_distance > 0.5):
+            atom_array.coord[last_carbon_index] = nitrogen_coord + np.array(
+                [1.3, 0.0, 0.0]
+            )
+
+        # add a bond between the nitrogen and carbon so output cif has a connection
+        atom_array.bonds.add_bond(first_nitrogen_index, last_carbon_index)
+        atom_array.bonds.add_bond(last_carbon_index, first_nitrogen_index)
+
     return atom_array
 
 
