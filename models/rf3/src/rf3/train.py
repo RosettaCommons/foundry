@@ -47,7 +47,7 @@ def train(cfg: DictConfig) -> None:
     )  # noqa
     from modelhub.utils.ddp import RankedLogger  # noqa
     from modelhub.utils.ddp import is_rank_zero, set_accelerator_based_on_availability  # noqa
-    from rf3.utils.datasets import (
+    from modelhub.utils.datasets import (
         recursively_instantiate_datasets_and_samplers,
         assemble_distributed_loader,
         subset_dataset_to_example_ids,

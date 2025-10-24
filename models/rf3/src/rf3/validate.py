@@ -43,7 +43,7 @@ def validate(cfg: DictConfig) -> None:
     from modelhub.utils.logging import print_config_tree  # noqa
     from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability  # noqa
     from modelhub.utils.ddp import is_rank_zero  # noqa
-    from rf3.utils.datasets import assemble_val_loader_dict  # noqa
+    from modelhub.utils.datasets import assemble_val_loader_dict  # noqa
 
     set_accelerator_based_on_availability(cfg)
 
