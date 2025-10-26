@@ -19,8 +19,9 @@ class UnresolvedRegionRASA(Metric):
         atom_radii: str | np.ndarray = "ProtOr",
         point_number: int = 100,
         include_resolved: bool = False,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.probe_radius = probe_radius
         self.atom_radii = atom_radii
         self.point_number = point_number

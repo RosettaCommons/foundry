@@ -91,8 +91,8 @@ class DistogramLoss(Metric):
             "crd_mask_rep_atoms_I": ("extra_info", "mask_token_lvl"),
         }
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.cce_loss = nn.CrossEntropyLoss(reduction="none")
 
     def compute(
@@ -193,12 +193,14 @@ class DistogramComparisons(Metric):
             "crd_mask_rep_atoms_I": ("extra_info", "mask_token_lvl"),  # [D, I]
         }
 
-    def __init__(self, comparison_configs: list[ComparisonConfig] | None = None):
+    def __init__(
+        self, comparison_configs: list[ComparisonConfig] | None = None, **kwargs
+    ):
         """
         Args:
             comparison_configs: List of ComparisonConfig objects defining which comparisons to compute.
         """
-        super().__init__()
+        super().__init__(**kwargs)
 
         if comparison_configs is None:
             # Default comparisons
@@ -321,13 +323,15 @@ class DistogramEntropy(Metric):
             "crd_mask_rep_atoms_I": ("extra_info", "mask_token_lvl"),  # [D, I]
         }
 
-    def __init__(self, comparison_configs: list[ComparisonConfig] | None = None):
+    def __init__(
+        self, comparison_configs: list[ComparisonConfig] | None = None, **kwargs
+    ):
         """
         Args:
             comparison_configs: List of ComparisonConfig objects defining which comparisons to compute.
                 If None, uses predefined configurations for atomized and non-atomized pairs.
         """
-        super().__init__()
+        super().__init__(**kwargs)
 
         if comparison_configs is None:
             # Default comparisons

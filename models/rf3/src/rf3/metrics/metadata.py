@@ -9,8 +9,8 @@ class ExtraInfo(Metric):
     """Stores the extra_info from the dataloader output in the metrics dictionary.
     Only basic Python types that are hashable and can be JSON serialized are stored."""
 
-    def __init__(self, keys_to_store: list[str] | Literal["all"] = "all"):
-        super().__init__()
+    def __init__(self, keys_to_store: list[str] | Literal["all"] = "all", **kwargs):
+        super().__init__(**kwargs)
         self.keys_to_store = keys_to_store
 
     @property

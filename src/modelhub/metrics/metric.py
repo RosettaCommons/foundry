@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 
 import hydra
+from atomworks.common import exists
 from atomworks.ml.utils import error, nested_dict
 from beartype.typing import Any
 from omegaconf import DictConfig
@@ -112,6 +113,23 @@ class MetricManager:
                 f" for example '{example_id}'" if example_id is not None else ""
             )
 
+            # Decide whether the Metric applies to this batch
+            if "extra_info" in kwargs and "metrics_tags" in kwargs["extra_info"]:
+                metrics_tags = kwargs["extra_info"]["metrics_tags"]
+                metrics_tags = set(metrics_tags)
+                if metric.required_tags_all and not metrics_tags.issuperset(
+                    metric.required_tags_all
+                ):
+                    continue
+                if metric.required_tags_any and not metrics_tags.intersection(
+                    metric.required_tags_any
+                ):
+                    continue
+                if metric.prohibited_tags and metrics_tags.intersection(
+                    metric.prohibited_tags
+                ):
+                    continue
+
             with error.context(
                 msg=f"Computing '{name}' ({type(metric).__name__}){example_msg}",
                 raise_error=self.raise_errors,
@@ -136,11 +154,40 @@ class Metric(ABC):
     """Abstract base class for Modelhub metrics.
 
     Defines a framework for computing metrics based on arbitrary keyword arguments.
+    A Metric can specify which batches a `MetricManager` applies it to, based on `tags` in the input batch.
+
+    Args:
+        required_tags_all: A set of tags that must all be present in the input batch for this metric to be computed.
+        required_tags_any: A set of tags where at least one must be present in the input batch for this metric to be computed.
+        prohibited_tags: A set of tags that must not be present in the input batch for this metric to be computed.
 
     To implement a new metric, subclass this class and implement the `compute` method, at a minimum.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        required_tags_all: list[str] | set[str] | None = None,
+        required_tags_any: list[str] | set[str] | None = None,
+        prohibited_tags: list[str] | set[str] | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        # Set required and prohibited tags
+        self.required_tags_all = (
+            set(required_tags_all) if exists(required_tags_all) else set()
+        )
+        self.required_tags_any = (
+            set(required_tags_any) if exists(required_tags_any) else set()
+        )
+        self.prohibited_tags = (
+            set(prohibited_tags) if exists(prohibited_tags) else set()
+        )
+        required_tags = self.required_tags_all.union(self.required_tags_any)
+        if required_tags.intersection(self.prohibited_tags):
+            raise ValueError(
+                "Conflicting tags found: required tags and prohibited tags must be disjoint."
+            )
+
         # Check that the 'keys' of the kwargs_to_compute_args are a subset of the 'compute' method signature
         if self.kwargs_to_compute_args:
             assert self.kwargs_to_compute_args.keys() <= self.required_compute_args, (

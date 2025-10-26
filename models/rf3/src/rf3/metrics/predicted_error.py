@@ -41,9 +41,6 @@ def compute_ptm(
 
 
 class ComputePTM(Metric):
-    def __init__(self):
-        super().__init__()
-
     @property
     def kwargs_to_compute_args(self) -> dict[str, Any]:
         return {
@@ -71,9 +68,6 @@ class ComputePTM(Metric):
 
 
 class ComputeIPTM(Metric):
-    def __init__(self):
-        super().__init__()
-
     @property
     def kwargs_to_compute_args(self) -> dict[str, Any]:
         return {

@@ -8,9 +8,6 @@ from modelhub.metrics.metric import Metric
 
 
 class CountClashingChains(Metric):
-    def __init__(self):
-        super().__init__()
-
     @property
     def kwargs_to_compute_args(self) -> dict[str, Any]:
         return {

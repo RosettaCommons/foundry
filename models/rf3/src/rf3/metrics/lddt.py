@@ -204,8 +204,8 @@ def extract_lddt_features_from_atom_arrays(
 class AllAtomLDDT(Metric):
     """Computes all-atom LDDT scores from AtomArrays."""
 
-    def __init__(self, log_lddt_for_every_batch: bool = False):
-        super().__init__()
+    def __init__(self, log_lddt_for_every_batch: bool = False, **kwargs):
+        super().__init__(**kwargs)
         self.log_lddt_for_every_batch = log_lddt_for_every_batch
 
     @property
@@ -264,8 +264,8 @@ class AllAtomLDDT(Metric):
 class InterfaceLDDTByType(Metric):
     """Computes interface LDDT, grouped by interface type"""
 
-    def __init__(self, log_lddt_for_every_batch: bool = False):
-        super().__init__()
+    def __init__(self, log_lddt_for_every_batch: bool = False, **kwargs):
+        super().__init__(**kwargs)
         self.log_lddt_for_every_batch = log_lddt_for_every_batch
 
     @property
@@ -367,8 +367,8 @@ class InterfaceLDDTByType(Metric):
 class ChainLDDTByType(Metric):
     """Computes chain-wise LDDT scores from AtomArrays, grouped by chain type."""
 
-    def __init__(self, log_lddt_for_every_batch: bool = False):
-        super().__init__()
+    def __init__(self, log_lddt_for_every_batch: bool = False, **kwargs):
+        super().__init__(**kwargs)
         self.log_lddt_for_every_batch = log_lddt_for_every_batch
 
     @property
@@ -458,12 +458,12 @@ class ChainLDDTByType(Metric):
 class ByTypeLDDT(Metric):
     """Calculates LDDT scores by type for both chains and interfaces."""
 
-    def __init__(self, log_lddt_for_every_batch: bool = True):
+    def __init__(self, log_lddt_for_every_batch: bool = True, **kwargs):
         self.interface_lddt = InterfaceLDDTByType(
-            log_lddt_for_every_batch=log_lddt_for_every_batch
+            log_lddt_for_every_batch=log_lddt_for_every_batch, **kwargs
         )
         self.chain_lddt = ChainLDDTByType(
-            log_lddt_for_every_batch=log_lddt_for_every_batch
+            log_lddt_for_every_batch=log_lddt_for_every_batch, **kwargs
         )
 
     @property

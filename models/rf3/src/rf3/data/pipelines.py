@@ -187,6 +187,7 @@ def build_af3_transform_pipeline(
     embedding_dim: int = 384,
     n_conformers: int = 8,
     add_cyclic_bonds: bool = True,
+    metrics_tags: list[str] | set[str] | None = None,
     p_dropout_ref_conf: float = 0.0,  # Unused
 ):
     """Build the AF3 pipeline with specified parameters.
@@ -206,6 +207,8 @@ def build_af3_transform_pipeline(
             Defaults to 0.5.
         conformer_generation_timeout (float, optional): The timeout for conformer generation in seconds.
             Defaults to 10.0.
+        metrics_tags (list[str] | set[str] | None, optional): Tags to use for determining which Metrics apply.
+            Defaults to None (tags not added).
 
     Returns:
         Transform: A composed pipeline of transforms.
@@ -259,6 +262,9 @@ def build_af3_transform_pipeline(
             ),
         ),
     ]
+
+    if exists(metrics_tags):
+        transforms.append(AddData({"metrics_tags": metrics_tags}))
 
     transforms.append(
         ConditionalRoute(

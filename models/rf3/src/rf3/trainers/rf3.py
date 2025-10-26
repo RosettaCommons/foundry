@@ -186,6 +186,9 @@ class RF3Trainer(FabricTrainer):
             }
         )
 
+        # Record metrics_tags for this example
+        metrics_extra_info["metrics_tags"] = example.get("metrics_tags", set())
+
         # (Create a shallow copy to avoid modifying the original dictionary)
         return {**metrics_extra_info}
 
