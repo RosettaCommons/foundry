@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-from rf3.training.checkpoint import activation_checkpointing
 from rf3.util_module import init_lecun_normal
+
+from modelhub.training.checkpoint import activation_checkpointing
 
 
 class OuterProductMean(nn.Module):

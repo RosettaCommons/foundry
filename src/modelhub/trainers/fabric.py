@@ -25,10 +25,10 @@ from lightning.fabric.wrappers import (
     _FabricModule,
     _FabricOptimizer,
 )
-from rf3.training.EMA import EMA
-from rf3.training.schedulers import SchedulerConfig
 
 from modelhub.callbacks.callback import BaseCallback
+from modelhub.training.EMA import EMA
+from modelhub.training.schedulers import SchedulerConfig
 from modelhub.utils.ddp import RankedLogger
 from modelhub.utils.weights import (
     CheckpointConfig,

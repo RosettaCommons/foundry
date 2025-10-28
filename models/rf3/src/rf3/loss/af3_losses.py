@@ -3,7 +3,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 from rf3.alignment import weighted_rigid_align
-from rf3.training.checkpoint import activation_checkpointing
+
+from modelhub.training.checkpoint import activation_checkpointing
 
 
 # resolve residue-level symmetries in native vs pred

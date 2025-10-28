@@ -10,8 +10,8 @@ from rf3.model.layers.layer_utils import (
     linearNoBias,
 )
 from rf3.model.layers.mlff import ConformerEmbeddingWeightedAverage
-from rf3.training.checkpoint import activation_checkpointing
 
+from modelhub.training.checkpoint import activation_checkpointing
 from modelhub.utils.torch import device_of
 
 

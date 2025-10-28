@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from rf3.training.checkpoint import activation_checkpointing
+
+from modelhub.training.checkpoint import activation_checkpointing
 
 
 class MSASubsampleEmbedder(nn.Module):

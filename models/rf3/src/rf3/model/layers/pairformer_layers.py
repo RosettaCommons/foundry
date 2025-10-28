@@ -16,10 +16,11 @@ from rf3.model.layers.outer_product import (
     OuterProductMean_AF3,
 )
 from rf3.model.RF3_blocks import MSAPairWeightedAverage, MSASubsampleEmbedder
-from rf3.training.checkpoint import activation_checkpointing
 from rf3.util_module import Dropout
 from torch import nn
 from torch.nn.functional import one_hot, relu
+
+from modelhub.training.checkpoint import activation_checkpointing
 
 
 class AtomAttentionEncoderPairformer(nn.Module):

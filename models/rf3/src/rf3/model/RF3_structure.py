@@ -14,7 +14,8 @@ from rf3.model.layers.pairformer_layers import (
     RelativePositionEncoding,
     RF3TemplateEmbedder,
 )
-from rf3.training.checkpoint import activation_checkpointing
+
+from modelhub.training.checkpoint import activation_checkpointing
 
 logger = logging.getLogger(__name__)
 
