@@ -41,7 +41,7 @@ class RF3Trainer(FabricTrainer):
         *,
         n_recycles_train: int | None = None,
         loss: DictConfig | dict | None = None,
-        metrics: DictConfig | dict | None = None,
+        metrics: DictConfig | dict | MetricManager | None = None,
         **kwargs,
     ):
         """See `FabricTrainer` for the additional initialization arguments.
@@ -51,7 +51,10 @@ class RF3Trainer(FabricTrainer):
                 random number of times between 1 and `n_recycles_train`. During inference, we determine the number of recycles from the MSA stack shape. However,
                 for training, we must sample the number of recycles upfront, so all GPUs within a distributed batch can sample the same number of recycles.
             loss: Configuration for the loss function. If None, the loss function will not be instantiated.
-            metrics: Configuration for the metrics. If None, the metrics will not be instantiated.
+            metrics: Metrics configuration. Can be:
+                - DictConfig/dict with Hydra configs (instantiated internally)
+                - Pre-instantiated MetricManager
+                - None (no metrics)
         """
         super().__init__(**kwargs)
 
@@ -65,12 +68,15 @@ class RF3Trainer(FabricTrainer):
         )  # [n_epochs, n_examples_per_epoch // world_size]
 
         # Metrics
-        # (We could have instantiated loss and metrics recursively, but we prioritize being explicit)
-        self.metrics = (
-            MetricManager.instantiate_from_hydra(metrics_cfg=metrics)
-            if metrics
-            else None
-        )
+        if isinstance(metrics, MetricManager):
+            # Already instantiated
+            self.metrics = metrics
+        elif metrics is not None:
+            # Hydra config - instantiate
+            self.metrics = MetricManager.instantiate_from_hydra(metrics_cfg=metrics)
+        else:
+            # No metrics
+            self.metrics = None
 
         # Loss
         self.loss = AF3Loss(**loss) if loss else None

@@ -90,6 +90,32 @@ class MetricManager:
         """
         return instantiate_metric_manager(metrics_cfg)
 
+    @classmethod
+    def from_metrics(
+        cls,
+        metrics: dict[str, "Metric"] | list[tuple[str, "Metric"]],
+        raise_errors: bool = True,
+    ) -> "MetricManager":
+        """Create MetricManager from metric objects.
+
+        Args:
+            metrics: Either dict mapping names to Metric objects,
+                or list of (name, Metric) tuples.
+            raise_errors: Whether to raise errors on metric failures. Defaults to ``True``.
+        """
+        if isinstance(metrics, list):
+            # Convert list of tuples to dict
+            metrics = dict(metrics)
+
+        # Validate all are Metric instances
+        for name, metric in metrics.items():
+            if not isinstance(metric, Metric):
+                raise TypeError(
+                    f"Metric '{name}' must be a Metric instance, got {type(metric)}"
+                )
+
+        return cls(metrics, raise_errors=raise_errors)
+
     def __repr__(self) -> str:
         """Return a string representation of the MetricManager."""
         return f"MetricManager({', '.join(self.metrics.keys())})"

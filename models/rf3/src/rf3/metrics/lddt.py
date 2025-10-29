@@ -459,6 +459,7 @@ class ByTypeLDDT(Metric):
     """Calculates LDDT scores by type for both chains and interfaces."""
 
     def __init__(self, log_lddt_for_every_batch: bool = True, **kwargs):
+        super().__init__(**kwargs)
         self.interface_lddt = InterfaceLDDTByType(
             log_lddt_for_every_batch=log_lddt_for_every_batch, **kwargs
         )
@@ -474,6 +475,11 @@ class ByTypeLDDT(Metric):
             "interfaces_to_score": ("extra_info", "interfaces_to_score"),
             "pn_units_to_score": ("extra_info", "pn_units_to_score"),
         }
+
+    @property
+    def optional_kwargs(self) -> set[str]:
+        """Mark interfaces_to_score and pn_units_to_score as optional."""
+        return {"interfaces_to_score", "pn_units_to_score"}
 
     def compute(
         self,

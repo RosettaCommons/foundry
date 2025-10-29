@@ -33,6 +33,7 @@ from rf3.utils.predicted_error import (
     compile_af3_confidence_outputs,
     get_mean_atomwise_plddt,
 )
+from modelhub.metrics.metric import MetricManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -90,7 +91,7 @@ class RF3InferenceEngine:
         seed: int | None = None,
         template_noise_scale: float = 1e-5,
         early_stopping_plddt_threshold: float | None = None,
-        metrics_cfg: dict | OmegaConf | None = None,
+        metrics_cfg: dict | OmegaConf | MetricManager | None = None,
         num_nodes: int = 1,
         devices_per_node: int = 1,
         cyclic_chains: list[str] = [],
@@ -110,7 +111,11 @@ class RF3InferenceEngine:
           seed: Random seed. If None, uses external RNG state. Defaults to ``None``.
           template_noise_scale: Noise scale for template coordinates. Defaults to ``1e-5``.
           early_stopping_plddt_threshold: Stop early if pLDDT below threshold. Defaults to ``None``.
-          metrics_cfg: Additional metrics configuration. Defaults to ``None``.
+          metrics_cfg: Metrics configuration. Can be:
+              - dict/OmegaConf with Hydra configs
+              - Pre-instantiated MetricManager
+              - None (no metrics).
+              Defaults to ``None``.
           num_nodes: Number of nodes for distributed inference. Defaults to ``1``.
           devices_per_node: Number of devices per node. Defaults to ``1``.
           print_config: Whether to print config trees. Defaults to ``False``.
@@ -125,7 +130,19 @@ class RF3InferenceEngine:
         self.cfg.model.net.inference_sampler.num_timesteps = num_steps
         self.cfg.trainer.num_nodes = num_nodes
         self.cfg.trainer.devices_per_node = devices_per_node
-        self.cfg.trainer["metrics"] = {}
+
+        # Set metrics - can be dict/OmegaConf or MetricManager
+        # Store MetricManager separately since OmegaConf can't serialize it
+        self._custom_metric_manager = None
+        if isinstance(metrics_cfg, MetricManager):
+            # Already instantiated - store separately and pass to trainer later
+            self._custom_metric_manager = metrics_cfg
+            self.cfg.trainer["metrics"] = {}  # Empty dict in config
+        elif metrics_cfg is not None:
+            # Hydra config dict
+            self.cfg.trainer["metrics"] = metrics_cfg
+        else:
+            self.cfg.trainer["metrics"] = {}
 
         set_accelerator_based_on_availability(self.cfg)
 
@@ -191,14 +208,15 @@ class RF3InferenceEngine:
                 self.cfg.trainer, resolve=True, title="INFERENCE TRAINER CONFIGURATION"
             )
 
-        if metrics_cfg is not None:
-            self.cfg.trainer["metrics"].update(metrics_cfg)
-
         self.trainer = hydra.utils.instantiate(
             self.cfg.trainer,
             _convert_="partial",
             _recursive_=False,
         )
+
+        # If we have a custom MetricManager, override the trainer's metrics
+        if self._custom_metric_manager is not None:
+            self.trainer.metrics = self._custom_metric_manager
 
         self.ckpt_path = ckpt_path
         self.early_stopping_plddt_threshold = early_stopping_plddt_threshold
