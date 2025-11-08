@@ -14,7 +14,7 @@ defaults:
 
 ckpt_config:
   _target_: modelhub.utils.weights.CheckpointConfig
-  path: /net/software/containers/versions/modelhub_inference/ckpts/rf3-w-conf-run10-ep903-remapped.ckpt
+  path: /net/software/containers/versions/modelhub_inference/ckpts/rf3-w-conf-run10-ep922-remapped.ckpt
   reset_optimizer: true
 
 model:

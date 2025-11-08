@@ -6,7 +6,7 @@ defaults:
 
 _target_: rf3.inference_engines.rf3.RF3InferenceEngine
 
-ckpt_path: /projects/ml/modelhub/apptainer/rf3-w-conf-run10-ep903-remapped.ckpt
+ckpt_path: /net/software/containers/versions/modelhub_inference/ckpts/rf3-w-conf-run10-ep922-remapped.ckpt
 
 # Transform arguments
 n_recycles: 10
@@ -21,7 +21,6 @@ early_stopping_plddt_threshold: 0.5
 seed: null
 print_config: true
 raise_if_missing_msa_for_protein_of_length_n: null
-cyclic_chains: []
 
 # Metrics
 metrics_cfg:

@@ -30,6 +30,9 @@ IncludeCmd: yes
         --exclude='outputs' \
         --exclude='logs' \
         --exclude='*.sif' \
+        --exclude='distillation' \
+        --exclude='benchmarks' \
+        --exclude='**/slurm_logs' \
         ./ ${APPTAINER_ROOTFS}/opt/modelhub/
 
     echo "Repository copied successfully."

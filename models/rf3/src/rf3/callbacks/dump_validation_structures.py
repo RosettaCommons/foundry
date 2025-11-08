@@ -21,6 +21,7 @@ class DumpValidationStructuresCallback(BaseCallback):
         dump_predictions: bool = False,
         one_model_per_file: bool = False,
         dump_trajectories: bool = False,
+        compress_outputs: bool = True,
     ):
         """
         Args:
@@ -28,12 +29,14 @@ class DumpValidationStructuresCallback(BaseCallback):
             one_model_per_file: If True, write each structure within a diffusion batch to its own CIF files. If False,
                 include each structure within a diffusion batch as a separate model within one CIF file.
             dump_trajectories: Whether to dump denoising trajectories after validation batches.
+            compress_outputs: Whether to gzip output files. Defaults to ``True``.
         """
         super().__init__()
         self.save_dir = Path(save_dir)
         self.dump_predictions = dump_predictions
         self.dump_trajectories = dump_trajectories
         self.one_model_per_file = one_model_per_file
+        self.compress_outputs = compress_outputs
 
     def on_validation_batch_end(
         self,
@@ -68,6 +71,9 @@ class DumpValidationStructuresCallback(BaseCallback):
 
             return path / f"{identifier}{extra}"
 
+        # Determine file type based on compression setting
+        file_type = "cif.gz" if self.compress_outputs else "cif"
+
         if self.dump_predictions:
             atom_array_stack = build_stack_from_atom_array_and_batched_coords(
                 network_output["X_L"], example["atom_array"]
@@ -76,6 +82,7 @@ class DumpValidationStructuresCallback(BaseCallback):
                 atom_arrays=atom_array_stack,
                 base_path=_build_path_from_example_id("predictions"),
                 one_model_per_file=self.one_model_per_file,
+                file_type=file_type,
             )
 
         if self.dump_trajectories:
@@ -83,9 +90,11 @@ class DumpValidationStructuresCallback(BaseCallback):
                 trajectory_list=network_output["X_denoised_L_traj"],
                 atom_array=example["atom_array"],
                 base_path=_build_path_from_example_id("trajectories", "_denoised"),
+                file_type=file_type,
             )
             dump_trajectories(
                 trajectory_list=network_output["X_noisy_L_traj"],
                 atom_array=example["atom_array"],
                 base_path=_build_path_from_example_id("trajectories", "_noisy"),
+                file_type=file_type,
             )

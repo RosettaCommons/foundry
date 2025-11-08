@@ -32,13 +32,19 @@ SHOULD_USE_CUEQUIVARIANCE = False
 
 try:
     if torch.cuda.is_available():
-        import cuequivariance_torch as cuet  # noqa: I001, F401
+        if _env.bool("DISABLE_CUEQUIVARIANCE", default=False):
+            logger.info("cuEquivariance usage disabled via DISABLE_CUEQUIVARIANCE")
+        else:
+            import cuequivariance_torch as cuet  # noqa: I001, F401
 
-        SHOULD_USE_CUEQUIVARIANCE = True
-        os.environ["CUEQ_DISABLE_AOT_TUNING"] = _env.str(
-            "CUEQ_DISABLE_AOT_TUNING", default="1"
-        )
-        os.environ["CUEQ_DEFAULT_CONFIG"] = _env.str("CUEQ_DEFAULT_CONFIG", default="1")
+            SHOULD_USE_CUEQUIVARIANCE = True
+            os.environ["CUEQ_DISABLE_AOT_TUNING"] = _env.str(
+                "CUEQ_DISABLE_AOT_TUNING", default="1"
+            )
+            os.environ["CUEQ_DEFAULT_CONFIG"] = _env.str(
+                "CUEQ_DEFAULT_CONFIG", default="1"
+            )
+            logger.info("cuEquivariance is available and will be used.")
 
 except ImportError:
     logger.debug("cuEquivariance unavailable: import failed")

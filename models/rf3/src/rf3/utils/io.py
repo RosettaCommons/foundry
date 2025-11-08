@@ -143,6 +143,7 @@ def dump_trajectories(
     atom_array: AtomArray,
     base_path: Path,
     align_structures: bool = True,
+    file_type: str = "cif.gz",
 ) -> None:
     """Write denoising trajectories to CIF files.
 
@@ -153,6 +154,7 @@ def dump_trajectories(
         base_path (Path): Base path where the output files will be saved.
         align_structures (bool): Flag to determine if the structures should be aligned on the final prediction.
             If False, each step may have a different alignment.
+        file_type (str): File type for output (e.g., "cif", "cif.gz", "pdb"). Defaults to ``"cif.gz"``.
     """
     n_steps = len(trajectory_list)
 
@@ -192,5 +194,5 @@ def dump_trajectories(
 
         path = f"{base_path}_model_{i}"
         to_cif_file(
-            atom_array_stack, path, file_type="cif.gz", include_entity_poly=False
+            atom_array_stack, path, file_type=file_type, include_entity_poly=False
         )

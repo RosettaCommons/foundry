@@ -40,6 +40,15 @@ from modelhub.utils.weights import (
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 
+def is_interactive_environment() -> bool:
+    try:
+        from IPython import get_ipython
+
+        return get_ipython() is not None
+    except ImportError:
+        return False
+
+
 class FabricTrainer(ABC):
     def __init__(
         self,
@@ -110,11 +119,13 @@ class FabricTrainer(ABC):
             (4) Efficient Gradient Accumulation (https://lightning.ai/docs/fabric/2.4.0/advanced/gradient_accumulation.html)
         """
         # DDP strategy requires a manual timeout higher than the default
-        if strategy == "ddp":
+        if strategy == "ddp" and not is_interactive_environment():
             strategy = DDPStrategy(
                 timeout=timedelta(seconds=nccl_timeout),
                 find_unused_parameters=find_unused_parameters,
             )
+        else:
+            strategy = "auto"  # type: ignore
 
         # See (1) for initialization arguments for Fabric()
         self.fabric = L.Fabric(

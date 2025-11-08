@@ -11,10 +11,12 @@ from atomworks.ml.preprocessing.msa.finding import (
     get_msa_dirs_from_env,
 )
 from atomworks.ml.samplers import LoadBalancedDistributedSampler
+from biotite.structure import AtomArray
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
+from modelhub.metrics.metric import MetricManager
 from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
 from modelhub.utils.logging import print_config_tree
 from rf3.model.RF3 import ShouldEarlyStopFn
@@ -33,7 +35,6 @@ from rf3.utils.predicted_error import (
     compile_af3_confidence_outputs,
     get_mean_atomwise_plddt,
 )
-from modelhub.metrics.metric import MetricManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -94,7 +95,8 @@ class RF3InferenceEngine:
         metrics_cfg: dict | OmegaConf | MetricManager | None = None,
         num_nodes: int = 1,
         devices_per_node: int = 1,
-        cyclic_chains: list[str] = [],
+        # Output control
+        compress_outputs: bool = True,
         # Debug
         print_config: bool = False,
         raise_if_missing_msa_for_protein_of_length_n: int | None = None,
@@ -118,6 +120,7 @@ class RF3InferenceEngine:
               Defaults to ``None``.
           num_nodes: Number of nodes for distributed inference. Defaults to ``1``.
           devices_per_node: Number of devices per node. Defaults to ``1``.
+          compress_outputs: Whether to gzip output files. Defaults to ``True``.
           print_config: Whether to print config trees. Defaults to ``False``.
           raise_if_missing_msa_for_protein_of_length_n: Debug flag for MSA checking. Defaults to ``None``.
         """
@@ -187,9 +190,8 @@ class RF3InferenceEngine:
             "p_give_polymer_ref_conf": 0.0,
             "p_give_non_polymer_ref_conf": 0.0,
             "p_dropout_ref_conf": 0.0,
+            "use_element_for_atom_names_of_atomized_tokens": True,
         }
-
-        self.cyclic_chains = cyclic_chains
 
         self.print_config = print_config
 
@@ -220,6 +222,7 @@ class RF3InferenceEngine:
 
         self.ckpt_path = ckpt_path
         self.early_stopping_plddt_threshold = early_stopping_plddt_threshold
+        self.compress_outputs = compress_outputs
 
         # Setup model
         ranked_logger.info("Setting up model...")
@@ -269,7 +272,14 @@ class RF3InferenceEngine:
 
     def run(
         self,
-        inputs: InferenceInput | list[InferenceInput] | PathLike | list[PathLike],
+        inputs: (
+            InferenceInput
+            | list[InferenceInput]
+            | AtomArray
+            | list[AtomArray]
+            | PathLike
+            | list[PathLike]
+        ),
         # Output control
         out_dir: PathLike | None = None,
         dump_predictions: bool = True,
@@ -281,22 +291,24 @@ class RF3InferenceEngine:
         # Selection overrides (applied to all input types)
         template_selection: list[str] | str | None = None,
         ground_truth_conformer_selection: list[str] | str | None = None,
+        cyclic_chains: list[str] = [],
     ) -> dict[str, dict] | None:
         """Run inference on inputs.
 
         Requires a pre-initialized inference engine.
 
         Args:
-          inputs: Single/list of InferenceInput objects, or file paths, or directory.
+          inputs: Single/list of InferenceInput objects, AtomArray objects, file paths, or directory.
           out_dir: Output directory. If None, returns results as an AtomArray and dictionaries of metrics. Defaults to ``None``.
           dump_predictions: Whether to save predicted structures. Defaults to ``True``.
           dump_trajectories: Whether to save diffusion trajectories. Defaults to ``False``.
           one_model_per_file: Save each model in separate file. Defaults to ``False``.
           annotate_b_factor_with_plddt: Write pLDDT to B-factor column. Defaults to ``False``.
           sharding_pattern: Sharding pattern for output organization. Defaults to ``None``.
-          skip_existing: Skip inputs with existing outputs. Defaults to ``False``.
+          skip_existing: Skip inputs with existing outputs. Requires ``out_dir`` to be set. If ``True`` when ``out_dir=None``, a warning is logged and skipping is disabled. Defaults to ``False``.
           template_selection: Template selection override. Defaults to ``None``.
           ground_truth_conformer_selection: Conformer selection override. Defaults to ``None``.
+          cyclic_chains: List of chain IDs to cyclize. Defaults to ``[]``.
 
         Returns:
           If ``out_dir`` is None: Dict mapping example_id to results dict.
@@ -307,6 +319,21 @@ class RF3InferenceEngine:
         if out_dir:
             out_dir.mkdir(parents=True, exist_ok=True)
             ranked_logger.info(f"Outputs will be written to {out_dir.resolve()}.")
+        if not out_dir:
+            ranked_logger.warning(
+                "out_dir is None - results will be returned in memory! If you want to save to disk, please provide an out_dir."
+            )
+
+        # Validate skip_existing configuration
+        if skip_existing and out_dir is None:
+            ranked_logger.warning(
+                "skip_existing=True requires out_dir to be set. "
+                "Disabling skip_existing for in-memory inference mode."
+            )
+            skip_existing = False
+
+        # Determine file type based on compression setting
+        file_type = "cif.gz" if self.compress_outputs else "cif"
 
         # Convert inputs to InferenceInput objects
         if isinstance(inputs, InferenceInput):
@@ -315,6 +342,26 @@ class RF3InferenceEngine:
             isinstance(i, InferenceInput) for i in inputs
         ):
             inference_inputs = inputs
+        elif isinstance(inputs, AtomArray):
+            # Single AtomArray - convert to InferenceInput
+            inference_inputs = [
+                InferenceInput.from_atom_array(
+                    inputs,
+                    template_selection=template_selection,
+                    ground_truth_conformer_selection=ground_truth_conformer_selection,
+                )
+            ]
+        elif isinstance(inputs, list) and all(isinstance(i, AtomArray) for i in inputs):
+            # List of AtomArrays - convert each to InferenceInput
+            inference_inputs = [
+                InferenceInput.from_atom_array(
+                    arr,
+                    example_id=f"inference_{i}",
+                    template_selection=template_selection,
+                    ground_truth_conformer_selection=ground_truth_conformer_selection,
+                )
+                for i, arr in enumerate(inputs)
+            ]
         elif isinstance(inputs, (str, Path)) or (
             isinstance(inputs, list) and isinstance(inputs[0], (str, Path))
         ):
@@ -329,9 +376,9 @@ class RF3InferenceEngine:
             raise ValueError(f"Unsupported inputs type: {type(inputs)}")
 
         # Flag chains for cyclization if specified
-        if self.cyclic_chains:
+        if cyclic_chains:
             for input_spec in inference_inputs:
-                input_spec.cyclic_chains = self.cyclic_chains
+                input_spec.cyclic_chains = cyclic_chains
 
         # make InferenceInputDataset
         inference_dataset = InferenceInputDataset(inference_inputs)
@@ -495,6 +542,7 @@ class RF3InferenceEngine:
                         atom_arrays=atom_array_list or atom_array_stack,
                         base_path=example_out_dir / input_spec.example_id,
                         one_model_per_file=one_model_per_file,
+                        file_type=file_type,
                     )
 
                 if dump_trajectories:
@@ -502,11 +550,13 @@ class RF3InferenceEngine:
                         trajectory_list=network_output["X_denoised_L_traj"],
                         atom_array=pipeline_output["atom_array"],
                         base_path=example_out_dir / "denoised",
+                        file_type=file_type,
                     )
                     dump_trajectories(
                         trajectory_list=network_output["X_noisy_L_traj"],
                         atom_array=pipeline_output["atom_array"],
                         base_path=example_out_dir / "noisy",
+                        file_type=file_type,
                     )
 
                 ranked_logger.info(

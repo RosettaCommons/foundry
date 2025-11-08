@@ -3,7 +3,7 @@ from pathlib import Path
 import typer
 from hydra import compose, initialize_config_dir
 
-app = typer.Typer()
+app = typer.Typer(pretty_exceptions_enable=False)
 
 
 @app.command(

@@ -27,6 +27,7 @@ IncludeCmd: yes
     /etc/hosts
     pyproject.toml /opt/core_pyproject.toml
     models/rf3/pyproject.toml /opt/rf3_pyproject.toml
+    lib/atomworks/pyproject.toml /opt/atomworks_pyproject.toml
 
 %post
     ## GENERAL SETUP
@@ -38,7 +39,22 @@ IncludeCmd: yes
     ln -s /projects /mnt/projects
     ln -s /net /mnt/net
 
+    # Update system and install essential packages
+    apt-get update && apt-get install -y \
+        build-essential \
+        git \
+        libxrender1 \
+        libxrender-dev \
+        libx11-6 \
+        libx11-dev \
+        libxext6 \
+        libxext-dev \
+        && rm -rf /var/lib/apt/lists/*
+
     ## PYTHON DEPENDENCY INSTALLATION
+
+    # Upgrade pip
+    python -m pip install --upgrade pip
 
     # Install uv for fast dependency resolution
     pip install uv
@@ -54,12 +70,18 @@ IncludeCmd: yes
     uv pip compile /opt/pyproject.toml --output-file /opt/rf3_requirements.txt --all-extras
     rm /opt/pyproject.toml
 
+    # (AtomWorks)
+    mv /opt/atomworks_pyproject.toml /opt/pyproject.toml
+    uv pip compile /opt/pyproject.toml --output-file /opt/atomworks_requirements.txt --all-extras
+    rm /opt/pyproject.toml
+
     # Merge and dedupe requirements, excluding packages we don't want
     # (atomworks is mounted from host; torch/numpy/nvidia-* provided by base image)
-    # (pynvml/packaging/pandas/markdown-it-py from NGC container to avoid conflicts)
-    cat /opt/core_requirements.txt /opt/rf3_requirements.txt | \
-        grep -vE "^(atomworks|torch(|vision|audio)|numpy|nvidia-.*|pynvml|packaging|pandas|markdown-it-py)==" | \
-        awk '!seen[$0]++' > /opt/combined_requirements.txt
+    # (pynvml/packaging/pandas/markdown-it-py/triton from NGC container to avoid conflicts)
+    # Deduplicate by package name (keeping first occurrence) to handle version conflicts
+    cat /opt/core_requirements.txt /opt/rf3_requirements.txt /opt/atomworks_requirements.txt | \
+        grep -vE "^(atomworks|torch(|vision|audio)|numpy|nvidia-.*|pynvml|packaging|pandas|markdown-it-py|triton)==" | \
+        awk -F'==' '!seen[$1]++' > /opt/combined_requirements.txt
 
     # Print combined requirements for debugging
     echo "=== Combined requirements to install ==="

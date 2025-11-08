@@ -45,6 +45,7 @@ def run_inference(cfg: DictConfig) -> None:
         "ground_truth_conformer_selection": cfg.get(
             "ground_truth_conformer_selection", None
         ),
+        "cyclic_chains": cfg.get("cyclic_chains", []),
     }
 
     # Create init config with only __init__ params

@@ -35,7 +35,8 @@ dependencies = [
     "cuequivariance_ops_torch_cu12>=0.6.1; sys_platform == 'linux'",
     "cuequivariance_torch>=0.6.1; sys_platform == 'linux'",
     # ... dataloading
-    "atomworks==1.0.2",
+    # (Commenting out for development; we should re-add before release)
+    # "atomworks==1.0.2",
 ]
 
 [project.scripts]
@@ -51,6 +52,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 source = "vcs"
+fallback-version = "0.0.0"
 
 [tool.hatch.version.raw-options]
 root = "../.."
