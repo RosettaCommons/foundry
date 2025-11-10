@@ -209,6 +209,7 @@ logs/
 **/scratch/
 **/outputs/
 **/slurm_logs/
+**/tmp/
 *.ckpt
 **/distillation/
 **/benchmarks/

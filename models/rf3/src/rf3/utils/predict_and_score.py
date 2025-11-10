@@ -42,7 +42,7 @@ def _clean_atom_array_for_rf3(atom_array: struc.AtomArray) -> struc.AtomArray:
 def predict_and_score_with_rf3(
     atom_arrays: list[struc.AtomArray],
     ckpt_path: str | Path,
-    metrics = None,
+    metrics=None,
     n_recycles: int = 10,
     diffusion_batch_size: int = 5,
     num_steps: int = 50,
