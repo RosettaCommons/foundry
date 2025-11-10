@@ -121,7 +121,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         )
 
         ranked_logger.info(
-            f"Validation Progress: {100 * batch_idx / num_batches:.0f}% for {dataset_name}"
+            f"Validation Progress: {100 * (batch_idx + 1) / num_batches:.0f}% for {dataset_name}"
         )
 
     def on_validation_epoch_end(self):
@@ -292,7 +292,10 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
             # +----------------- Other metrics -----------------+
             remaining_cols = list(set(dataset_df.columns) - set(by_type_lddt_cols))
             remaining_df = dataset_df[remaining_cols].copy()
-            remaining_df = remaining_df.dropna(how="all")
+            remaining_df = remaining_df.dropna(how="all", axis=0)
+            remaining_df = remaining_df.dropna(
+                how="all", axis=1
+            )  # If a Metric is all NaNs for this dataset, drop it
             numeric_cols = remaining_df.select_dtypes(include="number").columns
 
             # Compute means and non-NaN counts for numeric columns
