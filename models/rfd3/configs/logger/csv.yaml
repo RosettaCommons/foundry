@@ -1,0 +1,6 @@
+# https://lightning.ai/docs/fabric/latest/api/generated/lightning.fabric.loggers.CSVLogger.html#lightning.fabric.loggers.CSVLogger
+
+csv:
+  _target_: lightning.fabric.loggers.CSVLogger
+  root_dir: ${paths.output_dir}
+  flush_logs_every_n_steps: 1

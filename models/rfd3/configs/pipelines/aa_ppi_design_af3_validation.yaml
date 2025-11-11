@@ -1,0 +1,15 @@
+defaults:
+  - aa_ppi_design_af_multimer_validation
+
+steps: [link_from_dir, get_ss_content, backbone_geometry_metrics, 
+  filter_passing, mpnn, af3_ppi, af3_ppi_filter, update_benchmark]
+
+af3_ppi:
+  chunk_by_delimiter: _
+  chunk: 10 # We have fewer examples for online validation
+  num_diffusion_samples: 1 # 5 might be more standard, but this is faster, and fine as long as it's consistent
+  chainbreak_mode: big_gap
+  buckets: 128,192,256,320,384,512 # Good enough for now -- maybe expand later
+  slurm:
+    time: 01:00:00 # For online validation, this should be fine
+    p: gpu # gpu-bf is usually fine, but when digs is slammed this is necessary

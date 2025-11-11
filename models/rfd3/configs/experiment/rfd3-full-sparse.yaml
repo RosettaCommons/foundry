@@ -1,0 +1,24 @@
+# @package _global_
+# New base model configuration since last large refactor
+# includes 
+
+defaults:
+  - rfd3-full
+  - _self_
+
+name: rfd3-ablation-recycling
+
+model:
+  net:
+    diffusion_module:
+      n_recycle: 2
+      use_local_token_attention: True
+      diffusion_transformer:
+        n_local_tokens: 32
+        n_keys: 128
+
+    inference_sampler:
+      num_timesteps: 100
+
+trainer:
+  n_recycles_train: 2

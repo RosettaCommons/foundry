@@ -1,0 +1,21 @@
+# _target_: modelhub.loss.af3_losses.DiffusionLoss
+# sigma_data: ${model.net.diffusion_module.sigma_data}
+# alpha_dna: 5
+# alpha_rna: 5
+# alpha_ligand: 10
+# edm_lambda: True
+# se3_invariant_loss: True
+# clamp_diffusion_loss: False
+weight: 4.0
+
+_target_: rfd3.metrics.losses.VerboseDiffusionLoss
+alpha_motif: 1.0
+alpha_ca_atom: 1.0
+alpha_virtual_atom: 1.0
+alpha_fixed_motif: 2.0
+alpha_unindexed_diffused: 2.0
+lddt_weight: 0.25
+clamp_diffusion_loss: True
+align_prediction: False
+use_motif_aligned_loss: False
+normalize_virtual_atom_weight: False

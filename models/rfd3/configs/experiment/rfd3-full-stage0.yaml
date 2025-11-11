@@ -1,0 +1,42 @@
+# @package _global_
+# New base model configuration since last large refactor
+# includes 
+
+defaults:
+  - rfd3-full-sparse
+  - _self_
+
+name: rfd3-print
+tags: [print-model]
+ckpt_path: null
+
+datasets:
+  global_transform_args:
+    train_conditions:
+      unconditional:
+        frequency: 2.0
+      island:
+        frequency: 2.0
+      sequence_design:
+        frequency: 0.5
+      tipatom:
+        frequency: 5.0
+      ppi:
+        frequency: 2.0
+  train:
+    pdb:
+      probability: 0.05
+    monomer_distillation:
+      probability: 0.85
+
+    # Added in later stages of training:
+    # interdomain_distillation:
+    #   probability: 0.0
+    bcov_ppi_distillation:
+      probability: 0.10
+    dna_binder:  # 6 : 4 : 1
+      probability: 0.0
+    na_complex_distillation:
+      probability: 0.0
+    free_dna_dds:
+      probability: 0.0

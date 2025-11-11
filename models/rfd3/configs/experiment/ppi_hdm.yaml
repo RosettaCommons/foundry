@@ -1,0 +1,47 @@
+# @package _global_
+
+defaults: 
+  - ppi
+  - ../datasets/val/val_examples/bcov_ppi_easy_medium_with_ori@datasets.val.bcov_ppi_easy_medium.dataset.data
+  - _self_
+
+name: ppi_hdm
+tags:
+  - atom14
+  - ppi
+  - atom-level-hotspots
+  - ${datasets.global_transform_args.central_atom}
+  - 07-07-branch
+  - sl2-base
+  - full-binder-crop
+  - crop-size-384
+  - diffused-centered
+
+datasets: # NOTE: in contrast to the old branch, we're using the full atom14 association scheme here
+  diffusion_batch_size_train: 8
+  crop_size: 384
+  global_transform_args:
+    keep_full_binder_in_spatial_crop: True
+    max_binder_length: 256
+    sigma_perturb: 5 # Such that the ori token isn't fixed too closely
+    center_option: diffuse
+    meta_conditioning_probabilities:
+      add_ppi_hotspots: 0.75
+      full_binder_crop: 1.0 # Note that this leaks the sequence length
+  train:
+    pdb:
+      sub_datasets:
+        interface:
+          dataset:
+            transform:
+              max_atoms_in_crop: 5000
+
+model:
+  net:
+    inference_sampler:
+      center_option: diffuse
+    diffusion_module:
+      diffusion_atom_encoder:
+        c_atom_1d_features: 395
+        atom_1d_features:
+            is_atom_level_hotspot: 1

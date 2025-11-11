@@ -1,0 +1,3 @@
+defaults:
+  - ppi # NOTE: This will also port over the bcov val dataset, which should be removed in the launch script
+  - val/ppi_inference@val.ppi_inference

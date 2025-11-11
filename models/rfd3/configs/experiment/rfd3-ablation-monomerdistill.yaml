@@ -1,0 +1,16 @@
+# @package _global_
+
+defaults:
+  - rfd3-ablation-control
+  - _self_
+
+name: rfd3-ablation-monomerdistill
+
+# Reset the training parquets to the regular ones without structure-clustering
+datasets:
+  train:
+    pdb:
+      probability: 1.0
+    monomer_distillation:
+      probability: 0.0
+

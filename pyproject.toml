@@ -1,9 +1,9 @@
 [project]
-name = "modelhub"
+name = "modelforge"
 dynamic = ["version"]
 description = "Shared utilities and training infrastructure for biomolecular structure prediction models."
 readme = "README.md"
-requires-python = ">= 3.12"
+requires-python = ">=3.12"
 authors = [
     { name = "Institute for Protein Design", email = "contact@ipd.uw.edu" },
 ]
@@ -32,17 +32,36 @@ dependencies = [
     # ... typing & documentation
     "jaxtyping>=0.2.17,<1",
     "beartype>=0.18.0,<1",
+    "typer>=0.9.0,<1",
     # ... ml tools (core)
     "torch>=2.2.0,<3",
     "lightning>=2.5.0",
-    "loralib>=0.1.1"
+    "loralib>=0.1.1",
+    "einops>=0.8.0,<1",
+    "einx>=0.1.0,<1",
+    "opt_einsum>=3.4.0,<4",
+    "dm-tree>=0.1.6,<1",
 ]
 
 
 [project.optional-dependencies]
+rfd3 = [
+    "pydantic>=2.8",
+]
+rf3 = [
+    "cuequivariance_ops_cu12>=0.6.1; sys_platform == 'linux'",
+    "cuequivariance_ops_torch_cu12>=0.6.1; sys_platform == 'linux'",
+    "cuequivariance_torch>=0.6.1; sys_platform == 'linux'",
+]
+all = [
+    "modelforge[rfd3]",
+    "modelforge[rf3]",
+]
 dev = [
     # Linters & formatters
+    "assertpy",
     "ruff==0.8.3",
+    "ipdb",
     # Debugger/interactive
     "debugpy>=1.8.5,<2",
     "ipykernel>=6.29.4,<7",
@@ -53,8 +72,12 @@ dev = [
     "pytest-dotenv>=0.5.2,<1", # load environment variables from .env file
     "pytest-cov>=4.1.0,<5", # generate coverage report
     "pytest-benchmark>=5.0.0,<6", # benchmark tests for speed
+    "atomworks==1.0.2",
 ]
-# No CLI scripts at root level - models provide their own entry points
+[project.scripts]
+rf3 = "rf3.cli:app"
+rfd3 = "rfd3.cli:app"
+
 # Build settings ----------------------------------------------------------------------
 [build-system]
 requires = [
@@ -74,7 +97,11 @@ version-file = "src/modelhub/version.py"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/modelhub"]
+packages = [
+  "src/modelhub",
+  "models/rf3/src/rf3",
+  "models/rfd3/src/rfd3",
+]
 
 # Formatting & linting settings -------------------------------------------------------
 [tool.ruff]

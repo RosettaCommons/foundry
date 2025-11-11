@@ -1,0 +1,8 @@
+
+defaults:
+  - optimizers/adam@optimizer
+  - schedulers/af3@lr_scheduler
+  - samplers/edm@net.inference_sampler
+  - components/ema@ema
+  - components/rfd3_net@net
+  - _self_

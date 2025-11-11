@@ -1,0 +1,23 @@
+# base training dataset for training AF3 design models (atom14 variants):
+# protein subsampling only.
+
+defaults:
+  - design_base
+  - val/sm_binder_hbonds@val.sm_binder_hbonds
+  - val/sm_binder_hbonds_short@val.sm_binder_hbonds_short
+  - _self_
+
+
+# Datasets:
+train:
+  pdb:
+    probability: 0.9
+    sub_datasets:
+      interface:
+        dataset:
+          transform:
+            crop_spatial_probability: 1.0
+
+  # Should we do monomer for hbond? probably not, maybe small sampling so model learns something?
+  monomer_distillation:
+    probability: 0.1

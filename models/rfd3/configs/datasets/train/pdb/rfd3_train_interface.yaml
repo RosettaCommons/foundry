@@ -1,0 +1,10 @@
+# Inherit 
+defaults:
+  - af3_train_interface
+  - pdb_base
+  - _self_
+
+dataset:
+  transform:
+    crop_contiguous_probability: 0.0
+    crop_spatial_probability: 1.0

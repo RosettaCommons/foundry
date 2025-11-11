@@ -1,0 +1,146 @@
+defaults:
+  - base
+
+  # Interface dataset only
+  - train/pdb/rfd3_train_interface@train.pdb.sub_datasets.interface
+  
+  # PPI validation dataset
+  - val/bcov_ppi_easy_medium@val.bcov_ppi_easy_medium
+
+  # Customized train masks
+  - conditions/unconditional@global_transform_args.train_conditions.unconditional
+  - conditions/island@global_transform_args.train_conditions.island
+  - conditions/tipatom@global_transform_args.train_conditions.tipatom
+  - conditions/sequence_design@global_transform_args.train_conditions.sequence_design
+  - conditions/ppi@global_transform_args.train_conditions.ppi
+
+  - _self_
+
+pipeline_target: rfd3.transforms.pipelines.build_atom14_base_pipeline
+
+# Global transform arguments are necessary for arguments shared between training and inference
+global_transform_args:
+  allowed_types: ['is_protein', 'is_ligand']
+  n_atoms_per_token: 14
+  central_atom: CB
+  sigma_perturb: 4.0
+  sigma_perturb_com: 3.0
+  association_scheme: atom14-new  # atom14, atom14-new or null
+  center_option: all  # options are ["all", "motif", "diffuse"]
+
+  # Give ground-truth reference conformer for residues with unmasked sequences
+  generate_conformers: True
+  generate_conformers_for_non_protein_only: False
+  provide_reference_conformer_when_unmasked: True
+  ground_truth_conformer_policy: REPLACE
+  provide_elements_for_unindexed_components: False
+  use_element_for_atom_names_of_atomized_tokens: False
+
+  # PPI Cropping
+  keep_full_binder_in_spatial_crop: False
+  max_binder_length: 170
+
+  # PPI Hotspots
+  max_ppi_hotspots_frac_to_provide: 0.2
+  ppi_hotspot_max_distance: 4.5
+
+  # Secondary structure features
+  max_ss_frac_to_provide: 0.4
+  min_ss_island_len: 1
+  max_ss_island_len: 10
+
+  train_conditions:
+    unconditional:
+      frequency: 0.1
+    sequence_design:
+      frequency: 0.0
+    island:  
+      frequency: 0.1
+    tipatom:
+      frequency: 0.0
+    ppi:
+      frequency: 0.8
+
+  # Used to create simple boolean flags for downstream conditioning
+  meta_conditioning_probabilities:
+    calculate_rasa: 0.0   # not currently used in the default model anyway
+    keep_protein_motif_rasa: 0.2
+    mirror_input: 0.0
+    featurize_plddt: 0.0
+
+    # Conditioning token scheme probabilities
+    unindex_leak_global_index: 0.33
+    unindex_insert_random_break: 0.33
+    unindex_remove_random_break: 0.33
+
+    # Probability of adding 1d secondary structure conditioning
+    add_1d_ss_features: 0.0
+    add_global_is_non_loopy_feature: 0.0
+
+    # PPI
+    add_ppi_hotspots: 0
+    full_binder_crop: 0
+
+    # Hbonds
+    calculate_hbonds: 0.0 # No hbonds by default
+    hbond_subsample: 0.5 # Same as in DNA/sm cases
+
+
+# Base config overrides:
+seed: 42
+diffusion_batch_size_train: 32
+diffusion_batch_size_inference: 8
+crop_size: 256
+n_recycles_train: 1
+n_recycles_validation: 1
+n_msa: null
+max_atoms_in_crop: 5000
+train:
+  pdb:
+    probability: 1.0
+    sub_datasets:
+      interface:
+        dataset:
+          dataset:
+            data: ${paths.data.pdb_data_dir}/interfaces_df_structure_clustered_tm_0.8_singletons_removed_len_lt_25_removed.parquet
+            filters:
+              # filters common across all PDB datasets
+              - "deposition_date < '2021-09-30'"
+              - "resolution < 9.0"
+              - "num_polymer_pn_units <= 300" 
+              - "cluster.notnull()"
+              # interface specific filters
+              - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+              - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+              - "is_inter_molecule"
+              # ppi specific filters
+              - "pn_unit_1_type.astype('str').str.match('${chain_type_info_to_regex:PROTEINS}')"
+              - "pn_unit_2_type.astype('str').str.match('${chain_type_info_to_regex:PROTEINS}')"
+            columns_to_load:
+              # columns common across all PDB datasets
+              - example_id
+              - pdb_id
+              - assembly_id
+              - deposition_date
+              - resolution
+              - num_polymer_pn_units
+              - method
+              - cluster
+              - n_prot
+              - n_nuc
+              - n_ligand
+              - n_peptide
+              # interface specific columns
+              - pn_unit_1_iid
+              - pn_unit_2_iid
+              - pn_unit_1_non_polymer_res_names
+              - pn_unit_2_non_polymer_res_names
+              - is_inter_molecule
+              - all_pn_unit_iids_after_processing
+              - involves_loi
+              # necessary if filtering by pn_unit_type
+              - pn_unit_1_type
+              - pn_unit_2_type
+          transform:
+            crop_contiguous_probability: 0.0
+            crop_spatial_probability: 1.0

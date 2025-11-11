@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - override /datasets: unindexed
+  - _self_
+
+name: train-unindexed-main
+
+datasets:
+  train_conditions:
+    tipatom:
+      p_unindex_motif_tokens: 1.0
+    island:
+      p_unindex_motif_tokens: 1.0      

@@ -1,0 +1,187 @@
+# @package _global_
+
+defaults:
+  - override /model: rfd3_base
+  - override /datasets: all
+  - _self_
+
+name: rfd3-print
+tags: [print-model]
+ckpt_path: null
+
+datasets:
+  diffusion_batch_size_train: 16
+  crop_size: 384
+  max_atoms_in_crop: 3840  # 384 * 10
+
+  global_transform_args:
+    association_scheme: dense
+    sigma_perturb: 2.0  # 4.0
+    sigma_perturb_com: 1.0  # 3.0
+    center_option: diffuse  # options are ["all", "motif", "diffuse"]
+
+    generate_conformers: True
+    generate_conformers_for_non_protein_only: True
+    provide_elements_for_unindexed_components: True
+    use_element_for_atom_names_of_atomized_tokens: True  # TODO: correct name, implies unindexed do too
+
+    train_conditions:
+      unconditional:
+        frequency: 2.0
+        p_fix_motif_coordinates: 0.5
+
+      island:
+        frequency: 2.0
+        p_unindex_motif_tokens: 0.5
+        island_sampling_kwargs:
+          island_len_max: 12
+
+        # Give some love to other kinds of conditioning @magnusb
+        p_fix_motif_coordinates: 0.9
+
+      sequence_design:
+        frequency: 0.1
+
+        # For ChemNet-style sampling  < 1.0
+        p_fix_motif_coordinates: 0.8
+        p_fix_motif_sequence: 0.1
+
+      tipatom:
+        frequency: 5.0
+        island_sampling_kwargs:
+          n_islands_max: 12
+        subgraph_sampling_kwargs:
+          residue_p_seed_furthest_from_o: 0.8
+          residue_n_bond_expectation: 3.0
+          residue_p_fix_all: 0.05
+          hetatom_n_bond_expectation: 8
+          hetatom_p_fix_all: 0.5
+        p_unindex_motif_tokens: 0.95
+
+      ppi:
+        frequency: 0.0
+
+    meta_conditioning_probabilities:
+      calculate_hbonds: 0.2
+      calculate_rasa: 0.6
+
+      keep_protein_motif_rasa: 0.1  # Small to prevent noisy input to model
+      hbond_subsample: 0.5
+      
+      # fully indexed training
+      unindex_leak_global_index: 0.10
+      unindex_insert_random_break: 0.10
+      unindex_remove_random_break: 0.10
+      # unindex_remove_atom_names: 0.05
+
+      # Probability of adding 1d secondary structure conditioning
+      add_1d_ss_features: 0.1
+      featurize_plddt: 0.9  # Applied for monomer distillation only
+      add_global_is_non_loopy_feature: 0.99
+
+      # PPI
+      add_ppi_hotspots: 0.75
+      full_binder_crop: 0.75
+
+  # Down-weight monomer distillation
+  train:
+    pdb:
+      probability: 0.20
+      sub_datasets:
+        pn_unit:
+          dataset:
+            transform:  
+              # Orig 1/3 - 2/3 split -> bias to spatial
+              crop_contiguous_probability: 0.25
+              crop_spatial_probability: 0.75
+
+            # Modify: date & clustering parquet
+            dataset:
+              # data: ${paths.data.pdb_data_dir}/pn_units_df_structure_clustered_tm_0.8_singletons_removed_len_lt_25_removed.parquet
+              # data: ${paths.data.pdb_data_dir}/pn_units_df_structure_clustered_tm_0.8.parquet
+              # data: ${paths.data.pdb_data_dir}/pn_units_df_train_structure_clustered_2021_cutoff_tm_0.8.parquet
+              # data:  ${paths.data.pdb_data_dir}/pn_units_df.parquet
+              # data: /projects/ml/datahub/dfs/af3_splits/2024_12_16/pn_units_df_train.parquet
+              filters:
+                  # filters common across all PDB datasets
+                - 'pdb_id not in ["7rte", "7m5w", "7n5u"]'
+                - 'pdb_id not in ["3di3", "5o45", "1z92", "2gy5", "4zxb"]'
+                - "deposition_date < '2024-12-16'"
+                - "resolution < 9.0"
+                - "num_polymer_pn_units <= 300" 
+                - "cluster.notnull()"
+                # pn_unit specific filters
+                - "~(q_pn_unit_non_polymer_res_names.notnull() and q_pn_unit_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+        interface:
+          dataset:
+            # Modify: date & clustering parquet
+            dataset:
+              # data: ${paths.data.pdb_data_dir}/interfaces_df_structure_clustered_tm_0.8_singletons_removed_len_lt_25_removed.parquet
+              # data:  ${paths.data.pdb_data_dir}/interfaces_df_structure_clustered_tm_0.8.parquet
+              # data: ${paths.data.pdb_data_dir}/interfaces_df_train_structure_clustered_2021_cutoff_tm_0.8.parquet
+              # data:  ${paths.data.pdb_data_dir}/interfaces_df.parquet
+              # data: /projects/ml/datahub/dfs/af3_splits/2024_12_16/interfaces_df_train.parquet
+              filters:
+                # filters common across all PDB datasets
+                - 'pdb_id not in ["7rte", "7m5w", "7n5u"]'
+                - 'pdb_id not in ["3di3", "5o45", "1z92", "2gy5", "4zxb"]'
+                - "deposition_date < '2024-12-16'"
+                - "resolution < 9.0"
+                - "num_polymer_pn_units <= 300" 
+                - "cluster.notnull()"
+                # interface specific filters
+                - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+                - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+                - "is_inter_molecule"
+
+    monomer_distillation:
+      probability: 0.70
+      dataset:
+        transform:
+          # Orig 1/4 - 3/4 split -> bias to spatial
+          crop_contiguous_probability: 0.25
+          crop_spatial_probability: 0.75
+
+    # Added in third stage of training:
+    interdomain_distillation:
+      probability: 0.10
+    dna_binder:  # 6 : 4 : 1
+      probability: 0.0
+    na_complex_distillation:
+      probability: 0.0
+    free_dna_dds:
+      probability: 0.0
+
+
+trainer:
+  error_if_grad_nonfinite: False
+  n_recycles_train: 2
+  prevalidate: False
+  validate_every_n_epochs: 4
+  precision: bf16-mixed
+  loss:
+    verbose_diffusion_loss: null
+    simple_diffusion_loss:
+      _target_: rfd3.metrics.losses.SimpleDiffusionLoss
+      sigma_data: ${model.net.diffusion_module.sigma_data}
+      weight: 4.0
+      lddt_weight: 0.25
+      alpha_virtual_atom: 1.0
+      alpha_polar_residues: 1.0
+
+      lp_weight: 0.0
+      unindexed_norm_p: 1.0
+      alpha_unindexed_diffused: 1.0
+      unindexed_t_alpha: 0.75
+      normalize_virtual_atom_weight: False
+      alpha_ligand: 10.0
+
+# callbacks:
+#   activations_tracking_callback:
+#     _target_: modelhub.callbacks.health_logging.ActivationsGradientsWeightsTracker
+    # log_freq: 100
+    # keep_cache: True  # --> WARNING: Do not run this in a production run, this will lead to a memory leak! Meant for debugging.
+  # activations_tracking_callback:
+  #   _target_: modelhub.callbacks.health_logging.ActivationsGradientsWeightsTracker
+  #   log_freq: 100
+    # keep_cache: True  # --> WARNING: Do not run this in a production run, this will lead to a memory leak! Meant for debugging.

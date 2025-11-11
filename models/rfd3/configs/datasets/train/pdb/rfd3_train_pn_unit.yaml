@@ -1,0 +1,10 @@
+defaults:
+  - af3_train_pn_unit
+  - pdb_base
+  - _self_
+
+dataset: 
+  transform:
+    # pn_unit-specific Transform pipeline parameters
+    crop_contiguous_probability: 0.3333333333333333
+    crop_spatial_probability: 0.6666666666666667

@@ -1,0 +1,15 @@
+
+defaults:
+  - design_base
+  - _self_
+
+global_transform_args:
+  train_conditions:
+    unconditional:
+      frequency: 0.2
+    sequence_design:
+      frequency: 0.1
+    island:
+      frequency: 0.7
+    tipatom:
+      frequency: 0.0

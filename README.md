@@ -40,8 +40,7 @@ git clone https://github.com/RosettaCommons/modelforge.git \
   && uv python install 3.12 \
   && uv venv --python 3.12 \
   && source .venv/bin/activate \
-  && uv pip install -e . \
-  && uv pip install -e ./models/rf3
+  && uv pip install -e ".[rf3]"
 ```
 
 
@@ -71,21 +70,18 @@ ModelForge uses a multi-package architecture:
 
 #### For Users (Single Model)
 
-To use a model, you must first install `modelhub` in editable mode, then install the specific model:
+Use `pip install modelforge[<model>]` semantics (or `uv pip install -e ".[<model>]"` when developing locally) to pull in model-specific dependencies and the associated CLI in one step:
 
 ```bash
-# Install modelhub first (required)
+# Install modelforge with RF3 ready to go
+uv pip install -e ".[rf3]"
+
+# Install only the core utilities (no models)
 uv pip install -e .
 
-# Then install RF3
-uv pip install -e ./models/rf3
-
-# Future: Install other models
-# uv pip install -e ./models/other_model
+# Future models follow the same pattern
+# uv pip install -e ".[other_model]"
 ```
-
-> [!IMPORTANT]
-> You must install `modelhub` with `-e` (editable mode) first, before installing any model packages. This ensures both packages are installed in editable mode for proper development workflow.
 
 #### For Core Developers (Multiple Packages)
 

@@ -1,0 +1,18 @@
+# @package _global_
+
+defaults:
+  - rfd3-ablation-control
+  - _self_
+
+name: rfd3-ablation-recycling
+
+model:
+  net:
+    diffusion_module:
+      n_recycle: 1
+
+    inference_sampler:
+      num_timesteps: 200
+
+trainer:
+  n_recycles_train: 1

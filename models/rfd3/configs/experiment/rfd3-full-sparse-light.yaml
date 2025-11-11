@@ -1,0 +1,12 @@
+# @package _global_
+
+defaults:
+  - rfd3-full-sparse
+  - _self_
+
+model:
+  net:
+    diffusion_module:
+      c_token: 384
+      upcast:
+        n_split: 6

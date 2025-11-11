@@ -1,0 +1,31 @@
+# @package _global_
+
+defaults:
+  - uncond-main
+  # - override /trainer: aa_design_with_sequence # This has been absorbed into the default aa_design config
+  # HACK: This dataset config no longer exists. I am simply removing it to overwrite with the ppi dataset
+  # - override /datasets: uncond_index_mix 
+  - override /model: compact-base
+  - _self_
+
+name: uncond-compact
+
+trainer:
+  loss:
+    verbose_diffusion_loss:
+      alpha_motif: 1.0
+      alpha_ca_atom: 1.0
+      alpha_virtual_atom: 1.0
+      alpha_fixed_motif: 1.0
+      align_prediction: False
+      lddt_weight: 0.50
+      use_motif_aligned_loss: False
+
+    sequence_head_loss:
+      weight: 0.5
+      max_t: 2
+
+datasets:
+  diffusion_batch_size_train: 32
+  diffusion_batch_size_inference: 10
+  crop_size: 256

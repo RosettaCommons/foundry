@@ -1,0 +1,16 @@
+
+defaults:
+  - mcsa_41
+  - _self_
+
+dataset:
+  name: woodys-benchmark-short
+  eval_every_n: 4
+
+  subset_to_keys:
+    - M0630_1j79
+    - M0555_1f8r
+    - M0711_2esd
+    - M0058_1cju
+    - M0907_1rbl
+    - M0157_1qh5

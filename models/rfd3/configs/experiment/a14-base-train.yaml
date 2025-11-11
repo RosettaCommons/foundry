@@ -1,0 +1,12 @@
+# @package _global_
+
+name: train-main
+tags:
+  - atom14
+  - trunkless
+  - local-attn
+  - unet
+  - ${datasets.global_transform_args.central_atom}
+
+# Optional Pre-trained Design model
+ckpt_path: ${paths.data.design_model_weight_dir}/rfd3_latest.ckpt

@@ -1,0 +1,22 @@
+general_metrics:
+  _target_: rfd3.metrics.design_metrics.AtomArrayMetrics
+  compute_for_diffused_region_only: True
+  compute_ss_adherence_if_possible: False
+
+backbone_metrics:
+  _target_: rfd3.metrics.design_metrics.BackboneMetrics
+
+sidechain_metrics:
+  _target_: rfd3.metrics.sidechain_metrics.SidechainMetrics
+  central_atom: CB
+  dist_threshold_min: 1.0 # min distance for identifying a bond
+  dist_threshold_max: 2.0 # max distance for identifying a bond
+  already_removed_virtual_atoms: ${trainer.cleanup_virtual_atoms}
+
+metadata_metrics:
+  _target_: rfd3.metrics.design_metrics.MetadataMetrics
+
+hbond_metrics:
+ _target_: rfd3.metrics.hbonds_hbplus_metrics.HbondMetrics
+ cutoff_HA_dist: 3
+ cutoff_DA_distance: 3.5

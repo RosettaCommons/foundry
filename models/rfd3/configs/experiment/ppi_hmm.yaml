@@ -1,0 +1,31 @@
+# @package _global_
+defaults: 
+  - ppi_hdm
+  - _self_
+
+name: ppi_hmm
+tags:
+  - atom14
+  - ppi
+  - atom-level-hotspots
+  - ${datasets.global_transform_args.central_atom}
+  - 07-07-branch
+  - sl2-base
+  - full-binder-crop
+  - crop-size-384
+  - motif-centered
+
+
+datasets:
+  train:
+    pdb:
+      sub_datasets:
+        interface:
+          dataset:
+            transform:
+              center_option: motif
+
+model:
+  net:
+    inference_sampler:
+      center_option: motif

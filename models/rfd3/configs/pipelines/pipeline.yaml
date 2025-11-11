@@ -1,0 +1,558 @@
+# Central pipeline configurations. Contains base configs for all pipeline steps. See example format at the bottom
+defaults:
+  - _self_
+
+##################################################
+# Pipeline configuration
+##################################################
+
+rundir: null  # specified by user
+recompile_only: False
+
+steps: []
+skip_steps: []
+start_step: null
+clear_rundir: False
+
+num_workers: 1 # Just one worker by default
+
+# Set base slurm behaviours
+slurm:
+  submit: True
+  keep_logs: True
+  log_dir: ${rundir}/logs
+  merge_error_with_log: True
+  requeue_on_preempt: True
+  max_resubmission_fraction: 1
+  time: 12:00:00
+
+paths:
+  mpnn_repo: /net/software/lab/fused_mpnn/v1.1.0
+  rf_diffusion_repo: /home/jbutch/software/stable/rf_diffusion/rf_diffusion/
+  modelhub_repo: /home/jbutch/Projects/HT25/af3/aa_design
+  
+
+##################################################
+# Sample designs
+##################################################
+rf_diffusion:
+  _target_: pipelines.blocks.base.rf_diffusion_block
+  binaries: >
+    apptainer exec --env PYTHONPATH=/home/jbutch/software/stable/rf_diffusion:/home/jbutch/software/stable/rf_diffusion/rf_diffusion
+    /net/software/containers/users/sheffler/baker_rf_diffusion_241121.sif python
+  command: ${paths.rf_diffusion_repo}/run_inference.py
+
+  # Defaults: 10 x 100-residue unconditional protein
+  command_args: >
+    --config-name=aa_v2
+    inference.input_pdb=/home/jbutch/Projects/MT24/rf_diffusion_repo/rf_diffusion/test_data/1qys.pdb
+    contigmap.contigs=[\'100-100\']
+  design_prefix: backbone
+  num_designs: 10
+
+  chunk: 2
+  slurm:
+    J: rf_diffusion
+    c: 8
+    p: gpu
+    gres: gpu:rtx2080:1
+    mem: 32
+    time: 12:00:00
+
+    submit: ${slurm.submit}
+    keep_logs: ${slurm.keep_logs}
+    log_dir: ${slurm.log_dir}
+    merge_error_with_log: ${slurm.merge_error_with_log}
+    requeue_on_preempt: ${slurm.requeue_on_preempt}
+    max_resubmission_fraction: ${slurm.max_resubmission_fraction}
+
+aa_sequence_design:
+  _target_: pipelines.blocks.base.aa_sequence_design_block
+
+  command: >
+    export PROJECT_PATH=${paths.modelhub_repo}/rfd3 &&
+    ${paths.modelhub_repo}/src/modelhub/inference.py
+  ckpt_path: null
+
+  chunk: 8
+  slurm:
+    J: aa_design
+    c: 8
+    p: gpu
+    gres: gpu:a6000:1
+    mem: 64
+
+
+##################################################
+# Backbone-level filtering / Geometry Filters
+##################################################
+
+backbone_geometry_metrics:
+  _target_: pipelines.blocks.metrics.backbone_geometry_metrics_block
+  clash_threshold: 0.5  # distance between inter-residue atoms before calculated as a clash
+  max_ca_deviation: 1.0
+  max_num_clashes: 0
+  assert_pass_rate_greater_than: 0.8
+  exclude_motif: False
+  spoof_motif_as_chain: null
+  num_workers: ${num_workers}
+
+align_rmsd_metrics:
+  _target_: pipelines.blocks.metrics.align_rmsd_block
+  rmsd_metric_name: ca_align.ca_rmsd
+  max_rmsd_metric_value: 2.0
+
+tipatom_geometry_metrics:
+  _target_: pipelines.blocks.metrics.tipatom_geometry_metrics_block
+  command: >
+    apptainer exec --cleanenv --env PYTHONPATH=/net/software/lab/scripts/enzyme_design/geometry_metrics/rf_diffusion_geometry
+    /net/software/containers/users/sheffler/baker_rf_diffusion_241121.sif python
+    /net/software/scripts/enzyme_design/geometry_metrics/rf_diffusion_geometry/rf_diffusion/benchmark/util/geometry_metrics_run.py 
+  # apptainer exec --cleanenv --env PYTHONPATH=/home/jbutch/software/stable/rf_diffusion_geometry
+  # /net/software/containers/users/sheffler/baker_rf_diffusion_241121.sif python
+  # /home/jbutch/software/stable/rf_diffusion_geometry/rf_diffusion/benchmark/util/geometry_metrics_run.py 
+
+  # Guideposts
+  junction_cn_loss_threshold: 0.7  # std of C-N bond length deviation allowed from ideal (between consecutive residues)
+  cb_dev_threshold: 0.20  # deviation from ideal CB placement based on N-Ca-C
+  # Rotamers
+  rotamer_score_cut: 1.3  # higher values relax rotamer score threshold. 1.0 passes ~99% of native rotamers
+  relax_prob: -0.2  # set to 0 for stricter rotamer matching
+  angle_deviation_cut: 15  # upstream HA bond angle deviation (109.5 or 120, whichever is smallest)
+  rotamer_idealisation_rmsd: 4.1  # RMSD to idealization
+  # Backbone
+  chainbreak_deviation_threshold: 1.0
+  ca_dislocation_threshold: 0.5
+  num_clashes_allowed: 0
+  ligand_closest_contact: 0.5
+  
+  chunk: 1
+  slurm:
+    J: geometry_metrics
+    c: 2
+    p: cpu
+    gres: null
+    mem: 2
+    time: 12:00:00
+
+    submit: ${slurm.submit}
+    keep_logs: ${slurm.keep_logs}
+    log_dir: ${slurm.log_dir}
+    merge_error_with_log: ${slurm.merge_error_with_log}
+    requeue_on_preempt: ${slurm.requeue_on_preempt}
+    max_resubmission_fraction: ${slurm.max_resubmission_fraction}
+
+tmalign_diversity:
+  _target_: pipelines.blocks.metrics.tmalign_diversity_block
+  command: /home/jbutch/software/stable/TMalign
+  thresholds: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  write_to_cif: False
+
+get_ss_content:
+  _target_: pipelines.blocks.metrics.ss_elements_block
+  exclude_motif: False
+  spoof_motif_as_chain: null
+  num_workers: ${num_workers}
+  
+
+calculate_designability:
+  _target_: pipelines.blocks.oracles.designability_block
+  rank_backbones_by: af2_rmsd_to_input
+  self_consistency_rmsd: 1.5
+
+##################################################
+# MPNN
+##################################################
+mpnn:
+  # Basic MPNN block
+  # Will write a fix_pos_json for input based on the motif (if present)
+  _target_: pipelines.blocks.base.mpnn_block
+  # binaries: >
+  #   /usr/bin/apptainer exec --nv --bind /databases:/databases --bind /net/software:/net/software
+  #   --bind /home/jbutch/software/stable:/home/jbutch/software/stable 
+  #   --bind /projects:/projects /software/containers/versions/mlfold/mlfold-20230409.sif python -u
+  binaries: >
+    /usr/bin/apptainer exec --nv --bind /databases:/databases --bind /net/software:/net/software
+    --bind /home/jbutch/software/stable:/home/jbutch/software/stable 
+    --bind /projects:/projects /projects/ml/modelhub/apptainer/frozen_modelhub_datahub_cifutils_2025-02-05.sif python -u
+  command: ${paths.mpnn_repo}/run.py
+
+  # Common args:
+  skip_existing: True
+  model_type: protein_mpnn # protein_mpnn,ligand_mpnn
+  lddt_enhanced: False  # Fanglei's masterpiece
+  num_seq_per_pdb: 8
+  chains_to_design: null # Design all chains by default
+  
+  # Additional args (other than listed above) to run.py:
+  # Note: If you write your own the other args here will be deleted
+  args:
+    - pack_side_chains: 1
+    - temperature: 0.1
+    - packed_suffix: "\"\""
+    - omit_AA: 'XC'
+    - repack_everything: 0
+    - force_hetatm: 1
+    - zero_indexed: 1
+    - ligand_mpnn_use_side_chain_context: 1
+
+  chunk: 2
+  slurm:
+    J: mpnn
+    c: 2
+    p: cpu
+    gres: null
+    mem: 8
+    time: 12:00:00
+
+    submit: ${slurm.submit}
+    keep_logs: ${slurm.keep_logs}
+    log_dir: ${slurm.log_dir}
+    merge_error_with_log: ${slurm.merge_error_with_log}
+    requeue_on_preempt: ${slurm.requeue_on_preempt}
+    max_resubmission_fraction: ${slurm.max_resubmission_fraction}
+
+##################################################
+# Sequence-level filtering / Pyrosetta Filters
+##################################################
+
+##################################################
+# Refold oracles
+##################################################
+
+af2:
+  _target_: pipelines.blocks.oracles.af2_block
+  script: /net/software/lab/superfold/pyroml/bin/python3.8 /software/lab/superfold/run_superfold.py
+
+  skip_existing: True
+  nstruct: 1
+  max_recycles: 6
+  recycle_tol: 0.5
+  models: 4
+  rank_designs_by: af2_rmsd_to_input  # af2_rmsd_to_input, af2_plddt, af2_pae...
+  
+  chunk: 10
+  slurm:
+    J: af2
+    c: 8
+    p: gpu
+    # gres: gpu:a4000:1
+    gres: gpu:rtx2080:1
+    mem: 16
+    time: 12:00:00
+    
+    submit: ${slurm.submit}
+    keep_logs: ${slurm.keep_logs}
+    log_dir: ${slurm.log_dir}
+    merge_error_with_log: ${slurm.merge_error_with_log}
+    requeue_on_preempt: ${slurm.requeue_on_preempt}
+    max_resubmission_fraction: ${slurm.max_resubmission_fraction}
+
+af3:
+  _target_: pipelines.blocks.oracles.af3_block
+  command: >
+    /software/containers/users/ikalvet/mlfold3/mlfold3_01.sif 
+    python /opt/alphafold3/run_alphafold_custom.py 
+  command_args: ''
+  #   --run_data_pipeline=false
+  ligand: []
+
+  chunk: 2
+  slurm:
+    J: af3
+    c: 8
+    p: gpu
+    gres: gpu:a4000:1
+    mem: 32
+    time: 12:00:00
+
+    submit: ${slurm.submit}
+    keep_logs: ${slurm.keep_logs}
+    log_dir: ${slurm.log_dir}
+    merge_error_with_log: ${slurm.merge_error_with_log}
+    requeue_on_preempt: ${slurm.requeue_on_preempt}
+    max_resubmission_fraction: ${slurm.max_resubmission_fraction}
+
+af3_ppi:
+  _target_: pipelines.blocks.oracles.af3_ppi_block
+
+  command: /software/lab/ppi/af3/v3/run_alphafold_ppi.py --num_templates 16 --template_fuzz_ang 0.3 --template_fuzz_ident 0.95
+  num_diffusion_samples: 1
+  chainbreak_mode: big_gap
+
+  chunk: 10
+  chunk_by_delimiter: null 
+  skip_existing: True
+  
+  slurm:
+    J: af3-ppi
+    c: 8
+    p: gpu-bf
+    gres: gpu:a4000:1
+    mem: 16
+    time: 12:00:00
+    
+    submit: ${slurm.submit}
+    keep_logs: ${slurm.keep_logs}
+    log_dir: ${slurm.log_dir}
+    merge_error_with_log: ${slurm.merge_error_with_log}
+    requeue_on_preempt: ${slurm.requeue_on_preempt}
+    max_resubmission_fraction: ${slurm.max_resubmission_fraction}
+
+af_multimer_ppi:
+  _target_: pipelines.blocks.oracles.af_multimer_ppi_block
+
+  # TODO: This will have to be generalized!! Cleanest would be to auto-detect
+  # the repo root in the shebang and have that added to a config??
+  script: /home/rib7/protocols/pipelines/scripts/rb_wrapper_af_multimer.sh
+
+  skip_existing: True
+  
+  # If chunk_by_delimiter is set, chunk will be ignored and examples will be grouped by their
+  # prefix, defined as the first substring before the delimiter.
+  # This helps with runtime since multimer recompiles for different sequence lengths
+  chunk: 10
+  chunk_by_delimiter: null
+
+  slurm:
+    J: af-multimer
+    c: 8
+    p: gpu-bf
+    gres: gpu:a4000:1
+    mem: 16
+    time: 12:00:00
+    
+    submit: ${slurm.submit}
+    keep_logs: ${slurm.keep_logs}
+    log_dir: ${slurm.log_dir}
+    merge_error_with_log: ${slurm.merge_error_with_log}
+    requeue_on_preempt: ${slurm.requeue_on_preempt}
+    max_resubmission_fraction: ${slurm.max_resubmission_fraction}
+
+af3_repro:
+  _target_: pipelines.blocks.oracles.af3_repro_block
+  rundir: ${rundir}
+
+  # API: https://github.com/baker-laboratory/modelhub/blob/trunk/rf2aa/inference/README.md
+  command: >
+    apptainer exec --env PYTHONPATH='/projects/ml/modelhub' --nv /net/software/containers/users/ncorley/modelhub/frozen_modelhub_datahub_cifutils_2025-02-06.sif
+    python /projects/ml/modelhub/inference/run_inference.py
+  # apptainer -s run env PYTHONPATH='' --cleanenv --nv /net/software/containers/users/ncorley/modelhub/frozen_modelhub_datahub_cifutils_2025-02-06.sif 
+  # /projects/ml/modelhub/inference/run_inference.py 
+  command_args: >
+    --checkpoint_path /projects/ml/modelhub/inference/weights_with_confidence_2025_01_06
+    --n_recycles 10
+    --num_steps 50
+    --diffusion_batch_size 5
+  ligand: []
+  dna: []
+  rna: []
+
+  chunk: 2
+  slurm:
+    J: af3_repro
+    c: 8
+    p: gpu
+    gres: gpu:a6000:1
+    mem: 32
+    time: 12:00:00
+
+    submit: ${slurm.submit}
+    keep_logs: ${slurm.keep_logs}
+    log_dir: ${slurm.log_dir}
+    merge_error_with_log: ${slurm.merge_error_with_log}
+    requeue_on_preempt: ${slurm.requeue_on_preempt}
+    max_resubmission_fraction: ${slurm.max_resubmission_fraction}
+
+chai:
+  _target_: pipelines.blocks.oracles.chai_block
+  command: >
+    /net/software/lab/chai/chai_apptainer/chai.sif /net/software/lab/chai/chai-lab/predict.py
+  command_args: ''
+  ligand: []
+  dna: []
+  rna: []
+
+  chunk: 2
+  slurm:
+    J: chai
+    c: 8
+    p: gpu
+    gres: gpu:a4000:1
+    # gres: gpu:a100:1
+    mem: 32
+    time: 12:00:00
+
+    submit: ${slurm.submit}
+    keep_logs: ${slurm.keep_logs}
+    log_dir: ${slurm.log_dir}
+    merge_error_with_log: ${slurm.merge_error_with_log}
+    requeue_on_preempt: ${slurm.requeue_on_preempt}
+    max_resubmission_fraction: ${slurm.max_resubmission_fraction}
+
+
+####################################################################################################
+####################################################################################################
+#############################                                      #################################
+#############################          End of main configs         #################################
+#############################                                      #################################
+####################################################################################################
+####################################################################################################
+
+##################################################
+# Experimental blocks
+##################################################
+af2_filter:
+  _target_: pipelines.blocks.util_blocks.af2_filter_block
+  metrics_to_cutoffs_dict: # These metrics must be in Constants.af2_metrics.values()
+    af2_plddt:
+      threshold: 80
+      lower_is_better: False
+    af2_rmsd_to_input:
+      threshold: 1.5
+      lower_is_better: True
+
+# TODO: Add a Constant with all allowable values!
+af_multimer_filter:
+  _target_: pipelines.blocks.util_blocks.af2_filter_block
+  metrics_to_cutoffs_dict:
+    interface_rmsd:
+      threshold: 4
+      lower_is_better: True
+    pae_interaction:
+      threshold: 10
+      lower_is_better: True
+
+af3_ppi_filter:
+  _target_: pipelines.blocks.util_blocks.af2_filter_block
+  metrics_to_cutoffs_dict:
+    interface_rmsd:
+      threshold: 4
+      lower_is_better: True
+    min_pae_interaction:
+      threshold: 5
+      lower_is_better: True
+
+update_benchmark:
+  _target_: pipelines.blocks.util_blocks.update_benchmark_block
+  benchmark_name: null
+  benchmark_dir: /home/jbutch/software/stable/pipelines/benchmarks
+  additional_columns: 
+    model: null  # will set as rundir basename
+    epoch: 0
+    ckpt: null
+    rundir: ${rundir}
+    is_training: False
+    user: ${oc.env:USER}
+
+##################################################
+# Uitlities
+##################################################
+filter_passing:
+  _target_: pipelines.blocks.util_blocks.filter_passing_block
+pdb_to_cif:
+  _target_: pipelines.blocks.util_blocks.pdb_to_cif_block
+cif_to_pdb:
+  _target_: pipelines.blocks.util_blocks.cif_to_pdb_block
+  keep_extra_fields: False
+link_from_dir:
+  _target_: pipelines.blocks.util_blocks.link_from_dir_block
+  dir: null
+  raise_on_missing_trbs: False
+link_from_rundir:
+  _target_: pipelines.blocks.util_blocks.link_from_rundir_block
+  dir: null
+  simplify: True
+named_identity_block:
+  _target_: pipelines.blocks.util_blocks.named_identity_block
+  name: identity  # Name of the block, used for linking
+identity:
+  _target_: pipelines.blocks.util_blocks.identity_block
+  
+# For executing multiple blocks with the same inputs:
+parallelize:
+  _target_: pipelines.pipeline.parallelize_block
+  steps: []
+  create_links: False
+
+# Pipeline is itself a block function. The following can spawn multiple branches off the pipline
+# Overrides is a dictionary of key=name, value=config, where config is merged with the base config
+# that will be used to override the base config
+pipe:
+  _target_: pipelines.pipeline.pipe_block
+  ### Any normal pipeline configs ###
+  # steps: [] 
+  ###################################
+  pipeline_base: pipeline
+  merge_outputs: True  # True: pipe steps add rows to df, False: pipe steps add columns to df
+  # overrides:
+  #   <branch_name>:
+      ### Any normal pipeline configs for this branch ###
+      # mpnn:
+      #   model_type: ligand_mpnn
+      ###################################################
+
+# ##################################################
+# # Testing
+# ##################################################
+# design_copier:
+#   _target_: pipelines.tests.test_pipeline.copy_designs_block
+#   base_file: /home/jbutch/Projects/HT25/af3/modelhub/rf2aa/benchmark/tests/design.pdb
+#   n_copies: 50
+
+# annotate:
+#   _target_: pipelines.tests.test_pipeline.annotate_block
+#   scale: 1.0
+#   random_threshold: 0.8
+
+# annotate2:
+#   _target_: pipelines.tests.test_pipeline.annotate_block
+#   scale: 1.0
+#   random_threshold: 0.8
+
+# design_multiplier:
+#   _target_: pipelines.tests.test_pipeline.multiply_block
+#   n_multiply: 2
+# design_multiplier2:
+#   _target_: pipelines.tests.test_pipeline.multiply_block
+#   n_multiply: 2
+
+##################################################
+# Hydra (& To-do's)
+##################################################
+# This code will remove hydra's annoying nested directories
+# (default will write them to your local rundir)
+hydra:
+  run:
+    dir: .
+  sweep:
+    dir: .
+  runtime:
+    output_dir: .
+  output_subdir: null
+
+# convert_trbs_to_cif:
+#   _target_: pipelines.blocks.util_blocks.convert_trbs_to_cif_block
+#   rundir: ${rundir}
+#   remove_pdbs: True
+#   remove_trbs: True
+#   new_dir: False
+
+
+# pyrosetta_filter:
+#   _target_: pipelines.tools.pyrosetta_filter.main
+#   rundir: ${rundir}
+# TODO:
+
+
+##################################################
+# Pipeline block syntax:
+##################################################
+# all blocks will have the following configs added:
+#   <step_name>:
+#     _target_: <pipelines.path.to.function>  # links config to the block function (takes df_input and this conf)
+# These other args will be added automatically, but can be overidden:
+#     rundir: ${rundir}  # the base run directory, if your block needs to write files the convention is to write conf.rundir/<step_name>
+#     step: null  # will automatically be set to <step_name> by default
+#     recompile_only: # will automatically be set to ${recompile_only} by default
+# Not every block needs to make use of the step name, rundir and recompile_only, but they'll be added anyway.

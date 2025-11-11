@@ -1,0 +1,10 @@
+# @package _global_
+
+defaults:
+  - _self_
+
+datasets:
+  global_transform_args:
+    train_conditions:
+      unconditional:
+        frequency: 9999999999

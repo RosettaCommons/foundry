@@ -28,7 +28,6 @@ def run_inference(cfg: DictConfig) -> None:
     """Execute RF3 inference pipeline."""
 
     # Extract run() parameters from config
-
     # Preserve string inputs, convert other sequence-like inputs to a Python list (None -> [])
     inputs_param = cfg.inputs if isinstance(cfg.inputs, str) else list(cfg.inputs or [])
 

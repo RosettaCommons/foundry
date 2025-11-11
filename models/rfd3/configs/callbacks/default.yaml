@@ -1,0 +1,5 @@
+defaults:
+  - train_logging
+  - metrics_logging
+  - dump_validation_structures
+  - _self_

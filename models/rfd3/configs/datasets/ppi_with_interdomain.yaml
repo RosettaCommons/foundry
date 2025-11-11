@@ -1,0 +1,10 @@
+defaults:
+  - ppi
+  - train/af2db_interdomain_distillation@train
+  - _self_
+
+train:
+  pdb:
+    probability: 0.5
+  interdomain_distillation:
+    probability: 0.5
