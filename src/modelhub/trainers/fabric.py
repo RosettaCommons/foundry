@@ -118,8 +118,12 @@ class FabricTrainer(ABC):
             (3) Fabric Loggers (https://lightning.ai/docs/fabric/2.4.0/api/loggers.html)
             (4) Efficient Gradient Accumulation (https://lightning.ai/docs/fabric/2.4.0/advanced/gradient_accumulation.html)
         """
-        # DDP strategy requires a manual timeout higher than the default
-        if strategy == "ddp" and not is_interactive_environment():
+        # Use custom DDP strategy only for multi-device, non-interactive environments
+        if (
+            strategy == "ddp"
+            and not is_interactive_environment()
+            and not (num_nodes == 1 and devices_per_node == 1)
+        ):
             strategy = DDPStrategy(
                 timeout=timedelta(seconds=nccl_timeout),
                 find_unused_parameters=find_unused_parameters,

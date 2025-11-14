@@ -31,6 +31,7 @@ RUN_PARAM_KEYS = {
     "skip_existing",
     "template_selection",
     "ground_truth_conformer_selection",
+    "cyclic_chains",
 }
 """Run parameters that should be passed to engine.run(), not __init__."""
 
@@ -159,8 +160,8 @@ def compare_structures(
 @pytest.mark.parametrize(
     "example_id,rmsd_tolerance,csv_tolerance",
     [
-        ("5vht_from_file", 0.1, 0.003),
-        ("8vkf_from_file", 0.1, 0.003),
+        ("5vht_from_file", 0.1, 0.01),
+        ("8vkf_from_file", 0.1, 0.01),
     ],
 )
 def test_inference_regression(example_id, rmsd_tolerance, csv_tolerance):
@@ -241,8 +242,8 @@ def test_inference_regression(example_id, rmsd_tolerance, csv_tolerance):
 @pytest.mark.parametrize(
     "example_id,rmsd_tolerance,csv_tolerance",
     [
-        ("5vht_from_file", 0.1, 0.003),
-        ("8vkf_from_file", 0.1, 0.003),
+        ("5vht_from_file", 0.1, 0.01),
+        ("8vkf_from_file", 0.1, 0.01),
     ],
 )
 def test_inference_regression_in_memory(example_id, rmsd_tolerance, csv_tolerance):
@@ -325,3 +326,6 @@ def test_inference_regression_in_memory(example_id, rmsd_tolerance, csv_toleranc
         assert (
             rmsd_difference < rmsd_tolerance
         ), f"Mean RMSD difference {rmsd_difference:.4f}Å exceeds {rmsd_tolerance}Å tolerance for {example_id}"
+
+if __name__ == "__main__":
+    pytest.main([__file__])

@@ -56,6 +56,9 @@ rf3 fold models/rf3/tests/data/5vht_from_json.json
 
 Details on the exact formatting of the json files are available [here](models/rf3/README.md).
 
+> [!NOTE]
+> **IPD Users**: If you're running within the IPD environment, please see [IPD_USAGE.md](docs/IPD_USAGE.md) for instructions on using the shebang system, apptainer containers, and SLURM job submission for training, inference, and validation.
+
 ## Development
 
 ### Package Structure

@@ -25,14 +25,14 @@ from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 try:
-    from atomworks.ml.datasets.datasets import (
+    from atomworks.ml.datasets import (
         ConcatDatasetWithID,
         FallbackDatasetWrapper,
         get_row_and_index_by_example_id,
     )
 except Exception as e:
     ranked_logger.warning(
-        f"Failed to import atomworks.ml.datasets.datasets: {type(e).__name__}: {e}. "
+        f"Failed to import atomworks.ml.datasets: {type(e).__name__}: {e}. "
         "If training networks, the PDB_MIRROR environment variable must be set."
     )
 

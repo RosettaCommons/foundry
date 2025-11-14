@@ -4,7 +4,7 @@ defaults:
 
 interdomain_distillation:
   dataset:
-    _target_: atomworks.ml.datasets.datasets.StructuralDatasetWrapper
+    _target_: atomworks.ml.datasets.StructuralDatasetWrapper
 
     cif_parser_args:
       cache_dir: null
@@ -19,7 +19,7 @@ interdomain_distillation:
       path_colname: path
 
     dataset:
-      _target_: atomworks.ml.datasets.datasets.PandasDataset
+      _target_: atomworks.ml.datasets.PandasDataset
       name: af2db_interdomain_distillation
       data: /projects/ml/datahub/dfs/af2db_interdomain_dset.parquet
       id_column: example_id

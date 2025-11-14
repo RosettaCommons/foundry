@@ -2,7 +2,7 @@
 
 rna_monomer_distillation:
   dataset:
-    _target_: atomworks.ml.datasets.datasets.StructuralDatasetWrapper
+    _target_: atomworks.ml.datasets.StructuralDatasetWrapper
     save_failed_examples_to_dir: ${paths.data.failed_examples_dir}
 
     # cif parser arguments
@@ -18,7 +18,7 @@ rna_monomer_distillation:
 
     # metadata dataset
     dataset:
-      _target_: atomworks.ml.datasets.datasets.PandasDataset
+      _target_: atomworks.ml.datasets.PandasDataset
       name: rna_monomer_distillation
       id_column: example_id
       data: /projects/ml/afavor/rna_distillation/rna_distillation_filtered_df.parquet

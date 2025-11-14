@@ -5,7 +5,7 @@ defaults:
 
 bcov_ppi_distillation:
   dataset:
-    _target_: atomworks.ml.datasets.datasets.StructuralDatasetWrapper
+    _target_: atomworks.ml.datasets.StructuralDatasetWrapper
 
     cif_parser_args:
       cache_dir: null
@@ -20,7 +20,7 @@ bcov_ppi_distillation:
       path_colname: path
 
     dataset:
-      _target_: atomworks.ml.datasets.datasets.PandasDataset
+      _target_: atomworks.ml.datasets.PandasDataset
       name: bcov_ppi_distillation
       data: /projects/ml/datahub/dfs/bcov_ppi_dset_af3_preds.parquet
       id_column: example_id

@@ -5,7 +5,7 @@ dataset:
   dataset_parser:
     _target_: atomworks.ml.datasets.parsers.ValidationDFParserLikeAF3
   dataset:
-    _target_: atomworks.ml.datasets.datasets.PandasDataset
+    _target_: atomworks.ml.datasets.PandasDataset
     name: af3_validation
     data: /projects/ml/datahub/dfs/af3_splits/2024_12_16/runs_n_poses_entry_level_df.parquet
     filters:

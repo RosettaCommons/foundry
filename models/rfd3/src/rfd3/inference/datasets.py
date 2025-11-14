@@ -12,8 +12,7 @@ from typing import Any, List
 import yaml
 from atomworks.io.parser import parse_atom_array
 
-# from atomworks.ml.datasets.datasets import BaseDataset
-from atomworks.ml.datasets.datasets import MolecularDataset
+from atomworks.ml.datasets import MolecularDataset
 from atomworks.ml.transforms.base import Compose, Transform, TransformedDict
 from biotite.structure import BondList
 from omegaconf import DictConfig, OmegaConf
@@ -41,7 +40,7 @@ logger = RankedLogger(__name__, rank_zero_only=True)
 all_ranks_logger = RankedLogger(__name__, rank_zero_only=False)
 
 
-class ContigJsonDataset(MolecularDataset):  # atomworks.ml.datasets.datasets
+class ContigJsonDataset(MolecularDataset):
     """
     Enables loading of JSON files containing contig data for benchmark design tasks,
     or the passing of examples through analogously-structured hydra configs.

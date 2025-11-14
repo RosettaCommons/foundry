@@ -18,7 +18,7 @@ multidomain_distillation:
 
     # metadata dataset
     dataset:
-      _target_: atomworks.ml.datasets.datasets.PandasDataset
+      _target_: atomworks.ml.datasets.PandasDataset
       name: multidomain_distillation
       id_column: example_id
       data: /projects/ml/datahub/dfs/domain_domain/domain_domain_dataset.DIGS.parquet
