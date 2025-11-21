@@ -1,7 +1,8 @@
 import math
 
 import torch
-from rf3.flow_matching.rigid_utils import rot_vec_mul
+
+from modelhub.utils.rigid import rot_vec_mul
 
 
 def centre(X_L, X_exists_L):

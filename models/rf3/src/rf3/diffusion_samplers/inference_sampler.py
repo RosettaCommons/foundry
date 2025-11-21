@@ -1,9 +1,9 @@
 import torch
 from beartype.typing import Any, Literal
 from jaxtyping import Float
-from rf3.data.rotation_augmentation import centre_random_augmentation
 
 from modelhub.utils.ddp import RankedLogger
+from modelhub.utils.rotation_augmentation import centre_random_augmentation
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

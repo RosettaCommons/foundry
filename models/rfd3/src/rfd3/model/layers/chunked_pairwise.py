@@ -10,8 +10,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-
-from modelhub.model.layers.layer_utils import RMSNorm, linearNoBias
+from rfd3.model.layers.layer_utils import RMSNorm, linearNoBias
 
 
 class ChunkedPositionPairDistEmbedder(nn.Module):

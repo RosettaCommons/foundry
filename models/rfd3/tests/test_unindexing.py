@@ -10,7 +10,7 @@ from rfd3.testing.testing_utils import (
     instantiate_example,
     load_train_or_val_cfg,
 )
-from rfd3.transforms.conditioning_utils import (
+from rfd3.trainer.trainer_utils import (
     process_unindexed_outputs,
 )
 
@@ -48,10 +48,10 @@ def test_unindexed_cleanup(example, is_inference):
     )  # spoof inference label
     atom_array_cleaned, metadata = process_unindexed_outputs(atom_array)
 
-    from rfd3.testing.debug_utils import save_pipe_out
+    # from rfd3.testing.debug_utils import save_pipe_out
 
-    save_pipe_out(atom_array)
-    print("Metadata:", metadata)
+    # save_pipe_out(atom_array)
+    # print("Metadata:", metadata)
 
     xyz_cleaned = np.nan_to_num(atom_array_cleaned.coord)
     xyz_diffused = np.nan_to_num(atom_array[~atom_array.is_motif_atom_unindexed].coord)

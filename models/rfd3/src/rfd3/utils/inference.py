@@ -10,6 +10,7 @@ import biotite.structure as struc
 import numpy as np
 from atomworks import parse
 from atomworks.constants import STANDARD_DNA
+from atomworks.io.parser import STANDARD_PARSER_ARGS
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from atomworks.ml.preprocessing.utils.structure_utils import (
     get_atom_mask_from_cell_list,
@@ -21,18 +22,18 @@ from atomworks.ml.utils.token import (
 from rfd3.constants import (
     REQUIRED_CONDITIONING_ANNOTATIONS,
 )
-from rfd3.inference.components import (
-    fetch_mask_from_component,
-    get_name_mask,
-    unravel_components,
-)
 from rfd3.transforms.conditioning_base import (
     convert_existing_annotations_to_bool,
     set_default_conditioning_annotations,
 )
 from rfd3.transforms.conditioning_utils import sample_island_tokens
-from rfd3.constants import STANDARD_PARSER_ARGS
+
 from modelhub.common import exists
+from modelhub.utils.components import (
+    fetch_mask_from_component,
+    get_name_mask,
+    unravel_components,
+)
 from modelhub.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)

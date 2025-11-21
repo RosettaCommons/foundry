@@ -8,7 +8,8 @@ import numpy as np
 import torch
 from atomworks.io.utils.io_utils import to_cif_file
 from biotite.structure import AtomArray, AtomArrayStack, stack
-from rfd3.util.alignment import weighted_rigid_align
+
+from modelhub.utils.alignment import weighted_rigid_align
 
 DICTIONARY_LIKE_EXTENSIONS = {".json", ".yaml", ".yml", ".pkl"}
 CIF_LIKE_EXTENSIONS = {".cif", ".pdb", ".bcif", ".cif.gz", ".pdb.gz", ".bcif.gz"}

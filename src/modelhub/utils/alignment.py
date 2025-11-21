@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 def weighted_rigid_align(
     X_L,  # [B, L, 3]
     X_gt_L,  # [B, L, 3]
-    X_exists_L,  # [L]
-    w_L,  # [B, L]
+    X_exists_L=None,  # [L]
+    w_L=None,  # [B, L]
 ):
     """
     Weighted rigid body alignment of X_gt_L onto X_L with weights w_L
@@ -20,6 +20,13 @@ def weighted_rigid_align(
     """
     assert X_L.shape == X_gt_L.shape
     assert X_L.shape[:-1] == w_L.shape
+
+    if X_exists_L is None:
+        X_exists_L = torch.ones((X_L.shape[-2]), dtype=torch.bool)
+    if w_L is None:
+        w_L = torch.ones_like(X_L[..., 0])
+    else:
+        w_L = w_L.to(torch.float32)
 
     # Assert `X_exists_L` is a boolean mask
     assert (

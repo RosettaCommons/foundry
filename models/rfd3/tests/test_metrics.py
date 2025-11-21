@@ -8,7 +8,7 @@ from rfd3.testing.testing_utils import (
     build_pipelines,
     instantiate_example,
 )
-from rfd3.trainer.rfd3_trainer import (
+from rfd3.trainer.trainer_utils import (
     _cleanup_virtual_atoms_and_assign_atom_name_elements,
 )
 

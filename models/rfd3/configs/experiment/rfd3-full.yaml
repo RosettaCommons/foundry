@@ -159,23 +159,6 @@ trainer:
   prevalidate: False
   validate_every_n_epochs: 4
   precision: bf16-mixed
-  loss:
-    verbose_diffusion_loss: null
-    simple_diffusion_loss:
-      _target_: rfd3.metrics.losses.SimpleDiffusionLoss
-      sigma_data: ${model.net.diffusion_module.sigma_data}
-      weight: 4.0
-      lddt_weight: 0.25
-      alpha_virtual_atom: 1.0
-      alpha_polar_residues: 1.0
-
-      lp_weight: 0.0
-      unindexed_norm_p: 1.0
-      alpha_unindexed_diffused: 1.0
-      unindexed_t_alpha: 0.75
-      normalize_virtual_atom_weight: False
-      alpha_ligand: 10.0
-
 # callbacks:
 #   activations_tracking_callback:
 #     _target_: modelhub.callbacks.health_logging.ActivationsGradientsWeightsTracker

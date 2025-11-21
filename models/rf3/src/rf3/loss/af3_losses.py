@@ -1,10 +1,9 @@
-import hydra
 import numpy as np
 import torch
 import torch.nn as nn
-from rf3.alignment import weighted_rigid_align
 
 from modelhub.training.checkpoint import activation_checkpointing
+from modelhub.utils.alignment import weighted_rigid_align
 
 
 # resolve residue-level symmetries in native vs pred
@@ -358,31 +357,6 @@ class SubunitSymmetryResolution(nn.Module):
         loss_input["crd_mask_L"] = x_native_mask
 
         return loss_input
-
-
-class Loss(nn.Module):
-    def __init__(self, **losses):
-        super().__init__()
-        self.to_compute = []
-        for loss_name, loss in losses.items():
-            loss_fn = hydra.utils.instantiate(loss)
-            print(f"Adding loss {loss_name} to the loss function")
-            self.to_compute.append(loss_fn)
-
-    def forward(
-        self,
-        network_input,
-        network_output,
-        loss_input,
-    ):
-        loss_dict = {}
-        loss = 0
-        for loss_fn in self.to_compute:
-            loss_, loss_dict_ = loss_fn(network_input, network_output, loss_input)
-            loss += loss_
-            loss_dict.update(loss_dict_)
-        loss_dict["total_loss"] = loss.detach()
-        return loss, loss_dict
 
 
 class ProteinLigandBondLoss(nn.Module):

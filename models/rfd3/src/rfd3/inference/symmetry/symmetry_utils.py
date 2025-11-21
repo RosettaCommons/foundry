@@ -8,7 +8,6 @@ from pydantic import (
     ConfigDict,
     Field,
 )
-from rfd3.inference.components import fetch_mask_from_component
 from rfd3.inference.symmetry.atom_array import (
     FIXED_ENTITY_ID,
     FIXED_TRANSFORM_ID,
@@ -33,6 +32,7 @@ from rfd3.inference.symmetry.frames import (
 )
 from rfd3.transforms.conditioning_base import get_motif_features
 
+from modelhub.utils.components import fetch_mask_from_component
 from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)

@@ -9,7 +9,8 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
-from rfd3.inference.components import (
+
+from modelhub.utils.components import (
     ComponentStr,
     fetch_mask_from_idx,
     get_name_mask,

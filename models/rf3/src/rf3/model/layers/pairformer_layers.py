@@ -16,10 +16,10 @@ from rf3.model.layers.outer_product import (
     OuterProductMean_AF3,
 )
 from rf3.model.RF3_blocks import MSAPairWeightedAverage, MSASubsampleEmbedder
-from rf3.util_module import Dropout
 from torch import nn
 from torch.nn.functional import one_hot, relu
 
+from modelhub.model.layers.blocks import Dropout
 from modelhub.training.checkpoint import activation_checkpointing
 
 

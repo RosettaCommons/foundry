@@ -15,7 +15,6 @@ from rfd3.testing.testing_utils import (
     TEST_CFG_INFERENCE,
     TEST_CFG_TRAIN,
     TEST_JSON_DATA,
-    build_pipelines,
     instantiate_example,
 )
 
@@ -27,6 +26,23 @@ sys.path.append(PATH_TO_REPO_ROOT)
 sys.path.append(PATH_TO_SRC)
 
 smoke_test = list(TEST_JSON_DATA.keys())
+
+
+@pytest.mark.fast
+def test_imports():
+    import rfd3
+
+    import modelhub
+
+    print("Imported rfd3 version:", rfd3)
+    print("Imported modelhub version:", modelhub)
+
+    # Try imports from main modules
+    from rfd3.metrics.losses import DiffusionLoss
+    from rfd3.model.RFD3 import RFD3
+    from rfd3.trainer.rfd3 import AADesignTrainer
+
+    print("imported modules:", RFD3, AADesignTrainer, DiffusionLoss)
 
 
 def test_inference():
@@ -60,6 +76,6 @@ def test_training_pipeline(example_name):
         example.get("training_condition_name"),
     )
 
+
 if __name__ == "__main__":
-    # pytest.main(sys.argv)
-    pytest.main(["-v", __file__ + "::test_train_pipeline[rfd3-NA-full]"])
+    pytest.main(sys.argv)

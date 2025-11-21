@@ -37,7 +37,9 @@ def map_to_association_scheme(atom_names: list | str, res_name: str, scheme="ato
         raise ValueError(
             f"Scheme {scheme} not found in association_schemes_stripped. Available schemes: {list(association_schemes_stripped.keys())}"
         )
-    atom_names = [str(atom_names)] if isinstance(atom_names, (str, np.str_)) else atom_names
+    atom_names = (
+        [str(atom_names)] if isinstance(atom_names, (str, np.str_)) else atom_names
+    )
     idxs = np.array(
         [
             association_schemes_stripped[scheme][res_name].index(name)

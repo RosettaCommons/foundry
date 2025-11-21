@@ -1,4 +1,4 @@
-_target_: rfd3.model.aa_design.RFD3
+_target_: rfd3.model.RFD3.RFD3
 
 c_s: 384
 c_z: 128
@@ -53,7 +53,7 @@ token_initializer: # formerly known as the trunk
       n_attn_keys: 128
 
 diffusion_module:
-  _target_: rfd3.model.rfd3_diffusion_module.RFD3DiffusionModule
+  _target_: rfd3.model.RFD3_diffusion_module.RFD3DiffusionModule
   c_token: 768
   c_t_embed: 256  # Time embedding dimension
   sigma_data: 16

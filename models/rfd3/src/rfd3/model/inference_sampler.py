@@ -1,141 +1,18 @@
 import inspect
-import os
+from dataclasses import dataclass
+from typing import Any, Literal
 
-import hydra
 import torch
-from beartype.typing import Any
 from jaxtyping import Float
-from omegaconf import DictConfig
-from rfd3.inference.symmetry.symmetry_utils import (
-    apply_symmetry_to_xyz_atomwise,
-)
-from rfd3.model.cfg_utils import (
-    strip_f,
-    strip_X,
-)
-from rfd3.model.encoders import TokenInitializer
-from torch import nn
 
-from modelhub import SWAP_LAYER_NORM_FOR_RMS_NORM
-from modelhub.alignment import weighted_rigid_align
 from modelhub.common import exists
-from modelhub.data.rotation_augmentation import (
+from modelhub.utils.ddp import RankedLogger
+from modelhub.utils.rotation_augmentation import (
     rot_vec_mul,
     uniform_random_rotation,
 )
-from modelhub.diffusion_samplers.inference_sampler import SampleDiffusion
-from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
-
-
-class RFD3(nn.Module):
-    """
-    Simplified model for generation
-    This module level serves to wrap the diffusion module of AF3
-    to be roughly equivalent to the AF3 model w/o trunk processing.
-
-    Allows the same sampler to be used
-    """
-
-    def __init__(
-        self,
-        *,
-        # Channel dimensions ('global' features)
-        c_s: int,
-        c_z: int,
-        c_atom: int,
-        c_atompair: int,
-        # Arguments for modules that will be instantiated
-        token_initializer: DictConfig | dict,
-        diffusion_module: DictConfig | dict,
-        inference_sampler: DictConfig | dict,
-        **_,
-    ):
-        super().__init__()
-
-        # Register whether the model uses RMSNorms or LayerNorms
-        self.register_buffer(
-            "use_rmsnorm",
-            torch.tensor(SWAP_LAYER_NORM_FOR_RMS_NORM, dtype=torch.bool),
-        )
-
-        # Check for chunked P_LL mode via environment variable
-        use_chunked_pll = os.environ.get("RFD3_LOW_MEMORY_MODE", None) == "1"
-        ranked_logger.info(f"RFD3 initialized with chunked_pll={use_chunked_pll}")
-
-        # Simple constant-feature initializer
-        self.token_initializer = TokenInitializer(
-            c_s=c_s,
-            c_z=c_z,
-            c_atom=c_atom,
-            c_atompair=c_atompair,
-            use_chunked_pll=use_chunked_pll,
-            **token_initializer,
-        )
-
-        # Diffusion module instantiated to allow for config scripting
-        self.diffusion_module = hydra.utils.instantiate(
-            diffusion_module, c_atom=c_atom, c_atompair=c_atompair, c_s=c_s, c_z=c_z
-        )
-
-        self.use_classifier_free_guidance = (
-            inference_sampler["use_classifier_free_guidance"]
-            and inference_sampler["cfg_scale"] != 1.0
-        )
-        self.cfg_features = inference_sampler.pop("cfg_features", [])
-
-        # ... initialize the inference sampler, which performs a full diffusion rollout during inference
-        self.inference_sampler = ConditionalDiffusionSampler(**inference_sampler)
-
-    def forward(
-        self,
-        input: dict,
-        coord_atom_lvl_to_be_noised: torch.Tensor = None,
-        n_cycle=None,
-        **_,
-    ) -> dict:
-        # Assert that the correct swap is used
-        if bool(self.use_rmsnorm.item()) != SWAP_LAYER_NORM_FOR_RMS_NORM:
-            raise ValueError(
-                "Loaded checkpoint with use RMSNorm {} but environment variable set expects {}".format(
-                    self.use_rmsnorm.item(),
-                    SWAP_LAYER_NORM_FOR_RMS_NORM,
-                )
-                + " Set environment variable SWAP_LAYER_NORM_FOR_RMS_NORM to {}".format(
-                    {True: "1", False: "0"}[self.use_rmsnorm.item()]
-                )
-            )
-
-        initializer_outputs = self.token_initializer(input["f"])
-
-        if self.training:
-            # Single denoising step
-            return self.diffusion_module(
-                X_noisy_L=input["X_noisy_L"],
-                t=input["t"],
-                f=input["f"],
-                n_recycle=n_cycle,
-                **initializer_outputs,
-            )  # [D, L, 3]
-        else:
-            if self.use_classifier_free_guidance:
-                f_ref = strip_f(input["f"], self.cfg_features)
-                ref_initializer_outputs = self.token_initializer(f_ref)
-            else:
-                f_ref = None
-                ref_initializer_outputs = None
-
-            return self.inference_sampler.sample_diffusion_like_af3(
-                f=input["f"],
-                f_ref=f_ref,  # for cfg
-                diffusion_module=self.diffusion_module,
-                diffusion_batch_size=input["t"].shape[0],
-                coord_atom_lvl_to_be_noised=coord_atom_lvl_to_be_noised,
-                # Forwarded as **kwargs:
-                initializer_outputs=initializer_outputs,
-                ref_initializer_outputs=ref_initializer_outputs,  # for cfg
-            )
 
 
 def centre_random_augment_around_motif(
@@ -193,159 +70,70 @@ def centre_random_augment_around_motif(
     return X_L, R
 
 
-class SampleDiffusionWithMotif(SampleDiffusion):
-    def __init__(
-        self,
-        center_option: str = "all",
-        move_noise_to_reset_com: bool = False,  # Reset the COM of the diffuse region after the re-noising operation in each diffusion step
-        s_trans: float = 1.0,  # Translational noise scale for augmentation during inference
-        s_jitter_origin: float = 0.0,  # Random translation of motif at the start of diffusion
-        fraction_of_steps_to_fix_motif: float = 0.0,  # Fraction of steps to let the model not move the motif. e.g. if we have 10 steps, set this value to 0.2 will make model not move motif for the first 2 steps.
-        skip_few_diffusion_steps: bool = False,  # Choose to skip some diffusion steps based on the noise scheme
-        inference_noise_scaling_factor: float = 1.0,
-        # Additional argumnets
-        gamma_min2: float = 0.0,
-        allow_realignment: bool = False,
-        insert_motif_at_end: bool = True,
-        use_classifier_free_guidance: bool = False,
-        cfg_scale: float = 2.0,
-        use_frame_guidance: bool = False,  # Use frame guidance to align the virtual atoms to the central atom
-        fg_scale: float = 1.5,
-        zero_drift_noise: bool = False,
-        cfg_t_max: float
-        | None = None,  # If not None, use classifier-free guidance only for t < cfg_t_max
-        **kwargs,
-    ):
-        self.gamma_min2 = gamma_min2
-        self.allow_realignment = allow_realignment
-        self.insert_motif_at_end = insert_motif_at_end
-        self.use_classifier_free_guidance = use_classifier_free_guidance
-        self.cfg_scale = cfg_scale
-        self.cfg_t_max = cfg_t_max
+@dataclass(kw_only=True)
+class SampleDiffusionWithMotif:
+    """Diffusion sampler that supports optional motif alignment."""
 
-        self.center_option = center_option
-        self.fraction_of_steps_to_fix_motif = fraction_of_steps_to_fix_motif
-        self.move_noise_to_reset_com = move_noise_to_reset_com
-        self.s_trans = s_trans
-        self.skip_few_diffusion_steps = skip_few_diffusion_steps
-        self.s_jitter_origin = s_jitter_origin
-        self.inference_noise_scaling_factor = inference_noise_scaling_factor
-        self.zero_drift_noise = zero_drift_noise
+    # Standard EDM args
+    num_timesteps: int  # AF-3: 200
+    min_t: int  # AF-3: 0
+    max_t: int  # AF-3: 1
+    sigma_data: int  # AF-3: 16
+    s_min: float  # AF-3: 4e-4
+    s_max: int  # AF-3: 160
+    p: int  # AF-3: 7
+    gamma_0: float  # AF-3: 0.8
+    gamma_min: float  # AF-3: 1.0
+    noise_scale: float  # AF-3: 1.003
+    step_scale: float  # AF-3: 1.5
+    solver: Literal["af3"]
 
-        self.use_frame_guidance = use_frame_guidance
-        self.fg_scale = fg_scale
+    # RFD3 / design args
+    center_option: str = "all"
+    s_trans: float = 1.0
+    s_jitter_origin: float = 0.0
+    fraction_of_steps_to_fix_motif: float = 0.0
+    skip_few_diffusion_steps: bool = False
+    allow_realignment: bool = False
+    insert_motif_at_end: bool = True
+    use_classifier_free_guidance: bool = False
+    cfg_scale: float = 2.0
+    cfg_t_max: float | None = None
+    use_frame_guidance: bool = False
+    fg_scale: float = 1.0
 
-        super().__init__(**kwargs)
-
-    # TODO: Make this a properly-parametrized function in terms of instance variables provided in the configs
-    # For now, it's just hard-coded for early testing
-    def modify_noise_schedule(self, noise_schedule: torch.Tensor) -> torch.Tensor:
-        """
-        Modify the noise schedule to skip more steps at high noise and fewer at low noise.
-        """
-        mask = torch.ones_like(noise_schedule, dtype=bool)
-        mask_len = len(mask)
-        mask[: mask_len // 4] = torch.arange(mask_len // 4) % 5 == 0
-        mask[mask_len // 4 : mask_len // 2] = (
-            torch.arange(mask_len // 4, mask_len // 2) % 3 == 0
-        )
-        mask[mask_len // 2 : -mask_len // 4] = (
-            torch.arange(mask_len // 2, mask_len - mask_len // 4) % 2 == 0
-        )
-        return noise_schedule[mask]
-
-    def _get_initial_structure(
-        self,
-        c0: torch.Tensor,
-        D: int,
-        L: int,
-        coord_atom_lvl_to_be_noised: torch.Tensor,
-        is_motif_atom_with_fixed_coord,
+    def _construct_inference_noise_schedule(
+        self, device: torch.device, partial_t: float = None
     ) -> torch.Tensor:
-        noise = c0 * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=c0.device)
-        noise[..., is_motif_atom_with_fixed_coord, :] = 0  # Zero out noise going in
-        X_L = noise + coord_atom_lvl_to_be_noised
-        return X_L
+        """Constructs a noise schedule for use during inference.
 
-    def _move_noise_to_reset_com(self, X_noisy_L, is_motif_atom_with_fixed_coord):
+        The inference noise schedule is defined in the AF-3 supplement as:
+
+            t_hat = sigma_data * (s_max**(1/p) + t * (s_min**(1/p) - s_max**(1/p)))**p
+
+        Returns:
+            torch.Tensor: A tensor representing the noise schedule `t_hat`.
+
+        Reference:
+            AlphaFold 3 Supplement, Section 3.7.1.
         """
-        Reset the COM of the diffuse region after the re-noising operation in each diffusion step.
-        """
-        if self.center_option == "motif":
-            print(
-                "Warning: Moving the noise is not relevant when centering on the motif! Will be ignored."
+        # Create a linearly spaced tensor of timesteps between min_t and max_t
+        t = torch.linspace(self.min_t, self.max_t, self.num_timesteps, device=device)
+
+        # Construct the noise schedule, using the formula provided in the reference
+        t_hat = (
+            self.sigma_data
+            * (
+                (self.s_max) ** (1 / self.p)
+                + t * (self.s_min ** (1 / self.p) - self.s_max ** (1 / self.p))
             )
-        elif self.center_option == "diffuse":
-            displacement_vec = torch.mean(
-                X_noisy_L[..., ~is_motif_atom_with_fixed_coord, :],
-                dim=-2,
-                keepdim=True,
-            )  # (D, 1, 3) - COM of noisy diffused atoms
-
-            X_noisy_L[..., ~is_motif_atom_with_fixed_coord, :] = (
-                X_noisy_L[..., ~is_motif_atom_with_fixed_coord, :] - displacement_vec
-            )
-        else:
-            n_diffused = (~is_motif_atom_with_fixed_coord).sum()
-            displacement_vec = (
-                torch.sum(
-                    X_noisy_L,
-                    dim=-2,
-                    keepdim=True,
-                )
-                / n_diffused
-            )
-
-            X_noisy_L[..., ~is_motif_atom_with_fixed_coord, :] = (
-                X_noisy_L[..., ~is_motif_atom_with_fixed_coord, :] - displacement_vec
-            )
-
-        return X_noisy_L
-
-    def _skip_few_diffusion_steps(self, noise_schedule: torch.Tensor) -> torch.Tensor:
-        """
-        Modify the noise schedule to skip more steps at high noise and fewer at low noise.
-        i.e. When the noise is high (first few diffusion steps), skip more steps;
-             When the noise is lower, skip fewer steps;
-             When the noise is low, keep all the steps.
-        """
-        mask = torch.ones_like(noise_schedule, dtype=bool)
-        mask_len = len(mask)
-        mask[: mask_len // 4] = torch.arange(mask_len // 4) % 5 == 0
-        mask[mask_len // 4 : mask_len // 2] = (
-            torch.arange(mask_len // 4, mask_len // 2) % 3 == 0
-        )
-        mask[mask_len // 2 : -mask_len // 4] = (
-            torch.arange(mask_len // 2, mask_len - mask_len // 4) % 2 == 0
-        )
-        return noise_schedule[mask]
-
-    def sample_diffusion_like_af3(
-        self,
-        *,
-        f: dict[str, Any],
-        diffusion_module: torch.nn.Module,
-        diffusion_batch_size: int,
-        coord_atom_lvl_to_be_noised: Float[torch.Tensor, "D L 3"],
-        initializer_outputs,
-        ref_initializer_outputs: dict[str, Any] | None,
-        f_ref: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        # Motif setup to recenter the motif at every step
-        is_motif_atom_with_fixed_coord = f["is_motif_atom_with_fixed_coord"]
-
-        # Book-keeping
-        noise_schedule = self._construct_inference_noise_schedule(
-            device=coord_atom_lvl_to_be_noised.device
+            ** self.p
         )
 
-        # Choose to adjust the noise schedule
-        if self.skip_few_diffusion_steps:
-            noise_schedule = self._skip_few_diffusion_steps(noise_schedule)
-
-        if "partial_t" in f:
+        if partial_t is not None:
             # For now, partial t is a global parameter
-            partial_t = f["partial_t"].mean()
+            partial_t = float(partial_t.mean())
+            noise_schedule = t_hat
             ranked_logger.info("Using partial diffusion with t={}".format(partial_t))
 
             # Debug the noise schedule filtering
@@ -382,10 +170,43 @@ class SampleDiffusionWithMotif(SampleDiffusion):
                     f"Using fallback: final step with t={noise_schedule[0].item():.6f}"
                 )
 
+        return t_hat
+
+    def _get_initial_structure(
+        self,
+        c0: torch.Tensor,
+        D: int,
+        L: int,
+        coord_atom_lvl_to_be_noised: torch.Tensor,
+        is_motif_atom_with_fixed_coord,
+    ) -> torch.Tensor:
+        noise = c0 * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=c0.device)
+        noise[..., is_motif_atom_with_fixed_coord, :] = 0  # Zero out noise going in
+        X_L = noise + coord_atom_lvl_to_be_noised
+        return X_L
+
+    def sample_diffusion_like_af3(
+        self,
+        *,
+        f: dict[str, Any],
+        diffusion_module: torch.nn.Module,
+        diffusion_batch_size: int,
+        coord_atom_lvl_to_be_noised: Float[torch.Tensor, "D L 3"],
+        initializer_outputs,
+        ref_initializer_outputs: dict[str, Any] | None,
+        f_ref: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        # Motif setup to recenter the motif at every step
+        is_motif_atom_with_fixed_coord = f["is_motif_atom_with_fixed_coord"]
+
+        # Book-keeping
+        noise_schedule = self._construct_inference_noise_schedule(
+            device=coord_atom_lvl_to_be_noised.device,
+            partial_t=f.get("partial_t", None),
+        )
+
         L = f["ref_element"].shape[0]
         D = diffusion_batch_size
-
-        noise_schedule = noise_schedule * self.inference_noise_scaling_factor
 
         X_L = self._get_initial_structure(
             c0=noise_schedule[0],
@@ -433,7 +254,7 @@ class SampleDiffusionWithMotif(SampleDiffusion):
 
             # Update gamma & step scale
             gamma = self.gamma_0 if c_t > self.gamma_min else 0
-            step_scale = self.step_scale if c_t > self.gamma_min2 else 3.0
+            step_scale = self.step_scale
 
             # Compute the value of t_hat
             t_hat = c_t_minus_1 * (gamma + 1)
@@ -444,18 +265,10 @@ class SampleDiffusionWithMotif(SampleDiffusion):
                 * torch.sqrt(torch.square(t_hat) - torch.square(c_t_minus_1))
                 * torch.normal(mean=0.0, std=1.0, size=X_L.shape, device=X_L.device)
             )
-            if self.zero_drift_noise:
-                epsilon_L = epsilon_L - torch.mean(epsilon_L, dim=-2, keepdim=True)
             epsilon_L[..., is_motif_atom_with_fixed_coord, :] = (
                 0  # No noise injection for fixed atoms
             )
             X_noisy_L = X_L + epsilon_L
-
-            # Adjustg the center of mass
-            if self.move_noise_to_reset_com:
-                X_noisy_L = self._move_noise_to_reset_com(
-                    X_noisy_L, is_motif_atom_with_fixed_coord
-                )
 
             # Denoise the coordinates
             # Handle chunked mode vs standard mode
@@ -624,52 +437,9 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
         is_motif_atom_with_fixed_coord = f["is_motif_atom_with_fixed_coord"]
         # Book-keeping
         noise_schedule = self._construct_inference_noise_schedule(
-            device=coord_atom_lvl_to_be_noised.device
+            device=coord_atom_lvl_to_be_noised.device,
+            partial_t=f.get("partial_t", None),
         )
-
-        # Handle partial_t for symmetry sampler (same as regular sampler)
-        if "partial_t" in f:
-            # For now, partial t is a global parameter
-            partial_t = f["partial_t"].mean()
-            ranked_logger.info(
-                "Symmetry sampler: Using partial diffusion with t={}".format(partial_t)
-            )
-
-            # Debug the noise schedule filtering
-            original_schedule_len = len(noise_schedule)
-            original_max = noise_schedule.max().item()
-            original_min = noise_schedule.min().item()
-
-            noise_schedule = noise_schedule[noise_schedule <= partial_t]
-
-            new_schedule_len = len(noise_schedule)
-            if new_schedule_len > 0:
-                new_max = noise_schedule.max().item()
-                new_min = noise_schedule.min().item()
-                ranked_logger.info(
-                    f"Symmetry noise schedule: {original_schedule_len} → {new_schedule_len} steps"
-                )
-                ranked_logger.info(
-                    f"Symmetry original range: [{original_min:.3f}, {original_max:.3f}]"
-                )
-                ranked_logger.info(
-                    f"Symmetry filtered range: [{new_min:.3f}, {new_max:.3f}]"
-                )
-            else:
-                ranked_logger.warning(
-                    f"Symmetry sampler: No noise schedule steps found with t <= {partial_t}!"
-                )
-                ranked_logger.info(
-                    f"Symmetry original schedule range: [{original_min:.3f}, {original_max:.3f}]"
-                )
-                # Fallback to smallest available step
-                noise_schedule_original = self._construct_inference_noise_schedule(
-                    device=coord_atom_lvl_to_be_noised.device
-                )
-                noise_schedule = noise_schedule_original[-1:]  # Just use the final step
-                ranked_logger.info(
-                    f"Symmetry using fallback: final step with t={noise_schedule[0].item():.6f}"
-                )
 
         L = f["ref_element"].shape[0]
         D = diffusion_batch_size
@@ -711,7 +481,7 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
 
             # Update gamma & step scale
             gamma = self.gamma_0 if c_t > self.gamma_min else 0
-            step_scale = self.step_scale if c_t > self.gamma_min2 else 1.05
+            step_scale = self.step_scale
 
             # Compute the value of t_hat
             t_hat = c_t_minus_1 * (gamma + 1)

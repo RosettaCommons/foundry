@@ -1,7 +1,7 @@
 # RFdiffusion3 — Input specification (dialect **2**)
 
 > **TL;DR**  
-> Inputs are now defined with a single `InputSpecification` class.  
+> Inputs are now defined with a single `DesignInputSpecification` class.  
 > Selections like “what’s fixed?”, “what’s sequence-free?”, “which atoms are donors/acceptors?” are all expressed with the same **InputSelection** mini-language.  
 > Everything is reproducibly logged back out alongside your generation.
 
@@ -10,7 +10,7 @@
 - [What changed (high level)](#what-changed-high-level)
 - [Quick start](#quick-start)
 - [The `InputSelection` mini-language](#the-inputselection-mini-language)
-- [Full schema: `InputSpecification`](#full-schema-inputspecification)
+- [Full schema: `DesignInputSpecification`](#full-schema-DesignInputSpecification)
 - [Common recipes (cookbook)](#common-recipes-cookbook)
 - [Partial diffusion](#partial-diffusion)
 - [Symmetry](#symmetry)
@@ -40,7 +40,7 @@
 
 ---
 
-## InputSpecification
+## DesignInputSpecification
 
 | Field                                                          | Type              | Description                                                           |
 | -------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------- |

@@ -171,7 +171,7 @@ def test_inference_regression(example_id, rmsd_tolerance, csv_tolerance):
     baseline_dir = TEST_DATA_DIR / "inference_regression_tests" / example_id
 
     with (
-        initialize(config_path="../configs"),
+        initialize(config_path="../configs", version_base="1.3"),
         tempfile.TemporaryDirectory() as temp_dir,
         rng_state(create_rng_state_from_seeds(1, 1, 1)),
     ):
@@ -326,6 +326,7 @@ def test_inference_regression_in_memory(example_id, rmsd_tolerance, csv_toleranc
         assert (
             rmsd_difference < rmsd_tolerance
         ), f"Mean RMSD difference {rmsd_difference:.4f}Å exceeds {rmsd_tolerance}Å tolerance for {example_id}"
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

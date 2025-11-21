@@ -26,6 +26,6 @@ design_benchmark_data_dir: /projects/ml/aa_design/benchmarks
 design_model_weight_dir: /projects/ml/aa_design/models
 
 # path to directory with cached residue data
-residue_cache_dir: /net/tukwila/ncorley/datahub/MACE-OFF23_medium
+residue_cache_dir: /net/tukwila/lschaaf/datahub/MACE-Egret-3-noH/mace_embeddings
 
 cif_cache_dir: /net/tukwila/ncorley/cifutils/cache

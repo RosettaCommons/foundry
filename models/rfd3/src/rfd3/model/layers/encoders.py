@@ -3,11 +3,11 @@ import logging
 
 import torch
 import torch.nn as nn
-from rfd3.model.block_utils import (
+from rfd3.model.layers.block_utils import (
     bucketize_scaled_distogram,
     pairwise_mean_pool,
 )
-from rfd3.model.blocks import (
+from rfd3.model.layers.blocks import (
     Downcast,
     LocalAtomTransformer,
     OneDFeatureEmbedder,
@@ -15,19 +15,19 @@ from rfd3.model.blocks import (
     RelativePositionEncodingWithIndexRemoval,
     SinusoidalDistEmbed,
 )
-from rfd3.model.chunked_pairwise import (
+from rfd3.model.layers.chunked_pairwise import (
     ChunkedPairwiseEmbedder,
     ChunkedPositionPairDistEmbedder,
     ChunkedSinusoidalDistEmbed,
 )
-
-from modelhub.common import exists
-from modelhub.model.layers.layer_utils import (
+from rfd3.model.layers.layer_utils import (
     RMSNorm,
     Transition,
     linearNoBias,
 )
-from modelhub.model.layers.pairformer_layers import PairformerBlock
+from rfd3.model.layers.pairformer_layers import PairformerBlock
+
+from modelhub.common import exists
 from modelhub.training.checkpoint import activation_checkpointing
 
 logger = logging.getLogger(__name__)

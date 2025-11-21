@@ -69,11 +69,13 @@ class FabricTrainer(ABC):
         checkpoint_every_n_steps: int | None = None,
         clip_grad_max_norm: float | None = None,
         skip_nan_grad: bool = False,
+        error_if_grad_nonfinite: bool = False,
         limit_train_batches: int | float = float("inf"),
         limit_val_batches: int | float = float("inf"),
         prevalidate: bool = False,
         nccl_timeout: int = 3_200,
         find_unused_parameters: bool = False,
+        skip_optimizer_loading: bool = False,
     ) -> None:
         """Base Trainer class built around Lightning Fabric.
 
@@ -103,6 +105,7 @@ class FabricTrainer(ABC):
             clip_grad_max_norm: Maximum gradient norm to clip to (default: None). If None, no gradient clipping is performed.
             skip_nan_grad: Whether to skip optimizer updates when gradients contain NaN or Inf values (default: False).
                 Useful for training stability, especially with mixed precision or challenging datasets.
+            error_if_grad_nonfinite: Whether to raise when gradient clipping detects NaN or Inf gradients (default: False).
             limit_train_batches: Limit on the number of training batches per epoch (default: float("inf")).
                 Helpful for debugging; should NOT be used when training production models.
             limit_val_batches: Limit on the number of validation batches per epoch (default: float("inf")).
@@ -111,6 +114,7 @@ class FabricTrainer(ABC):
             nccl_timeout: Timeout for NCCL operations (default: 3200). Only used with DDP strategy.
             find_unused_parameters: Whether to let DDP find and skip gradient synchronization for unused parameters in the model (default: False). NOTE: Setting to True will incur a performance penalty,
                 but allow for training for bespoke use cases where parts of the model are frozen.
+            skip_optimizer_loading: Whether to skip loading the optimizer/scheduler state when restoring from checkpoints (default: False).
 
         References:
             (1) Fabric Arguments (https://lightning.ai/docs/fabric/stable/api/fabric_args.html)
@@ -145,6 +149,7 @@ class FabricTrainer(ABC):
         # Training
         self.clip_grad_max_norm = clip_grad_max_norm
         self.skip_nan_grad = skip_nan_grad
+        self.error_if_grad_nonfinite = error_if_grad_nonfinite
         self.grad_accum_steps = grad_accum_steps
 
         # Stopping
@@ -162,6 +167,7 @@ class FabricTrainer(ABC):
         self.output_dir = Path(output_dir) if output_dir else None
         self.checkpoint_every_n_epochs = checkpoint_every_n_epochs
         self.checkpoint_every_n_steps = checkpoint_every_n_steps
+        self.skip_optimizer_loading = skip_optimizer_loading
 
         # Inject trainer reference into callbacks for easy access to trainer state
         self._inject_trainer_into_callbacks()
@@ -262,14 +268,28 @@ class FabricTrainer(ABC):
             )
             self.initialize_or_update_trainer_state({"scheduler_cfg": scheduler_cfg})
 
-    @abstractmethod
     def construct_model(self):
         """Instantiate the model, updating the trainer state in-place.
 
         This method must set the "model" key in the state dictionary using `self.initialize_or_update_trainer_state()`.
         For an example, see the `construct_model` method in the `AF3Trainer`
+        Construct the model and optionally wrap with EMA.
         """
-        raise NotImplementedError
+        # ... instantiate model with Hydra and Fabric
+        with self.fabric.init_module():
+            ranked_logger.info("Instantiating model...")
+
+            model = hydra.utils.instantiate(
+                self.state["train_cfg"].model.net,
+                _recursive_=False,
+            )
+
+            # Optionally, wrap the model with EMA
+            if self.state["train_cfg"].model.ema is not None:
+                ranked_logger.info("Wrapping model with EMA...")
+                model = EMA(model, **self.state["train_cfg"].model.ema)
+
+        self.initialize_or_update_trainer_state({"model": model})
 
     def setup_model_optimizers_and_schedulers(self) -> None:
         """Setup the model, optimizer(s), and scheduler(s) with Fabric.
@@ -354,6 +374,11 @@ class FabricTrainer(ABC):
             ), "Checkpoint path not found in checkpoint configuration!"
             ckpt_path = Path(ckpt_config.path)
 
+            reset_optimizer = bool(
+                getattr(ckpt_config, "reset_optimizer", False)
+                or self.skip_optimizer_loading
+            )
+
             if ckpt_path.is_dir():
                 # If given a directory, load the latest checkpoint from the directory
                 ranked_logger.info(
@@ -362,14 +387,14 @@ class FabricTrainer(ABC):
                 self.load_checkpoint(
                     self.get_latest_checkpoint(ckpt_path),
                     weight_loading_config=ckpt_config.weight_loading_config,
-                    reset_optimizer=ckpt_config.reset_optimizer,
+                    reset_optimizer=reset_optimizer,
                 )
             else:
                 # If given a specific checkpoint file, load that checkpoint
                 self.load_checkpoint(
                     ckpt_path,
                     weight_loading_config=ckpt_config.weight_loading_config,
-                    reset_optimizer=ckpt_config.reset_optimizer,
+                    reset_optimizer=reset_optimizer,
                 )
 
             # Apply parameter freezing if a freezing config is provided
@@ -716,7 +741,7 @@ class FabricTrainer(ABC):
                 module=model,
                 optimizer=optimizer,
                 max_norm=self.clip_grad_max_norm,
-                error_if_nonfinite=False,  # Don't error on NaN/Inf if skip_nan_grad is True
+                error_if_nonfinite=self.error_if_grad_nonfinite,
             )
 
         # ... step the optimizer

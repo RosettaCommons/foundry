@@ -219,7 +219,6 @@ class FabricTrainer(ABC):
             )
             self.initialize_or_update_trainer_state({"scheduler_cfg": scheduler_cfg})
 
-    @abstractmethod
     def construct_model(self):
         """Instantiate the model, updating the trainer state in-place.
 

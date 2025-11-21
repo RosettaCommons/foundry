@@ -1,5 +1,8 @@
 import numpy as np
-from atomworks.constants import CRYSTALLIZATION_AIDS
+
+from modelhub.constants import TIP_BY_RESTYPE
+
+TIP_BY_RESTYPE
 
 # Annot: default (diffused default)
 REQUIRED_CONDITIONING_ANNOTATION_VALUES = {
@@ -204,46 +207,3 @@ SELECTION_NONPROTEIN = [
     "MACROLIDE",
     "POLYDEOXYRIBONUCLEOTIDE/POLYRIBONUCLEOTIDE HYBRID",
 ]
-
-# fmt: off
-# ... For convenience, we allow BKBN, or TIP to be used as a shortcut | TIP is the largest set of fixed atom given at least 2 tip atoms
-TIP_BY_RESTYPE = {
-    "TRP": ["CG","CD1","CD2","NE1","CE2","CE3","CZ2","CZ3","CH2"],  # fix both rings
-    "HIS": ["CG","ND1","CD2","CE1","NE2"],  # fixed ring
-    "TYR": ["CZ","OH"],  # keeps ring dihedral flexible
-    "PHE": ["CG","CD1","CD2","CE1","CE2","CZ"],
-    "ASN": ["CB", "CG","OD1","ND2"],
-    "ASP": ["CB", "CG","OD1","OD2"],
-    "GLN": ["CG", "CD","OE1","NE2"],
-    "GLU": ["CG", "CD","OE1","OE2"],
-    "CYS": ["CB", "SG"],
-    "SER": ["CB", "OG"],
-    "THR": ["CB", "OG1"],
-    "LEU": ["CB", "CG", "CD1", "CD2"],
-    "VAL": ["CG1", "CG2"],
-    "ILE": ["CB", "CG2"],
-    "MET": ["SD", "CE"],
-    "LYS": ["CE","NZ"],
-    "ARG": ["CD","NE","CZ","NH1","NH2"],
-    "PRO": None,
-    "ALA": None,
-    "GLY": None,
-    "UNK": None,
-    "MSK": None
-}
-# fmt: on
-
-STANDARD_PARSER_ARGS = {
-    "add_missing_atoms": True,
-    "add_id_and_entity_annotations": True,
-    "add_bond_types_from_struct_conn": ("covale",),
-    "remove_ccds": tuple(CRYSTALLIZATION_AIDS),
-    "remove_waters": True,
-    "fix_ligands_at_symmetry_centers": True,
-    "fix_arginines": True,
-    "fix_formal_charges": True,
-    "fix_bond_types": True,
-    "convert_mse_to_met": True,  # Changed from False to True vs. atomworks.io.parser.parse default
-    "hydrogen_policy": "keep",
-    "model": None,  # all models
-}

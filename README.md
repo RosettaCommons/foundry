@@ -111,3 +111,14 @@ To add a new model:
 2. Add `modelhub` as a dependency
 3. Implement model-specific code in `models/<model_name>/src/`
 4. Users can install with: `uv pip install -e ./models/<model_name>`
+
+### Pre-commit Formatting
+
+We ship a `.pre-commit-config.yaml` that runs `make format` (via `ruff format`) before each commit. Enable it once per clone:
+
+```bash
+pip install pre-commit  # if not already installed
+pre-commit install
+```
+
+After installation the hook automatically formats the repo whenever you `git commit`. Use `pre-commit run --all-files` to apply it manually.

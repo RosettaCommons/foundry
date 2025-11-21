@@ -1,6 +1,5 @@
 import copy
 import getpass
-import inspect
 import json
 import logging
 import os
@@ -23,14 +22,12 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../../../src")
 
 import atomworks
 from atomworks import parse
+from atomworks.io.parser import STANDARD_PARSER_ARGS
 from atomworks.io.utils.io_utils import to_cif_file
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
-from rfd3.constants import STANDARD_PARSER_ARGS
-from rfd3.inference.datasets import (
-    prepare_pipeline_input_from_atom_array,
-)
 from rfd3.inference.input_parsing import (
+    DesignInputSpecification,
     create_atom_array_from_design_specification,
 )
 from rfd3.transforms.pipelines import (
@@ -106,7 +103,7 @@ TEST_CFG_TRAIN = load_train_or_val_cfg()
 ##########################################################################################
 
 DIRS = [
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../tests'),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../tests"),
     os.path.join(os.path.dirname(os.path.abspath(__file__))),
     TEST_CFG_TRAIN.paths.data.design_benchmark_data_dir,
 ]
@@ -156,9 +153,6 @@ def load_test_json():
 TEST_JSON_DATA = load_test_json()
 assert TEST_JSON_DATA, "No test json data loaded!"
 
-sig = inspect.signature(create_atom_array_from_design_specification)
-valid_keys_ = sig.parameters.keys()
-
 
 def filter_inference_args(args):
     return {k: v for k, v in args.items() if k in valid_keys_}
@@ -171,8 +165,11 @@ def instantiate_example(args, is_inference=True):
     if is_inference:
         # Keep only the kwargs that the function actually accepts
         # args = filter_inference_args(args)
-        atom_array, spec = create_atom_array_from_design_specification(**args)
-        input = prepare_pipeline_input_from_atom_array(atom_array)
+        # atom_array, spec = create_atom_array_from_design_specification(**args)
+        # input = prepare_pipeline_input_from_atom_array(atom_array)
+        input = DesignInputSpecification.safe_init(**args).to_pipeline_input(
+            example_id=args.get("example_id", "example")
+        )
     else:
         file = args.get("input")
         if file is None:

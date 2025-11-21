@@ -6,33 +6,60 @@ import torch.nn as nn
 import torch.nn.functional as F
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from einops import rearrange
-from rfd3.model.attention import (
+from rfd3.model.layers.attention import (
     GatedCrossAttention,
     LocalAttentionPairBias,
 )
-from rfd3.model.block_utils import (
+from rfd3.model.layers.block_utils import (
     build_valid_mask,
     create_attention_indices,
     group_atoms,
     ungroup_atoms,
 )
-from torch.nn.functional import one_hot
-
-from modelhub import DISABLE_CHECKPOINTING
-from modelhub.common import exists
-from modelhub.model.layers.af3_diffusion_transformer import (
-    ConditionedTransitionBlock,
-)
-from modelhub.model.layers.layer_utils import (
+from rfd3.model.layers.layer_utils import (
+    AdaLN,
     EmbeddingLayer,
+    LinearBiasInit,
     RMSNorm,
     Transition,
     collapse,
     linearNoBias,
 )
-from modelhub.model.layers.pairformer_layers import PairformerBlock
+from rfd3.model.layers.pairformer_layers import PairformerBlock
+from torch.nn.functional import one_hot
+
+from modelhub import DISABLE_CHECKPOINTING
+from modelhub.common import exists
 
 logger = logging.getLogger(__name__)
+
+
+# SwiGLU transition block with adaptive layernorm
+class ConditionedTransitionBlock(nn.Module):
+    def __init__(self, c_token, c_s, n=2):
+        super().__init__()
+        self.ada_ln = AdaLN(c_a=c_token, c_s=c_s)
+        self.linear_1 = linearNoBias(c_token, c_token * n)
+        self.linear_2 = linearNoBias(c_token, c_token * n)
+        self.linear_output_project = nn.Sequential(
+            LinearBiasInit(c_s, c_token, biasinit=-2.0),
+            nn.Sigmoid(),
+        )
+        self.linear_3 = linearNoBias(c_token * n, c_token)
+
+    def forward(
+        self,
+        Ai,  # [B, I, C_token]
+        Si,  # [B, I, C_token]
+    ):
+        Ai = self.ada_ln(Ai, Si)
+        # BUG: This is not the correct implementation of SwiGLU
+        # Bi = torch.sigmoid(self.linear_1(Ai)) * self.linear_2(Ai)
+        # FIX: This is the correct implementation of SwiGLU
+        Bi = torch.nn.functional.silu(self.linear_1(Ai)) * self.linear_2(Ai)
+
+        # Output projection (from adaLN-Zero)
+        return self.linear_output_project(Si) * self.linear_3(Bi)
 
 
 class PositionPairDistEmbedder(nn.Module):

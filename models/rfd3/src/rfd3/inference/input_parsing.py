@@ -1,11 +1,18 @@
 import copy
+import json
 import logging
+import os
+import time
 import warnings
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from atomworks.constants import STANDARD_AA
+from atomworks.io.parser import parse_atom_array
+
+# from atomworks.ml.datasets.datasets import BaseDataset
+from atomworks.ml.transforms.base import TransformedDict
 from atomworks.ml.utils.token import (
     get_token_starts,
 )
@@ -18,19 +25,9 @@ from pydantic import (
     model_validator,
 )
 from rfd3.constants import (
+    INFERENCE_ANNOTATIONS,
     REQUIRED_CONDITIONING_ANNOTATION_VALUES,
     REQUIRED_INFERENCE_ANNOTATIONS,
-)
-from rfd3.inference.components import (
-    get_design_pattern_with_constraints,
-    get_motif_components_and_breaks,
-)
-from rfd3.inference.inference_utils import (
-    extract_ligand_array,
-    inference_load_,
-    set_com,
-    set_common_annotations,
-    set_indices,
 )
 from rfd3.inference.legacy_input_parsing import (
     create_atom_array_from_design_specification_legacy,
@@ -48,8 +45,19 @@ from rfd3.transforms.conditioning_base import (
     set_default_conditioning_annotations,
 )
 from rfd3.transforms.util_transforms import assign_types_
+from rfd3.utils.inference import (
+    extract_ligand_array,
+    inference_load_,
+    set_com,
+    set_common_annotations,
+    set_indices,
+)
 
 from modelhub.common import exists
+from modelhub.utils.components import (
+    get_design_pattern_with_constraints,
+    get_motif_components_and_breaks,
+)
 from modelhub.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.DEBUG)
@@ -62,216 +70,6 @@ logger = RankedLogger(__name__, rank_zero_only=True)
 #################################################################################
 
 
-@contextmanager
-def validator_context(validator_name: str, data: dict = None):
-    """Context manager for validator execution with logging."""
-    logger.debug(f"Starting validator: {validator_name}")
-    try:
-        yield
-        logger.debug(f"✓ Completed validator: {validator_name}")
-    except Exception as e:
-        logger.error(
-            f"✗ Failed in validator: {validator_name}\n"
-            f"  Error: {str(e)}\n"
-            f"  Error type: {type(e).__name__}"
-        )
-        raise e
-
-
-def create_diffused_residues(n, additional_annotations=None):
-    if n <= 0:
-        raise ValueError(f"Negative/null residue count ({n}) not allowed.")
-
-    atoms = []
-    [
-        atoms.extend(
-            [
-                struc.Atom(
-                    np.array([0.0, 0.0, 0.0], dtype=np.float32),
-                    res_name="ALA",
-                    res_id=idx,
-                )
-                for _ in range(5)
-            ]
-        )
-        for idx in range(1, n + 1)
-    ]
-    array = struc.array(atoms)
-    array.set_annotation(
-        "element", np.array(["N", "C", "C", "O", "C"] * n, dtype="<U2")
-    )
-    array.set_annotation(
-        "atom_name", np.array(["N", "CA", "C", "O", "CB"] * n, dtype="<U2")
-    )
-    array = set_default_conditioning_annotations(
-        array, motif=False, additional=additional_annotations
-    )
-    array = set_common_annotations(array)
-    return array
-
-
-def create_motif_residue(
-    token,
-    strip_sidechains_by_default: bool,
-):
-    if strip_sidechains_by_default and token.res_name in STANDARD_AA:
-        n_atoms = token.shape[0]
-        diffuse_oxygen = False
-        if n_atoms < 3:
-            raise ValueError(
-                f"Not enough data for {src_chain}{src_resid} in input atom array."
-            )
-        if n_atoms == 3:
-            # Handle cases with N, CA, C only;
-            token = token + create_o_atoms(token.copy())
-            diffuse_oxygen = True  # flag oxygen for generation
-
-        # Subset to the first 4 atoms (N, CA, C, O) only
-        token = token[np.isin(token.atom_name, ["N", "CA", "C", "O"])]
-
-        # exactly N, CA, C, O but no CB. Place CB onto idealized position and conver to ALA
-        # Sequence name ALA ensures the padded atoms to be diffused from the fixed backbone
-        # are placed on the CB so as to not leak the identity of the residue.
-        token = token + create_cb_atoms(token.copy())
-
-        # Sequence name must be set to ALA such that the central atom is correctly CB
-        token.res_name = np.full_like(token.res_name, "ALA", dtype=token.res_name.dtype)
-        token.set_annotation(
-            "is_motif_atom_with_fixed_coord",
-            np.where(
-                np.arange(token.shape[0], dtype=int) < (4 - int(diffuse_oxygen)),
-                token.is_motif_atom_with_fixed_coord,
-                0,
-            ),
-        )
-
-    check_has_required_conditioning_annotations(token)
-    token = set_common_annotations(token)
-    token.set_annotation("res_id", np.full(token.shape[0], 1))  # Reset to 1
-
-    return token
-
-
-def accumulate_components(
-    components_to_accumulate: List[Union[str, int]],
-    *,
-    # Tokens from input
-    indexed_tokens: Dict[str, AtomArray],
-    unindexed_tokens: Dict[str, AtomArray],
-    # Additional parameters
-    atom_array_accum=[],
-    start_chain: str = "A",
-    start_resid: int = 1,
-    unindexed_breaks: Optional[List[bool]] = [],
-    **kwargs,
-) -> AtomArray:
-    # ... Create list of components
-    assert (
-        x := (set(list(indexed_tokens.keys()) + list(unindexed_tokens.keys())))
-    ).issubset(
-        (y := set(components_to_accumulate))
-    ), "Unindexed and indexed set {} is not subset of components to accumulate {}".format(
-        x, y
-    )
-    all_tokens = indexed_tokens | unindexed_tokens
-    all_annots = []
-    [
-        all_annots.extend(list(tok.get_annotation_categories()))
-        for tok in all_tokens.values()
-    ]
-    all_annots = set(all_annots)
-
-    # ... For-loop accum variables
-    unindexed_components_started = (
-        False  # once one unindexed component is added, stop adding diffused residues
-    )
-    chain = start_chain
-    res_id = start_resid
-    molecule_id = 0
-
-    # ... Insert contig information one- by one-
-    assert len(components_to_accumulate) == len(
-        unindexed_breaks
-    ), "Mismatch in number of components to accumulate and breaks"
-    for component, is_break in zip(components_to_accumulate, unindexed_breaks):
-        if component == "/0":
-            # Reset iterators on next chain
-            chain = chr(ord(chain) + 1)
-            molecule_id += 1
-            res_id = 1
-            continue
-
-        # ... Create array to insert
-        if str(component)[0].isalpha():  # motif (e.g. "A22")
-            n = 1
-
-            # ... Fetch the motif residue
-            token = all_tokens[component]
-
-            # ... Insert breakpoint when break clause is met
-            if exists(is_break) and is_break:
-                if not unindexed_components_started:
-                    chain = start_chain
-                    unindexed_components_started = True
-                token.set_annotation(
-                    "is_motif_atom_unindexed_motif_breakpoint",
-                    np.ones(token.shape[0], dtype=int),
-                )
-            else:
-                token.set_annotation(
-                    "is_motif_atom_unindexed_motif_breakpoint",
-                    np.zeros(token.shape[0], dtype=int),
-                )
-        else:
-            n = int(component)
-            # ... Skip if none or unindexed
-            if n == 0 or unindexed_components_started:
-                res_id += n
-                continue
-
-            # ... Create diffused residues
-            token = create_diffused_residues(n, all_annots)
-
-        # ... Set index of insertion
-        token = set_indices(
-            array=token,
-            chain=chain,
-            res_id_start=res_id,
-            molecule_id=molecule_id,
-            component=component,
-        )
-
-        assert (
-            len(get_token_starts(token)) == n
-        ), f"Mismatch in number of residues: expected {n}, got {len(get_token_starts(token))} in \n{token}"
-
-        # ... Insert & Increment residue ID
-        atom_array_accum.append(token)
-        res_id += n
-
-    # ... Concatenate all components
-    atom_array_accum = struc.concatenate(atom_array_accum)
-    atom_array_accum.set_annotation("pn_unit_iid", atom_array_accum.chain_id)
-
-    # Reset res_id for unindexed residues to avoid duplicates
-    if np.any(atom_array_accum.is_motif_atom_unindexed.astype(bool)) and not np.all(
-        atom_array_accum.is_motif_atom_unindexed.astype(bool)
-    ):
-        max_id = np.max(
-            atom_array_accum[
-                ~atom_array_accum.is_motif_atom_unindexed.astype(bool)
-            ].res_id
-        )
-        atom_array_accum.res_id[
-            atom_array_accum.is_motif_atom_unindexed.astype(bool)
-        ] += max_id + 1
-
-    # ... Bonds
-    if atom_array_accum.bonds is None:
-        atom_array_accum.bonds = BondList(atom_array_accum.array_length())
-    return atom_array_accum
-
-
 class LegacySpecification(BaseModel):
     """Legacy specification for compatibility with legacy input parsing."""
 
@@ -280,12 +78,26 @@ class LegacySpecification(BaseModel):
         extra="allow",
     )
 
-    def build(self):
+    def build(self, *args, **kwargs):
         """Build atom array using legacy input parsing."""
         atom_array = create_atom_array_from_design_specification_legacy(
             design_specification=self.model_dump(),
         )
         return atom_array, self.model_dump()
+
+    def to_pipeline_input(self, example_id):
+        atom_array, spec_dict = self.build(return_metadata=True)
+
+        # ... Forward into
+        data = prepare_pipeline_input_from_atom_array(atom_array)
+        data["example_id"] = example_id
+
+        # ... Wrap up with additional features
+        if "extra" not in spec_dict:
+            spec_dict["extra"] = {}
+        spec_dict["extra"]["example_id"] = example_id
+        data["specification"] = spec_dict
+        return data
 
 
 # ========================================================================
@@ -293,7 +105,7 @@ class LegacySpecification(BaseModel):
 # ========================================================================
 
 
-class InputSpecification(BaseModel):
+class DesignInputSpecification(BaseModel):
     """Validated and parsed input specification before resolution."""
 
     model_config = ConfigDict(
@@ -932,10 +744,73 @@ class InputSpecification(BaseModel):
         else:
             return cls(**spec_kwargs)
 
+    def to_pipeline_input(self, example_id):
+        atom_array, spec_dict = self.build(return_metadata=True)
+
+        # ... Forward into
+        data = prepare_pipeline_input_from_atom_array(atom_array)
+        data["example_id"] = example_id
+
+        # ... Wrap up with additional features
+        if "extra" not in spec_dict:
+            spec_dict["extra"] = {}
+        spec_dict["extra"]["example_id"] = example_id
+        data["specification"] = spec_dict
+        return data
+
 
 # ============================================================================
-# Public API
+# APIs and utils
 # ============================================================================
+
+
+def prepare_pipeline_input_from_atom_array(  # see atomworks.ml.datasets.parsers.base.load_example_from_metadata_row
+    atom_array_orig,
+) -> dict:
+    """
+    Load or create an example from a metadata dictionary.
+    If the file path is not provided in the metadata dictionary, create a spoofed CIF file based on the length.
+    Args:
+        atom_array_orig: Atom array instantiated with conditioning annotations
+
+    Returns:
+        dict: A dictionary containing the parsed row data and additional loaded CIF data.
+    """
+    _start_parse_time = time.time()
+    # HACK: Set empty bond graph:
+    if atom_array_orig.bonds is None:
+        atom_array_orig.bonds = BondList(atom_array_orig.array_length())
+
+    # Temporary spoof of chain IDs to ensure duplicates aren't dropped:
+    result_dict = parse_atom_array(
+        atom_array_orig,
+        remove_ccds=[],
+        fix_arginines=False,
+        add_missing_atoms=False,
+        extra_fields=INFERENCE_ANNOTATIONS,
+        build_assembly=None,
+        hydrogen_policy="remove",
+    )
+    atom_array = result_dict["asym_unit"][0]
+
+    # HACK: Set iid information manually
+    # We currently do not preserve this information from the input,
+    # if you want these we'd need to remove the spoofing here
+    check_has_required_conditioning_annotations(
+        atom_array, required=REQUIRED_INFERENCE_ANNOTATIONS
+    )
+    atom_array = convert_existing_annotations_to_bool(atom_array)
+    atom_array.set_annotation("chain_iid", [f"{c}_1" for c in atom_array.chain_id])
+    atom_array.set_annotation("pn_unit_iid", [f"{c}_1" for c in atom_array.pn_unit_id])
+    data = {
+        "atom_array": atom_array,  # First model
+        "chain_info": result_dict["chain_info"],
+        "ligand_info": result_dict["ligand_info"],
+        "metadata": result_dict["metadata"],
+    }
+    _stop_parse_time = time.time()
+    data = TransformedDict(data)
+    return data
 
 
 def create_atom_array_from_design_specification(
@@ -952,6 +827,216 @@ def create_atom_array_from_design_specification(
         return atom_array, {}
 
     # Create input specfication and build
-    spec = InputSpecification(**spec_kwargs)
+    spec = DesignInputSpecification(**spec_kwargs)
     atom_array, metadata = spec.build(return_metadata=True)
     return atom_array, metadata
+
+
+@contextmanager
+def validator_context(validator_name: str, data: dict = None):
+    """Context manager for validator execution with logging."""
+    logger.debug(f"Starting validator: {validator_name}")
+    try:
+        yield
+        logger.debug(f"✓ Completed validator: {validator_name}")
+    except Exception as e:
+        logger.error(
+            f"✗ Failed in validator: {validator_name}\n"
+            f"  Error: {str(e)}\n"
+            f"  Error type: {type(e).__name__}"
+        )
+        raise e
+
+
+def create_diffused_residues(n, additional_annotations=None):
+    if n <= 0:
+        raise ValueError(f"Negative/null residue count ({n}) not allowed.")
+
+    atoms = []
+    [
+        atoms.extend(
+            [
+                struc.Atom(
+                    np.array([0.0, 0.0, 0.0], dtype=np.float32),
+                    res_name="ALA",
+                    res_id=idx,
+                )
+                for _ in range(5)
+            ]
+        )
+        for idx in range(1, n + 1)
+    ]
+    array = struc.array(atoms)
+    array.set_annotation(
+        "element", np.array(["N", "C", "C", "O", "C"] * n, dtype="<U2")
+    )
+    array.set_annotation(
+        "atom_name", np.array(["N", "CA", "C", "O", "CB"] * n, dtype="<U2")
+    )
+    array = set_default_conditioning_annotations(
+        array, motif=False, additional=additional_annotations
+    )
+    array = set_common_annotations(array)
+    return array
+
+
+def create_motif_residue(
+    token,
+    strip_sidechains_by_default: bool,
+):
+    if strip_sidechains_by_default and token.res_name in STANDARD_AA:
+        n_atoms = token.shape[0]
+        diffuse_oxygen = False
+        if n_atoms < 3:
+            raise ValueError(
+                f"Not enough data for {src_chain}{src_resid} in input atom array."
+            )
+        if n_atoms == 3:
+            # Handle cases with N, CA, C only;
+            token = token + create_o_atoms(token.copy())
+            diffuse_oxygen = True  # flag oxygen for generation
+
+        # Subset to the first 4 atoms (N, CA, C, O) only
+        token = token[np.isin(token.atom_name, ["N", "CA", "C", "O"])]
+
+        # exactly N, CA, C, O but no CB. Place CB onto idealized position and conver to ALA
+        # Sequence name ALA ensures the padded atoms to be diffused from the fixed backbone
+        # are placed on the CB so as to not leak the identity of the residue.
+        token = token + create_cb_atoms(token.copy())
+
+        # Sequence name must be set to ALA such that the central atom is correctly CB
+        token.res_name = np.full_like(token.res_name, "ALA", dtype=token.res_name.dtype)
+        token.set_annotation(
+            "is_motif_atom_with_fixed_coord",
+            np.where(
+                np.arange(token.shape[0], dtype=int) < (4 - int(diffuse_oxygen)),
+                token.is_motif_atom_with_fixed_coord,
+                0,
+            ),
+        )
+
+    check_has_required_conditioning_annotations(token)
+    token = set_common_annotations(token)
+    token.set_annotation("res_id", np.full(token.shape[0], 1))  # Reset to 1
+
+    return token
+
+
+def accumulate_components(
+    components_to_accumulate: List[Union[str, int]],
+    *,
+    # Tokens from input
+    indexed_tokens: Dict[str, AtomArray],
+    unindexed_tokens: Dict[str, AtomArray],
+    # Additional parameters
+    atom_array_accum=[],
+    start_chain: str = "A",
+    start_resid: int = 1,
+    unindexed_breaks: Optional[List[bool]] = [],
+    **kwargs,
+) -> AtomArray:
+    # ... Create list of components
+    assert (
+        x := (set(list(indexed_tokens.keys()) + list(unindexed_tokens.keys())))
+    ).issubset(
+        (y := set(components_to_accumulate))
+    ), "Unindexed and indexed set {} is not subset of components to accumulate {}".format(
+        x, y
+    )
+    all_tokens = indexed_tokens | unindexed_tokens
+    all_annots = []
+    [
+        all_annots.extend(list(tok.get_annotation_categories()))
+        for tok in all_tokens.values()
+    ]
+    all_annots = set(all_annots)
+
+    # ... For-loop accum variables
+    unindexed_components_started = (
+        False  # once one unindexed component is added, stop adding diffused residues
+    )
+    chain = start_chain
+    res_id = start_resid
+    molecule_id = 0
+
+    # ... Insert contig information one- by one-
+    assert len(components_to_accumulate) == len(
+        unindexed_breaks
+    ), "Mismatch in number of components to accumulate and breaks"
+    for component, is_break in zip(components_to_accumulate, unindexed_breaks):
+        if component == "/0":
+            # Reset iterators on next chain
+            chain = chr(ord(chain) + 1)
+            molecule_id += 1
+            res_id = 1
+            continue
+
+        # ... Create array to insert
+        if str(component)[0].isalpha():  # motif (e.g. "A22")
+            n = 1
+
+            # ... Fetch the motif residue
+            token = all_tokens[component]
+
+            # ... Insert breakpoint when break clause is met
+            if exists(is_break) and is_break:
+                if not unindexed_components_started:
+                    chain = start_chain
+                    unindexed_components_started = True
+                token.set_annotation(
+                    "is_motif_atom_unindexed_motif_breakpoint",
+                    np.ones(token.shape[0], dtype=int),
+                )
+            else:
+                token.set_annotation(
+                    "is_motif_atom_unindexed_motif_breakpoint",
+                    np.zeros(token.shape[0], dtype=int),
+                )
+        else:
+            n = int(component)
+            # ... Skip if none or unindexed
+            if n == 0 or unindexed_components_started:
+                res_id += n
+                continue
+
+            # ... Create diffused residues
+            token = create_diffused_residues(n, all_annots)
+
+        # ... Set index of insertion
+        token = set_indices(
+            array=token,
+            chain=chain,
+            res_id_start=res_id,
+            molecule_id=molecule_id,
+            component=component,
+        )
+
+        assert (
+            len(get_token_starts(token)) == n
+        ), f"Mismatch in number of residues: expected {n}, got {len(get_token_starts(token))} in \n{token}"
+
+        # ... Insert & Increment residue ID
+        atom_array_accum.append(token)
+        res_id += n
+
+    # ... Concatenate all components
+    atom_array_accum = struc.concatenate(atom_array_accum)
+    atom_array_accum.set_annotation("pn_unit_iid", atom_array_accum.chain_id)
+
+    # Reset res_id for unindexed residues to avoid duplicates
+    if np.any(atom_array_accum.is_motif_atom_unindexed.astype(bool)) and not np.all(
+        atom_array_accum.is_motif_atom_unindexed.astype(bool)
+    ):
+        max_id = np.max(
+            atom_array_accum[
+                ~atom_array_accum.is_motif_atom_unindexed.astype(bool)
+            ].res_id
+        )
+        atom_array_accum.res_id[
+            atom_array_accum.is_motif_atom_unindexed.astype(bool)
+        ] += max_id + 1
+
+    # ... Bonds
+    if atom_array_accum.bonds is None:
+        atom_array_accum.bonds = BondList(atom_array_accum.array_length())
+    return atom_array_accum

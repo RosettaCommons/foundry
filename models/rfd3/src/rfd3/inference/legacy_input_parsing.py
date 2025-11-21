@@ -17,23 +17,6 @@ from rfd3.constants import (
     OPTIONAL_CONDITIONING_VALUES,
     REQUIRED_INFERENCE_ANNOTATIONS,
 )
-from rfd3.inference.components import (
-    fetch_mask_from_component,
-    fetch_mask_from_idx,
-    get_design_pattern_with_constraints,
-    get_motif_components_and_breaks,
-    get_name_mask,
-    split_contig,
-)
-from rfd3.inference.inference_utils import (
-    create_cb_atoms,
-    create_o_atoms,
-    extract_ligand_array,
-    inference_load_,
-    set_com,
-    set_common_annotations,
-    set_indices,
-)
 from rfd3.inference.symmetry.symmetry_utils import (
     center_symmetric_src_atom_array,
     make_symmetric_atom_array,
@@ -45,8 +28,25 @@ from rfd3.transforms.conditioning_base import (
     set_default_conditioning_annotations,
 )
 from rfd3.transforms.util_transforms import assign_types_
+from rfd3.utils.inference import (
+    create_cb_atoms,
+    create_o_atoms,
+    extract_ligand_array,
+    inference_load_,
+    set_com,
+    set_common_annotations,
+    set_indices,
+)
 
 from modelhub.common import exists
+from modelhub.utils.components import (
+    fetch_mask_from_component,
+    fetch_mask_from_idx,
+    get_design_pattern_with_constraints,
+    get_motif_components_and_breaks,
+    get_name_mask,
+    split_contig,
+)
 from modelhub.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)

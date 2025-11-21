@@ -3,7 +3,7 @@ from atomworks.common import sum_string_arrays
 from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.ml.transforms.center_random_augmentation import CenterRandomAugmentation
 from biotite.structure import AtomArrayStack
-from rfd3.trainer.rfd3_trainer import _reassign_unindexed_token_chains
+from rfd3.trainer.rfd3 import _reassign_unindexed_token_chains
 from rfd3.transforms.design_transforms import (
     MotifCenterRandomAugmentation,
 )

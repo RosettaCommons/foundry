@@ -621,3 +621,4 @@ view(atom_array)
 **Alternative viewing options:**
 - View in PyMol like normal, or using `pymol_remote`
 - Use the `view_pymol()` function for direct PyMol integration
+

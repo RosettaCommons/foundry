@@ -15,6 +15,7 @@ from rf3.model.layers.pairformer_layers import (
     RF3TemplateEmbedder,
 )
 
+from modelhub.model.layers.blocks import FourierEmbedding
 from modelhub.training.checkpoint import activation_checkpointing
 
 logger = logging.getLogger(__name__)
@@ -227,29 +228,6 @@ class DiffusionConditioning(nn.Module):
             return S_I, Z_II
 
         return _run_conditioning(Z_II, S_trunk_I, S_inputs_I)
-
-
-pi = torch.acos(torch.zeros(1)).item() * 2
-
-
-class FourierEmbedding(nn.Module):
-    def __init__(self, c):
-        super().__init__()
-        self.c = c
-        self.register_buffer("w", torch.zeros(c, dtype=torch.float32))
-        self.register_buffer("b", torch.zeros(c, dtype=torch.float32))
-        self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        # super().reset_parameters()
-        nn.init.normal_(self.w)
-        nn.init.normal_(self.b)
-
-    def forward(
-        self,
-        t,  # [D]
-    ):
-        return torch.cos(2 * pi * (t[:, None] * self.w + self.b))
 
 
 class DistogramHead(nn.Module):

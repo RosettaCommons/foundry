@@ -6,18 +6,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from opt_einsum import contract as einsum
-from rfd3.model.block_utils import (
+from rfd3.model.layers.block_utils import (
     create_attention_indices,
     indices_to_mask,
 )
-
-from modelhub.common import exists
-from modelhub.model.layers.layer_utils import (
+from rfd3.model.layers.layer_utils import (
     AdaLN,
     LinearBiasInit,
     RMSNorm,
     linearNoBias,
 )
+
+from modelhub.common import exists
 from modelhub.training.checkpoint import activation_checkpointing
 from modelhub.utils.ddp import RankedLogger
 
@@ -417,7 +417,6 @@ def sparse_pairbias_attention(
         if B.ndim == 3:
             B_gathered = B[query_idx, indices, :]  # (D, L, k, H)
         elif B.ndim == 4:  # (D, L, L, H)
-            # import ipdb; ipdb.set_trace()
             B_gathered = B[batch_idx, query_idx, indices, :]  # (D, L, k, H)
     else:
         assert B.shape == (D, L, k, H), "B must be batched with shape (D, L, k, H)"

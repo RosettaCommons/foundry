@@ -2,7 +2,6 @@ import logging
 from os import PathLike
 from pathlib import Path
 
-import hydra
 import pandas as pd
 import torch
 import torch.distributed as dist
@@ -12,13 +11,12 @@ from atomworks.ml.preprocessing.msa.finding import (
 )
 from atomworks.ml.samplers import LoadBalancedDistributedSampler
 from biotite.structure import AtomArray
-from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
+from modelhub.inference_engines.base import BaseInferenceEngine
 from modelhub.metrics.metric import MetricManager
-from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
-from modelhub.utils.logging import print_config_tree
+from modelhub.utils.ddp import RankedLogger
 from rf3.model.RF3 import ShouldEarlyStopFn
 from rf3.utils.inference import (
     InferenceInput,
@@ -63,7 +61,7 @@ def should_early_stop_by_mean_plddt(
     return fn
 
 
-class RF3InferenceEngine:
+class RF3InferenceEngine(BaseInferenceEngine):
     """RF3 inference engine.
 
     Separates model setup (expensive, once) from inference (can run multiple times).
@@ -84,71 +82,44 @@ class RF3InferenceEngine:
 
     def __init__(
         self,
-        ckpt_path: PathLike,
         # Model parameters
         n_recycles: int = 10,
         diffusion_batch_size: int = 5,
         num_steps: int = 50,
-        seed: int | None = None,
+        # Templating, MSAs, etc.
         template_noise_scale: float = 1e-5,
-        early_stopping_plddt_threshold: float | None = None,
-        metrics_cfg: dict | OmegaConf | MetricManager | None = None,
-        num_nodes: int = 1,
-        devices_per_node: int = 1,
+        raise_if_missing_msa_for_protein_of_length_n: int | None = None,
         # Output control
         compress_outputs: bool = True,
-        # Debug
-        print_config: bool = False,
-        raise_if_missing_msa_for_protein_of_length_n: int | None = None,
+        early_stopping_plddt_threshold: float | None = None,
+        # Metrics
+        metrics_cfg: dict | OmegaConf | MetricManager | None = None,
+        **kwargs,
     ):
         """Initialize inference engine and load model.
 
         Model config is loaded from checkpoint and overridden with parameters provided here.
 
         Args:
-          ckpt_path: Path to model checkpoint.
           n_recycles: Number of recycles. Defaults to ``10``.
           diffusion_batch_size: Number of structures to generate per input. Defaults to ``5``.
           num_steps: Number of diffusion steps. Defaults to ``50``.
-          seed: Random seed. If None, uses external RNG state. Defaults to ``None``.
           template_noise_scale: Noise scale for template coordinates. Defaults to ``1e-5``.
+          raise_if_missing_msa_for_protein_of_length_n: Debug flag for MSA checking. Defaults to ``None``.
+          compress_outputs: Whether to gzip output files. Defaults to ``True``.
           early_stopping_plddt_threshold: Stop early if pLDDT below threshold. Defaults to ``None``.
           metrics_cfg: Metrics configuration. Can be:
               - dict/OmegaConf with Hydra configs
               - Pre-instantiated MetricManager
               - None (no metrics).
               Defaults to ``None``.
-          num_nodes: Number of nodes for distributed inference. Defaults to ``1``.
-          devices_per_node: Number of devices per node. Defaults to ``1``.
-          compress_outputs: Whether to gzip output files. Defaults to ``True``.
-          print_config: Whether to print config trees. Defaults to ``False``.
-          raise_if_missing_msa_for_protein_of_length_n: Debug flag for MSA checking. Defaults to ``None``.
+          **kwargs: Additional arguments passed to BaseInferenceEngine:
+              - ckpt_path (PathLike, required): Path to model checkpoint.
+              - seed (int | None): Random seed. If None, uses external RNG state. Defaults to ``None``.
+              - num_nodes (int): Number of nodes for distributed inference. Defaults to ``1``.
+              - devices_per_node (int): Number of devices per node. Defaults to ``1``.
+              - print_config (bool): Whether to print config trees. Defaults to ``False``.
         """
-        # Load checkpoint and config
-        ranked_logger.info(f"Loading checkpoint from {Path(ckpt_path).resolve()}...")
-        checkpoint = torch.load(ckpt_path, "cpu", weights_only=False)
-        self.cfg = OmegaConf.create(checkpoint["train_cfg"])
-
-        # Override config with inference parameters
-        self.cfg.model.net.inference_sampler.num_timesteps = num_steps
-        self.cfg.trainer.num_nodes = num_nodes
-        self.cfg.trainer.devices_per_node = devices_per_node
-
-        # Set metrics - can be dict/OmegaConf or MetricManager
-        # Store MetricManager separately since OmegaConf can't serialize it
-        self._custom_metric_manager = None
-        if isinstance(metrics_cfg, MetricManager):
-            # Already instantiated - store separately and pass to trainer later
-            self._custom_metric_manager = metrics_cfg
-            self.cfg.trainer["metrics"] = {}  # Empty dict in config
-        elif metrics_cfg is not None:
-            # Hydra config dict
-            self.cfg.trainer["metrics"] = metrics_cfg
-        else:
-            self.cfg.trainer["metrics"] = {}
-
-        set_accelerator_based_on_availability(self.cfg)
-
         # set MSA directories
         if env_var_msa_dirs := get_msa_dirs_from_env(raise_if_not_set=False):
             override_msa_dirs = [str(msa_dir) for msa_dir in env_var_msa_dirs]
@@ -163,112 +134,72 @@ class RF3InferenceEngine:
             ]
             ranked_logger.info(f"Using default MSA directories: {override_msa_dirs}")
 
-        # Dataset overrides
-        self.dataset_overrides = {
-            "diffusion_batch_size": diffusion_batch_size,
-            "n_recycles": n_recycles,
-            "raise_if_missing_msa_for_protein_of_length_n": raise_if_missing_msa_for_protein_of_length_n,
-            "undesired_res_names": [],
-            "template_noise_scales": {
-                "atomized": template_noise_scale,
-                "not_atomized": template_noise_scale,
+        super().__init__(
+            transform_overrides={
+                "diffusion_batch_size": diffusion_batch_size,
+                "n_recycles": n_recycles,
+                "raise_if_missing_msa_for_protein_of_length_n": raise_if_missing_msa_for_protein_of_length_n,
+                "undesired_res_names": [],
+                "template_noise_scales": {
+                    "atomized": template_noise_scale,
+                    "not_atomized": template_noise_scale,
+                },
+                "allowed_chain_types_for_conditioning": None,
+                "protein_msa_dirs": [
+                    {
+                        "dir": msa_dir,
+                        "extension": extension.value,
+                        "directory_depth": depth,
+                    }
+                    for msa_dir, depth, extension in [
+                        (msa_dir, *get_msa_depth_and_ext_from_folder(Path(msa_dir)))
+                        for msa_dir in override_msa_dirs
+                    ]
+                ],
+                "rna_msa_dirs": [],
+                # (Paranoia - in validation, these should be set correctly anyhow)
+                "p_give_polymer_ref_conf": 0.0,
+                "p_give_non_polymer_ref_conf": 0.0,
+                "p_dropout_ref_conf": 0.0,
+                "use_element_for_atom_names_of_atomized_tokens": True,
             },
-            "allowed_chain_types_for_conditioning": None,
-            "protein_msa_dirs": [
-                {
-                    "dir": msa_dir,
-                    "extension": extension.value,
-                    "directory_depth": depth,
-                }
-                for msa_dir, depth, extension in [
-                    (msa_dir, *get_msa_depth_and_ext_from_folder(Path(msa_dir)))
-                    for msa_dir in override_msa_dirs
-                ]
-            ],
-            "rna_msa_dirs": [],
-            # (Paranoia - in validation, these should be set correctly anyhow)
-            "p_give_polymer_ref_conf": 0.0,
-            "p_give_non_polymer_ref_conf": 0.0,
-            "p_dropout_ref_conf": 0.0,
-            "use_element_for_atom_names_of_atomized_tokens": True,
-        }
-
-        self.print_config = print_config
-
-        # Set random seed (only if seed is not None)
-        if seed is not None or self.cfg.seed is not None:
-            seed = seed or self.cfg.seed
-            ranked_logger.info(f"Seeding everything with seed={seed}...")
-            seed_everything(seed, workers=True, verbose=True)
-        else:
-            ranked_logger.info("Seed is None - using external RNG state")
-
-        # Instantiate trainer
-        ranked_logger.info("Instantiating trainer...")
-        if self.print_config:
-            print_config_tree(
-                self.cfg.trainer, resolve=True, title="INFERENCE TRAINER CONFIGURATION"
-            )
-
-        self.trainer = hydra.utils.instantiate(
-            self.cfg.trainer,
-            _convert_="partial",
-            _recursive_=False,
+            inference_sampler_overrides={
+                "num_timesteps": num_steps,
+            },
+            **kwargs,
         )
 
-        # If we have a custom MetricManager, override the trainer's metrics
-        if self._custom_metric_manager is not None:
-            self.trainer.metrics = self._custom_metric_manager
+        # remove loss override if present (i.e. keep from checkpoint)
+        self.overrides["trainer"].pop("loss", None)
 
-        self.ckpt_path = ckpt_path
+        # Store metrics config for later - will be set directly on trainer in initialize()
+        self._metrics_cfg = metrics_cfg
+
+        # Dataset overrides
         self.early_stopping_plddt_threshold = early_stopping_plddt_threshold
         self.compress_outputs = compress_outputs
 
-        # Setup model
-        ranked_logger.info("Setting up model...")
-        self.trainer.fabric.launch()
-        self.trainer.initialize_or_update_trainer_state({"train_cfg": self.cfg})
-        self.trainer.construct_model()
+    def initialize(self):
+        cfg = super().initialize()
 
-        ranked_logger.info("Loading model weights from checkpoint...")
-        self.trainer.load_checkpoint(checkpoint=checkpoint)
+        if cfg is not None:
+            self.cfg = cfg  # store for later use
 
-        # Ensure optimizer isn't loaded
-        self.trainer.state["optimizer"] = None
-        self.trainer.state["train_cfg"].model.optimizer = None
+            # Set trainer metrics directly based on what was requested
+            # This bypasses the OmegaConf merge issue with empty dicts
+            if isinstance(self._metrics_cfg, MetricManager):
+                # Already instantiated - use directly
+                self.trainer.metrics = self._metrics_cfg
+            elif self._metrics_cfg is not None:
+                # Hydra config dict - instantiate MetricManager
+                self.trainer.metrics = MetricManager.instantiate_from_hydra(
+                    metrics_cfg=self._metrics_cfg
+                )
+            else:
+                # No metrics requested - disable them
+                self.trainer.metrics = None
 
-        self.trainer.setup_model_optimizers_and_schedulers()
-        self.trainer.state["model"].eval()
-
-        # Construct pipeline
-        ranked_logger.info("Building Transform pipeline...")
-        first_val_dataset_key, first_val_dataset = next(
-            iter(self.cfg.datasets.val.items())
-        )
-        ranked_logger.info(
-            f"Using settings from validation dataset: {first_val_dataset_key}."
-        )
-
-        assert (
-            first_val_dataset.dataset.transform.is_inference
-        ), "Inference must be enabled for the validation dataset."
-
-        # Provide manual overrides to dataset config
-        for key, value in self.dataset_overrides.items():
-            first_val_dataset.dataset.transform[key] = value
-
-        if self.print_config:
-            print_config_tree(
-                first_val_dataset.dataset.transform,
-                resolve=True,
-                title="INFERENCE TRANSFORM PIPELINE",
-            )
-
-        self.pipeline = hydra.utils.instantiate(
-            first_val_dataset.dataset.transform,
-        )
-
-        ranked_logger.info("Model loaded and ready for inference.")
+        return cfg
 
     def run(
         self,
@@ -314,6 +245,8 @@ class RF3InferenceEngine:
           If ``out_dir`` is None: Dict mapping example_id to results dict.
           If ``out_dir`` is set: None (results saved to disk).
         """
+        self.initialize()
+
         # Setup output directory if provided
         out_dir = Path(out_dir) if out_dir else None
         if out_dir:

@@ -108,3 +108,23 @@ This is then passed through the same processing pipeline as in training with `is
   <figcaption>Overview of important transforms in the Atom14 conditioning pipeline.
   </figcaption>
 </p>
+
+
+
+## Citation
+
+If you use this code or data in your work, please cite:
+
+```bibtex
+@article {butcher2025_rfdiffusion3,
+	author = {Butcher, Jasper and Krishna, Rohith and Mitra, Raktim and Brent, Rafael Isaac and Li, Yanjing and Corley, Nathaniel and Kim, Paul T and Funk, Jonathan and Mathis, Simon Valentin and Salike, Saman and Muraishi, Aiko and Eisenach, Helen and Thompson, Tuscan Rock and Chen, Jie and Politanska, Yuliya and Sehgal, Enisha and Coventry, Brian and Zhang, Odin and Qiang, Bo and Didi, Kieran and Kazman, Maxwell and DiMaio, Frank and Baker, David},
+	title = {De novo Design of All-atom Biomolecular Interactions with RFdiffusion3},
+	elocation-id = {2025.09.18.676967},
+	year = {2025},
+	doi = {10.1101/2025.09.18.676967},
+	publisher = {Cold Spring Harbor Laboratory},
+	URL = {https://www.biorxiv.org/content/early/2025/11/19/2025.09.18.676967},
+	eprint = {https://www.biorxiv.org/content/early/2025/11/19/2025.09.18.676967.full.pdf},
+	journal = {bioRxiv}
+}
+```

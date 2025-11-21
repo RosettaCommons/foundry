@@ -1,6 +1,7 @@
 defaults:
   - ddp
-  - loss/losses/diffusion_loss@loss.verbose_diffusion_loss
+  - loss/losses/diffusion_loss@loss.diffusion_loss
+  - loss/losses/sequence_loss@loss.sequence_loss
   - metrics: design_metrics
   - _self_
 
@@ -28,10 +29,3 @@ output_dir: ${paths.output_dir}
 n_recycles_train: 2
 grad_accum_steps: 3  # overridden by launch.sh
 skip_optimizer_loading: True
-
-loss:
-  verbose_diffusion_loss:
-  sequence_head_loss:
-    _target_: rfd3.metrics.losses.SequenceLoss
-    weight: 0.1
-    max_t: 1

@@ -5,29 +5,17 @@
 import json
 import os
 import textwrap
-import time
 from os import PathLike
-from typing import Any, List
+from typing import Any, Dict, List
 
 import yaml
-from atomworks.io.parser import parse_atom_array
-
 from atomworks.ml.datasets import MolecularDataset
-from atomworks.ml.transforms.base import Compose, Transform, TransformedDict
-from biotite.structure import BondList
+from atomworks.ml.transforms.base import Compose, Transform
 from omegaconf import DictConfig, OmegaConf
-from rfd3.constants import (
-    INFERENCE_ANNOTATIONS,
-    REQUIRED_INFERENCE_ANNOTATIONS,
-)
-from rfd3.inference.inference_utils import ensure_input_is_abspath
 from rfd3.inference.input_parsing import (
-    create_atom_array_from_design_specification,
+    DesignInputSpecification,
 )
-from rfd3.transforms.conditioning_base import (
-    check_has_required_conditioning_annotations,
-    convert_existing_annotations_to_bool,
-)
+from rfd3.utils.inference import ensure_input_is_abspath
 from torch.utils.data import (
     DataLoader,
     SequentialSampler,
@@ -49,7 +37,7 @@ class ContigJsonDataset(MolecularDataset):
     def __init__(
         self,
         *,
-        data: PathLike | dict,
+        data: PathLike | Dict[str, dict | DesignInputSpecification],
         cif_parser_args: dict | None,
         transform: Transform | Compose | None,
         name: str | None,
@@ -137,7 +125,7 @@ class ContigJsonDataset(MolecularDataset):
     def _check_json_keys(self):
         """Check if the JSON keys are valid."""
         for k, data in self.data.items():
-            if not isinstance(data, dict):
+            if not isinstance(data, (dict, DesignInputSpecification)):
                 raise ValueError("Each item in the JSON data must be a dictionary.")
 
     @property
@@ -171,75 +159,17 @@ class ContigJsonDataset(MolecularDataset):
         spec = self.data[example_id]
 
         # if 'input' in metadata and not abspath, prepend the source json directory to the file path
-        spec = ensure_input_is_abspath(spec, self.json_path)
+        if not isinstance(spec, DesignInputSpecification):
+            spec = ensure_input_is_abspath(spec, self.json_path)
+            spec["cif_parser_args"] = self.cif_parser_args
+            spec = DesignInputSpecification(**spec)
 
-        # ... Create atom array with conditioning annotations
-        atom_array, spec_dict = create_atom_array_from_design_specification(
-            cif_parser_args=self.cif_parser_args, **spec
-        )
+        # Create pipeline input
+        data = spec.to_pipeline_input(example_id=example_id)
 
-        # ... Forward into
-        data = prepare_pipeline_input_from_atom_array(atom_array)
-        data["example_id"] = example_id
-
-        # ... Wrap up with additional features
-        if "extra" not in spec_dict:
-            spec_dict["extra"] = {}
-        spec_dict["extra"]["example_id"] = example_id
-        data["specification"] = spec_dict
-
-        # ... Send through pipeline
+        # Apply transforms and return
         data = self.transform(data)
         return data
-
-
-def prepare_pipeline_input_from_atom_array(  # see atomworks.ml.datasets.parsers.base.load_example_from_metadata_row
-    atom_array_orig,
-) -> dict:
-    """
-    Load or create an example from a metadata dictionary.
-    If the file path is not provided in the metadata dictionary, create a spoofed CIF file based on the length.
-    Args:
-        atom_array_orig: Atom array instantiated with conditioning annotations
-
-    Returns:
-        dict: A dictionary containing the parsed row data and additional loaded CIF data.
-    """
-    _start_parse_time = time.time()
-    # HACK: Set empty bond graph:
-    if atom_array_orig.bonds is None:
-        atom_array_orig.bonds = BondList(atom_array_orig.array_length())
-
-    # Temporary spoof of chain IDs to ensure duplicates aren't dropped:
-    result_dict = parse_atom_array(
-        atom_array_orig,
-        remove_ccds=[],
-        fix_arginines=False,
-        add_missing_atoms=False,
-        extra_fields=INFERENCE_ANNOTATIONS,
-        build_assembly=None,
-        hydrogen_policy="remove",
-    )
-    atom_array = result_dict["asym_unit"][0]
-
-    # HACK: Set iid information manually
-    # We currently do not preserve this information from the input,
-    # if you want these we'd need to remove the spoofing here
-    check_has_required_conditioning_annotations(
-        atom_array, required=REQUIRED_INFERENCE_ANNOTATIONS
-    )
-    atom_array = convert_existing_annotations_to_bool(atom_array)
-    atom_array.set_annotation("chain_iid", [f"{c}_1" for c in atom_array.chain_id])
-    atom_array.set_annotation("pn_unit_iid", [f"{c}_1" for c in atom_array.pn_unit_id])
-    data = {
-        "atom_array": atom_array,  # First model
-        "chain_info": result_dict["chain_info"],
-        "ligand_info": result_dict["ligand_info"],
-        "metadata": result_dict["metadata"],
-    }
-    _stop_parse_time = time.time()
-    data = TransformedDict(data)
-    return data
 
 
 def assemble_distributed_inference_loader_from_json(

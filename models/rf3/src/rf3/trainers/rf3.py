@@ -5,7 +5,6 @@ from einops import repeat
 from jaxtyping import Float, Int
 from lightning_utilities import apply_to_collection
 from omegaconf import DictConfig
-from rf3.loss.af3_losses import Loss as AF3Loss
 from rf3.loss.af3_losses import (
     ResidueSymmetryResolution,
     SubunitSymmetryResolution,
@@ -15,6 +14,7 @@ from rf3.utils.io import build_stack_from_atom_array_and_batched_coords
 from rf3.utils.recycling import get_recycle_schedule
 
 from modelhub.common import exists
+from modelhub.metrics.losses import Loss
 from modelhub.metrics.metric import MetricManager
 from modelhub.trainers.fabric import FabricTrainer
 from modelhub.training.EMA import EMA
@@ -42,6 +42,7 @@ class RF3Trainer(FabricTrainer):
         n_recycles_train: int | None = None,
         loss: DictConfig | dict | None = None,
         metrics: DictConfig | dict | MetricManager | None = None,
+        seed=None,  # dumped
         **kwargs,
     ):
         """See `FabricTrainer` for the additional initialization arguments.
@@ -79,7 +80,7 @@ class RF3Trainer(FabricTrainer):
             self.metrics = None
 
         # Loss
-        self.loss = AF3Loss(**loss) if loss else None
+        self.loss = Loss(**loss) if loss else None
 
         # (Symmetry resolution)
         self.subunit_symm_resolve = SubunitSymmetryResolution()

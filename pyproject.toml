@@ -32,7 +32,7 @@ dependencies = [
     # ... typing & documentation
     "jaxtyping>=0.2.17,<1",
     "beartype>=0.18.0,<1",
-    "typer>=0.9.0,<1",
+    "typer>=0.20.0,<1",
     # ... ml tools (core)
     "torch>=2.2.0,<3",
     "lightning>=2.5.0",
@@ -41,12 +41,17 @@ dependencies = [
     "einx>=0.1.0,<1",
     "opt_einsum>=3.4.0,<4",
     "dm-tree>=0.1.6,<1",
+    "zstandard",
+    "pandas",
+    # "biotite",
+    "atomworks"
 ]
 
 
 [project.optional-dependencies]
 rfd3 = [
     "pydantic>=2.8",
+    "toolz",
 ]
 rf3 = [
     "cuequivariance_ops_cu12>=0.6.1; sys_platform == 'linux'",
@@ -72,7 +77,8 @@ dev = [
     "pytest-dotenv>=0.5.2,<1", # load environment variables from .env file
     "pytest-cov>=4.1.0,<5", # generate coverage report
     "pytest-benchmark>=5.0.0,<6", # benchmark tests for speed
-    "atomworks==1.0.2",
+    # "atomworks==1.0.2",
+    "pre-commit"
 ]
 [project.scripts]
 rf3 = "rf3.cli:app"

@@ -3,7 +3,7 @@ import numpy as np
 from biotite.structure.info import residue
 from scipy.spatial.distance import cdist
 
-from modelhub.metrics.base import Metric
+from modelhub.metrics.metric import Metric
 
 
 def collapsing_virtual_atoms_batched(

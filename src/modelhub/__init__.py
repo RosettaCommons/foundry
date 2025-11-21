@@ -49,5 +49,9 @@ try:
 except ImportError:
     logger.debug("cuEquivariance unavailable: import failed")
 
+
+# Whether to disable checkpointing globally
+DISABLE_CHECKPOINTING = False
+
 # Export for easy access
-__all__ = ["SHOULD_USE_CUEQUIVARIANCE"]
+__all__ = ["SHOULD_USE_CUEQUIVARIANCE", "DISABLE_CHECKPOINTING"]

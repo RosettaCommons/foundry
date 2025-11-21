@@ -44,6 +44,7 @@ def set_accelerator_based_on_availability(cfg: dict | DictConfig):
         cfg.trainer.num_nodes = 1
     else:
         cfg.trainer.accelerator = "gpu"
+    return cfg
 
 
 class RankedLogger(logging.LoggerAdapter):

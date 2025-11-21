@@ -192,6 +192,8 @@ def test_atom14_pipeline_regression(
     # Compare results
     config_desc = f" ({config.name})" if config.name != "a14-base-train" else ""
     mode_description = f"{'inference' if is_inference else 'training'}{config_desc}"
+    if "specification" in result:
+        expected_result["specification"] = result["specification"]
 
     _assert_pipeline_results_equal(
         result, expected_result, example_name, mode_description

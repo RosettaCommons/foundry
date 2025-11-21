@@ -258,7 +258,7 @@ def _viz_from_file(
             atom_array = pickle.load(f)
     elif file_path.endswith((".cif", ".cif.gz", ".bcif", ".bcif.gz")):
         from atomworks.io.utils.io_utils import get_structure, read_any
-        from rfd3.inference.inference_utils import (
+        from rfd3.utils.inference import (
             _add_design_annotations_from_cif_block_metadata,
         )
 

@@ -4,30 +4,6 @@ import torch.nn as nn
 from modelhub.training.checkpoint import activation_checkpointing
 
 
-class Loss(nn.Module):
-    def __init__(self, **losses):
-        super().__init__()
-        self.to_compute = []
-        for loss_name, loss in losses.items():
-            loss_fn = hydra.utils.instantiate(loss)
-            print(f"Adding loss {loss_name} to the loss function")
-            self.to_compute.append(loss_fn)
-
-    def forward(
-        self,
-        network_input,
-        network_output,
-        loss_input,
-    ):
-        loss_dict = {}
-        loss = 0
-        for loss_fn in self.to_compute:
-            loss_, loss_dict_ = loss_fn(network_input, network_output, loss_input)
-            loss += loss_
-            loss_dict.update(loss_dict_)
-        loss_dict["total_loss"] = loss.detach()
-        return loss, loss_dict
-
 class SequenceLoss(nn.Module):
     def __init__(self, weight, min_t=0, max_t=torch.inf):
         super().__init__()
@@ -80,7 +56,7 @@ class SequenceLoss(nn.Module):
         return self.weight * token_loss, outs
 
 
-class SimpleDiffusionLoss(nn.Module):
+class DiffusionLoss(nn.Module):
     def __init__(
         self,
         *,
@@ -94,8 +70,7 @@ class SimpleDiffusionLoss(nn.Module):
         unindexed_t_alpha=1.0,
         unindexed_norm_p=1.0,
         lp_weight=0.0,
-        normalize_virtual_atom_weight=False,
-        alpha_normalized_virtual_atom_weight=3.9,
+        **_,  # dump args from old configs
     ):
         super().__init__()
         self.weight = weight
@@ -108,8 +83,6 @@ class SimpleDiffusionLoss(nn.Module):
         self.unindexed_t_alpha = unindexed_t_alpha
         self.lp_weight = lp_weight
         self.alpha_ligand = alpha_ligand
-        self.normalize_virtual_atom_weight = normalize_virtual_atom_weight
-        self.alpha_normalized_virtual_atom_weight = alpha_normalized_virtual_atom_weight
         self.alpha_polar_residues = alpha_polar_residues
 
         self.get_lambda = (
@@ -123,18 +96,10 @@ class SimpleDiffusionLoss(nn.Module):
         crd_mask_L = loss_input["crd_mask_L"]  # (D, L)
         crd_mask_L = crd_mask_L.unsqueeze(0).expand(D, -1)
         tok_idx = network_input["f"]["atom_to_token_map"]
-        is_motif_token = network_input["f"]["is_motif_token"]  # N
         t = network_input["t"]  # (D,)
         is_original_unindexed_token = loss_input["is_original_unindexed_token"][tok_idx]
         is_polar_atom = network_input["f"]["is_polar"][tok_idx]
         is_ligand = network_input["f"]["is_ligand"][tok_idx]
-
-        # Treat fully fixed atoms as non-lossable atoms to provide stable normalization
-        # is_motif_atom_with_fixed_coord = network_input["f"][
-        #     "is_motif_atom_with_fixed_coord"
-        # ]
-        # crd_mask_L = crd_mask_L * ~is_motif_atom_with_fixed_coord[None]
-
         is_virtual_atom = network_input["f"]["is_virtual"]  # L
         is_sidechain_atom = network_input["f"]["is_sidechain"]  # L
         is_sidechain_atom = is_sidechain_atom & ~is_virtual_atom
@@ -148,29 +113,6 @@ class SimpleDiffusionLoss(nn.Module):
 
         # Upweight polar residues
         w_L[is_polar_atom] *= self.alpha_polar_residues
-
-        if self.normalize_virtual_atom_weight:
-            # Divide by the number of virtual atoms within a token
-            n_virtual_atoms_per_token = torch.zeros_like(is_motif_token).float()
-            n_virtual_atoms_per_token.scatter_add_(
-                0, tok_idx.long(), is_virtual_atom.float()
-            )
-            n_virtual_atoms_per_token = n_virtual_atoms_per_token.clamp(min=1)
-
-            # Also divide by the number of heavy atoms within a token
-            n_sc_atoms_per_token = torch.zeros_like(is_motif_token).float()
-            n_sc_atoms_per_token.scatter_add_(
-                0, tok_idx.long(), is_sidechain_atom.float()
-            )
-            n_sc_atoms_per_token = n_sc_atoms_per_token.clamp(min=1)
-
-            w_L[is_virtual_atom] /= (
-                self.alpha_normalized_virtual_atom_weight
-            ) * n_virtual_atoms_per_token[tok_idx][is_virtual_atom]
-            w_L[is_sidechain_atom] /= (
-                10 - self.alpha_normalized_virtual_atom_weight
-            ) * n_sc_atoms_per_token[tok_idx][is_sidechain_atom]
-
         w_L = w_L[None].expand(D, -1) * crd_mask_L
 
         X_gt_L = torch.nan_to_num(loss_input["X_gt_L_in_input_frame"])

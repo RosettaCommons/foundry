@@ -5,11 +5,11 @@ from contextlib import ExitStack
 
 import torch
 import torch.nn as nn
-from rfd3.model.block_utils import (
+from rfd3.model.layers.block_utils import (
     bucketize_scaled_distogram,
     create_attention_indices,
 )
-from rfd3.model.blocks import (
+from rfd3.model.layers.blocks import (
     CompactStreamingDecoder,
     Downcast,
     LinearEmbedWithPool,
@@ -17,17 +17,14 @@ from rfd3.model.blocks import (
     LocalAtomTransformer,
     LocalTokenTransformer,
 )
-from rfd3.model.encoders import (
+from rfd3.model.layers.encoders import (
     DiffusionTokenEncoder,
 )
+from rfd3.model.layers.layer_utils import RMSNorm, linearNoBias
 
-from modelhub.model.AF3_structure import (
+from modelhub.model.layers.blocks import (
     FourierEmbedding,
 )
-from modelhub.model.layers.af3_diffusion_transformer import (
-    DiffusionTransformer,
-)
-from modelhub.model.layers.layer_utils import RMSNorm, linearNoBias
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +50,7 @@ class RFD3DiffusionModule(nn.Module):
         atom_attention_decoder,
         # upcast,
         downcast,
-        use_local_token_attention=False,
+        use_local_token_attention=True,
         **_,
     ):
         super().__init__()
@@ -111,20 +108,12 @@ class RFD3DiffusionModule(nn.Module):
             **diffusion_token_encoder,
         )
 
-        if not use_local_token_attention:
-            self.diffusion_transformer = DiffusionTransformer(
-                c_token=c_token,
-                c_tokenpair=c_z,
-                c_s=c_s,
-                **diffusion_transformer,
-            )
-        else:
-            self.diffusion_transformer = LocalTokenTransformer(
-                c_token=c_token,
-                c_tokenpair=c_z,
-                c_s=c_s,
-                **diffusion_transformer,
-            )
+        self.diffusion_transformer = LocalTokenTransformer(
+            c_token=c_token,
+            c_tokenpair=c_z,
+            c_s=c_s,
+            **diffusion_transformer,
+        )
 
         self.decoder = CompactStreamingDecoder(
             c_atom=c_atom,
@@ -342,21 +331,18 @@ class RFD3DiffusionModule(nn.Module):
         )
 
         # ... Diffusion transformer
-        if not self.use_local_token_attention:
-            A_I = self.diffusion_transformer(A_I, S_I, Z_II, Beta_II=None)
-        else:
-            A_I = self.diffusion_transformer(
-                A_I,
-                S_I,
-                Z_II,
-                f=f,
-                X_L=(
-                    X_noisy_L[..., f["is_ca"], :]
-                    if X_L_self is None
-                    else X_L_self[..., f["is_ca"], :]
-                ),
-                full=not (os.environ.get("RFD3_LOW_MEMORY_MODE", None) == "1"),
-            )
+        A_I = self.diffusion_transformer(
+            A_I,
+            S_I,
+            Z_II,
+            f=f,
+            X_L=(
+                X_noisy_L[..., f["is_ca"], :]
+                if X_L_self is None
+                else X_L_self[..., f["is_ca"], :]
+            ),
+            full=not (os.environ.get("RFD3_LOW_MEMORY_MODE", None) == "1"),
+        )
 
         # ... Decoder readout
         # Check if using chunked P_LL mode

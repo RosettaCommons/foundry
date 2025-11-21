@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 from atomworks.common import exists
 from atomworks.enums import ChainType
-from atomworks.ml.datasets import logger, StructuralDatasetWrapper
+from atomworks.ml.datasets import StructuralDatasetWrapper, logger
 from atomworks.ml.datasets.parsers import (
     MetadataRowParser,
     load_example_from_metadata_row,

@@ -624,35 +624,33 @@ def build_atom14_base_pipeline(
         kwargs.setdefault("crop_spatial_probability", 0.0)
         kwargs.setdefault("dna_contact_crop_probability", 0.0)
         kwargs.setdefault("max_atoms_in_crop", None)
-        kwargs.setdefault("b_factor_min", None)
-        kwargs.setdefault("zero_occ_on_exposure_after_cropping", False)
-        kwargs.setdefault("meta_conditioning_probabilities", {})
-        kwargs.setdefault("association_scheme", "atom14")
-
-        kwargs.setdefault("sigma_perturb", 0.0)
-        kwargs.setdefault("sigma_perturb_com", 0.0)
-        kwargs.setdefault("allowed_types", "ALL")
-        kwargs.setdefault("train_conditions", {})
-
-        # TODO: Delete these once all checkpoints are updated with the latest defaults
-        kwargs.setdefault("generate_conformers_for_non_protein_only", True)
-        kwargs.setdefault("atom_1d_features", None)
-        kwargs.setdefault("token_1d_features", None)
-        kwargs.setdefault("diffusion_batch_size", 16)
-        kwargs.setdefault("sigma_data", 16)
-        kwargs.setdefault("return_atom_array", True)
-        kwargs.setdefault("provide_elements_for_unindexed_components", False)
-        kwargs.setdefault("center_option", "all")
-        kwargs.setdefault("use_element_for_atom_names_of_atomized_tokens", False)
-
-        kwargs.setdefault("residue_cache_dir", None)
         kwargs.setdefault("keep_full_binder_in_spatial_crop", True)
-        kwargs.setdefault("max_binder_length", 999)
         kwargs.setdefault("max_ppi_hotspots_frac_to_provide", 0)
         kwargs.setdefault("ppi_hotspot_max_distance", 15)
         kwargs.setdefault("max_ss_frac_to_provide", 0.0)
         kwargs.setdefault("min_ss_island_len", 0)
         kwargs.setdefault("max_ss_island_len", 999)
+        kwargs.setdefault("max_binder_length", 999)
+
+        kwargs.setdefault("b_factor_min", None)
+        kwargs.setdefault("zero_occ_on_exposure_after_cropping", False)
+        kwargs.setdefault("meta_conditioning_probabilities", {})
+        kwargs.setdefault("association_scheme", "dense")
+        kwargs.setdefault("sigma_perturb", 0.0)
+        kwargs.setdefault("sigma_perturb_com", 0.0)
+        kwargs.setdefault("allowed_types", "ALL")
+        kwargs.setdefault("train_conditions", {})
+        kwargs.setdefault("residue_cache_dir", None)
+
+        # TODO: Delete these once all checkpoints are updated with the latest defaults
+        kwargs.setdefault("generate_conformers_for_non_protein_only", True)
+        # kwargs.setdefault("atom_1d_features", None)
+        # kwargs.setdefault("token_1d_features", None)
+        # kwargs.setdefault("diffusion_batch_size", 16)
+        # kwargs.setdefault("sigma_data", 16)
+        kwargs.setdefault("return_atom_array", True)
+        kwargs.setdefault("provide_elements_for_unindexed_components", False)
+        kwargs.setdefault("center_option", "all")
 
     return build_atom14_base_pipeline_(
         is_inference=is_inference,

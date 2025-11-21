@@ -35,17 +35,6 @@ dataset:
     use_element_for_atom_names_of_atomized_tokens: ${datasets.global_transform_args.use_element_for_atom_names_of_atomized_tokens}
     residue_cache_dir: ${paths.data.residue_cache_dir}
 
-    # PPI
-    keep_full_binder_in_spatial_crop: ${datasets.global_transform_args.keep_full_binder_in_spatial_crop}
-    max_binder_length: ${datasets.global_transform_args.max_binder_length}
-    max_ppi_hotspots_frac_to_provide: ${datasets.global_transform_args.max_ppi_hotspots_frac_to_provide}
-    ppi_hotspot_max_distance: ${datasets.global_transform_args.ppi_hotspot_max_distance}
-
-    # Secondary structure
-    max_ss_frac_to_provide: ${datasets.global_transform_args.max_ss_frac_to_provide}
-    min_ss_island_len: ${datasets.global_transform_args.min_ss_island_len}
-    max_ss_island_len: ${datasets.global_transform_args.max_ss_island_len}
-
     # Other dataset-specific parameters
     atom_1d_features: ${model.net.token_initializer.atom_1d_features}
     token_1d_features: ${model.net.token_initializer.token_1d_features}

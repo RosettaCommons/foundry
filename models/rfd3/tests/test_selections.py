@@ -3,17 +3,18 @@ import sys
 import numpy as np
 import pytest
 from atomworks.io.utils.io_utils import load_any
-from rfd3.inference.components import (
+from rfd3.inference.input_parsing import DesignInputSpecification
+from rfd3.inference.parsing import InputSelection
+from rfd3.testing.testing_utils import (
+    TEST_JSON_DATA,
+)
+
+from modelhub.utils.components import (
     fetch_mask_from_component,
     fetch_mask_from_idx,
     fetch_mask_from_name,
     get_name_mask,
     unravel_components,
-)
-from rfd3.inference.input_parsing import InputSpecification
-from rfd3.inference.parsing import InputSelection
-from rfd3.testing.testing_utils import (
-    TEST_JSON_DATA,
 )
 
 # TEST 1 - test the selections
@@ -116,7 +117,7 @@ atom_array_ref_unindexed = load_any(file)[0]
 def test_unindexed_break():
     # Assert that unindexed selections with breaks work
     sele = InputSelection.from_any(args["unindex"], atom_array=atom_array_ref_unindexed)
-    comps, breaks = InputSpecification.break_unindexed(sele)
+    comps, breaks = DesignInputSpecification.break_unindexed(sele)
 
 
 if __name__ == "__main__":

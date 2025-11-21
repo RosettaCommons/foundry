@@ -4,7 +4,6 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 
 import hydra
 import ipdb  # noqa: F401
@@ -38,7 +37,7 @@ print(f"Project root: {os.environ.get('PROJECT_ROOT', '../..')}")
 
 
 is_inference = True
-outdir = Path("/home/jbutch/Projects/HT25/af3/modelhub_refactor/rfd3/tests/outs")
+# outdir = Path("/home/jbutch/Projects/HT25/af3/modelhub_refactor/rfd3/tests/outs")
 args = TEST_JSON_DATA["1qys-1-refactored"]
 input = instantiate_example(args, is_inference=is_inference)
 
