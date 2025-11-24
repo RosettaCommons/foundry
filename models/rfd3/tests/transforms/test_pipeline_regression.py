@@ -180,10 +180,10 @@ def test_atom14_pipeline_regression(
     # Get regression data path using shared logic
     regression_path = _get_regression_data_path(example_name, is_inference, config.name)
 
-    # # Uncomment the following lines to create/update the regression data
-    # with regression_path.open("wb") as f:
-    #     pickle.dump(result, f)
-    #     logger.info(f"Saved regression data to {regression_path}")
+    # Uncomment the following lines to create/update the regression data
+    with regression_path.open("wb") as f:
+        pickle.dump(result, f)
+        logger.info(f"Saved regression data to {regression_path}")
 
     # Load expected result
     with regression_path.open("rb") as f:
