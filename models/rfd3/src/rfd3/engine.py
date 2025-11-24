@@ -81,6 +81,12 @@ class RFD3InferenceConfig:
         return getattr(self, key)
 
 
+@dataclass
+class RFD3Output:
+    atom_array: AtomArray
+    metadata: dict
+
+
 class RFD3InferenceEngine(BaseInferenceEngine):
     """Inference engine for RFdiffusion3"""
 
@@ -171,7 +177,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
             ranked_logger.info(f"Outputs will be written to {out_dir.resolve()}.")
         self.out_dir = out_dir
 
-    def _run_multi(self, specs):
+    def _run_multi(self, specs) -> None | Dict[str, List[RFD3Output]]:
         # ==============================================================================
         # Prepare pipeline and inference loader
         # ==============================================================================
@@ -211,11 +217,13 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                     pipeline_output=pipeline_output,
                 )
             else:
-                outputs[pipeline_output["example_id"]] = {
-                    "network_output": output["network_output"],
-                    "prediction_metadata": output["prediction_metadata"],
-                    "predicted_atom_array_stack": output["predicted_atom_array_stack"],
-                }
+                outputs[pipeline_output["example_id"]] = [
+                    RFD3Output(
+                        atom_array=output["predicted_atom_array_stack"][i],
+                        metadata=output["prediction_metadata"][i],
+                    )
+                    for i in range(len(output["predicted_atom_array_stack"]))
+                ]
         return outputs
 
     def _model_forward(self, pipeline_output):
