@@ -15,78 +15,23 @@ from modelhub.utils.rotation_augmentation import (
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 
-def centre_random_augment_around_motif(
-    X_L: torch.Tensor,  # (D, L, 3) noisy diffused coordinates
-    coord_atom_lvl_to_be_noised: torch.Tensor,  # (D, L, 3) original coordinates
-    is_motif_atom_with_fixed_coord: torch.Tensor,  # (D, L) indices in original coordinates to be kept constant
-    s_trans: float = 1.0,
-    center_option: str = "all",
-    centering_affects_motif: bool = True,
-    reinsert_motif=True,
-):
-    D, L, _ = X_L.shape
-
-    if reinsert_motif and torch.any(is_motif_atom_with_fixed_coord):
-        # ... Align original coordinates to the prediction
-        coords_with_gt_aligned = weighted_rigid_align(
-            X_L[..., is_motif_atom_with_fixed_coord, :],
-            coord_atom_lvl_to_be_noised[..., is_motif_atom_with_fixed_coord, :],
-        )
-
-        # ... Insert original coordinates into X_L
-        X_L[..., is_motif_atom_with_fixed_coord, :] = coords_with_gt_aligned
-
-    # ... Centering
-    if torch.any(is_motif_atom_with_fixed_coord):
-        if center_option == "motif":
-            center = torch.mean(
-                X_L[..., is_motif_atom_with_fixed_coord, :], dim=-2, keepdim=True
-            )  # (D, 1, 3) - COM of motif atoms
-        elif center_option == "diffuse":
-            center = torch.mean(
-                X_L[..., ~is_motif_atom_with_fixed_coord, :], dim=-2, keepdim=True
-            )  # (D, 1, 3) - COM of diffused atoms
-
-        else:
-            center = torch.mean(X_L, dim=-2, keepdim=True)
-    else:
-        center = torch.mean(X_L, dim=-2, keepdim=True)
-
-    # ... Center
-    if centering_affects_motif:
-        X_L = X_L - center
-    else:
-        X_L[..., ~is_motif_atom_with_fixed_coord, :] = (
-            X_L[..., ~is_motif_atom_with_fixed_coord, :] - center
-        )
-
-    # ... Random augmentation
-    R = uniform_random_rotation((D,)).to(X_L.device)
-    noise = (
-        torch.normal(mean=0, std=1, size=(D, 1, 3), device=X_L.device) * s_trans
-    )  # (D, 1, 3)
-    X_L = rot_vec_mul(R[:, None], X_L) + noise
-
-    return X_L, R
-
-
 @dataclass(kw_only=True)
-class SampleDiffusionWithMotif:
-    """Diffusion sampler that supports optional motif alignment."""
+class SampleDiffusionConfig:
+    kind: Literal["default", "symmetry"] = "default"
 
     # Standard EDM args
-    num_timesteps: int  # AF-3: 200
-    min_t: int  # AF-3: 0
-    max_t: int  # AF-3: 1
-    sigma_data: int  # AF-3: 16
-    s_min: float  # AF-3: 4e-4
-    s_max: int  # AF-3: 160
-    p: int  # AF-3: 7
-    gamma_0: float  # AF-3: 0.8
-    gamma_min: float  # AF-3: 1.0
-    noise_scale: float  # AF-3: 1.003
-    step_scale: float  # AF-3: 1.5
-    solver: Literal["af3"]
+    num_timesteps: int = 200
+    min_t: int = 0
+    max_t: int = 1
+    sigma_data: int = 16
+    s_min: float = 4e-4
+    s_max: int = 160
+    p: int = 7
+    gamma_0: float = 0.6
+    gamma_min: float = 1.0
+    noise_scale: float = 1.003
+    step_scale: float = 1.5
+    solver: Literal["af3"] = "af3"
 
     # RFD3 / design args
     center_option: str = "all"
@@ -99,8 +44,10 @@ class SampleDiffusionWithMotif:
     use_classifier_free_guidance: bool = False
     cfg_scale: float = 2.0
     cfg_t_max: float | None = None
-    use_frame_guidance: bool = False
-    fg_scale: float = 1.0
+
+
+class SampleDiffusionWithMotif(SampleDiffusionConfig):
+    """Diffusion sampler that supports optional motif alignment."""
 
     def _construct_inference_noise_schedule(
         self, device: torch.device, partial_t: float = None
@@ -339,11 +286,6 @@ class SampleDiffusionWithMotif:
 
                 # apply CFG
                 delta_L = delta_L + (self.cfg_scale - 1) * (delta_L - delta_L_ref)
-
-            if self.use_frame_guidance:
-                X_L_ref_frame = outs.get("X_L_ref_frame")
-                delta_L_ref = (X_noisy_L - X_L_ref_frame) / t_hat
-                delta_L = delta_L + (self.fg_scale - 1) * (delta_L - delta_L_ref)
 
             if exists(outs.get("sequence_logits_I")):
                 # Compute confidence
@@ -636,3 +578,58 @@ class ConditionalDiffusionSampler:
                         [param.name for param in signature.parameters.values()]
                     )
         return arg_names
+
+
+def centre_random_augment_around_motif(
+    X_L: torch.Tensor,  # (D, L, 3) noisy diffused coordinates
+    coord_atom_lvl_to_be_noised: torch.Tensor,  # (D, L, 3) original coordinates
+    is_motif_atom_with_fixed_coord: torch.Tensor,  # (D, L) indices in original coordinates to be kept constant
+    s_trans: float = 1.0,
+    center_option: str = "all",
+    centering_affects_motif: bool = True,
+    reinsert_motif=True,
+):
+    D, L, _ = X_L.shape
+
+    if reinsert_motif and torch.any(is_motif_atom_with_fixed_coord):
+        # ... Align original coordinates to the prediction
+        coords_with_gt_aligned = weighted_rigid_align(
+            X_L[..., is_motif_atom_with_fixed_coord, :],
+            coord_atom_lvl_to_be_noised[..., is_motif_atom_with_fixed_coord, :],
+        )
+
+        # ... Insert original coordinates into X_L
+        X_L[..., is_motif_atom_with_fixed_coord, :] = coords_with_gt_aligned
+
+    # ... Centering
+    if torch.any(is_motif_atom_with_fixed_coord):
+        if center_option == "motif":
+            center = torch.mean(
+                X_L[..., is_motif_atom_with_fixed_coord, :], dim=-2, keepdim=True
+            )  # (D, 1, 3) - COM of motif atoms
+        elif center_option == "diffuse":
+            center = torch.mean(
+                X_L[..., ~is_motif_atom_with_fixed_coord, :], dim=-2, keepdim=True
+            )  # (D, 1, 3) - COM of diffused atoms
+
+        else:
+            center = torch.mean(X_L, dim=-2, keepdim=True)
+    else:
+        center = torch.mean(X_L, dim=-2, keepdim=True)
+
+    # ... Center
+    if centering_affects_motif:
+        X_L = X_L - center
+    else:
+        X_L[..., ~is_motif_atom_with_fixed_coord, :] = (
+            X_L[..., ~is_motif_atom_with_fixed_coord, :] - center
+        )
+
+    # ... Random augmentation
+    R = uniform_random_rotation((D,)).to(X_L.device)
+    noise = (
+        torch.normal(mean=0, std=1, size=(D, 1, 3), device=X_L.device) * s_trans
+    )  # (D, 1, 3)
+    X_L = rot_vec_mul(R[:, None], X_L) + noise
+
+    return X_L, R

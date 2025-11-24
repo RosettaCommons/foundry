@@ -5,10 +5,9 @@ import os
 import hydra
 import rootutils
 from dotenv import load_dotenv
-from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
-from modelhub.utils.logging import suppress_warnings
+from rfd3.engine import RFD3InferenceConfig, RFD3InferenceEngine
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
@@ -18,6 +17,24 @@ load_dotenv(override=True)
 
 # If the user has set `PROJECT_PATH`, use it to build the config path; otherwise, fall back to `PROJECT_ROOT`
 _config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rfd3/configs")
+
+
+# def run_inference_without_hydra(
+#     inputs,
+#     out_dir,
+#     n_batches,
+#     **kwargs
+# ) -> None:
+
+#     # Create config
+#     from rfd3.engine import RFD3InferenceConfig, RFD3InferenceEngine
+#     conf = RFD3InferenceConfig(**kwargs)
+#     with RFD3InferenceEngine(**conf) as engine:
+#         return engine.run(
+#             inputs=inputs,
+#             out_dir=out_dir,
+#             n_batches=n_batches
+#         )
 
 
 @hydra.main(
@@ -35,11 +52,22 @@ def run_inference(cfg: DictConfig) -> None:
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
     init_cfg_dict = {k: v for k, v in cfg_dict.items() if k not in run_params_set}
     init_cfg = OmegaConf.create(init_cfg_dict)
-    inference_engine = instantiate(init_cfg, _convert_="partial", _recursive_=False)
 
-    # # Run inference
-    with suppress_warnings(is_inference=True):
-        inference_engine.run(**run_params)
+    # Run
+    init_cfg_dict = {k: v for k, v in init_cfg_dict.items() if k not in ["_target_"]}
+    init_cfg = RFD3InferenceConfig(**init_cfg_dict)
+    engine = RFD3InferenceEngine(**init_cfg)
+
+    import ipdb
+
+    ipdb.set_trace()
+    engine.run(**run_params)
+
+    # inference_engine = instantiate(init_cfg, _convert_="partial", _recursive_=False)
+
+    # # # Run inference
+    # with suppress_warnings(is_inference=True):
+    #     inference_engine.run(**run_params)
 
 
 if __name__ == "__main__":

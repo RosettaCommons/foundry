@@ -2,9 +2,10 @@ import json
 import logging
 import os
 import time
+from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import torch
 import yaml
@@ -19,6 +20,7 @@ from rfd3.inference.datasets import (
     assemble_distributed_inference_loader_from_json,
 )
 from rfd3.inference.input_parsing import DesignInputSpecification
+from rfd3.model.inference_sampler import SampleDiffusionConfig
 from rfd3.utils.inference import ensure_input_is_abspath
 from rfd3.utils.io import (
     CIF_LIKE_EXTENSIONS,
@@ -31,6 +33,52 @@ from rfd3.utils.io import (
 
 logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
+
+
+@dataclass(kw_only=True)
+class RFD3InferenceConfig:
+    ckpt_path: str = "/projects/ml/aa_design/models/rfd3_latest_cleaned.ckpt"
+    diffusion_batch_size: int = 16
+
+    # RFD3 specific
+    skip_existing: bool = False
+    json_keys_subset: Optional[List[str]] = None
+    skip_existing: bool = True
+    specification: Optional[dict] = field(default_factory=dict)
+    inference_sampler: SampleDiffusionConfig | dict = field(default_factory=dict)
+
+    # Saving args
+    cleanup_guideposts: bool = True
+    cleanup_virtual_atoms: bool = True
+    read_sequence_from_sequence_head: bool = True
+    output_full_json: bool = True
+
+    # Prefix to add to all output samples
+    # Default: None      -> f'{jsonfilebasename}_{jsonkey}_{batch}_{model}'
+    # Otherwise: string  -> f'{string}{jsonkey}_{batch}_{model}'
+    # e.g. Empty string  -> f'{jsonkey}_{batch}_{model}'
+    # e.g. Chunk string  -> f'{chunkprefix_}{jsonkey}_{batch}_{model}' (pipelines usage)
+    global_prefix: Optional[str] = None
+    dump_prediction_metadata_json: bool = True
+    dump_trajectories: bool = False
+    align_trajectory_structures: bool = False
+    prevalidate_inputs: bool = True
+    low_memory_mode: bool = (
+        False  # False for standard mode, True for memory efficient tokenization mode
+    )
+
+    # Other:
+    num_nodes: int = 1
+    devices_per_node: int = 1
+    print_config: bool = False
+    seed: Optional[int] = None
+
+    # For use as mapping:
+    def keys(self):
+        return self.__dataclass_fields__.keys()
+
+    def __getitem__(self, key):
+        return getattr(self, key)
 
 
 class RFD3InferenceEngine(BaseInferenceEngine):
@@ -234,7 +282,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                 f"Invalid input type: {type(inputs)}. Expected JSON/YAML file paths, AtomArray, or DesignInputSpecification.\nInput: {inputs}"
             )
 
-        return design_specifications
+        return inputs
 
     def _multiply_specifications(
         self, inputs: Dict[str, dict | DesignInputSpecification], n_batches=None

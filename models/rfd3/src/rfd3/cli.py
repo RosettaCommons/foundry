@@ -28,10 +28,13 @@ def design(ctx: typer.Context):
 
     with initialize_config_dir(config_dir=config_path, version_base="1.3"):
         cfg = compose(config_name="inference", overrides=args)
+
         # Lazy import to avoid loading heavy dependencies at CLI startup
+        from modelhub.utils.logging import suppress_warnings
         from rfd3.run_inference import run_inference
 
-        run_inference(cfg)
+        with suppress_warnings(is_inference=True):
+            run_inference(cfg)
 
 
 if __name__ == "__main__":

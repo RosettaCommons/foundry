@@ -44,7 +44,8 @@ dependencies = [
     "zstandard",
     "pandas",
     # "biotite",
-    "atomworks"
+    "atomworks",
+    "ipykernel>=6.31.0",
 ]
 
 

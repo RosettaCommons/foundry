@@ -162,7 +162,7 @@ class ContigJsonDataset(MolecularDataset):
         if not isinstance(spec, DesignInputSpecification):
             spec = ensure_input_is_abspath(spec, self.json_path)
             spec["cif_parser_args"] = self.cif_parser_args
-            spec = DesignInputSpecification(**spec)
+            spec = DesignInputSpecification.safe_init(**spec)
 
         # Create pipeline input
         data = spec.to_pipeline_input(example_id=example_id)
