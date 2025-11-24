@@ -429,7 +429,7 @@ def create_atom_array_from_design_specification_legacy(
     symmetry: dict = None,
     # Low-temperature global conditioning args
     plddt_enhanced: bool = True,
-    is_non_loopy: bool | None = True,
+    is_non_loopy: bool | None = None,
     # Partial diff args:
     partial_t: float | None = None,  # Optional noise scale for partial diffusion
     **_,  # dump additional args

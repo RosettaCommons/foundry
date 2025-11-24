@@ -179,7 +179,7 @@ class DesignInputSpecification(BaseModel):
     infer_ori_strategy: Optional[str] = Field(None, description="Strategy for inferring origin; `com` or `hotspots`")
     # Additional global conditioning
     plddt_enhanced: Optional[bool] = Field(True, description="Enable pLDDT enhancement")
-    is_non_loopy: Optional[bool] = Field(True, description="Non-loopy conditioning")
+    is_non_loopy: Optional[bool] = Field(None, description="Non-loopy conditioning")
     # Partial diffusion
     partial_t: Optional[float] = Field(None, ge=0.0, description="Angstroms of noise to add for partial diffusion (None turns off partial diffusion), t <= 15 recommended.")
     # fmt: on
