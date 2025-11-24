@@ -44,7 +44,7 @@
 
 | Field                                                          | Type              | Description                                                           |
 | -------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------- |
-| `input`                                                        | `str?`             | Path to input **PDB/CIF**. Required if you provide contig+length.    |
+| `input`                                                        | `str?`            | Path to input **PDB/CIF**. Required if you provide contig+length.    |
 | `atom_array_input`                                             | internal          | Pre-loaded `AtomArray` (not recommended).                             |
 | `contig`                                                       | `InputSelection?` | Indexed motif specification, e.g., `"A1-80,10,\0,B5-12"`.             |
 | `unindex`                                                      | `InputSelection?` | Unindexed motif components (unknown sequence placement).              |

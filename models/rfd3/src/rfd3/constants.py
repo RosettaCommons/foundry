@@ -26,6 +26,9 @@ OPTIONAL_CONDITIONING_VALUES = {
     "ref_plddt": 0,
     "is_non_loopy": 0,
     "partial_t": np.nan,
+    # kept for legacy reasons
+    "is_motif_token": 1,
+    "is_motif_atom": 1,
 }
 """Optional conditioning annotations and their default values if not provided."""
 

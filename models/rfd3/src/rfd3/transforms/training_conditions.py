@@ -522,7 +522,9 @@ def sample_unindexed_breaks(
     token_idxs = np.arange(len(starts))
     breaks_all = np.zeros(len(starts), dtype=bool)
 
-    if np.any(is_unindexed_token):
+    if is_unindexed_token.sum() == 1:
+        breaks_all = is_unindexed_token
+    elif np.any(is_unindexed_token):
         # ... Subset to unindexed tokens
         unindexed_token_starts = starts[is_unindexed_token]
         unindexed_token_resid = atom_array[unindexed_token_starts].res_id

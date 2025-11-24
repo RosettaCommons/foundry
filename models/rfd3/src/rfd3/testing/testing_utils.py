@@ -111,7 +111,12 @@ DIRS = [
 
 def load_test_json():
     test_files = ["demo.json", "demo_extended.json", "tests.json"]
-    test_files += ["mcsa_41.json", "rfd_unindexed.json", "sym_tests.json"]
+    test_files += [
+        "mcsa_41.json",
+        "rfd_unindexed.json",
+        "sym_tests.json",
+        "brk_regression.json",
+    ]
     test_json_data = {}
     for dir in DIRS:
         test_data_dir = Path(dir, "test_data")
@@ -163,10 +168,6 @@ def instantiate_example(args, is_inference=True):
     args = copy.deepcopy(args)
 
     if is_inference:
-        # Keep only the kwargs that the function actually accepts
-        # args = filter_inference_args(args)
-        # atom_array, spec = create_atom_array_from_design_specification(**args)
-        # input = prepare_pipeline_input_from_atom_array(atom_array)
         input = DesignInputSpecification.safe_init(**args).to_pipeline_input(
             example_id=args.get("example_id", "example")
         )

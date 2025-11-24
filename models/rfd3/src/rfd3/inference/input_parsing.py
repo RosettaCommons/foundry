@@ -46,6 +46,7 @@ from rfd3.transforms.conditioning_base import (
 )
 from rfd3.transforms.util_transforms import assign_types_
 from rfd3.utils.inference import (
+    _restore_bonds_for_nonstandard_residues,
     extract_ligand_array,
     inference_load_,
     set_com,
@@ -81,7 +82,7 @@ class LegacySpecification(BaseModel):
     def build(self, *args, **kwargs):
         """Build atom array using legacy input parsing."""
         atom_array = create_atom_array_from_design_specification_legacy(
-            design_specification=self.model_dump(),
+            **self.model_dump(),
         )
         return atom_array, self.model_dump()
 
@@ -377,7 +378,6 @@ class DesignInputSpecification(BaseModel):
                     "RASA",
                     ("select_buried", "select_partially_buried", "select_exposed"),
                 ),
-                ("Hydrogen bonds", ("select_hbond_acceptor", "select_hbond_donor")),
             ]
 
             for name, excl_set in exclusive_sets:
@@ -573,6 +573,8 @@ class DesignInputSpecification(BaseModel):
                 unindexed_tokens=unindexed_tokens,
                 atom_array_accum=[],
                 unindexed_breaks=unindexed_breaks,
+                start_chain="A",
+                start_resid=1,
             )
         else:
             # ... Set common annotations
@@ -661,6 +663,14 @@ class DesignInputSpecification(BaseModel):
                     list(atom_array.get_annotation_categories())
                     + list(atom_array_input_annotated.get_annotation_categories())
                 ),
+            )
+            # Offset ligand residue ids based on the original input to avoid clashes
+            # with any newly created residues (matches legacy behaviour).
+            ligand_array.res_id = (
+                ligand_array.res_id
+                - np.min(ligand_array.res_id)
+                + np.max(atom_array.res_id)
+                + 1
             )
             atom_array = atom_array + ligand_array
         return atom_array
@@ -802,6 +812,15 @@ def prepare_pipeline_input_from_atom_array(  # see atomworks.ml.datasets.parsers
     atom_array = convert_existing_annotations_to_bool(atom_array)
     atom_array.set_annotation("chain_iid", [f"{c}_1" for c in atom_array.chain_id])
     atom_array.set_annotation("pn_unit_iid", [f"{c}_1" for c in atom_array.pn_unit_id])
+
+    # Ensure motif annotations are removed
+    atom_array.del_annotation(
+        "is_motif_token"
+    ) if "is_motif_token" in atom_array.get_annotation_categories() else None
+    atom_array.del_annotation(
+        "is_motif_atom"
+    ) if "is_motif_atom" in atom_array.get_annotation_categories() else None
+
     data = {
         "atom_array": atom_array,  # First model
         "chain_info": result_dict["chain_info"],
@@ -933,6 +952,8 @@ def accumulate_components(
     start_chain: str = "A",
     start_resid: int = 1,
     unindexed_breaks: Optional[List[bool]] = [],
+    src_atom_array: Optional[AtomArray] = None,
+    strip_sidechains_by_default: bool = False,
     **kwargs,
 ) -> AtomArray:
     # ... Create list of components
@@ -950,6 +971,12 @@ def accumulate_components(
         for tok in all_tokens.values()
     ]
     all_annots = set(all_annots)
+    atom_array_accum = [] if atom_array_accum is None else atom_array_accum
+    unindexed_breaks = (
+        [None] * len(components_to_accumulate)
+        if unindexed_breaks is None
+        else unindexed_breaks
+    )
 
     # ... For-loop accum variables
     unindexed_components_started = (
@@ -958,12 +985,21 @@ def accumulate_components(
     chain = start_chain
     res_id = start_resid
     molecule_id = 0
+    source_to_accum_idx: Dict[int, int] = {}
+    current_accum_idx = sum(len(arr) for arr in atom_array_accum)
 
     # ... Insert contig information one- by one-
     assert len(components_to_accumulate) == len(
         unindexed_breaks
     ), "Mismatch in number of components to accumulate and breaks"
     for component, is_break in zip(components_to_accumulate, unindexed_breaks):
+        src_indices = None
+        if exists(is_break) and is_break:
+            if not unindexed_components_started:
+                chain = start_chain
+                res_id = start_resid
+                unindexed_components_started = True
+
         if component == "/0":
             # Reset iterators on next chain
             chain = chr(ord(chain) + 1)
@@ -977,12 +1013,21 @@ def accumulate_components(
 
             # ... Fetch the motif residue
             token = all_tokens[component]
+            if src_atom_array is not None:
+                src_mask = fetch_mask_from_idx(component, atom_array=src_atom_array)
+                src_indices = np.where(src_mask)[0]
+                # try:
+                # except ComponentValidationError as e:
+                #     src_indices = None
+                #     print(e)
+
+            # ... Ensure motif residues are set properly
+            token = create_motif_residue(
+                token, strip_sidechains_by_default=strip_sidechains_by_default
+            )
 
             # ... Insert breakpoint when break clause is met
             if exists(is_break) and is_break:
-                if not unindexed_components_started:
-                    chain = start_chain
-                    unindexed_components_started = True
                 token.set_annotation(
                     "is_motif_atom_unindexed_motif_breakpoint",
                     np.ones(token.shape[0], dtype=int),
@@ -1015,15 +1060,42 @@ def accumulate_components(
             len(get_token_starts(token)) == n
         ), f"Mismatch in number of residues: expected {n}, got {len(get_token_starts(token))} in \n{token}"
 
+        if (
+            src_atom_array is not None
+            and str(component)[0].isalpha()
+            and src_indices is not None
+            and len(src_indices) == len(token)
+        ):
+            for i, src_idx in enumerate(src_indices):
+                source_to_accum_idx[int(src_idx)] = current_accum_idx + i
+
         # ... Insert & Increment residue ID
         atom_array_accum.append(token)
         res_id += n
+        current_accum_idx += len(token)
 
     # ... Concatenate all components
     atom_array_accum = struc.concatenate(atom_array_accum)
     atom_array_accum.set_annotation("pn_unit_iid", atom_array_accum.chain_id)
 
-    # Reset res_id for unindexed residues to avoid duplicates
+    should_restore_bonds = (
+        src_atom_array is not None
+        and bool(source_to_accum_idx)
+        and _check_has_backbone_connections_to_nonstandard_residues(
+            atom_array_accum, src_atom_array
+        )
+    )
+    if should_restore_bonds:
+        assert not unindexed_tokens, (
+            "PTM backbone bond restoration is not compatible with unindexed components. "
+            "PTMs must be specified as indexed components (using 'contig' parameter, not 'unindex'). "
+            f"Found unindexed components: {list(unindexed_tokens.keys())}"
+        )
+        atom_array_accum = _restore_bonds_for_nonstandard_residues(
+            atom_array_accum, src_atom_array, source_to_accum_idx
+        )
+
+    # Reset res_id for unindexed residues to avoid duplicates (ridiculously long lines of code, cleanup later)
     if np.any(atom_array_accum.is_motif_atom_unindexed.astype(bool)) and not np.all(
         atom_array_accum.is_motif_atom_unindexed.astype(bool)
     ):
@@ -1032,9 +1104,14 @@ def accumulate_components(
                 ~atom_array_accum.is_motif_atom_unindexed.astype(bool)
             ].res_id
         )
+        min_id_udx = np.min(
+            atom_array_accum[
+                atom_array_accum.is_motif_atom_unindexed.astype(bool)
+            ].res_id
+        )
         atom_array_accum.res_id[
             atom_array_accum.is_motif_atom_unindexed.astype(bool)
-        ] += max_id + 1
+        ] += max_id - min_id_udx + 1
 
     # ... Bonds
     if atom_array_accum.bonds is None:

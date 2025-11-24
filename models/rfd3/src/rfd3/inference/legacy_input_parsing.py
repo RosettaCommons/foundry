@@ -10,7 +10,6 @@ from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from atomworks.ml.utils.token import (
     get_token_starts,
-    spread_token_wise,
 )
 from rfd3.constants import (
     INFERENCE_ANNOTATIONS,
@@ -372,7 +371,7 @@ def accumulate_components(
     atom_array_accum = struc.concatenate(atom_array_accum)
     atom_array_accum.set_annotation("pn_unit_iid", atom_array_accum.chain_id)
 
-    # Reset res_id for unindexed residues to avoid duplicates
+    # Reset res_id for unindexed residues to avoid duplicates (ridiculously long lines of code, cleanup later)
     if np.any(atom_array_accum.is_motif_atom_unindexed.astype(bool)) and not np.all(
         atom_array_accum.is_motif_atom_unindexed.astype(bool)
     ):
@@ -381,9 +380,14 @@ def accumulate_components(
                 ~atom_array_accum.is_motif_atom_unindexed.astype(bool)
             ].res_id
         )
+        min_id_udx = np.min(
+            atom_array_accum[
+                atom_array_accum.is_motif_atom_unindexed.astype(bool)
+            ].res_id
+        )
         atom_array_accum.res_id[
             atom_array_accum.is_motif_atom_unindexed.astype(bool)
-        ] += max_id + 1
+        ] += max_id - min_id_udx + 1
 
     return atom_array_accum
 
@@ -406,7 +410,6 @@ def create_atom_array_from_design_specification_legacy(
     unfix_all=False,
     unfix_specific: str = None,
     flexible_backbone: bool = False,
-    is_d_amino_acid=None,
     # Args for biomolecular design (Enzymes, DNA/PNA):
     ligand: str = None,
     ori_token: list[float] = None,
@@ -556,7 +559,7 @@ def create_atom_array_from_design_specification_legacy(
         if indexed_components and indexed_components_provided:
             for component in indexed_components:
                 if str(component)[0].isalpha():
-                    mask = fetch_residue_mask(atom_array, component)
+                    mask = fetch_mask_from_component(component, atom_array=atom_array)
 
                     # Set the component as a motif token
                     set_default_conditioning_annotations(
@@ -624,31 +627,24 @@ def create_atom_array_from_design_specification_legacy(
     is_motif_atom = f["is_motif_atom"]
     atom_array.set_annotation("is_motif_atom", is_motif_atom.astype(int))
 
-    # This is an annotation on the diffused regions, so must be added after accumulate_components
-    if spoof_helical_bundle_ss_conditioning:
-        is_helix = spoof_helical_bundle_ss_conditioning_fn(atom_array)
-        is_sheet = None
-        is_loop = None
-    if exists(is_helix):
-        set_atom_level_argument(atom_array, is_helix, "is_helix")
-    if exists(is_sheet):
-        set_atom_level_argument(atom_array, is_sheet, "is_sheet")
-        optional_conditions.append("is_sheet")
-    if exists(is_loop):
-        set_atom_level_argument(atom_array, is_loop, "is_loop")
-        optional_conditions.append("is_loop")
-
-    is_non_loopy_annot = np.zeros(atom_array.array_length(), dtype=int)
-    diffused_region_mask = ~(is_motif_token.astype(bool))
-    if exists(is_non_loopy):
-        is_non_loopy_annot[diffused_region_mask] = 1 if is_non_loopy else -1
-
-    atom_array.set_annotation("is_non_loopy", is_non_loopy_annot)
-    atom_array.set_annotation("is_non_loopy_atom_level", is_non_loopy_annot)
-
     # ... If ligand, post-pend it
     if exists(ligand):
-        ligand_array = extract_ligand_array(atom_array_input, ligand, fixed_atoms)
+        ligand_array = extract_ligand_array(
+            atom_array_input,
+            ligand,
+            fixed_atoms,
+            additional_annotations=set(
+                list(atom_array.get_annotation_categories())
+                + list(atom_array_input.get_annotation_categories())
+                + ["is_motif_atom", "is_motif_token"]
+            ),
+        )
+        ligand_array.res_id = (
+            ligand_array.res_id
+            - np.min(ligand_array.res_id)
+            + np.max(atom_array.res_id)
+            + 1
+        )
         atom_array = atom_array + ligand_array
 
     # ... Apply symmetry if it exists ahead of any other processing
@@ -674,13 +670,31 @@ def create_atom_array_from_design_specification_legacy(
             atom_array, ori_token=ori_token, infer_ori_strategy=infer_ori_strategy
         )
         # diffused atoms initialized at origin
-        atom_array.coord[~atom_array.is_motif_token.astype(bool)] = 0.0
+        atom_array.coord[~atom_array.is_motif_atom_with_fixed_coord.astype(bool), :] = (
+            0.0
+        )
 
-    # ... Add is_d_amino_acid annotation if specified
-    if is_d_amino_acid is not None:
-        # convert to nd_array
-        is_d_amino_acid = np.asarray(is_d_amino_acid, dtype=bool)
-        is_d_amino_acid = spread_token_wise(atom_array, is_d_amino_acid)
+    # This is an annotation on the diffused regions, so must be added after accumulate_components
+    if spoof_helical_bundle_ss_conditioning:
+        is_helix = spoof_helical_bundle_ss_conditioning_fn(atom_array)
+        is_sheet = None
+        is_loop = None
+    if exists(is_helix):
+        set_atom_level_argument(atom_array, is_helix, "is_helix")
+    if exists(is_sheet):
+        set_atom_level_argument(atom_array, is_sheet, "is_sheet")
+        optional_conditions.append("is_sheet")
+    if exists(is_loop):
+        set_atom_level_argument(atom_array, is_loop, "is_loop")
+        optional_conditions.append("is_loop")
+
+    is_non_loopy_annot = np.zeros(atom_array.array_length(), dtype=int)
+    diffused_region_mask = ~(atom_array.is_motif_token.astype(bool))
+    if exists(is_non_loopy):
+        is_non_loopy_annot[diffused_region_mask] = 1 if is_non_loopy else -1
+
+    atom_array.set_annotation("is_non_loopy", is_non_loopy_annot)
+    atom_array.set_annotation("is_non_loopy_atom_level", is_non_loopy_annot)
 
     if plddt_enhanced:
         atom_array.set_annotation(

@@ -10,8 +10,7 @@ def pytest_configure(config):
 
     paths_to_add = [
         root / "src",
-        root / "lib" / "cifutils" / "src",
-        root / "lib" / "datahub" / "src",
+        root / "models" / "rfd3" / "tests",
     ]
 
     for path in paths_to_add:

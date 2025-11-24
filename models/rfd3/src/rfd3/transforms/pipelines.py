@@ -84,11 +84,6 @@ from rfd3.transforms.design_transforms import (
 )
 from rfd3.transforms.dna_crop import ProteinDNAContactContiguousCrop
 from rfd3.transforms.hbonds_hbplus import CalculateHbondsPlus
-from rfd3.transforms.ncaa_transforms import (
-    AddIsDAminoAcidFeat,
-    RandomlyMirrorInputs,
-    StrtoBoolforIsDAminoAcidFeature,
-)
 from rfd3.transforms.ppi_transforms import (
     Add1DSSFeature,
     AddGlobalIsNonLoopyFeature,
@@ -152,7 +147,6 @@ def get_pre_crop_transforms(
 ):
     return [
         InferenceRoute(StrtoBoolforIsXFeatures()),
-        InferenceRoute(StrtoBoolforIsDAminoAcidFeature()),
         RemoveHydrogens(),
         FilterToSpecifiedPNUnits(
             extra_info_key_with_pn_unit_iids_to_keep="all_pn_unit_iids_after_processing"
@@ -542,22 +536,6 @@ def build_atom14_base_pipeline_(
         sigma_data=sigma_data,
         diffusion_batch_size=diffusion_batch_size,
     )
-
-    # ... Mixed chirality handling
-    transforms += [
-        TrainingRoute(
-            ConditionalRoute(
-                condition_func=lambda data: data["conditions"].get(
-                    "mirror_input", False
-                ),
-                transform_map={
-                    True: RandomlyMirrorInputs(),
-                    False: Identity(),
-                },
-            )
-        ),
-        AddIsDAminoAcidFeat(),
-    ]
 
     # ... Random augmentation accounting for motif
     transforms += [

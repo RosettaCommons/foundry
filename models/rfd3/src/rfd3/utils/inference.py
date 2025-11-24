@@ -5,12 +5,15 @@ Utilities for inference input preparation
 import logging
 import os
 from os import PathLike
+from typing import Dict
 
 import biotite.structure as struc
 import numpy as np
 from atomworks import parse
-from atomworks.constants import STANDARD_DNA
-from atomworks.io.parser import STANDARD_PARSER_ARGS
+from atomworks.constants import STANDARD_AA, STANDARD_DNA
+from atomworks.io.parser import (
+    STANDARD_PARSER_ARGS,
+)
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from atomworks.ml.preprocessing.utils.structure_utils import (
     get_atom_mask_from_cell_list,
@@ -160,6 +163,150 @@ def extract_na_array(atom_array_input):
         raise ValueError(
             "Could not find any NA tokens in input file, but requested to add all NA"
         )
+
+
+def _restore_bonds_for_nonstandard_residues(
+    atom_array_accum: struc.AtomArray,
+    src_atom_array: struc.AtomArray | None,
+    source_to_accum_idx: Dict[int, int],
+) -> struc.AtomArray:
+    """
+    Restores and creates bonds for non-standard residues (PTMs, modified AAs, etc.)
+    from source structure and between consecutive residues.
+    This function:
+    1. Preserves inter-residue bonds from the source structure (if available)
+    2. Adds backbone C-N bonds between consecutive residues where at least one is non-standard
+    Args:
+        atom_array_accum: The accumulated atom array to add bonds to
+        src_atom_array: The source atom array containing original bond information
+        source_to_accum_idx: Mapping from source atom indices to accumulated array indices
+    Returns:
+        atom_array_accum with bonds added
+    """
+    # Initialize bonds if needed
+    if atom_array_accum.bonds is None:
+        atom_array_accum.bonds = struc.BondList(atom_array_accum.array_length())
+
+    # Step 1: Restore inter-residue bonds from the source atom array (only for non-standard residues)
+    if (
+        src_atom_array is not None
+        and hasattr(src_atom_array, "bonds")
+        and src_atom_array.bonds is not None
+    ):
+        original_bonds = src_atom_array.bonds.as_array()
+        if len(original_bonds) > 0:
+            # Extract bonds where both atoms are in the accumulated array
+            bonds_to_add = []
+            for bond in original_bonds:
+                atom_i, atom_j, bond_type = bond
+                # Check if both atoms are in our mapping
+                if (
+                    int(atom_i) in source_to_accum_idx
+                    and int(atom_j) in source_to_accum_idx
+                ):
+                    # Check if at least one atom is from a non-standard residue
+                    src_res_i = src_atom_array[int(atom_i)].res_name
+                    src_res_j = src_atom_array[int(atom_j)].res_name
+
+                    # Only preserve if at least one residue is non-standard
+                    if src_res_i not in STANDARD_AA or src_res_j not in STANDARD_AA:
+                        new_i = source_to_accum_idx[int(atom_i)]
+                        new_j = source_to_accum_idx[int(atom_j)]
+                        bonds_to_add.append([new_i, new_j, int(bond_type)])
+
+            if bonds_to_add:
+                # Add the preserved bonds
+                new_bonds = struc.BondList(
+                    atom_array_accum.array_length(),
+                    np.array(bonds_to_add, dtype=np.int64),
+                )
+                atom_array_accum.bonds = atom_array_accum.bonds.merge(new_bonds)
+                logger.info(
+                    f"Preserved {len(bonds_to_add)} inter-residue bonds involving non-standard residues from source structure"
+                )
+
+    # Step 2: Add backbone bonds between consecutive residues where at least one is non-standard
+    # This handles: PTM-to-diffused, diffused-to-PTM, PTM-to-PTM, ligand-to-protein
+    bonds_to_add = []
+
+    # Group by residue
+    token_starts = get_token_starts(atom_array_accum, add_exclusive_stop=True)
+
+    for i in range(
+        len(token_starts) - 2
+    ):  # -2 because we need pairs and token_starts has exclusive stop
+        curr_start, curr_end = token_starts[i], token_starts[i + 1]
+        next_start, next_end = token_starts[i + 1], token_starts[i + 2]
+
+        curr_residue = atom_array_accum[curr_start:curr_end]
+        next_residue = atom_array_accum[next_start:next_end]
+
+        # Check if at least one residue is non-standard (PTMs, modified AAs, etc.)
+        curr_is_nonstandard = curr_residue.res_name[0] not in STANDARD_AA
+        next_is_nonstandard = next_residue.res_name[0] not in STANDARD_AA
+
+        # Only add bonds if at least one residue is non-standard
+        if not (curr_is_nonstandard or next_is_nonstandard):
+            continue
+
+        # Check if consecutive in same chain
+        if curr_residue.chain_id[0] != next_residue.chain_id[0]:
+            continue
+        if next_residue.res_id[0] - curr_residue.res_id[0] != 1:
+            continue
+
+        # Find C atom in current residue (C-terminus connection point)
+        c_mask = curr_residue.atom_name == "C"
+        if not np.any(c_mask):
+            # If a non-standard residue doesn't have a C atom, it can't connect to next residue
+            # This is expected for some atomized residues or ligands at chain termini
+            if curr_is_nonstandard and next_is_nonstandard:
+                # Both are non-standard but no C in current - might be an atomized region without proper termini
+                logger.debug(
+                    f"Non-standard residue {curr_residue.res_name[0]} (res_id {curr_residue.res_id[0]}) "
+                    f"has no C atom - cannot form backbone bond to next residue"
+                )
+            continue
+        c_idx = curr_start + np.where(c_mask)[0][0]
+
+        # Find N atom in next residue (N-terminus connection point)
+        n_mask = next_residue.atom_name == "N"
+        if not np.any(n_mask):
+            # If a non-standard residue doesn't have an N atom, it can't connect to previous residue
+            # This is expected for some atomized residues or ligands at chain termini
+            if curr_is_nonstandard and next_is_nonstandard:
+                # Both are non-standard but no N in next - might be an atomized region without proper termini
+                logger.debug(
+                    f"Non-standard residue {next_residue.res_name[0]} (res_id {next_residue.res_id[0]}) "
+                    f"has no N atom - cannot form backbone bond from previous residue"
+                )
+            continue
+        n_idx = next_start + np.where(n_mask)[0][0]
+
+        # Check if this bond already exists (from source preservation)
+        existing_bonds = atom_array_accum.bonds.as_array()
+        bond_exists = False
+        if len(existing_bonds) > 0:
+            for existing_bond in existing_bonds:
+                if (existing_bond[0] == c_idx and existing_bond[1] == n_idx) or (
+                    existing_bond[0] == n_idx and existing_bond[1] == c_idx
+                ):
+                    bond_exists = True
+                    break
+
+        if not bond_exists:
+            bonds_to_add.append([c_idx, n_idx, struc.BondType.SINGLE])
+
+    if bonds_to_add:
+        new_bonds = struc.BondList(
+            atom_array_accum.array_length(), np.array(bonds_to_add, dtype=np.int64)
+        )
+        atom_array_accum.bonds = atom_array_accum.bonds.merge(new_bonds)
+        logger.info(
+            f"Added {len(bonds_to_add)} backbone bonds involving non-standard residues"
+        )
+
+    return atom_array_accum
 
 
 #################################################################################

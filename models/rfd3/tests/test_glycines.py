@@ -47,7 +47,6 @@ def test_glycine_features_and_is_x(example, is_inference):
 
     assert bad_feats == [
         "is_central",
-        "is_d_amino_acid",
     ], "Expected only is_central to differ: {}".format(bad_feats)
     assert (
         actual["is_central"].sum() == actual["is_ca"].sum()
