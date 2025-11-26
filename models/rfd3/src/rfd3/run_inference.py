@@ -57,17 +57,7 @@ def run_inference(cfg: DictConfig) -> None:
     init_cfg_dict = {k: v for k, v in init_cfg_dict.items() if k not in ["_target_"]}
     init_cfg = RFD3InferenceConfig(**init_cfg_dict)
     engine = RFD3InferenceEngine(**init_cfg)
-
-    import ipdb
-
-    ipdb.set_trace()
     engine.run(**run_params)
-
-    # inference_engine = instantiate(init_cfg, _convert_="partial", _recursive_=False)
-
-    # # # Run inference
-    # with suppress_warnings(is_inference=True):
-    #     inference_engine.run(**run_params)
 
 
 if __name__ == "__main__":

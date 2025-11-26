@@ -240,7 +240,11 @@ class DesignInputSpecification(BaseModel):
 
         # unused input check
         if exists(data.get("input")) and not (
-            (exists(data.get("contig")) or exists(data.get("unindex")))
+            (
+                exists(data.get("contig"))
+                or exists(data.get("unindex"))
+                or exists(data.get("ligand"))
+            )
             or exists(data.get("partial_t"))
         ):
             raise ValueError("Input provided but unused in composition specification.")

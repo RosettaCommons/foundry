@@ -9,11 +9,13 @@ from typing import Any, Dict, List, Optional
 
 import torch
 import yaml
-from biotite.structure import AtomArray
+from atomworks.io.utils.io_utils import to_cif_file
+from biotite.structure import AtomArray, AtomArrayStack
 from toolz import merge_with
 
 from modelhub.common import exists
 from modelhub.inference_engines.base import BaseInferenceEngine
+from modelhub.utils.alignment import weighted_rigid_align
 from modelhub.utils.ddp import RankedLogger
 from rfd3.constants import SAVED_CONDITIONING_ANNOTATIONS
 from rfd3.inference.datasets import (
@@ -24,9 +26,7 @@ from rfd3.model.inference_sampler import SampleDiffusionConfig
 from rfd3.utils.inference import ensure_input_is_abspath
 from rfd3.utils.io import (
     CIF_LIKE_EXTENSIONS,
-    dump_metadata,
-    dump_structures,
-    dump_trajectories,
+    build_stack_from_atom_array_and_batched_coords,
     extract_example_id_from_path,
     find_files_with_extension,
 )
@@ -85,6 +85,49 @@ class RFD3InferenceConfig:
 class RFD3Output:
     atom_array: AtomArray
     metadata: dict
+    example_id: str
+    denoised_trajectory_stack: Optional[AtomArrayStack] = None
+    noisy_trajectory_stack: Optional[AtomArrayStack] = None
+
+    def dump(
+        self,
+        out_dir,
+        verbose=True,
+    ):
+        base_path = os.path.join(out_dir, self.example_id)
+        base_path = Path(base_path).absolute()
+        to_cif_file(
+            self.atom_array,
+            base_path,
+            file_type="cif.gz",
+            include_entity_poly=False,
+            extra_fields=SAVED_CONDITIONING_ANNOTATIONS,
+        )
+        if self.metadata:
+            with open(f"{base_path}.json", "w") as f:
+                json.dump(self.metadata, f, indent=4)
+
+        # Trajectory saving
+        prefix = str(base_path)[:-1].rstrip("_model_")
+        suffix = str(base_path)[-1]
+        if self.denoised_trajectory_stack is not None:
+            to_cif_file(
+                self.denoised_trajectory_stack,
+                "_denoised_model_".join([prefix, suffix]),
+                file_type="cif.gz",
+                include_entity_poly=False,
+            )
+
+        if self.noisy_trajectory_stack is not None:
+            to_cif_file(
+                self.noisy_trajectory_stack,
+                "_noisy_model_".join([prefix, suffix]),
+                file_type="cif.gz",
+                include_entity_poly=False,
+            )
+
+        if verbose:
+            ranked_logger.info(f"Outputs for {self.example_id} written to {base_path}.")
 
 
 class RFD3InferenceEngine(BaseInferenceEngine):
@@ -183,7 +226,6 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         # ==============================================================================
         loader = assemble_distributed_inference_loader_from_json(
             # Passed directly to ContigJSONDataset
-            # data={spec.example_id: spec for spec in spec.values()},
             data=specs,
             transform=self.pipeline,
             name="inference-dataset",
@@ -205,32 +247,23 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         outputs = {}
         for batch_idx, batch in enumerate(loader):
             pipeline_output = batch[0]
-            output = self._model_forward(pipeline_output)
+            example_id = pipeline_output["example_id"]
 
+            # Run model
+            output_list = self._model_forward(pipeline_output)
             if self.out_dir:
-                self.save_batch_outputs(
-                    out_dir=self.out_dir,
-                    example_id=pipeline_output["example_id"],
-                    network_output=output["network_output"],
-                    prediction_metadata=output["prediction_metadata"],
-                    predicted_atom_array_stack=output["predicted_atom_array_stack"],
-                    pipeline_output=pipeline_output,
-                )
+                for output in output_list:
+                    output.dump(out_dir=self.out_dir)
             else:
-                outputs[pipeline_output["example_id"]] = [
-                    RFD3Output(
-                        atom_array=output["predicted_atom_array_stack"][i],
-                        metadata=output["prediction_metadata"][i],
-                    )
-                    for i in range(len(output["predicted_atom_array_stack"]))
-                ]
+                outputs[example_id] = output_list
         return outputs
 
-    def _model_forward(self, pipeline_output):
+    def _model_forward(self, pipeline_output) -> List[RFD3Output]:
+        # Wraps around the trainer validation step to create atom arrays for saving.
         t0 = time.time()
         with torch.no_grad():
             pipeline_output = self.trainer.fabric.to_device(pipeline_output)
-            output = self.trainer.validation_step(
+            output_val = self.trainer.validation_step(
                 batch=pipeline_output,
                 batch_idx=0,
                 compute_metrics=False,
@@ -238,15 +271,55 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         t_end = time.time()
 
         # Add additional information to prediction metadata
-        for key in output["prediction_metadata"].keys():
-            ckpt = Path(self.ckpt_path)
-            if ckpt.is_symlink():
-                ckpt = ckpt.resolve(strict=True)  # follow symlink to target
-            output["prediction_metadata"][key]["ckpt_path"] = str(ckpt)
-            output["prediction_metadata"][key]["seed"] = self.seed
+        if self.dump_trajectories:
+            X_noisy_L_traj = torch.stack(
+                output_val["network_output"]["X_noisy_L_traj"]
+            ).transpose(0, 1)  # [D, N_steps, L, 3]
+            X_denoised_L_traj = torch.stack(
+                output_val["network_output"]["X_denoised_L_traj"]
+            ).transpose(0, 1)  # [D, N_steps, L, 3]
+
+        outputs = []
+        for idx in range(len(output_val["predicted_atom_array_stack"])):
+            if self.dump_prediction_metadata_json:
+                ckpt = Path(self.ckpt_path)
+                if ckpt.is_symlink():
+                    ckpt = ckpt.resolve(strict=True)  # follow symlink to target
+                output_val["prediction_metadata"][idx]["ckpt_path"] = str(ckpt)
+                output_val["prediction_metadata"][idx]["seed"] = self.seed
+
+            # Append to outputs
+            if self.dump_trajectories:
+                X_denoised_L_traj_i = _reshape_trajectory(
+                    X_noisy_L_traj[idx], self.align_trajectory_structures
+                )
+                X_noisy_L_traj_i = _reshape_trajectory(X_denoised_L_traj[idx], False)
+                denoised_trajectory_stack = (
+                    build_stack_from_atom_array_and_batched_coords(
+                        X_denoised_L_traj_i, pipeline_output["atom_array"]
+                    )
+                )
+                noisy_trajectory_stack = build_stack_from_atom_array_and_batched_coords(
+                    X_noisy_L_traj_i, pipeline_output["atom_array"]
+                )
+            else:
+                denoised_trajectory_stack = None
+                noisy_trajectory_stack = None
+
+            outputs.append(
+                RFD3Output(
+                    example_id=f'{pipeline_output["example_id"]}_model_{idx}',
+                    atom_array=output_val["predicted_atom_array_stack"][idx],
+                    metadata=output_val["prediction_metadata"][idx]
+                    if self.dump_prediction_metadata_json
+                    else {},
+                    denoised_trajectory_stack=denoised_trajectory_stack,
+                    noisy_trajectory_stack=noisy_trajectory_stack,
+                )
+            )
 
         ranked_logger.info(f"Finished inference batch in {t_end - t0:.2f} seconds.")
-        return output
+        return outputs
 
     ###############################################
     # Input merging
@@ -324,49 +397,6 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                     continue
                 design_specifications[example_id] = example_spec
         return design_specifications
-
-    def save_batch_outputs(
-        self,
-        *,
-        out_dir,
-        network_output,
-        prediction_metadata,
-        predicted_atom_array_stack,
-        pipeline_output,
-        example_id,
-    ):
-        out_dir = Path(out_dir)
-        dump_structures(
-            atom_arrays=predicted_atom_array_stack,
-            base_path=out_dir / example_id,
-            one_model_per_file=True,
-            extra_fields=SAVED_CONDITIONING_ANNOTATIONS,
-        )
-
-        if self.dump_prediction_metadata_json:
-            dump_metadata(
-                prediction_metadata=prediction_metadata,
-                base_path=out_dir / example_id,
-                one_model_per_file=True,
-            )
-
-        if self.dump_trajectories:
-            dump_trajectories(
-                trajectory_list=network_output["X_denoised_L_traj"],
-                atom_array=pipeline_output["atom_array"],
-                base_path=out_dir / f"{example_id}_denoised",
-                align_structures=self.align_trajectory_structures,
-            )
-            dump_trajectories(
-                trajectory_list=network_output["X_noisy_L_traj"],
-                atom_array=pipeline_output["atom_array"],
-                base_path=out_dir / f"{example_id}_noisy",
-                align_structures=self.align_trajectory_structures,
-            )
-
-        ranked_logger.info(
-            f"Outputs for {example_id} written to {out_dir / example_id}."
-        )
 
 
 def normalize_inputs(inputs: str | list | None) -> list[str | None]:
@@ -489,3 +519,24 @@ def process_input(
             DesignInputSpecification.safe_init(**example_spec)
 
     return all_specs
+
+
+def _reshape_trajectory(traj, align_structures: bool):
+    traj = [traj[i] for i in range(len(traj))]
+    n_steps = len(traj)
+    max_frames = 100
+
+    if align_structures:
+        # ... align the trajectories on the last prediction
+        for step in range(n_steps - 1):
+            traj[step] = weighted_rigid_align(
+                X_L=traj[-1],
+                X_gt_L=traj[step],
+            )
+    traj = traj[::-1]  # reverse to go from noised -> denoised
+    if n_steps > max_frames:
+        selected_indices = torch.linspace(0, n_steps - 1, max_frames).long().tolist()
+        traj = [traj[i] for i in selected_indices]
+
+    traj = torch.stack(traj).cpu().numpy()
+    return traj

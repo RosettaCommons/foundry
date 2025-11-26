@@ -46,13 +46,14 @@ dependencies = [
     # "biotite",
     "atomworks",
     "ipykernel>=6.31.0",
+    "assertpy",
+    "toolz",
 ]
 
 
 [project.optional-dependencies]
 rfd3 = [
     "pydantic>=2.8",
-    "toolz",
 ]
 rf3 = [
     "cuequivariance_ops_cu12>=0.6.1; sys_platform == 'linux'",
