@@ -28,27 +28,27 @@ pipeline_target: rfd3.transforms.pipelines.build_atom14_base_pipeline
 # Base config overrides:
 diffusion_batch_size_train: 32
 diffusion_batch_size_inference: 8
-crop_size: 256
-n_recycles_train: 1
+crop_size: 384
+n_recycles_train: 2
 n_recycles_validation: 1
-max_atoms_in_crop: 2560  # 256x14 doesnt work since we pad up | 256 x 10
+max_atoms_in_crop: 3840  # ~10x crop size.
 
 # Global transform arguments are necessary for arguments shared between training and inference
 global_transform_args:
   n_atoms_per_token: 14
   central_atom: CB
-  sigma_perturb: 1.0
-  sigma_perturb_com: 0.0
-  association_scheme: atom14  # atom14, atom14-new or null
-  center_option: all # options are ["all", "motif", "diffuse"]
+  sigma_perturb: 2.0
+  sigma_perturb_com: 1.0
+  association_scheme: dense
+  center_option: diffuse  # options are ["all", "motif", "diffuse"]
 
   # Reference conformer policy
   generate_conformers: True
   generate_conformers_for_non_protein_only: True
-  provide_reference_conformer_when_unmasked: False
-  ground_truth_conformer_policy: IGNORE # Other options: REPLACE, ADD, FALLBACK. See atomworks.enums for details
-  provide_elements_for_unindexed_components: False
-  use_element_for_atom_names_of_atomized_tokens: False
+  provide_reference_conformer_when_unmasked: True
+  ground_truth_conformer_policy: IGNORE  # Other options: REPLACE, ADD, FALLBACK. See atomworks.enums for details
+  provide_elements_for_unindexed_components: True
+  use_element_for_atom_names_of_atomized_tokens: True  # TODO: correct name, implies unindexed do too
 
   # PPI Cropping
   keep_full_binder_in_spatial_crop: False
@@ -77,30 +77,22 @@ global_transform_args:
 
   # Used to create simple boolean flags for downstream conditioning
   meta_conditioning_probabilities:
-    calculate_rasa: 0.0   # not currently used in the default model anyway
-    keep_protein_motif_rasa: 0.2
-    mirror_input: 0.0
-    calculate_hbonds: 0.0
+    calculate_hbonds: 0.2
+    calculate_rasa: 0.6
 
-    # Conditioning token scheme probabilities
-    unindex_leak_global_index: 0.33
-    unindex_insert_random_break: 0.33
-    unindex_remove_random_break: 0.33
+    keep_protein_motif_rasa: 0.1  # Small to prevent noisy input to model
+    hbond_subsample: 0.5
+    
+    # fully indexed training
+    unindex_leak_global_index: 0.10
+    unindex_insert_random_break: 0.10
+    unindex_remove_random_break: 0.10
 
     # Probability of adding 1d secondary structure conditioning
-    add_1d_ss_features: 0.0
-    add_global_is_non_loopy_feature: 0.0
-    featurize_plddt: 0.0
+    add_1d_ss_features: 0.1
+    featurize_plddt: 0.9  # Applied for monomer distillation only
+    add_global_is_non_loopy_feature: 0.99
 
     # PPI
-    add_ppi_hotspots: 0
-    full_binder_crop: 0
-
-# Dataset probabilities
-train:
-  pdb:
-    probability: 0.75
-  monomer_distillation:
-    probability: 0.25
-  interdomain_distillation:
-    probability: 0.0
+    add_ppi_hotspots: 0.75
+    full_binder_crop: 0.75

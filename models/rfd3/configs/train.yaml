@@ -5,7 +5,7 @@ hydra:
 
 defaults:
   - model: rfd3_base
-  - trainer: aa_design
+  - trainer: rfd3_base
   - datasets: design_base
   - callbacks: design_callbacks
   - dataloader: fast

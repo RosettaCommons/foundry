@@ -19,24 +19,6 @@ load_dotenv(override=True)
 _config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rfd3/configs")
 
 
-# def run_inference_without_hydra(
-#     inputs,
-#     out_dir,
-#     n_batches,
-#     **kwargs
-# ) -> None:
-
-#     # Create config
-#     from rfd3.engine import RFD3InferenceConfig, RFD3InferenceEngine
-#     conf = RFD3InferenceConfig(**kwargs)
-#     with RFD3InferenceEngine(**conf) as engine:
-#         return engine.run(
-#             inputs=inputs,
-#             out_dir=out_dir,
-#             n_batches=n_batches
-#         )
-
-
 @hydra.main(
     config_path=_config_path,
     config_name="inference",
@@ -50,13 +32,12 @@ def run_inference(cfg: DictConfig) -> None:
 
     # Create __init__ args by filtering for all configs not in run_params
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
-    init_cfg_dict = {k: v for k, v in cfg_dict.items() if k not in run_params_set}
-    init_cfg = OmegaConf.create(init_cfg_dict)
+    init_cfg_dict = {
+        k: v for k, v in cfg_dict.items() if k not in run_params_set | {"_target_"}
+    }
 
     # Run
-    init_cfg_dict = {k: v for k, v in init_cfg_dict.items() if k not in ["_target_"]}
-    init_cfg = RFD3InferenceConfig(**init_cfg_dict)
-    engine = RFD3InferenceEngine(**init_cfg)
+    engine = RFD3InferenceEngine(**RFD3InferenceConfig(**init_cfg_dict))
     engine.run(**run_params)
 
 
