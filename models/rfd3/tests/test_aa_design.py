@@ -77,5 +77,12 @@ def test_training_pipeline(example_name):
     )
 
 
+def test_dataset_instantiation():
+    """Test that the train and val pipelines can be run without errors."""
+    from modelhub.utils.datasets import recursively_instantiate_datasets_and_samplers
+
+    recursively_instantiate_datasets_and_samplers(TEST_CFG_TRAIN.datasets.train)
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)

@@ -16,9 +16,9 @@ log_dataset_sampling_ratios_callback:
 # Optional health logging
 #   activations_tracking_callback:
 #     _target_: modelhub.callbacks.health_logging.ActivationsGradientsWeightsTracker
-    # log_freq: 100
-    # keep_cache: True  # --> WARNING: Do not run this in a production run, this will lead to a memory leak! Meant for debugging.
-  # activations_tracking_callback:
-  #   _target_: modelhub.callbacks.health_logging.ActivationsGradientsWeightsTracker
-  #   log_freq: 100
-    # keep_cache: True  # --> WARNING: Do not run this in a production run, this will lead to a memory leak! Meant for debugging.
+# log_freq: 100
+# keep_cache: True  # --> WARNING: Do not run this in a production run, this will lead to a memory leak! Meant for debugging.
+# activations_tracking_callback:
+#   _target_: modelhub.callbacks.health_logging.ActivationsGradientsWeightsTracker
+#   log_freq: 100
+# keep_cache: True  # --> WARNING: Do not run this in a production run, this will lead to a memory leak! Meant for debugging.

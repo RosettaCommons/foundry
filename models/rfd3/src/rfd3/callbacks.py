@@ -195,40 +195,40 @@ class LogDesignValidationMetricsCallback(BaseCallback):
                         )
 
 
-class LogTrainVariableCallback(BaseCallback):
-    """Callback to log specified training variables during training."""
+# class LogTrainVariableCallback(BaseCallback):
+#     """Callback to log specified training variables during training."""
 
-    def __init__(self, log_every_n: int = 10, variables: list[str] = None):
-        """
-        Args:
-            log_every_n (int): Log stats every N batches
-            variables (list[str]): List of variable names to track and log
-        """
-        super().__init__()
-        self.log_every_n = log_every_n
-        self.stats_to_log = variables or []
+#     def __init__(self, log_every_n: int = 10, variables: list[str] = None):
+#         """
+#         Args:
+#             log_every_n (int): Log stats every N batches
+#             variables (list[str]): List of variable names to track and log
+#         """
+#         super().__init__()
+#         self.log_every_n = log_every_n
+#         self.stats_to_log = variables or []
 
-    def on_train_batch_end(self, batch: Any, batch_idx: int, trainer: Any, **_):
-        # Initialize accumulators for each stat
-        stat_totals = {stat: 0 for stat in self.stats_to_log}
-        valid_samples = 0
+#     def on_train_batch_end(self, batch: Any, batch_idx: int, trainer: Any, **_):
+#         # Initialize accumulators for each stat
+#         stat_totals = {stat: 0 for stat in self.stats_to_log}
+#         valid_samples = 0
 
-        for sample in batch:
-            logs = sample.get("log_dict", {})
-            # log the information that are in stats_to_log
-            for stat in self.stats_to_log:
-                if stat in logs:
-                    stat_totals[stat] += logs[stat]
-                    valid_samples += 1
+#         for sample in batch:
+#             logs = sample.get("log_dict", {})
+#             # log the information that are in stats_to_log
+#             for stat in self.stats_to_log:
+#                 if stat in logs:
+#                     stat_totals[stat] += logs[stat]
+#                     valid_samples += 1
 
-        if valid_samples > 0 and batch_idx % self.log_every_n == 0:
-            # Calculate averages and prepare logging dict
-            log_dict = {
-                f"train/{stat}_avg": stat_totals[stat] / valid_samples
-                for stat in self.stats_to_log
-            }
+#         if valid_samples > 0 and batch_idx % self.log_every_n == 0:
+#             # Calculate averages and prepare logging dict
+#             log_dict = {
+#                 f"train/{stat}_avg": stat_totals[stat] / valid_samples
+#                 for stat in self.stats_to_log
+#             }
 
-            trainer.fabric.log_dict(
-                log_dict,
-                step=trainer.state["current_epoch"],
-            )
+#             trainer.fabric.log_dict(
+#                 log_dict,
+#                 step=trainer.state["current_epoch"],
+#             )

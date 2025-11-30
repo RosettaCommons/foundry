@@ -7,7 +7,6 @@ _target_: rfd3.engine.RFD3InferenceEngine
 
 out_dir: ???
 inputs: ???  # null, json, pdb or 
-# ckpt_path: /projects/ml/aa_design/models/rfd3_latest.ckpt
 ckpt_path: /projects/ml/aa_design/models/rfd3_latest_cleaned.ckpt
 json_keys_subset: null
 skip_existing: True

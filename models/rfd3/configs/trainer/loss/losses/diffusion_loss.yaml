@@ -1,3 +1,4 @@
+_target_: rfd3.metrics.losses.DiffusionLoss
 sigma_data: ${model.net.diffusion_module.sigma_data}
 weight: 4.0
 lddt_weight: 0.25

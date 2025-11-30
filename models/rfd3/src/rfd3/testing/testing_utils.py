@@ -34,14 +34,9 @@ from rfd3.transforms.pipelines import (
     build_atom14_base_pipeline,
 )
 
-from modelhub.hydra.resolvers import chain_type_info_to_regex, resolve_import
+from modelhub.hydra.resolvers import register_resolvers
 
-if not OmegaConf.has_resolver("resolve_import"):
-    OmegaConf.register_new_resolver("resolve_import", resolve_import)
-if not OmegaConf.has_resolver("chain_type_info_to_regex"):
-    OmegaConf.register_new_resolver(
-        "chain_type_info_to_regex", chain_type_info_to_regex
-    )
+register_resolvers()
 
 print("Atomworks version:", atomworks.__version__)
 
@@ -81,7 +76,7 @@ def load_inference_cfg():
     return cfg
 
 
-def load_train_or_val_cfg(name="a14-base-train", is_val_cfg=False):
+def load_train_or_val_cfg(name="pretrain", is_val_cfg=False):
     GlobalHydra.instance().clear()  # Clear existing context
     with patch.object(sys, "argv", ["compile_cfg"]):
         initialize(config_path=_config_path, version_base="1.3", job_name="trainer_cfg")
@@ -204,7 +199,7 @@ def instantiate_example(args, is_inference=True):
 
 
 def build_pipelines(
-    cfg_name="a14-base-train",
+    cfg_name="pretrain",
     train_dataset_nested_keys=["pdb", "sub_datasets", "interface"],
     val_dataset_nested_keys=["unconditional"],
     composed_config: DictConfig | None = None,
@@ -250,7 +245,7 @@ def build_pipelines(
     return pipes
 
 
-def get_train_dataloader(cfg_name="a14-base-train", seed=42):
+def get_train_dataloader(cfg_name="pretrain", seed=42):
     print("This function is deprecated!")
     cfg = load_train_or_val_cfg(name=cfg_name, is_val_cfg=False)
     from modelhub.utils.datasets import (

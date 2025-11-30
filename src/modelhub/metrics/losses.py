@@ -1,5 +1,6 @@
 import hydra
 import torch.nn as nn
+from omegaconf import DictConfig
 
 
 class Loss(nn.Module):
@@ -10,6 +11,9 @@ class Loss(nn.Module):
             loss_fn = hydra.utils.instantiate(loss)
             print(f"Adding loss {loss_name} to the loss function")
             self.to_compute.append(loss_fn)
+            assert not isinstance(
+                loss_fn, DictConfig
+            ), f"Loss {loss_name} was instantiated as a DictConfig. Is _target_ present?."
 
     def forward(
         self,

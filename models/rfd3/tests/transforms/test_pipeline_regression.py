@@ -38,14 +38,14 @@ class PipelineConfig:
 
 
 # Define pipeline configurations
-base_cfg = load_train_or_val_cfg("a14-base-train")
+base_cfg = load_train_or_val_cfg("pretrain")
 unindexed_cfg = load_train_or_val_cfg("test-unindexed")
 unindexed_cfg.datasets.global_transform_args.train_conditions.island.frequency = 1e10
 unindexed_cfg.datasets.global_transform_args.train_conditions.island.p_unindex_motif_tokens = 1.0
 
 PIPELINE_CONFIGS = [
     PipelineConfig(
-        name="a14-base-train",
+        name="pretrain",
         example_names=["1qys-0", "1p5d-0"],
         inference_modes=[False, True],
         pipeline=build_pipelines(composed_config=base_cfg),
@@ -190,7 +190,7 @@ def test_atom14_pipeline_regression(
         expected_result = pickle.load(f)
 
     # Compare results
-    config_desc = f" ({config.name})" if config.name != "a14-base-train" else ""
+    config_desc = f" ({config.name})" if config.name != "pretrain" else ""
     mode_description = f"{'inference' if is_inference else 'training'}{config_desc}"
     if "specification" in result:
         expected_result["specification"] = result["specification"]
