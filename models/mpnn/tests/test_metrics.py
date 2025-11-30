@@ -7,16 +7,16 @@ classes including InterfaceSequenceRecovery and InterfaceNLL.
 
 import pytest
 from atomworks.ml.utils.testing import cached_parse
-from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
-from mpnn.metrics.sequence_recovery import SequenceRecovery, InterfaceSequenceRecovery
 from mpnn.metrics.nll import NLL, InterfaceNLL
+from mpnn.metrics.sequence_recovery import InterfaceSequenceRecovery, SequenceRecovery
+from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from test_utils import (
     PDB_IDS,
-    select_model,
-    prepare_features,
-    create_feature_collator,
     assert_all_metrics_comprehensive,
     combine_kwargs_to_compute,
+    create_feature_collator,
+    prepare_features,
+    select_model,
 )
 
 

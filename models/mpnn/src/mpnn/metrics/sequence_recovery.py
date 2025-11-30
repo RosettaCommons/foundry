@@ -1,12 +1,11 @@
 from atomworks.ml.transforms.base import ConvertToTorch
-
-from modelhub.metrics.metric import Metric
-
-from mpnn.transforms.polymer_ligand_interface import ComputePolymerLigandInterface
+from mpnn.collate.feature_collator import FeatureCollator
 from mpnn.transforms.feature_aggregation.polymer_ligand_interface import (
     FeaturizePolymerLigandInterfaceMask,
 )
-from mpnn.collate.feature_collator import FeatureCollator
+from mpnn.transforms.polymer_ligand_interface import ComputePolymerLigandInterface
+
+from modelhub.metrics.metric import Metric
 
 
 class SequenceRecovery(Metric):

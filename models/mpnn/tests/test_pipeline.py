@@ -8,11 +8,10 @@ including data processing, shape validation, and feature extraction.
 import numpy as np
 import pytest
 import torch
-from atomworks.ml.utils.testing import cached_parse
-from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from atomworks.io.utils.atom_array_plus import as_atom_array_plus
 from atomworks.ml.transforms.base import TransformPipelineError
-from atomworks.ml.utils.token import get_token_starts
+from atomworks.ml.utils.testing import cached_parse
+from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 
 
 class TestMPNNPipeline:

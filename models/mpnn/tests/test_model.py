@@ -12,15 +12,14 @@ from atomworks.ml.utils.testing import cached_parse
 from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from test_utils import (
     PDB_IDS,
-    loss_fn,
-    select_model,
-    prepare_features,
+    assert_comprehensive_shapes,
+    assert_gradient_properties,
+    assert_value_checks,
+    compute_loss_and_backward,
     create_feature_collator,
     create_symmetry_equivalence_group,
-    assert_comprehensive_shapes,
-    assert_value_checks,
-    assert_gradient_properties,
-    compute_loss_and_backward,
+    prepare_features,
+    select_model,
 )
 
 

@@ -19,19 +19,15 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-
-from biotite.structure import AtomArray
-
 from atomworks.io import parse
 from atomworks.io.parser import STANDARD_PARSER_ARGS
 from atomworks.io.utils.atom_array_plus import (
-    as_atom_array_plus,
     AtomArrayPlus,
+    as_atom_array_plus,
 )
 from atomworks.io.utils.io_utils import to_cif_file
-
 from atomworks.ml.utils.token import get_token_starts, spread_token_wise
-
+from biotite.structure import AtomArray
 from mpnn.transforms.feature_aggregation.token_encodings import MPNN_TOKEN_ENCODING
 
 logger = logging.getLogger(__name__)

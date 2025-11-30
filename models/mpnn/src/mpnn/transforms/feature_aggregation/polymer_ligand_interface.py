@@ -8,7 +8,6 @@ that are at the interface with ligand molecules.
 from typing import Any
 
 import numpy as np
-
 from atomworks.ml.transforms._checks import check_atom_array_annotation
 from atomworks.ml.transforms.base import Transform
 from atomworks.ml.utils.token import get_token_starts

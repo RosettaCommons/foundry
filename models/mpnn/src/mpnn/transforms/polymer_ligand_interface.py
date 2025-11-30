@@ -9,11 +9,9 @@ distance threshold.
 from typing import Any
 
 import numpy as np
-from biotite.structure import AtomArray, CellList
-from scipy.spatial.distance import cdist
-
 from atomworks.ml.transforms._checks import check_atom_array_annotation
 from atomworks.ml.transforms.base import Transform
+from biotite.structure import AtomArray, CellList
 
 
 class ComputePolymerLigandInterface(Transform):

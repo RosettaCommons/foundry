@@ -1,10 +1,9 @@
-from typing import Callable, Iterator, List, Any
+from typing import Any, Callable, Iterator, List
 
 import numpy as np
 import torch
-from torch.utils.data import Sampler, BatchSampler
-
 from atomworks.ml.samplers import set_sampler_epoch
+from torch.utils.data import BatchSampler, Sampler
 
 
 class PaddedTokenBudgetBatchSampler(BatchSampler):

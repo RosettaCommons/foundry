@@ -1,20 +1,19 @@
 import torch
 from beartype.typing import Any
 from lightning_utilities import apply_to_collection
+from mpnn.loss.nll_loss import LabelSmoothedNLLLoss
+from mpnn.metrics.nll import NLL, InterfaceNLL
+from mpnn.metrics.sequence_recovery import (
+    InterfaceSequenceRecovery,
+    SequenceRecovery,
+)
+from mpnn.model.mpnn import LigandMPNN, ProteinMPNN
 from omegaconf import DictConfig
 
 from modelhub.metrics.metric import MetricManager
 from modelhub.trainers.fabric import FabricTrainer
 from modelhub.utils.ddp import RankedLogger
 from modelhub.utils.torch import assert_no_nans
-
-from mpnn.loss.nll_loss import LabelSmoothedNLLLoss
-from mpnn.model.mpnn import ProteinMPNN, LigandMPNN
-from mpnn.metrics.nll import NLL, InterfaceNLL
-from mpnn.metrics.sequence_recovery import (
-    SequenceRecovery,
-    InterfaceSequenceRecovery,
-)
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
@@ -107,7 +106,7 @@ class MPNNTrainer(FabricTrainer):
             network_output = model.forward(network_input)
             assert_no_nans(
                 network_output["decoder_features"],
-                msg=f"network_output['decoder_features'] "
+                msg="network_output['decoder_features'] "
                 + f"for batch_idx: {batch_idx}",
             )
 
@@ -164,7 +163,7 @@ class MPNNTrainer(FabricTrainer):
 
         assert_no_nans(
             network_output["decoder_features"],
-            msg=f"network_output['decoder_features'] " + f"for batch_idx: {batch_idx}",
+            msg="network_output['decoder_features'] " + f"for batch_idx: {batch_idx}",
         )
 
         metrics_output = {}

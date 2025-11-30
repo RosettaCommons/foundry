@@ -8,7 +8,6 @@ from atomworks.ml.transforms._checks import (
 from atomworks.ml.transforms.base import Transform
 from atomworks.ml.transforms.encoding import atom_array_to_encoding
 from atomworks.ml.utils.token import get_token_starts
-
 from mpnn.transforms.feature_aggregation.token_encodings import MPNN_TOKEN_ENCODING
 
 

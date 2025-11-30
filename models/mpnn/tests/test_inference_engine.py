@@ -19,17 +19,15 @@ This module also focuses on:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Tuple, List
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pytest
 import torch
-from biotite.structure import AtomArray
-
 from atomworks.constants import DICT_THREE_TO_ONE
 from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.ml.utils.testing import cached_parse
-
+from biotite.structure import AtomArray
 from mpnn.inference_engines import mpnn as engine_mod
 from mpnn.inference_engines.mpnn import MPNNInferenceEngine
 from mpnn.model.mpnn import ProteinMPNN
@@ -37,14 +35,11 @@ from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from mpnn.transforms.feature_aggregation.token_encodings import (
     MPNN_TOKEN_ENCODING,
 )
-from mpnn.utils.inference import MPNNInferenceInput, MPNNInferenceOutput
-
 from test_utils import (
     PDB_IDS,
-    prepare_features,
     create_feature_collator,
+    prepare_features,
 )
-
 
 ###############################################################################
 # Helpers (engine stub + simple AtomArray)

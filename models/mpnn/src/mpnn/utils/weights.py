@@ -1,8 +1,7 @@
 import torch
-
 from mpnn.transforms.feature_aggregation.token_encodings import (
-    token_order,
     legacy_token_order,
+    token_order,
 )
 
 

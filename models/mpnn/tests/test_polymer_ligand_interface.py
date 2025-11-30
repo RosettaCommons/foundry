@@ -1,9 +1,7 @@
 import numpy as np
 import pytest
-from biotite.structure import AtomArray
 from atomworks.io.utils.atom_array_plus import as_atom_array
-from biotite.structure import Atom
-
+from biotite.structure import Atom, AtomArray
 from mpnn.transforms.polymer_ligand_interface import (
     ComputePolymerLigandInterface,
 )
@@ -19,9 +17,6 @@ class TestPolymerLigandInterface:
         include_nan: bool = False,
     ) -> AtomArray:
         """Create a sample AtomArray with polymer and ligand atoms."""
-        n_polymer = len(polymer_coords)
-        n_ligand = len(ligand_coords)
-        total_atoms = n_polymer + n_ligand
 
         atoms = []
 
@@ -103,14 +98,14 @@ class TestPolymerLigandInterface:
 
         # Polymer atoms 0, 1, 2 should be at interface (close to ligands)
         # Polymer atom 3 should NOT be at interface (far from ligands)
-        assert interface_flags[0] == True  # polymer atom close to ligand
-        assert interface_flags[1] == True  # polymer atom close to ligand
-        assert interface_flags[2] == True  # polymer atom close to ligand
-        assert interface_flags[3] == False  # polymer atom far from ligand
+        assert interface_flags[0] is True  # polymer atom close to ligand
+        assert interface_flags[1] is True  # polymer atom close to ligand
+        assert interface_flags[2] is True  # polymer atom close to ligand
+        assert interface_flags[3] is False  # polymer atom far from ligand
 
         # All ligand atoms should be at interface (close to polymers)
-        assert interface_flags[4] == True  # ligand atom close to polymers
-        assert interface_flags[5] == True  # ligand atom close to polymers
+        assert interface_flags[4] is True  # ligand atom close to polymers
+        assert interface_flags[5] is True  # ligand atom close to polymers
 
     def test_distance_threshold_sensitivity(self):
         """Test that distance threshold correctly affects interface detection."""
@@ -161,13 +156,13 @@ class TestPolymerLigandInterface:
         # (First polymer and first ligand have NaN coords)
         interface_flags = result.at_polymer_ligand_interface
 
-        assert interface_flags[0] == False  # polymer atom with NaN coords
+        assert interface_flags[0] is False  # polymer atom with NaN coords
         assert (
-            interface_flags[1] == True
+            interface_flags[1] is True
         )  # polymer atom with valid coords, close to valid ligand
-        assert interface_flags[2] == False  # ligand atom with NaN coords
+        assert interface_flags[2] is False  # ligand atom with NaN coords
         assert (
-            interface_flags[3] == True
+            interface_flags[3] is True
         )  # ligand atom with valid coords, close to valid polymer
 
     def test_no_polymer_atoms(self):

@@ -1,15 +1,9 @@
-import numpy as np
-
 import torch
 import torch.nn as nn
-
 from atomworks.constants import ELEMENT_NAME_TO_ATOMIC_NUMBER
-
-from mpnn.transforms.feature_aggregation.token_encodings import MPNN_TOKEN_ENCODING
-
-from mpnn.model.layers.message_passing import gather_nodes, gather_edges
-
+from mpnn.model.layers.message_passing import gather_edges, gather_nodes
 from mpnn.model.layers.positional_encoding import PositionalEncodings
+from mpnn.transforms.feature_aggregation.token_encodings import MPNN_TOKEN_ENCODING
 
 
 class ProteinFeatures(nn.Module):

@@ -7,10 +7,9 @@ used across multiple test files in the MPNN test suite.
 
 import pytest
 import torch
-import numpy as np
-from mpnn.model.mpnn import ProteinMPNN, LigandMPNN
-from mpnn.loss.nll_loss import LabelSmoothedNLLLoss
 from mpnn.collate.feature_collator import FeatureCollator
+from mpnn.loss.nll_loss import LabelSmoothedNLLLoss
+from mpnn.model.mpnn import LigandMPNN, ProteinMPNN
 
 # Shared test constants
 PDB_IDS = ["6eb6", "7tdx", "3en2", "2xni"]

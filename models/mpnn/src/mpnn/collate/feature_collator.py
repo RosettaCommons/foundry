@@ -6,9 +6,10 @@ variable-length features, including padding and scalar feature
 consistency checks.
 """
 
-from typing import Dict, List, Any
-import torch
 import copy
+from typing import Any, Dict, List
+
+import torch
 from atomworks.constants import UNKNOWN_AA
 from mpnn.transforms.feature_aggregation.token_encodings import MPNN_TOKEN_ENCODING
 

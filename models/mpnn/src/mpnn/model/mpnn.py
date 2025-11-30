@@ -1,23 +1,19 @@
 import torch
 import torch.nn as nn
-
 from atomworks.constants import UNKNOWN_AA
-
-from mpnn.utils.probability import sample_bernoulli_rv
-
 from mpnn.model.layers.graph_embeddings import (
     ProteinFeatures,
+    ProteinFeaturesLigand,
     ProteinFeaturesMembrane,
     ProteinFeaturesPSSM,
-    ProteinFeaturesLigand,
 )
-
 from mpnn.model.layers.message_passing import (
-    gather_nodes,
-    cat_neighbors_nodes,
-    EncLayer,
     DecLayer,
+    EncLayer,
+    cat_neighbors_nodes,
+    gather_nodes,
 )
+from mpnn.utils.probability import sample_bernoulli_rv
 
 
 class ProteinMPNN(nn.Module):

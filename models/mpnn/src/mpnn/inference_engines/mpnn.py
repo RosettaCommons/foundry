@@ -1,29 +1,22 @@
 import copy
-
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
-
-from biotite.structure import AtomArray
-
 from atomworks.constants import (
-    PROTEIN_BACKBONE_ATOM_NAMES,
     DICT_THREE_TO_ONE,
+    PROTEIN_BACKBONE_ATOM_NAMES,
     UNKNOWN_AA,
 )
 from atomworks.ml.utils.token import get_token_starts, spread_token_wise
-
-from modelhub.metrics.metric import MetricManager
-from modelhub.utils.ddp import RankedLogger
-
+from biotite.structure import AtomArray
+from mpnn.collate.feature_collator import FeatureCollator
 from mpnn.metrics.sequence_recovery import (
     InterfaceSequenceRecovery,
     SequenceRecovery,
 )
 from mpnn.model.mpnn import LigandMPNN, ProteinMPNN
-from mpnn.collate.feature_collator import FeatureCollator
 from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from mpnn.transforms.feature_aggregation.token_encodings import MPNN_TOKEN_ENCODING
 from mpnn.utils.inference import (
@@ -33,6 +26,9 @@ from mpnn.utils.inference import (
     _absolute_path_or_none,
 )
 from mpnn.utils.weights import load_legacy_weights
+
+from modelhub.metrics.metric import MetricManager
+from modelhub.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

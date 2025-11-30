@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-
 from mpnn.model.layers.position_wise_feed_forward import PositionWiseFeedForward
 
 

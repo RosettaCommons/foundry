@@ -1,5 +1,4 @@
-from atomworks.constants import STANDARD_AA, UNKNOWN_AA, AA_LIKE_CHEM_TYPES
-
+from atomworks.constants import AA_LIKE_CHEM_TYPES, STANDARD_AA, UNKNOWN_AA
 from atomworks.ml.encoding_definitions import TokenEncoding
 
 # Token ordering for MPNN.

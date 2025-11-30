@@ -4,24 +4,21 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from omegaconf import DictConfig
-
 import torch
-from torch.utils.data import WeightedRandomSampler, DataLoader
-
+from atomworks.io.parser import STANDARD_PARSER_ARGS
 from atomworks.ml.datasets.pandas_dataset import PandasDataset, StructuralDatasetWrapper
 from atomworks.ml.datasets.parsers.default_metadata_row_parsers import GenericDFParser
-from atomworks.io.parser import STANDARD_PARSER_ARGS
 from atomworks.ml.samplers import (
-    calculate_weights_for_pdb_dataset_df,
     DistributedMixedSampler,
+    calculate_weights_for_pdb_dataset_df,
 )
+from omegaconf import DictConfig
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from modelhub.callbacks.metrics_logging import StoreValidationMetricsInDFCallback
 from modelhub.utils.datasets import wrap_dataset_and_sampler_with_fallbacks
-
-from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from mpnn.collate.feature_collator import TokenBudgetAwareFeatureCollator
+from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from mpnn.samplers.samplers import PaddedTokenBudgetBatchSampler
 from mpnn.trainers.mpnn import MPNNTrainer
 

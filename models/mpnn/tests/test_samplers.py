@@ -1,10 +1,9 @@
 """Tests for MPNN samplers."""
 
-import pytest
 import pandas as pd
-from torch.utils.data import Sampler
-
+import pytest
 from mpnn.samplers.samplers import PaddedTokenBudgetBatchSampler
+from torch.utils.data import Sampler
 
 
 class MockIndexSampler(Sampler):

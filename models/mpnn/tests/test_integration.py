@@ -7,28 +7,24 @@ model functionality.
 """
 
 import pytest
-from omegaconf import DictConfig
-
 import torch
-
 from atomworks.ml.utils.testing import cached_parse
-
-from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
-from mpnn.metrics.sequence_recovery import SequenceRecovery, InterfaceSequenceRecovery
 from mpnn.metrics.nll import NLL, InterfaceNLL
+from mpnn.metrics.sequence_recovery import InterfaceSequenceRecovery, SequenceRecovery
+from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from mpnn.trainers.mpnn import MPNNTrainer
+from omegaconf import DictConfig
 from test_utils import (
     PDB_IDS,
-    loss_fn,
-    select_model,
-    create_feature_collator,
-    assert_comprehensive_shapes,
-    assert_value_checks,
-    assert_loss_output_structure,
-    assert_gradient_properties,
-    compute_loss_and_backward,
     assert_all_metrics_comprehensive,
+    assert_comprehensive_shapes,
+    assert_gradient_properties,
+    assert_loss_output_structure,
+    assert_value_checks,
     combine_kwargs_to_compute,
+    compute_loss_and_backward,
+    create_feature_collator,
+    select_model,
 )
 
 

@@ -25,7 +25,6 @@ from atomworks.ml.transforms.filters import (
     RemoveHydrogens,
     RemoveUnresolvedTokens,
 )
-
 from mpnn.transforms.feature_aggregation.mpnn import (
     EncodeMPNNNonAtomizedTokens,
     FeaturizeAtomizedTokens,

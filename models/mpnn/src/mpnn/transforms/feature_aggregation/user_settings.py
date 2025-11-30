@@ -6,14 +6,12 @@ mode-specific and common user features required by MPNN models.
 from typing import Any
 
 import numpy as np
-
-from atomworks.io.utils.selection import get_annotation
 from atomworks.io.utils.atom_array_plus import AtomArrayPlus
-
-from atomworks.ml.transforms.base import Transform
+from atomworks.io.utils.selection import get_annotation
 from atomworks.ml.transforms._checks import (
     check_atom_array_annotation,
 )
+from atomworks.ml.transforms.base import Transform
 from atomworks.ml.utils.token import (
     get_token_starts,
     spread_token_wise,

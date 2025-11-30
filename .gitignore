@@ -1,6 +1,6 @@
 # Base .gitignore from https://github.com/github/gitignore/blob/main/Python.gitignore
 *.lock
-
+**.nfs**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

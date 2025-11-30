@@ -19,7 +19,6 @@ from typing import Any
 import numpy as np
 import pytest
 from biotite.structure import AtomArray
-
 from mpnn.transforms.feature_aggregation.token_encodings import (
     MPNN_TOKEN_ENCODING,
 )

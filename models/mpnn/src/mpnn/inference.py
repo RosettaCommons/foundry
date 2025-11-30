@@ -2,9 +2,9 @@
 
 from mpnn.inference_engines.mpnn import MPNNInferenceEngine
 from mpnn.utils.inference import (
+    MPNN_GLOBAL_INFERENCE_DEFAULTS,
     build_arg_parser,
     cli_to_json,
-    MPNN_GLOBAL_INFERENCE_DEFAULTS,
 )
 
 
