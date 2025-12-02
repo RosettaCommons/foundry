@@ -72,6 +72,12 @@ def calculate_hbonds(
 
     hbplus_exe = os.environ.get("HBPLUS_PATH")
 
+    if hbplus_exe is None or hbplus_exe == "":
+        raise ValueError(
+            "HBPLUS_PATH environment variable not set. "
+            "Please set it to the path of the hbplus executable in order to calculate hydrogen bonds."
+        )
+
     subprocess.call(
         [
             hbplus_exe,

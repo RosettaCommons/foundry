@@ -622,10 +622,6 @@ def build_atom14_base_pipeline(
 
         # TODO: Delete these once all checkpoints are updated with the latest defaults
         kwargs.setdefault("generate_conformers_for_non_protein_only", True)
-        # kwargs.setdefault("atom_1d_features", None)
-        # kwargs.setdefault("token_1d_features", None)
-        # kwargs.setdefault("diffusion_batch_size", 16)
-        # kwargs.setdefault("sigma_data", 16)
         kwargs.setdefault("return_atom_array", True)
         kwargs.setdefault("provide_elements_for_unindexed_components", False)
         kwargs.setdefault("center_option", "all")

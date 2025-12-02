@@ -3,8 +3,7 @@
 
 name: train-base
 tags: [print-model]
-# ckpt_path: null
-ckpt_path: /projects/ml/aa_design/models/rfd3_latest_cleaned.ckpt
+ckpt_path: null
 
 datasets:
   diffusion_batch_size_train: 16
