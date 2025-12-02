@@ -261,9 +261,6 @@ class RFD3DiffusionModule(nn.Module):
         # ... Collect outputs
         outputs = {
             "X_L": recycled_features["X_L"],  # [B, L, 3] denoised positions
-            "X_L_ref_frame": recycled_features[
-                "X_L_ref_frame"
-            ],  # [B, L, 3] denoised positions in reference frame
             "sequence_indices_I": recycled_features["sequence_indices_I"],
             "sequence_logits_I": recycled_features["sequence_logits_I"],
         }
@@ -382,30 +379,8 @@ class RFD3DiffusionModule(nn.Module):
         sequence_logits_I, sequence_indices_I = self.sequence_head(A_I=A_I)
         D_II_self = self.bucketize_fn(X_out_L[..., f["is_ca"], :].detach())
 
-        # ... Compute frame reference
-        if not self.training:
-            # Within each token, collapse virtual predictions onto the
-            R_update_L_ref_frame = R_update_L.clone()  # D, L, 3
-            cb = R_update_L_ref_frame[:, f["is_central"], :]  # D, I, 3
-            va_indices = f["atom_to_token_map"][
-                f["is_virtual"]
-            ]  # D, L_virtual in (0, I-1)
-
-            # Scatter: CB into virtual atoms given virtual atom indices
-            idx = va_indices.unsqueeze(0).unsqueeze(-1)  # (1, L_virtual, 1)
-            idx = idx.expand(cb.shape[0], -1, 3)  # (D, L_virtual, 3)
-
-            virtual_coords = torch.gather(cb, 1, idx.long())  # (D, L_virtual, 3)
-            R_update_L_ref_frame[:, f["is_virtual"], :] = virtual_coords
-            X_L_ref_frame = self.scale_positions_out(
-                R_update_L_ref_frame, X_noisy_L, t_L
-            )
-        else:
-            X_L_ref_frame = None
-
         return {
             "X_L": X_out_L,
-            "X_L_ref_frame": X_L_ref_frame,
             "D_II_self": D_II_self,
             "sequence_logits_I": sequence_logits_I,
             "sequence_indices_I": sequence_indices_I,
