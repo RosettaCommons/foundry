@@ -1,5 +1,6 @@
 # path to directory with training splits
-pdb_data_dir: /projects/ml/datahub/dfs/af3_splits/2024_12_16/  # TODO: uncomment
+pdb_data_dir: projects/ml/frozen_pdb_copies/2025_07_13_pdb
+pdb_parquet_dir: /projects/ml/datahub/dfs/af3_splits/2024_12_16/  # TODO: uncomment
 
 # fb monomer distillation dataset
 monomer_distillation_data_dir: /squash/af2_distillation_facebook/

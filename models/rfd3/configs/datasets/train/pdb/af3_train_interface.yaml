@@ -4,10 +4,10 @@ defaults:
 dataset:
   dataset_parser:
     _target_: atomworks.ml.datasets.parsers.InterfacesDFParser
-    base_dir: /projects/ml/frozen_pdb_copies/2025_07_13_pdb
+    base_dir: ${paths.data.pdb_data_dir}
   dataset:
     name: interface
-    data: ${paths.data.pdb_data_dir}/interfaces_df_train.parquet
+    data: ${paths.data.pdb_parquet_dir}/interfaces_df_train.parquet
     filters:
       # filters common across all PDB datasets
       - "deposition_date < '2021-09-30'"
