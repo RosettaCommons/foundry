@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 from atomworks.io import parse
-from atomworks.io.parser import STANDARD_PARSER_ARGS
+from atomworks.io.parser import STANDARD_PARSER_ARGS, parse_atom_array
 from atomworks.io.utils.atom_array_plus import (
     AtomArrayPlus,
     as_atom_array_plus,
@@ -712,6 +712,8 @@ class MPNNInferenceInput:
 
         # Copy atom array.
         atom_array = atom_array.copy() if atom_array is not None else None
+        parser_output = parse_atom_array(atom_array) if atom_array is not None else {}
+        atom_array = parser_output["assemblies"]["1"][0] if len(parser_output.get("assemblies", {})) > 0 else None
 
         # Validate the input dictionary.
         MPNNInferenceInput._validate_all(
@@ -733,7 +735,8 @@ class MPNNInferenceInput:
         # Annotate the atom array with per-residue information from the
         # input dictionary.
         annotated = MPNNInferenceInput.annotate_atom_array(atom_array, input_dict)
-
+        logger.info(
+            f"Annotated AtomArray has {annotated.array_length()} atoms "    )
         return MPNNInferenceInput(atom_array=annotated, input_dict=input_dict)
 
     @staticmethod

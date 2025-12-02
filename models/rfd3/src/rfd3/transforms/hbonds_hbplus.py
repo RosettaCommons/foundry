@@ -69,10 +69,12 @@ def calculate_hbonds(
     dtstr = datetime.now().strftime("%Y%m%d%H%M%S")
     pdb_path = f"{dtstr}_{np.random.randint(10000)}.pdb"
     atom_array, nan_mask, chain_map = save_atomarray_to_pdb(atom_array, pdb_path)
+    
+    hbplus_exe = os.environ.get("HBPLUS_PATH")
 
     subprocess.call(
         [
-            "/projects/ml/hbplus",
+            hbplus_exe,
             "-h",
             str(cutoff_HA_dist),
             "-d",

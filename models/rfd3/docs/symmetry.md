@@ -163,3 +163,5 @@ The tasks that these examples describe are as follows:
 - Implementation of 2D-conditioning for symmetric motifs
   - will require figuring out how to read in motif, make symmetric when atom array is symmetrized, and then make sure that the 2D-cond labels get copied over too. 
 - Improve helical symmetry
+
+
