@@ -2,24 +2,6 @@ defaults:
   - train_logging
   - _self_
 
-# Validation metrics:
-dump_validation_structures_callback:
-  _target_: rfd3.trainer.dump_validation_structures.DumpValidationStructuresCallback
-  save_dir: ${paths.output_dir}/val_structures
-  dump_predictions: True
-  dump_prediction_metadata_json: True
-  dump_trajectories: False
-  dump_denoised_trajectories_only: False
-  
-  one_model_per_file: True
-  dump_every_n: 4
-  align_trajectories: False
-  verbose: False
-
-# Other:
-log_design_validation_metrics_callback:
-  _target_: rfd3.callbacks.LogDesignValidationMetricsCallback
-
 log_learning_rate_callback:
   log_every_n: 25 # default 10
 
