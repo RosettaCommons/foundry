@@ -457,7 +457,13 @@ def build_af3_transform_pipeline(
             pad_token=af3_sequence_encoding.token_to_idx["<G>"],
             add_residue_is_paired_feature=add_residue_is_paired_feature,
         ),
-        AddAF3TokenBondFeatures(),
+        ConditionalRoute(
+            condition_func=lambda data: data.get("is_inference", False),
+            transform_map={
+                True: AddAF3TokenBondFeatures(np.inf),
+                False: AddAF3TokenBondFeatures(),
+            },
+        ),
     ]
 
     if add_cyclic_bonds:

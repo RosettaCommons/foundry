@@ -79,8 +79,8 @@ class DumpValidationStructuresCallback(BaseCallback):
     def on_validation_batch_end(
         self,
         *,
+        current_epoch,
         outputs: dict,
-        trainer: Any,
         batch: Any,
         dataset_name: str,
         **_,
@@ -88,9 +88,9 @@ class DumpValidationStructuresCallback(BaseCallback):
         if (not self.dump_predictions) and (not self.dump_trajectories):
             return  # Nothing to do
 
-        if trainer.state["current_epoch"] % self.dump_every_n != 0:
+        if current_epoch % self.dump_every_n != 0:
             ranked_logger.debug(
-                f"Skipping validation batch dump at step {trainer.state['current_epoch']} (not every {self.dump_every_n} epochs)"
+                f"Skipping validation batch dump at step {current_epoch} (not every {self.dump_every_n} epochs)"
             )
             return
 
@@ -106,7 +106,7 @@ class DumpValidationStructuresCallback(BaseCallback):
         _build_path_from_example_id = functools.partial(
             self._build_path_from_example_id,
             example_id=example["example_id"],
-            epoch=trainer.state["current_epoch"],
+            epoch=current_epoch,
             dataset_name=dataset_name,
         )
 

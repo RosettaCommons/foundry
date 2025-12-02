@@ -302,6 +302,36 @@ class AADesignTrainer(FabricTrainer):
             ],  # [I,]
         }
 
+    def _assemble_metrics_extra_info(self, example: dict, network_output: dict) -> dict:
+        """Prepares the extra info for the metrics"""
+        # We need the same information as for the loss...
+        metrics_extra_info = self._assemble_loss_extra_info(example)
+
+        # ... and possibly some additional metadata from the example dictionary
+        # TODO: Generalize, so we always use the `extra_info` key, rather than unpacking the ground truth as well
+        metrics_extra_info.update(
+            {
+                # TODO: Remove, instead using `extra_info` for all keys
+                **{
+                    k: example["ground_truth"][k]
+                    for k in [
+                        "interfaces_to_score",
+                        "pn_units_to_score",
+                        "chain_iid_token_lvl",
+                    ]
+                    if k in example["ground_truth"]
+                },
+                "example_id": example[
+                    "example_id"
+                ],  # We require the example ID for logging
+                # (From the parser)
+                **example.get("extra_info", {}),
+            }
+        )
+
+        # (Create a shallow copy to avoid modifying the original dictionary)
+        return {**metrics_extra_info}
+
     def _build_predicted_atom_array_stack(
         self, network_output: dict, example: dict
     ) -> Union[AtomArrayStack, List[AtomArray]]:

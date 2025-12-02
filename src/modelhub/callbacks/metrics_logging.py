@@ -39,11 +39,12 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
             f"Saved validation outputs to {file_path} for rank {rank}, epoch {epoch}"
         )
 
-    def on_validation_epoch_start(self):
+    def on_validation_epoch_start(self, trainer):
         self.per_gpu_outputs_df = pd.DataFrame()
 
     def on_validation_batch_end(
         self,
+        trainer,
         outputs: dict,
         batch: Any,
         batch_idx: int,
@@ -103,7 +104,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
 
         # ... convert the list of dicts to a DataFrame and add epoch and dataset columns
         batch_df = pd.DataFrame(metrics_as_list_of_dicts)
-        batch_df["epoch"] = self.trainer.state["current_epoch"]
+        batch_df["epoch"] = trainer.state["current_epoch"]
         batch_df["dataset"] = dataset_name
 
         # Assert no duplicate rows
@@ -120,7 +121,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
             f"Validation Progress: {100 * (batch_idx + 1) / num_batches:.0f}% for {dataset_name}"
         )
 
-    def on_validation_epoch_end(self):
+    def on_validation_epoch_end(self, trainer):
         """Aggregate and log the validation metrics at the end of the epoch.
 
         Each rank writes out its partial CSV. Then rank 0 aggregates them, logs grouped metrics by dataset,
@@ -128,19 +129,19 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         """
 
         #  ... write out partial CSV for this rank
-        rank = self.trainer.fabric.global_rank
-        epoch = self.trainer.state["current_epoch"]
+        rank = trainer.fabric.global_rank
+        epoch = trainer.state["current_epoch"]
         self._save_dataframe_for_rank(rank, epoch)
 
         # Synchronize all processes
         ranked_logger.info(
             "Synchronizing all processes before concatenating DataFrames..."
         )
-        self.trainer.fabric.barrier()
+        trainer.fabric.barrier()
 
         # Only rank 0 loads and concatenates the DataFrames
         ranked_logger.info("Loading and concatenating DataFrames...")
-        if self.trainer.fabric.is_global_zero:
+        if trainer.fabric.is_global_zero:
             # ... load all partial CSVs
             merged_df = self._load_and_concatenate_csvs(epoch)
 
@@ -155,7 +156,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
             ranked_logger.info(f"Appended epoch={epoch} results to {master_path}")
 
             # Store the path to the master CSV in the Trainer
-            self.trainer.validation_results_path = master_path
+            trainer.validation_results_path = master_path
 
             # Cleanup
             self._cleanup_temp_files()

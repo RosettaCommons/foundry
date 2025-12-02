@@ -9,7 +9,6 @@ class Loss(nn.Module):
         self.to_compute = []
         for loss_name, loss in losses.items():
             loss_fn = hydra.utils.instantiate(loss)
-            print(f"Adding loss {loss_name} to the loss function")
             self.to_compute.append(loss_fn)
             assert not isinstance(
                 loss_fn, DictConfig

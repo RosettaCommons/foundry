@@ -563,8 +563,8 @@ class FabricTrainer(ABC):
                         batch=batch,
                         batch_idx=batch_idx,
                         num_batches=len(val_loader),
-                        trainer=self,
                         dataset_name=val_loader_name,
+                        current_epoch=self.state["current_epoch"],
                     )
 
             self.fabric.call("on_validation_epoch_end", trainer=self)

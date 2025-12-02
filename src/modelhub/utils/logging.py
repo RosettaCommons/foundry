@@ -95,6 +95,34 @@ def suppress_warnings(is_inference: bool = False):
             atomworks_ml_logger.removeFilter(cached_data_filter)
 
 
+def configure_minimal_inference_logging() -> None:
+    """Configure minimal logging for inference (quiet mode)."""
+    # Suppress most logging by default
+    logging.getLogger().setLevel(logging.WARNING)
+
+    # Suppress specific noisy loggers
+    for logger_name in [
+        "atomworks",
+        "transforms",
+        "modelhub.metrics",
+        "modelhub.trainers",
+        "modelhub.inference_engines.base",
+        "rf3.trainers",
+        "rf3.utils.inference",
+        "lightning",
+        "lightning_fabric",
+        "root",
+    ]:
+        logging.getLogger(logger_name).setLevel(logging.ERROR)
+
+    # Keep model-specific inference engine loggers at INFO for progress messages
+    logging.getLogger("rf3.inference_engines").setLevel(logging.INFO)
+    logging.getLogger("rfd3.engine").setLevel(logging.INFO)
+
+    # Suppress warnings
+    warnings.filterwarnings("ignore")
+
+
 @rank_zero_only
 def print_config_tree(
     cfg: DictConfig,

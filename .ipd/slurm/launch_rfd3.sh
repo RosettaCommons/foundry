@@ -53,13 +53,17 @@ echo "Running on $SLURM_NNODES nodes with $DEVICES_PER_NODE tasks per node"
 GRAD_ACCUM_STEPS=$((EFFECTIVE_BATCH_SIZE / (DEVICES_PER_NODE * SLURM_NNODES)))
 echo "Grad Accumulation Steps: $GRAD_ACCUM_STEPS"
 
+EXTRA_ARGS="$@"
 command="srun --kill-on-bad-exit ../../models/rfd3/src/rfd3/train.py \
     experiment=$SLURM_JOB_NAME \
     ++trainer.devices_per_node=$DEVICES_PER_NODE \
     ++trainer.num_nodes=$SLURM_NNODES \
     ++trainer.grad_accum_steps=$GRAD_ACCUM_STEPS"
 
+command="$command $EXTRA_ARGS"
+
 echo -e "command\t$command"
+echo "Extra args: $EXTRA_ARGS"
 
 # Let 'er rip
 $command

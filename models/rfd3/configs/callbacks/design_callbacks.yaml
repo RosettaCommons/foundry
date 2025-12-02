@@ -16,10 +16,6 @@ dump_validation_structures_callback:
   align_trajectories: False
   verbose: False
 
-log_pipelines_results_callback:
-  _target_: rfd3.callbacks.LogPipelinesResultsCallback
-  metrics_save_dir: ${paths.output_dir}/val_metrics
-
 # Other:
 log_design_validation_metrics_callback:
   _target_: rfd3.callbacks.LogDesignValidationMetricsCallback
@@ -30,11 +26,3 @@ log_learning_rate_callback:
 log_af3_training_losses_callback:
   log_full_batch_losses: False
   log_every_n: 25 # default 10
-
-# log_train_variable_callback:
-#   _target_:  rfd3.callbacks.LogTrainVariableCallback
-#   log_every_n: 1
-#   variables:
-#     - hbond_total_count
-#     - hbond_subsample_atoms
-#     - hbond_total_atoms

@@ -43,11 +43,12 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
             f"Saved validation outputs to {file_path} for rank {rank}, epoch {epoch}"
         )
 
-    def on_validation_epoch_start(self):
+    def on_validation_epoch_start(self, trainer):
         self.per_gpu_outputs_df = pd.DataFrame()
 
     def on_validation_batch_end(
         self,
+        trainer,
         outputs: dict,
         batch: Any,
         batch_idx: int,
@@ -107,7 +108,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
 
         # ... convert the list of dicts to a DataFrame and add epoch and dataset columns
         batch_df = pd.DataFrame(metrics_as_list_of_dicts)
-        batch_df["epoch"] = self.trainer.state["current_epoch"]
+        batch_df["epoch"] = trainer.state["current_epoch"]
         batch_df["dataset"] = dataset_name
 
         # Assert no duplicate rows
@@ -124,7 +125,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
             f"Validation Progress: {100 * (batch_idx + 1) / num_batches:.0f}% for {dataset_name}"
         )
 
-    def on_validation_epoch_end(self):
+    def on_validation_epoch_end(self, trainer):
         """Aggregate and log the validation metrics at the end of the epoch.
 
         Each rank writes out its partial CSV. Then rank 0 aggregates them, logs grouped metrics by dataset,
@@ -132,19 +133,19 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         """
 
         #  ... write out partial CSV for this rank
-        rank = self.trainer.fabric.global_rank
-        epoch = self.trainer.state["current_epoch"]
+        rank = trainer.fabric.global_rank
+        epoch = trainer.state["current_epoch"]
         self._save_dataframe_for_rank(rank, epoch)
 
         # Synchronize all processes
         ranked_logger.info(
             "Synchronizing all processes before concatenating DataFrames..."
         )
-        self.trainer.fabric.barrier()
+        trainer.fabric.barrier()
 
         # Only rank 0 loads and concatenates the DataFrames
         ranked_logger.info("Loading and concatenating DataFrames...")
-        if self.trainer.fabric.is_global_zero:
+        if trainer.fabric.is_global_zero:
             # ... load all partial CSVs
             merged_df = self._load_and_concatenate_csvs(epoch)
 
@@ -159,7 +160,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
             ranked_logger.info(f"Appended epoch={epoch} results to {master_path}")
 
             # Store the path to the master CSV in the Trainer
-            self.trainer.validation_results_path = master_path
+            trainer.validation_results_path = master_path
 
             # Cleanup
             self._cleanup_temp_files()
@@ -221,15 +222,15 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
     ):
         self.metrics_to_log = metrics_to_log
 
-    def on_validation_epoch_end(self):
+    def on_validation_epoch_end(self, trainer):
         # Only log metrics to disk if this is the global zero rank
-        if not self.trainer.fabric.is_global_zero:
+        if not trainer.fabric.is_global_zero:
             return
 
         assert hasattr(
-            self.trainer, "validation_results_path"
+            trainer, "validation_results_path"
         ), "Results path not found! Ensure that StoreValidationMetricsInDFCallback is called first."
-        df = pd.read_csv(self.trainer.validation_results_path)
+        df = pd.read_csv(trainer.validation_results_path)
 
         # ... filter to most recent epoch, drop epoch column
         df = df[df["epoch"] == df["epoch"].max()]
@@ -273,20 +274,20 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
                 )
                 print_df_as_table(
                     condense_count_columns_of_grouped_df(grouped).reset_index(),
-                    f"{dataset} — Epoch {self.trainer.state['current_epoch']} — Validation Metrics: LDDT by Type",
+                    f"{dataset} — Epoch {trainer.state['current_epoch']} — Validation Metrics: LDDT by Type",
                 )
 
                 # Log the grouped metrics (aggregated from all ranks) with Fabric
-                if self.trainer.fabric:
+                if trainer.fabric:
                     for _, row in grouped.reset_index().iterrows():
-                        self.trainer.fabric.log_dict(
+                        trainer.fabric.log_dict(
                             {
                                 f"val/{dataset}/{row['type'].iloc[0]}/{col}": row[col][
                                     "mean"
                                 ]
                                 for col in numeric_cols
                             },
-                            step=self.trainer.state["current_epoch"],
+                            step=trainer.state["current_epoch"],
                         )
 
             # +----------------- Other metrics -----------------+
@@ -311,13 +312,13 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
 
             print_df_as_table(
                 final_means_df.reset_index(),
-                f"{dataset} — {self.trainer.state['current_epoch']} — General Validation Metrics",
+                f"{dataset} — {trainer.state['current_epoch']} — General Validation Metrics",
                 console_width=150,
             )
 
-            if self.trainer.fabric:
+            if trainer.fabric:
                 for col in numeric_cols:
-                    self.trainer.fabric.log_dict(
+                    trainer.fabric.log_dict(
                         {f"val/{dataset}/{col}": final_means[col]},
-                        step=self.trainer.state["current_epoch"],
+                        step=trainer.state["current_epoch"],
                     )

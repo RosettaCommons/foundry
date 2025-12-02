@@ -21,23 +21,36 @@ git clone https://github.com/RosettaCommons/modelforge.git \
   && uv python install 3.12 \
   && uv venv --python 3.12 \
   && source .venv/bin/activate \
-  && uv pip install -e . \
-  && uv pip install -e ./models/rf3
+  && uv pip install -e ".[rf3]"
 ```
 
-> [!IMPORTANT]
-> You must install `modelhub` (the root package) with `-e` first, then install `rf3`. This ensures both packages are in editable mode for proper development workflow.
+### B. Download model weights for RF3
 
-### B. Download model weights for RF3 
+We offer three model checkpoints:
+
+| Model | Training Cutoff | Description |
+|-------|-----------------|-------------|
+| **Latest** | 01/24 | Most recent model with bugfixes and improvements from preprint |
+| **Preprint** | 01/24 | Original preprint model |
+| **Benchmark** | 09/21 | For benchmarking against other models with the same date cutoff |
+
+**Latest (recommended):**
 ```bash
-wget http://files.ipd.uw.edu/pub/rf3/rf3_latest.pt
+wget http://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_latest.ckpt
 ```
 
-If you're looking for the 9/21 model (e.g., for benchmarking against other models with the same date cutoff):
+**Preprint:**
 ```bash
-wget http://files.ipd.uw.edu/pub/rf3/rf3_921.pt
+wget http://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_preprint.ckpt
 ```
-The inference API is otherwise identical.
+
+**Benchmark (09/21):**
+```bash
+wget http://files.ipd.uw.edu/pub/rf3/rf3_foundry_09_21_preprint.ckpt
+```
+
+> [!NOTE]
+> The inference API is identical across all checkpoints.
 
 ### C. Run a test prediction
 ```bash

@@ -10,7 +10,7 @@ from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
 from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
-from modelhub.utils.logging import print_config_tree
+from modelhub.utils.logging import configure_minimal_inference_logging, print_config_tree
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +40,7 @@ class BaseInferenceEngine:
         inference_sampler_overrides={},
         trainer_overrides={},
         # Debug
-        print_config: bool = False,
+        verbose: bool = False,
         seed: int | None = None,
     ):
         """Initialize inference engine and load model.
@@ -52,13 +52,16 @@ class BaseInferenceEngine:
           seed: Random seed. If None, uses external RNG state. Defaults to ``None``.
           num_nodes: Number of nodes for distributed inference. Defaults to ``1``.
           devices_per_node: Number of devices per node. Defaults to ``1``.
-          print_config: Whether to print config trees. Defaults to ``False``.
+          verbose: If True, show detailed logging and config trees. Defaults to ``False``.
         """
+        if not verbose:
+            configure_minimal_inference_logging()
+
         # Set attrs
         self.initialized_ = False
         self.trainer = None
         self.pipeline = None
-        self.print_config = print_config
+        self.verbose = verbose
         self.ckpt_path = ckpt_path
 
         # Set random seed (only if seed is not None)
@@ -139,7 +142,7 @@ class BaseInferenceEngine:
         """
         # Instantiate trainer
         ranked_logger.info("Instantiating trainer...")
-        if self.print_config:
+        if self.verbose:
             print_config_tree(
                 cfg.trainer, resolve=True, title="INFERENCE TRAINER CONFIGURATION"
             )
@@ -190,7 +193,7 @@ class BaseInferenceEngine:
         transform = first_val_dataset.dataset.transform
         transform = merge(transform, self.transform_overrides)
 
-        if self.print_config:
+        if self.verbose:
             print_config_tree(
                 transform,
                 resolve=True,

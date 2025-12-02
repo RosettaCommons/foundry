@@ -169,22 +169,6 @@ class FabricTrainer(ABC):
         self.checkpoint_every_n_steps = checkpoint_every_n_steps
         self.skip_optimizer_loading = skip_optimizer_loading
 
-        # Inject trainer reference into callbacks for easy access to trainer state
-        self._inject_trainer_into_callbacks()
-
-    def _inject_trainer_into_callbacks(self):
-        """Inject trainer reference into all callbacks.
-
-        This allows callbacks to access trainer.state, trainer.fabric, etc.
-        without needing trainer passed to every hook method.
-        """
-        callbacks = self.fabric._callbacks if self.fabric._callbacks else []
-        if not isinstance(callbacks, list):
-            callbacks = [callbacks]
-
-        for callback in callbacks:
-            callback.trainer = self
-
     def initialize_or_update_trainer_state(
         self,
         updates: dict,
@@ -424,7 +408,7 @@ class FabricTrainer(ABC):
         # relying on the _num_iter_calls attribute to determine the current epoch)
         train_loader._num_iter_calls = self.state["current_epoch"]
 
-        self.fabric.call("on_fit_start")
+        self.fabric.call("on_fit_start", trainer=self)
 
         # Prevalidate
         if self.prevalidate and val_loaders:
@@ -488,7 +472,7 @@ class FabricTrainer(ABC):
         # Reset for next `fit()` call
         self.should_stop = False
 
-        self.fabric.call("on_fit_end")
+        self.fabric.call("on_fit_end", trainer=self)
 
     def train_loop(
         self,
@@ -503,23 +487,23 @@ class FabricTrainer(ABC):
             limit_batches: Limit on the batches during this training epoch. If greater than the number of batches in the
                 `train_loader`, this argument has no effect. Helpful for debugging; should NOT be used when training production models.
         """
-        self.fabric.call("on_train_epoch_start")
+        self.fabric.call("on_train_epoch_start", trainer=self)
 
         assert self.state["model"].training
 
         # NOTE: When we call iter(), Fabric calls the `set_sampler_epoch()` method on the sampler behind the scenes, so we don't need to call it explicitly
         train_iter = iter(train_loader)
-        self.fabric.call("on_after_train_loader_iter")
+        self.fabric.call("on_after_train_loader_iter", trainer=self)
 
         for batch_idx in range(len(train_loader)):
             # (End epoch if stopping training completely or maximum desired batches for this epoch reached)
             if self.should_stop or batch_idx >= limit_batches:
                 break
 
-            self.fabric.call("on_before_train_loader_next")
+            self.fabric.call("on_before_train_loader_next", trainer=self)
             batch = next(train_iter)
 
-            self.fabric.call("on_train_batch_start", batch=batch, batch_idx=batch_idx)
+            self.fabric.call("on_train_batch_start", trainer=self, batch=batch, batch_idx=batch_idx)
 
             # Optimizer should step if we've accumulated the desired number of gradients
             should_optimizer_step = (batch_idx + 1) % self.grad_accum_steps == 0
@@ -532,6 +516,7 @@ class FabricTrainer(ABC):
 
             self.fabric.call(
                 "on_train_batch_end",
+                trainer=self,
                 outputs=self._current_train_return,
                 batch=batch,
                 batch_idx=batch_idx,
@@ -540,6 +525,7 @@ class FabricTrainer(ABC):
             if should_optimizer_step:
                 self.fabric.call(
                     "on_before_optimizer_step",
+                    trainer=self,
                     optimizer=self.state["optimizer"],
                 )
 
@@ -547,6 +533,13 @@ class FabricTrainer(ABC):
                 # Note: step_optimizer() calls optimizer.step(), which internally triggers
                 # on_after_optimizer_step callbacks via _FabricOptimizer
                 self.step_optimizer()
+
+                # ... call optimizer_step hook (distinct from on_after_optimizer_step which is called by Fabric)
+                self.fabric.call(
+                    "optimizer_step",
+                    trainer=self,
+                    optimizer=self.state["optimizer"],
+                )
 
                 # ... step the scheduler, if we're adjusting the learning rate at the optimizer step-level
                 self.step_scheduler(
@@ -565,7 +558,7 @@ class FabricTrainer(ABC):
             ):
                 self.save_checkpoint()
 
-        self.fabric.call("on_train_epoch_end")
+        self.fabric.call("on_train_epoch_end", trainer=self)
 
     def validation_loop(
         self,
@@ -587,7 +580,7 @@ class FabricTrainer(ABC):
             # ... assert we're in evaluation mode
             assert not self.state["model"].training
 
-            self.fabric.call("on_validation_epoch_start")
+            self.fabric.call("on_validation_epoch_start", trainer=self)
 
             # ... iterate over all validation loaders
             for val_loader_name, val_loader in val_loaders.items():
@@ -602,6 +595,7 @@ class FabricTrainer(ABC):
 
                     self.fabric.call(
                         "on_validation_batch_start",
+                        trainer=self,
                         batch=batch,
                         batch_idx=batch_idx,
                         num_batches=len(val_loader),
@@ -615,6 +609,7 @@ class FabricTrainer(ABC):
 
                     self.fabric.call(
                         "on_validation_batch_end",
+                        trainer=self,
                         outputs=validation_result,
                         batch=batch,
                         batch_idx=batch_idx,
@@ -622,7 +617,7 @@ class FabricTrainer(ABC):
                         dataset_name=val_loader_name,
                     )
 
-            self.fabric.call("on_validation_epoch_end")
+            self.fabric.call("on_validation_epoch_end", trainer=self)
 
             # ... reset the model to training mode
             self.state["model"].train()
@@ -795,8 +790,7 @@ class FabricTrainer(ABC):
             return
 
         # (Provide a hook to modify the state before saving)
-        # Note: Pass as positional arg to work with both BaseCallback and LightningModule hooks
-        self.fabric.call("on_save_checkpoint", self.state)
+        self.fabric.call("on_save_checkpoint", trainer=self, state=self.state)
 
         # ... construct the checkpoint file path using Path
         checkpoint_file = (
@@ -855,7 +849,7 @@ class FabricTrainer(ABC):
             ckpt = checkpoint
         else:
             ranked_logger.info(f"Loading checkpoint from: {checkpoint}...")
-            ckpt = self.fabric.load(checkpoint)
+            ckpt = torch.load(checkpoint, map_location="cpu", weights_only=False)
 
         try:
             # ... optimize, scheduler

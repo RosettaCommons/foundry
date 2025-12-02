@@ -21,7 +21,7 @@ class DumpValidationStructuresCallback(BaseCallback):
         dump_predictions: bool = False,
         one_model_per_file: bool = False,
         dump_trajectories: bool = False,
-        compress_outputs: bool = True,
+        compress_outputs: bool = False,
     ):
         """
         Args:
@@ -29,7 +29,7 @@ class DumpValidationStructuresCallback(BaseCallback):
             one_model_per_file: If True, write each structure within a diffusion batch to its own CIF files. If False,
                 include each structure within a diffusion batch as a separate model within one CIF file.
             dump_trajectories: Whether to dump denoising trajectories after validation batches.
-            compress_outputs: Whether to gzip output files. Defaults to ``True``.
+            compress_outputs: Whether to gzip output files. Defaults to ``False``.
         """
         super().__init__()
         self.save_dir = Path(save_dir)
@@ -40,10 +40,11 @@ class DumpValidationStructuresCallback(BaseCallback):
 
     def on_validation_batch_end(
         self,
+        trainer,
         outputs: dict,
         batch: Any,
-        dataset_name: str | None = None,
-        **kwargs,
+        dataset_name: str | None,
+        **_,
     ):
         if (not self.dump_predictions) and (not self.dump_trajectories):
             return  # Nothing to do
@@ -65,7 +66,7 @@ class DumpValidationStructuresCallback(BaseCallback):
 
         def _build_path_from_example_id(dir: str, extra: str = "") -> Path:
             """Helper function to build a path from a training or validation example_id."""
-            path = self.save_dir / dir / f"epoch_{self.trainer.state['current_epoch']}"
+            path = self.save_dir / dir / f"epoch_{trainer.state['current_epoch']}"
 
             path = path / dataset_name
 

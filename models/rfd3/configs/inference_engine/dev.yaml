@@ -8,7 +8,7 @@ n_batches: 1
 seed: 42
 
 dump_trajectories: True
-print_config: True
+verbose: true
 skip_existing: False
 cleanup_guideposts: False
 cleanup_virtual_atoms: False

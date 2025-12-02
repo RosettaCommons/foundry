@@ -26,8 +26,8 @@ from modelhub.utils.logging import (
 class LogModelParametersCallback(BaseCallback):
     """Print a table of the total and trainable parameters of the model at the start of training."""
 
-    def on_fit_start(self):
-        print_model_parameters(self.trainer.state["model"])
+    def on_fit_start(self, trainer):
+        print_model_parameters(trainer.state["model"])
 
 
 class PrintExampleIDBeforeForwardPassCallback(BaseCallback):
@@ -39,12 +39,12 @@ class PrintExampleIDBeforeForwardPassCallback(BaseCallback):
     def __init__(self, rank_zero_only: bool = True):
         self.logger = RankedLogger(__name__, rank_zero_only=rank_zero_only)
 
-    def on_train_batch_start(self, batch: Any, batch_idx: int):
+    def on_train_batch_start(self, trainer, batch: Any, batch_idx: int):
         example_id = batch[0]["example_id"]
 
         # Prepare the formatted strings with colors
-        rank_info = f"[grey]<Rank {self.trainer.fabric.global_rank}>[/grey]"
-        epoch_batch_info = f"[blue]Epoch {self.trainer.state['current_epoch']} Batch {batch_idx}[/blue]"
+        rank_info = f"[grey]<Rank {trainer.fabric.global_rank}>[/grey]"
+        epoch_batch_info = f"[blue]Epoch {trainer.state['current_epoch']} Batch {batch_idx}[/blue]"
         example_id_info = f"[bold yellow]Example ID: {example_id}[/bold yellow]"
 
         safe_print(
@@ -56,18 +56,18 @@ class PrintExampleIDBeforeForwardPassCallback(BaseCallback):
 class LogDatasetSamplingRatiosCallback(BaseCallback):
     """Monitor the sampling ratios of the datasets and log after each epoch."""
 
-    def on_fit_start(self):
+    def on_fit_start(self, trainer):
         self.dataset_sampling_counts = defaultdict(int)
 
-    def on_train_batch_start(self, batch, batch_idx):
+    def on_train_batch_start(self, trainer, batch, batch_idx):
         example_id = batch[0]["example_id"]
 
-        if self.trainer.fabric.is_global_zero:
+        if trainer.fabric.is_global_zero:
             dataset_string = "/".join(parse_example_id(example_id)["datasets"])
             self.dataset_sampling_counts[dataset_string] += 1
 
-    def on_train_epoch_end(self):
-        if self.trainer.fabric.is_global_zero:
+    def on_train_epoch_end(self, trainer):
+        if trainer.fabric.is_global_zero:
             total_samples = sum(self.dataset_sampling_counts.values())
 
             data = {
@@ -81,7 +81,7 @@ class LogDatasetSamplingRatiosCallback(BaseCallback):
 
             print_df_as_table(
                 df=pd.DataFrame(data),
-                title=f"Epoch {self.trainer.state['current_epoch']}: Dataset Sampling Ratios",
+                title=f"Epoch {trainer.state['current_epoch']}: Dataset Sampling Ratios",
             )
 
             # Reset the counts for the next epoch
@@ -98,13 +98,13 @@ class LogLearningRateCallback(BaseCallback):
     def __init__(self, log_every_n: int):
         self.log_every_n = log_every_n
 
-    def on_after_optimizer_step(self, optimizer: _FabricOptimizer, **kwargs):
+    def optimizer_step(self, trainer, optimizer: _FabricOptimizer):
         # Get the current global step
-        current_step = self.trainer.state["global_step"]
+        current_step = trainer.state["global_step"]
 
         # Log the learning rate only every `log_every_n` steps
         if current_step % self.log_every_n == 0:
-            self.trainer.fabric.log(
+            trainer.fabric.log(
                 "train/learning_rate",
                 optimizer.param_groups[0]["lr"],
                 step=current_step,
@@ -144,21 +144,21 @@ class LogAF3TrainingLossesCallback(BaseCallback):
         # This dict will store key -> MeanMetric() for each loss
         self.loss_trackers = {}
 
-    def on_train_epoch_start(self):
+    def on_train_epoch_start(self, trainer):
         # Record the start time of the epoch
         self.start_time = time.time()
 
-    def on_train_batch_end(self, outputs: Any, batch: Any, batch_idx: int):
+    def on_train_batch_end(self, trainer, outputs: Any, batch: Any, batch_idx: int):
         mean_loss_dict = {}
         if "loss_dict" in outputs:
             mean_loss_dict.update(mean_losses(outputs["loss_dict"]))
 
         for key, val in mean_loss_dict.items():
             if key not in self.loss_trackers:
-                self.loss_trackers[key] = self.trainer.fabric.to_device(MeanMetric())
+                self.loss_trackers[key] = trainer.fabric.to_device(MeanMetric())
             self.loss_trackers[key].update(val)
 
-        if self.trainer.fabric.is_global_zero and batch_idx % self.log_every_n == 0:
+        if trainer.fabric.is_global_zero and batch_idx % self.log_every_n == 0:
             # ... log losses for each structure in the batch
             if self.log_full_batch_losses:
                 full_batch_loss_dicts = convert_batched_losses_to_list_of_dicts(
@@ -168,8 +168,8 @@ class LogAF3TrainingLossesCallback(BaseCallback):
                     loss_dict = {
                         f"train/per_structure/{k}": v for k, v in loss_dict.items()
                     }
-                    self.trainer.fabric.log_dict(
-                        loss_dict, step=self.trainer.state["global_step"]
+                    trainer.fabric.log_dict(
+                        loss_dict, step=trainer.state["global_step"]
                     )
 
             # ... log losses meaned across the batch
@@ -177,8 +177,8 @@ class LogAF3TrainingLossesCallback(BaseCallback):
             mean_loss_dict_for_logging = {
                 f"train/batch_mean/{k}": v for k, v in mean_loss_dict.items()
             }
-            self.trainer.fabric.log_dict(
-                mean_loss_dict_for_logging, step=self.trainer.state["global_step"]
+            trainer.fabric.log_dict(
+                mean_loss_dict_for_logging, step=trainer.state["global_step"]
             )
 
             # ... print the mean losses in a table
@@ -193,7 +193,7 @@ class LogAF3TrainingLossesCallback(BaseCallback):
             table = table_from_df(df_losses, title="Training Losses")
 
             # (percentage of batch count)
-            percentage_complete = (batch_idx / self.trainer.n_batches_per_epoch) * 100
+            percentage_complete = (batch_idx / trainer.n_batches_per_epoch) * 100
 
             # Simple progress bar using Unicode blocks
             progress_bar_length = 10  # Length of the progress bar
@@ -205,8 +205,8 @@ class LogAF3TrainingLossesCallback(BaseCallback):
 
             # Create a panel for the epoch and batch info with a progress bar
             epoch_batch_info = (
-                f"[grey]<Rank {self.trainer.fabric.global_rank}>[/grey] "
-                f"Epoch {self.trainer.state['current_epoch']} Batch {batch_idx} "
+                f"[grey]<Rank {trainer.fabric.global_rank}>[/grey] "
+                f"Epoch {trainer.state['current_epoch']} Batch {batch_idx} "
                 f"[{progress_bar}] {percentage_str}"
             )
 
@@ -228,7 +228,7 @@ class LogAF3TrainingLossesCallback(BaseCallback):
 
             safe_print(combined_content)
 
-    def on_train_epoch_end(self):
+    def on_train_epoch_end(self, trainer):
         # Gather final epoch means (must be run on all ranks)
         final_means = {
             k: tracker.compute().item() for k, tracker in self.loss_trackers.items()
@@ -239,13 +239,13 @@ class LogAF3TrainingLossesCallback(BaseCallback):
         num_batches = (
             self.loss_trackers["total_loss"].update_count
             if "total_loss" in self.loss_trackers
-            else self.trainer.n_batches_per_epoch
+            else trainer.n_batches_per_epoch
         )
 
-        if self.trainer.fabric.is_global_zero:
+        if trainer.fabric.is_global_zero:
             # Create a summary table
             table = Table(
-                title=f"Epoch {self.trainer.state['current_epoch']} Summary",
+                title=f"Epoch {trainer.state['current_epoch']} Summary",
                 show_header=False,
                 header_style="bold magenta",
             )
@@ -257,7 +257,7 @@ class LogAF3TrainingLossesCallback(BaseCallback):
 
             table.add_section()
             table.add_row(
-                "Total Optimizer Steps", str(self.trainer.state["global_step"])
+                "Total Optimizer Steps", str(trainer.state["global_step"])
             )
             table.add_row("Number of Batches", str(num_batches))
             table.add_row("Elapsed Time (s)", f"{elapsed_time:.2f}")
@@ -268,9 +268,9 @@ class LogAF3TrainingLossesCallback(BaseCallback):
             safe_print(table)
 
         # Log these final epoch means (prepend "train/per_epoch_" to each key)
-        self.trainer.fabric.log_dict(
+        trainer.fabric.log_dict(
             {f"train/per_epoch_{k}": v for k, v in final_means.items()},
-            step=self.trainer.state["current_epoch"],
+            step=trainer.state["current_epoch"],
         )
 
         # Reset the trackers for the next epoch

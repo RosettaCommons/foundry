@@ -13,23 +13,13 @@ git clone https://github.com/RosettaCommons/modelforge.git \
   && uv python install 3.12 \
   && uv venv --python 3.12 \
   && source .venv/bin/activate \
-  && uv pip install -e . \
-  && uv pip install -e ./models/rfd3
+  && uv pip install -e ".[rfd3]"
 ```
 
-> [!IMPORTANT]
-> You must install `modelhub` (the root package) with `-e` first, then install `rf3`. This ensures both packages are in editable mode for proper development workflow.
-
-### B. Download model weights for RF3 
+### B. Download model weights for RFD3
 ```bash
-wget http://files.ipd.uw.edu/pub/rf3/rf3_latest.pt
+wget http://files.ipd.uw.edu/pub/rfd3/rfd3_foundry_2025_12_01.ckpt
 ```
-
-If you're looking for the 9/21 model (e.g., for benchmarking against other models with the same date cutoff):
-```bash
-wget http://files.ipd.uw.edu/pub/rf3/rf3_921.pt
-```
-The inference API is otherwise identical.
 
 ### C. Run a test prediction
 ```bash

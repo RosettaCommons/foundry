@@ -7,7 +7,7 @@ defaults:
 ckpt_path: ???
 num_nodes: 1
 devices_per_node: 1
-compress_outputs: true
+compress_outputs: false
 
 # Parameters for RF3InferenceEngine.run()
 inputs: ???

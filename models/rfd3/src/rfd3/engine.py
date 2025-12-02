@@ -70,7 +70,7 @@ class RFD3InferenceConfig:
     # Other:
     num_nodes: int = 1
     devices_per_node: int = 1
-    print_config: bool = False
+    verbose: bool = False
     seed: Optional[int] = None
 
     # For use as mapping:

@@ -7,7 +7,7 @@ defaults:
 ckpt_path: ???
 num_nodes: 1
 devices_per_node: 1
-print_config: False
+verbose: false
 seed: null
 
 # Parameters for RFD3InferenceEngine.run()

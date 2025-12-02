@@ -90,7 +90,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
         template_noise_scale: float = 1e-5,
         raise_if_missing_msa_for_protein_of_length_n: int | None = None,
         # Output control
-        compress_outputs: bool = True,
+        compress_outputs: bool = False,
         early_stopping_plddt_threshold: float | None = None,
         # Metrics
         metrics_cfg: dict | OmegaConf | MetricManager | None = None,
@@ -106,7 +106,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
           num_steps: Number of diffusion steps. Defaults to ``50``.
           template_noise_scale: Noise scale for template coordinates. Defaults to ``1e-5``.
           raise_if_missing_msa_for_protein_of_length_n: Debug flag for MSA checking. Defaults to ``None``.
-          compress_outputs: Whether to gzip output files. Defaults to ``True``.
+          compress_outputs: Whether to gzip output files. Defaults to ``False``.
           early_stopping_plddt_threshold: Stop early if pLDDT below threshold. Defaults to ``None``.
           metrics_cfg: Metrics configuration. Can be:
               - dict/OmegaConf with Hydra configs
@@ -118,21 +118,17 @@ class RF3InferenceEngine(BaseInferenceEngine):
               - seed (int | None): Random seed. If None, uses external RNG state. Defaults to ``None``.
               - num_nodes (int): Number of nodes for distributed inference. Defaults to ``1``.
               - devices_per_node (int): Number of devices per node. Defaults to ``1``.
-              - print_config (bool): Whether to print config trees. Defaults to ``False``.
+              - verbose (bool): If True, show detailed logging and config trees. Defaults to ``False``.
         """
-        # set MSA directories
+        # set MSA directories from environment variable only
         if env_var_msa_dirs := get_msa_dirs_from_env(raise_if_not_set=False):
             override_msa_dirs = [str(msa_dir) for msa_dir in env_var_msa_dirs]
-            ranked_logger.info(
+            ranked_logger.debug(
                 f"Using MSA directories from environment variable: {override_msa_dirs}"
             )
         else:
-            override_msa_dirs = [
-                "/projects/msa/hhblits",
-                "/projects/msa/mmseqs_gpu",
-                "/projects/msa/lab",
-            ]
-            ranked_logger.info(f"Using default MSA directories: {override_msa_dirs}")
+            override_msa_dirs = []
+            ranked_logger.debug("No MSA directories set (LOCAL_MSA_DIRS env var not found)")
 
         super().__init__(
             transform_overrides={
@@ -180,6 +176,10 @@ class RF3InferenceEngine(BaseInferenceEngine):
         self.compress_outputs = compress_outputs
 
     def initialize(self):
+        # Log checkpoint path on first init (base class logger may be suppressed in quiet mode)
+        if not self.initialized_:
+            ranked_logger.info(f"Loading checkpoint from {Path(self.ckpt_path).resolve()}...")
+
         cfg = super().initialize()
 
         if cfg is not None:
