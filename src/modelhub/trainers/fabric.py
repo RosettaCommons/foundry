@@ -503,7 +503,9 @@ class FabricTrainer(ABC):
             self.fabric.call("on_before_train_loader_next", trainer=self)
             batch = next(train_iter)
 
-            self.fabric.call("on_train_batch_start", trainer=self, batch=batch, batch_idx=batch_idx)
+            self.fabric.call(
+                "on_train_batch_start", trainer=self, batch=batch, batch_idx=batch_idx
+            )
 
             # Optimizer should step if we've accumulated the desired number of gradients
             should_optimizer_step = (batch_idx + 1) % self.grad_accum_steps == 0

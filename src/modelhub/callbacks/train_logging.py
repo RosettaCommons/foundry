@@ -44,7 +44,9 @@ class PrintExampleIDBeforeForwardPassCallback(BaseCallback):
 
         # Prepare the formatted strings with colors
         rank_info = f"[grey]<Rank {trainer.fabric.global_rank}>[/grey]"
-        epoch_batch_info = f"[blue]Epoch {trainer.state['current_epoch']} Batch {batch_idx}[/blue]"
+        epoch_batch_info = (
+            f"[blue]Epoch {trainer.state['current_epoch']} Batch {batch_idx}[/blue]"
+        )
         example_id_info = f"[bold yellow]Example ID: {example_id}[/bold yellow]"
 
         safe_print(
@@ -256,9 +258,7 @@ class LogAF3TrainingLossesCallback(BaseCallback):
                 table.add_row(f"<Train> Mean {k}", f"{v:.4f}")
 
             table.add_section()
-            table.add_row(
-                "Total Optimizer Steps", str(trainer.state["global_step"])
-            )
+            table.add_row("Total Optimizer Steps", str(trainer.state["global_step"]))
             table.add_row("Number of Batches", str(num_batches))
             table.add_row("Elapsed Time (s)", f"{elapsed_time:.2f}")
             table.add_row(

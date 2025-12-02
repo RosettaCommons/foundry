@@ -61,5 +61,7 @@ class TimingCallback(BaseCallback):
 
     def _print_timings(self, timings: dict[str, float]):
         df = pd.DataFrame(timings.items(), columns=["Step", "Time (s)"])
-        print_df_as_table(df, title=f"Timing stats (over {self.n_steps_since_last_log} steps)")
+        print_df_as_table(
+            df, title=f"Timing stats (over {self.n_steps_since_last_log} steps)"
+        )
         self.n_steps_since_last_log = 0

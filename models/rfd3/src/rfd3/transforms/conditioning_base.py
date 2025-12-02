@@ -438,7 +438,7 @@ class UnindexFlaggedTokens(Transform):
 
         leak_all = not np.any(breaks)
         if leak_all:
-            if is_inference:
+            if is_inference and np.any(is_motif_token_unindexed):
                 logger.info("Indexing all unindexed components")
             L = len(token_starts)
             return np.zeros((L, L), dtype=bool), is_motif_token_unindexed

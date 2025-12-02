@@ -128,7 +128,9 @@ class RF3InferenceEngine(BaseInferenceEngine):
             )
         else:
             override_msa_dirs = []
-            ranked_logger.debug("No MSA directories set (LOCAL_MSA_DIRS env var not found)")
+            ranked_logger.debug(
+                "No MSA directories set (LOCAL_MSA_DIRS env var not found)"
+            )
 
         super().__init__(
             transform_overrides={
@@ -178,7 +180,9 @@ class RF3InferenceEngine(BaseInferenceEngine):
     def initialize(self):
         # Log checkpoint path on first init (base class logger may be suppressed in quiet mode)
         if not self.initialized_:
-            ranked_logger.info(f"Loading checkpoint from {Path(self.ckpt_path).resolve()}...")
+            ranked_logger.info(
+                f"Loading checkpoint from {Path(self.ckpt_path).resolve()}..."
+            )
 
         cfg = super().initialize()
 

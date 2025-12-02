@@ -50,7 +50,9 @@ class BaseCallback(ABC):
         """Called at the start of each training batch"""
         pass
 
-    def on_train_batch_end(self, trainer: Any, outputs: Any, batch: Any, batch_idx: int):
+    def on_train_batch_end(
+        self, trainer: Any, outputs: Any, batch: Any, batch_idx: int
+    ):
         """Called after each training batch, but before the optimizer.step"""
         pass
 

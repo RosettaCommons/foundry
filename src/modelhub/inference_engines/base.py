@@ -10,7 +10,10 @@ from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
 from modelhub.utils.ddp import RankedLogger, set_accelerator_based_on_availability
-from modelhub.utils.logging import configure_minimal_inference_logging, print_config_tree
+from modelhub.utils.logging import (
+    configure_minimal_inference_logging,
+    print_config_tree,
+)
 
 logging.basicConfig(
     level=logging.INFO,
