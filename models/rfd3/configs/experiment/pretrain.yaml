@@ -22,7 +22,10 @@ datasets:
       ppi:
         frequency: 0.0
   train:
+    # These are the ratios used in the preprint but we set all pdb sampling by default since not everyone might download the distillation data.
+    #pdb:
+      #probability: 0.10
+    #monomer_distillation:
+      #probability: 0.90
     pdb:
-      probability: 0.10
-    monomer_distillation:
-      probability: 0.90
+      probability: 1.0
