@@ -30,7 +30,7 @@ foundry install rfd3 ligandmpnn rf3 --checkpoint_dir  <path/to/ckpt/dir>
 > *See [models/rfd3/README.md](models/rfd3/README.md) for complete documentation.*
 
 <div align="center">
-  <img src="docs/_static/rfd3_trajectory.png" alt="RFdiffusion3 generation trajectory." width="400">
+  <img src="models/rfd3/docs/.assets/trajectory.png" alt="RFdiffusion3 generation trajectory." width="400">
 </div>
 
 ### ProteinMPNN
