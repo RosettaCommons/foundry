@@ -54,11 +54,18 @@ class MPNNInferenceEngine:
         self.out_directory = out_directory
         self.write_fasta = write_fasta
         self.write_structures = write_structures
-        
+
         # allow null for checkpoint path when foundry-installed
         # TODO: Currently this assumes the model type is the key in the registered path. Rework needed
-        self.checkpoint_path = str(REGISTERED_CHECKPOINTS[self.model_type.replace('_', '')].get_default_path()) \
-            if not checkpoint_path else checkpoint_path
+        self.checkpoint_path = (
+            str(
+                REGISTERED_CHECKPOINTS[
+                    self.model_type.replace("_", "")
+                ].get_default_path()
+            )
+            if not checkpoint_path
+            else checkpoint_path
+        )
 
         # Determine the device.
         if device is not None:
