@@ -3,20 +3,16 @@
 import os
 
 import hydra
-import rootutils
 from dotenv import load_dotenv
 from omegaconf import DictConfig, OmegaConf
 
 from rfd3.engine import RFD3InferenceConfig, RFD3InferenceEngine
 
-# Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
-# NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
-rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-
 load_dotenv(override=True)
 
-# If the user has set `PROJECT_PATH`, use it to build the config path; otherwise, fall back to `PROJECT_ROOT`
-_config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rfd3/configs")
+# For pip-installed package, configs should be relative to this file
+# Adjust this path based on where configs are bundled in the package
+_config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs")
 
 
 @hydra.main(
