@@ -4,57 +4,24 @@
   <img src="docs/.assets/trajectory.png" alt="All-atom diffusion with RFD3">
 </p>
 
-
-##  Installation, Setup, and a Basic Design
-### A. Installation using `uv`
+## Get Started
+1. Install RFdiffusion3. See [Main README](../../README.md) for instructions how to install all models to run full pipeline (recommended). If you have already installed all the models skip [here](#run-inference). 
 ```bash
-git clone https://github.com/RosettaCommons/foundry.git \
-  && cd foundry \
-  && uv python install 3.12 \
-  && uv venv --python 3.12 \
-  && source .venv/bin/activate \
-  && uv pip install -e ".[rfd3]"
+pip install rc-foundry[rfd3]
 ```
-<!--
-> [!IMPORTANT]
-> You must install `foundry` (the root package) with `-e` first, then install `rfd3`. This ensures both packages are in editable mode for proper development workflow.
--->
-> [!NOTE]
-> optionally make installed venv available as ipynb kernel (helpful for running examples in `examples/all.ipynb`)
-`python -m ipykernel install --user --name=foundry --display-name "foundry"`
-
-### B. Download model weights for RFD3
+2. Download checkpoint to your desired checkpoint location.
 ```bash
-wget http://files.ipd.uw.edu/pub/rfd3/rfd3_foundry_2025_12_01.ckpt
-```
-*You can store these weights anywhere you would like,
-but if you do not store them in the root directory
-you will need to change the `cur_ckpt` variable discussed
-later on.*
-
-**Setup**
-```bash
-export PROJECT_PATH="$(pwd)/models/rfd3/src:$(pwd)/src:$(pwd)/lib/atomworks/src"
-```
-If your virtual environment is not already active you will 
-also need to run:
-```
-source .venv/bin/activate
+foundry install rfd3 --checkpoint-dir /path/to/ckpt/dir
 ```
 
-Files for RFD3 exist under this folder (`models/rfd3`), and wrap around the components of RF3 under `src/foundry/`. 
-```
-chmod +x src/foundry/*.py
-```
-
-## Inference:
+## Run Inference
 ```bash 
 cur_ckpt=rfd3_foundry_2025_12_01.ckpt
 ```
 
 To run inference
 ```bash
-uv run python models/rfd3/src/rfd3/run_inference.py out_dir=logs/inference_outs/demo/0 ckpt_path=$cur_ckpt inputs=models/rfd3/docs/demo.json print_config=True dump_trajectories=True
+rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json ckpt_path=$cur_ckpt
 ```
 
 > [!NOTE]
@@ -97,21 +64,54 @@ For full details on how to specify inputs, see the [input specification document
   </tr>
 </table>
 
-## Training (w & w/o WandB): #TODO make sure correct
+##  Installation and Setup for Development and Training
+### A. Installation using `uv`
+```bash
+git clone https://github.com/RosettaCommons/foundry.git \
+  && cd foundry \
+  && uv python install 3.12 \
+  && uv venv --python 3.12 \
+  && source .venv/bin/activate \
+  && uv pip install -e ".[rfd3]"
+```
+<!--
+> [!IMPORTANT]
+> You must install `foundry` (the root package) with `-e` first, then install `rfd3`. This ensures both packages are in editable mode for proper development workflow.
+-->
+> [!NOTE]
+> optionally make installed venv available as ipynb kernel (helpful for running examples in `examples/all.ipynb`)
+`python -m ipykernel install --user --name=foundry --display-name "foundry"`
+Download checkpoints.
+```bash
+foundry install rfd3 --checkpoint-dir /path/to/checkpoint/
+```
 
-Add `export PROJECT_PATH=$(pwd)/models/rfd3` to `scripts/slurm/launch.sh`, where `$(pwd)` is the repositories' absolute path
-You will also want to add your atomworks and foundry (`$(pwd)`) paths to `launch.sh`.
+## Inference:
+```bash 
+cur_ckpt=rfd3_foundry_2025_12_01.ckpt
+```
+
+To run inference
+```bash
+rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json ckpt_path=$cur_ckpt dump_trajectories=True
+```
+
+> [!NOTE]
+> This demo will take a very long amount of time if run on a
+> CPU instead of a GPU. On a GPU, this should take on the
+> order of 10 minutes.
+
+The output directory will automatically be created.
+
+For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `models/rfd3/configs/inference_engine/rfdiffusion3.yaml`.
+
+## Training (w & w/o WandB): #TODO make sure correct
 
 To launch a training run, use:
 ```
-sbatch -J rfd3-full-sparse launch.sh
+uv run python models/rfd3/src/rfd3/train.py experiment=pretrain
 ```
-
-Optionally ensure your `WANDB_API_KEY` is an environment variable. You can disable wandb by including the following at the top of your experiment config:
-```yaml
-defaults:
-  - override /logger: csv  # turns off wandb logger
-```
+See the paths [configs](/models/rfd3/configs/paths/) to customize the paths where data is read from and where logs are written. There is also a wandb config that can be enabled if you want to log training through wandb. 
 
 ### Install HBPLUS for training with hydrogen bond conditioning:
 

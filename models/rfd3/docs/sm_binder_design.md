@@ -1,6 +1,13 @@
 # RFdiffusion3 — Small molecule binder design examples
 
 ### small molecule binder examples against the ligand IAI with different RASA conditioning
+RFD3 is also capable of designing small molecule binding proteins. Here are some inputs that could be useful:
+- input: a PDB or CIF file that has the small molecule that is to be bound
+- ligand: the 3 letter code in the file that is the ligand to be bound
+- length: how long the generated protein should be (can be a range)
+- select_fixed_atoms: selecting which atoms in the ligand should be fixed to the coordinates in the PDB
+- select_exposed: selecting which atoms in the ligand should be given as exposed to the model
+- select_buried: selecting which atoms in the ligand should be given as buried to the model
 
 ```json
 {

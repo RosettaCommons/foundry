@@ -2,23 +2,9 @@
 pdb_data_dir: /projects/ml/frozen_pdb_copies/2025_07_13_pdb
 pdb_parquet_dir: /projects/ml/datahub/dfs/af3_splits/2024_12_16/  # TODO: uncomment
 
-# fb monomer distillation dataset
+# monomer distillation dataset
 monomer_distillation_data_dir: /squash/af2_distillation_facebook/
 monomer_distillation_parquet_dir: /projects/ml/datahub/dfs/distillation/af2_distillation_facebook
-
-# path(s) to search for protein MSAs (for PDB datasets)
-protein_msa_dirs:
-  - {"dir": "/projects/msa/rf2aa_af3/rf2aa_paper_model_protein_msas", "extension": ".a3m.gz", "directory_depth": 2}
-  - {"dir": "/projects/msa/rf2aa_af3/missing_msas_through_2024_08_12", "extension": ".msa0.a3m.gz", "directory_depth": 2}
-  - {"dir": "/net/scratch/mkazman/msa/validate_no_leak_taxid", "extension": ".a3m.gz", "directory_depth": 2}
-  - {"dir": "/net/scratch/mkazman/msa/missing_antibody_msas", "extension": ".a3m.gz", "directory_depth": 2}
-  - {"dir": "/net/scratch/mkazman/msa/post_training_cutoff_msas/processed_nested", "extension": ".a3m.gz", "directory_depth": 2}
-  - {"dir": "/net/scratch/mkazman/msa/post_training_cutoff_msas/extra_seqs_processed_nested", "extension": ".a3m.gz", "directory_depth": 2}
-  - {"dir": "/projects/msa/nvidia_renamed_with_seq_hash/maxseq_10k", "extension": ".a3m.gz", "directory_depth": 2}
-
-# path(s) to search for RNA MSAs
-rna_msa_dirs:
-  - {"dir": "/projects/msa/rf2aa_af3/rf2aa_paper_model_rna_msas", "extension": ".afa", "directory_depth": 0}
 
 # path to save examples that fail during the Transform pipeline (null = do not save)
 failed_examples_dir: null

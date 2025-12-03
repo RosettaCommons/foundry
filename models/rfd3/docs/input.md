@@ -23,11 +23,11 @@
 
 ---
 
-## What changed (high level)
+## How it works (high level)
 
 - **Unified selections.** All per-residue/atom choices now use **InputSelection**:
   - You can pass `true`/`false`, a **contig string** (`"A1-10,B5-8"`), or a **dictionary** (`{"A1-10": "ALL", "B5": "N,CA,C,O"}`).
-  - New selection fields include: `select_fixed_atoms`, `select_unfixed_sequence`, `select_buried`, `select_partially_buried`, `select_exposed`, `select_hbond_donor`, `select_hbond_acceptor`, `select_hotspots`.
+  - Selection fields include: `select_fixed_atoms`, `select_unfixed_sequence`, `select_buried`, `select_partially_buried`, `select_exposed`, `select_hbond_donor`, `select_hbond_acceptor`, `select_hotspots`.
 - **Clearer unindexing.** For **unindexed** motifs you typically either fix `"ALL"` atoms or explicitly choose subsets such as `"TIP"`/`"BKBN"`/explicit atom lists via a **dictionary** (see examples).  
   When using `unindex`, only **the atoms you mark as fixed** are carried over from the input.
 - **Reproducibility.** The exact specification and the **sampled contig** are logged back into the output JSON. We also log useful counts (atoms, residues, chains).
@@ -138,23 +138,44 @@ lists multiple unindexed components; internal “breakpoints” are inferred and
 
 # Appendix
 ## FAQ / gotchas
+<details>
+  <summary><b>Do I need select_fixed_atoms & select_unfixed_sequence every time?</b></summary>
 
-Q: Do I need select_fixed_atoms & select_unfixed_sequence every time?
-A: No. Defaults apply when input present.
+  No. Defaults apply when input present.
+  </details>
 
-Q: What does "ALL" vs "TIP" in unindex mean?
-A: "ALL" → copy full residue; "TIP" → fix only sidechain tip atoms.
+<details>
+  <summary><b>Do I need select_fixed_atoms & select_unfixed_sequence every time?</b></summary>
 
-Q: Can selections overlap?
-A: Only certain ones (fixed vs unfixed) may; RASA & donor/acceptor cannot.
+  No. Defaults apply when input present.
+  </details>
 
-Q: How to fix backbone but redesign sidechains?
-A: redesign_motif_sidechains: true.
+  <details>
+  <summary><b>What does "ALL" vs "TIP" in unindex mean?</b></summary>
 
-Q: Why “Input provided but unused”?
-A: You gave input but no contig, unindex, or partial_t.
+  - **`ALL`** → copy full residue
+  - **`TIP`** → fix only sidechain tip atoms
+  </details>
 
-## Shorthand atoms
+  <details>
+  <summary><b>Can selections overlap?</b></summary>
+
+  Only certain ones (fixed vs unfixed) may; RASA & donor/acceptor cannot.
+  </details>
+
+  <details>
+  <summary><b>How to fix backbone but redesign sidechains?</b></summary>
+
+  `redesign_motif_sidechains: true`
+  </details>
+
+  <details>
+  <summary><b>Why "Input provided but unused"?</b></summary>
+
+  You gave input but no contig, unindex, or partial_t.
+  </details>
+
+## Shorthand atoms for easy specification
 Keyword	Expands to
 BKBN	N, CA, C, O
 TIP	Residue-specific “tip” atoms

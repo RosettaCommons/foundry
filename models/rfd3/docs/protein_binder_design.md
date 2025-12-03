@@ -1,5 +1,9 @@
 # RFdiffusion3 — Protein binder design examples
-
+RFD3 is a highly proficient protein binder designer. The following arguments have to be specified to RFD3 to make protein binders.
+- input: the PDB or CIF file of the structure you want to bind
+- contig: the length range of the binder to make (indicated as a range) and which residues from the target file to consider. 
+- infer_ori_strategy: how rfd3 decides to place the origin of the generated protein binder with respect to the target. We find that using the "hotspots" strategy works best
+- select_hotspots: which atoms on the target should be bound (dictionary of residues on the target and atoms in those residues)
 ```json
 
 {
