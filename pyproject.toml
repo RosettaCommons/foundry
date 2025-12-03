@@ -44,7 +44,7 @@ dependencies = [
     "zstandard",
     "pandas",
     # "biotite",
-    "atomworks==2.1.1",
+    "atomworks[ml]>=2.1.1",
     "ipykernel>=6.31.0",
     "assertpy",
     "toolz",
@@ -79,7 +79,7 @@ dev = [
     "pytest-dotenv>=0.5.2,<1", # load environment variables from .env file
     "pytest-cov>=4.1.0,<5", # generate coverage report
     "pytest-benchmark>=5.0.0,<6", # benchmark tests for speed
-    "atomworks==2.1.1",
+    "atomworks[ml,dev,openbabel]>=2.1.1",
     "pre-commit"
 ]
 [project.scripts]

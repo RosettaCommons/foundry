@@ -1,6 +1,8 @@
 data_8VKF
 # 
 _entry.id   8VKF 
+#
+_msa_paths_by_chain_id.A   models/rf3/tests/data/msas/8vkf_A.a3m
 # 
 _audit_conform.dict_name       mmcif_pdbx.dic 
 _audit_conform.dict_version    5.402 
