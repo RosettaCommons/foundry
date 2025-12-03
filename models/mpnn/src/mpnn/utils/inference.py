@@ -362,7 +362,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--fixed_residues",
         type=str,
         help=(
-            'List of residue IDs to fix: e.g. \'["A35","B40","C52"]\' or "A35,B40,C52"',
+            'List of residue IDs to fix: e.g. \'["A35","B40","C52"]\' or "A35,B40,C52"'
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["fixed_residues"],
     )
@@ -371,20 +371,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         help=(
             "List of residue IDs to design: "
-            'e.g. \'["A35","B40","C52"]\' or "A35,B40,C52"',
+            'e.g. \'["A35","B40","C52"]\' or "A35,B40,C52"'
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["designed_residues"],
     )
     design_group.add_argument(
         "--fixed_chains",
         type=str,
-        help=('List of chain IDs to fix: e.g. \'["A","B"]\' or "A,B"',),
+        help=('List of chain IDs to fix: e.g. \'["A","B"]\' or "A,B"'),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["fixed_chains"],
     )
     design_group.add_argument(
         "--designed_chains",
         type=str,
-        help=('List of chain IDs to design: e.g. \'["A","B"]\' or "A,B"',),
+        help=('List of chain IDs to design: e.g. \'["A","B"]\' or "A,B"'),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["designed_chains"],
     )
 
