@@ -1,4 +1,3 @@
-#!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../../scripts/shebang/modelhub_exec.sh" "$0" "$@"'
 # JBs debugging file, please create your own and go crazy!
 import logging
 import os

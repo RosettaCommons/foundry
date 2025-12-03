@@ -1,4 +1,3 @@
-#!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../../scripts/shebang/modelhub_exec.sh" "$0" "$@"'
 """
 If you add the `/path/to/visualize.py` to your .bashrc/.zshrc like this:
 

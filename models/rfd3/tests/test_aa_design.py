@@ -1,9 +1,3 @@
-#!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../../scripts/shebang/modelhub_exec.sh" "$0" "$@"'
-# Usage:
-# >>> apptainer exec scripts/shebang/test_modelhub.sif pytest ./rfd3/tests/test_aa_design.py
-# To combine both make format and testing together you can use:
-# apptainer exec ./scripts/shebang/test_modelhub.sif make format || true && apptainer exec ./scripts/shebang/test_modelhub.sif pytest ./rfd3/tests/test_aa_design.py
-
 import contextlib
 import io
 import os
