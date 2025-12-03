@@ -113,6 +113,14 @@ defaults:
   - override /logger: csv  # turns off wandb logger
 ```
 
+### Install HBPLUS for training with hydrogen bond conditioning:
+
+
+1. Download hbplus from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
+2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
+3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
+
+
 ## Citation
 
 If you use this code or data in your work, please cite:
