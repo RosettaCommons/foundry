@@ -105,6 +105,45 @@ The output directory will automatically be created.
 
 For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `models/rfd3/configs/inference_engine/rfdiffusion3.yaml`.
 
+## Training:
+
+We make available to the community not only the weights to run RFdiffusion3 but also the complete training code, easily extendable to additional use cases. Any AtomWorks-compatible dataset (and thus, any collection of structure files) can be readily incorporated and used for training or fine-tuning.
+
+### Dataset Configuration
+
+#### PDB Training
+
+To train on the PDB:
+
+1. Set up PDB and CCD mirrors as described in the [AtomWorks documentation](https://rosettacommons.github.io/atomworks/latest/mirrors.html)
+2. Update the [path configs](/models/rfd3/configs/paths/) to point to the correct base directories for the metadata parquets
+3. Set the `PDB_MIRROR` and `CCD_PATH` variables in your `.env` file
+
+#### Custom Datasets
+
+RFdiffusion3 supports arbitrary datasets of structure files for training and fine-tuning via AtomWorks. See the [AtomWorks dataset documentation](https://rosettacommons.github.io/atomworks/latest/auto_examples/dataset_exploration.html) for details on creating custom datasets.
+
+### Running Training
+
+After setting up Hydra configs, launch a training run:
+```bash
+uv run python models/rfd3/src/rfd3/train.py experiment=pretrain
+```
+
+See the [path configs](/models/rfd3/configs/paths/) to customize data input and log output directories.
+
+### Logging Configuration
+
+Training runs support logging via [Weights & Biases](https://wandb.ai/). To enable wandb logging:
+
+```bash
+uv run python models/rfd3/src/rfd3/train.py experiment=pretrain logger=wandb
+```
+
+To run training without wandb (default):
+```bash
+uv run python models/rfd3/src/rfd3/train.py experiment=pretrain logger=csv
+``` 
 
 ### Install HBPLUS for training with hydrogen bond conditioning:
 
@@ -113,15 +152,15 @@ For full details on how to specify inputs, see the [input specification document
 2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
 3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
 
-## Training (w & w/o WandB): #TODO make sure correct
-**Launching:** To launch distributed training on slurm, we recommend the following setup:
+## Distributed Training
+To use distributed training, you could use a command such as this (we use Lightning Fabric to handle ddp)
 ```
 EFFECTIVE_BATCH_SIZE=16
 DEVICES_PER_NODE= #INSERT NUMBER OF DEVICES PER NODE
 NNODES = # INSERT NUMBER OF NODES
 GRAD_ACCUM_STEPS=$((EFFECTIVE_BATCH_SIZE / (DEVICES_PER_NODE * NNODES)))
 uv run python models/rfd3/src/rfd3/train.py \
-    experiment=$SLURM_JOB_NAME \
+    experiment=pretrain \
     trainer.devices_per_node=$DEVICES_PER_NODE \
     trainer.num_nodes=$SLURM_NNODES \
     trainer.grad_accum_steps=$GRAD_ACCUM_STEPS"
@@ -136,7 +175,7 @@ Notably, fabric must receive `devices_per_node` and the number of nodes (`num_no
 
 In `models/rfd3/configs/datasets/design_base.yaml` there's the shared configs for all datasets under `global_transform_args`. The dials that control the conditioning described above go under `training_conditions`, where for example `tipatom` - a specific preset conditioning sampler which more frequently fixes few tokens with few atoms - and others can be found.
 
-**Training with WandB:** We strongly recommend tracking your runs via wandb. To use it, simply have your WANDB_API_KEY set. For more details see [here](wandb.ai)
+**Training with WandB:** We strongly recommend tracking your runs via wandb. To use it, simply have your WANDB_API_KEY set and use the wandb logger. For more details see [here](wandb.ai)
 
 ## Citation
 

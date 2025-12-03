@@ -2,6 +2,8 @@
 
 Foundry provides tooling and infrastructure for using and training all classes of models for protein design, including design (RFD3), inverse folding (ProteinMPNN) and protein folding (RF3).
 
+All models within Foundry rely on [AtomWorks](https://github.com/RosettaCommons/atomworks) - a unified framework for manipulating and processing biomolecular structures - for both training and inference. 
+
 ## Getting Started
 ### Quickstart guide
 **Installation**
@@ -14,14 +16,14 @@ pip install rc-foundry[all]
 ```
 foundry install all --checkpoint_dir <path/to/ckpt/dir>
 ```
-This will download all the models supported (including multiple checkpoints of rf3) but as a beginner you can start with:
+This will download all the models supported (including multiple checkpoints of RF3) but as a beginner you can start with:
 ```
 foundry install rfd3 ligandmpnn rf3 --checkpoint_dir  <path/to/ckpt/dir>
 ```
 
 >*See `examples/all.ipynb` for how to run each model in a notebook.*
 
-### RFdiffusion3
+### RFdiffusion3 (RFD3)
 
 [RFdiffusion3](https://www.biorxiv.org/content/10.1101/2025.09.18.676967v2) is an all-atom generative model capable of designing protein structures under complex constraints. 
 
@@ -36,7 +38,8 @@ foundry install rfd3 ligandmpnn rf3 --checkpoint_dir  <path/to/ckpt/dir>
 
 > *See [models/mpnn/README.md](models/mpnn/README.md) for complete documentation.*
 
-### RosettaFold3
+
+### RosettaFold3 (RF3)
 
 [RF3](https://doi.org/10.1101/2025.08.14.670328) is a structure prediction neural network that narrows the gap between closed-source AF-3 and open-source alternatives.
 
