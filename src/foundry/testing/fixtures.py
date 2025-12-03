@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for modelhub tests."""
+"""Shared pytest fixtures for foundry tests."""
 
 from pathlib import Path
 

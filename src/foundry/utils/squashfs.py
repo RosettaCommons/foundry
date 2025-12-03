@@ -24,7 +24,7 @@ class SquashfsManager:
     Examples:
         Get mount directory (mounts automatically if needed)::
 
-            from modelhub.utils.squashfs import SquashfsManager
+            from foundry.utils.squashfs import SquashfsManager
 
             mount_dir = SquashfsManager.get_mount("/path/to/file.sqfs")
             file_path = os.path.join(mount_dir, "internal/path/to/file")

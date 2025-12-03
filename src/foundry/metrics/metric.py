@@ -177,7 +177,7 @@ class MetricManager:
 
 
 class Metric(ABC):
-    """Abstract base class for Modelhub metrics.
+    """Abstract base class for Foundry metrics.
 
     Defines a framework for computing metrics based on arbitrary keyword arguments.
     A Metric can specify which batches a `MetricManager` applies it to, based on `tags` in the input batch.
