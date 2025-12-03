@@ -266,7 +266,7 @@ def get_hbond_metrics(atom_array=None):
         return o
 
     except Exception as e:
-        global_logger.error(f"Could not calculate hbond metrics: {e}")
+        global_logger.warning(f"Could not calculate hbond metrics: {e}")
         return {}
 
 
