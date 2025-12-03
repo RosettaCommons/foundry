@@ -30,14 +30,8 @@ foundry install rfd3 ligandmpnn rf3 --checkpoint_dir  <path/to/ckpt/dir>
 > *See [models/rfd3/README.md](models/rfd3/README.md) for complete documentation.*
 
 <div align="center">
-  <img src="models/rfd3/docs/.assets/trajectory.png" alt="RFdiffusion3 generation trajectory." width="700">
+  <img src="docs/_static/cover.png" alt="RFdiffusion3 generation trajectory." width="700">
 </div>
-
-### ProteinMPNN
-[ProteinMPNN](https://www.science.org/doi/10.1126/science.add2187) and [LigandMPNN](https://www.nature.com/articles/s41592-025-02626-1) are lightweight inverse-folding models which can be use to design diverse sequences for backbones under constrained conditions.
-
-> *See [models/mpnn/README.md](models/mpnn/README.md) for complete documentation.*
-
 
 ### RosettaFold3 (RF3)
 
@@ -48,6 +42,11 @@ foundry install rfd3 ligandmpnn rf3 --checkpoint_dir  <path/to/ckpt/dir>
 </div>
 
 > *See [models/rf3/README.md](models/rf3/README.md) for complete documentation.*
+
+### ProteinMPNN
+[ProteinMPNN](https://www.science.org/doi/10.1126/science.add2187) and [LigandMPNN](https://www.nature.com/articles/s41592-025-02626-1) are lightweight inverse-folding models which can be use to design diverse sequences for backbones under constrained conditions.
+
+> *See [models/mpnn/README.md](models/mpnn/README.md) for complete documentation.*
 
 ---
 
@@ -77,6 +76,9 @@ This approach allows you to:
 - Modify `foundry` shared utilities and see changes immediately
 - Work on specific models without installing all models
 - Add new models as independent packages in `models/`
+
+> [!NOTE]
+> Running tests is not currently supported, test files may be missing.
 
 ### Adding New Models
 

@@ -64,36 +64,9 @@ For full details on how to specify inputs, see the [input specification document
   </tr>
 </table>
 
-##  Installation and Setup for Development and Training
-### A. Installation using `uv`
-```bash
-git clone https://github.com/RosettaCommons/foundry.git \
-  && cd foundry \
-  && uv python install 3.12 \
-  && uv venv --python 3.12 \
-  && source .venv/bin/activate \
-  && uv pip install -e ".[rfd3]"
-```
-<!--
-> [!IMPORTANT]
-> You must install `foundry` (the root package) with `-e` first, then install `rfd3`. This ensures both packages are in editable mode for proper development workflow.
--->
-> [!NOTE]
-> optionally make installed venv available as ipynb kernel (helpful for running examples in `examples/all.ipynb`)
-`python -m ipykernel install --user --name=foundry --display-name "foundry"`
-Download checkpoints.
-```bash
-foundry install rfd3 --checkpoint-dir /path/to/checkpoint/
-```
-
-## Inference:
-```bash 
-cur_ckpt=rfd3_foundry_2025_12_01.ckpt
-```
-
 To run inference
 ```bash
-rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json ckpt_path=$cur_ckpt dump_trajectories=True
+rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json dump_trajectories=True
 ```
 
 > [!NOTE]
