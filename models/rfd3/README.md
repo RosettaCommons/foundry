@@ -105,13 +105,6 @@ The output directory will automatically be created.
 
 For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `models/rfd3/configs/inference_engine/rfdiffusion3.yaml`.
 
-## Training (w & w/o WandB): #TODO make sure correct
-
-To launch a training run, use:
-```
-uv run python models/rfd3/src/rfd3/train.py experiment=pretrain
-```
-See the paths [configs](/models/rfd3/configs/paths/) to customize the paths where data is read from and where logs are written. There is also a wandb config that can be enabled if you want to log training through wandb. 
 
 ### Install HBPLUS for training with hydrogen bond conditioning:
 
@@ -120,10 +113,34 @@ See the paths [configs](/models/rfd3/configs/paths/) to customize the paths wher
 2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
 3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
 
+## Training (w & w/o WandB): #TODO make sure correct
+**Launching:** To launch distributed training on slurm, we recommend the following setup:
+```
+EFFECTIVE_BATCH_SIZE=16
+DEVICES_PER_NODE= #INSERT NUMBER OF DEVICES PER NODE
+NNODES = # INSERT NUMBER OF NODES
+GRAD_ACCUM_STEPS=$((EFFECTIVE_BATCH_SIZE / (DEVICES_PER_NODE * NNODES)))
+uv run python models/rfd3/src/rfd3/train.py \
+    experiment=$SLURM_JOB_NAME \
+    trainer.devices_per_node=$DEVICES_PER_NODE \
+    trainer.num_nodes=$SLURM_NNODES \
+    trainer.grad_accum_steps=$GRAD_ACCUM_STEPS"
+```
+Notably, fabric must receive `devices_per_node` and the number of nodes (`num_nodes`) you're training on.
+
+**Dataset Paths:** See the paths [configs](/models/rfd3/configs/paths/) to customize the paths where data is read from and where logs are written. There is also a wandb config that can be enabled if you want to log training through wandb. 
+
+**Hydra configs and experiments:** In the example above, the `experiment` argument is a hydra-native argument. For RFD3, it will look for config overrides in `/models/rfd3/configs/experiment/<experiment-name>.yaml` and apply them on top of the base configs
+
+**Conditioning during training:** RFD3 is trained on a multitude of conditioning tasks, and does so by randomly 'creating problems' for it to solve during training. For example, for a random training example it gets a random set of tokens to be 'motif tokens', then subsets those to whether specific atoms should be fixed, and further subsets the information to whether, say, sequence, coordinates or the sequence index should be fixed. It's pretty complicated to evaluate and it's more of an art than a science how this was put together; which means there's likely some optimization further work can do! 
+
+In `models/rfd3/configs/datasets/design_base.yaml` there's the shared configs for all datasets under `global_transform_args`. The dials that control the conditioning described above go under `training_conditions`, where for example `tipatom` - a specific preset conditioning sampler which more frequently fixes few tokens with few atoms - and others can be found.
+
+**Training with WandB:** We strongly recommend tracking your runs via wandb. To use it, simply have your WANDB_API_KEY set. For more details see [here](wandb.ai)
 
 ## Citation
 
-If you use this code or data in your work, please cite:
+If you use this code or data in your work, please consider citing:
 
 ```bibtex
 @article {butcher2025_rfdiffusion3,

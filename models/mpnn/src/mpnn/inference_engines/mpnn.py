@@ -27,6 +27,7 @@ from mpnn.utils.inference import (
 )
 from mpnn.utils.weights import load_legacy_weights
 
+from foundry.inference_engines.checkpoint_registry import REGISTERED_CHECKPOINTS
 from foundry.metrics.metric import MetricManager
 from foundry.utils.ddp import RankedLogger
 
@@ -49,11 +50,15 @@ class MPNNInferenceEngine:
     ):
         # Store raw configuration
         self.model_type = model_type
-        self.checkpoint_path = checkpoint_path
         self.is_legacy_weights = is_legacy_weights
         self.out_directory = out_directory
         self.write_fasta = write_fasta
         self.write_structures = write_structures
+        
+        # allow null for checkpoint path when foundry-installed
+        # TODO: Currently this assumes the model type is the key in the registered path. Rework needed
+        self.checkpoint_path = str(REGISTERED_CHECKPOINTS[self.model_type.replace('_', '')].get_default_path()) \
+            if not checkpoint_path else checkpoint_path
 
         # Determine the device.
         if device is not None:

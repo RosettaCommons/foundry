@@ -19,21 +19,22 @@ This will download all the models supported (including multiple checkpoints of r
 foundry install rfd3 ligandmpnn rf3 --checkpoint_dir  <path/to/ckpt/dir>
 ```
 
-**Running a basic example of everything** See `examples/all.ipynb` for how to run each model in a notebook.
-
-We include details DNA, Ligands, Protein-Protein Interaction, Symmetry-conditioned systems and enzymes.
+>*See `examples/all.ipynb` for how to run each model in a notebook.*
 
 ### RFdiffusion3
 
 [RFdiffusion3](https://www.biorxiv.org/content/10.1101/2025.09.18.676967v2) is an all-atom generative model capable of designing protein structures under complex constraints. 
 
-> See [models/rfd3/README.md](models/rfd3/README.md) for complete documentation.
+> *See [models/rfd3/README.md](models/rfd3/README.md) for complete documentation.*
+
+<div align="center">
+  <img src="docs/_static/rfd3_trajectory.png" alt="RFdiffusion3 generation trajectory." width="400">
+</div>
 
 ### ProteinMPNN
 [ProteinMPNN](https://www.science.org/doi/10.1126/science.add2187) and [LigandMPNN](https://www.nature.com/articles/s41592-025-02626-1) are lightweight inverse-folding models which can be use to design diverse sequences for backbones under constrained conditions.
 
 > *See [models/mpnn/README.md](models/mpnn/README.md) for complete documentation.*
-
 
 ### RosettaFold3
 

@@ -36,8 +36,8 @@ MPNN_GLOBAL_INFERENCE_DEFAULTS: dict[str, Any] = {
     # Top-level Config JSON
     "config_json": None,
     # Model Type and Weights
-    "model_type": None,
     "checkpoint_path": None,
+    "model_type": None,
     "is_legacy_weights": None,
     # Output controls
     "out_directory": None,
