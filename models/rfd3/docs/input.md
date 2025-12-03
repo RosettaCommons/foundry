@@ -98,7 +98,7 @@ dialect: 2
 
 ### Python API
 ```
-from projects.aa_design.inference.input_parsing import create_atom_array_from_design_specification
+from rfd3.inference.input_parsing import create_atom_array_from_design_specification
 
 atom_array, metadata = create_atom_array_from_design_specification(
     input="path/to/template.pdb",
@@ -109,17 +109,6 @@ atom_array, metadata = create_atom_array_from_design_specification(
     dialect=2,
 )
 ```
-
-## Demo examples
-### Enzyme
-TODO
-### Symmetry
-TODO.
-See `symmetry.md` for more details
-### Partial diffusion
-TODO
-### Binder design
-TODO
 
 ## The InputSelection mini-language
 

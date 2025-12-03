@@ -54,7 +54,7 @@ cur_ckpt=rfd3_foundry_2025_12_01.ckpt
 
 To run inference
 ```bash
-python ./models/rfd3/src/rfd3/run_inference.py out_dir=logs/inference_outs/demo/0 ckpt_path=$cur_ckpt inputs=./models/rfd3/docs/demo.json verbose=True dump_trajectories=True
+uv run python models/rfd3/src/rfd3/run_inference.py out_dir=logs/inference_outs/demo/0 ckpt_path=$cur_ckpt inputs=models/rfd3/docs/demo.json print_config=True dump_trajectories=True
 ```
 
 > [!NOTE]
@@ -73,15 +73,15 @@ For full details on how to specify inputs, see the [input specification document
 <table>
   <tr>
     <td align="center">
-      <h3><a href="./docs/binder_design.md">Nucleic acid binder design</a></h3>
+      <h3><a href="./docs/na_binder_design.md">Nucleic acid binder design</a></h3>
       <img src="docs/.assets/dna.png" height="150" />
     </td>
     <td align="center">
-      <h3><a href="./docs/binder_design.md">Small molecule binder design</a></h3>
+      <h3><a href="./docs/sm_binder_design.md">Small molecule binder design</a></h3>
       <img src="docs/.assets/sm.png" height="150" />
     </td>
     <td align="center">
-      <h3><a href="./docs/binder_design.md">Protein binder design</a></h3>
+      <h3><a href="./docs/protein_binder_design.md">Protein binder design</a></h3>
       <img src="docs/.assets/ppi.png" height="150" />
     </td>
   </tr>
