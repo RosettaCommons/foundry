@@ -12,10 +12,16 @@ app = typer.Typer()
 def design(ctx: typer.Context):
     """Run design using hydra config overrides and input files."""
     # Find the RFD3 configs directory relative to this file
-    # This file is at: models/rfd3/src/rfd3/cli.py
-    # Configs are at: models/rfd3/configs/
-    rfd3_package_dir = Path(__file__).parent.parent.parent  # Go up to models/rfd3/
-    config_path = str(rfd3_package_dir / "configs")
+    # Development: models/rfd3/src/rfd3/cli.py -> models/rfd3/configs/
+    # Installed: site-packages/rfd3/cli.py -> site-packages/rfd3/configs/
+
+    # Try development location first
+    dev_config_path = Path(__file__).parent.parent.parent / "configs"
+    if dev_config_path.exists():
+        config_path = str(dev_config_path)
+    else:
+        # Fall back to installed package location
+        config_path = str(Path(__file__).parent / "configs")
 
     # Get all arguments
     args = ctx.params.get("args", []) + ctx.args
