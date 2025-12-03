@@ -14,7 +14,7 @@ pip install rc-foundry[all]
 **Downloading weights** All models can be downloaded to a target folder with:
 
 ```
-foundry install all --checkpoint_dir <path/to/ckpt/dir>
+foundry install all --checkpoint-dir <path/to/ckpt/dir>
 ```
 This will download all the models supported (including multiple checkpoints of RF3) but as a beginner you can start with:
 ```
