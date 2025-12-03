@@ -24,7 +24,6 @@ from foundry.inference_engines.checkpoint_registry import (
     get_default_checkpoint_dir,
 )
 
-rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 load_dotenv(override=True)
 
 app = typer.Typer(help="Foundry model checkpoint installation utilities")
@@ -98,7 +97,7 @@ def install_model(
         raise typer.Exit(1)
 
     checkpoint_info = REGISTERED_CHECKPOINTS[model_name]
-    dest_path = checkpoint_dir / checkpoint_info["filename"]
+    dest_path = checkpoint_dir / checkpoint_info.filename
 
     # Check if already exists
     if dest_path.exists() and not force:
@@ -109,12 +108,12 @@ def install_model(
         return
 
     console.print(
-        f"[cyan]Installing {model_name}:[/cyan] {checkpoint_info['description']}"
+        f"[cyan]Installing {model_name}:[/cyan] {checkpoint_info.description}"
     )
 
     try:
         download_file(
-            checkpoint_info["url"], dest_path, checkpoint_info.get("sha256")
+            checkpoint_info.url, dest_path, checkpoint_info.sha256
         )
         console.print(
             f"[green]✓[/green] Successfully installed {model_name} to {dest_path}"
@@ -186,7 +185,7 @@ def list_models():
     """List available model checkpoints."""
     console.print("[bold]Available models:[/bold]\n")
     for name, info in REGISTERED_CHECKPOINTS.items():
-        console.print(f"  [cyan]{name:8}[/cyan] - {info['description']}")
+        console.print(f"  [cyan]{name:8}[/cyan] - {info.description}")
 
 
 @app.command()
