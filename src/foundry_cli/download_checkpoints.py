@@ -1,12 +1,13 @@
 """CLI for foundry model checkpoint installation and management."""
 
 import hashlib
-import os
 from pathlib import Path
 from typing import Optional
 from urllib.request import urlopen
 
+import rootutils
 import typer
+from dotenv import find_dotenv, load_dotenv, set_key
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -18,68 +19,16 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
+from foundry.inference_engines.checkpoint_registry import (
+    REGISTERED_CHECKPOINTS,
+    get_default_checkpoint_dir,
+)
+
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+load_dotenv(override=True)
+
 app = typer.Typer(help="Foundry model checkpoint installation utilities")
 console = Console()
-
-# Checkpoint URLs and metadata
-# TODO: Replace these with your actual checkpoint URLs
-CHECKPOINTS = {
-    "rfd3": {
-        "url": "https://files.ipd.uw.edu/pub/rfd3/rfd3_foundry_2025_12_01_remapped.ckpt",
-        "filename": "rfd3_latest.ckpt",
-        "sha256": None,  # Optional: add checksum for verification
-        "description": "RFdiffusion3 checkpoint",
-    },
-    "rf3_preprint_921": {
-        "url": "https://files.ipd.uw.edu/pub/rf3/rf3_foundry_09_21_preprint_remapped.ckpt",
-        "filename": "rf3_foundry_09_21_preprint_remapped.ckpt",
-        "sha256": None,
-        "description": "RF3 preprint checkpoint trained with data until 9/2021",
-    },
-    "rf3_preprint_124": {
-        "url": "https://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_preprint_remapped.ckpt",
-        "filename": "rf3_foundry_01_24_preprint_remapped.ckpt",
-        "sha256": None,
-        "description": "RF3 preprint checkpoint trained with data until 1/2024",
-    },
-    "rf3": {
-        "url": "https://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_latest_remapped.ckpt",
-        "filename": "rf3_foundry_01_24_latest_remapped.ckpt",
-        "sha256": None,
-        "description": "latest RF3 checkpoint trained with data until 1/2024 (expect best performance)",
-    },
-    "proteinmpnn": {
-        "url": "https://files.ipd.uw.edu/pub/ligandmpnn/proteinmpnn_v_48_020.pt",
-        "filename": "proteinmpnn_v_48_020.pt",
-        "sha256": None,
-        "description": "ProteinMPNN checkpoint",
-    },
-    "ligandmpnn": {
-        "url": "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_010_25.pt",
-        "filename": "ligandmpnn_v_32_010_25.pt",
-        "sha256": None,
-        "description": "LigandMPNN checkpoint",
-    },
-    "solublempnn": {
-        "url": "https://files.ipd.uw.edu/pub/ligandmpnn/solublempnn_v_48_020.pt",
-        "filename": "solublempnn_v_48_020.pt",
-        "sha256": None,
-        "description": "SolubleMPNN checkpoint",    
-    }
-}
-
-
-def get_default_checkpoint_dir() -> Path:
-    """Get the default checkpoint directory.
-
-    Priority:
-    1. FOUNDRY_CHECKPOINTS_DIR environment variable
-    2. ~/.foundry/checkpoints
-    """
-    if "FOUNDRY_CHECKPOINTS_DIR" in os.environ:
-        return Path(os.environ["FOUNDRY_CHECKPOINTS_DIR"])
-    return Path.home() / ".foundry" / "checkpoints"
-
 
 def download_file(url: str, dest: Path, verify_hash: Optional[str] = None) -> None:
     """Download a file with progress bar and optional hash verification.
@@ -143,12 +92,12 @@ def install_model(
         checkpoint_dir: Directory to save checkpoints
         force: Overwrite existing checkpoint if it exists
     """
-    if model_name not in CHECKPOINTS:
+    if model_name not in REGISTERED_CHECKPOINTS:
         console.print(f"[red]Error:[/red] Unknown model '{model_name}'")
-        console.print(f"Available models: {', '.join(CHECKPOINTS.keys())}")
+        console.print(f"Available models: {', '.join(REGISTERED_CHECKPOINTS.keys())}")
         raise typer.Exit(1)
 
-    checkpoint_info = CHECKPOINTS[model_name]
+    checkpoint_info = REGISTERED_CHECKPOINTS[model_name]
     dest_path = checkpoint_dir / checkpoint_info["filename"]
 
     # Check if already exists
@@ -210,7 +159,7 @@ def install(
 
     # Expand 'all' to all available models
     if "all" in models:
-        models_to_install = list(CHECKPOINTS.keys())
+        models_to_install = ['rfd3', 'proteinmpnn', 'ligandmpnn', 'rf3']
     else:
         models_to_install = models
 
@@ -219,6 +168,16 @@ def install(
         install_model(model_name, checkpoint_dir, force)
         console.print()
 
+    set_key(
+        dotenv_path=find_dotenv(),
+        key_to_set='FOUNDRY_CHECKPOINTS_DIR',
+        value_to_set=str(checkpoint_dir),
+        export = False,
+    )
+    console.print(
+        f"Set checkpoint installation directory to: {checkpoint_dir}"
+    )
+
     console.print("[bold green]Installation complete![/bold green]")
 
 
@@ -226,7 +185,7 @@ def install(
 def list_models():
     """List available model checkpoints."""
     console.print("[bold]Available models:[/bold]\n")
-    for name, info in CHECKPOINTS.items():
+    for name, info in REGISTERED_CHECKPOINTS.items():
         console.print(f"  [cyan]{name:8}[/cyan] - {info['description']}")
 
 

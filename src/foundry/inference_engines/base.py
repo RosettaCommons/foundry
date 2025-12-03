@@ -1,4 +1,5 @@
 import logging
+import os
 from os import PathLike
 from pathlib import Path
 from typing import Any, Dict
@@ -9,6 +10,7 @@ from biotite.structure import AtomArray
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
+from foundry.inference_engines.checkpoint_registry import REGISTERED_CHECKPOINTS
 from foundry.utils.ddp import RankedLogger, set_accelerator_based_on_availability
 from foundry.utils.logging import (
     configure_minimal_inference_logging,
@@ -65,7 +67,18 @@ class BaseInferenceEngine:
         self.trainer = None
         self.pipeline = None
         self.verbose = verbose
-        self.ckpt_path = ckpt_path
+
+        # Resolve checkpoint path
+        if '.' not in str(ckpt_path):
+            # Assume registered model
+            name = str(ckpt_path)
+            assert name in REGISTERED_CHECKPOINTS, 'Checkpoint provided not and not in registered checkpoints'
+            ckpt = REGISTERED_CHECKPOINTS[name]
+            
+            ckpt_path = ckpt.get_default_path()
+            ranked_logger.info("Using checkpoint from default installation directory, got: {}".format(str(ckpt_path)))
+            assert os.path.exists(ckpt_path), 'Invalid checkpoint: {}. And could not find checkpoint in default installation location: {}'.format(name, ckpt_path)
+        self.ckpt_path = Path(ckpt_path).resolve()
 
         # Set random seed (only if seed is not None)
         if seed is not None:

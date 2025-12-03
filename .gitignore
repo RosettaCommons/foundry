@@ -1,3 +1,8 @@
+# For docs / outputs from example notebooks;
+examples/*.cif
+**.ckpt
+**.pt
+
 # Base .gitignore from https://github.com/github/gitignore/blob/main/Python.gitignore
 *.lock
 **.nfs**
