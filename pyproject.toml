@@ -115,6 +115,10 @@ packages = [
   "models/mpnn/src/mpnn",
 ]
 
+[tool.hatch.build.targets.wheel.force-include]
+"models/rfd3/configs" = "rfd3/configs"
+"models/rf3/configs" = "rf3/configs"
+
 # Formatting & linting settings -------------------------------------------------------
 [tool.ruff]
 line-length = 88
