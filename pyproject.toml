@@ -1,5 +1,5 @@
 [project]
-name = "modelforge"
+name = "rc-foundry"
 dynamic = ["version"]
 description = "Shared utilities and training infrastructure for biomolecular structure prediction models."
 readme = "README.md"
@@ -61,8 +61,8 @@ rf3 = [
     "cuequivariance_torch>=0.6.1; sys_platform == 'linux'",
 ]
 all = [
-    "modelforge[rfd3]",
-    "modelforge[rf3]",
+    "rc-foundry[rfd3]",
+    "rc-foundry[rf3]",
 ]
 dev = [
     # Linters & formatters
@@ -86,6 +86,7 @@ dev = [
 rf3 = "rf3.cli:app"
 rfd3 = "rfd3.cli:app"
 mpnn = "mpnn.inference:main"
+foundry = "foundry_cli.download_checkpoints:app"
 
 # Build settings ----------------------------------------------------------------------
 [build-system]
@@ -108,6 +109,7 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = [
   "src/foundry",
+  "src/foundry_cli",
   "models/rf3/src/rf3",
   "models/rfd3/src/rfd3",
   "models/mpnn/src/mpnn",
