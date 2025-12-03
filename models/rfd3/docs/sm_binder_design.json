@@ -1,0 +1,27 @@
+{
+    "buried": {
+        "input": "./input_pdbs/IAI.pdb",
+        "length": "180-180",
+        "ligand": "IAI",
+        "select_fixed_atoms": {
+            "IAI": ""
+        },
+        "select_buried": {
+            "IAI": "C22,C23,C25,C24,C21,C20,N13,C15,C16,N14,C19,C11,N12,C18,C17,N9,O8,C4,C1,N3,C10,N5,C7,C2,C6,N27,O26,C33,C29,C32,O31,C30,N28"
+        }
+    },
+    "partial": {
+        "input": "./input_pdbs/IAI.pdb",
+        "ligand": "IAI",
+        "length": "180-180",
+        "select_fixed_atoms": {
+            "IAI": ""
+        },
+        "select_exposed": {
+            "IAI": "C22,C23,C25,C24,C21,C20,N13,C15,C16,N14,C19,C11,N12,C18,C17"
+        },
+        "select_buried": {
+            "IAI": "N9,O8,C4,C1,N3,C10,N5,C7,C2,C6,N27,O26,C33,C29,C32,O31,C30,N28"
+        }
+    }
+}

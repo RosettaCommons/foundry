@@ -1,0 +1,16 @@
+{
+    "M0255_1mg5_unfixed": {
+        "input": "./input_pdbs/M0255_1mg5.pdb", 
+        "ligand": "NAI,ACT",
+        "unindex": "A108,A139,A152,A156",
+        "length": "180-200",
+        "select_fixed_atoms": {
+            "A108": "ND2,CG",
+            "A139": "OG,CB,CA",
+            "A152": "OH,CZ",
+            "A156": "NZ,CE,CD",
+            "ACT": "OXT",
+            "NAI": ""
+        }
+    }
+}
