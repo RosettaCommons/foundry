@@ -854,7 +854,7 @@ class FabricTrainer(ABC):
 
             # ... replace confidence head keys with model and shadow prefixes
             model_state_dict = {
-                f"model.confidence_head{key[len('confidence'):]}"
+                f"model.confidence_head{key[len('confidence') :]}"
                 if key.startswith("confidence")
                 else key: value
                 for key, value in ckpt["final_state_dict"].items()
@@ -862,9 +862,9 @@ class FabricTrainer(ABC):
 
             shadow_state_dict = {
                 (
-                    f"shadow.confidence_head{key[len('confidence'):]}"
+                    f"shadow.confidence_head{key[len('confidence') :]}"
                     if key.startswith("confidence")
-                    else f"shadow{key[len('model'):]}"
+                    else f"shadow{key[len('model') :]}"
                     if key.startswith("model")
                     else key
                 ): value

@@ -308,7 +308,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
 
             outputs.append(
                 RFD3Output(
-                    example_id=f'{pipeline_output["example_id"]}_model_{idx}',
+                    example_id=f"{pipeline_output['example_id']}_model_{idx}",
                     atom_array=output_val["predicted_atom_array_stack"][idx],
                     metadata=output_val["prediction_metadata"][idx]
                     if self.dump_prediction_metadata_json

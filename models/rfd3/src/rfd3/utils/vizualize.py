@@ -115,7 +115,7 @@ def get_atom_array_style_cmd(
             if len(constraint_data) > 0:
                 _atom_idxs = np.unique(constraint_data[:, :2].flatten()).astype(int)
                 _atom_ids = atom_ids[_atom_idxs]
-                _selection = f'{obj} and id {"+".join(str(id) for id in _atom_ids)}'
+                _selection = f"{obj} and id {'+'.join(str(id) for id in _atom_ids)}"
                 commands.extend(
                     [
                         f"delete m2d_{obj}",
@@ -168,11 +168,11 @@ def get_atom_array_style_cmd(
             _atom_ids = atom_ids[np.where(cond.mask(atom_array, default="generate"))[0]]
             if cond.level == Level.ATOM:
                 _selection = (
-                    f'model {obj} and id {"+".join(str(id) for id in _atom_ids)}'
+                    f"model {obj} and id {'+'.join(str(id) for id in _atom_ids)}"
                 )
                 commands.extend([f"select {cond.mask_name}_{obj}, {_selection}"])
             elif cond.level == Level.RESIDUE or cond.level == Level.TOKEN:
-                _selection = f'model {obj} and byres (id {"+".join(str(id) for id in _atom_ids)})'
+                _selection = f"model {obj} and byres (id {'+'.join(str(id) for id in _atom_ids)})"
                 commands.extend([f"select {cond.mask_name}_{obj}, {_selection}"])
 
     return "\n".join(commands)

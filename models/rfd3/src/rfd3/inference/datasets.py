@@ -102,11 +102,11 @@ class ContigJsonDataset(MolecularDataset):
             ", ".join(self.names), width=l
         )  # .replace('\n', '+\n+ ')
         logger.info(
-            f"\n+{l*'-'}+\n"
+            f"\n+{l * '-'}+\n"
             f"Dataset {self.name}:\n"
             f"  - Found {len(self):,} examples:\n"
             f"{fmt_names}\n"
-            f"\n+{l*'-'}+\n"
+            f"\n+{l * '-'}+\n"
         )
 
     @staticmethod

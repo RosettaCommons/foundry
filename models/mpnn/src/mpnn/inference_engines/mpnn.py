@@ -216,7 +216,7 @@ class MPNNInferenceEngine:
         """
         if input_dicts is None and atom_arrays is None:
             raise ValueError(
-                "At least one of 'input_dicts' or 'atom_arrays' must be " "provided."
+                "At least one of 'input_dicts' or 'atom_arrays' must be provided."
             )
         if atom_arrays is not None and input_dicts is not None:
             if len(atom_arrays) != len(input_dicts):
@@ -345,8 +345,7 @@ class MPNNInferenceEngine:
         B, L = S_sampled.shape
         if B != input_dict["batch_size"]:
             raise ValueError(
-                "Mismatch between network output batch size and input_dict "
-                "batch_size."
+                "Mismatch between network output batch size and input_dict batch_size."
             )
 
         # Extract the metrics.
@@ -485,7 +484,7 @@ class MPNNInferenceEngine:
         # If no output directory and writing requested, raise error.
         if not out_directory and (self.write_fasta or self.write_structures):
             raise ValueError(
-                "Output directory is not set, but writing of outputs was " "requested."
+                "Output directory is not set, but writing of outputs was requested."
             )
         elif not out_directory:
             # Nothing to do.
@@ -528,7 +527,7 @@ class MPNNInferenceEngine:
                 # Can't write without a name.
                 if name is None:
                     raise ValueError(
-                        "Cannot write FASTA output: 'name' is not set in " "input_dict."
+                        "Cannot write FASTA output: 'name' is not set in input_dict."
                     )
 
                 if name not in grouped:

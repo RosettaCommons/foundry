@@ -1,16 +1,21 @@
+import json
 import logging
+import re
+from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
+from typing import TextIO
 
 import pandas as pd
 import torch
 import torch.distributed as dist
+from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.ml.preprocessing.msa.finding import (
     get_msa_depth_and_ext_from_folder,
     get_msa_dirs_from_env,
 )
 from atomworks.ml.samplers import LoadBalancedDistributedSampler
-from biotite.structure import AtomArray
+from biotite.structure import AtomArray, AtomArrayStack
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
@@ -30,7 +35,7 @@ from rf3.utils.io import (
 )
 from rf3.utils.predicted_error import (
     annotate_atom_array_b_factor_with_plddt,
-    compile_af3_confidence_outputs,
+    compile_af3_style_confidence_outputs,
     get_mean_atomwise_plddt,
 )
 
@@ -40,6 +45,159 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
+
+# Default metrics configuration for RF3 inference (ptm, iptm, clashing chains)
+DEFAULT_RF3_METRICS_CFG = {
+    "ptm": {"_target_": "rf3.metrics.predicted_error.ComputePTM"},
+    "iptm": {"_target_": "rf3.metrics.predicted_error.ComputeIPTM"},
+    "count_clashing_chains": {
+        "_target_": "rf3.metrics.clashing_chains.CountClashingChains"
+    },
+}
+
+
+def dump_json_compact_arrays(obj: dict, f: TextIO) -> None:
+    """Dump JSON with indented structure but compact arrays (AF3 style).
+
+    Arrays are written on single lines instead of one element per line.
+    """
+    # First dump with indent to get structure
+    json_str = json.dumps(obj, indent=2)
+    # Collapse arrays onto single lines using regex
+    # Match arrays that span multiple lines and collapse them
+    pattern = re.compile(r"\[\s*\n\s*([^\[\]]*?)\s*\n\s*\]", re.DOTALL)
+    while pattern.search(json_str):
+        json_str = pattern.sub(
+            lambda m: "["
+            + ",".join(item.strip() for item in m.group(1).split(","))
+            + "]",
+            json_str,
+        )
+    f.write(json_str)
+
+
+def compute_ranking_score(
+    iptm: float | None,
+    ptm: float | None,
+    has_clash: bool,
+) -> float:
+    """Compute ranking score.
+
+    Formula: 0.8 * ipTM + 0.2 * pTM - 100 * has_clash
+
+    For single-chain predictions where ipTM is None, uses pTM only.
+    """
+    if iptm is None:
+        # Single chain - use pTM only
+        iptm = ptm if ptm is not None else 0.0
+    if ptm is None:
+        ptm = 0.0
+    return 0.8 * iptm + 0.2 * ptm - 100 * int(has_clash)
+
+
+@dataclass
+class RF3Output:
+    """Output container for RF3 predictions, analogous to RFD3Output.
+
+    Stores predicted structures and confidence metrics in AlphaFold3-compatible format.
+    """
+
+    example_id: str
+    atom_array: AtomArray
+    summary_confidences: dict = field(default_factory=dict)
+    confidences: dict | None = None
+    sample_idx: int = 0
+    seed: int = 0
+
+    def dump(
+        self,
+        out_dir: Path,
+        file_type: str = "cif",
+        dump_full_confidences: bool = True,
+    ) -> None:
+        """Save output to disk in AlphaFold3-compatible format.
+
+        Args:
+            out_dir: Directory to save outputs to.
+            file_type: File type for structure output ("cif" or "cif.gz").
+            dump_full_confidences: Whether to save full per-atom confidences.
+        """
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        sample_name = f"{self.example_id}_seed-{self.seed}_sample-{self.sample_idx}"
+        base_path = out_dir / sample_name
+
+        # Save structure
+        to_cif_file(
+            self.atom_array,
+            f"{base_path}_model",
+            file_type=file_type,
+            include_entity_poly=False,
+        )
+
+        # Save summary_confidences.json
+        with open(f"{base_path}_summary_confidences.json", "w") as f:
+            dump_json_compact_arrays(self.summary_confidences, f)
+
+        # Save confidences.json (optional, for full per-atom data)
+        if dump_full_confidences and self.confidences:
+            with open(f"{base_path}_confidences.json", "w") as f:
+                dump_json_compact_arrays(self.confidences, f)
+
+
+def dump_ranking_scores(
+    outputs: list[RF3Output],
+    out_dir: Path,
+    example_id: str,
+) -> None:
+    """Write {example_id}_ranking_scores.csv with ranking scores for all samples."""
+    rows = [
+        {
+            "seed": o.seed,
+            "sample": o.sample_idx,
+            "ranking_score": o.summary_confidences.get("ranking_score"),
+        }
+        for o in outputs
+    ]
+    df = pd.DataFrame(rows)
+    df.to_csv(out_dir / f"{example_id}_ranking_scores.csv", index=False)
+
+
+def dump_top_ranked_outputs(
+    outputs: list[RF3Output],
+    out_dir: Path,
+    example_id: str,
+    file_type: str = "cif",
+) -> RF3Output:
+    """Copy the top-ranked model and summary to the top-level directory.
+
+    Returns the top-ranked RF3Output.
+    """
+    # Find the output with the highest ranking score
+    best_output = max(
+        outputs,
+        key=lambda o: o.summary_confidences.get("ranking_score", float("-inf")),
+    )
+
+    # Save top-ranked model at top level
+    to_cif_file(
+        best_output.atom_array,
+        out_dir / f"{example_id}_model",
+        file_type=file_type,
+        include_entity_poly=False,
+    )
+
+    # Save top-ranked summary_confidences at top level
+    with open(out_dir / f"{example_id}_summary_confidences.json", "w") as f:
+        dump_json_compact_arrays(best_output.summary_confidences, f)
+
+    # Save top-ranked full confidences at top level (if present)
+    if best_output.confidences:
+        with open(out_dir / f"{example_id}_confidences.json", "w") as f:
+            dump_json_compact_arrays(best_output.confidences, f)
+
+    return best_output
 
 
 def should_early_stop_by_mean_plddt(
@@ -93,7 +251,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
         compress_outputs: bool = False,
         early_stopping_plddt_threshold: float | None = None,
         # Metrics
-        metrics_cfg: dict | OmegaConf | MetricManager | None = None,
+        metrics_cfg: dict | OmegaConf | MetricManager | str | None = "default",
         **kwargs,
     ):
         """Initialize inference engine and load model.
@@ -109,10 +267,11 @@ class RF3InferenceEngine(BaseInferenceEngine):
           compress_outputs: Whether to gzip output files. Defaults to ``False``.
           early_stopping_plddt_threshold: Stop early if pLDDT below threshold. Defaults to ``None``.
           metrics_cfg: Metrics configuration. Can be:
+              - "default" to use standard RF3 metrics (ptm, iptm, clashing chains)
               - dict/OmegaConf with Hydra configs
               - Pre-instantiated MetricManager
               - None (no metrics).
-              Defaults to ``None``.
+              Defaults to ``"default"``.
           **kwargs: Additional arguments passed to BaseInferenceEngine:
               - ckpt_path (PathLike, required): Path to model checkpoint.
               - seed (int | None): Random seed. If None, uses external RNG state. Defaults to ``None``.
@@ -194,6 +353,11 @@ class RF3InferenceEngine(BaseInferenceEngine):
             if isinstance(self._metrics_cfg, MetricManager):
                 # Already instantiated - use directly
                 self.trainer.metrics = self._metrics_cfg
+            elif self._metrics_cfg == "default":
+                # Use default RF3 metrics (ptm, iptm, clashing chains)
+                self.trainer.metrics = MetricManager.instantiate_from_hydra(
+                    metrics_cfg=DEFAULT_RF3_METRICS_CFG
+                )
             elif self._metrics_cfg is not None:
                 # Hydra config dict - instantiate MetricManager
                 self.trainer.metrics = MetricManager.instantiate_from_hydra(
@@ -246,7 +410,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
           cyclic_chains: List of chain IDs to cyclize. Defaults to ``[]``.
 
         Returns:
-          If ``out_dir`` is None: Dict mapping example_id to results dict.
+          If ``out_dir`` is None: Dict mapping example_id to list of RF3Output objects.
           If ``out_dir`` is set: None (results saved to disk).
         """
         self.initialize()
@@ -429,70 +593,123 @@ class RF3InferenceEngine(BaseInferenceEngine):
             atom_array_stack = build_stack_from_atom_array_and_batched_coords(
                 network_output["X_L"], pipeline_output["atom_array"]
             )
+            num_samples = (
+                len(atom_array_stack)
+                if isinstance(atom_array_stack, AtomArrayStack)
+                else 1
+            )
 
-            # Compile confidence outputs if available
-            atom_array_list = None
-            confidence_df = None
-            if "plddt" in network_output:
-                confidence_outs = compile_af3_confidence_outputs(
-                    plddt_logits=network_output["plddt"],
-                    pae_logits=network_output["pae"],
-                    pde_logits=network_output["pde"],
-                    chain_iid_token_lvl=pipeline_output["ground_truth"][
-                        "chain_iid_token_lvl"
-                    ],
-                    is_real_atom=pipeline_output["confidence_feats"]["is_real_atom"],
-                    example_id=input_spec.example_id,
-                    confidence_loss_cfg=self.cfg.trainer.loss.confidence_loss,
+            # Build RF3Output objects for each sample
+            rf3_outputs: list[RF3Output] = []
+            for sample_idx in range(num_samples):
+                # Get atom array for this sample
+                if isinstance(atom_array_stack, AtomArrayStack):
+                    sample_atom_array = atom_array_stack[sample_idx]
+                else:
+                    sample_atom_array = atom_array_stack
+
+                # Compile confidence outputs in AF3 format (if available)
+                summary_confidences = {}
+                confidences = None
+                if "plddt" in network_output:
+                    conf_outs = compile_af3_style_confidence_outputs(
+                        plddt_logits=network_output["plddt"],
+                        pae_logits=network_output["pae"],
+                        pde_logits=network_output["pde"],
+                        chain_iid_token_lvl=pipeline_output["ground_truth"][
+                            "chain_iid_token_lvl"
+                        ],
+                        is_real_atom=pipeline_output["confidence_feats"][
+                            "is_real_atom"
+                        ],
+                        atom_array=pipeline_output["atom_array"],
+                        confidence_loss_cfg=self.cfg.trainer.loss.confidence_loss,
+                        batch_idx=sample_idx,
+                    )
+                    summary_confidences = conf_outs["summary_confidences"]
+                    confidences = conf_outs["confidences"]
+
+                    # Annotate b-factor with pLDDT if requested
+                    if annotate_b_factor_with_plddt:
+                        atom_array_list = annotate_atom_array_b_factor_with_plddt(
+                            atom_array_stack,
+                            conf_outs["plddt"],
+                            pipeline_output["confidence_feats"]["is_real_atom"],
+                        )
+                        sample_atom_array = atom_array_list[sample_idx]
+
+                # Add metrics (ptm, iptm, has_clash) to summary_confidences
+                if metrics_output:
+                    ptm_key = f"ptm.ptm_{sample_idx}"
+                    iptm_key = f"iptm.iptm_{sample_idx}"
+                    clash_key = f"count_clashing_chains.has_clash_{sample_idx}"
+
+                    ptm_val = metrics_output.get(ptm_key)
+                    iptm_val = metrics_output.get(iptm_key)
+                    has_clash = bool(metrics_output.get(clash_key, 0))
+
+                    # Convert to native Python floats for JSON serialization
+                    ptm = float(ptm_val) if ptm_val is not None else None
+                    iptm = float(iptm_val) if iptm_val is not None else None
+
+                    summary_confidences["ptm"] = ptm
+                    summary_confidences["iptm"] = iptm
+                    summary_confidences["has_clash"] = has_clash
+
+                    ranking_score = compute_ranking_score(
+                        iptm=iptm,
+                        ptm=ptm,
+                        has_clash=has_clash,
+                    )
+                    summary_confidences["ranking_score"] = round(ranking_score, 4)
+
+                rf3_outputs.append(
+                    RF3Output(
+                        example_id=input_spec.example_id,
+                        atom_array=sample_atom_array,
+                        summary_confidences=summary_confidences,
+                        confidences=confidences,
+                        sample_idx=sample_idx,
+                        seed=self.seed if self.seed is not None else 0,
+                    )
                 )
-                confidence_df = confidence_outs["confidence_df"]
-
-                if annotate_b_factor_with_plddt:
-                    atom_array_list = annotate_atom_array_b_factor_with_plddt(
-                        atom_array_stack,
-                        confidence_outs["plddt"],
-                        pipeline_output["confidence_feats"]["is_real_atom"],
-                    )
-                    logging.info(
-                        f"Annotated pLDDT scores into B-factors for {input_spec.example_id}. "
-                        "Forcing one model per file."
-                    )
-                    one_model_per_file = True
 
             # Save or return results
             if out_dir:
-                # Save to disk
-                df_to_save = pd.DataFrame([metrics_output])
-                df_to_save.to_csv(
-                    example_out_dir / f"{input_spec.example_id}_metrics.csv",
-                    index=False,
+                # Save to disk in AlphaFold3-style directory structure
+                # Top-level: ranking_scores.csv, best model, best summary
+                dump_ranking_scores(rf3_outputs, example_out_dir, input_spec.example_id)
+                dump_top_ranked_outputs(
+                    rf3_outputs,
+                    example_out_dir,
+                    input_spec.example_id,
+                    file_type=file_type,
                 )
 
-                if confidence_df is not None:
-                    confidence_df.to_csv(
-                        example_out_dir / f"{input_spec.example_id}_score.csv",
-                        index=False,
-                    )
-
+                # Per-sample subdirectories
                 if dump_predictions:
-                    dump_structures(
-                        atom_arrays=atom_array_list or atom_array_stack,
-                        base_path=example_out_dir / input_spec.example_id,
-                        one_model_per_file=one_model_per_file,
-                        file_type=file_type,
-                    )
+                    for rf3_out in rf3_outputs:
+                        sample_subdir = (
+                            example_out_dir
+                            / f"seed-{rf3_out.seed}_sample-{rf3_out.sample_idx}"
+                        )
+                        rf3_out.dump(
+                            out_dir=sample_subdir,
+                            file_type=file_type,
+                            dump_full_confidences=True,
+                        )
 
                 if dump_trajectories:
-                    dump_trajectories(
-                        trajectory_list=network_output["X_denoised_L_traj"],
-                        atom_array=pipeline_output["atom_array"],
+                    dump_structures(
+                        atom_arrays=network_output["X_denoised_L_traj"],
                         base_path=example_out_dir / "denoised",
+                        one_model_per_file=True,
                         file_type=file_type,
                     )
-                    dump_trajectories(
-                        trajectory_list=network_output["X_noisy_L_traj"],
-                        atom_array=pipeline_output["atom_array"],
+                    dump_structures(
+                        atom_arrays=network_output["X_noisy_L_traj"],
                         base_path=example_out_dir / "noisy",
+                        one_model_per_file=True,
                         file_type=file_type,
                     )
 
@@ -500,12 +717,8 @@ class RF3InferenceEngine(BaseInferenceEngine):
                     f"Outputs for {input_spec.example_id} written to {example_out_dir}!"
                 )
             else:
-                # Store in memory
-                results[input_spec.example_id] = {
-                    "predicted_structures": atom_array_list or atom_array_stack,
-                    "metrics": metrics_output,
-                    "confidence_scores": confidence_df,
-                }
+                # Store in memory - return list of RF3Output objects
+                results[input_spec.example_id] = rf3_outputs
 
         # merge results across ranks
         self.trainer.fabric.barrier()

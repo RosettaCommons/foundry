@@ -110,8 +110,7 @@ class FeaturizeUserSettings(Transform):
                     atom_values == spread_token_wise(atom_array, token_values)
                 ):
                     raise ValueError(
-                        f"All atoms in each token must have the same "
-                        f"value for {key}"
+                        f"All atoms in each token must have the same value for {key}"
                     )
 
         # Check pair keys such that token-level pairs are unique.

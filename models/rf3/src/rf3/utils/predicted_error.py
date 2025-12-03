@@ -238,6 +238,166 @@ def compile_af3_confidence_outputs(
     }
 
 
+def compile_af3_style_confidence_outputs(
+    plddt_logits: torch.Tensor,
+    pae_logits: torch.Tensor,
+    pde_logits: torch.Tensor,
+    chain_iid_token_lvl: torch.Tensor | np.ndarray,
+    is_real_atom: torch.Tensor,
+    atom_array: AtomArray,
+    confidence_loss_cfg: DictConfig | dict,
+    batch_idx: int = 0,
+) -> dict[str, Any]:
+    """Compile confidence outputs in AlphaFold3-compatible format.
+
+    Returns a dict with:
+        - summary_confidences: Dict for {name}_summary_confidences.json
+        - confidences: Dict for {name}_confidences.json (per-atom data)
+        - plddt, pae, pde: Raw tensors for further processing
+    """
+    # Unbin logits
+    plddt = unbin_logits(
+        plddt_logits.reshape(
+            -1,
+            plddt_logits.shape[1],
+            NHEAVY,
+            confidence_loss_cfg.plddt.n_bins,
+        )
+        .permute(0, 3, 1, 2)
+        .float(),
+        confidence_loss_cfg.plddt.max_value,
+        confidence_loss_cfg.plddt.n_bins,
+    )
+
+    pae = unbin_logits(
+        pae_logits.permute(0, 3, 1, 2).float(),
+        confidence_loss_cfg.pae.max_value,
+        confidence_loss_cfg.pae.n_bins,
+    )
+    pde = unbin_logits(
+        pde_logits.permute(0, 3, 1, 2).float(),
+        confidence_loss_cfg.pde.max_value,
+        confidence_loss_cfg.pde.n_bins,
+    )
+
+    # Get chain information
+    if isinstance(chain_iid_token_lvl, torch.Tensor):
+        chain_iid_token_lvl = chain_iid_token_lvl.cpu().numpy()
+    chains = list(np.unique(chain_iid_token_lvl))
+    n_chains = len(chains)
+
+    # Calculate chainwise metrics
+    chain_masks_1d = create_chainwise_masks_1d(
+        chain_iid_token_lvl, device=is_real_atom.device
+    )
+    chain_masks_2d = create_chainwise_masks_2d(chain_iid_token_lvl, device=pae.device)
+
+    # Chain-level pLDDT
+    chain_plddt = {}
+    for chain, mask in chain_masks_1d.items():
+        chain_plddt[chain] = compute_mean_over_subsampled_pairs(
+            plddt, is_real_atom[..., :NHEAVY] * mask[:, None]
+        )[batch_idx].item()
+
+    # Chain-level PAE (intra-chain)
+    chain_pae = {}
+    for chain, mask in chain_masks_2d.items():
+        chain_pae[chain] = compute_mean_over_subsampled_pairs(pae, mask)[
+            batch_idx
+        ].item()
+
+    # Chain-pair PAE/PDE (inter-chain, for iptm-like metric)
+    interface_masks = create_interface_masks_2d(chain_iid_token_lvl, device=pae.device)
+    chain_pair_pae = {}
+    chain_pair_pae_min = {}
+    chain_pair_pde = {}
+    chain_pair_pde_min = {}
+    for (chain_i, chain_j), mask in interface_masks.items():
+        chain_pair_pae[(chain_i, chain_j)] = compute_mean_over_subsampled_pairs(
+            pae, mask
+        )[batch_idx].item()
+        chain_pair_pae_min[(chain_i, chain_j)] = compute_min_over_subsampled_pairs(
+            pae, mask
+        )[batch_idx].item()
+        chain_pair_pde[(chain_i, chain_j)] = compute_mean_over_subsampled_pairs(
+            pde, mask
+        )[batch_idx].item()
+        chain_pair_pde_min[(chain_i, chain_j)] = compute_min_over_subsampled_pairs(
+            pde, mask
+        )[batch_idx].item()
+
+    # Overall metrics for this batch
+    overall_plddt = compute_mean_over_subsampled_pairs(
+        plddt, is_real_atom[..., :NHEAVY]
+    )[batch_idx].item()
+    overall_pae = pae[batch_idx].mean().item()
+    overall_pde = pde[batch_idx].mean().item()
+
+    # Build chain_pair matrices (NxN)
+    chain_pair_pae_matrix = [[None] * n_chains for _ in range(n_chains)]
+    chain_pair_pae_min_matrix = [[None] * n_chains for _ in range(n_chains)]
+    chain_pair_pde_matrix = [[None] * n_chains for _ in range(n_chains)]
+    chain_pair_pde_min_matrix = [[None] * n_chains for _ in range(n_chains)]
+    for i, chain_i in enumerate(chains):
+        for j, chain_j in enumerate(chains):
+            if i != j and (chain_i, chain_j) in chain_pair_pae:
+                chain_pair_pae_matrix[i][j] = round(
+                    chain_pair_pae[(chain_i, chain_j)], 2
+                )
+                chain_pair_pae_min_matrix[i][j] = round(
+                    chain_pair_pae_min[(chain_i, chain_j)], 2
+                )
+                chain_pair_pde_matrix[i][j] = round(
+                    chain_pair_pde[(chain_i, chain_j)], 2
+                )
+                chain_pair_pde_min_matrix[i][j] = round(
+                    chain_pair_pde_min[(chain_i, chain_j)], 2
+                )
+
+    # Extract per-atom pLDDT values
+    atom_plddts = plddt[batch_idx][is_real_atom[..., :NHEAVY]].cpu().tolist()
+
+    # Extract atom/token chain and residue info from atom_array
+    atom_chain_ids = atom_array.chain_id.tolist()
+    token_chain_ids = list(chain_iid_token_lvl)
+    token_res_ids = list(
+        range(len(chain_iid_token_lvl))
+    )  # Simplified; could map to actual res_id
+
+    # PAE matrix for this batch
+    pae_matrix = pae[batch_idx].cpu().tolist()
+
+    # Build summary_confidences (AlphaFold3-style + RF3 extensions)
+    summary_confidences = {
+        "chain_ptm": [round(chain_plddt.get(c, 0.0), 2) for c in chains],
+        "chain_pair_pae_min": chain_pair_pae_min_matrix,
+        "chain_pair_pde_min": chain_pair_pde_min_matrix,
+        "chain_pair_pae": chain_pair_pae_matrix,
+        "chain_pair_pde": chain_pair_pde_matrix,
+        "overall_plddt": round(overall_plddt, 4),
+        "overall_pde": round(overall_pde, 4),
+        "overall_pae": round(overall_pae, 4),
+        # Note: ptm, iptm, has_clash should be populated from metrics_output
+    }
+
+    # Build full confidences (per-atom data)
+    confidences = {
+        "atom_chain_ids": atom_chain_ids,
+        "atom_plddts": [round(p, 2) for p in atom_plddts],
+        "pae": [[round(v, 2) for v in row] for row in pae_matrix],
+        "token_chain_ids": token_chain_ids,
+        "token_res_ids": token_res_ids,
+    }
+
+    return {
+        "summary_confidences": summary_confidences,
+        "confidences": confidences,
+        "plddt": plddt,
+        "pae": pae,
+        "pde": pde,
+    }
+
+
 def compute_batch_indices_with_lowest_predicted_error(
     plddt: torch.Tensor,
     is_real_atom: torch.Tensor,

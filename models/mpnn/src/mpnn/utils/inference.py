@@ -362,8 +362,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--fixed_residues",
         type=str,
         help=(
-            "List of residue IDs to fix: "
-            'e.g. \'["A35","B40","C52"]\' or "A35,B40,C52"',
+            'List of residue IDs to fix: e.g. \'["A35","B40","C52"]\' or "A35,B40,C52"',
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["fixed_residues"],
     )
@@ -379,13 +378,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     design_group.add_argument(
         "--fixed_chains",
         type=str,
-        help=("List of chain IDs to fix: " 'e.g. \'["A","B"]\' or "A,B"',),
+        help=('List of chain IDs to fix: e.g. \'["A","B"]\' or "A,B"',),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["fixed_chains"],
     )
     design_group.add_argument(
         "--designed_chains",
         type=str,
-        help=("List of chain IDs to design: " 'e.g. \'["A","B"]\' or "A,B"',),
+        help=('List of chain IDs to design: e.g. \'["A","B"]\' or "A,B"',),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["designed_chains"],
     )
 
@@ -400,8 +399,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--bias_per_residue",
         type=str,
         help=(
-            'Per-residue bias dict: e.g. \'{"A35": {"ALA": -2.0}}\'. '
-            "Overwrites --bias."
+            'Per-residue bias dict: e.g. \'{"A35": {"ALA": -2.0}}\'. Overwrites --bias.'
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["bias_per_residue"],
     )
@@ -807,7 +805,7 @@ class MPNNInferenceInput:
 
             if not res_num_allowed:
                 raise ValueError(
-                    f"ID '{id_str}' is not allowed to contain a " "residue number."
+                    f"ID '{id_str}' is not allowed to contain a residue number."
                 )
 
         # Handle insertion code (None or "" mapped to None).
@@ -1007,8 +1005,7 @@ class MPNNInferenceInput:
             for item in undesired_res_names:
                 if not isinstance(item, str):
                     raise TypeError(
-                        "undesired_res_names entries must be strings, "
-                        f"got {type(item)}"
+                        f"undesired_res_names entries must be strings, got {type(item)}"
                     )
 
     @staticmethod
@@ -1033,8 +1030,7 @@ class MPNNInferenceInput:
             allowed = {"auto_regressive", "teacher_forcing"}
             if decode_type not in allowed:
                 raise ValueError(
-                    f"decode_type must be one of {sorted(allowed)}, "
-                    f"got '{decode_type}'"
+                    f"decode_type must be one of {sorted(allowed)}, got '{decode_type}'"
                 )
 
         # Check type and value of causality_pattern.
@@ -1103,8 +1099,7 @@ class MPNNInferenceInput:
             for res_id in val:
                 if not isinstance(res_id, str):
                     raise TypeError(
-                        f"{key} entries must be residue-id strings, "
-                        f"got {type(res_id)}"
+                        f"{key} entries must be residue-id strings, got {type(res_id)}"
                     )
                 MPNNInferenceInput._parse_id(res_id, res_num_required=True)
 
@@ -1118,8 +1113,7 @@ class MPNNInferenceInput:
             for chain_id in val:
                 if not isinstance(chain_id, str):
                     raise TypeError(
-                        f"{key} entries must be chain-id strings, "
-                        f"got {type(chain_id)}"
+                        f"{key} entries must be chain-id strings, got {type(chain_id)}"
                     )
                 MPNNInferenceInput._parse_id(chain_id, res_num_allowed=False)
 
@@ -1155,12 +1149,11 @@ class MPNNInferenceInput:
             for token_name, value in bias.items():
                 if token_name not in token_to_idx:
                     raise ValueError(
-                        f"bias key '{token_name}' is not in the MPNN token "
-                        "vocabulary."
+                        f"bias key '{token_name}' is not in the MPNN token vocabulary."
                     )
                 if not isinstance(value, (int, float)):
                     raise TypeError(
-                        f"bias['{token_name}'] must be numeric, " f"got {type(value)}"
+                        f"bias['{token_name}'] must be numeric, got {type(value)}"
                     )
 
         # Check bias_per_residue type, residue-id parsing, token membership,
@@ -1416,15 +1409,14 @@ class MPNNInferenceInput:
         if symmetry_residues_weights is not None:
             if not isinstance(symmetry_residues_weights, list):
                 raise TypeError(
-                    "symmetry_residues_weights must be a list of lists when "
-                    "provided."
+                    "symmetry_residues_weights must be a list of lists when provided."
                 )
 
             # Check that symmetry_residues is also provided, and that the
             # outer lengths match.
             if symmetry_residues is None:
                 raise ValueError(
-                    "symmetry_residues_weights provided without " "symmetry_residues."
+                    "symmetry_residues_weights provided without symmetry_residues."
                 )
             if len(symmetry_residues_weights) != len(symmetry_residues):
                 raise ValueError(
@@ -1441,7 +1433,7 @@ class MPNNInferenceInput:
                 # Check group type.
                 if not isinstance(symmetry_residue_group_weights, list):
                     raise TypeError(
-                        "Each element of symmetry_residues_weights must be a " "list."
+                        "Each element of symmetry_residues_weights must be a list."
                     )
 
                 # Length check.
@@ -1464,7 +1456,7 @@ class MPNNInferenceInput:
         if homo_oligomer_chains is not None:
             if not isinstance(homo_oligomer_chains, list):
                 raise TypeError(
-                    "homo_oligomer_chains must be a list of lists when " "provided."
+                    "homo_oligomer_chains must be a list of lists when provided."
                 )
 
             # Check each chain group.
