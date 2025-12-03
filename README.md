@@ -57,40 +57,13 @@ We include details DNA, Ligands, Protein-Protein Interaction, Symmetry-condition
 - **foundry**: Model architectures, training, inference endpoints
 - **models/\<model\>:** Released models.
 
-### Debugging
-
-VSCode-native debugging with Apptainers:
-
-1. Add to `.vscode/launch.json`:
-```json
-{
-    "name": "Python: Attach",
-    "type": "debugpy",
-    "request": "attach",
-    "connect": {
-        "host": "localhost",
-        "port": 2345
-    }
-}
-```
-
-2. Set breakpoints in VSCode
-
-3. Launch with debug port:
-```bash
-export DEBUG_PORT=2345
-./train.py experiment=...
-```
-
-4. Attach debugger when prompted (F5)
-
 #### For Core Developers (Multiple Packages)
 
 Install both `foundry` and models in editable mode for development:
 
 ```bash
 # Install foundry and RF3 in editable mode
-uv pip install -e . -e ./models/rf3
+uv pip install -e . -e ./models/rf3 -e ./models/rfd3 -e ./models/mpnn
 
 # Or install only foundry (no models)
 uv pip install -e .
@@ -165,3 +138,5 @@ If you use this repository code or data in your work, please cite the relavant w
   publisher={Nature Publishing Group US New York}
 }
 ```
+## Acknowledgments
+We thank Rachel Clune and Hope Woods from the RosettaCommons for their collaboration on the codebase, documentation, tutorials and examples. 
