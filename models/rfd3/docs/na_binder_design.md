@@ -1,9 +1,31 @@
 # RFdiffusion3 — Nucleic acid binder design examples
 
-### simple dsDNA binder example
+If you would like to run the examples below, `na_binder_design.json`, located in this directory,
+contains the example code. You can run it via:
+```
+rfd3 design out_dir=inference_outputs/na_binder/0 \
+ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
+inputs=./na_binder_design.json
+```
+
+
+Or, if you have cloned the repo rather than using `pip install`:
+```
+python path/to/foundry/models/rfd3/src/rfd3/run_inference.py \
+out_dir=inference_outputs/na_binder/0 \
+ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
+inputs=./na_binder_design.json 
+```
+
+An example script for running these examples in batches is also provided in `run_inf_tutorial.sh`.
+
+The input files for the different examples are already provided in `input_pdbs`, but if you would like
+to see how you could download these directly from the PDB, see `get_na_input.sh`.
+
+### 1. Simple dsDNA binder example
 
 The DNA chains are A and B and specified as such in the contig. RFD3 will treat these as fixed in space. the contig specifies to generate a protein chain of length between 120-130. An ori token is specified.
-The length attribute shuold be the sum of all polymer lengths. in this case (120to130) + 10 + 10  = (140to150) 
+The length attribute should be the sum of all polymer lengths. in this case (120 to 130) + 10 + 10  = (140 to 150) 
 ```json
 {
     "dsDNA_basic": { 
@@ -15,9 +37,9 @@ The length attribute shuold be the sum of all polymer lengths. in this case (120
 }
 ```
 
-### simple ssDNA binder example G-quadruplex
+### 2. Simple ssDNA binder example G-quadruplex
 
-Similar to the previous one but done for a PDB containing one DNA strand (A)
+Similar to the previous example, but done for a PDB containing one DNA strand (A):
 
 ```json
 {
@@ -30,9 +52,9 @@ Similar to the previous one but done for a PDB containing one DNA strand (A)
 }
 ```
 
-### ssDNA example based on DNA sequence diffused from dsDNA pdb as input
+### 3. ssDNA example based on DNA sequence diffused from dsDNA pdb as input
 
-Similar to the previous one but the input PDB has a dsDNA. one of the chains (A) is selected. However, the single stranded DNA conformation will be sampled by RFD3 because we have specified to not have any fixed DNA atoms by using `"select_fixed_atoms": {"A1-10":""}`. ori_token is not meaningful to specify when there is no fixed atom.
+Similar to the previous example but the input PDB has a dsDNA. One of the chains (A) is selected. However, the single stranded DNA conformation will be sampled by RFD3 because we have specified to not have any fixed DNA atoms by using `"select_fixed_atoms": {"A1-10":""}`. ori_token is not meaningful to specify when there are no fixed atoms.
 ```json
 {
     "ssDNA_diffused_from_dsDNA_pdb":{
@@ -44,9 +66,9 @@ Similar to the previous one but the input PDB has a dsDNA. one of the chains (A)
 }
 ```
 
-### simple RNA binder example
+### 4. Simple RNA binder example
 
-Example on RNA. similar to ssDNA example.
+Example on RNA. Similar to the ssDNA example, example 2.
 
 ```json
 {
@@ -59,9 +81,15 @@ Example on RNA. similar to ssDNA example.
 }
 ```
 
-### complex example based on a protein-dsDNA input pdb with parts of protein and dna partially fixed (indexed and unindexed), with Hbond conditioning
+### 5. Complex example based on a protein-dsDNA input pdb with parts of protein and dna partially fixed (indexed and unindexed), with Hbond conditioning
 
-This is a complex example which has a dsDNA specified in the contig C5-18 and D24-37. However, it also has specified indexed protein motif component A146-154 and diffusing the two flanks of the protein indexed region in the same chain. The diffused protein region has an unindexed motif specified too via `"unindex": "/0,/0,B251-B255",` (note: the chain breaks applied analogous to the contig string). Parts of the DNA has been specified to be fixed and parts of it left to be sampled by RFD3 (`select_fixed_atoms`). additionally hydrogen bond conditioning is applied to some backbone and base atoms of a few DNA bases.
+This is a complex example which has a dsDNA specified in the contig: `C5-18` and `D24-37`. However, it also specifies an indexed protein motif component (`A146-154`) and diffuses the two flanks of the protein indexed region in the same chain. The diffused protein region has an unindexed motif specified via `"unindex": "/0,/0,B251-B255".` (*Note: the chain breaks applied are analogous to the contig string*). Parts of the DNA have been specified as fixed or to be sampled by RFD3 (`select_fixed_atoms`). Additionally hydrogen bond conditioning is applied to some backbone and base atoms of a few DNA bases.
+
+To run this without warnings, you will need to install [hpblus](https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/) to enable hydrogen bond metrics computation. This is discussed at the end of the RFD3 README, but the instructions are reproduced here for convenience:
+
+1. Download hbplus from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
+2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
+3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
 
 ```json
 {
