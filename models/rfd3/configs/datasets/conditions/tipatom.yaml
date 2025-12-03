@@ -1,0 +1,28 @@
+
+defaults:
+  - island
+  - _self_
+
+frequency: 1.0
+name: tipatom
+
+# Island sampling (`is_motif_token` assignment)
+island_sampling_kwargs:
+  island_len_min: 1
+  island_len_max: 1
+  n_islands_min: 2
+  n_islands_max: 12
+
+# Subgraph / within-token sampling (`is_motif_atom` assignment)
+p_diffuse_motif_sidechains: 0.0  # 80% probability of diffusing sidechains
+p_diffuse_subgraph_atoms: 1.0
+subgraph_sampling_kwargs:
+  residue_p_seed_furthest_from_o: 0.8
+  residue_n_bond_expectation: 3.0
+  residue_p_fix_all: 0.05
+  hetatom_n_bond_expectation: 8
+  hetatom_p_fix_all: 0.5
+
+p_fix_motif_sequence: 0.7
+p_fix_motif_coordinates: 1.0
+p_unindex_motif_tokens: 0.5

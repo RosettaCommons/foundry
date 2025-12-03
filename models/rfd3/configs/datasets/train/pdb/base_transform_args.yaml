@@ -1,0 +1,59 @@
+# All required training args
+
+defaults:
+  - _self_
+
+dataset:
+  transform:
+    _target_: ${datasets.pipeline_target}
+    is_inference: False
+    return_atom_array: False
+
+    # Model
+    sigma_perturb: ${datasets.global_transform_args.sigma_perturb}
+    sigma_perturb_com: ${datasets.global_transform_args.sigma_perturb_com}
+    sigma_data: ${model.net.diffusion_module.sigma_data}
+    diffusion_batch_size: ${datasets.diffusion_batch_size_train}
+    central_atom: ${datasets.global_transform_args.central_atom}
+    n_atoms_per_token: ${datasets.global_transform_args.n_atoms_per_token}
+    association_scheme: ${datasets.global_transform_args.association_scheme}
+    center_option: ${datasets.global_transform_args.center_option}
+
+    # Conformers
+    generate_conformers: ${datasets.global_transform_args.generate_conformers}
+    generate_conformers_for_non_protein_only: ${datasets.global_transform_args.generate_conformers_for_non_protein_only}
+    provide_reference_conformer_when_unmasked: ${datasets.global_transform_args.provide_reference_conformer_when_unmasked}
+    ground_truth_conformer_policy: ${datasets.global_transform_args.ground_truth_conformer_policy}
+    provide_elements_for_unindexed_components: ${datasets.global_transform_args.provide_elements_for_unindexed_components}
+    use_element_for_atom_names_of_atomized_tokens: ${datasets.global_transform_args.use_element_for_atom_names_of_atomized_tokens}
+    residue_cache_dir: ${paths.data.residue_cache_dir}
+
+    # Conditions
+    train_conditions: ${datasets.global_transform_args.train_conditions}
+    meta_conditioning_probabilities: ${datasets.global_transform_args.meta_conditioning_probabilities}
+
+    # PPI Hypers
+    keep_full_binder_in_spatial_crop: ${datasets.global_transform_args.keep_full_binder_in_spatial_crop}
+    max_binder_length: ${datasets.global_transform_args.max_binder_length}
+    max_ppi_hotspots_frac_to_provide: ${datasets.global_transform_args.max_ppi_hotspots_frac_to_provide}
+    ppi_hotspot_max_distance: ${datasets.global_transform_args.ppi_hotspot_max_distance}
+
+    # 1D SS hypers
+    max_ss_frac_to_provide: ${datasets.global_transform_args.max_ss_frac_to_provide}
+    min_ss_island_len: ${datasets.global_transform_args.min_ss_island_len}
+    max_ss_island_len: ${datasets.global_transform_args.max_ss_island_len}
+
+    # Cropping
+    crop_size: ${datasets.crop_size}
+    max_atoms_in_crop: ${datasets.max_atoms_in_crop}
+    allowed_types: ALL
+    crop_spatial_probability: ???
+    crop_contiguous_probability: ???
+    dna_contact_crop_probability: 0.0
+    crop_center_cutoff_distance: 15.0
+    zero_occ_on_exposure_after_cropping: False
+    b_factor_min: null
+
+    # Other dataset-specific parameters
+    atom_1d_features: ${model.net.token_initializer.atom_1d_features}
+    token_1d_features: ${model.net.token_initializer.token_1d_features}

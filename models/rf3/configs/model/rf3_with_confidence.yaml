@@ -1,0 +1,7 @@
+defaults:
+  - components/rf3_net_with_confidence_head@net
+  - rf3
+  - _self_
+
+net:
+  _target_: rf3.model.RF3.RF3WithConfidence

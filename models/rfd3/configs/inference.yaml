@@ -1,0 +1,9 @@
+# @package _global_
+
+hydra:
+  searchpath:
+    - pkg://configs
+
+defaults:
+  - inference_engine: rfdiffusion3
+  - _self_

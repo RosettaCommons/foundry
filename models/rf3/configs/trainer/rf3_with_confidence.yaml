@@ -1,0 +1,13 @@
+defaults:
+  - rf3
+  - override loss: structure_prediction_with_confidence
+
+_target_: rf3.trainers.rf3.RF3TrainerWithConfidence
+
+metrics:
+  ptm:
+    _target_: rf3.metrics.predicted_error.ComputePTM
+  iptm:
+    _target_: rf3.metrics.predicted_error.ComputeIPTM
+  count_clashing_chains:
+    _target_: rf3.metrics.clashing_chains.CountClashingChains

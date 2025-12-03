@@ -1,0 +1,10 @@
+defaults:
+  - edm
+  - _self_
+
+kind: symmetry
+num_timesteps: 200
+gamma_0: 1.0  # 1.0 for SDE sampling
+gamma_min: 1.0
+gamma_min2: 0.0
+sym_step_frac: 0.9 # when 0.9, 90% of the trajectory from the start is symmetrized

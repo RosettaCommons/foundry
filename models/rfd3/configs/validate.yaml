@@ -1,0 +1,34 @@
+# @package _global_
+
+hydra:
+  searchpath:
+    - pkg://configs
+
+defaults:
+  - model: rfd3_base
+  - trainer: rfd3_base
+  - datasets: design_base
+  - callbacks: design_callbacks
+  - dataloader: fast
+  - paths: default
+  - hydra: default
+  - logger: csv
+  - _self_
+  - experiment: ???
+  - debug: null
+
+name: ???
+tags: ???
+project: aa_design
+# Names;
+task_name: "validate"
+seed: 42
+
+callbacks:
+  dump_validation_structures_callback:
+    dump_predictions: True
+    one_model_per_file: True
+    dump_trajectories: False
+
+# Args:
+ckpt_path: ???

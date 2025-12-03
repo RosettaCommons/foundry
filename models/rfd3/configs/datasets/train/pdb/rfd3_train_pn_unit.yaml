@@ -1,0 +1,23 @@
+defaults:
+  - af3_train_pn_unit
+  - pdb_base
+  - _self_
+
+dataset: 
+  transform:
+    # pn_unit-specific Transform pipeline parameters
+    crop_contiguous_probability: 0.25
+    crop_spatial_probability: 0.75
+
+  # Modify: date & clustering parquet
+  dataset:
+    filters:
+        # filters common across all PDB datasets
+      - 'pdb_id not in ["7rte", "7m5w", "7n5u"]'
+      - 'pdb_id not in ["3di3", "5o45", "1z92", "2gy5", "4zxb"]'
+      - "deposition_date < '2024-12-16'"
+      - "resolution < 9.0"
+      - "num_polymer_pn_units <= 300" 
+      - "cluster.notnull()"
+      # pn_unit specific filters
+      - "~(q_pn_unit_non_polymer_res_names.notnull() and q_pn_unit_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"

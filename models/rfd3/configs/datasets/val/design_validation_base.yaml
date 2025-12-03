@@ -1,0 +1,40 @@
+dataset:
+  _target_: rfd3.inference.datasets.ContigJsonDataset
+
+  # Required parameters for each inheriting dataset
+  data: ???  # Path to json file
+  name: ???  # Name for displaying and saving files
+  eval_every_n: ???  # Evaluate on this dataset every n epochs
+  subset_to_keys: null  # Specific keys in json to keep, ignores all others.
+
+  # NB: Used for parsing input files (not for atom_array reloading anymore)
+  cif_parser_args:
+    cache_dir: null
+    load_from_cache: False
+    save_to_cache: False
+    add_missing_atoms: False
+    
+  # Common Transform pipeline components for all PDB datasets
+  transform:
+    _target_: ${datasets.pipeline_target}
+    is_inference: True
+    return_atom_array: True
+    diffusion_batch_size: ${datasets.diffusion_batch_size_train}
+    sigma_data: ${model.net.diffusion_module.sigma_data}
+    central_atom: ${datasets.global_transform_args.central_atom}
+    n_atoms_per_token: ${datasets.global_transform_args.n_atoms_per_token}
+    association_scheme: ${datasets.global_transform_args.association_scheme}
+    center_option: ${datasets.global_transform_args.center_option}
+
+    # Conformers
+    generate_conformers: ${datasets.global_transform_args.generate_conformers}
+    generate_conformers_for_non_protein_only: ${datasets.global_transform_args.generate_conformers_for_non_protein_only}
+    provide_reference_conformer_when_unmasked: ${datasets.global_transform_args.provide_reference_conformer_when_unmasked}
+    ground_truth_conformer_policy: ${datasets.global_transform_args.ground_truth_conformer_policy}
+    provide_elements_for_unindexed_components: ${datasets.global_transform_args.provide_elements_for_unindexed_components}
+    use_element_for_atom_names_of_atomized_tokens: ${datasets.global_transform_args.use_element_for_atom_names_of_atomized_tokens}
+    residue_cache_dir: ${paths.data.residue_cache_dir}
+
+    # Other dataset-specific parameters
+    atom_1d_features: ${model.net.token_initializer.atom_1d_features}
+    token_1d_features: ${model.net.token_initializer.token_1d_features}

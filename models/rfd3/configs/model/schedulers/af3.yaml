@@ -1,0 +1,6 @@
+# Learning rate scheduler
+_target_: foundry.training.schedulers.AF3Scheduler
+base_lr: 1.8e-3
+warmup_steps: 1000
+decay_factor: 0.95
+decay_steps: 50000

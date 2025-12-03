@@ -1,0 +1,66 @@
+# @package _global_
+
+defaults:
+  - override /logger: null
+
+# default debugging setup, runs 1 full epoch
+# other debugging configs can inherit from this one
+
+# overwrite task name so debugging logs are stored in separate folder
+task_name: "debug"
+
+extras:
+  ignore_warnings: False
+  enforce_tags: False
+
+# sets level of all command line loggers to 'DEBUG'
+# https://hydra.cc/docs/tutorials/basic/running_your_app/logging/
+hydra:
+  job_logging:
+    root:
+      level: DEBUG
+  # use the below to also set hydra loggers to 'DEBUG'
+  verbose: True
+
+# Print example ID before forward pass
+callbacks:
+  print_example_id_before_forward_pass:
+      _target_: foundry.callbacks.train_logging.PrintExampleIDBeforeForwardPassCallback
+  timing_logging:
+      _target_: foundry.callbacks.timing_logging.TimingCallback
+      log_every_n: 5
+
+dataloader:
+  train:
+    dataloader_params: 
+      batch_size: 1
+      num_workers: 0  # debuggers don't like multiprocessing -- work on main thread
+      pin_memory: False  # disable gpu memory pin
+      prefetch_factor: null # must be null for num_workers=0
+    n_fallback_retries: 0 # disable fallback retries for debugging
+
+  val:
+    dataloader_params:
+      batch_size: 1
+      num_workers: 0
+      pin_memory: False
+      prefetch_factor: null # must be null for num_workers=0
+
+datasets:
+  crop_size: 100  # set small crop size for quick debugging
+  diffusion_batch_size_train: 1
+  diffusion_batch_size_inference: 2
+  n_recycles_train: 1
+  n_recycles_validation: 1
+  n_msa: 128
+  key_to_balance: null # otherwise big examples will be processed first
+
+trainer:
+  devices_per_node: 1
+  limit_train_batches: 2
+  limit_val_batches: 1
+  validate_every_n_epochs: 1
+
+# Set tags to help identify debugging runs
+tags:
+  - debug

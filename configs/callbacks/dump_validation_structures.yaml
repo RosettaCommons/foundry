@@ -1,6 +1,0 @@
-dump_validation_structures_callback:
-    _target_: modelhub.callbacks.dump_validation_structures.DumpValidationStructuresCallback
-    save_dir: ${paths.output_dir}/val_structures
-    dump_predictions: True
-    one_model_per_file: False
-    dump_trajectories: False

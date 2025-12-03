@@ -1,0 +1,65 @@
+# @package _global_
+defaults:
+  - base
+  - _self_
+
+_target_: rfd3.engine.RFD3InferenceEngine
+
+out_dir: ???
+inputs: ???  # null, json, pdb or 
+ckpt_path: /projects/ml/aa_design/models/rfd3_latest_cleaned.ckpt
+json_keys_subset: null
+skip_existing: True
+
+#########################################################
+# Design spec args: overrides args from input json
+specification: {}
+#########################################################
+
+# Diffusion args
+diffusion_batch_size: 8
+n_batches: 1
+
+# Inference sampler args | set to None to use the default in the checkpoint's config
+inference_sampler:
+  kind: "default" # "default" or "symmetry" to choose the sampler
+  # Classifier-free guidance args:
+  cfg_features:  # set to 0 in the reference CFG step
+    - active_donor
+    - active_acceptor
+    - ref_atomwise_rasa
+
+  use_classifier_free_guidance: False
+  cfg_t_max: null # max t to apply cfg guidance
+  cfg_scale: 1.5
+  center_option: "all"  # Options are ["all", "motif", "diffuse"]
+  s_trans: 1.0  # Translational noise scale for augmentation during inference
+  inference_noise_scaling_factor: 1.0
+  allow_realignment: False
+
+  # Diffusion args:
+  num_timesteps: 200
+  step_scale: 1.5  # 1.5 - 1.0   |   Higher values lead to less diverse, more designable, structures
+  noise_scale: 1.003
+  p: 7
+  gamma_0: 0.6  # Previously 1.0  | 0.0 for ODE sampling
+  gamma_min: 1.0
+  s_jitter_origin: 0.0  # Sigma of gaussian noise to jitter the motif offset (equivalent to ORI token Jitter)
+
+# Saving args
+cleanup_guideposts: True
+cleanup_virtual_atoms: True
+read_sequence_from_sequence_head: True
+output_full_json: True
+
+# Prefix to add to all output samples 
+# Default: None      -> f'{jsonfilebasename}_{jsonkey}_{batch}_{model}'
+# Otherwise: string  -> f'{string}{jsonkey}_{batch}_{model}'
+# e.g. Empty string  -> f'{jsonkey}_{batch}_{model}'
+# e.g. Chunk string  -> f'{chunkprefix_}{jsonkey}_{batch}_{model}' (pipelines usage)
+global_prefix: null
+dump_prediction_metadata_json: True
+dump_trajectories: False
+align_trajectory_structures: False
+prevalidate_inputs: True
+low_memory_mode: False # False for standard mode, True for memory efficient tokenization mode

@@ -1,0 +1,9 @@
+_target_: rf3.loss.af3_losses.DiffusionLoss
+weight: 4.0
+sigma_data: ${model.net.diffusion_module.sigma_data}
+alpha_dna: 5
+alpha_rna: 5
+alpha_ligand: 10
+edm_lambda: True
+se3_invariant_loss: True
+clamp_diffusion_loss: False

@@ -1,0 +1,20 @@
+store_validation_metrics_in_df_callback:
+    _target_: foundry.callbacks.metrics_logging.StoreValidationMetricsInDFCallback
+    save_dir: ${paths.output_dir}/val_metrics
+    metrics_to_save: "all"
+
+dump_validation_structures_callback:
+  _target_: rfd3.trainer.dump_validation_structures.DumpValidationStructuresCallback
+  save_dir: ${paths.output_dir}/val_structures
+  dump_predictions: True
+  dump_prediction_metadata_json: True
+  dump_trajectories: False
+  dump_denoised_trajectories_only: False
+  
+  one_model_per_file: True
+  dump_every_n: 4
+  align_trajectories: False
+  verbose: False
+
+log_design_validation_metrics_callback:
+  _target_: rfd3.callbacks.LogDesignValidationMetricsCallback

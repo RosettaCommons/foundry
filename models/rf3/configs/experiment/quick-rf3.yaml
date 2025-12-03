@@ -1,0 +1,61 @@
+# @package _global_
+
+# Experiment that loads a small dataset for quick testing
+
+name: quick-rf3
+
+# For explanation of the "override" syntax, see: https://hydra.cc/docs/upgrades/1.0_to_1.1/defaults_list_override/
+defaults:
+  - pretrained/rf3
+  - override /datasets: pdb_only
+
+tags:
+  # list of tags to add to the run ( & on wandb to easily find & filter runs)
+  - quick
+
+project: test
+
+paths:
+  data:
+    pdb_data_dir: /projects/ml/datahub/dfs/af3_splits/2024_12_16
+
+trainer:
+  limit_train_batches: 4
+  limit_val_batches: 4
+
+datasets:
+  train:
+    pdb:
+      # We must adjust the probability, since we set the monomer distillation dataset to null
+      probability: 1.0
+      sub_datasets:
+        interface:
+          dataset:
+            dataset:
+              # A small dataframe that loads quickly
+              data: /projects/ml/datahub/dfs/pdb/test_dfs/interfaces_df.parquet
+              filters:
+                - "total_num_atoms_in_unprocessed_assembly <= 3000" 
+                - "cluster.notnull()"
+        pn_unit:
+          dataset:
+            dataset:
+              # A small dataframe that loads quickly
+              data: /projects/ml/datahub/dfs/pdb/test_dfs/pn_units_df.parquet
+              filters:
+                - "total_num_atoms_in_unprocessed_assembly <= 3000" 
+                - "cluster.notnull()"
+  val: 
+    af3_validation:
+      dataset:
+        dataset:
+          filters:
+            - "n_tokens_total < 500"
+            # (We often want to debug with a ligand)
+            - "interfaces_to_score.str.contains('protein-ligand')"
+            - example_id  in ["{['validation']}{7psi}{1}{[]}", "{['validation']}{7lo1}{2}{[]}", "{['validation']}{6zg9}{1}{[]}", "{['validation']}{7vhy}{1}{[]}"]
+
+model:
+  net:
+    inference_sampler:
+      num_timesteps: 50

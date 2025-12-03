@@ -1,0 +1,32 @@
+dataset:
+  _target_: atomworks.ml.datasets.StructuralDatasetWrapper
+  save_failed_examples_to_dir: ${paths.data.failed_examples_dir}
+  cif_parser_args:
+    cache_dir: null
+    load_from_cache: False
+    save_to_cache: False
+  dataset:
+    _target_: atomworks.ml.datasets.PandasDataset
+    # we will use the example_id as the unique column
+    id_column: example_id
+  # return all keys (do not subset)
+  transform:
+    # common Transform pipeline components for all PDB datasets
+    _target_: ${datasets.pipeline_target}
+    is_inference: True
+    protein_msa_dirs: ${paths.data.protein_msa_dirs}
+    rna_msa_dirs: ${paths.data.rna_msa_dirs}
+    n_recycles: ${datasets.n_recycles_validation}
+    crop_size: null # do not crop for inference
+    n_msa: ${datasets.n_msa}
+    diffusion_batch_size: ${datasets.diffusion_batch_size_inference}
+    max_atoms_in_crop: null # do not crop for inference
+    return_atom_array: True # return atom array for inference
+    run_confidence_head: ${datasets.run_confidence_head}
+    p_unconditional: 1.0 # unconditional for inference, unless explicitly overridden
+    p_dropout_atom_level_embeddings: 0.0 # always use embeddings in inference
+    take_first_chiral_subordering: ${datasets.take_first_chiral_subordering}
+    use_element_for_atom_names_of_atomized_tokens: ${datasets.use_element_for_atom_names_of_atomized_tokens}
+    add_residue_is_paired_feature: ${datasets.add_residue_is_paired_feature}
+
+key_to_balance: ${datasets.key_to_balance}

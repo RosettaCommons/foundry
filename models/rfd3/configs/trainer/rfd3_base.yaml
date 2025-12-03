@@ -1,0 +1,35 @@
+defaults:
+  - ddp
+  - loss/losses/diffusion_loss@loss.diffusion_loss
+  - loss/losses/sequence_loss@loss.sequence_loss
+  - metrics: design_metrics
+  - _self_
+
+_target_: rfd3.trainer.rfd3.AADesignTrainer
+
+# AADesign specific (atom-array related):
+output_full_json: False  # saves additional metadata in the output json
+allow_sequence_outputs: True
+cleanup_guideposts: False
+cleanup_virtual_atoms: False
+read_sequence_from_sequence_head: True
+compute_non_clash_metrics_for_diffused_region_only: False
+association_scheme: ${datasets.global_transform_args.association_scheme}
+
+# Other:
+n_examples_per_epoch: 2400 # 24000 # 10x as many epochs
+checkpoint_every_n_epochs: 10 #  Less often checkpointing for fewer epochs
+validate_every_n_epochs: 4  # Validate often
+
+max_epochs: 100_000
+prevalidate: False
+
+clip_grad_max_norm: 10.0
+output_dir: ${paths.output_dir}
+n_recycles_train: 2
+grad_accum_steps: 3  # overridden by launch.sh
+skip_optimizer_loading: True
+
+# Precision
+error_if_grad_nonfinite: False
+precision: bf16-mixed

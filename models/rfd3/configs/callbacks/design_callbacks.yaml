@@ -1,0 +1,10 @@
+defaults:
+  - train_logging
+  - _self_
+
+log_learning_rate_callback:
+  log_every_n: 25 # default 10
+
+log_af3_training_losses_callback:
+  log_full_batch_losses: False
+  log_every_n: 25 # default 10

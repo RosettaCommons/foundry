@@ -1,0 +1,10 @@
+
+defaults:
+  - unindexed
+  - _self_
+
+dataset:
+  name: rigid-ligand-enzymes
+  eval_every_n: 1
+  data: ${paths.data.design_benchmark_data_dir}/mcsa_41_short_rigid_new.json
+

@@ -1,0 +1,2 @@
+_target_: rf3.loss.af3_losses.DistogramLoss
+weight: 3e-2

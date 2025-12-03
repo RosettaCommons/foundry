@@ -1,0 +1,7 @@
+defaults:
+  - unconditional
+  - _self_
+
+dataset:
+  name: ppi_inference
+  data: ??? # This is a required override, specifying a path to the dataset json or yaml file.

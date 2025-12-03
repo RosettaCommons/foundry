@@ -1,0 +1,17 @@
+# AF3 dataset configuration with monomer distillation
+
+defaults:
+  - base
+  # The @ symbol specifies the tree under which the item will be attached to the config
+  - train/pdb/train_interface@train.pdb.sub_datasets.interface
+  - train/pdb/train_pn_unit@train.pdb.sub_datasets.pn_unit
+  - val/af3_validation@val.af3_validation
+  - _self_
+
+# Dataloading pipeline to use
+pipeline_target: rf3.data.pipelines.build_af3_transform_pipeline
+
+# Dataset weighting
+train: 
+  pdb:
+    probability: 1.0

@@ -1,0 +1,3 @@
+_target_: rfd3.transforms.training_conditions.SubtypeCondition
+frequency: 1.0
+subtype: ["is_dna", "is_rna"]

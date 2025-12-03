@@ -1,0 +1,131 @@
+_target_: rfd3.model.RFD3.RFD3
+
+c_s: 384
+c_z: 128
+c_atom: 128
+c_atompair: 16
+
+token_initializer: # formerly known as the trunk
+  relative_position_encoding:
+    r_max: 32
+    s_max: 2
+  
+  # Attention pair biases without batch dimensions
+  n_pairformer_blocks: 2
+  pairformer_block:
+    use_triangle_attn: false
+    use_triangle_mult: false
+    attention_pair_bias:
+      n_head: 16
+      kq_norm: True
+
+  token_1d_features:
+    ref_motif_token_type: 3
+    restype: 32
+    ref_plddt: 1
+    is_non_loopy: 1
+
+  downcast: ${model.net.diffusion_module.downcast}
+  atom_1d_features:
+    ref_atom_name_chars: 256
+    ref_element: 128
+    ref_charge: 1
+    ref_mask: 1
+    ref_is_motif_atom_with_fixed_coord: 1
+    ref_is_motif_atom_unindexed: 1
+    has_zero_occupancy: 1
+    ref_pos: 3
+    
+    # Guided features
+    ref_atomwise_rasa: 3
+    active_donor: 1
+    active_acceptor: 1
+    is_atom_level_hotspot: 1
+
+  atom_transformer:
+    n_blocks: 0
+    atom_transformer_block:
+      n_head: 4
+      kq_norm: True
+      no_residual_connection_between_attention_and_transition: False
+      dropout: 0.0
+      n_attn_seq_neighbours: 4
+      n_attn_keys: 128
+
+diffusion_module:
+  _target_: rfd3.model.RFD3_diffusion_module.RFD3DiffusionModule
+  c_token: 768
+  c_t_embed: 256  # Time embedding dimension
+  sigma_data: 16
+  f_pred: edm
+  n_attn_seq_neighbours: 2  # include self + n flanking neighbours
+  n_attn_keys: 128
+  n_recycle: 2
+  use_local_token_attention: false
+  
+  # Upcast/downcast mechanisms
+  upcast:
+    method: cross_attention
+    n_split: 3
+    cross_attention_block:
+      n_head: 4
+      c_model: 128
+      dropout: 0.0
+      kq_norm: True
+
+  downcast:
+    method: cross_attention
+    cross_attention_block:
+      n_head: 4
+      c_model: 128
+      dropout: 0.0
+      kq_norm: True
+
+  ########################################################################
+  # UNet level processing
+  ########################################################################
+  atom_attention_encoder:
+    n_blocks: 3
+    atom_transformer_block:
+      n_head: 4
+      kq_norm: True
+      no_residual_connection_between_attention_and_transition: False
+      dropout: 0.0
+
+  diffusion_token_encoder:  # encodes self conditioning information and distogram
+    use_distogram: True
+    use_self: True
+    use_sinusoidal_distogram_embedder: False
+    sigma_data: ${model.net.diffusion_module.sigma_data}
+
+    n_pairformer_blocks: 2
+    pairformer_block:
+      use_triangle_attn: false
+      use_triangle_mult: false
+      attention_pair_bias:
+        n_head: 16
+        kq_norm: True
+
+  diffusion_transformer:
+    n_block: 18
+    n_registers: 0  # 8 Idk if they do anything tbh
+    diffusion_transformer_block:
+      n_head: 16
+      kq_norm: True
+      no_residual_connection_between_attention_and_transition: False
+      dropout: 0.10
+
+  atom_attention_decoder:
+    n_blocks: 3
+    upcast: ${model.net.diffusion_module.upcast}
+    downcast: ${model.net.diffusion_module.downcast}
+
+    atom_transformer_block:
+      n_head: 4
+      kq_norm: True
+      no_residual_connection_between_attention_and_transition: False
+      dropout: 0.10
+
+  ########################################################################
+  # 
+  ########################################################################

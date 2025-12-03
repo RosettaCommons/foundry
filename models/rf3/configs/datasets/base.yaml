@@ -1,0 +1,31 @@
+# Base Transform defaults
+diffusion_batch_size_train: 48
+diffusion_batch_size_inference: 5
+
+n_recycles_train: 4
+n_recycles_validation: 10
+
+run_confidence_head: false
+
+# Conditioning
+p_unconditional: 0.9
+
+# Embeddings
+p_dropout_atom_level_embeddings: 0.5
+
+n_msa: 1024
+crop_size: 384
+max_atoms_in_crop: 5000 
+
+key_to_balance: n_tokens_total
+
+take_first_chiral_subordering: false
+use_element_for_atom_names_of_atomized_tokens: true
+mirror_prob: 0.02
+atomization_prob: 0.02
+ligand_dropout_prob: 0.0
+
+add_residue_is_paired_feature: true
+
+add_cyclic_bonds: true
+

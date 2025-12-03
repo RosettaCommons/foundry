@@ -1,0 +1,32 @@
+dataset:
+  _target_: atomworks.ml.datasets.StructuralDatasetWrapper
+  save_failed_examples_to_dir: ${paths.data.failed_examples_dir}
+  cif_parser_args:
+    cache_dir: null
+    load_from_cache: false
+    save_to_cache: false
+  dataset:
+    _target_: atomworks.ml.datasets.PandasDataset
+    # we will use the example_id as the unique column
+    id_column: example_id
+  transform:
+    # common Transform pipeline components for all PDB datasets
+    _target_: ${datasets.pipeline_target}
+    is_inference: False
+    protein_msa_dirs: ${paths.data.protein_msa_dirs}
+    rna_msa_dirs: ${paths.data.rna_msa_dirs}
+    n_recycles: ${datasets.n_recycles_train}
+    crop_size: ${datasets.crop_size}
+    n_msa: ${datasets.n_msa}
+    diffusion_batch_size: ${datasets.diffusion_batch_size_train}
+    max_atoms_in_crop: ${datasets.max_atoms_in_crop}
+    run_confidence_head: ${datasets.run_confidence_head}
+    p_unconditional: ${datasets.p_unconditional}
+    p_dropout_atom_level_embeddings: ${datasets.p_dropout_atom_level_embeddings}
+    take_first_chiral_subordering: ${datasets.take_first_chiral_subordering}
+    use_element_for_atom_names_of_atomized_tokens: ${datasets.use_element_for_atom_names_of_atomized_tokens}
+    mirror_prob: ${datasets.mirror_prob}
+    atomization_prob: ${datasets.atomization_prob}
+    ligand_dropout_prob: ${datasets.ligand_dropout_prob}
+    add_residue_is_paired_feature: ${datasets.add_residue_is_paired_feature}
+    add_cyclic_bonds: ${datasets.add_cyclic_bonds}

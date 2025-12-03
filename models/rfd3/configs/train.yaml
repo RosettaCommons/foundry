@@ -1,0 +1,28 @@
+# @package _global_
+hydra:
+  searchpath:
+    - pkg://configs
+
+defaults:
+  - model: rfd3_base
+  - trainer: rfd3_base
+  - datasets: design_base
+  - callbacks: design_callbacks
+  - dataloader: fast
+  - paths: default
+  - hydra: default
+  - logger: default
+  - _self_
+  # Required overrides:
+  - experiment: ???
+  - debug: null
+
+# Definitions:
+task_name: train
+project: aa_design
+seed: 42
+ckpt_path: null
+
+# Placeholders
+name: aa_design
+tags: [aa_design]

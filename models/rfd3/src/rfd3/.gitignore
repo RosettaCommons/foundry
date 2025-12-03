@@ -1,0 +1,7 @@
+tests/outs
+tests/test_data/mcsa_41/
+configs/datasets/val/data
+configs/model/old
+transforms/old
+benchmarks
+old

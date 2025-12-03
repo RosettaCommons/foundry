@@ -1,0 +1,45 @@
+defaults:
+  - rf3_net
+
+# Model architecture
+_target_: rf3.model.RF3.RF3WithConfidence
+
+# +---------- Mini rollout sampler ----------+
+# From the AF-3 main text:
+# > ... To remedy this, we developed a diffusion ‘rollout’ procedure for the full-structure prediction generation during training (using a larger step size than normal)
+# They do not further elaborate on how they adjusted the step size during diffusion rollout, but this may be a fruitful area of exploration moving forwards
+mini_rollout_sampler:
+  solver: "af3"
+  num_timesteps: 20 # 20 timesteps for the mini-rollout (vs. 200 for the full rollout during inference)
+  min_t: 0
+  max_t: 1
+  sigma_data: ${model.net.diffusion_module.sigma_data}
+  s_min: 4e-4
+  s_max: 160
+  p: 7
+  gamma_0: 0.8
+  gamma_min: 1.0
+  noise_scale: 1.003
+  step_scale: 1.5
+
+# +---------- Confidence head architecture ----------+
+confidence_head:
+  c_s: ${model.net.c_s}
+  c_z: ${model.net.c_z}
+  n_pairformer_layers: 4
+  pairformer:
+    p_drop: 0.25
+    triangle_multiplication:
+      d_hidden: 128
+    triangle_attention:
+      n_head: 4
+      d_hidden: 32
+    attention_pair_bias:
+      n_head: 16 
+  n_bins_pae: 64
+  n_bins_pde: 64
+  n_bins_plddt: 50
+  n_bins_exp_resolved: 2
+  use_Cb_distances: False
+  use_af3_style_binning_and_final_layer_norms: True
+  symmetrize_Cb_logits: True

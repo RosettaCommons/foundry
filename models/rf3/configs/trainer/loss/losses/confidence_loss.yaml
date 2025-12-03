@@ -1,0 +1,29 @@
+_target_: rf3.loss.af3_confidence_loss.ConfidenceLoss
+weight: 1.0
+
+plddt:
+  weight: 1.0
+  n_bins: 50
+  max_value: 1.0
+
+pae:
+  weight: 1.0
+  n_bins: 64
+  max_value: 32
+
+pde:  
+  weight: 1.0
+  n_bins: 64
+  max_value: 32
+
+exp_resolved:
+  weight: 1.0
+  n_bins: 2
+  max_value: 1
+
+# Adds to loss_dict true and predicted average plddt, pae, and pde per batch, also info about the spread and correlation of those values within a batch
+log_statistics: True 
+
+rank_loss:
+  use_listnet_loss: False
+  weight: 0.0

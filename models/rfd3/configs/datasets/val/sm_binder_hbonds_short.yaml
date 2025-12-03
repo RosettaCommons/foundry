@@ -1,0 +1,15 @@
+defaults:
+  - sm_binder_hbonds
+  - _self_
+
+dataset:
+  eval_every_n: 1
+  data: ${paths.data.design_benchmark_data_dir}/sm_binder_hbonds_sampled.json
+  name: sm_binder_hbonds-design-short
+  subset_to_keys:
+    - FAD_1
+    - FAD_2
+    - FAD_3
+    - IAI_1
+    - IAI_2
+    - IAI_3

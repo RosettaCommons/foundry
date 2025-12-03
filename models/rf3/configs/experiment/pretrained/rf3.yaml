@@ -1,0 +1,50 @@
+# @package _global_
+
+name: rf3
+project: rf3
+
+tags:
+  # list of tags to add to the run ( & on wandb to easily find & filter runs)
+  - full
+
+defaults:
+  - override /datasets: pdb_and_distillation
+  - override /model: rf3
+  - override /trainer: rf3
+
+ckpt_config:
+  _target_: foundry.utils.weights.CheckpointConfig
+  path: /net/software/containers/versions/modelhub_inference/ckpts/rf3-w-conf-run10-ep922-remapped.ckpt
+  reset_optimizer: true
+
+model:
+  lr_scheduler:
+    base_lr: 0.9e-3 # 1/2 of original learning rate (1.8e-3)
+  net:
+    feature_initializer:
+      input_feature_embedder:
+        atom_attention_encoder:
+          c_atom_1d_features: 393 # 392 + 1 has_atom_level_embedding = 393
+          atom_1d_features: 
+             - ref_pos                                                                             
+             - ref_charge                                                                          
+             - ref_mask                                                                            
+             - ref_element                                                                         
+             - ref_atom_name_chars                                                                 
+             - ref_pos_ground_truth 
+             - has_atom_level_embedding
+          use_atom_level_embedding: true
+          atom_level_embedding_dim: 384
+    diffusion_module:
+      atom_attention_encoder:
+        c_atom_1d_features: 393 # 392 + 1 has_atom_level_embedding = 393
+        atom_1d_features:
+          - ref_pos                                                                             
+          - ref_charge                                                                          
+          - ref_mask                                                                            
+          - ref_element                                                                         
+          - ref_atom_name_chars                                                                 
+          - ref_pos_ground_truth 
+          - has_atom_level_embedding
+        use_atom_level_embedding: true
+        atom_level_embedding_dim: 384

@@ -1,0 +1,23 @@
+# @package _global_
+
+defaults:
+  - /hydra: no_logging
+
+# Parameters for RF3InferenceEngine.__init__()
+ckpt_path: ???
+num_nodes: 1
+devices_per_node: 1
+compress_outputs: false
+
+# Parameters for RF3InferenceEngine.run()
+inputs: ???
+out_dir: ???
+dump_predictions: true
+dump_trajectories: false
+one_model_per_file: false
+annotate_b_factor_with_plddt: true
+sharding_pattern: null
+skip_existing: false
+template_selection: null
+ground_truth_conformer_selection: null
+cyclic_chains: []

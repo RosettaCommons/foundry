@@ -1,0 +1,14 @@
+# Adds weights to the sampler
+
+defaults:
+  - base_no_weights
+  - _self_
+
+weights:
+  _target_: atomworks.ml.samplers.calculate_weights_for_pdb_dataset_df
+  beta: 0.5
+  alphas:
+    a_prot: 3.0 # 3 for AF-3
+    a_nuc: 0.0 # 3 for AF-3
+    a_ligand: 1.0 # 1 for AF-3
+    a_loi: 5.0 # 5 for AF-3

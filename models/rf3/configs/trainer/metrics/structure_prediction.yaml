@@ -1,0 +1,14 @@
+by_type_lddt:
+  _target_: rf3.metrics.lddt.ByTypeLDDT
+all_atom_lddt:
+  _target_: rf3.metrics.lddt.AllAtomLDDT
+distogram:
+  _target_: rf3.metrics.distogram.DistogramLoss
+distogram_comparisons:
+  _target_: rf3.metrics.distogram.DistogramComparisons
+distogram_entropy:
+  _target_: rf3.metrics.distogram.DistogramEntropy
+chiral_loss:
+  _target_: rf3.metrics.chiral.ChiralLoss
+unresolved_rasa:
+  _target_: rf3.metrics.rasa.UnresolvedRegionRASA

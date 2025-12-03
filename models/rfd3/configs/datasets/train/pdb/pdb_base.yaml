@@ -1,0 +1,11 @@
+# Base config for all PDB datasets
+defaults:
+  - base
+  - _self_
+
+dataset:
+  # All PDB datasets load from this cache:
+  cif_parser_args:
+    cache_dir: ${paths.data.cif_cache_dir}
+    load_from_cache: True
+    save_to_cache: False

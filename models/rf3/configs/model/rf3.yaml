@@ -1,0 +1,43 @@
+defaults:
+  - optimizers/adam@optimizer
+  - schedulers/af3@lr_scheduler
+  - components/ema@ema
+  - components/rf3_net@net
+  - _self_
+
+net:
+  feature_initializer:
+    input_feature_embedder:
+      atom_attention_encoder:
+        c_atom_1d_features: 393 # 392 + 1 has_atom_level_embedding = 393
+        atom_1d_features: 
+            - ref_pos                                                                             
+            - ref_charge                                                                          
+            - ref_mask                                                                            
+            - ref_element                                                                         
+            - ref_atom_name_chars                                                                 
+            - ref_pos_ground_truth 
+            - has_atom_level_embedding
+        use_atom_level_embedding: true
+        atom_level_embedding_dim: 384
+
+  recycler:
+    msa_module:
+        msa_subsample_embedder:
+          dim_raw_msa: 35
+    template_embedder:
+      raw_template_dim: 66
+
+  diffusion_module:
+    atom_attention_encoder:
+      c_atom_1d_features: 393 # 392 + 1 has_atom_level_embedding = 393
+      atom_1d_features:
+        - ref_pos                                                                             
+        - ref_charge                                                                          
+        - ref_mask                                                                            
+        - ref_element                                                                         
+        - ref_atom_name_chars                                                                 
+        - ref_pos_ground_truth 
+        - has_atom_level_embedding
+      use_atom_level_embedding: true
+      atom_level_embedding_dim: 384

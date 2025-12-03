@@ -1,0 +1,22 @@
+# Inherit 
+defaults:
+  - af3_train_interface
+  - pdb_base
+  - _self_
+
+dataset:
+  transform:
+    crop_contiguous_probability: 0.0
+    crop_spatial_probability: 1.0
+    filters:
+        # filters common across all PDB datasets
+        - 'pdb_id not in ["7rte", "7m5w", "7n5u"]'
+        - 'pdb_id not in ["3di3", "5o45", "1z92", "2gy5", "4zxb"]'
+        - "deposition_date < '2024-12-16'"
+        - "resolution < 9.0"
+        - "num_polymer_pn_units <= 300" 
+        - "cluster.notnull()"
+        # interface specific filters
+        - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+        - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+        - "is_inter_molecule"

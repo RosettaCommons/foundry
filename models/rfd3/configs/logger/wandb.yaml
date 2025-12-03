@@ -1,0 +1,15 @@
+# https://wandb.ai
+
+wandb:
+  _target_: wandb.integration.lightning.fabric.WandbLogger
+  save_dir: ${paths.output_dir}
+  name: ${name}
+  offline: False
+  id: null # pass correct id (along with checkpoint path, and resume='allow' or 'must') to resume a run
+  anonymous: null # enable anonymous logging
+  project: ${project}
+  prefix: "" # a string to put at the beginning of metric keys
+  log_model: False # do not upload model checkpoints
+  tags: ${tags}
+  # (Default resume to "never" to avoid accidentally resuming runs; we want to be explicit about resuming)
+  resume: never # never, allow, or must (see: https://docs.wandb.ai/guides/runs/resuming/)

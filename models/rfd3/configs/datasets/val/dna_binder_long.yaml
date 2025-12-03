@@ -1,0 +1,13 @@
+
+defaults:
+  - design_validation_base
+  - _self_
+
+dataset:
+  data: ${paths.root_dir}/tests/dna.json
+  name: dna_binder_design
+  eval_every_n: 10
+  subset_to_keys:
+    - 7rte_sequence_only
+    - 7rte_with_structure
+

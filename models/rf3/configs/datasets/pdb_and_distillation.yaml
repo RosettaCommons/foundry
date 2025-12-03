@@ -1,0 +1,58 @@
+# AF3 dataset configuration with monomer distillation
+
+defaults:
+  - base
+  # The @ symbol specifies the tree under which the item will be attached to the config
+  - train/pdb/train_interface@train.pdb.sub_datasets.interface
+  - train/pdb/train_pn_unit@train.pdb.sub_datasets.pn_unit
+  - train:
+    - monomer_distillation
+    - na_complex_distillation
+    - disorder_distillation
+    # - domain_distillation
+    # - rna_monomer_distillation
+  - val/af3_validation@val.af3_validation
+  - val/af3_validation@val.quick_af3_validation_with_templating
+  - _self_
+
+# Dataloading pipeline to use
+pipeline_target: rf3.data.pipelines.build_af3_transform_pipeline
+
+# Dataset weighting
+train: 
+  pdb:
+    probability: 0.50
+  monomer_distillation:
+    probability: 0.46
+  na_complex_distillation:
+    probability: 0.02
+  disorder_distillation:
+    probability: 0.02
+  # multidomain_distillation:
+  #   probability: 0.06
+  # rna_monomer_distillation:
+  #   probability: 0.04
+
+val:
+  quick_af3_validation_with_templating:
+    dataset:
+      dataset:
+        filters:
+          # Only score examples with protein-ligand interfaces
+          - "interfaces_to_score.str.contains('protein-ligand')"
+          # Small examples only - very fast
+          - "n_tokens_total < 400"
+      transform:
+        # +-- Conditioning --+
+        p_unconditional: 0.0 # Always show conditioning
+        # (Templates)
+        template_noise_scales:
+          not_atomized: 1e-4 # No noise on polymer atoms (epsilon to avoid division by zero)
+          atomized: 1e-4 # No noise on ligand atoms (epsilon to avoid division by zero)
+        allowed_chain_types_for_conditioning:
+          _target_: atomworks.enums.ChainType.get_all_types
+        p_condition_per_token: 1.0 # Always condition
+        p_provide_inter_molecule_distances: 0.0 # No inter-chain distances
+        # (Reference conformer)
+        p_give_non_polymer_ref_conf: 1.0 # Always give non-polymer reference conformers
+        p_give_polymer_ref_conf: 1.0 # Always give polymer reference conformers

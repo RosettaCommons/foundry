@@ -1,0 +1,8 @@
+weights:
+  _target_: atomworks.ml.samplers.calculate_weights_for_pdb_dataset_df
+  # We do not include beta here, since it is different for interfaces and chains
+  alphas:
+    a_prot: 3.0 # 3 for AF-3
+    a_nuc: 3.0 # 3 for AF-3
+    a_ligand: 1.0 # 1 for AF-3
+    a_loi: 5.0 # 5 for AF-3

@@ -1,0 +1,56 @@
+# TODO: Inherit from common config with default Transform pipeline
+
+rna_monomer_distillation:
+  dataset:
+    _target_: atomworks.ml.datasets.StructuralDatasetWrapper
+    save_failed_examples_to_dir: ${paths.data.failed_examples_dir}
+
+    # cif parser arguments
+    cif_parser_args:
+      cache_dir: null
+      load_from_cache: False
+      save_to_cache: False 
+
+    # metadata parser
+    dataset_parser:
+      _target_: atomworks.ml.datasets.parsers.GenericDFParser
+      pn_unit_iid_colnames: null
+
+    # metadata dataset
+    dataset:
+      _target_: atomworks.ml.datasets.PandasDataset
+      name: rna_monomer_distillation
+      id_column: example_id
+      data: /projects/ml/afavor/rna_distillation/rna_distillation_filtered_df.parquet
+      columns_to_load:
+        - example_id
+        - path
+        - cluster_id
+        - seq_hash
+        - overall_plddt
+        - overall_pde
+        - overall_pae
+
+    transform:
+      _target_: ${datasets.pipeline_target}
+      is_inference: False
+      protein_msa_dirs: []
+      rna_msa_dirs: [{"dir": "/projects/ml/afavor/rna_distillation/all_MSAs_renamed", "extension": ".afa", "directory_depth": 2}]
+      n_recycles: ${datasets.n_recycles_train}
+      crop_size: ${datasets.crop_size}
+      n_msa: ${datasets.n_msa}
+      diffusion_batch_size: ${datasets.diffusion_batch_size_train}
+      max_atoms_in_crop: ${datasets.max_atoms_in_crop}
+      crop_contiguous_probability: 1.0
+      crop_spatial_probability: 0.0
+      pad_dna_p_skip: 0.0
+      b_factor_min: 0.6
+      run_confidence_head: ${datasets.run_confidence_head}
+      take_first_chiral_subordering: ${datasets.take_first_chiral_subordering}
+      use_element_for_atom_names_of_atomized_tokens: ${datasets.use_element_for_atom_names_of_atomized_tokens}
+      mirror_prob: 0.0
+      atomization_prob: ${datasets.atomization_prob}
+      ligand_dropout_prob: ${datasets.ligand_dropout_prob}
+      p_unconditional: ${datasets.p_unconditional}
+      p_dropout_atom_level_embeddings: ${datasets.p_dropout_atom_level_embeddings}
+      add_residue_is_paired_feature: ${datasets.add_residue_is_paired_feature}

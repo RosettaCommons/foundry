@@ -1,0 +1,21 @@
+# @package _global_
+
+defaults:
+  - _self_
+
+name: train-unindexed-main
+
+datasets:
+  diffusion_batch_size_train: 24
+  global_transform_args:
+    train_conditions:
+      unconditional:
+        frequency: 3.0
+      sequence_design:
+        frequency: 0.5
+      island:
+        frequency: 3.0
+        p_unindex_motif_tokens: 1.0
+      tipatom:
+        frequency: 3.0
+        p_unindex_motif_tokens: 1.0

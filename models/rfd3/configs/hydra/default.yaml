@@ -1,0 +1,18 @@
+# https://hydra.cc/docs/configure_hydra/intro/
+
+# enable color logging (requires `colorlog` to be installed)
+# defaults:
+#   - override hydra_logging: colorlog
+#   - override job_logging: colorlog
+
+
+# output directory, generated dynamically on each run
+run:
+  dir: ${paths.log_dir}/${task_name}/${name}/${now:%Y-%m-%d}_${now:%H-%M}_JOB_${oc.env:SLURM_JOB_ID,default}
+
+# ... this is where the log file is written (i.e. the programs output)
+job_logging:
+  handlers:
+    file:
+      # Incorporates fix from https://github.com/facebookresearch/hydra/pull/2242
+      filename: ${hydra.runtime.output_dir}/experiment.log

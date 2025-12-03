@@ -1,0 +1,12 @@
+_target_: rfd3.metrics.losses.DiffusionLoss
+sigma_data: ${model.net.diffusion_module.sigma_data}
+weight: 4.0
+lddt_weight: 0.25
+alpha_virtual_atom: 1.0
+alpha_polar_residues: 1.0
+lp_weight: 0.0
+unindexed_norm_p: 1.0
+alpha_unindexed_diffused: 1.0
+unindexed_t_alpha: 0.75
+normalize_virtual_atom_weight: False
+alpha_ligand: 10.0

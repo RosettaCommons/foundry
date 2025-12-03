@@ -1,0 +1,10 @@
+store_validation_metrics_in_df_callback:
+    _target_: rf3.callbacks.metrics_logging.StoreValidationMetricsInDFCallback
+    save_dir: ${paths.output_dir}/val_metrics
+    metrics_to_save: "all"
+
+log_af3_validation_metrics_callback:
+    _target_: rf3.callbacks.metrics_logging.LogAF3ValidationMetricsCallback
+    # Only logs if present in the metric output dictionary
+    # Must be subset of metrics_to_save
+    metrics_to_log:  "all"

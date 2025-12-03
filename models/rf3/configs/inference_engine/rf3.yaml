@@ -1,0 +1,33 @@
+# @package _global_
+
+defaults:
+  - base
+  - _self_
+
+_target_: rf3.inference_engines.rf3.RF3InferenceEngine
+
+ckpt_path: rf3_foundry_01_24_latest.ckpt
+
+# Transform arguments
+n_recycles: 10
+diffusion_batch_size: 5
+
+# Sampling
+num_steps: 50
+template_noise_scale: 1e-5
+
+# Model arguments
+early_stopping_plddt_threshold: 0.5
+seed: null
+verbose: false
+raise_if_missing_msa_for_protein_of_length_n: null
+
+# Metrics
+metrics_cfg:
+  # (For confidence outputs)
+  ptm:
+    _target_: rf3.metrics.predicted_error.ComputePTM
+  iptm:
+    _target_: rf3.metrics.predicted_error.ComputeIPTM
+  count_clashing_chains:
+    _target_: rf3.metrics.clashing_chains.CountClashingChains

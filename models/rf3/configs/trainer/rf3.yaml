@@ -1,0 +1,20 @@
+defaults:
+  - ddp
+  - loss: structure_prediction
+  - metrics: structure_prediction
+
+_target_: rf3.trainers.rf3.RF3Trainer
+validate_every_n_epochs: 1
+max_epochs: 10_000
+n_examples_per_epoch: 24000
+prevalidate: True
+
+# We must pre-specify the number of recycles during training so we can pre-sample recycles per batch consistently for each GPU
+n_recycles_train: ${datasets.n_recycles_train}
+
+clip_grad_max_norm: 10.0
+
+output_dir: ${paths.output_dir}
+checkpoint_every_n_epochs: 1
+
+precision: bf16-mixed

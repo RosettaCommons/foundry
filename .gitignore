@@ -1,4 +1,12 @@
+# For docs / outputs from example notebooks;
+examples/*.cif
+**.ckpt
+**.pt
+
 # Base .gitignore from https://github.com/github/gitignore/blob/main/Python.gitignore
+*.lock
+**.nfs**
+**.dat
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -208,6 +216,12 @@ logs/
 **/notebooks/
 **/scratch/
 **/outputs/
-**/scripts/slurm/
+**/slurm_logs/
+**/tmp/
+*.ckpt
+**/distillation/
 **/benchmarks/
 
+# AI
+**/CLAUDE.md
+**/.claude

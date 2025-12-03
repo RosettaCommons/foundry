@@ -1,0 +1,43 @@
+########################
+# Datasets
+########################
+
+# path to directory with training splits
+pdb_data_dir: /projects/ml/datahub/dfs/af3_splits/2025_07_13
+
+# fb monomer distillation dataset
+monomer_distillation_data_dir: /squash/af2_distillation_facebook
+monomer_distillation_parquet_dir: /projects/ml/datahub/dfs/distillation/af2_distillation_facebook
+
+mgnify_distillation_data_dir: /squash/mgnify_distill_rf3/
+mgnify_distillation_parquet_dir: /home/dimaio/MGnify/
+
+# na complex distill set
+na_complex_distillation_data_dir: /projects/ml/prot_dna/rf3_newDL
+na_complex_distillation_parquet_dir: /projects/ml/prot_dna
+
+# disorder distill set
+disorder_distill_parquet_dir: /projects/ml/disorder_distill
+
+########################
+# MSAs
+########################
+
+# path(s) to search for protein MSAs (for PDB datasets)
+# e.g., {"dir": "/path/to/msas", "extension": ".a3m.gz", "directory_depth": 2}
+protein_msa_dirs:
+  - {"dir": "/projects/msa/hhblits", "extension": ".a3m.gz", "directory_depth": 2}
+  - {"dir": "/projects/msa/mmseqs_gpu", "extension": ".a3m.gz", "directory_depth": 2}
+  - {"dir": "/projects/msa/lab", "extension": ".a3m.gz", "directory_depth": 1}
+
+# path(s) to search for RNA MSAs
+# e.g., {"dir": "/path/to/msas", "extension": ".afa", "directory_depth": 0}
+rna_msa_dirs:
+  - {"dir": "/projects/msa/rna", "extension": ".afa", "directory_depth": 0}
+
+########################
+# Misc
+########################
+
+# path to save examples that fail during the Transform pipeline (null = do not save)
+failed_examples_dir: null
