@@ -1,7 +1,7 @@
 # De novo Design of Biomolecular Interactions with RFdiffusion3
 
 <p align="center">
-  <img src="docs/.assets/trajectory.png" alt="All-atom diffusion with RFD3">
+  <img src="docs/.assets/overview.png" alt="All-atom design with RFD3">
 </p>
 
 ## Get Started
