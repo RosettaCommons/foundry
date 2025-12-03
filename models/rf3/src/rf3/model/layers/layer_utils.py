@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import silu
 
-from modelhub.training.checkpoint import activation_checkpointing
+from foundry.training.checkpoint import activation_checkpointing
 
 linearNoBias = partial(torch.nn.Linear, bias=False)
 

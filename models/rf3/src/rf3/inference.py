@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
-from modelhub.utils.logging import suppress_warnings
+from foundry.utils.logging import suppress_warnings
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)

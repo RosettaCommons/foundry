@@ -46,7 +46,7 @@ from rfd3.transforms.util_transforms import (
 )
 from rfd3.transforms.virtual_atoms import PadTokensWithVirtualAtoms
 
-from modelhub.utils.ddp import RankedLogger  # noqa
+from foundry.utils.ddp import RankedLogger  # noqa
 
 #####################################################################################################
 # Other design transforms

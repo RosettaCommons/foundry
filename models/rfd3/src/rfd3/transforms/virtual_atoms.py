@@ -25,7 +25,7 @@ from rfd3.transforms.util_transforms import (
     get_af3_token_representative_masks,
 )
 
-from modelhub.common import exists
+from foundry.common import exists
 
 
 def map_to_association_scheme(atom_names: list | str, res_name: str, scheme="atom14"):

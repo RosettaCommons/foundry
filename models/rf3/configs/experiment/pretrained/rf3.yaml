@@ -13,7 +13,7 @@ defaults:
   - override /trainer: rf3
 
 ckpt_config:
-  _target_: modelhub.utils.weights.CheckpointConfig
+  _target_: foundry.utils.weights.CheckpointConfig
   path: /net/software/containers/versions/modelhub_inference/ckpts/rf3-w-conf-run10-ep922-remapped.ckpt
   reset_optimizer: true
 

@@ -26,11 +26,11 @@ from lightning.fabric.wrappers import (
     _FabricOptimizer,
 )
 
-from modelhub.callbacks.callback import BaseCallback
-from modelhub.training.EMA import EMA
-from modelhub.training.schedulers import SchedulerConfig
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.weights import (
+from foundry.callbacks.callback import BaseCallback
+from foundry.training.EMA import EMA
+from foundry.training.schedulers import SchedulerConfig
+from foundry.utils.ddp import RankedLogger
+from foundry.utils.weights import (
     CheckpointConfig,
     WeightLoadingConfig,
     freeze_parameters_with_config,

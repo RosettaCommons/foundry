@@ -1,6 +1,6 @@
 import numpy as np
 
-from modelhub.constants import TIP_BY_RESTYPE
+from foundry.constants import TIP_BY_RESTYPE
 
 TIP_BY_RESTYPE
 

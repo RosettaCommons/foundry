@@ -17,9 +17,9 @@ from rfd3.model.layers.layer_utils import (
     linearNoBias,
 )
 
-from modelhub.common import exists
-from modelhub.training.checkpoint import activation_checkpointing
-from modelhub.utils.ddp import RankedLogger
+from foundry.common import exists
+from foundry.training.checkpoint import activation_checkpointing
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

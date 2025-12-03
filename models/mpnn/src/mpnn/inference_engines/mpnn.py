@@ -27,8 +27,8 @@ from mpnn.utils.inference import (
 )
 from mpnn.utils.weights import load_legacy_weights
 
-from modelhub.metrics.metric import MetricManager
-from modelhub.utils.ddp import RankedLogger
+from foundry.metrics.metric import MetricManager
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

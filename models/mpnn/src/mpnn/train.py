@@ -15,8 +15,8 @@ from atomworks.ml.samplers import (
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
-from modelhub.callbacks.metrics_logging import StoreValidationMetricsInDFCallback
-from modelhub.utils.datasets import wrap_dataset_and_sampler_with_fallbacks
+from foundry.callbacks.metrics_logging import StoreValidationMetricsInDFCallback
+from foundry.utils.datasets import wrap_dataset_and_sampler_with_fallbacks
 from mpnn.collate.feature_collator import TokenBudgetAwareFeatureCollator
 from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from mpnn.samplers.samplers import PaddedTokenBudgetBatchSampler

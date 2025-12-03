@@ -16,8 +16,8 @@ from rfd3.transforms.hbonds import (
     calculate_hbonds,
 )
 
-from modelhub.metrics.base import Metric
-from modelhub.utils.ddp import RankedLogger
+from foundry.metrics.base import Metric
+from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 global_logger = RankedLogger(__name__, rank_zero_only=False)

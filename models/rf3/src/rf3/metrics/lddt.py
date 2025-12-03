@@ -9,8 +9,8 @@ from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack, stack
 from jaxtyping import Bool, Float, Int
 
-from modelhub.metrics.metric import Metric
-from modelhub.utils.ddp import RankedLogger
+from foundry.metrics.metric import Metric
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

@@ -9,8 +9,8 @@ from rfd3.constants import (
 from rfd3.transforms.conditioning_base import get_motif_features
 from rfd3.transforms.hbonds_hbplus import calculate_hbonds
 
-from modelhub.metrics.metric import Metric
-from modelhub.utils.ddp import RankedLogger
+from foundry.metrics.metric import Metric
+from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 global_logger = RankedLogger(__name__, rank_zero_only=False)

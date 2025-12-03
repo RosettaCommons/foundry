@@ -13,10 +13,10 @@ from atomworks.io.utils.io_utils import to_cif_file
 from biotite.structure import AtomArray, AtomArrayStack
 from toolz import merge_with
 
-from modelhub.common import exists
-from modelhub.inference_engines.base import BaseInferenceEngine
-from modelhub.utils.alignment import weighted_rigid_align
-from modelhub.utils.ddp import RankedLogger
+from foundry.common import exists
+from foundry.inference_engines.base import BaseInferenceEngine
+from foundry.utils.alignment import weighted_rigid_align
+from foundry.utils.ddp import RankedLogger
 from rfd3.constants import SAVED_CONDITIONING_ANNOTATIONS
 from rfd3.inference.datasets import (
     assemble_distributed_inference_loader_from_json,

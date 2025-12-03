@@ -21,8 +21,8 @@ from torch.utils.data import (
     SequentialSampler,
 )
 
-from modelhub.utils.datasets import assemble_distributed_loader
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.datasets import assemble_distributed_loader
+from foundry.utils.ddp import RankedLogger
 
 logger = RankedLogger(__name__, rank_zero_only=True)
 all_ranks_logger = RankedLogger(__name__, rank_zero_only=False)

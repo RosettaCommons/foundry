@@ -100,14 +100,14 @@ source = "vcs"
 fallback-version = "0.0.0"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "src/modelhub/version.py"
+version-file = "src/foundry/version.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = [
-  "src/modelhub",
+  "src/foundry",
   "models/rf3/src/rf3",
   "models/rfd3/src/rfd3",
   "models/mpnn/src/mpnn",

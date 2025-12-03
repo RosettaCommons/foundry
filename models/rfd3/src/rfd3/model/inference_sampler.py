@@ -5,9 +5,9 @@ from typing import Any, Literal
 import torch
 from jaxtyping import Float
 
-from modelhub.common import exists
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.rotation_augmentation import (
+from foundry.common import exists
+from foundry.utils.ddp import RankedLogger
+from foundry.utils.rotation_augmentation import (
     rot_vec_mul,
     uniform_random_rotation,
 )

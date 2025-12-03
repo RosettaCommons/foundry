@@ -22,7 +22,7 @@ from rfd3.testing.testing_utils import (
     load_train_or_val_cfg,
 )
 
-from modelhub.utils.ddp import set_accelerator_based_on_availability
+from foundry.utils.ddp import set_accelerator_based_on_availability
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,7 +37,6 @@ print(f"Project root: {os.environ.get('PROJECT_ROOT', '../..')}")
 
 
 is_inference = True
-# outdir = Path("/home/jbutch/Projects/HT25/af3/modelhub_refactor/rfd3/tests/outs")
 args = TEST_JSON_DATA["1qys-1-refactored"]
 input = instantiate_example(args, is_inference=is_inference)
 

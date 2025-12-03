@@ -34,7 +34,7 @@ from rfd3.transforms.pipelines import (
     build_atom14_base_pipeline,
 )
 
-from modelhub.hydra.resolvers import register_resolvers
+from foundry.hydra.resolvers import register_resolvers
 
 register_resolvers()
 
@@ -248,7 +248,7 @@ def build_pipelines(
 def get_train_dataloader(cfg_name="pretrain", seed=42):
     print("This function is deprecated!")
     cfg = load_train_or_val_cfg(name=cfg_name, is_val_cfg=False)
-    from modelhub.utils.datasets import (
+    from foundry.utils.datasets import (
         assemble_distributed_loader,
         recursively_instantiate_datasets_and_samplers,
     )

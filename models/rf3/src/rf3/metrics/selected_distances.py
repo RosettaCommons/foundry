@@ -7,7 +7,7 @@ from atomworks.ml.utils.selection import (
 from beartype.typing import Any
 from biotite.structure import AtomArrayStack
 
-from modelhub.metrics.metric import Metric
+from foundry.metrics.metric import Metric
 
 
 class SelectedAtomByAtomDistances(Metric):

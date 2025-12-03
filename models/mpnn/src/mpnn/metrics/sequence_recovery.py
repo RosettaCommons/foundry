@@ -5,7 +5,7 @@ from mpnn.transforms.feature_aggregation.polymer_ligand_interface import (
 )
 from mpnn.transforms.polymer_ligand_interface import ComputePolymerLigandInterface
 
-from modelhub.metrics.metric import Metric
+from foundry.metrics.metric import Metric
 
 
 class SequenceRecovery(Metric):

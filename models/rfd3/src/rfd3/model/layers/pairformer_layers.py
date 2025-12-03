@@ -7,8 +7,8 @@ from rfd3.model.layers.layer_utils import (
 )
 from torch import nn
 
-from modelhub.training.checkpoint import activation_checkpointing
-from modelhub.utils.torch import device_of
+from foundry.training.checkpoint import activation_checkpointing
+from foundry.utils.torch import device_of
 
 
 class AttentionPairBiasPairformerDeepspeed(nn.Module):

@@ -13,9 +13,9 @@ from rich.panel import Panel
 from rich.table import Table
 from torchmetrics.aggregation import MeanMetric
 
-from modelhub.callbacks.callback import BaseCallback
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.logging import (
+from foundry.callbacks.callback import BaseCallback
+from foundry.utils.ddp import RankedLogger
+from foundry.utils.logging import (
     print_df_as_table,
     print_model_parameters,
     safe_print,

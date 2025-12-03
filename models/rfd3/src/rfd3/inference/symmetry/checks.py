@@ -2,7 +2,7 @@ import numpy as np
 from rfd3.inference.symmetry.contigs import expand_contig_unsym_motif
 from rfd3.transforms.conditioning_base import get_motif_features
 
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.ddp import RankedLogger
 
 MIN_ATOMS_ALIGN = 100
 MAX_TRANSFORMS = 10

@@ -10,8 +10,8 @@ from rfd3.utils.io import (
     dump_trajectories,
 )
 
-from modelhub.callbacks.callback import BaseCallback
-from modelhub.utils.ddp import RankedLogger
+from foundry.callbacks.callback import BaseCallback
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

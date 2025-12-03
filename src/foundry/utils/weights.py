@@ -9,7 +9,7 @@ import torch
 from beartype.typing import Pattern
 from torch import nn
 
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

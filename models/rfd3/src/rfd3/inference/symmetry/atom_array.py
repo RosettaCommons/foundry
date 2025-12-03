@@ -4,7 +4,7 @@ from rfd3.inference.symmetry.frames import (
     get_symmetry_frames_from_symmetry_id,
 )
 
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.ddp import RankedLogger
 
 FIXED_TRANSFORM_ID = -1
 FIXED_ENTITY_ID = -1

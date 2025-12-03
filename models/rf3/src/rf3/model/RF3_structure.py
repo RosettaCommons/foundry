@@ -15,8 +15,8 @@ from rf3.model.layers.pairformer_layers import (
     RF3TemplateEmbedder,
 )
 
-from modelhub.model.layers.blocks import FourierEmbedding
-from modelhub.training.checkpoint import activation_checkpointing
+from foundry.model.layers.blocks import FourierEmbedding
+from foundry.training.checkpoint import activation_checkpointing
 
 logger = logging.getLogger(__name__)
 

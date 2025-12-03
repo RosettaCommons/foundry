@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from modelhub.training.checkpoint import activation_checkpointing
+from foundry.training.checkpoint import activation_checkpointing
 
 
 class SequenceLoss(nn.Module):

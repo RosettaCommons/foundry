@@ -9,7 +9,7 @@ from rf3.utils.io import (
     dump_trajectories,
 )
 
-from modelhub.callbacks.callback import BaseCallback
+from foundry.callbacks.callback import BaseCallback
 
 
 class DumpValidationStructuresCallback(BaseCallback):

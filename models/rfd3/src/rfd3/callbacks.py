@@ -1,9 +1,9 @@
 import pandas as pd
 from beartype.typing import Any
 
-from modelhub.callbacks.callback import BaseCallback
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.logging import print_df_as_table
+from foundry.callbacks.callback import BaseCallback
+from foundry.utils.ddp import RankedLogger
+from foundry.utils.logging import print_df_as_table
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

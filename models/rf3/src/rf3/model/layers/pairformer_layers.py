@@ -19,8 +19,8 @@ from rf3.model.RF3_blocks import MSAPairWeightedAverage, MSASubsampleEmbedder
 from torch import nn
 from torch.nn.functional import one_hot, relu
 
-from modelhub.model.layers.blocks import Dropout
-from modelhub.training.checkpoint import activation_checkpointing
+from foundry.model.layers.blocks import Dropout
+from foundry.training.checkpoint import activation_checkpointing
 
 
 class AtomAttentionEncoderPairformer(nn.Module):

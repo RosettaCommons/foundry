@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import silu
 
-from modelhub.training.checkpoint import activation_checkpointing
-from modelhub.utils.ddp import RankedLogger
+from foundry.training.checkpoint import activation_checkpointing
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 try:

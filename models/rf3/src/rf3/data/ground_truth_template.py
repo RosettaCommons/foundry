@@ -20,7 +20,7 @@ from biotite.structure import AtomArray
 from jaxtyping import Bool, Float, Shaped
 from torch import Tensor
 
-from modelhub.utils.torch import assert_no_nans
+from foundry.utils.torch import assert_no_nans
 
 logger = logging.getLogger(__name__)
 

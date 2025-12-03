@@ -10,7 +10,7 @@ from pydantic import (
     model_validator,
 )
 
-from modelhub.utils.components import (
+from foundry.utils.components import (
     ComponentStr,
     fetch_mask_from_idx,
     get_name_mask,

@@ -15,7 +15,7 @@ from rf3.model.layers.pairformer_layers import (
 from rf3.model.RF3_structure import DiffusionModule, DistogramHead, Recycler
 from torch import nn
 
-from modelhub.training.checkpoint import create_custom_forward
+from foundry.training.checkpoint import create_custom_forward
 
 """
 Shape Annotation Glossary:

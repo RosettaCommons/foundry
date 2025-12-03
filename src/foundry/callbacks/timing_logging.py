@@ -1,9 +1,9 @@
 import pandas as pd
 from lightning.fabric.utilities.rank_zero import rank_zero_only
 
-from modelhub.callbacks.callback import BaseCallback
-from modelhub.utils.logging import print_df_as_table
-from modelhub.utils.torch import Timers
+from foundry.callbacks.callback import BaseCallback
+from foundry.utils.logging import print_df_as_table
+from foundry.utils.torch import Timers
 
 
 class TimingCallback(BaseCallback):

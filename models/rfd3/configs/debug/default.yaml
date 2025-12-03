@@ -25,7 +25,7 @@ hydra:
 # Print example ID before forward pass
 callbacks:
   print_example_id_before_forward_pass:
-      _target_: modelhub.callbacks.train_logging.PrintExampleIDBeforeForwardPassCallback
+      _target_: foundry.callbacks.train_logging.PrintExampleIDBeforeForwardPassCallback
 
 dataloader:
   train:

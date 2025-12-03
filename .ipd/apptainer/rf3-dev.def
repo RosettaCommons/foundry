@@ -14,7 +14,7 @@ IncludeCmd: yes
 
 %setup
     # Create a directory in the container to bind the host's current working directory
-    mkdir ${APPTAINER_ROOTFS}/modelhub_host
+    mkdir ${APPTAINER_ROOTFS}/foundry_host
     # ... for mounting `/projects` with --bind
     mkdir ${APPTAINER_ROOTFS}/projects
     # ... for mounting `/databases` with --bind

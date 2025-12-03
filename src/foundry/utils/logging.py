@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.tree import Tree
 from torch import nn
 
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

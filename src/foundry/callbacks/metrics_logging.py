@@ -7,8 +7,8 @@ from atomworks.ml.utils import nested_dict
 from beartype.typing import Any, Literal
 from omegaconf import ListConfig
 
-from modelhub.callbacks.callback import BaseCallback
-from modelhub.utils.ddp import RankedLogger
+from foundry.callbacks.callback import BaseCallback
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

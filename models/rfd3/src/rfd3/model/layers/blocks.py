@@ -28,8 +28,8 @@ from rfd3.model.layers.layer_utils import (
 from rfd3.model.layers.pairformer_layers import PairformerBlock
 from torch.nn.functional import one_hot
 
-from modelhub import DISABLE_CHECKPOINTING
-from modelhub.common import exists
+from foundry import DISABLE_CHECKPOINTING
+from foundry.common import exists
 
 logger = logging.getLogger(__name__)
 

@@ -54,12 +54,12 @@ from rfd3.utils.inference import (
     set_indices,
 )
 
-from modelhub.common import exists
-from modelhub.utils.components import (
+from foundry.common import exists
+from foundry.utils.components import (
     get_design_pattern_with_constraints,
     get_motif_components_and_breaks,
 )
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.DEBUG)
 

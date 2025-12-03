@@ -9,8 +9,8 @@ from beartype.typing import Any
 from rf3.inference_engines.rf3 import RF3InferenceEngine
 from rf3.utils.inference import InferenceInput
 
-from modelhub.metrics.metric import MetricManager
-from modelhub.utils.ddp import RankedLogger
+from foundry.metrics.metric import MetricManager
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

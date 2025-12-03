@@ -8,8 +8,8 @@ import rootutils
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 
-from modelhub.utils.logging import suppress_warnings
-from modelhub.utils.weights import CheckpointConfig
+from foundry.utils.logging import suppress_warnings
+from foundry.utils.weights import CheckpointConfig
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
@@ -39,15 +39,15 @@ def train(cfg: DictConfig) -> None:
     # Reference: https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
     torch.set_float32_matmul_precision("medium")
 
-    from modelhub.callbacks.callback import BaseCallback  # noqa
-    from modelhub.utils.instantiators import instantiate_loggers, instantiate_callbacks  # noqa
-    from modelhub.utils.logging import (
+    from foundry.callbacks.callback import BaseCallback  # noqa
+    from foundry.utils.instantiators import instantiate_loggers, instantiate_callbacks  # noqa
+    from foundry.utils.logging import (
         print_config_tree,
         log_hyperparameters_with_all_loggers,
     )  # noqa
-    from modelhub.utils.ddp import RankedLogger  # noqa
-    from modelhub.utils.ddp import is_rank_zero, set_accelerator_based_on_availability  # noqa
-    from modelhub.utils.datasets import (
+    from foundry.utils.ddp import RankedLogger  # noqa
+    from foundry.utils.ddp import is_rank_zero, set_accelerator_based_on_availability  # noqa
+    from foundry.utils.datasets import (
         recursively_instantiate_datasets_and_samplers,
         assemble_distributed_loader,
         subset_dataset_to_example_ids,

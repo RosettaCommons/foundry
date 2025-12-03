@@ -47,10 +47,10 @@ We include details DNA, Ligands, Protein-Protein Interaction, Symmetry-condition
 
 ### Code Organization
 
-**Strict dependency flow:** `modelhub` → `atomworks`
+**Strict dependency flow:** `foundry` → `atomworks`
 
 - **atomworks**: Structure I/O, preprocessing, featurization
-- **modelhub**: Model architectures, training, inference endpoints
+- **foundry**: Model architectures, training, inference endpoints
 - **models/\<model\>:** Released models.
 
 ### Debugging
@@ -82,18 +82,18 @@ export DEBUG_PORT=2345
 
 #### For Core Developers (Multiple Packages)
 
-Install both `modelhub` and models in editable mode for development:
+Install both `foundry` and models in editable mode for development:
 
 ```bash
-# Install modelhub and RF3 in editable mode
+# Install foundry and RF3 in editable mode
 uv pip install -e . -e ./models/rf3
 
-# Or install only modelhub (no models)
+# Or install only foundry (no models)
 uv pip install -e .
 ```
 
 This approach allows you to:
-- Modify `modelhub` shared utilities and see changes immediately
+- Modify `foundry` shared utilities and see changes immediately
 - Work on specific models without installing all models
 - Add new models as independent packages in `models/`
 
@@ -102,7 +102,7 @@ This approach allows you to:
 To add a new model:
 
 1. Create `models/<model_name>/` directory with its own `pyproject.toml`
-2. Add `modelhub` as a dependency
+2. Add `foundry` as a dependency
 3. Implement model-specific code in `models/<model_name>/src/`
 4. Users can install with: `uv pip install -e ./models/<model_name>`
 

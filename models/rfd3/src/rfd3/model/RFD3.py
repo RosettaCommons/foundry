@@ -10,7 +10,7 @@ from rfd3.model.inference_sampler import ConditionalDiffusionSampler
 from rfd3.model.layers.encoders import TokenInitializer
 from torch import nn
 
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

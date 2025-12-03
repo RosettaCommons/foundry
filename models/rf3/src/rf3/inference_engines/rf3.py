@@ -19,9 +19,9 @@ from biotite.structure import AtomArray, AtomArrayStack
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
-from modelhub.inference_engines.base import BaseInferenceEngine
-from modelhub.metrics.metric import MetricManager
-from modelhub.utils.ddp import RankedLogger
+from foundry.inference_engines.base import BaseInferenceEngine
+from foundry.metrics.metric import MetricManager
+from foundry.utils.ddp import RankedLogger
 from rf3.model.RF3 import ShouldEarlyStopFn
 from rf3.utils.inference import (
     InferenceInput,

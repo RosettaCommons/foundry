@@ -15,7 +15,7 @@ echo '################## Start shebang info ##################'
 echo "The file $SCRIPT_PATH is being run as a shebang executable.
     It will...
 
-    1. Add 'src/modelhub', 'models/rf3/src', and 'lib/atomworks/src' to your PYTHONPATH.
+    1. Add 'src/foundry', 'models/rf3/src', and 'lib/atomworks/src' to your PYTHONPATH.
     2. Run your python script from the right container, which contains all dependencies.
     3. Launch the container with slurm and nvidia gpu support."
 
@@ -57,13 +57,13 @@ add_to_pythonpath() {
     fi
 }
 
-# Add modelhub, rf3, and atomworks to PYTHONPATH
+# Add foundry, rf3, and atomworks to PYTHONPATH
 echo
-echo "Adding modelhub, RF3, and atomworks to PYTHONPATH..."
-MODELHUB_PATH="$REPO_ROOT/src"
+echo "Adding foundry, RF3, and atomworks to PYTHONPATH..."
+FOUNDRY_PATH="$REPO_ROOT/src"
 RF3_PATH="$REPO_ROOT/models/rf3/src"
 ATOMWORKS_PATH="$REPO_ROOT/lib/atomworks/src"
-add_to_pythonpath "$MODELHUB_PATH"
+add_to_pythonpath "$FOUNDRY_PATH"
 add_to_pythonpath "$RF3_PATH"
 add_to_pythonpath "$ATOMWORKS_PATH"
 

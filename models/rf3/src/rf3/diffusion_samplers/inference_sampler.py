@@ -2,8 +2,8 @@ import torch
 from beartype.typing import Any, Literal
 from jaxtyping import Float
 
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.rotation_augmentation import centre_random_augmentation
+from foundry.utils.ddp import RankedLogger
+from foundry.utils.rotation_augmentation import centre_random_augmentation
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=modelhub_ligand
+#SBATCH --job-name=foundry_ligand
 #SBATCH --partition=gpu-train
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=12

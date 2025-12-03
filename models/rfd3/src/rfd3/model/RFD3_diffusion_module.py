@@ -22,7 +22,7 @@ from rfd3.model.layers.encoders import (
 )
 from rfd3.model.layers.layer_utils import RMSNorm, linearNoBias
 
-from modelhub.model.layers.blocks import (
+from foundry.model.layers.blocks import (
     FourierEmbedding,
 )
 

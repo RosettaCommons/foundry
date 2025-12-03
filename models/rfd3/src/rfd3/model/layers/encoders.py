@@ -27,8 +27,8 @@ from rfd3.model.layers.layer_utils import (
 )
 from rfd3.model.layers.pairformer_layers import PairformerBlock
 
-from modelhub.common import exists
-from modelhub.training.checkpoint import activation_checkpointing
+from foundry.common import exists
+from foundry.training.checkpoint import activation_checkpointing
 
 logger = logging.getLogger(__name__)
 

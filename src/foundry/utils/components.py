@@ -9,8 +9,8 @@ from rfd3.constants import (
     TIP_BY_RESTYPE,
 )
 
-from modelhub.common import exists
-from modelhub.utils.ddp import RankedLogger
+from foundry.common import exists
+from foundry.utils.ddp import RankedLogger
 
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 sequence_encoding = AF3SequenceEncoding()

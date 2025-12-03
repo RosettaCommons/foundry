@@ -18,7 +18,7 @@ def fold(
     """Run structure prediction using hydra config overrides or simple input file."""
     # Configure logging BEFORE any heavy imports
     if not verbose:
-        from modelhub.utils.logging import configure_minimal_inference_logging
+        from foundry.utils.logging import configure_minimal_inference_logging
 
         configure_minimal_inference_logging()
 

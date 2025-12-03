@@ -2,8 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from modelhub.training.checkpoint import activation_checkpointing
-from modelhub.utils.alignment import weighted_rigid_align
+from foundry.training.checkpoint import activation_checkpointing
+from foundry.utils.alignment import weighted_rigid_align
 
 
 # resolve residue-level symmetries in native vs pred

@@ -2,7 +2,7 @@ Bootstrap: localimage
 From: .ipd/apptainer/rf3-dev.sif
 IncludeCmd: yes
 
-# RF3 Full Production Container - Includes modelhub, rf3, and atomworks packages installed
+# RF3 Full Production Container - Includes foundry, rf3, and atomworks packages installed
 
 # To build this Apptainer, from the project root, run:
 # apptainer build rf3-full.sif .ipd/apptainer/rf3-full.def
@@ -17,7 +17,7 @@ IncludeCmd: yes
     echo "Copying repository..."
 
     # Create base directory
-    mkdir -p ${APPTAINER_ROOTFS}/opt/modelhub
+    mkdir -p ${APPTAINER_ROOTFS}/opt/foundry
 
     # Copy everything except large/unnecessary files
     rsync -av --info=progress2 \
@@ -33,7 +33,7 @@ IncludeCmd: yes
         --exclude='distillation' \
         --exclude='benchmarks' \
         --exclude='**/slurm_logs' \
-        ./ ${APPTAINER_ROOTFS}/opt/modelhub/
+        ./ ${APPTAINER_ROOTFS}/opt/foundry/
 
     echo "Repository copied successfully."
 
@@ -41,20 +41,20 @@ IncludeCmd: yes
     echo "Installing packages into container..."
 
     # Do editable installs so everything works as in development
-    cd /opt/modelhub
+    cd /opt/foundry
 
-    # Install modelhub (editable, no dependencies - already in base image)
-    echo "Installing modelhub..."
+    # Install foundry (editable, no dependencies - already in base image)
+    echo "Installing foundry..."
     uv pip install --system --break-system-packages --no-deps -e .
 
     # Install rf3 (editable, no dependencies - already in base image)
     echo "Installing rf3..."
-    cd /opt/modelhub/models/rf3
+    cd /opt/foundry/models/rf3
     uv pip install --system --break-system-packages --no-deps -e .
 
     # Install atomworks (editable, no dependencies - already in base image)
     echo "Installing atomworks..."
-    cd /opt/modelhub/lib/atomworks
+    cd /opt/foundry/lib/atomworks
     uv pip install --system --break-system-packages --no-deps -e .
 
     # Cleanup caches only
@@ -74,7 +74,7 @@ IncludeCmd: yes
 %help
     RosettaFold3 (RF3) full production container.
 
-    Contains modelhub, rf3, and atomworks packages installed in site-packages.
+    Contains foundry, rf3, and atomworks packages installed in site-packages.
     All dependencies are included from the base rf3-dev container.
 
     Usage:

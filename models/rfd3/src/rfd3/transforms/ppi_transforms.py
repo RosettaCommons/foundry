@@ -29,7 +29,7 @@ from biotite.structure import AtomArray
 from rfd3.transforms.conditioning_utils import sample_island_tokens
 from scipy.spatial import KDTree
 
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

@@ -10,10 +10,10 @@ from mpnn.metrics.sequence_recovery import (
 from mpnn.model.mpnn import LigandMPNN, ProteinMPNN
 from omegaconf import DictConfig
 
-from modelhub.metrics.metric import MetricManager
-from modelhub.trainers.fabric import FabricTrainer
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.torch import assert_no_nans
+from foundry.metrics.metric import MetricManager
+from foundry.trainers.fabric import FabricTrainer
+from foundry.utils.ddp import RankedLogger
+from foundry.utils.torch import assert_no_nans
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

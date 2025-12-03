@@ -7,9 +7,9 @@ from atomworks.ml.utils import nested_dict
 from beartype.typing import Any, Literal
 from omegaconf import ListConfig
 
-from modelhub.callbacks.callback import BaseCallback
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.logging import (
+from foundry.callbacks.callback import BaseCallback
+from foundry.utils.ddp import RankedLogger
+from foundry.utils.logging import (
     condense_count_columns_of_grouped_df,
     print_df_as_table,
 )

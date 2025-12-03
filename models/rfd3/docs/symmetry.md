@@ -73,7 +73,7 @@ symmetry:
 ## Example command 
 You can run the following example command:
 ```
-./src/modelhub/inference.py inference_sampler.kind=symmetry inference_sampler.gamma_0=0.6 out_dir=logs/inference_outs/sym_demo/0 ckpt_path=$cur_ckpt inputs=./projects/aa_design/tests/test_data/sym_tests.json diffusion_batch_size=1 
+./src/foundry/inference.py inference_sampler.kind=symmetry inference_sampler.gamma_0=0.6 out_dir=logs/inference_outs/sym_demo/0 ckpt_path=$cur_ckpt inputs=./projects/aa_design/tests/test_data/sym_tests.json diffusion_batch_size=1 
 ```
 `diffusion_batch_size` is 8 by default, but it is recommended to set it to 1 for symmetry due to memory limitations.
 
@@ -83,7 +83,7 @@ export cur_ckpt=/projects/ml/aa_design/models/rfd3_latest.ckpt
 ```
 
 ## Example json
-You can also find the same JSON at `modelhub/projects/aa_design/tests/test_data/sym_tests.json` and the input PDBS can be found at `modelhub/projects/aa_design/tests/test_data/symmetry_examples`.
+You can also find the same JSON at `foundry/projects/aa_design/tests/test_data/sym_tests.json` and the input PDBS can be found at `modelhub/projects/aa_design/tests/test_data/symmetry_examples`.
 
 The tasks that these examples describe are as follows:
 - 1j79_C2, 1e3v_C2: 

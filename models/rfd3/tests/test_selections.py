@@ -9,7 +9,7 @@ from rfd3.testing.testing_utils import (
     TEST_JSON_DATA,
 )
 
-from modelhub.utils.components import (
+from foundry.utils.components import (
     fetch_mask_from_component,
     fetch_mask_from_idx,
     fetch_mask_from_name,

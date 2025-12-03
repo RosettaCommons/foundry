@@ -10,8 +10,8 @@ from rfd3.metrics.metrics_utils import (
     get_ss_metrics_and_rg,
 )
 
-from modelhub.common import exists
-from modelhub.metrics.metric import Metric
+from foundry.common import exists
+from foundry.metrics.metric import Metric
 
 STANDARD_CACA_DIST = 3.8
 

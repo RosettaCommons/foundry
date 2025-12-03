@@ -2,7 +2,7 @@ import math
 
 import torch
 
-from modelhub.utils.rigid import rot_vec_mul
+from foundry.utils.rigid import rot_vec_mul
 
 
 def centre(X_L, X_exists_L):

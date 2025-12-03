@@ -18,7 +18,7 @@ from rfd3.testing.testing_utils import (
     instantiate_example,
 )
 
-from modelhub.utils.logging import print_config_tree
+from foundry.utils.logging import print_config_tree
 
 PATH_TO_REPO_ROOT = os.path.dirname(os.path.abspath(__file__)) + "/../../.."
 PATH_TO_SRC = os.path.dirname(os.path.abspath(__file__)) + "/../../../src"
@@ -32,10 +32,10 @@ smoke_test = list(TEST_JSON_DATA.keys())
 def test_imports():
     import rfd3
 
-    import modelhub
+    import foundry
 
     print("Imported rfd3 version:", rfd3)
-    print("Imported modelhub version:", modelhub)
+    print("Imported foundry version:", foundry)
 
     # Try imports from main modules
     from rfd3.metrics.losses import DiffusionLoss
@@ -79,7 +79,7 @@ def test_training_pipeline(example_name):
 
 def test_dataset_instantiation():
     """Test that the train and val pipelines can be run without errors."""
-    from modelhub.utils.datasets import recursively_instantiate_datasets_and_samplers
+    from foundry.utils.datasets import recursively_instantiate_datasets_and_samplers
 
     recursively_instantiate_datasets_and_samplers(TEST_CFG_TRAIN.datasets.train)
 

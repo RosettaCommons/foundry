@@ -37,8 +37,8 @@ from rfd3.utils.inference import (
     set_indices,
 )
 
-from modelhub.common import exists
-from modelhub.utils.components import (
+from foundry.common import exists
+from foundry.utils.components import (
     fetch_mask_from_component,
     fetch_mask_from_idx,
     get_design_pattern_with_constraints,
@@ -46,7 +46,7 @@ from modelhub.utils.components import (
     get_name_mask,
     split_contig,
 )
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)

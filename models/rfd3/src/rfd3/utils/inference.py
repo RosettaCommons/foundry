@@ -31,13 +31,13 @@ from rfd3.transforms.conditioning_base import (
 )
 from rfd3.transforms.conditioning_utils import sample_island_tokens
 
-from modelhub.common import exists
-from modelhub.utils.components import (
+from foundry.common import exists
+from foundry.utils.components import (
     fetch_mask_from_component,
     get_name_mask,
     unravel_components,
 )
-from modelhub.utils.ddp import RankedLogger
+from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)

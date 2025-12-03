@@ -3,7 +3,7 @@
 This module provides the base metric framework.
 """
 
-from modelhub.metrics.metric import Metric, MetricInputError, MetricManager
+from foundry.metrics.metric import Metric, MetricInputError, MetricManager
 
 __all__ = [
     "Metric",

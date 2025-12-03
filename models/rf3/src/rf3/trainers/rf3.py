@@ -13,13 +13,13 @@ from rf3.model.RF3 import ShouldEarlyStopFn
 from rf3.utils.io import build_stack_from_atom_array_and_batched_coords
 from rf3.utils.recycling import get_recycle_schedule
 
-from modelhub.common import exists
-from modelhub.metrics.losses import Loss
-from modelhub.metrics.metric import MetricManager
-from modelhub.trainers.fabric import FabricTrainer
-from modelhub.training.EMA import EMA
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.torch import assert_no_nans, assert_same_shape
+from foundry.common import exists
+from foundry.metrics.losses import Loss
+from foundry.metrics.metric import MetricManager
+from foundry.trainers.fabric import FabricTrainer
+from foundry.training.EMA import EMA
+from foundry.utils.ddp import RankedLogger
+from foundry.utils.torch import assert_no_nans, assert_same_shape
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

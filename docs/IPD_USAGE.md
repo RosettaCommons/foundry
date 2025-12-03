@@ -35,7 +35,7 @@ The shebang system allows you to execute Python scripts directly (e.g., `./model
 
 2. **The rf3_exec.sh Script** (`.ipd/shebang/rf3_exec.sh`) then:
    - Locates the repository root by searching for `.project-root`
-   - Sets up PYTHONPATH to include modelhub, rf3, and atomworks
+   - Sets up PYTHONPATH to include foundry, rf3, and atomworks
    - Finds the development container at `.ipd/apptainer/rf3-dev.sif`
    - Detects GPU support (uses `--nvccli` if available, falls back to `--nv`, or runs without GPU)
    - Executes your script inside the container with the repository bind-mounted

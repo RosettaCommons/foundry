@@ -20,8 +20,8 @@ from torch.utils.data import (
 )
 from torch.utils.data.distributed import DistributedSampler
 
-from modelhub.hydra.resolvers import register_resolvers
-from modelhub.utils.ddp import RankedLogger
+from foundry.hydra.resolvers import register_resolvers
+from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 try:

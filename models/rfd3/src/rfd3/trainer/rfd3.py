@@ -20,11 +20,11 @@ from rfd3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
 )
 
-from modelhub.metrics.losses import Loss
-from modelhub.metrics.metric import MetricManager
-from modelhub.trainers.fabric import FabricTrainer
-from modelhub.utils.ddp import RankedLogger
-from modelhub.utils.torch import assert_no_nans, assert_same_shape
+from foundry.metrics.losses import Loss
+from foundry.metrics.metric import MetricManager
+from foundry.trainers.fabric import FabricTrainer
+from foundry.utils.ddp import RankedLogger
+from foundry.utils.torch import assert_no_nans, assert_same_shape
 
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 

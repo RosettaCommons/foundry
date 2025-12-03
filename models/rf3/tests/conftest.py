@@ -1,6 +1,6 @@
 """Test fixtures and utilities for RF3 tests."""
 
-from modelhub.testing import configure_pytest, get_test_data_dir, gpu  # noqa: F401
+from foundry.testing import configure_pytest, get_test_data_dir, gpu  # noqa: F401
 
 TEST_DATA_DIR = get_test_data_dir(__file__)
 

@@ -40,7 +40,7 @@ from rfd3.transforms.util_transforms import (
     add_representative_atom,
 )
 
-from modelhub.common import exists
+from foundry.common import exists
 
 nx.from_numpy_matrix = nx.from_numpy_array
 logger = logging.getLogger(__name__)

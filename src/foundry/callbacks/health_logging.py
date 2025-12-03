@@ -13,7 +13,7 @@ from lightning.fabric.wrappers import (
 )
 from torch import Tensor
 
-from modelhub.callbacks.callback import BaseCallback
+from foundry.callbacks.callback import BaseCallback
 
 _DEFAULT_STATISTICS = types.MappingProxyType(
     {

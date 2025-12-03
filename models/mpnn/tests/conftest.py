@@ -3,7 +3,7 @@
 import pytest
 from mpnn.loss.nll_loss import LabelSmoothedNLLLoss
 
-from modelhub.testing import configure_pytest, get_test_data_dir, gpu  # noqa: F401
+from foundry.testing import configure_pytest, get_test_data_dir, gpu  # noqa: F401
 
 TEST_DATA_DIR = get_test_data_dir(__file__)
 
