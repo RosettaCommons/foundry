@@ -15,7 +15,6 @@ from toolz import merge_with
 
 from foundry.common import exists
 from foundry.inference_engines.base import BaseInferenceEngine
-from foundry.inference_engines.checkpoint_registry import REGISTERED_CHECKPOINTS
 from foundry.utils.alignment import weighted_rigid_align
 from foundry.utils.ddp import RankedLogger
 from rfd3.constants import SAVED_CONDITIONING_ANNOTATIONS
@@ -38,7 +37,9 @@ ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 @dataclass(kw_only=True)
 class RFD3InferenceConfig:
-    ckpt_path: str | Path = 'rfd3'  # Defaults to foundry installation upon instantiation
+    ckpt_path: str | Path = (
+        "rfd3"  # Defaults to foundry installation upon instantiation
+    )
     diffusion_batch_size: int = 16
 
     # RFD3 specific

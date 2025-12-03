@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Optional
 from urllib.request import urlopen
 
-import rootutils
 import typer
 from dotenv import find_dotenv, load_dotenv, set_key
 from rich.console import Console
@@ -28,6 +27,7 @@ load_dotenv(override=True)
 
 app = typer.Typer(help="Foundry model checkpoint installation utilities")
 console = Console()
+
 
 def download_file(url: str, dest: Path, verify_hash: Optional[str] = None) -> None:
     """Download a file with progress bar and optional hash verification.
@@ -81,9 +81,7 @@ def download_file(url: str, dest: Path, verify_hash: Optional[str] = None) -> No
         console.print("[green]✓[/green] Hash verification passed")
 
 
-def install_model(
-    model_name: str, checkpoint_dir: Path, force: bool = False
-) -> None:
+def install_model(model_name: str, checkpoint_dir: Path, force: bool = False) -> None:
     """Install a single model checkpoint.
 
     Args:
@@ -112,9 +110,7 @@ def install_model(
     )
 
     try:
-        download_file(
-            checkpoint_info.url, dest_path, checkpoint_info.sha256
-        )
+        download_file(checkpoint_info.url, dest_path, checkpoint_info.sha256)
         console.print(
             f"[green]✓[/green] Successfully installed {model_name} to {dest_path}"
         )
@@ -158,7 +154,7 @@ def install(
 
     # Expand 'all' to all available models
     if "all" in models:
-        models_to_install = ['rfd3', 'proteinmpnn', 'ligandmpnn', 'rf3']
+        models_to_install = ["rfd3", "proteinmpnn", "ligandmpnn", "rf3"]
     else:
         models_to_install = models
 
@@ -167,15 +163,16 @@ def install(
         install_model(model_name, checkpoint_dir, force)
         console.print()
 
-    set_key(
-        dotenv_path=find_dotenv(),
-        key_to_set='FOUNDRY_CHECKPOINTS_DIR',
-        value_to_set=str(checkpoint_dir),
-        export = False,
-    )
-    console.print(
-        f"Set checkpoint installation directory to: {checkpoint_dir}"
-    )
+    # Try to persist checkpoint dir to .env (optional, may not exist in Colab etc.)
+    dotenv_path = find_dotenv()
+    if dotenv_path:
+        set_key(
+            dotenv_path=dotenv_path,
+            key_to_set="FOUNDRY_CHECKPOINTS_DIR",
+            value_to_set=str(checkpoint_dir),
+            export=False,
+        )
+        console.print(f"Saved FOUNDRY_CHECKPOINTS_DIR to {dotenv_path}")
 
     console.print("[bold green]Installation complete![/bold green]")
 
@@ -209,9 +206,7 @@ def show(
 
     checkpoint_files = list(checkpoint_dir.glob("*.ckpt"))
     if not checkpoint_files:
-        console.print(
-            f"[yellow]No checkpoint files found in {checkpoint_dir}[/yellow]"
-        )
+        console.print(f"[yellow]No checkpoint files found in {checkpoint_dir}[/yellow]")
         raise typer.Exit(0)
 
     console.print(f"[bold]Installed checkpoints in {checkpoint_dir}:[/bold]\n")
@@ -247,9 +242,7 @@ def clean(
     # List files to delete
     checkpoint_files = list(checkpoint_dir.glob("*.ckpt"))
     if not checkpoint_files:
-        console.print(
-            f"[yellow]No checkpoint files found in {checkpoint_dir}[/yellow]"
-        )
+        console.print(f"[yellow]No checkpoint files found in {checkpoint_dir}[/yellow]")
         raise typer.Exit(0)
 
     console.print("[bold]Files to delete:[/bold]")
