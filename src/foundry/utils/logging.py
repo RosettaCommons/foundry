@@ -28,7 +28,7 @@ class CachedDataFilter(logging.Filter):
 
 
 def silence_warnings():
-    """Silence common warnings that appear during modelhub execution."""
+    """Silence common warnings that appear during foundry execution."""
     warnings.filterwarnings(
         "ignore", message="All-NaN slice encountered", category=RuntimeWarning
     )
@@ -104,9 +104,9 @@ def configure_minimal_inference_logging() -> None:
     for logger_name in [
         "atomworks",
         "transforms",
-        "modelhub.metrics",
-        "modelhub.trainers",
-        "modelhub.inference_engines.base",
+        "foundry.metrics",
+        "foundry.trainers",
+        "foundry.inference_engines.base",
         "rf3.trainers",
         "rf3.utils.inference",
         "lightning",

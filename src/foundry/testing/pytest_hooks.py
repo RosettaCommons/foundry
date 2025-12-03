@@ -1,12 +1,11 @@
-"""Shared pytest configuration hooks for modelhub tests."""
+"""Shared pytest configuration hooks for foundry tests."""
 
 import rootutils
 from dotenv import load_dotenv
 
 
 def configure_pytest(config, conftest_file: str) -> None:
-    """Configure pytest for modelhub tests.
-
+    """Configure pytest for foundry tests.
     Sets up project root and environment variables.
     """
     # Setup the project root

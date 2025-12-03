@@ -14,7 +14,7 @@ should_debug = _env.bool("DEBUG", default=False)
 should_check_nans = _env.bool("NAN_CHECK", default=True)
 
 # Set up logger
-logger = logging.getLogger("modelhub")
+logger = logging.getLogger("foundry")
 # ... set logging level based on `DEBUG` environment variable
 logger.setLevel(logging.DEBUG if should_debug else logging.INFO)
 # ... log the current mode
@@ -25,7 +25,7 @@ logger.debug("NAN checking mode: %s", should_check_nans)
 # Enable runtime type checking if `TYPE_CHECK` environment variable is set to `True`
 if should_typecheck:
     beartype_this_package()
-    install_import_hook("modelhub", "beartype.beartype")
+    install_import_hook("foundry", "beartype.beartype")
 
 # Global flag for cuEquivariance availability
 SHOULD_USE_CUEQUIVARIANCE = False
