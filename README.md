@@ -36,7 +36,6 @@ For an interactive Google Colab notebook walking through a basic design pipeline
 
 > *See [models/rfd3/README.md](models/rfd3/README.md) for complete documentation.*
 
-
 ### RosettaFold3 (RF3)
 
 [RF3](https://doi.org/10.1101/2025.08.14.670328) is a structure prediction neural network that narrows the gap between closed-source AF-3 and open-source alternatives.
