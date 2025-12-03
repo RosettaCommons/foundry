@@ -15,10 +15,11 @@ git clone https://github.com/RosettaCommons/foundry.git \
   && source .venv/bin/activate \
   && uv pip install -e ".[rfd3]"
 ```
-
+<!--
 > [!IMPORTANT]
 > You must install `foundry` (the root package) with `-e` first, then install `rfd3`. This ensures both packages are in editable mode for proper development workflow.
-
+-->
+> [!NOTE]
 > optionally make installed venv available as ipynb kernel (helpful for running examples in `examples/all.ipynb`)
 `python -m ipykernel install --user --name=foundry --display-name "foundry"`
 
@@ -26,10 +27,18 @@ git clone https://github.com/RosettaCommons/foundry.git \
 ```bash
 wget http://files.ipd.uw.edu/pub/rfd3/rfd3_foundry_2025_12_01.ckpt
 ```
+*You can store these weights anywhere you would like,
+but if you do not store them in the root directory
+you will need to change the `cur_ckpt` variable discussed
+later on.*
 
 **Setup**
 ```bash
 export PROJECT_PATH="$(pwd)/models/rfd3/src:$(pwd)/src:$(pwd)/lib/atomworks/src"
+```
+If your virtual environment is not already active you will 
+also need to run:
+```
 source .venv/bin/activate
 ```
 
@@ -45,12 +54,19 @@ cur_ckpt=rfd3_foundry_2025_12_01.ckpt
 
 To run inference
 ```bash
-python ./src/foundry/inference.py out_dir=logs/inference_outs/demo/0 ckpt_path=$cur_ckpt inputs=models/rfd3/docs/demo.json print_config=True dump_trajectories=True
+python ./models/rfd3/src/rfd3/run_inference.py out_dir=logs/inference_outs/demo/0 ckpt_path=$cur_ckpt inputs=./models/rfd3/docs/demo.json verbose=True dump_trajectories=True
 ```
+
+> [!NOTE]
+> This demo will take a very long amount of time if run on a
+> CPU instead of a GPU. On a GPU, this should take on the
+> order of 10 minutes.
 
 Additional args here are added for verbosity, aligning trajectory structures, printing the config and dumping trajectories are turned off by default.
 
-For full details on how to specify inputs, see the [input specification documentation](./docs/input.md).
+The output directory will automatically be created.
+
+For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `models/rfd3/configs/inference_engine/rfdiffusion3.yaml`.
 
 ## Further example jsons for different applications
 
