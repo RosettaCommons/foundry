@@ -18,7 +18,7 @@ foundry install all --checkpoint-dir <path/to/ckpt/dir>
 ```
 This will download all the models supported (including multiple checkpoints of RF3) but as a beginner you can start with:
 ```
-foundry install rfd3 ligandmpnn rf3 --checkpoint_dir  <path/to/ckpt/dir>
+foundry install rfd3 ligandmpnn rf3 --checkpoint-dir  <path/to/ckpt/dir>
 ```
 
 >*See `examples/all.ipynb` for how to run each model in a notebook.*
@@ -30,11 +30,11 @@ For an interactive Google Colab notebook walking through a basic design pipeline
 
 [RFdiffusion3](https://www.biorxiv.org/content/10.1101/2025.09.18.676967v2) is an all-atom generative model capable of designing protein structures under complex constraints. 
 
-> *See [models/rfd3/README.md](models/rfd3/README.md) for complete documentation.*
-
 <div align="center">
   <img src="docs/_static/cover.png" alt="RFdiffusion3 generation trajectory." width="700">
 </div>
+
+> *See [models/rfd3/README.md](models/rfd3/README.md) for complete documentation.*
 
 ### RosettaFold3 (RF3)
 
