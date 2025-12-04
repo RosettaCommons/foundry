@@ -187,7 +187,6 @@ dev.py
 *.benchmarks/
 
 # Images
-*.png
 *.pdf
 *.svg
 *.jpg

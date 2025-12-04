@@ -1,7 +1,7 @@
 # De novo Design of Biomolecular Interactions with RFdiffusion3
 
 <p align="center">
-  <img src="docs/.assets/trajectory.png" alt="All-atom diffusion with RFD3">
+  <img src="docs/.assets/overview.png" alt="All-atom design with RFD3">
 </p>
 
 ## Get Started
@@ -13,23 +13,19 @@ pip install rc-foundry[rfd3]
 ```bash
 foundry install rfd3 --checkpoint-dir /path/to/ckpt/dir
 ```
+This sets `FOUNDRY_CHECKPOINTS_DIR` and will in future look for checkpoints in that directory, allowing you to run inference without supplying the checkpoint path. The checkpoint directory is optional, defaulting to `~/.foundry/checkpoints` if unset.
 
 ## Run Inference
-```bash 
-cur_ckpt=rfd3_foundry_2025_12_01.ckpt
-```
 
-To run inference
+To run inference:
 ```bash
-rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json ckpt_path=$cur_ckpt
+rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json ckpt_path=null skip_existing=False dump_trajectories=True align_trajectory_structures=True
 ```
 
-> [!NOTE]
-> This demo will take a very long amount of time if run on a
-> CPU instead of a GPU. On a GPU, this should take on the
-> order of 10 minutes.
-
-Additional args here are added for verbosity, aligning trajectory structures, printing the config and dumping trajectories are turned off by default.
+Additional unecessary args here are added:
+- Including dumping and aligning trajectory structures can be useful for debugging your setup or making cool gifs.
+- Printing the config and dumping trajectories are turned off by default, but turned on here for verbosity
+- Only `out_dir` and `inputs` are required
 
 The output directory will automatically be created.
 
