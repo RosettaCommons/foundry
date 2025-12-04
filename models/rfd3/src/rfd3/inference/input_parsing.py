@@ -696,7 +696,7 @@ class DesignInputSpecification(BaseModel):
             # Partial diffusion: use COM, keep all coordinates
             if exists(self.symmetry) and self.symmetry.id:
                 # For symmetric structures, avoid COM centering that would collapse chains
-                ranked_logger.info(
+                logger.info(
                     "Partial diffusion with symmetry: skipping COM centering to preserve chain spacing"
                 )
             else:

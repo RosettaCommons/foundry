@@ -10,12 +10,13 @@ def get_symmetry_frames_from_symmetry_id(symmetry_id):
     Returns:
         frames: list of rotation matrices
     """
+    from rfd3.inference.symmetry.symmetry_utils import SymmetryConfig
 
     # Get frames from symmetry id
     sym_conf = {}
-    if isinstance(symmetry_id, dict):
+    if isinstance(symmetry_id, SymmetryConfig):
         sym_conf = symmetry_id
-        symmetry_id = symmetry_id.get("id")
+        symmetry_id = symmetry_id.id
 
     if symmetry_id.lower().startswith("c"):
         order = int(symmetry_id[1:])
@@ -25,9 +26,9 @@ def get_symmetry_frames_from_symmetry_id(symmetry_id):
         frames = get_dihedral_frames(order)
     elif symmetry_id.lower() == "input_defined":
         assert (
-            "symmetry_file" in sym_conf
+            sym_conf.symmetry_file is not None
         ), "symmetry_file is required for input_defined symmetry"
-        frames = get_frames_from_file(sym_conf.get("symmetry_file"))
+        frames = get_frames_from_file(sym_conf.symmetry_file)
     else:
         raise ValueError(f"Symmetry id {symmetry_id} not supported")
 
@@ -120,7 +121,9 @@ def get_symmetry_frames_from_atom_array(src_atom_array, input_frames):
     computed_frames = [(R, np.array([0, 0, 0])) for R in Rs]
 
     # check that the computed frames match the input frames
-    check_input_frames_match_symmetry_frames(computed_frames, input_frames)
+    check_input_frames_match_symmetry_frames(
+        computed_frames, input_frames, nids_by_entity
+    )
 
     return computed_frames
 

@@ -39,18 +39,36 @@ ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 
 class SymmetryConfig(BaseModel):
-    # AM / HE TODO: feel free to flesh this out and add validation as needed
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         extra="allow",
     )
-    id: Optional[str] = Field(None)
-    # is_unsym_motif: Optional[np.ndarray[bool]] = Field(...)
-    # is_symmetric_motif: bool = Field(...)
+    id: Optional[str] = Field(
+        None,
+        description="Symmetry group ID. e.g. 'C3', 'D2'. Only C and D symmetry types are supported currently.",
+    )
+    is_unsym_motif: Optional[str] = Field(
+        None,
+        description="Comma separated list of contig/ligand names that should not be symmetrized such as DNA strands. \
+         e.g. 'HEM' or 'Y1-11,Z16-25'",
+    )
+    is_symmetric_motif: bool = Field(
+        True,
+        description="If True, the input motifs are expected to be already symmetric and won't be symmetrized. \
+        If False, the all input motifs are expected to be ASU and will be symmetrized.",
+    )
+
+
+def convery_sym_conf_to_symmetry_config(sym_conf: dict):
+    return SymmetryConfig(**sym_conf)
 
 
 def make_symmetric_atom_array(
-    asu_atom_array, sym_conf: SymmetryConfig, sm=None, has_2d=False, src_atom_array=None
+    asu_atom_array,
+    sym_conf: SymmetryConfig | dict,
+    sm=None,
+    has_dist_cond=False,
+    src_atom_array=None,
 ):
     """
     apply symmetry to an atom array.
@@ -58,39 +76,31 @@ def make_symmetric_atom_array(
         asu_atom_array: atom array of the asymmetric unit
         sym_conf: symmetry configuration (dict, "id" key is required)
         sm: optional small molecule names (str, comma separated)
-        has_2d: whether to add 2d entity annotations
+        has_dist_cond: whether to add 2d entity annotations
     Returns:
         new_asu_atom_array: atom array with symmetry applied
     """
-    sym_conf = (
-        sym_conf.model_dump()
-    )  # TODO: JB: remove this line to keep as symmetry config for cleaner syntax(?)
-    ranked_logger.info(f"Symmetry Configs: {sym_conf}")
+    if not isinstance(sym_conf, SymmetryConfig):
+        sym_conf = convery_sym_conf_to_symmetry_config(sym_conf)
 
-    # Making sure that the symmetry config is valid
-    check_symmetry_config(
-        asu_atom_array,
-        sym_conf,
-        sm,
-        has_dist_cond=has_2d,
-        src_atom_array=src_atom_array,
-    )
+    check_symmetry_config(asu_atom_array, sym_conf, sm, has_dist_cond, src_atom_array=src_atom_array)
     # Adding utility annotations to the asu atom array
     asu_atom_array = _add_util_annotations(asu_atom_array, sym_conf, sm)
 
-    if has_2d:  # NB: this will only work for asymmetric motifs at the moment - need to add functionality for symmetric motifs
+    if has_dist_cond:  # NB: this will only work for asymmetric motifs at the moment - need to add functionality for symmetric motifs
         asu_atom_array = add_2d_entity_annotations(asu_atom_array)
 
     frames = get_symmetry_frames_from_symmetry_id(sym_conf)
 
     # If the motif is symmetric, we get the frames instead from the source atom array.
-    if sym_conf.get("is_symmetric_motif"):
+    if sym_conf.is_symmetric_motif:
         assert (
             src_atom_array is not None
         ), "Source atom array must be provided for symmetric motifs"
-        # if symmetric motif is provided, get the frames from the src atom array
+        # if symmetric motif is provided, get the frames from the src atom array.
         frames = get_symmetry_frames_from_atom_array(src_atom_array, frames)
-    else:
+    elif (asu_atom_array._is_motif[~asu_atom_array._is_unsym_motif]).any():
+        # if the motifs that's not unsym motifs are present.
         raise NotImplementedError(
             "Asymmetric motif inputs are not implemented yet. please symmetrize the motif."
         )
@@ -101,7 +111,7 @@ def make_symmetric_atom_array(
     # Extracting all things at this moment that we will not want to symmetrize.
     # This includes: 1) unsym motifs, 2) ligands
     unsym_atom_arrays = []
-    if sym_conf.get("is_unsym_motif"):
+    if sym_conf.is_unsym_motif:
         # unsym_motif_atom_array = get_unsym_motif(asu_atom_array, asu_atom_array._is_unsym_motif)
         # Now remove the unsym motifs from the asu atom array
         unsym_atom_arrays.append(asu_atom_array[asu_atom_array._is_unsym_motif])
@@ -128,7 +138,7 @@ def make_symmetric_atom_array(
     symmetrized_atom_array = struc.concatenate(symmetry_unit_list)
 
     # add 2D conditioning annotations
-    if has_2d:
+    if has_dist_cond:
         symmetrized_atom_array = reannotate_2d_conditions(symmetrized_atom_array)
 
     # set all motifs to not have any symmetrization applied to them
@@ -183,7 +193,7 @@ def make_symmetric_atom_array_for_partial_diffusion(atom_array, sym_conf):
     frames = get_symmetry_frames_from_symmetry_id(sym_conf)
 
     # Add symmetry ID
-    symmetry_ids = np.full(n, sym_conf.get("id"), dtype="U6")
+    symmetry_ids = np.full(n, sym_conf.id, dtype="U6")
     atom_array.set_annotation("symmetry_id", symmetry_ids)
 
     # Initialize transform annotations (use same format as original system)
@@ -244,7 +254,7 @@ def _add_util_annotations(asu_atom_array, sym_conf, sm):
     """
     n = asu_atom_array.shape[0]
     is_motif = get_motif_features(asu_atom_array)["is_motif_atom"].astype(np.bool_)
-    is_sm = np.zeros(asu_atom_array.shape[0], dtype=bool)
+    is_sm = np.zeros(n, dtype=bool)
     is_asu = np.ones(n, dtype=bool)
     is_unsym_motif = np.zeros(n, dtype=bool)
 
@@ -257,8 +267,8 @@ def _add_util_annotations(asu_atom_array, sym_conf, sm):
         )
 
     # assign unsym motifs
-    if sym_conf.get("is_unsym_motif"):
-        unsym_motif_names = sym_conf["is_unsym_motif"].split(",")
+    if sym_conf.is_unsym_motif:
+        unsym_motif_names = sym_conf.is_unsym_motif.split(",")
         unsym_motif_names = expand_contig_unsym_motif(unsym_motif_names)
         is_unsym_motif = get_unsym_motif_mask(asu_atom_array, unsym_motif_names)
 
@@ -360,39 +370,5 @@ def apply_symmetry_to_xyz_atomwise(X_L, sym_feats, partial_diffusion=False):
             sym_X_L[:, this_subunit, :] = torch.einsum(
                 "blc,cd->bld", asu_xyz, sym_transforms[target_id][0].to(asu_xyz.dtype)
             ) + sym_transforms[target_id][1].to(asu_xyz.dtype)
-
-    # Log inter-chain distances for debugging - use actual chain annotations
-    if sym_X_L.shape[1] > 100:  # Only for large structures
-        # Use symmetry entity annotations to find different chains
-        sym_entity_id = sym_feats["sym_entity_id"]
-        unique_entities = torch.unique(sym_entity_id)
-
-        if len(unique_entities) >= 2:
-            # Get atoms from first two different entities
-            entity_0_mask = sym_entity_id == unique_entities[0]
-            entity_1_mask = sym_entity_id == unique_entities[1]
-
-            if entity_0_mask.sum() > 0 and entity_1_mask.sum() > 0:
-                entity_0_atoms = sym_X_L[0, entity_0_mask, :]
-                entity_1_atoms = sym_X_L[0, entity_1_mask, :]
-
-                # Sample subset to avoid memory issues
-                entity_0_sample = entity_0_atoms[: min(50, entity_0_atoms.shape[0]), :]
-                entity_1_sample = entity_1_atoms[: min(50, entity_1_atoms.shape[0]), :]
-
-                min_distance = (
-                    torch.cdist(entity_0_sample, entity_1_sample).min().item()
-                )
-                ranked_logger.info(
-                    f"Min inter-chain distance after symmetry: {min_distance:.2f} Å"
-                )
-
-                # Also log the centers of each entity
-                entity_0_center = entity_0_atoms.mean(dim=0)
-                entity_1_center = entity_1_atoms.mean(dim=0)
-                center_distance = torch.norm(entity_0_center - entity_1_center).item()
-                ranked_logger.info(
-                    f"Distance between chain centers: {center_distance:.2f} Å"
-                )
 
     return sym_X_L
