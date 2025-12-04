@@ -391,6 +391,26 @@ def ensure_input_is_abspath(args: dict, path: PathLike | None):
     return args
 
 
+def ensure_inference_sampler_matches_design_spec(design_spec: dict, inference_sampler: dict | None = None):
+    """
+    Ensure the inference sampler is set to the correct sampler for the design specification.
+    Args:
+        design_spec: Design specification dictionary
+        inference_sampler: Inference sampler dictionary
+    """
+    has_symmetry_specification = [
+        True if "symmetry" in item.keys() else False for item in design_spec.values()
+    ]
+    if any(has_symmetry_specification):
+        if (
+            inference_sampler is None
+            or inference_sampler.get("kind", "default") != "symmetry"
+        ):
+            raise ValueError(
+                "You requested for symmetric designs, but inference sampler is not set to symmetry. "
+                "Please add inference_sampler.kind='symmetry' to your command."
+            )
+
 #################################################################################
 # Custom infer_ori functions
 #################################################################################

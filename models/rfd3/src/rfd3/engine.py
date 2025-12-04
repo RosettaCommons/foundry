@@ -23,7 +23,10 @@ from rfd3.inference.datasets import (
 )
 from rfd3.inference.input_parsing import DesignInputSpecification
 from rfd3.model.inference_sampler import SampleDiffusionConfig
-from rfd3.utils.inference import ensure_input_is_abspath
+from rfd3.utils.inference import ( 
+    ensure_input_is_abspath,
+    ensure_inference_sampler_matches_design_spec,
+)
 from rfd3.utils.io import (
     CIF_LIKE_EXTENSIONS,
     build_stack_from_atom_array_and_batched_coords,
@@ -171,6 +174,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         )
         # save
         self.specification_overrides = dict(specification or {})
+        self.inference_sampler_overrides = dict(inference_sampler or {})
 
         # Setup output directories and args
         self.global_prefix = global_prefix
@@ -209,6 +213,9 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         design_specifications = self._multiply_specifications(
             inputs=inputs,
             n_batches=n_batches,
+        )
+        ensure_inference_sampler_matches_design_spec(
+            design_specifications, self.inference_sampler_overrides
         )
         # init before
         self.initialize()

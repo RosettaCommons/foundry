@@ -4,12 +4,8 @@ from rfd3.inference.symmetry.frames import (
     get_symmetry_frames_from_symmetry_id,
 )
 
-from foundry.utils.ddp import RankedLogger
-
 FIXED_TRANSFORM_ID = -1
 FIXED_ENTITY_ID = -1
-ranked_logger = RankedLogger(__name__, rank_zero_only=True)
-
 
 ########################################################
 # Symmetry annotations
@@ -28,7 +24,7 @@ def add_sym_annotations(atom_array, sym_conf):
     is_asu = np.full(n, True, dtype=np.bool_)
     atom_array.set_annotation("is_sym_asu", is_asu)
     # symmetry_id
-    symmetry_ids = np.full(n, sym_conf.get("id"), dtype="U6")
+    symmetry_ids = np.full(n, sym_conf.id, dtype="U6")
     atom_array.set_annotation("symmetry_id", symmetry_ids)
     return atom_array
 
