@@ -1,5 +1,11 @@
 # De novo Design of Biomolecular Interactions with RFdiffusion3
 
+RFdiffusion3 (RFD3) is a diffusion method that can design protein structures 
+under complex constraints. 
+
+This repository contains both the training and inference code, and
+both are described in more detail below. 
+
 <p align="center">
   <img src="docs/.assets/overview.png" alt="All-atom design with RFD3">
 </p>
@@ -17,7 +23,7 @@ This sets `FOUNDRY_CHECKPOINTS_DIR` and will in future look for checkpoints in t
 
 ## Run Inference
 
-To run inference:
+To run inference (with foundry installed in your environment, or RFD3 & Foundry src in PYTHONPATH):
 ```bash
 rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json ckpt_path=null skip_existing=False dump_trajectories=True align_trajectory_structures=True
 ```
@@ -29,9 +35,26 @@ Additional unecessary args here are added:
 
 The output directory will automatically be created.
 
-For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `models/rfd3/configs/inference_engine/rfdiffusion3.yaml`.
+For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `foundry/models/rfd3/configs/inference_engine/rfdiffusion3.yaml` for even more options.
 
 ## Further example jsons for different applications
+Additional examples are broken up by use case. If you have cloned the
+repository, matching `.json` files are in `foundry/models/rfd3/docs`
+that can be run directly, similar to the previous example. 
+
+In the examples the paths to the input files are specified assuming
+that you are running the examples from the `foundry/models/rfd3/docs`
+directory. If you would like to run RFD3 from a different location, 
+you will need to change the path in the `.json` file(s) before running.
+
+### Install HBPLUS for hydrogen bond conditioning:
+One of the examples shows how to incorporate hydrogen bond conditioning 
+into your designs. To make use of this feature, you will need to 
+additionally complete the following steps:
+
+1. Download hbplus from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
+2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
+3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
 
 <table>
   <tr>
@@ -59,20 +82,6 @@ For full details on how to specify inputs, see the [input specification document
     </td>
   </tr>
 </table>
-
-To run inference
-```bash
-rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json dump_trajectories=True
-```
-
-> [!NOTE]
-> This demo will take a very long amount of time if run on a
-> CPU instead of a GPU. On a GPU, this should take on the
-> order of 10 minutes.
-
-The output directory will automatically be created.
-
-For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `models/rfd3/configs/inference_engine/rfdiffusion3.yaml`.
 
 ## Training:
 
@@ -116,7 +125,6 @@ uv run python models/rfd3/src/rfd3/train.py experiment=pretrain logger=csv
 
 ### Install HBPLUS for training with hydrogen bond conditioning:
 
-
 1. Download hbplus from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
 2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
 3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
@@ -140,7 +148,8 @@ Notably, fabric must receive `devices_per_node` and the number of nodes (`num_no
 
 **Hydra configs and experiments:** In the example above, the `experiment` argument is a hydra-native argument. For RFD3, it will look for config overrides in `/models/rfd3/configs/experiment/<experiment-name>.yaml` and apply them on top of the base configs
 
-**Conditioning during training:** RFD3 is trained on a multitude of conditioning tasks, and does so by randomly 'creating problems' for it to solve during training. For example, for a random training example it gets a random set of tokens to be 'motif tokens', then subsets those to whether specific atoms should be fixed, and further subsets the information to whether, say, sequence, coordinates or the sequence index should be fixed. It's pretty complicated to evaluate and it's more of an art than a science how this was put together; which means there's likely some optimization further work can do! 
+**Conditioning during training:** RFD3 is trained on a multitude of conditioning tasks, and does so by randomly 'creating problems' for it to solve during training. For example, for a random training example it gets a random set of tokens to be 'motif tokens', then subsets those to whether specific atoms should be fixed, and further subsets the information to whether, say, sequence, coordinates or the sequence index should be fixed. It's pretty complicated to evaluate and how it was put together was more of an art than a science. There's likely still room for 
+further optimization!
 
 In `models/rfd3/configs/datasets/design_base.yaml` there's the shared configs for all datasets under `global_transform_args`. The dials that control the conditioning described above go under `training_conditions`, where for example `tipatom` - a specific preset conditioning sampler which more frequently fixes few tokens with few atoms - and others can be found.
 
