@@ -22,7 +22,7 @@ pip install rc-foundry[rfd3]
 ```bash
 foundry install rfd3 --checkpoint-dir <path/to/ckpt/dir>
 ```
-This sets `FOUNDRY_CHECKPOINTS_DIR` and will in future look for checkpoints in that directory, allowing you to run inference without supplying the checkpoint path. The checkpoint directory is optional, defaulting to `~/.foundry/checkpoints` if unset.
+This sets `FOUNDRY_CHECKPOINT_DIRS` and will in future look for checkpoints in that directory (alongside the default `~/.foundry/checkpoints` location), allowing you to run inference without supplying the checkpoint path. The checkpoint directory is optional, defaulting to `~/.foundry/checkpoints` if unset.
 
 ## Running Inference
 
