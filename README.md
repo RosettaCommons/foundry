@@ -15,12 +15,12 @@ pip install rc-foundry[all]
 ```
 foundry install base-models --checkpoint-dir <path/to/ckpt/dir>
 ```
-where `checkpoint-dir` will be `~/.foundry/checkpoints` by default. Once installed, foundry sets the env `FOUNDRY_CHECKPOINTS_DIR` which it will use during inference or subsequent commands to find the checkpoints. `base-models` installs the latest RFD3, RF3 and MPNN variants - you can also download all of the models supported (including multiple checkpoints of RF3) with `all`, or by listing the models sequentially (e.g. `foundry install rfd3 rf3 ...`).
+where `checkpoint-dir` will be `~/.foundry/checkpoints` by default. Foundry always searches `~/.foundry/checkpoints` plus any colon-separated entries in `$FOUNDRY_CHECKPOINT_DIRS` during inference or subsequent commands to find checkpoints. `base-models` installs the latest RFD3, RF3 and MPNN variants - you can also download all of the models supported (including multiple checkpoints of RF3) with `all`, or by listing the models sequentially (e.g. `foundry install rfd3 rf3 ...`).
 To list the registry of available checkpoints:
 ```
 foundry list-available
 ```
-To check what you already have downloaded (defaults to `$FOUNDRY_CHECKPOINTS_DIR` if set):
+To check what you already have downloaded (searches `~/.foundry/checkpoints` plus `$FOUNDRY_CHECKPOINT_DIRS` if set):
 ```
 foundry list-installed
 ```
