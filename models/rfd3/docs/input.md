@@ -171,3 +171,9 @@ Below is an example of what the output should look like (diffusion outputs in te
   The sequence head from RFD3 logs it's confidence for each token in the output structure, you can run `spectrum b` in `pymol` to see it. It usually doesn't mean anything but can give you some idea if the model has gone vastly distribution if the entropy is high (uncertain assignment of sequence).
   </details>
 </details>
+
+## Further examples of InputSelection syntax
+Below is a reference for more examples of different ways you can specify inputs to select from your pdb in configs; we hope the community can find use in this flexible system for future models!
+<p align="center">
+  <img src=".assets/input_selection_large.png" alt="Input selection syntax" width=650>
+</p>
