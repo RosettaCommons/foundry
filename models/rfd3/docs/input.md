@@ -15,7 +15,7 @@
 
 ## Quick start
 
-Below is a quick example of the JSON structure:
+JSON inputs take the following top-level structure;
 ```json
 {
     "spec-1": {  // First design configuration
@@ -25,7 +25,7 @@ Below is a quick example of the JSON structure:
       "ligand": "HAX,OAA",  // Selects ligands HAX and OAA based on res name in the input
     },
     "spec-2": {
-      // ... additional design configurations to be run 
+      // ... args for the second (independent) configuration for design. 
     }
 }
 ```
@@ -136,43 +136,33 @@ Below is an example of what the output should look like (diffusion outputs in te
 
 ## FAQ / gotchas
 <details>
+  <details>
+  <summary><b>Can I guide on secondary structure?</b></summary>
+  Currently no - in future models we may do so, however, you can use `is_non_loopy: true` to make fewer loops. We find this produces a lot more helices and fewer loops (and less sheets).
+  </details>
+
   <summary><b>Do I need select_fixed_atoms & select_unfixed_sequence every time?</b></summary>
-
+  
   No. Defaults apply when input present.
-  </details>
-
-  <details>
-  <summary><b>What does "ALL" vs "TIP" in unindex mean?</b></summary>
-
-  - **`ALL`** → copy full residue
-  - **`TIP`** → fix only sidechain tip atoms
-  </details>
-
-  <details>
-  <summary><b>Can selections overlap?</b></summary>
-
-  Only certain ones (fixed vs unfixed) may; RASA & donor/acceptor cannot.
-  </details>
-
-  <details>
-  <summary><b>How to fix backbone but redesign sidechains?</b></summary>
-
-  `redesign_motif_sidechains: true`
   </details>
 
   <details>
   <summary><b>Why "Input provided but unused"?</b></summary>
 
-  You gave input but no contig, unindex, or partial_t.
+  This indicates you gave an input pdb / cif (not `input: null`) but no contig, unindex, ligand or partial_t.
   </details>
 
   <details>
   <summary><b>What do the logged bfactors mean?</b></summary>
+
   The sequence head from RFD3 logs it's confidence for each token in the output structure, you can run `spectrum b` in `pymol` to see it. It usually doesn't mean anything but can give you some idea if the model has gone vastly distribution if the entropy is high (uncertain assignment of sequence).
   </details>
 </details>
 
+Let us know if you have any additional questions, we'd be happy to answer them!
+
 ## Further examples of InputSelection syntax
+
 Below is a reference for more examples of different ways you can specify inputs to select from your pdb in configs; we hope the community can find use in this flexible system for future models!
 <p align="center">
   <img src=".assets/input_selection_large.png" alt="Input selection syntax" width=650>
