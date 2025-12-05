@@ -46,7 +46,7 @@ def get_default_checkpoint_dir() -> Path:
     return get_default_checkpoint_dirs()[0]
 
 
-def append_checkpoint_to_env(checkpoint_dirs: list[Path]) -> None:
+def append_checkpoint_to_env(checkpoint_dirs: list[Path]) -> bool:
     dotenv_path = dotenv.find_dotenv()
     if dotenv_path:
         checkpoint_dirs = _normalize_paths(checkpoint_dirs)
