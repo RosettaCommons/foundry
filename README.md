@@ -21,6 +21,15 @@ This will download all the models supported (including multiple checkpoints of R
 foundry install rfd3 ligandmpnn rf3 --checkpoint-dir  <path/to/ckpt/dir>
 ```
 
+List the registry of available checkpoints with:
+```
+foundry list-available
+```
+Check what you already have downloaded (defaults to `$FOUNDRY_CHECKPOINTS_DIR` if set) with:
+```
+foundry list-installed --checkpoint-dir <path/to/ckpt/dir>
+```
+
 >*See `examples/all.ipynb` for how to run each model in a notebook.*
 
 ### Google Colab
