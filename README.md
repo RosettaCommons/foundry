@@ -14,12 +14,9 @@ pip install rc-foundry[all]
 **Downloading weights** All models can be downloaded to a target folder with:
 
 ```
-foundry install all --checkpoint-dir <path/to/ckpt/dir>
+foundry install base-models --checkpoint-dir <path/to/ckpt/dir>
 ```
-This will download all the models supported (including multiple checkpoints of RF3) but as a beginner you can start with:
-```
-foundry install rfd3 ligandmpnn rf3 --checkpoint-dir  <path/to/ckpt/dir>
-```
+You can also download all of the models supported (including multiple checkpoints of RF3) with `all` instead of `base-models`, which installs the latest RFD3, RF3 and MPNN variants.
 
 List the registry of available checkpoints with:
 ```
@@ -27,7 +24,7 @@ foundry list-available
 ```
 Check what you already have downloaded (defaults to `$FOUNDRY_CHECKPOINTS_DIR` if set) with:
 ```
-foundry list-installed --checkpoint-dir <path/to/ckpt/dir>
+foundry list-installed
 ```
 
 >*See `examples/all.ipynb` for how to run each model in a notebook.*

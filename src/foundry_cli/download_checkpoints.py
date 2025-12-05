@@ -155,6 +155,8 @@ def install(
 
     # Expand 'all' to all available models
     if "all" in models:
+        models_to_install = list(REGISTERED_CHECKPOINTS.keys())
+    elif "base-models" in models:
         models_to_install = ["rfd3", "proteinmpnn", "ligandmpnn", "rf3"]
     else:
         models_to_install = models
