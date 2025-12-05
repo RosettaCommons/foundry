@@ -1,4 +1,4 @@
-# RFdiffusion3 — Input specification (dialect **2**)
+# RFdiffusion3 — Input Specification & Command-line arguments
 
 ---
 
@@ -29,6 +29,23 @@ JSON inputs take the following top-level structure;
     }
 }
 ```
+
+You can then run inference at the command line with:
+```
+rfd3 design out_dir=<path/to/outdir> inputs=<path/to/inputs>
+```
+In this document, we detail the syntax of the config structure.
+
+## CLI arguments
+Key CLI arguments (from the default config) to know include:
+- `n_batches` — number of batches to generate per input key (default: 1).
+- `diffusion_batch_size` — number of diffusion samples per batch (default: 8).
+- `specification` — JSON overrides for the per-example InputSpecification (default: `{}`). For example, you can run `rfd3 design inputs=null specification.length=200` for a quick debug of creating a 200-length protein.
+- `inference_sampler.num_timesteps` — diffusion timesteps for sampling (default: 200).
+- `inference_sampler.step_scale` — scales diffusion step size; higher → less diverse, more designable (default: 1.5).
+- `low_memory_mode` — memory-efficient tokenization mode; set `True` if GPU RAM is tight (default: False).
+
+The full config of default arguments that are applied can be seen in [inference_engine/rfdiffusion3.yaml](../configs/inference_engine/rfdiffusion3.yaml)
 
 ## InputSpecification fields
 
@@ -88,7 +105,7 @@ select_fixed_atoms:
 ```
 
 <p align="center">
-  <img src=".assets/input_selection.png" alt="InputSelection language for foundry">
+  <img src=".assets/input_selection.png" alt="InputSelection language for foundry" width=500>
 </p>
 
 ## Unindexing specifics
