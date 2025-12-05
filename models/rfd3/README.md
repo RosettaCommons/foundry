@@ -10,18 +10,21 @@ both are described in more detail below.
   <img src="docs/.assets/overview.png" alt="All-atom design with RFD3">
 </p>
 
-## Get Started
-1. Install RFdiffusion3. See [Main README](../../README.md) for instructions how to install all models to run full pipeline (recommended). If you have already installed all the models skip [here](#run-inference). 
+> [!NOTE]
+> Looking for config documentation? See [here](./docs/input.md)
+
+## Getting Started
+1. Install RFdiffusion3. See [Main README](../../README.md) for instructions how to install all models to run full pipeline (recommended). If you have already installed all the models skip [here](#run-inference).
 ```bash
 pip install rc-foundry[rfd3]
 ```
 2. Download checkpoint to your desired checkpoint location.
 ```bash
-foundry install rfd3 --checkpoint-dir /path/to/ckpt/dir
+foundry install rfd3 --checkpoint-dir <path/to/ckpt/dir>
 ```
 This sets `FOUNDRY_CHECKPOINTS_DIR` and will in future look for checkpoints in that directory, allowing you to run inference without supplying the checkpoint path. The checkpoint directory is optional, defaulting to `~/.foundry/checkpoints` if unset.
 
-## Run Inference
+## Running Inference
 
 To run inference (with foundry installed in your environment, or RFD3 & Foundry src in PYTHONPATH):
 ```bash
@@ -54,15 +57,6 @@ that you are running the examples from the `foundry/models/rfd3/docs`
 directory. If you would like to run RFD3 from a different location, 
 you will need to change the path in the `.json` file(s) before running.
 
-### Install HBPLUS for hydrogen bond conditioning:
-One of the examples shows how to incorporate hydrogen bond conditioning 
-into your designs. To make use of this feature, you will need to 
-additionally complete the following steps:
-
-1. Download hbplus from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
-2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
-3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
-
 <table>
   <tr>
     <td align="center">
@@ -90,7 +84,7 @@ additionally complete the following steps:
   </tr>
 </table>
 
-## Training:
+## Training and Fine-Tuning
 
 We make available to the community not only the weights to run RFdiffusion3 but also the complete training code, easily extendable to additional use cases. Any AtomWorks-compatible dataset (and thus, any collection of structure files) can be readily incorporated and used for training or fine-tuning.
 
@@ -112,9 +106,10 @@ RFdiffusion3 supports arbitrary datasets of structure files for training and fin
 
 After setting up Hydra configs, launch a training run:
 ```bash
-uv run python models/rfd3/src/rfd3/train.py experiment=pretrain
+uv run python models/rfd3/src/rfd3/train.py experiment=pretrain ckpt_path=<path/to/ckpt>
 ```
 
+Supplying `ckpt_path=null` (default) will start with fresh weights.
 See the [path configs](/models/rfd3/configs/paths/) to customize data input and log output directories.
 
 ### Logging Configuration
@@ -161,6 +156,17 @@ further optimization!
 In `models/rfd3/configs/datasets/design_base.yaml` there's the shared configs for all datasets under `global_transform_args`. The dials that control the conditioning described above go under `training_conditions`, where for example `tipatom` - a specific preset conditioning sampler which more frequently fixes few tokens with few atoms - and others can be found.
 
 **Training with WandB:** We strongly recommend tracking your runs via wandb. To use it, simply have your WANDB_API_KEY set and use the wandb logger. For more details see [here](wandb.ai)
+
+# Appendix
+
+## Install HBPLUS for hydrogen bond conditioning:
+One of the examples shows how to incorporate hydrogen bond conditioning 
+into your designs. To make use of this feature, you will need to 
+additionally complete the following steps:
+
+1. Download hbplus from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
+2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
+3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
 
 ## Citation
 

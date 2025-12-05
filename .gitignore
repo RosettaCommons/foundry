@@ -1,4 +1,6 @@
 # For docs / outputs from example notebooks;
+demo/*/**.cif*
+demo/*/**.json
 examples/*.cif
 **.ckpt
 **.pt

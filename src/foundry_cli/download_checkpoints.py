@@ -29,6 +29,13 @@ app = typer.Typer(help="Foundry model checkpoint installation utilities")
 console = Console()
 
 
+def _resolve_checkpoint_dir(checkpoint_dir: Optional[Path]) -> Path:
+    """Return user-specified checkpoint dir or fall back to default."""
+    return (
+        checkpoint_dir if checkpoint_dir is not None else get_default_checkpoint_dir()
+    )
+
+
 def download_file(url: str, dest: Path, verify_hash: Optional[str] = None) -> None:
     """Download a file with progress bar and optional hash verification.
 
@@ -123,7 +130,7 @@ def install_model(model_name: str, checkpoint_dir: Path, force: bool = False) ->
 def install(
     models: list[str] = typer.Argument(
         ...,
-        help="Models to install: 'all', 'rfd3', 'rf3', 'mpnn', or combination",
+        help="Models to install: 'all', 'rfd3', 'rf3', 'mpnn', or a combination thereof",
     ),
     checkpoint_dir: Optional[Path] = typer.Option(
         None,
@@ -136,24 +143,21 @@ def install(
     ),
 ):
     """Install model checkpoints for foundry.
-
     Examples:
-
         foundry install all
-
         foundry install rfd3 rf3
-
         foundry install proteinmpnn --checkpoint-dir ./checkpoints
     """
     # Determine checkpoint directory
-    if checkpoint_dir is None:
-        checkpoint_dir = get_default_checkpoint_dir()
+    checkpoint_dir = _resolve_checkpoint_dir(checkpoint_dir)
 
     console.print(f"[bold]Checkpoint directory:[/bold] {checkpoint_dir}")
     console.print()
 
     # Expand 'all' to all available models
     if "all" in models:
+        models_to_install = list(REGISTERED_CHECKPOINTS.keys())
+    elif "base-models" in models:
         models_to_install = ["rfd3", "proteinmpnn", "ligandmpnn", "rf3"]
     else:
         models_to_install = models
@@ -177,26 +181,18 @@ def install(
     console.print("[bold green]Installation complete![/bold green]")
 
 
-@app.command(name="list")
-def list_models():
+@app.command(name="list-available")
+def list_available():
     """List available model checkpoints."""
     console.print("[bold]Available models:[/bold]\n")
     for name, info in REGISTERED_CHECKPOINTS.items():
         console.print(f"  [cyan]{name:8}[/cyan] - {info.description}")
 
 
-@app.command()
-def show(
-    checkpoint_dir: Optional[Path] = typer.Option(
-        None,
-        "--checkpoint-dir",
-        "-d",
-        help="Checkpoint directory to show",
-    ),
-):
-    """Show installed checkpoints."""
-    if checkpoint_dir is None:
-        checkpoint_dir = get_default_checkpoint_dir()
+@app.command(name="list-installed")
+def list_installed():
+    """List installed checkpoints and their sizes."""
+    checkpoint_dir = _resolve_checkpoint_dir(None)
 
     if not checkpoint_dir.exists():
         console.print(
@@ -204,7 +200,9 @@ def show(
         )
         raise typer.Exit(0)
 
-    checkpoint_files = list(checkpoint_dir.glob("*.ckpt"))
+    checkpoint_files = list(checkpoint_dir.glob("*.ckpt")) + list(
+        checkpoint_dir.glob("*.pt")
+    )
     if not checkpoint_files:
         console.print(f"[yellow]No checkpoint files found in {checkpoint_dir}[/yellow]")
         raise typer.Exit(0)
@@ -219,21 +217,14 @@ def show(
     console.print(f"\n[bold]Total:[/bold] {total_size:.2f} GB")
 
 
-@app.command()
+@app.command(name="clean")
 def clean(
-    checkpoint_dir: Optional[Path] = typer.Option(
-        None,
-        "--checkpoint-dir",
-        "-d",
-        help="Checkpoint directory to clean",
-    ),
     confirm: bool = typer.Option(
         True, "--confirm/--no-confirm", help="Ask for confirmation before deleting"
     ),
 ):
     """Remove all downloaded checkpoints."""
-    if checkpoint_dir is None:
-        checkpoint_dir = get_default_checkpoint_dir()
+    checkpoint_dir = _resolve_checkpoint_dir(None)
 
     if not checkpoint_dir.exists():
         console.print(f"[yellow]No checkpoints found at {checkpoint_dir}[/yellow]")
