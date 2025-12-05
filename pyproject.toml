@@ -102,6 +102,8 @@ fallback-version = "0.0.0"
 
 [tool.hatch.build.hooks.vcs]
 version-file = "src/foundry/version.py"
+tag-pattern = "^v(?P<version>.*)$"
+local-scheme = "no-local-version"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -191,3 +193,9 @@ ignore = [
 
 [tool.pyright]
 typeCheckingMode = "off"
+
+[dependency-groups]
+dev = [
+    "build>=1.3.0",
+    "hatchling>=1.28.0",
+]
