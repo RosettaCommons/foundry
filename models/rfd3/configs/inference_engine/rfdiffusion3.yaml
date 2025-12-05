@@ -61,5 +61,5 @@ global_prefix: null
 dump_prediction_metadata_json: True
 dump_trajectories: False
 align_trajectory_structures: False
-prevalidate_inputs: True
+prevalidate_inputs: False
 low_memory_mode: False # False for standard mode, True for memory efficient tokenization mode

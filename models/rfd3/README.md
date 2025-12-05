@@ -25,12 +25,13 @@ This sets `FOUNDRY_CHECKPOINTS_DIR` and will in future look for checkpoints in t
 
 To run inference (with foundry installed in your environment, or RFD3 & Foundry src in PYTHONPATH):
 ```bash
-rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json skip_existing=False dump_trajectories=True
+rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json skip_existing=False dump_trajectories=True prevalidate_inputs=True
 ```
 
 Additional unecessary args here are added:
 - Including dumping and aligning trajectory structures can be useful for debugging your setup or making cool gifs.
 - Printing the config and dumping trajectories are turned off by default, but turned on here for verbosity
+- `prevalidate_inputs` will check that your inputs are valid before running infernece. Helpful if your json has a number of different configs you want to debug / double check are valid before loading the checkpoints.
 - Only `out_dir` and `inputs` are required
 
 The output directory will automatically be created.
