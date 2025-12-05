@@ -247,7 +247,7 @@ def clean(
 
     console.print("[bold]Files to delete:[/bold]")
     total_size = 0
-    for ckpt in sorted(checkpoint_files, key=lambda path: str(path)):
+    for ckpt in sorted(checkpoint_files, key=str):
         size = ckpt.stat().st_size / (1024**3)  # GB
         total_size += size
         console.print(f"  {ckpt} ({size:.2f} GB)")
