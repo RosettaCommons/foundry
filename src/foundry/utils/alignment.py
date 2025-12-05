@@ -29,7 +29,7 @@ def weighted_rigid_align(
     if w_L is None:
         w_L = torch.ones_like(X_L[..., 0])
     else:
-        if X_L.ndim == 1:
+        if w_L.ndim == 1:
             w_L = w_L[None]
         w_L = w_L.to(torch.float32)
 
