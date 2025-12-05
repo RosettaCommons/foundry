@@ -116,7 +116,7 @@ In the following example, RFD3 will noise out by 15 angstroms and constrain atom
         "ligand": "OQO", 
         "partial_t": 15.0,
         "unindex": "A431,A572-573",
-        "fixed_atoms": {
+        "select_fixed_atoms": {
             "A431": "TIP",
             "A572": "BKBN",
             "A573": "BKBN"
