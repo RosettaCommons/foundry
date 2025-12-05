@@ -30,6 +30,11 @@ def get_default_checkpoint_dirs() -> list[Path]:
     FOUNDRY_CHECKPOINT_DIRS environment variable.
     """
     env_dirs = os.environ.get("FOUNDRY_CHECKPOINT_DIRS", "")
+
+    # For backward compatibility, also check FOUNDRY_CHECKPOINTS_DIR
+    if not env_dirs:
+        env_dirs = os.environ.get("FOUNDRY_CHECKPOINTS_DIR", "")
+
     extra_dirs: list[Path] = []
     if env_dirs:
         extra_dirs = [Path(p.strip()) for p in env_dirs.split(":") if p.strip()]
