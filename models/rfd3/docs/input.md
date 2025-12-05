@@ -155,7 +155,7 @@ Below is an example of what the output should look like (diffusion outputs in te
   <details>
   <summary><b>What do the logged bfactors mean?</b></summary>
 
-  The sequence head from RFD3 logs it's confidence for each token in the output structure, you can run `spectrum b` in `pymol` to see it. It usually doesn't mean anything but can give you some idea if the model has gone vastly distribution if the entropy is high (uncertain assignment of sequence).
+  The sequence head from RFD3 logs its confidence for each token in the output structure, you can run `spectrum b` in `pymol` to see it. It usually doesn't mean anything but can give you some idea if the model has gone vastly distribution if the entropy is high (uncertain assignment of sequence).
   </details>
 </details>
 
