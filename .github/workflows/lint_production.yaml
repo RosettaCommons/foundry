@@ -32,6 +32,6 @@ jobs:
       - name: Install ruff
         run: pip install ruff==${{ env.RUFF_VERSION }}
       - name: Ruff format
-        run: ruff format --diff src tests scripts notebooks
+        run: ruff format --diff src models tests
       - name: Ruff check
-        run: ruff check src tests scripts notebooks
+        run: ruff check src models tests
