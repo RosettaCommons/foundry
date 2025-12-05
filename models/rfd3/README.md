@@ -10,7 +10,7 @@ both are described in more detail below.
   <img src="docs/.assets/overview.png" alt="All-atom design with RFD3">
 </p>
 
-> [!INFO]
+> [!NOTE]
 > Looking for config documentation? See [here](./docs/input.md)
 
 ## Getting Started
