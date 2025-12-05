@@ -199,7 +199,9 @@ def list_installed():
         )
         raise typer.Exit(0)
 
-    checkpoint_files = list(checkpoint_dir.glob("*.ckpt"))
+    checkpoint_files = list(checkpoint_dir.glob("*.ckpt")) + list(
+        checkpoint_dir.glob("*.pt")
+    )
     if not checkpoint_files:
         console.print(f"[yellow]No checkpoint files found in {checkpoint_dir}[/yellow]")
         raise typer.Exit(0)
