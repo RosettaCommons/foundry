@@ -187,9 +187,9 @@ def recursively_instantiate_datasets_and_samplers(
                 continue
 
             # (To use a MixedSampler, we must provide a "probability" key for each dataset)
-            assert "probability" in nested_dataset_cfg, (
-                "Expected 'probability' key in dataset configuration"
-            )
+            assert (
+                "probability" in nested_dataset_cfg
+            ), "Expected 'probability' key in dataset configuration"
             datasets_info.append(
                 {
                     **recursively_instantiate_datasets_and_samplers(
@@ -263,9 +263,7 @@ def assemble_distributed_loader(
             rank is not None
             and world_size is not None
             and n_examples_per_epoch is not None
-        ), (
-            "Rank, world_size, and n_examples_per_epoch must be provided for MixedSampler"
-        )
+        ), "Rank, world_size, and n_examples_per_epoch must be provided for MixedSampler"
         sampler = DistributedMixedSampler(
             datasets_info=sampler.datasets_info,
             num_replicas=world_size,
@@ -276,9 +274,9 @@ def assemble_distributed_loader(
         )
     elif isinstance(sampler, (RandomSampler, SequentialSampler)):
         # (If given a RandomSampler or SequentialSampler, we must convert to a DistributedSampler)
-        assert rank is not None and world_size is not None, (
-            "Rank and world_size must be provided for RandomSampler or SequentialSampler"
-        )
+        assert (
+            rank is not None and world_size is not None
+        ), "Rank and world_size must be provided for RandomSampler or SequentialSampler"
         sampler = DistributedSampler(
             dataset=dataset,
             num_replicas=world_size,
@@ -291,12 +289,12 @@ def assemble_distributed_loader(
         ranked_logger.info(f"Subsetting dataset to {len(dataset)} examples!")
     else:
         # (We assume we are already given a DistributedSampler or DistributedMixedSampler)
-        assert rank is None and world_size is None, (
-            "Rank and world_size will have no effect on the provided sampler and should be None"
-        )
-        assert isinstance(sampler, (DistributedSampler, DistributedMixedSampler)), (
-            "Invalid sampler type for distributed training."
-        )
+        assert (
+            rank is None and world_size is None
+        ), "Rank and world_size will have no effect on the provided sampler and should be None"
+        assert isinstance(
+            sampler, (DistributedSampler, DistributedMixedSampler)
+        ), "Invalid sampler type for distributed training."
 
     # ... wrap the composed dataset and sampler with a fallback mechanism, if needed
     if (
@@ -364,9 +362,9 @@ def assemble_val_loader_dict(
             # (Skip any None validation datasets; e.g., those overrode by the experiment config)
             continue
 
-        assert "dataset" in val_dataset, (
-            f"Expected 'dataset' key in validation dataset config for {val_dataset_name}"
-        )
+        assert (
+            "dataset" in val_dataset
+        ), f"Expected 'dataset' key in validation dataset config for {val_dataset_name}"
         dataset = hydra.utils.instantiate(
             val_dataset.dataset
         )  # directly instantiate the dataset
@@ -376,9 +374,9 @@ def assemble_val_loader_dict(
             key_to_balance = val_dataset.key_to_balance
             ranked_logger.info(f"Balancing dataset with key: {key_to_balance}")
 
-            assert key_to_balance in dataset.data.columns, (
-                f"Key {key_to_balance} not found in dataset columns!"
-            )
+            assert (
+                key_to_balance in dataset.data.columns
+            ), f"Key {key_to_balance} not found in dataset columns!"
 
             sampler = LoadBalancedDistributedSampler(
                 dataset=dataset,

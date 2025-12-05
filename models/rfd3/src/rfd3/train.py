@@ -127,9 +127,9 @@ def train(cfg: DictConfig) -> None:
     n_examples_per_epoch = cfg.trainer.n_examples_per_epoch
 
     # ... build the train dataset
-    assert "train" in cfg.datasets and cfg.datasets.train, (
-        "No 'train' dataloader configuration provided! If only performing validation, use `validate.py` instead."
-    )
+    assert (
+        "train" in cfg.datasets and cfg.datasets.train
+    ), "No 'train' dataloader configuration provided! If only performing validation, use `validate.py` instead."
     dataset_and_sampler = recursively_instantiate_datasets_and_samplers(
         cfg.datasets.train
     )

@@ -38,9 +38,9 @@ def test_unindexed_cleanup(example, is_inference):
     example = unindexed_pipes[is_inference](input)
     atom_array = example["atom_array"]
     assert atom_array.is_motif_atom_unindexed.sum() > 0
-    assert np.isnan(atom_array.coord).any(-1).sum() == 0, (
-        "Coords should not contain nans for this test"
-    )
+    assert (
+        np.isnan(atom_array.coord).any(-1).sum() == 0
+    ), "Coords should not contain nans for this test"
     # ... Assert cleanup of unindexed tokens yields the identity in the output during training
     atom_array.coord = np.nan_to_num(atom_array.coord)
     atom_array.set_annotation(

@@ -72,9 +72,9 @@ class BaseInferenceEngine:
         if "." not in str(ckpt_path):
             # Assume registered model
             name = str(ckpt_path)
-            assert name in REGISTERED_CHECKPOINTS, (
-                "Checkpoint provided not and not in registered checkpoints"
-            )
+            assert (
+                name in REGISTERED_CHECKPOINTS
+            ), "Checkpoint provided not and not in registered checkpoints"
             ckpt = REGISTERED_CHECKPOINTS[name]
 
             ckpt_path = ckpt.get_default_path()
@@ -83,10 +83,10 @@ class BaseInferenceEngine:
                     str(ckpt_path)
                 )
             )
-            assert os.path.exists(ckpt_path), (
-                "Invalid checkpoint: {}. And could not find checkpoint in default installation location: {}".format(
-                    name, ckpt_path
-                )
+            assert os.path.exists(
+                ckpt_path
+            ), "Invalid checkpoint: {}. And could not find checkpoint in default installation location: {}".format(
+                name, ckpt_path
             )
         self.ckpt_path = Path(ckpt_path).resolve()
 

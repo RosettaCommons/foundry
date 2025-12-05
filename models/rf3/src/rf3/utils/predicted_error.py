@@ -36,17 +36,17 @@ def get_mean_atomwise_plddt(
     Returns:
         plddt: Tensor of shape [B,] with the mean atom-wise pLDDT for each batch
     """
-    assert plddt_logits.ndim == 3, (
-        "plddt_logits must be a 3D tensor (B, n_token, max_atoms_in_a_token * n_bins)"
-    )
+    assert (
+        plddt_logits.ndim == 3
+    ), "plddt_logits must be a 3D tensor (B, n_token, max_atoms_in_a_token * n_bins)"
 
     # TODO: Replace with the last dimension of is_real_atom; right now that number is too large (36) because it includes hydrogens
     max_atoms_in_a_token = NHEAVY
 
     # Since the pLDDT logits have the last dimension (max_atoms_in_a_token * n_bins), we can calculate n_bins directly
-    assert plddt_logits.shape[-1] % max_atoms_in_a_token == 0, (
-        "The last dimension of plddt_logits must be divisible by max_atoms_in_a_token!"
-    )
+    assert (
+        plddt_logits.shape[-1] % max_atoms_in_a_token == 0
+    ), "The last dimension of plddt_logits must be divisible by max_atoms_in_a_token!"
     n_bins = plddt_logits.shape[-1] // max_atoms_in_a_token
 
     # ... reshape to match what unbin_logits expects

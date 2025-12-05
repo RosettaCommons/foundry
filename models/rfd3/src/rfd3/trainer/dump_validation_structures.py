@@ -94,9 +94,9 @@ class DumpValidationStructuresCallback(BaseCallback):
             )
             return
 
-        assert "network_output" in outputs, (
-            "Validation outputs must contain `network_output` to dump structures!"
-        )
+        assert (
+            "network_output" in outputs
+        ), "Validation outputs must contain `network_output` to dump structures!"
 
         network_output = outputs["network_output"]
         atom_array_stack = outputs["predicted_atom_array_stack"]

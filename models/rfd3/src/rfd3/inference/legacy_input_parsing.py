@@ -64,10 +64,8 @@ def assert_non_intersecting_contigs(indexed_components, unindexed_components):
             )
             for unindexed_component in unindexed_components
         ]
-    ), (
-        "Unindexed residues must not be part of the indexing contig. got: {} and {}".format(
-            unindexed_components, indexed_components
-        )
+    ), "Unindexed residues must not be part of the indexing contig. got: {} and {}".format(
+        unindexed_components, indexed_components
     )
 
 
@@ -85,9 +83,9 @@ def set_atom_level_argument(atom_array, args, name: str):
                 mask = component_mask & np.isin(
                     atom_array.atom_name, np.array(names.split(","))
                 )
-                assert mask.sum() == len(names.split(",")), (
-                    f"Not all atoms in {names} found in {atom_array.atom_name}"
-                )
+                assert mask.sum() == len(
+                    names.split(",")
+                ), f"Not all atoms in {names} found in {atom_array.atom_name}"
 
                 atom_idxs_selected = atom_idxs[mask]
                 atom_values[atom_idxs_selected] = value
@@ -117,10 +115,10 @@ def fetch_motif_residue_(
     the original residue is a glycine if sequence is masked during inference.
     """
 
-    assert src_atom_array is not None, (
-        "Motif provided in contigs, but no input provided. input={} contig={}".format(
-            input, components
-        )
+    assert (
+        src_atom_array is not None
+    ), "Motif provided in contigs, but no input provided. input={} contig={}".format(
+        input, components
     )
 
     # ... Fetch residue in the input atom array
@@ -378,9 +376,9 @@ def accumulate_components(
             component=component,
         )
 
-        assert len(get_token_starts(atom_array_insert)) == n, (
-            f"Mismatch in number of residues: expected {n}, got {len(get_token_starts(atom_array_insert))} in \n{atom_array_insert}"
-        )
+        assert (
+            len(get_token_starts(atom_array_insert)) == n
+        ), f"Mismatch in number of residues: expected {n}, got {len(get_token_starts(atom_array_insert))} in \n{atom_array_insert}"
 
         # ... Insert & Increment residue ID
         atom_array_accum.append(atom_array_insert)

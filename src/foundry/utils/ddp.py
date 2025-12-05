@@ -34,9 +34,9 @@ def set_accelerator_based_on_availability(cfg: dict | DictConfig):
         )
         assert "trainer" in cfg, "Configuration object must have a 'trainer' key."
         for key in ["accelerator", "devices_per_node", "num_nodes"]:
-            assert key in cfg.trainer, (
-                f"Configuration object must have a 'trainer.{key}' key."
-            )
+            assert (
+                key in cfg.trainer
+            ), f"Configuration object must have a 'trainer.{key}' key."
 
         # Override accelerator settings
         cfg.trainer.accelerator = "cpu"

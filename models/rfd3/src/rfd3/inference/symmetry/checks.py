@@ -26,9 +26,9 @@ def check_symmetry_config(
 
     is_unsym_motif = np.zeros(atom_array.shape[0], dtype=bool)
     if sym_conf.is_unsym_motif:
-        assert src_atom_array is not None, (
-            "Source atom array must be provided for symmetric motifs"
-        )
+        assert (
+            src_atom_array is not None
+        ), "Source atom array must be provided for symmetric motifs"
         unsym_motif_names = sym_conf.is_unsym_motif.split(",")
         unsym_motif_names = expand_contig_unsym_motif(unsym_motif_names)
         is_unsym_motif = get_unsym_motif_mask(atom_array, unsym_motif_names)

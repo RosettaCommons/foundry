@@ -355,83 +355,84 @@ class TestMPNNPipeline:
             37,
             3,
         ), f"X shape mismatch: expected ({L}, 37, 3), got {input_features['X'].shape}"
-        assert input_features["X"].dtype == torch.float32, (
-            f"X dtype mismatch: expected torch.float32, got {input_features['X'].dtype}"
-        )
+        assert (
+            input_features["X"].dtype == torch.float32
+        ), f"X dtype mismatch: expected torch.float32, got {input_features['X'].dtype}"
 
         # X_m: (L, 37) mask, int32
         assert input_features["X_m"].shape == (
             L,
             37,
         ), f"X_m shape mismatch: expected ({L}, 37), got {input_features['X_m'].shape}"
-        assert input_features["X_m"].dtype == torch.bool, (
-            f"X_m dtype mismatch: expected torch.bool, got {input_features['X_m'].dtype}"
-        )
+        assert (
+            input_features["X_m"].dtype == torch.bool
+        ), f"X_m dtype mismatch: expected torch.bool, got {input_features['X_m'].dtype}"
 
         # S: (L,) sequence, int64
-        assert input_features["S"].shape == (L,), (
-            f"S shape mismatch: expected ({L},), got {input_features['S'].shape}"
-        )
-        assert input_features["S"].dtype == torch.int64, (
-            f"S dtype mismatch: expected torch.int64, got {input_features['S'].dtype}"
-        )
+        assert input_features["S"].shape == (
+            L,
+        ), f"S shape mismatch: expected ({L},), got {input_features['S'].shape}"
+        assert (
+            input_features["S"].dtype == torch.int64
+        ), f"S dtype mismatch: expected torch.int64, got {input_features['S'].dtype}"
 
         # R_idx: (L,) residue indices, int32
-        assert input_features["R_idx"].shape == (L,), (
-            f"R_idx shape mismatch: expected ({L},), got {input_features['R_idx'].shape}"
-        )
-        assert input_features["R_idx"].dtype == torch.int32, (
-            f"R_idx dtype mismatch: expected torch.int32, got {input_features['R_idx'].dtype}"
-        )
+        assert input_features["R_idx"].shape == (
+            L,
+        ), f"R_idx shape mismatch: expected ({L},), got {input_features['R_idx'].shape}"
+        assert (
+            input_features["R_idx"].dtype == torch.int32
+        ), f"R_idx dtype mismatch: expected torch.int32, got {input_features['R_idx'].dtype}"
 
         # chain_labels: (L,) chain labels, int64
-        assert input_features["chain_labels"].shape == (L,), (
-            f"chain_labels shape mismatch: expected ({L},), got {input_features['chain_labels'].shape}"
-        )
-        assert input_features["chain_labels"].dtype == torch.int64, (
-            f"chain_labels dtype mismatch: expected torch.int64, got {input_features['chain_labels'].dtype}"
-        )
+        assert (
+            input_features["chain_labels"].shape == (L,)
+        ), f"chain_labels shape mismatch: expected ({L},), got {input_features['chain_labels'].shape}"
+        assert (
+            input_features["chain_labels"].dtype == torch.int64
+        ), f"chain_labels dtype mismatch: expected torch.int64, got {input_features['chain_labels'].dtype}"
 
         # residue_mask: (L,) all 1's, float32
-        assert input_features["residue_mask"].shape == (L,), (
-            f"residue_mask shape mismatch: expected ({L},), got {input_features['residue_mask'].shape}"
-        )
-        assert input_features["residue_mask"].dtype == torch.bool, (
-            f"residue_mask dtype mismatch: expected torch.bool, got {input_features['residue_mask'].dtype}"
-        )
-        assert torch.all(input_features["residue_mask"] == 1.0), (
-            "residue_mask should be all 1's"
-        )
+        assert (
+            input_features["residue_mask"].shape == (L,)
+        ), f"residue_mask shape mismatch: expected ({L},), got {input_features['residue_mask'].shape}"
+        assert (
+            input_features["residue_mask"].dtype == torch.bool
+        ), f"residue_mask dtype mismatch: expected torch.bool, got {input_features['residue_mask'].dtype}"
+        assert torch.all(
+            input_features["residue_mask"] == 1.0
+        ), "residue_mask should be all 1's"
 
         # Test atomized token features
         if model_type == "ligand_mpnn":
             n_atomized = input_features["Y"].shape[0]  # Number of atomized tokens
             # Y: (n_atomized, 3) coordinates, float32
-            assert input_features["Y"].shape == (
-                n_atomized,
-                3,
-            ), (
-                f"Y shape mismatch: expected ({n_atomized}, 3), got {input_features['Y'].shape}"
-            )
-            assert input_features["Y"].dtype == torch.float32, (
-                f"Y dtype mismatch: expected torch.float32, got {input_features['Y'].dtype}"
-            )
+            assert (
+                input_features["Y"].shape
+                == (
+                    n_atomized,
+                    3,
+                )
+            ), f"Y shape mismatch: expected ({n_atomized}, 3), got {input_features['Y'].shape}"
+            assert (
+                input_features["Y"].dtype == torch.float32
+            ), f"Y dtype mismatch: expected torch.float32, got {input_features['Y'].dtype}"
 
             # Y_t: (n_atomized,) atomic numbers, int32
-            assert input_features["Y_t"].shape == (n_atomized,), (
-                f"Y_t shape mismatch: expected ({n_atomized},), got {input_features['Y_t'].shape}"
-            )
-            assert input_features["Y_t"].dtype == torch.int32, (
-                f"Y_t dtype mismatch: expected torch.int32, got {input_features['Y_t'].dtype}"
-            )
+            assert (
+                input_features["Y_t"].shape == (n_atomized,)
+            ), f"Y_t shape mismatch: expected ({n_atomized},), got {input_features['Y_t'].shape}"
+            assert (
+                input_features["Y_t"].dtype == torch.int32
+            ), f"Y_t dtype mismatch: expected torch.int32, got {input_features['Y_t'].dtype}"
 
             # Y_m: (n_atomized,) mask, int32
-            assert input_features["Y_m"].shape == (n_atomized,), (
-                f"Y_m shape mismatch: expected ({n_atomized},), got {input_features['Y_m'].shape}"
-            )
-            assert input_features["Y_m"].dtype == torch.bool, (
-                f"Y_m dtype mismatch: expected torch.bool, got {input_features['Y_m'].dtype}"
-            )
+            assert (
+                input_features["Y_m"].shape == (n_atomized,)
+            ), f"Y_m shape mismatch: expected ({n_atomized},), got {input_features['Y_m'].shape}"
+            assert (
+                input_features["Y_m"].dtype == torch.bool
+            ), f"Y_m dtype mismatch: expected torch.bool, got {input_features['Y_m'].dtype}"
             assert torch.all(input_features["Y_m"] == 1), "Y_m should be all 1's"
 
     @pytest.mark.parametrize("model_type", ["protein_mpnn", "ligand_mpnn"])
@@ -450,9 +451,9 @@ class TestMPNNPipeline:
 
         # Check that S is in valid range [0, 20] (21 possible values: 20 AA + UNK)
         S = input_features["S"]
-        assert torch.all(S >= 0) and torch.all(S <= 20), (
-            f"S values out of range [0, 20]: min={S.min()}, max={S.max()}"
-        )
+        assert torch.all(S >= 0) and torch.all(
+            S <= 20
+        ), f"S values out of range [0, 20]: min={S.min()}, max={S.max()}"
 
     @pytest.mark.parametrize("model_type", ["ligand_mpnn"])
     def test_mpnn_pipeline_atomic_numbers_valid(self, model_type):
@@ -471,9 +472,9 @@ class TestMPNNPipeline:
         # Check atomic numbers are reasonable (most common atoms in proteins: 1-16, plus some others)
         Y_t = input_features["Y_t"]
         if len(Y_t) > 0:
-            assert torch.all(Y_t > 0) and torch.all(Y_t < 100), (
-                f"Y_t values unreasonable: min={Y_t.min()}, max={Y_t.max()}"
-            )
+            assert torch.all(Y_t > 0) and torch.all(
+                Y_t < 100
+            ), f"Y_t values unreasonable: min={Y_t.min()}, max={Y_t.max()}"
 
     @pytest.mark.parametrize("model_type", ["protein_mpnn", "ligand_mpnn"])
     def test_mpnn_pipeline_occupancy_filtering(self, model_type):

@@ -212,9 +212,9 @@ class SamplePartialDiffusion(SampleDiffusion):
         """Constructs a noise schedule for use during inference with partial t."""
         t_hat_full = super()._construct_inference_noise_schedule(device)
 
-        assert self.partial_t < self.num_timesteps, (
-            f"Partial t ({self.partial_t}) must be less than num_timesteps ({self.num_timesteps})"
-        )
+        assert (
+            self.partial_t < self.num_timesteps
+        ), f"Partial t ({self.partial_t}) must be less than num_timesteps ({self.num_timesteps})"
         ranked_logger.info(
             f"Using partial t index: {self.partial_t} [e.g., {t_hat_full[self.partial_t]:.4}], or {self.partial_t / (self.num_timesteps):.2%}, by index (100% is data, 0% is noise)"
         )

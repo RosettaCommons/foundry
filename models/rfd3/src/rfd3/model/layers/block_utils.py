@@ -140,10 +140,10 @@ def scatter_add_pair_features(P_LK_tgt, P_LK_indices, P_LA_src, P_LA_indices):
         P_LA_indices = P_LA_indices.unsqueeze(0).expand(D, -1, -1)
     if P_LA_src.ndim == 3:
         P_LA_src = P_LA_src.unsqueeze(0).expand(D, -1, -1)
-    assert P_LA_src.shape[-1] == P_LK_tgt.shape[-1], (
-        "Channel dims do not match, got: {} vs {}".format(
-            P_LA_src.shape[-1], P_LK_tgt.shape[-1]
-        )
+    assert (
+        P_LA_src.shape[-1] == P_LK_tgt.shape[-1]
+    ), "Channel dims do not match, got: {} vs {}".format(
+        P_LA_src.shape[-1], P_LK_tgt.shape[-1]
     )
 
     matches = P_LA_indices.unsqueeze(-1) == P_LK_indices.unsqueeze(-2)  # (D, L, a, k)
@@ -440,9 +440,9 @@ def get_sparse_attention_indices(
     if (indices[..., 1:] == indices[..., :-1]).any():
         raise AssertionError("Tensor has duplicate elements along the last dimension.")
 
-    assert indices.shape[-1] == k_max, (
-        f"Expected k_max={k_max} indices, got {indices.shape[-1]} instead."
-    )
+    assert (
+        indices.shape[-1] == k_max
+    ), f"Expected k_max={k_max} indices, got {indices.shape[-1]} instead."
     # Detach to avoid gradients flowing through indices
 
     return indices.detach()

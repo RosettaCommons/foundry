@@ -73,9 +73,9 @@ class ContigJsonDataset(MolecularDataset):
         self._data = original_data
 
         if subset_to_keys is not None:
-            assert len(subset_to_keys) > 0, (
-                "subset_to_keys must be a non-empty list of keys."
-            )
+            assert (
+                len(subset_to_keys) > 0
+            ), "subset_to_keys must be a non-empty list of keys."
             self._data = {k: v for k, v in self._data.items() if k in subset_to_keys}
         self._check_json_keys()
 

@@ -5,7 +5,6 @@ import biotite.structure as struc
 import numpy as np
 from atomworks.enums import ChainType
 from atomworks.io.transforms.atom_array import remove_hydrogens
-from foundry.metrics.base import Metric
 from rfd3.constants import (
     ATOM14_ATOM_NAMES,
     SELECTION_NONPROTEIN,
@@ -17,6 +16,7 @@ from rfd3.transforms.hbonds import (
     calculate_hbonds,
 )
 
+from foundry.metrics.base import Metric
 from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
@@ -149,9 +149,9 @@ def calculate_hbond_stats(
     # Used the latest function above, should check if it works correctly
     output_atom_array_stack = simplified_processing_atom_array(output_atom_array_stack)
 
-    assert len(input_atom_array_stack) == len(output_atom_array_stack), (
-        "Input and output atom arrays must have the same length"
-    )
+    assert len(input_atom_array_stack) == len(
+        output_atom_array_stack
+    ), "Input and output atom arrays must have the same length"
 
     total_correct_donors_percent = 0.0
     total_correct_acceptors_percent = 0.0

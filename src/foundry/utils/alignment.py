@@ -34,9 +34,9 @@ def weighted_rigid_align(
         w_L = w_L.to(torch.float32)
 
     # Assert `X_exists_L` is a boolean mask
-    assert X_exists_L.dtype == torch.bool, (
-        "X_exists_L should be a boolean mask! Otherwise, the alignment will be incorrect (silent failure)!"
-    )
+    assert (
+        X_exists_L.dtype == torch.bool
+    ), "X_exists_L should be a boolean mask! Otherwise, the alignment will be incorrect (silent failure)!"
 
     assert X_L.shape == X_gt_L.shape
     assert X_L.shape[:-1] == w_L.shape

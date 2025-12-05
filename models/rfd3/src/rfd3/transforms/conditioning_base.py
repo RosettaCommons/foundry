@@ -253,9 +253,9 @@ class SampleConditioningType(Transform):
             cat in REQUIRED_CONDITIONING_ANNOTATIONS
             for cat in data["atom_array"].get_annotation_categories()
         ]
-        assert not any(existing), (
-            "Conditioning annotations already set! found {}".format(existing)
-        )
+        assert not any(
+            existing
+        ), "Conditioning annotations already set! found {}".format(existing)
         assert "conditions" in data, "Conditioning dict not initialized"
 
     def forward(self, data):
@@ -297,9 +297,9 @@ class SampleConditioningFlags(Transform):
     ]  # We use is_protein in the PPI training condition
 
     def check_input(self, data):
-        assert not data["is_inference"], (
-            "This transform is only used during training! Validation using sampled conditions is not implemented yet"
-        )
+        assert not data[
+            "is_inference"
+        ], "This transform is only used during training! Validation using sampled conditions is not implemented yet"
         assert "sampled_condition" in data
 
     def forward(self, data: dict) -> dict:
@@ -394,9 +394,9 @@ class UnindexFlaggedTokens(Transform):
         atom_array_to_concat = struc.concatenate(unindexed_tokens)
         # Ensure tokens are recognised as seperate
         n_unindexed_tokens = get_token_count(atom_array_to_concat)
-        assert n_unindexed_tokens == len(unindexed_tokens), (
-            f"Expected {len(unindexed_tokens)} but got {n_unindexed_tokens}"
-        )
+        assert n_unindexed_tokens == len(
+            unindexed_tokens
+        ), f"Expected {len(unindexed_tokens)} but got {n_unindexed_tokens}"
         assert (
             get_token_count(atom_array_full)
             == get_token_count(atom_array) + n_unindexed_tokens

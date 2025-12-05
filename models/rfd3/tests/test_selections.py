@@ -29,18 +29,18 @@ def test_canonicalization(name="L:G", idx="Z9", atom_names="C1,N1,O1,C2,O2"):
     canonical_components_0 = unravel_components("Z9", atom_array=atom_array_ref)
     canonical_components_1 = unravel_components("L:G", atom_array=atom_array_ref)
 
-    assert len(canonical_components_0) == 1, (
-        f"0) Expected single canonical component but got {canonical_components_0}"
-    )
-    assert len(canonical_components_1) == 1, (
-        f"1) Expected single canonical component but got {canonical_components_1}"
-    )
-    assert canonical_components_0[0] == idx, (
-        f"0) Expected {idx} but got {canonical_components_0}"
-    )
-    assert canonical_components_1[0] == idx, (
-        f"1) Expected {idx} but got {canonical_components_1}"
-    )
+    assert (
+        len(canonical_components_0) == 1
+    ), f"0) Expected single canonical component but got {canonical_components_0}"
+    assert (
+        len(canonical_components_1) == 1
+    ), f"1) Expected single canonical component but got {canonical_components_1}"
+    assert (
+        canonical_components_0[0] == idx
+    ), f"0) Expected {idx} but got {canonical_components_0}"
+    assert (
+        canonical_components_1[0] == idx
+    ), f"1) Expected {idx} but got {canonical_components_1}"
 
     # Assert same masks are made when creating from different routes
     mask_0 = fetch_mask_from_idx(idx, atom_array=atom_array_ref)
@@ -64,9 +64,9 @@ def test_canonicalization(name="L:G", idx="Z9", atom_names="C1,N1,O1,C2,O2"):
     sele = InputSelection.from_any({name: atom_names}, atom_array=atom_array_ref)
     name_mask_1 = sele.get_mask()
 
-    assert (name_mask_0 == name_mask_1).all(), (
-        f"Expected selection mask to be {name_mask_0} but got {name_mask_1}"
-    )
+    assert (
+        name_mask_0 == name_mask_1
+    ).all(), f"Expected selection mask to be {name_mask_0} but got {name_mask_1}"
 
 
 args = TEST_JSON_DATA["1j79_C2"]

@@ -67,9 +67,9 @@ class ConformerEmbeddingWeightedAverage(nn.Module):
         Returns:
             Processed tensor of shape [n_atom, c_atom] ready for residual addition
         """
-        assert atom_level_embeddings.shape[0] == self.n_conformers, (
-            "Number of conformers must be consistent"
-        )
+        assert (
+            atom_level_embeddings.shape[0] == self.n_conformers
+        ), "Number of conformers must be consistent"
 
         # Subset to [:atom_level_embedding_dim]
         if atom_level_embeddings.shape[-1] > self.atom_level_embedding_dim:

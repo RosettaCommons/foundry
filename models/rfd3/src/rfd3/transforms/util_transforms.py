@@ -35,9 +35,9 @@ af3_sequence_encoding = AF3SequenceEncoding()
 
 def assert_single_representative(token, central_atom="CB"):
     mask = get_af3_token_representative_masks(token, central_atom=central_atom)
-    assert np.sum(mask) == 1, (
-        f"No representative atom (CB) found. mask: {mask}\nToken: {token}"
-    )
+    assert (
+        np.sum(mask) == 1
+    ), f"No representative atom (CB) found. mask: {mask}\nToken: {token}"
 
 
 def assert_single_token(token):

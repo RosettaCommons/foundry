@@ -115,12 +115,12 @@ def assert_value_checks(network_output, input_features, model_type):
         if feature_group in network_output:
             for key, tensor in network_output[feature_group].items():
                 if isinstance(tensor, torch.Tensor):
-                    assert not torch.isnan(tensor).any(), (
-                        f"NaN in {feature_group}.{key}"
-                    )
-                    assert not torch.isinf(tensor).any(), (
-                        f"Inf in {feature_group}.{key}"
-                    )
+                    assert not torch.isnan(
+                        tensor
+                    ).any(), f"NaN in {feature_group}.{key}"
+                    assert not torch.isinf(
+                        tensor
+                    ).any(), f"Inf in {feature_group}.{key}"
 
 
 def assert_comprehensive_shapes(network_output, input_features, model_type):
@@ -175,9 +175,9 @@ def assert_comprehensive_shapes(network_output, input_features, model_type):
 
     for key in non_repeated_input_features:
         if key in input_features and input_features[key] is not None:
-            assert input_features[key].shape[0] == original_B, (
-                f"{key} should have batch size {original_B}, got {input_features[key].shape[0]}"
-            )
+            assert (
+                input_features[key].shape[0] == original_B
+            ), f"{key} should have batch size {original_B}, got {input_features[key].shape[0]}"
 
     # Features that DO get repeated (based on repeat_along_batch implementation)
     repeated_input_features = [
@@ -194,14 +194,14 @@ def assert_comprehensive_shapes(network_output, input_features, model_type):
 
     for key in repeated_input_features:
         if key in input_features and input_features[key] is not None:
-            assert input_features[key].shape[0] == repeated_B, (
-                f"{key} should have batch size {repeated_B}, got {input_features[key].shape[0]}"
-            )
+            assert (
+                input_features[key].shape[0] == repeated_B
+            ), f"{key} should have batch size {repeated_B}, got {input_features[key].shape[0]}"
 
     # Specific shape assertions for input features
-    assert input_features["X"].shape == (original_B, L, num_atoms, 3), (
-        f"X shape: expected ({original_B}, {L}, {num_atoms}, 3), got {input_features['X'].shape}"
-    )
+    assert (
+        input_features["X"].shape == (original_B, L, num_atoms, 3)
+    ), f"X shape: expected ({original_B}, {L}, {num_atoms}, 3), got {input_features['X'].shape}"
     assert input_features["X_pre_noise"].shape == (original_B, L, num_atoms, 3)
     assert input_features["X_backbone"].shape == (original_B, L, num_backbone_atoms, 3)
     assert input_features["X_m_backbone"].shape == (original_B, L, num_backbone_atoms)
@@ -228,22 +228,22 @@ def assert_comprehensive_shapes(network_output, input_features, model_type):
     graph_features = network_output["graph_features"]
 
     # Graph features have mixed batch sizes
-    assert graph_features["E_idx"].shape == (repeated_B, L, K), (
-        f"E_idx shape: expected ({repeated_B}, {L}, {K}), got {graph_features['E_idx'].shape}"
-    )
-    assert graph_features["E"].shape == (original_B, L, K, hidden_dim), (
-        f"E shape: expected ({original_B}, {L}, {K}, {hidden_dim}), got {graph_features['E'].shape}"
-    )
+    assert (
+        graph_features["E_idx"].shape == (repeated_B, L, K)
+    ), f"E_idx shape: expected ({repeated_B}, {L}, {K}), got {graph_features['E_idx'].shape}"
+    assert (
+        graph_features["E"].shape == (original_B, L, K, hidden_dim)
+    ), f"E shape: expected ({original_B}, {L}, {K}, {hidden_dim}), got {graph_features['E'].shape}"
 
     # ===== ENCODER FEATURES SHAPES =====
     encoder_features = network_output["encoder_features"]
 
-    assert encoder_features["h_V"].shape == (repeated_B, L, hidden_dim), (
-        f"Encoder h_V shape: expected ({repeated_B}, {L}, {hidden_dim}), got {encoder_features['h_V'].shape}"
-    )
-    assert encoder_features["h_E"].shape == (repeated_B, L, K, hidden_dim), (
-        f"Encoder h_E shape: expected ({repeated_B}, {L}, {K}, {hidden_dim}), got {encoder_features['h_E'].shape}"
-    )
+    assert (
+        encoder_features["h_V"].shape == (repeated_B, L, hidden_dim)
+    ), f"Encoder h_V shape: expected ({repeated_B}, {L}, {hidden_dim}), got {encoder_features['h_V'].shape}"
+    assert (
+        encoder_features["h_E"].shape == (repeated_B, L, K, hidden_dim)
+    ), f"Encoder h_E shape: expected ({repeated_B}, {L}, {K}, {hidden_dim}), got {encoder_features['h_E'].shape}"
 
     # ===== DECODER FEATURES SHAPES =====
     decoder_features = network_output["decoder_features"]
@@ -265,9 +265,9 @@ def assert_comprehensive_shapes(network_output, input_features, model_type):
 
     for key in decoder_tensor_features:
         if key in decoder_features and decoder_features[key] is not None:
-            assert decoder_features[key].shape[0] == repeated_B, (
-                f"Decoder {key} should have batch size {repeated_B}, got {decoder_features[key].shape[0]}"
-            )
+            assert (
+                decoder_features[key].shape[0] == repeated_B
+            ), f"Decoder {key} should have batch size {repeated_B}, got {decoder_features[key].shape[0]}"
 
     # Specific decoder shape assertions
     assert decoder_features["causal_mask"].shape == (repeated_B, L, K, 1)
@@ -376,22 +376,22 @@ def assert_gradient_properties(model):
     for name, param in model.named_parameters():
         if param.requires_grad:
             # All trainable parameters should have gradients
-            assert param.grad is not None, (
-                f"Parameter {name} requires gradients but has None gradient"
-            )
+            assert (
+                param.grad is not None
+            ), f"Parameter {name} requires gradients but has None gradient"
 
             # Check gradient shape matches parameter shape
-            assert param.grad.shape == param.shape, (
-                f"Gradient shape mismatch for {name}: expected {param.shape}, got {param.grad.shape}"
-            )
+            assert (
+                param.grad.shape == param.shape
+            ), f"Gradient shape mismatch for {name}: expected {param.shape}, got {param.grad.shape}"
 
             # Check for NaN/Inf in gradients
-            assert not torch.isnan(param.grad).any(), (
-                f"NaN found in gradients for parameter {name}"
-            )
-            assert not torch.isinf(param.grad).any(), (
-                f"Inf found in gradients for parameter {name}"
-            )
+            assert not torch.isnan(
+                param.grad
+            ).any(), f"NaN found in gradients for parameter {name}"
+            assert not torch.isinf(
+                param.grad
+            ).any(), f"Inf found in gradients for parameter {name}"
 
             # Check gradient magnitude is reasonable (not too large)
             grad_norm = param.grad.norm()
@@ -451,9 +451,9 @@ def assert_sequence_recovery_metric_shapes(
 
     for key in required_keys:
         assert key in metrics, f"Missing required key: {key}"
-        assert isinstance(metrics[key], float), (
-            f"{key} should be a float scalar, got {type(metrics[key])}"
-        )
+        assert isinstance(
+            metrics[key], float
+        ), f"{key} should be a float scalar, got {type(metrics[key])}"
 
     if return_per_example:
         per_example_keys = [
@@ -467,9 +467,9 @@ def assert_sequence_recovery_metric_shapes(
 
         for key in per_example_keys:
             assert key in metrics, f"Missing per-example key: {key}"
-            assert metrics[key].shape == (B,), (
-                f"{key} should have shape ({B},), got {metrics[key].shape}"
-            )
+            assert metrics[key].shape == (
+                B,
+            ), f"{key} should have shape ({B},), got {metrics[key].shape}"
 
     if return_per_residue:
         per_residue_keys = [
@@ -511,9 +511,9 @@ def assert_nll_metric_shapes(
 
     for key in required_keys:
         assert key in metrics, f"Missing required key: {key}"
-        assert isinstance(metrics[key], float), (
-            f"{key} should be a float scalar, got {type(metrics[key])}"
-        )
+        assert isinstance(
+            metrics[key], float
+        ), f"{key} should be a float scalar, got {type(metrics[key])}"
 
     if return_per_example:
         per_example_keys = [
@@ -525,9 +525,9 @@ def assert_nll_metric_shapes(
 
         for key in per_example_keys:
             assert key in metrics, f"Missing per-example key: {key}"
-            assert metrics[key].shape == (B,), (
-                f"{key} should have shape ({B},), got {metrics[key].shape}"
-            )
+            assert metrics[key].shape == (
+                B,
+            ), f"{key} should have shape ({B},), got {metrics[key].shape}"
 
     if return_per_residue:
         per_residue_keys = [f"{prefix}nll_per_residue", f"{prefix}per_residue_mask"]
@@ -564,9 +564,9 @@ def assert_metric_values(metrics, is_interface=False):
                     if isinstance(metrics[key], torch.Tensor):
                         assert not torch.isnan(metrics[key]), f"NaN found in {key}"
                         assert not torch.isinf(metrics[key]), f"Inf found in {key}"
-                    assert 0 <= metrics[key] <= 1, (
-                        f"{key} should be in [0, 1] range, got {metrics[key]}"
-                    )
+                    assert (
+                        0 <= metrics[key] <= 1
+                    ), f"{key} should be in [0, 1] range, got {metrics[key]}"
 
             # Check NLL and perplexity values are positive
             nll_keys = [f"{prefix}mean_nll"]
@@ -577,18 +577,18 @@ def assert_metric_values(metrics, is_interface=False):
                     if isinstance(metrics[key], torch.Tensor):
                         assert not torch.isnan(metrics[key]), f"NaN found in {key}"
                         assert not torch.isinf(metrics[key]), f"Inf found in {key}"
-                    assert metrics[key] >= 0, (
-                        f"{key} should be >= 0, got {metrics[key]}"
-                    )
+                    assert (
+                        metrics[key] >= 0
+                    ), f"{key} should be >= 0, got {metrics[key]}"
 
             for key in perplexity_keys:
                 if key in metrics:
                     if isinstance(metrics[key], torch.Tensor):
                         assert not torch.isnan(metrics[key]), f"NaN found in {key}"
                         assert not torch.isinf(metrics[key]), f"Inf found in {key}"
-                    assert metrics[key] >= 1.0, (
-                        f"{key} should be >= 1.0, got {metrics[key]}"
-                    )
+                    assert (
+                        metrics[key] >= 1.0
+                    ), f"{key} should be >= 1.0, got {metrics[key]}"
 
         # Sequence recovery per-example
         for key in [
@@ -597,41 +597,41 @@ def assert_metric_values(metrics, is_interface=False):
         ]:
             if key in metrics:
                 vals = metrics[key][valid_mask]
-                assert not torch.isnan(vals).any(), (
-                    f"NaN found in {key} for valid examples"
-                )
-                assert not torch.isinf(vals).any(), (
-                    f"Inf found in {key} for valid examples"
-                )
-                assert torch.all((0 <= vals) & (vals <= 1)), (
-                    f"{key} values should be in [0, 1] for valid examples, got {vals}"
-                )
+                assert not torch.isnan(
+                    vals
+                ).any(), f"NaN found in {key} for valid examples"
+                assert not torch.isinf(
+                    vals
+                ).any(), f"Inf found in {key} for valid examples"
+                assert torch.all(
+                    (0 <= vals) & (vals <= 1)
+                ), f"{key} values should be in [0, 1] for valid examples, got {vals}"
         # NLL per-example
         for key in [f"{prefix}nll_per_example"]:
             if key in metrics:
                 vals = metrics[key][valid_mask]
-                assert not torch.isnan(vals).any(), (
-                    f"NaN found in {key} for valid examples"
-                )
-                assert not torch.isinf(vals).any(), (
-                    f"Inf found in {key} for valid examples"
-                )
-                assert torch.all(vals >= 0), (
-                    f"{key} values should be >= 0 for valid examples, got {vals}"
-                )
+                assert not torch.isnan(
+                    vals
+                ).any(), f"NaN found in {key} for valid examples"
+                assert not torch.isinf(
+                    vals
+                ).any(), f"Inf found in {key} for valid examples"
+                assert torch.all(
+                    vals >= 0
+                ), f"{key} values should be >= 0 for valid examples, got {vals}"
         # Perplexity per-example
         for key in [f"{prefix}perplexity_per_example"]:
             if key in metrics:
                 vals = metrics[key][valid_mask]
-                assert not torch.isnan(vals).any(), (
-                    f"NaN found in {key} for valid examples"
-                )
-                assert not torch.isinf(vals).any(), (
-                    f"Inf found in {key} for valid examples"
-                )
-                assert torch.all(vals >= 1.0), (
-                    f"{key} values should be >= 1.0 for valid examples, got {vals}"
-                )
+                assert not torch.isnan(
+                    vals
+                ).any(), f"NaN found in {key} for valid examples"
+                assert not torch.isinf(
+                    vals
+                ).any(), f"Inf found in {key} for valid examples"
+                assert torch.all(
+                    vals >= 1.0
+                ), f"{key} values should be >= 1.0 for valid examples, got {vals}"
         # Correct per-example
         for key in [
             f"{prefix}correct_per_example_sampled",
@@ -639,28 +639,28 @@ def assert_metric_values(metrics, is_interface=False):
         ]:
             if key in metrics:
                 vals = metrics[key][valid_mask]
-                assert not torch.isnan(vals).any(), (
-                    f"NaN found in {key} for valid examples"
-                )
-                assert not torch.isinf(vals).any(), (
-                    f"Inf found in {key} for valid examples"
-                )
-                assert torch.all(vals >= 0), (
-                    f"{key} values should be >= 0 for valid examples, got {vals}"
-                )
+                assert not torch.isnan(
+                    vals
+                ).any(), f"NaN found in {key} for valid examples"
+                assert not torch.isinf(
+                    vals
+                ).any(), f"Inf found in {key} for valid examples"
+                assert torch.all(
+                    vals >= 0
+                ), f"{key} values should be >= 0 for valid examples, got {vals}"
         # Total valid per-example
         for key in [f"{prefix}total_valid_per_example"]:
             if key in metrics:
                 vals = metrics[key][valid_mask]
-                assert not torch.isnan(vals).any(), (
-                    f"NaN found in {key} for valid examples"
-                )
-                assert not torch.isinf(vals).any(), (
-                    f"Inf found in {key} for valid examples"
-                )
-                assert torch.all(vals > 0), (
-                    f"{key} values should be > 0 for valid examples, got {vals}"
-                )
+                assert not torch.isnan(
+                    vals
+                ).any(), f"NaN found in {key} for valid examples"
+                assert not torch.isinf(
+                    vals
+                ).any(), f"Inf found in {key} for valid examples"
+                assert torch.all(
+                    vals > 0
+                ), f"{key} values should be > 0 for valid examples, got {vals}"
 
         # Per-residue checks (masked by both valid_examples_mask and per_residue_mask)
         per_residue_keys = [
@@ -685,26 +685,26 @@ def assert_metric_values(metrics, is_interface=False):
                 selected = values[combined_mask]
                 if "correct_predictions" in value_key:
                     # Should be 0 or 1
-                    assert not torch.isnan(selected).any(), (
-                        f"NaN found in {value_key} for valid residues"
-                    )
-                    assert not torch.isinf(selected).any(), (
-                        f"Inf found in {value_key} for valid residues"
-                    )
-                    assert torch.all((0 <= selected) & (selected <= 1)), (
-                        f"{value_key} values should be in [0, 1] for valid residues, got {selected}"
-                    )
+                    assert not torch.isnan(
+                        selected
+                    ).any(), f"NaN found in {value_key} for valid residues"
+                    assert not torch.isinf(
+                        selected
+                    ).any(), f"Inf found in {value_key} for valid residues"
+                    assert torch.all(
+                        (0 <= selected) & (selected <= 1)
+                    ), f"{value_key} values should be in [0, 1] for valid residues, got {selected}"
                 elif "nll_per_residue" in value_key:
                     # Should be >= 0
-                    assert not torch.isnan(selected).any(), (
-                        f"NaN found in {value_key} for valid residues"
-                    )
-                    assert not torch.isinf(selected).any(), (
-                        f"Inf found in {value_key} for valid residues"
-                    )
-                    assert torch.all(selected >= 0), (
-                        f"{value_key} values should be >= 0 for valid residues, got {selected}"
-                    )
+                    assert not torch.isnan(
+                        selected
+                    ).any(), f"NaN found in {value_key} for valid residues"
+                    assert not torch.isinf(
+                        selected
+                    ).any(), f"Inf found in {value_key} for valid residues"
+                    assert torch.all(
+                        selected >= 0
+                    ), f"{value_key} values should be >= 0 for valid residues, got {selected}"
 
 
 def assert_all_metrics_comprehensive(
@@ -770,9 +770,9 @@ def assert_all_metrics_comprehensive(
             "interface_total_valid_per_example"
         ].sum()
         full_total = seq_metrics["total_valid_per_example"].sum()
-        assert interface_total <= full_total, (
-            f"Interface total ({interface_total}) should be <= full total ({full_total})"
-        )
+        assert (
+            interface_total <= full_total
+        ), f"Interface total ({interface_total}) should be <= full total ({full_total})"
 
 
 def combine_kwargs_to_compute(metric, network_input, network_output):

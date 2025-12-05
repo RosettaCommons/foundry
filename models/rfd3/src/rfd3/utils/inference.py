@@ -420,9 +420,9 @@ def ensure_inference_sampler_matches_design_spec(
 
 
 def infer_ori_from_hotspots(atom_array: struc.AtomArray):
-    assert "is_atom_level_hotspot" in atom_array.get_annotation_categories(), (
-        "Atom array must contain 'is_atom_level_hotspot' annotation to infer ori from hotspots."
-    )
+    assert (
+        "is_atom_level_hotspot" in atom_array.get_annotation_categories()
+    ), "Atom array must contain 'is_atom_level_hotspot' annotation to infer ori from hotspots."
     hotspot_atom_array = atom_array[atom_array.is_atom_level_hotspot.astype(bool)]
     hotspot_com = hotspot_atom_array.coord.mean(axis=0)
 
