@@ -535,14 +535,13 @@ def process_input(
 
 def _reshape_trajectory(traj, align_structures: bool):
     traj = [traj[i] for i in range(len(traj))]  # make list of arrays
-    n_steps = len(traj)
     max_frames = 100
-    if n_steps > max_frames:
-        selected_indices = torch.linspace(0, n_steps - 1, max_frames).long().tolist()
+    if len(traj) > max_frames:
+        selected_indices = torch.linspace(0, len(traj) - 1, max_frames).long().tolist()
         traj = [traj[i] for i in selected_indices]
     if align_structures:
         # ... align the trajectories on the last prediction
-        for step in range(n_steps - 1):
+        for step in range(len(traj) - 1):
             traj[step] = weighted_rigid_align(
                 X_L=traj[-1][None],
                 X_gt_L=traj[step][None],
