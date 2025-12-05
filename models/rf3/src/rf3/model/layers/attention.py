@@ -105,9 +105,9 @@ class TriangleAttention(nn.Module):
             pair = pair.to(dtype=dtype)
             bias = bias.to(dtype=dtype)
 
-        assert (
-            pair.dtype == torch.bfloat16 and bias.dtype == torch.bfloat16
-        ), f"cuEquivariance requires bfloat16 inputs (got pair={pair.dtype}, bias={bias.dtype})"
+        assert pair.dtype == torch.bfloat16 and bias.dtype == torch.bfloat16, (
+            f"cuEquivariance requires bfloat16 inputs (got pair={pair.dtype}, bias={bias.dtype})"
+        )
 
         # Gate computation
         gate = torch.sigmoid(self.to_g(pair))  # (B, L, L, h*dim)
@@ -195,13 +195,13 @@ class TriangleMultiplication(nn.Module):
 
         if self.use_cuequivariance:
             # cuEquivariance kernel requires d_pair == d_hidden...
-            assert (
-                d_pair == d_hidden
-            ), "cuEquivariance triangle multiplication requires d_pair == d_hidden"
+            assert d_pair == d_hidden, (
+                "cuEquivariance triangle multiplication requires d_pair == d_hidden"
+            )
             # ... and d_pair must be a multiple of 32
-            assert (
-                d_pair % 32 == 0
-            ), "cuEquivariance triangle multiplication requires d_pair to be a multiple of 32"
+            assert d_pair % 32 == 0, (
+                "cuEquivariance triangle multiplication requires d_pair to be a multiple of 32"
+            )
 
         # Input normalization (optional bias)
         self.norm_in = nn.LayerNorm(d_pair, bias=bias)
@@ -291,9 +291,9 @@ class TriangleMultiplication(nn.Module):
             dtype = torch.get_autocast_dtype("cuda")
             pair = pair.to(dtype=dtype)
 
-        assert (
-            pair.dtype == torch.bfloat16
-        ), "cuEquivariance requires bfloat16 inputs for optimal performance"
+        assert pair.dtype == torch.bfloat16, (
+            "cuEquivariance requires bfloat16 inputs for optimal performance"
+        )
 
         output = cuet.triangle_multiplicative_update(
             x=pair,

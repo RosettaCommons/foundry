@@ -208,9 +208,9 @@ def get_crop_transform(
             atol=1e-6,
         ), "Crop probabilities must sum to 1.0"
         assert crop_size > 0, "Crop size must be greater than 0"
-        assert (
-            crop_center_cutoff_distance > 0
-        ), "Crop center cutoff distance must be greater than 0"
+        assert crop_center_cutoff_distance > 0, (
+            "Crop center cutoff distance must be greater than 0"
+        )
 
     pre_crop_transforms = [
         SubsampleToTypes(allowed_types=allowed_types),

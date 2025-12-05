@@ -400,9 +400,9 @@ class RF3WithConfidence(RF3):
                 f=input["f"], n_recycles=n_cycle
             )
             if should_early_stop_fn:
-                assert (
-                    not self.training
-                ), "Early stopping is not supported during training!"
+                assert not self.training, (
+                    "Early stopping is not supported during training!"
+                )
                 # ... get the recycling outputs after the first recycle
                 first_recycle_outputs = next(recycling_output_generator)
 

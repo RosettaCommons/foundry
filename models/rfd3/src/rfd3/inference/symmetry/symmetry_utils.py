@@ -83,7 +83,9 @@ def make_symmetric_atom_array(
     if not isinstance(sym_conf, SymmetryConfig):
         sym_conf = convery_sym_conf_to_symmetry_config(sym_conf)
 
-    check_symmetry_config(asu_atom_array, sym_conf, sm, has_dist_cond, src_atom_array=src_atom_array)
+    check_symmetry_config(
+        asu_atom_array, sym_conf, sm, has_dist_cond, src_atom_array=src_atom_array
+    )
     # Adding utility annotations to the asu atom array
     asu_atom_array = _add_util_annotations(asu_atom_array, sym_conf, sm)
 
@@ -94,9 +96,9 @@ def make_symmetric_atom_array(
 
     # If the motif is symmetric, we get the frames instead from the source atom array.
     if sym_conf.is_symmetric_motif:
-        assert (
-            src_atom_array is not None
-        ), "Source atom array must be provided for symmetric motifs"
+        assert src_atom_array is not None, (
+            "Source atom array must be provided for symmetric motifs"
+        )
         # if symmetric motif is provided, get the frames from the src atom array.
         frames = get_symmetry_frames_from_atom_array(src_atom_array, frames)
     elif (asu_atom_array._is_motif[~asu_atom_array._is_unsym_motif]).any():

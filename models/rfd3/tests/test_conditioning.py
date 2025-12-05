@@ -28,18 +28,18 @@ def test_rasa_conditioning(example_name, is_inference):
     print("Got flags:", flags)
 
     # In both training and inference cases, assert that ref_rasa_bin is present
-    assert (
-        "ref_atomwise_rasa" in example["feats"]
-    ), "ref_rasa_bin not in feats, got: {}".format(list(example["feats"].keys()))
+    assert "ref_atomwise_rasa" in example["feats"], (
+        "ref_rasa_bin not in feats, got: {}".format(list(example["feats"].keys()))
+    )
 
     if not is_inference:
-        assert (
-            input["atom_array"].bonds is not None
-        ), "Bonds not present in input atom array"
+        assert input["atom_array"].bonds is not None, (
+            "Bonds not present in input atom array"
+        )
         assert "rasa" in flags, "rasa not in atom_array, got: {}".format(flags)
-        assert (
-            example["feats"]["ref_atomwise_rasa"].sum() > 0
-        ), "Did not create any rasa information"
+        assert example["feats"]["ref_atomwise_rasa"].sum() > 0, (
+            "Did not create any rasa information"
+        )
 
 
 plddt_cfg = load_train_or_val_cfg("test-uncond")

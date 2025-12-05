@@ -74,9 +74,9 @@ class MetricManager:
         self.raise_errors = raise_errors
         self.metrics = {}
         for name, metric in metrics.items():
-            assert isinstance(
-                metric, Metric
-            ), f"{name} must be a Metric instance, not {type(metric)}"
+            assert isinstance(metric, Metric), (
+                f"{name} must be a Metric instance, not {type(metric)}"
+            )
             self.metrics[name] = metric
 
     @classmethod

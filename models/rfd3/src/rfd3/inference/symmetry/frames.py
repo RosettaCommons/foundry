@@ -25,9 +25,9 @@ def get_symmetry_frames_from_symmetry_id(symmetry_id):
         order = int(symmetry_id[1:])
         frames = get_dihedral_frames(order)
     elif symmetry_id.lower() == "input_defined":
-        assert (
-            sym_conf.symmetry_file is not None
-        ), "symmetry_file is required for input_defined symmetry"
+        assert sym_conf.symmetry_file is not None, (
+            "symmetry_file is required for input_defined symmetry"
+        )
         frames = get_frames_from_file(sym_conf.symmetry_file)
     else:
         raise ValueError(f"Symmetry id {symmetry_id} not supported")
@@ -115,9 +115,9 @@ def get_symmetry_frames_from_atom_array(src_atom_array, input_frames):
     # check that the frames are valid rotation matrices
     Rs = [R for _, R, _ in xforms.values()]
     for R in Rs:
-        assert is_valid_rotation_matrix(
-            R
-        ), f"Computed frame {R} is not a valid rotation matrix"
+        assert is_valid_rotation_matrix(R), (
+            f"Computed frame {R} is not a valid rotation matrix"
+        )
     computed_frames = [(R, np.array([0, 0, 0])) for R in Rs]
 
     # check that the computed frames match the input frames

@@ -112,9 +112,9 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         batch_df["dataset"] = dataset_name
 
         # Assert no duplicate rows
-        assert (
-            batch_df.duplicated().sum() == 0
-        ), "Duplicate rows found in the metrics DataFrame!"
+        assert batch_df.duplicated().sum() == 0, (
+            "Duplicate rows found in the metrics DataFrame!"
+        )
 
         # Accumulate into the per-rank DataFrame
         self.per_gpu_outputs_df = pd.concat(
@@ -227,9 +227,9 @@ class LogAF3ValidationMetricsCallback(BaseCallback):
         if not trainer.fabric.is_global_zero:
             return
 
-        assert hasattr(
-            trainer, "validation_results_path"
-        ), "Results path not found! Ensure that StoreValidationMetricsInDFCallback is called first."
+        assert hasattr(trainer, "validation_results_path"), (
+            "Results path not found! Ensure that StoreValidationMetricsInDFCallback is called first."
+        )
         df = pd.read_csv(trainer.validation_results_path)
 
         # ... filter to most recent epoch, drop epoch column

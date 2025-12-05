@@ -14,9 +14,9 @@ class LogDesignValidationMetricsCallback(BaseCallback):
         if not trainer.fabric.is_global_zero:
             return
 
-        assert hasattr(
-            trainer, "validation_results_path"
-        ), "Results path not found! Ensure that StoreValidationMetricsInDFCallback is called first."
+        assert hasattr(trainer, "validation_results_path"), (
+            "Results path not found! Ensure that StoreValidationMetricsInDFCallback is called first."
+        )
         df = pd.read_csv(trainer.validation_results_path)
 
         # ... filter to most recent epoch, drop epoch column

@@ -75,9 +75,9 @@ def generate_atom_mappings_(scheme="atom14"):
         for ccd_index in range(len(atom14_names)):
             atom14_name = atom14_names[ccd_index]
             if atom14_name is not None:
-                assert (
-                    atom14_name in scheme_names
-                ), f"{atom14_name} not in CCD ordering for {aaa}"
+                assert atom14_name in scheme_names, (
+                    f"{atom14_name} not in CCD ordering for {aaa}"
+                )
                 scheme_index = scheme_names.index(atom14_name)
                 scheme_index_in_cur_mapping = mapping.index(scheme_index)
                 mapping[ccd_index], mapping[scheme_index_in_cur_mapping] = (
@@ -109,9 +109,9 @@ def generate_atom_mappings_(scheme="atom14"):
         atom_mapping_expected = np.array(scheme[aaa])[idxs]
         atom_mapping_actual = np.array(ccd_ordering_atomchar[aaa])
 
-        assert np.array_equal(
-            atom_mapping_expected, atom_mapping_actual
-        ), f"Mapping mismatch for {aaa}: {atom_mapping_expected} != {atom_mapping_actual}"
+        assert np.array_equal(atom_mapping_expected, atom_mapping_actual), (
+            f"Mapping mismatch for {aaa}: {atom_mapping_expected} != {atom_mapping_actual}"
+        )
 
     return atom_mapping, symmetry_mapping
 
@@ -169,9 +169,9 @@ class PadTokensWithVirtualAtoms(Transform):
         is_motif_token_unindexed = token_level_array.is_motif_atom_unindexed
 
         token_ids = np.unique(atom_array.token_id)
-        assert len(token_ids) == len(
-            is_motif_atom_with_fixed_seq
-        ), "Token ids and token level array have different lengths!"
+        assert len(token_ids) == len(is_motif_atom_with_fixed_seq), (
+            "Token ids and token level array have different lengths!"
+        )
 
         # Unindexed tokens are never fully atomized, but may be assigned as atomized to have repr atoms:
         is_residue = (

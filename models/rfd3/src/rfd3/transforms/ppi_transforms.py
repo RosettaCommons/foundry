@@ -97,9 +97,9 @@ def get_secondary_structure_types(atom_array: AtomArray) -> np.ndarray:
 
     # Compute secondary structure information
     sse_array = struc.annotate_sse(atom_array)
-    assert len(sse_array) == len(
-        np.unique(atom_array.token_id)
-    ), "SSE array length does not match number of tokens."
+    assert len(sse_array) == len(np.unique(atom_array.token_id)), (
+        "SSE array length does not match number of tokens."
+    )
 
     # Restore original res_id
     atom_array.res_id = actual_res_id

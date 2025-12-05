@@ -86,9 +86,9 @@ def resolve_symmetries(
         )
         crd_mask = ~torch.isnan(torch.tensor(ground_truth_stack.coord)).any(dim=-1)
 
-    assert not torch.isnan(
-        X_pred
-    ).any(), "NaN coordinates found in predicted structure!"
+    assert not torch.isnan(X_pred).any(), (
+        "NaN coordinates found in predicted structure!"
+    )
 
     # Apply symmetry resolution (returns updated ground truth coordinates)
     X_gt_resolved: Float[torch.Tensor, "D L 3"] = apply_symmetry_resolution(
@@ -154,12 +154,12 @@ def generate_symmetry_resolution_inputs_from_atom_array(
     # Extract automorphisms
     result["automorphisms"] = data.get("automorphisms", [])
     # Extract molecule annotations (assert they exist)
-    assert (
-        "molecule_entity" in atom_array.get_annotation_categories()
-    ), "molecule_entity annotation required"
-    assert (
-        "molecule_iid" in atom_array.get_annotation_categories()
-    ), "molecule_iid annotation required"
+    assert "molecule_entity" in atom_array.get_annotation_categories(), (
+        "molecule_entity annotation required"
+    )
+    assert "molecule_iid" in atom_array.get_annotation_categories(), (
+        "molecule_iid annotation required"
+    )
 
     result["molecule_entity"] = atom_array.molecule_entity
     result["molecule_iid"] = atom_array.molecule_iid

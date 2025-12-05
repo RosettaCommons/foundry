@@ -351,9 +351,9 @@ def featurize_noised_ground_truth_as_template_distogram(
     )  # (n_token, n_token)
     n_bins: int = len(distogram_bins) + 1
     template_distogram_onehot: Float[Tensor, "n_token n_token n_bins"] = (
-        torch.nn.functional.one_hot(
-            template_distogram_binned, num_classes=n_bins
-        ).to(torch.float32)
+        torch.nn.functional.one_hot(template_distogram_binned, num_classes=n_bins).to(
+            torch.float32
+        )
     )
 
     # Expand noise_scale to (n_token,) if needed

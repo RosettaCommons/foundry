@@ -114,9 +114,11 @@ def dump_structures(
     base_path = Path(base_path)
 
     if one_model_per_file:
-        assert (
-            isinstance(atom_arrays, AtomArrayStack) or isinstance(atom_arrays, list)
-        ), "AtomArrayStack or list of AtomArray required when one_model_per_file is True"
+        assert isinstance(atom_arrays, AtomArrayStack) or isinstance(
+            atom_arrays, list
+        ), (
+            "AtomArrayStack or list of AtomArray required when one_model_per_file is True"
+        )
         # One model per file —> loop over the diffusion batch
         for i in range(len(atom_arrays)):
             path = f"{base_path}_model_{i}"

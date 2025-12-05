@@ -391,7 +391,9 @@ def ensure_input_is_abspath(args: dict, path: PathLike | None):
     return args
 
 
-def ensure_inference_sampler_matches_design_spec(design_spec: dict, inference_sampler: dict | None = None):
+def ensure_inference_sampler_matches_design_spec(
+    design_spec: dict, inference_sampler: dict | None = None
+):
     """
     Ensure the inference sampler is set to the correct sampler for the design specification.
     Args:
@@ -411,15 +413,16 @@ def ensure_inference_sampler_matches_design_spec(design_spec: dict, inference_sa
                 "Please add inference_sampler.kind='symmetry' to your command."
             )
 
+
 #################################################################################
 # Custom infer_ori functions
 #################################################################################
 
 
 def infer_ori_from_hotspots(atom_array: struc.AtomArray):
-    assert (
-        "is_atom_level_hotspot" in atom_array.get_annotation_categories()
-    ), "Atom array must contain 'is_atom_level_hotspot' annotation to infer ori from hotspots."
+    assert "is_atom_level_hotspot" in atom_array.get_annotation_categories(), (
+        "Atom array must contain 'is_atom_level_hotspot' annotation to infer ori from hotspots."
+    )
     hotspot_atom_array = atom_array[atom_array.is_atom_level_hotspot.astype(bool)]
     hotspot_com = hotspot_atom_array.coord.mean(axis=0)
 

@@ -12,7 +12,9 @@ load_dotenv(override=True)
 
 # For pip-installed package, configs should be relative to this file
 # Adjust this path based on where configs are bundled in the package
-_config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs")
+_config_path = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs"
+)
 
 
 @hydra.main(

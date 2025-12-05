@@ -259,15 +259,15 @@ class TestIntegration:
         model = trainer.state["model"]
 
         # Test training information
-        assert (
-            "loss" in captured_training_info
-        ), "Training loss should be captured during fit"
-        assert (
-            "loss_dict" in captured_training_info
-        ), "Training loss dict should be captured during fit"
-        assert (
-            "batch" in captured_training_info
-        ), "Training batch should be captured during fit"
+        assert "loss" in captured_training_info, (
+            "Training loss should be captured during fit"
+        )
+        assert "loss_dict" in captured_training_info, (
+            "Training loss dict should be captured during fit"
+        )
+        assert "batch" in captured_training_info, (
+            "Training batch should be captured during fit"
+        )
 
         # Test loss output structure
         loss = captured_training_info["loss"]
@@ -276,15 +276,15 @@ class TestIntegration:
         assert_loss_output_structure(loss, loss_output, batch)
 
         # Test validation information
-        assert (
-            "metrics_output" in captured_validation_info
-        ), "Validation metrics should be captured during fit"
-        assert (
-            "network_output" in captured_validation_info
-        ), "Validation network output should be captured during fit"
-        assert (
-            "batch" in captured_validation_info
-        ), "Validation batch should be captured during fit"
+        assert "metrics_output" in captured_validation_info, (
+            "Validation metrics should be captured during fit"
+        )
+        assert "network_output" in captured_validation_info, (
+            "Validation network output should be captured during fit"
+        )
+        assert "batch" in captured_validation_info, (
+            "Validation batch should be captured during fit"
+        )
 
         # Test that metrics were computed
         metrics_output = captured_validation_info["metrics_output"]

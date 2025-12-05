@@ -193,9 +193,9 @@ def log_hyperparameters_with_all_loggers(
     for logger in trainer.fabric.loggers:
         # ...log hyperparameters to each Fabric logger
         # For Abstract Base Class of Fabric `Loggers`, see: https://lightning.ai/docs/fabric/stable/_modules/lightning/fabric/loggers/logger.html#Logger
-        assert hasattr(
-            logger, "log_hyperparams"
-        ), f"Logger {logger} does not have a `log_hyperparams` method. Ensure that the logger is a subclass of Fabric's ABC `Logger`."
+        assert hasattr(logger, "log_hyperparams"), (
+            f"Logger {logger} does not have a `log_hyperparams` method. Ensure that the logger is a subclass of Fabric's ABC `Logger`."
+        )
         try:
             logger.log_hyperparams(cfg)
         except NotImplementedError:

@@ -165,9 +165,9 @@ class DiffusionLoss(nn.Module):
 
         # ... Aggregate
         l_mse_total = torch.clamp(l_total, max=2)
-        assert l_mse_total.shape == (
-            D,
-        ), f"Expected l_total to be of shape (D,), got {l_total.shape}"
+        assert l_mse_total.shape == (D,), (
+            f"Expected l_total to be of shape (D,), got {l_total.shape}"
+        )
         l_mse_total = torch.mean(l_mse_total)  # D, -> scalar
 
         # ... Return

@@ -342,9 +342,9 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
     """
 
     def __init__(self, sym_step_frac: float = 0.9, **kwargs):
-        assert (
-            kwargs.get("gamma_0") > 0.5
-        ), "gamma_0 must be greater than 0.5 for symmetry sampling"
+        assert kwargs.get("gamma_0") > 0.5, (
+            "gamma_0 must be greater than 0.5 for symmetry sampling"
+        )
         self.sym_step_frac = sym_step_frac
         super().__init__(**kwargs)
 

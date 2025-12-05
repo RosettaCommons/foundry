@@ -215,9 +215,9 @@ def test_token_id_annotations(example, is_inference):
     example = pipes[is_inference](input)
     aa_out = example["atom_array"]
 
-    assert not (
-        np.diff(aa_out.token_id) > 1
-    ).any(), "Token ID has breaks > 1. Expected aranged token_id"
+    assert not (np.diff(aa_out.token_id) > 1).any(), (
+        "Token ID has breaks > 1. Expected aranged token_id"
+    )
 
 
 if __name__ == "__main__":

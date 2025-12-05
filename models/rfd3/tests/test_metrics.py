@@ -37,9 +37,9 @@ def test_output_metrics(example, is_inference):
     # Pipe input
     example = pipes[is_inference](input)
     atom_array = example["atom_array"]
-    assert (
-        atom_array.is_motif_atom_unindexed.sum() == 0
-    ), "No unindexed atoms should be present"
+    assert atom_array.is_motif_atom_unindexed.sum() == 0, (
+        "No unindexed atoms should be present"
+    )
 
     # Convert to cleaned array
     atom_array = _cleanup_virtual_atoms_and_assign_atom_name_elements(atom_array)

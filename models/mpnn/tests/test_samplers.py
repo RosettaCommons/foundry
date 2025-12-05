@@ -98,9 +98,9 @@ class TestPaddedTokenBudgetBatchSampler:
 
             # Check constraint: max_length * batch_size <= max_tokens_with_padding
             # Exception: single samples that exceed max_tokens are not allowed (should raise ValueError)
-            assert (
-                max_tokens_in_batch * batch_size <= max_tokens
-            ), f"Batch violates max_tokens_with_padding constraint: {max_tokens_in_batch} * {batch_size} > {max_tokens}"
+            assert max_tokens_in_batch * batch_size <= max_tokens, (
+                f"Batch violates max_tokens_with_padding constraint: {max_tokens_in_batch} * {batch_size} > {max_tokens}"
+            )
 
     def test_length_sorting(self, index_sampler, get_num_tokens):
         """Test that samples are generally grouped by similar lengths."""

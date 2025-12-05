@@ -10,9 +10,9 @@ class Loss(nn.Module):
         for loss_name, loss in losses.items():
             loss_fn = hydra.utils.instantiate(loss)
             self.to_compute.append(loss_fn)
-            assert not isinstance(
-                loss_fn, DictConfig
-            ), f"Loss {loss_name} was instantiated as a DictConfig. Is _target_ present?."
+            assert not isinstance(loss_fn, DictConfig), (
+                f"Loss {loss_name} was instantiated as a DictConfig. Is _target_ present?."
+            )
 
     def forward(
         self,

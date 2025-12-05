@@ -115,9 +115,9 @@ def test_inference_regression(example_id):
 
         rmsd_tolerance = 0.3
         rmsd_difference = abs(predicted_rmsd - baseline_rmsd)
-        assert (
-            rmsd_difference < rmsd_tolerance
-        ), f"RMSD difference {rmsd_difference:.4f}Å exceeds {rmsd_tolerance}Å tolerance"
+        assert rmsd_difference < rmsd_tolerance, (
+            f"RMSD difference {rmsd_difference:.4f}Å exceeds {rmsd_tolerance}Å tolerance"
+        )
 
         # Compare confidence metrics to baseline
         with open(predicted_dir / f"{example_id}_summary_confidences.json") as f:

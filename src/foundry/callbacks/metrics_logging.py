@@ -108,9 +108,9 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         batch_df["dataset"] = dataset_name
 
         # Assert no duplicate rows
-        assert (
-            batch_df.duplicated().sum() == 0
-        ), "Duplicate rows found in the metrics DataFrame!"
+        assert batch_df.duplicated().sum() == 0, (
+            "Duplicate rows found in the metrics DataFrame!"
+        )
 
         # Accumulate into the per-rank DataFrame
         self.per_gpu_outputs_df = pd.concat(

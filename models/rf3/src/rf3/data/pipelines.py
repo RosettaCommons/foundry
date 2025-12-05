@@ -234,9 +234,9 @@ def build_af3_transform_pipeline(
             crop_contiguous_probability + crop_spatial_probability, 1.0, atol=1e-6
         ), "Crop probabilities must sum to 1.0"
         assert crop_size > 0, "Crop size must be greater than 0"
-        assert (
-            crop_center_cutoff_distance > 0
-        ), "Crop center cutoff distance must be greater than 0"
+        assert crop_center_cutoff_distance > 0, (
+            "Crop center cutoff distance must be greater than 0"
+        )
 
     af3_sequence_encoding = AF3SequenceEncoding()
     rf2aa_sequence_encoding = RF2AA_ATOM36_ENCODING

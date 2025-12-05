@@ -49,9 +49,9 @@ class DumpValidationStructuresCallback(BaseCallback):
         if (not self.dump_predictions) and (not self.dump_trajectories):
             return  # Nothing to do
 
-        assert (
-            "network_output" in outputs
-        ), "Validation outputs must contain `network_output` to dump structures!"
+        assert "network_output" in outputs, (
+            "Validation outputs must contain `network_output` to dump structures!"
+        )
 
         network_output = outputs["network_output"]
         example = batch[0]  # Assume batch size = 1

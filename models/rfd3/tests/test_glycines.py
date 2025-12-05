@@ -48,12 +48,12 @@ def test_glycine_features_and_is_x(example, is_inference):
     assert bad_feats == [
         "is_central",
     ], "Expected only is_central to differ: {}".format(bad_feats)
-    assert (
-        actual["is_central"].sum() == actual["is_ca"].sum()
-    ), "is_central and is_ca count should match"
-    assert (
-        expected["is_central"].sum() == expected["is_ca"].sum()
-    ), "is_central and is_ca count should match in expected features"
+    assert actual["is_central"].sum() == actual["is_ca"].sum(), (
+        "is_central and is_ca count should match"
+    )
+    assert expected["is_central"].sum() == expected["is_ca"].sum(), (
+        "is_central and is_ca count should match in expected features"
+    )
 
 
 if __name__ == "__main__":

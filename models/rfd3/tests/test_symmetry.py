@@ -28,9 +28,9 @@ def test_symmetrized_motif(example, is_inference):
     input = instantiate_example(args, is_inference=is_inference)
     example = pipes[is_inference](input)
     aa = example["atom_array"]
-    assert (
-        "sym_entity_id" in aa.get_annotation_categories()
-    ), "sym_entity_id not in atom_array"
+    assert "sym_entity_id" in aa.get_annotation_categories(), (
+        "sym_entity_id not in atom_array"
+    )
 
     sym_motif_mask = get_motif_features(aa)["is_motif_atom"]
     if args["symmetry"].get("is_unsym_motif"):
@@ -40,9 +40,9 @@ def test_symmetrized_motif(example, is_inference):
         sym_motif_mask = sym_motif_mask & ~is_unsym_motif
     symmetrized_motifs = aa[sym_motif_mask]
 
-    assert check_atom_array_is_symmetric(
-        symmetrized_motifs
-    ), "Symmetrized motif is not symmetric"
+    assert check_atom_array_is_symmetric(symmetrized_motifs), (
+        "Symmetrized motif is not symmetric"
+    )
 
 
 if __name__ == "__main__":

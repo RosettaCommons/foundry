@@ -106,9 +106,9 @@ def _assert_pipeline_results_equal(
 ):
     """Assert that two pipeline results are equal."""
     # Check that both have the same keys
-    assert set(result.keys()) == set(
-        expected.keys()
-    ), f"Keys don't match for {example_name} in {mode} mode"
+    assert set(result.keys()) == set(expected.keys()), (
+        f"Keys don't match for {example_name} in {mode} mode"
+    )
 
     # Check atom array if present
     assert "atom_array" in result, "Atom array not found in result"
@@ -132,9 +132,9 @@ def _assert_features_equal(
     """Assert that feature dictionaries are equal, with new features being a superset of old features."""
     # Check that all expected feature keys are present in the new features
     missing_keys = set(expected_feats.keys()) - set(feats.keys())
-    assert (
-        not missing_keys
-    ), f"Missing feature keys {missing_keys} for {example_name} in {mode} mode"
+    assert not missing_keys, (
+        f"Missing feature keys {missing_keys} for {example_name} in {mode} mode"
+    )
 
     # Only check features that were in the expected results (allows for new features)
     for key in expected_feats.keys():
@@ -142,9 +142,9 @@ def _assert_features_equal(
         expected_feat = expected_feats[key]
 
         # Check shapes
-        assert (
-            feat.shape == expected_feat.shape
-        ), f"Feature {key} shape mismatch for {example_name} in {mode} mode: {feat.shape} vs {expected_feat.shape}"
+        assert feat.shape == expected_feat.shape, (
+            f"Feature {key} shape mismatch for {example_name} in {mode} mode: {feat.shape} vs {expected_feat.shape}"
+        )
 
         # Check values with tolerance
         assert_tensor_or_array_equal(
