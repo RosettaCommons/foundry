@@ -10,14 +10,17 @@ both are described in more detail below.
   <img src="docs/.assets/overview.png" alt="All-atom design with RFD3">
 </p>
 
+> [!INFO]
+> Looking for config documentation? See [here](./docs/input.md)
+
 ## Getting Started
-1. Install RFdiffusion3. See [Main README](../../README.md) for instructions how to install all models to run full pipeline (recommended). If you have already installed all the models skip [here](#run-inference). 
+1. Install RFdiffusion3. See [Main README](../../README.md) for instructions how to install all models to run full pipeline (recommended). If you have already installed all the models skip [here](#run-inference).
 ```bash
 pip install rc-foundry[rfd3]
 ```
 2. Download checkpoint to your desired checkpoint location.
 ```bash
-foundry install rfd3 --checkpoint-dir /path/to/ckpt/dir
+foundry install rfd3 --checkpoint-dir <path/to/ckpt/dir>
 ```
 This sets `FOUNDRY_CHECKPOINTS_DIR` and will in future look for checkpoints in that directory, allowing you to run inference without supplying the checkpoint path. The checkpoint directory is optional, defaulting to `~/.foundry/checkpoints` if unset.
 

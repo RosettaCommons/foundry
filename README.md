@@ -74,11 +74,7 @@ For an interactive Google Colab notebook walking through a basic design pipeline
 Install both `foundry` and models in editable mode for development:
 
 ```bash
-# Install foundry and RF3 in editable mode
-uv pip install -e . -e ./models/rf3 -e ./models/rfd3 -e ./models/mpnn
-
-# Or install only foundry (no models)
-uv pip install -e .
+uv pip install -e '.[all,dev]'
 ```
 
 This approach allows you to:
