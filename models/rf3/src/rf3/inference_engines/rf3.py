@@ -16,6 +16,7 @@ from atomworks.ml.preprocessing.msa.finding import (
 )
 from atomworks.ml.samplers import LoadBalancedDistributedSampler
 from biotite.structure import AtomArray, AtomArrayStack
+import numpy as np
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
@@ -383,6 +384,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
         out_dir: PathLike | None = None,
         dump_predictions: bool = True,
         dump_trajectories: bool = False,
+        dump_pae_matrix: bool = False,
         one_model_per_file: bool = False,
         annotate_b_factor_with_plddt: bool = False,
         sharding_pattern: str | None = None,
@@ -401,6 +403,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
           out_dir: Output directory. If None, returns results as an AtomArray and dictionaries of metrics. Defaults to ``None``.
           dump_predictions: Whether to save predicted structures. Defaults to ``True``.
           dump_trajectories: Whether to save diffusion trajectories. Defaults to ``False``.
+          dump_pae_matrix (bool): Whether to dump the full PAE matrix.
           one_model_per_file: Save each model in separate file. Defaults to ``False``.
           annotate_b_factor_with_plddt: Write pLDDT to B-factor column. Defaults to ``False``.
           sharding_pattern: Sharding pattern for output organization. Defaults to ``None``.
@@ -713,9 +716,14 @@ class RF3InferenceEngine(BaseInferenceEngine):
                         file_type=file_type,
                     )
 
+                if self.dump_pae_matrix:
+                    pae_np = confidence_outs["pae"].cpu().numpy()
+                    np.save(self.cif_out_dir / f"{example_id}.pae", pae_np)
+
                 ranked_logger.info(
                     f"Outputs for {input_spec.example_id} written to {example_out_dir}!"
                 )
+
             else:
                 # Store in memory - return list of RF3Output objects
                 results[input_spec.example_id] = rf3_outputs

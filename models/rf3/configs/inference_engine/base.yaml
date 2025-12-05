@@ -14,6 +14,7 @@ inputs: ???
 out_dir: ???
 dump_predictions: true
 dump_trajectories: false
+dump_pae_matrix: false
 one_model_per_file: false
 annotate_b_factor_with_plddt: true
 sharding_pattern: null
