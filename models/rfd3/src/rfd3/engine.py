@@ -23,9 +23,9 @@ from rfd3.inference.datasets import (
 )
 from rfd3.inference.input_parsing import DesignInputSpecification
 from rfd3.model.inference_sampler import SampleDiffusionConfig
-from rfd3.utils.inference import ( 
-    ensure_input_is_abspath,
+from rfd3.utils.inference import (
     ensure_inference_sampler_matches_design_spec,
+    ensure_input_is_abspath,
 )
 from rfd3.utils.io import (
     CIF_LIKE_EXTENSIONS,
@@ -390,6 +390,9 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         # Based on inputs, construct the specifications to loop through
         design_specifications = {}
         for prefix, example_spec in inputs.items():
+            # Record task name in the specification
+            example_spec["extra"]["task_name"] = prefix
+
             # ... Create n_batches for example
             for batch_id in range((n_batches) if exists(n_batches) else 1):
                 # ... Example ID
@@ -531,21 +534,20 @@ def process_input(
 
 
 def _reshape_trajectory(traj, align_structures: bool):
-    traj = [traj[i] for i in range(len(traj))]
+    traj = [traj[i] for i in range(len(traj))]  # make list of arrays
     n_steps = len(traj)
     max_frames = 100
-
+    if n_steps > max_frames:
+        selected_indices = torch.linspace(0, n_steps - 1, max_frames).long().tolist()
+        traj = [traj[i] for i in selected_indices]
     if align_structures:
         # ... align the trajectories on the last prediction
         for step in range(n_steps - 1):
             traj[step] = weighted_rigid_align(
-                X_L=traj[-1],
-                X_gt_L=traj[step],
-            )
+                X_L=traj[-1][None],
+                X_gt_L=traj[step][None],
+            ).squeeze(0)
     traj = traj[::-1]  # reverse to go from noised -> denoised
-    if n_steps > max_frames:
-        selected_indices = torch.linspace(0, n_steps - 1, max_frames).long().tolist()
-        traj = [traj[i] for i in selected_indices]
 
     traj = torch.stack(traj).cpu().numpy()
     return traj
