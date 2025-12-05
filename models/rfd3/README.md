@@ -39,7 +39,7 @@ There are various interesting ways you can use RFD3 beyond Atom14 design as it's
 For example, you can fix sequence and not structure (prediction-type task), fix the backbone and unfix the sequence (MPNN-type inverse folding) or unfix the sidechains only (PLACER/ChemNet-style):
 
 <p align="center">
-  <img src="docs/.assets/conditioning.png" alt="Conditioning options for RD3">
+  <img src="docs/.assets/conditioning.png" alt="Conditioning options for RFD3">
 </p>
 
 For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `foundry/models/rfd3/configs/inference_engine/rfdiffusion3.yaml` for even more options.
