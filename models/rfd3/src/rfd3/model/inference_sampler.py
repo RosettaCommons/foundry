@@ -13,10 +13,7 @@ from foundry.utils.rotation_augmentation import (
     uniform_random_rotation,
 )
 
-from rfd3.inference.symmetry.atom_array import (
-    FIXED_ENTITY_ID,
-    FIXED_TRANSFORM_ID
-)
+from rfd3.inference.symmetry.atom_array import FIXED_ENTITY_ID, FIXED_TRANSFORM_ID
 from rfd3.inference.symmetry.symmetry_utils import apply_symmetry_to_xyz_atomwise
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
