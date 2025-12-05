@@ -25,15 +25,22 @@ This sets `FOUNDRY_CHECKPOINTS_DIR` and will in future look for checkpoints in t
 
 To run inference (with foundry installed in your environment, or RFD3 & Foundry src in PYTHONPATH):
 ```bash
-rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json skip_existing=False dump_trajectories=True
+rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json skip_existing=False dump_trajectories=True prevalidate_inputs=True
 ```
 
-Additional unecessary args here are added:
+Additional unnecessary args here are added:
 - Including dumping and aligning trajectory structures can be useful for debugging your setup or making cool gifs.
 - Printing the config and dumping trajectories are turned off by default, but turned on here for verbosity
-- Only `out_dir` and `inputs` are required
+- `prevalidate_inputs` will check that your inputs are valid before running inference. Helpful if your json has a number of different configs you want to debug / double check are valid before loading the checkpoints.
+- Only `out_dir` and `inputs` are required. The output directory will automatically be created. 
 
-The output directory will automatically be created.
+
+There are various interesting ways you can use RFD3 beyond Atom14 design as it's trained on a large array of different tasks.
+For example, you can fix sequence and not structure (prediction-type task), fix the backbone and unfix the sequence (MPNN-type inverse folding) or unfix the sidechains only (PLACER/ChemNet-style):
+
+<p align="center">
+  <img src="docs/.assets/conditioning.png" alt="Conditioning options for RFD3">
+</p>
 
 For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `foundry/models/rfd3/configs/inference_engine/rfdiffusion3.yaml` for even more options.
 

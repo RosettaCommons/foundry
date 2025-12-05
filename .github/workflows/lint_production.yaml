@@ -1,10 +1,10 @@
-name: lint_trunk
+name: lint_production
 
 on:
   push:
-    branches: [main, trunk, wip/for-release, wip/remove-chemdata]
+    branches: [main, production, wip/for-release, wip/remove-chemdata]
   pull_request:
-    branches: [main, trunk, wip/for-release, wip/remove-chemdata]
+    branches: [main, production, wip/for-release, wip/remove-chemdata]
   pull_request_target:
     types: [ready_for_review]
   workflow_dispatch:
@@ -23,14 +23,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: 'pip'
-      - name: Extract ruff version from requirements.txt
+      - name: Extract ruff version from pyproject.toml
         run: |
-          echo "RUFF_VERSION=$(grep 'ruff==' pyproject.toml | sed 's/.*ruff==\(.*\)/\1/')" >> $GITHUB_ENV
+          echo "RUFF_VERSION=$(grep 'ruff==' pyproject.toml \
+            | sed -E 's/.*ruff==([^",]+).*/\1/')" >> "$GITHUB_ENV"
       - name: Install ruff
         run: pip install ruff==${{ env.RUFF_VERSION }}
       - name: Ruff format
-        run: ruff format --diff src tests scripts notebooks
+        run: ruff format --diff src models tests
       - name: Ruff check
-        run: ruff check src tests scripts notebooks
+        run: ruff check src models tests
