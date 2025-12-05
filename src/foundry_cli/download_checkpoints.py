@@ -145,6 +145,7 @@ def install(
     """Install model checkpoints for foundry.
     Examples:
         foundry install all
+        foundry install rfd3 rf3
         foundry install proteinmpnn --checkpoint-dir ./checkpoints
     """
     # Determine checkpoint directory
