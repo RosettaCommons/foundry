@@ -184,7 +184,7 @@ def fetch_motif_residue_(
             "is_motif_atom_with_fixed_seq", np.zeros(subarray.shape[0], dtype=int)
         )
     elif to_index or to_unindex:
-        # If the residue is in the contig or unindexed components, 
+        # If the residue is in the contig or unindexed components,
         # we set all atoms in the residue to be motif atoms
         subarray.set_annotation("is_motif_atom", np.ones(subarray.shape[0], dtype=int))
     else:
@@ -193,7 +193,7 @@ def fetch_motif_residue_(
         ):
             raise ValueError(
                 f"{src_chain}{src_resid} is not found in fixed_atoms, contig or unindex contig."
-                 "Please check your input and contig specification."
+                "Please check your input and contig specification."
             )
     if unfix_all or f"{src_chain}{src_resid}" in unfix_residues:
         subarray.set_annotation(

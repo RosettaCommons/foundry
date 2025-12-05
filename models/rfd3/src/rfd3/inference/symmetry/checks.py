@@ -23,7 +23,7 @@ def check_symmetry_config(
 
     assert sym_conf.id, "symmetry_id is required. e.g. {'id': 'C2'}"
     # if unsym motif is provided, check that each motif name is in the atom array
-     
+
     is_unsym_motif = np.zeros(atom_array.shape[0], dtype=bool)
     if sym_conf.is_unsym_motif:
         assert (
@@ -35,7 +35,7 @@ def check_symmetry_config(
         for n in unsym_motif_names:
             if (sm and n not in sm.split(",")) and (n not in atom_array.src_component):
                 raise ValueError(f"Unsym motif {n} not found in atom_array")
-        
+
     is_motif_token = get_motif_features(atom_array)["is_motif_token"]
     if (
         is_motif_token[~is_unsym_motif].any()
@@ -72,7 +72,9 @@ def check_atom_array_is_symmetric(atom_array):
     # remove hetero atoms
     atom_array = atom_array[~atom_array.hetero]
     if len(atom_array) == 0:
-        ranked_logger.warning("Atom array has no protein chains. Please check your input.")
+        ranked_logger.warning(
+            "Atom array has no protein chains. Please check your input."
+        )
         return True
 
     chains = np.unique(atom_array.chain_id)

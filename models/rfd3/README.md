@@ -25,7 +25,7 @@ This sets `FOUNDRY_CHECKPOINTS_DIR` and will in future look for checkpoints in t
 
 To run inference (with foundry installed in your environment, or RFD3 & Foundry src in PYTHONPATH):
 ```bash
-rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json ckpt_path=null skip_existing=False dump_trajectories=True
+rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json skip_existing=False dump_trajectories=True
 ```
 
 Additional unecessary args here are added:
