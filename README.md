@@ -8,7 +8,7 @@ All models within Foundry rely on [AtomWorks](https://github.com/RosettaCommons/
 ### Quickstart guide
 **Installation**
 ```bash
-pip install rc-foundry[all]
+pip install "rc-foundry[all]"
 ```
 
 **Downloading weights** Models can be downloaded to a target folder with:
