@@ -45,7 +45,7 @@ class SymmetryConfig(BaseModel):
     )
     id: Optional[str] = Field(
         None,
-        description="Symmetry group ID. e.g. 'C3', 'D2'. Only C and D symmetry types are supported currently.",
+        description="Symmetry group ID. Supported types: Cyclic (C), Dihedral (D), Tetrahedral (T), Octahedral (O), Icosahedral (I). e.g. 'C3', 'D2', 'T', 'O', 'I'.",
     )
     is_unsym_motif: Optional[str] = Field(
         None,
@@ -83,7 +83,7 @@ def make_symmetric_atom_array(
     if not isinstance(sym_conf, SymmetryConfig):
         sym_conf = convery_sym_conf_to_symmetry_config(sym_conf)
 
-    sym_conf = check_symmetry_config(
+    check_symmetry_config(
         asu_atom_array, sym_conf, sm, has_dist_cond, src_atom_array=src_atom_array
     )
     # Adding utility annotations to the asu atom array
@@ -99,14 +99,12 @@ def make_symmetric_atom_array(
         assert (
             src_atom_array is not None
         ), "Source atom array must be provided for symmetric motifs"
+        # if symmetric motif is provided, get the frames from the src atom array.
         frames = get_symmetry_frames_from_atom_array(src_atom_array, frames)
-    elif sym_conf.is_symmetric_motif is None:
-        ranked_logger.info(
-            "No motifs found in atom array. Generating unconditional symmetric proteins."
-        )
-    else:
-        raise ValueError(
-            "Asymmetric motif inputs are not supported yet. Please provide a symmetric motif or no motifs."
+    elif (asu_atom_array._is_motif[~asu_atom_array._is_unsym_motif]).any():
+        # if the motifs that's not unsym motifs are present.
+        raise NotImplementedError(
+            "Asymmetric motif inputs are not implemented yet. please symmetrize the motif."
         )
 
     # Add symmetry annotations to the asu atom array

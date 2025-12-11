@@ -24,6 +24,12 @@ def get_symmetry_frames_from_symmetry_id(symmetry_id):
     elif symmetry_id.lower().startswith("d"):
         order = int(symmetry_id[1:])
         frames = get_dihedral_frames(order)
+    elif symmetry_id.lower() == "t":
+        frames = get_tetrahedral_frames()
+    elif symmetry_id.lower() == "o":
+        frames = get_octahedral_frames()
+    elif symmetry_id.lower() == "i":
+        frames = get_icosahedral_frames()
     elif symmetry_id.lower() == "input_defined":
         assert (
             sym_conf.symmetry_file is not None
@@ -278,6 +284,248 @@ def get_dihedral_frames(order):
         frames.append((R @ flip, np.array([0, 0, 0])))
 
     return frames
+
+
+def get_tetrahedral_frames():
+    """
+    Get tetrahedral frames (T symmetry group, 12 elements).
+    Returns:
+        frames: list of rotation matrices
+    """
+
+    frames = []
+
+    # Identity
+    frames.append((np.eye(3), np.array([0, 0, 0])))
+
+    # 8 rotations by ±120° around body diagonals (±1, ±1, ±1)
+    diagonals = [
+        np.array([1, 1, 1]),
+        np.array([1, -1, -1]),
+        np.array([-1, 1, -1]),
+        np.array([-1, -1, 1]),
+    ]
+    for d in diagonals:
+        axis = d / np.linalg.norm(d)
+        for angle in [2 * np.pi / 3, 4 * np.pi / 3]:
+            R = _rotation_matrix_from_axis_angle(axis, angle)
+            frames.append((R, np.array([0, 0, 0])))
+
+    # 3 rotations by 180° around coordinate axes
+    for axis in [np.array([1, 0, 0]), np.array([0, 1, 0]), np.array([0, 0, 1])]:
+        R = _rotation_matrix_from_axis_angle(axis, np.pi)
+        frames.append((R, np.array([0, 0, 0])))
+
+    return frames
+
+
+def get_octahedral_frames():
+    """
+    Get octahedral frames (O symmetry group, 24 elements).
+    The axes are computed from the geometry of a cube with vertices at (±1, ±1, ±1).
+    Returns:
+        frames: list of rotation matrices
+    """
+
+    frames = []
+
+    # 8 vertices of the cube
+    vertices = []
+    for s1 in [1, -1]:
+        for s2 in [1, -1]:
+            for s3 in [1, -1]:
+                vertices.append(np.array([s1, s2, s3]))
+    vertices = np.array(vertices)
+
+    # 6 face centers of the cube (4-fold axes pass through these)
+    face_centers = [
+        np.array([1, 0, 0]),
+        np.array([-1, 0, 0]),
+        np.array([0, 1, 0]),
+        np.array([0, -1, 0]),
+        np.array([0, 0, 1]),
+        np.array([0, 0, -1]),
+    ]
+
+    # Find edges (pairs of vertices differing in exactly one coordinate)
+    edges = []
+    for i in range(len(vertices)):
+        for j in range(i + 1, len(vertices)):
+            diff = np.abs(vertices[i] - vertices[j])
+            if np.sum(diff > 0) == 1:  # Differ in exactly one coordinate
+                edges.append((i, j))
+
+    # Helper to get unique axis (normalize direction to avoid duplicates)
+    def normalize_axis(v):
+        axis = v / np.linalg.norm(v)
+        for c in axis:
+            if abs(c) > 1e-10:
+                if c < 0:
+                    axis = -axis
+                break
+        return tuple(np.round(axis, 10))
+
+    # Identity
+    frames.append((np.eye(3), np.array([0, 0, 0])))
+
+    # 4-fold axes (through opposite face centers) - 3 axes
+    # Each gives rotations at 90°, 180°, 270° (we skip 0° = identity)
+    fourfold_axes_set = set()
+    for fc in face_centers:
+        axis_tuple = normalize_axis(fc)
+        fourfold_axes_set.add(axis_tuple)
+
+    for axis_tuple in fourfold_axes_set:
+        axis = np.array(axis_tuple)
+        for k in [1, 2, 3]:  # 90°, 180°, 270°
+            angle = np.pi * k / 2
+            R = _rotation_matrix_from_axis_angle(axis, angle)
+            frames.append((R, np.array([0, 0, 0])))
+
+    # 3-fold axes (through opposite vertices) - 4 axes
+    # Each gives rotations at 120°, 240°
+    threefold_axes_set = set()
+    for v in vertices:
+        axis_tuple = normalize_axis(v)
+        threefold_axes_set.add(axis_tuple)
+
+    for axis_tuple in threefold_axes_set:
+        axis = np.array(axis_tuple)
+        for angle in [2 * np.pi / 3, 4 * np.pi / 3]:
+            R = _rotation_matrix_from_axis_angle(axis, angle)
+            frames.append((R, np.array([0, 0, 0])))
+
+    # 2-fold axes (through opposite edge midpoints) - 6 axes
+    # Each gives 1 rotation at 180°
+    twofold_axes_set = set()
+    for i, j in edges:
+        midpoint = (vertices[i] + vertices[j]) / 2
+        axis_tuple = normalize_axis(midpoint)
+        twofold_axes_set.add(axis_tuple)
+
+    for axis_tuple in twofold_axes_set:
+        axis = np.array(axis_tuple)
+        R = _rotation_matrix_from_axis_angle(axis, np.pi)
+        frames.append((R, np.array([0, 0, 0])))
+
+    return frames
+
+
+def get_icosahedral_frames():
+    """
+    Get icosahedral frames (I symmetry group, 60 elements).
+    The axes are computed from the geometry of a regular icosahedron with
+    vertices at (0, ±1, ±φ), (±1, ±φ, 0), (±φ, 0, ±1) where φ is the golden ratio.
+    Returns:
+        frames: list of rotation matrices
+    """
+
+    frames = []
+
+    # Golden ratio
+    phi = (1 + np.sqrt(5)) / 2
+
+    # 12 vertices of the icosahedron
+    vertices = []
+    for s1 in [1, -1]:
+        for s2 in [1, -1]:
+            vertices.append(np.array([0, s1 * 1, s2 * phi]))
+            vertices.append(np.array([s1 * 1, s2 * phi, 0]))
+            vertices.append(np.array([s2 * phi, 0, s1 * 1]))
+    vertices = np.array(vertices)
+
+    # Find edges (pairs of vertices at distance 2)
+    edges = []
+    for i in range(len(vertices)):
+        for j in range(i + 1, len(vertices)):
+            dist_sq = np.sum((vertices[i] - vertices[j]) ** 2)
+            if np.isclose(dist_sq, 4.0):
+                edges.append((i, j))
+
+    # Find faces (triangles of mutually adjacent vertices)
+    edge_set = set(edges)
+    faces = []
+    for i in range(len(vertices)):
+        for j in range(i + 1, len(vertices)):
+            for k in range(j + 1, len(vertices)):
+                if (i, j) in edge_set and (j, k) in edge_set and (i, k) in edge_set:
+                    faces.append((i, j, k))
+
+    # Helper to get unique axis (normalize direction to avoid duplicates)
+    def normalize_axis(v):
+        axis = v / np.linalg.norm(v)
+        # Make first significant component positive to avoid duplicate opposite axes
+        for c in axis:
+            if abs(c) > 1e-10:
+                if c < 0:
+                    axis = -axis
+                break
+        return tuple(np.round(axis, 10))
+
+    # Identity
+    frames.append((np.eye(3), np.array([0, 0, 0])))
+
+    # 5-fold axes (through opposite vertices) - 6 axes, 4 rotations each = 24
+    fivefold_axes_set = set()
+    for v in vertices:
+        axis_tuple = normalize_axis(v)
+        fivefold_axes_set.add(axis_tuple)
+
+    for axis_tuple in fivefold_axes_set:
+        axis = np.array(axis_tuple)
+        for k in [1, 2, 3, 4]:
+            angle = 2 * np.pi * k / 5
+            R = _rotation_matrix_from_axis_angle(axis, angle)
+            frames.append((R, np.array([0, 0, 0])))
+
+    # 3-fold axes (through opposite face centers) - 10 axes, 2 rotations each = 20
+    threefold_axes_set = set()
+    for i, j, k in faces:
+        center = (vertices[i] + vertices[j] + vertices[k]) / 3
+        axis_tuple = normalize_axis(center)
+        threefold_axes_set.add(axis_tuple)
+
+    for axis_tuple in threefold_axes_set:
+        axis = np.array(axis_tuple)
+        for angle in [2 * np.pi / 3, 4 * np.pi / 3]:
+            R = _rotation_matrix_from_axis_angle(axis, angle)
+            frames.append((R, np.array([0, 0, 0])))
+
+    # 2-fold axes (through opposite edge midpoints) - 15 axes, 1 rotation each = 15
+    twofold_axes_set = set()
+    for i, j in edges:
+        midpoint = (vertices[i] + vertices[j]) / 2
+        axis_tuple = normalize_axis(midpoint)
+        twofold_axes_set.add(axis_tuple)
+
+    for axis_tuple in twofold_axes_set:
+        axis = np.array(axis_tuple)
+        R = _rotation_matrix_from_axis_angle(axis, np.pi)
+        frames.append((R, np.array([0, 0, 0])))
+
+    return frames
+
+
+def _rotation_matrix_from_axis_angle(axis, angle):
+    """
+    Compute a rotation matrix from an axis and angle using Rodrigues' formula.
+    Arguments:
+        axis: unit vector of the rotation axis
+        angle: rotation angle in radians
+    Returns:
+        R: 3x3 rotation matrix
+    """
+
+    axis = axis / np.linalg.norm(axis)
+    K = np.array(
+        [
+            [0, -axis[2], axis[1]],
+            [axis[2], 0, -axis[0]],
+            [-axis[1], axis[0], 0],
+        ]
+    )
+    R = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+    return R
 
 
 def get_frames_from_file(file_path):
