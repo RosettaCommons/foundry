@@ -24,7 +24,16 @@ def check_symmetry_config(
     assert sym_conf.id, "symmetry_id is required. e.g. {'id': 'C2'}"
     # if unsym motif is provided, check that each motif name is in the atom array
 
+    is_motif_atom = get_motif_features(atom_array)["is_motif_atom"]
     is_unsym_motif = np.zeros(atom_array.shape[0], dtype=bool)
+
+    if not is_motif_atom.any():
+        sym_conf.is_symmetric_motif = None
+        ranked_logger.warning(
+            "No motifs found in atom array. Setting is_symmetric_motif to None."
+        )
+        return sym_conf
+
     if sym_conf.is_unsym_motif:
         assert (
             src_atom_array is not None
@@ -36,21 +45,20 @@ def check_symmetry_config(
             if (sm and n not in sm.split(",")) and (n not in atom_array.src_component):
                 raise ValueError(f"Unsym motif {n} not found in atom_array")
 
-    is_motif_token = get_motif_features(atom_array)["is_motif_token"]
     if (
-        is_motif_token[~is_unsym_motif].any()
+        is_motif_atom[~is_unsym_motif].any()
         and not sym_conf.is_symmetric_motif
         and not has_dist_cond
     ):
         raise ValueError(
-            "Asymmetric motif inputs should be distance constrained."
-            "Use atomwise_fixed_dist to constrain the distance between the motif atoms."
+            "Asymmetric motif inputs are not supported yet. Please provide a symmetric motif."
         )
 
     if partial and not sym_conf.is_symmetric_motif:
         raise ValueError(
             "Partial diffusion with symmetry is only supported for symmetric inputs."
         )
+    return sym_conf
 
 
 def check_atom_array_is_symmetric(atom_array):
