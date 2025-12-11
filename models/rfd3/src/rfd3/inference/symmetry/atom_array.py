@@ -334,13 +334,9 @@ def reannotate_chain_ids(atom_array, offset, multiplier=0):
         offset: offset to add to the chain ids (typically num_chains in ASU)
         multiplier: multiplier for the offset (typically transform index)
     """
-    chain_ids_indices = np.array(
-        [chain_id_to_index(c) for c in atom_array.chain_id]
-    )
+    chain_ids_indices = np.array([chain_id_to_index(c) for c in atom_array.chain_id])
     new_indices = chain_ids_indices + offset * multiplier
-    chain_ids = np.array(
-        [index_to_chain_id(idx) for idx in new_indices], dtype="U4"
-    )
+    chain_ids = np.array([index_to_chain_id(idx) for idx in new_indices], dtype="U4")
     atom_array.chain_id = chain_ids
     atom_array.pn_unit_iid = chain_ids
     return atom_array
