@@ -29,6 +29,7 @@
         "input": "./input_pdbs/1bna.pdb",
         "contig": "A1-10,/0,B15-24,/0,120-130",
         "length": "140-150",
-        "ori_token": [24,20,10]
+        "ori_token": [24,20,10],
+        "is_non_loopy": true
     }
 }
