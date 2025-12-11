@@ -16,9 +16,16 @@ symmetry:
     is_unsym_motif: "Y1-11,Z16-25"
     is_symmetric_motif: true
 ```
-- `id`                : Symmetry group ID; e.g. "C3" for a cyclic protein with 3 subunits, "D2" for a dihedral protein with 2 subunits. Note that only C and D symmetry types are supported currently.
+- `id`                : Symmetry group ID. Supported symmetry types:
+  - **Cyclic (C)**: e.g. "C3" for a cyclic protein with 3 subunits
+  - **Dihedral (D)**: e.g. "D2" for a dihedral protein with 4 subunits (2×2)
+  - **Tetrahedral (T)**: "T" for tetrahedral symmetry with 12 subunits
+  - **Octahedral (O)**: "O" for octahedral symmetry with 24 subunits
+  - **Icosahedral (I)**: "I" for icosahedral symmetry with 60 subunits
 - `is_unsym_motif`    : Comma separated string list of contig/ligand names that should NOT be symmetrized (e.g. DNA strands). If not provided, all motifs are assumed to be symmetrized. See [Designs with motifs](#designs-with-motifs) section for details.
 - `is_symmetric_motif`: Boolean value whether the input motif is symmetric. Currently only symmetric input motifs are supported, therefore, `true` by default.
+
+> **⚠️ Memory Warning:** Memory requirements scale quadratically with the number of subunits. For larger complexes (especially T, O, and I symmetries), memory usage can become very high. Always use `diffusion_batch_size=1` for symmetry, and consider enabling `low_memory_mode=True` for higher-order symmetries. The memory footprint increases dramatically as both the number of subunits and the length of each subunit increase.
 
 
 ## Example command 
@@ -26,18 +33,17 @@ You can run the following example command:
 ```
 ./src/modelhub/inference.py inference_sampler.kind=symmetry out_dir=logs/inference_outs/sym_demo/0 ckpt_path=$cur_ckpt inputs=./projects/aa_design/tests/test_data/sym_tests.json diffusion_batch_size=1 
 ```
-- `inference_sampler.kind`: Set `symmetry` to tern on symmetry mode.
-- `diffusion_batch_size`  : `8` by default, but it is recommended to set it to `1` for symmetry due to memory limitations.
-- `low_memory_mode`       : Additionally you can set this to `True` if you have memory constraints (e.g. "CUDA error: out of memory"). However, this will significantly slow the inference.
+- `inference_sampler.kind`: Set `symmetry` to turn on symmetry mode.
+- `diffusion_batch_size`  : **Must be set to `1` for all symmetry types** due to memory limitations. Memory scales quadratically with the number of subunits.
+- `low_memory_mode`       : **Strongly recommended** for T, O, and I symmetries. Set to `True` if you encounter memory errors (e.g. "CUDA error: out of memory"). Note that this will significantly slow the inference but is often necessary for larger complexes.
 
 
 ## Unconditional multimer design
 
-As mentioned above, we currently only support C and D symmetry types.
-The following provides a general overview of the types of symmetry and examples of how to run:
+The following provides a general overview of the supported symmetry types and examples of how to run:
 
-### Cyclic
-**Defaults:**
+### Cyclic (C)
+Cyclic symmetry with n-fold rotational symmetry around a single axis. Generates n identical subunits.
 
 ```json
 {
@@ -51,8 +57,8 @@ The following provides a general overview of the types of symmetry and examples 
 }
 ```
 
-### Dihedrals
-**Defaults:**
+### Dihedral (D)
+Dihedral symmetry combines n-fold rotational symmetry with a 2-fold rotation perpendicular to the main axis. Generates 2n identical subunits.
 
 ```json
 {
@@ -66,9 +72,57 @@ The following provides a general overview of the types of symmetry and examples 
 }
 ```
 
+### Tetrahedral (T)
+Tetrahedral symmetry based on the symmetry of a tetrahedron. Generates 12 identical subunits.
+
+```json
+{
+    "uncond_T": { 
+        "length": 100,
+        "symmetry": {
+            "id": "T"
+        }
+    }
+}
+```
+
+### Octahedral (O)
+Octahedral symmetry based on the symmetry of a cube/octahedron. Generates 24 identical subunits.
+
+```json
+{
+    "uncond_O": { 
+        "length": 100,
+        "symmetry": {
+            "id": "O"
+        }
+    }
+}
+```
+
+### Icosahedral (I)
+Icosahedral symmetry based on the symmetry of an icosahedron/dodecahedron. Generates 60 identical subunits. This is the largest point group symmetry and is commonly found in viral capsids.
+
+```json
+{
+    "uncond_I": { 
+        "length": 100,
+        "symmetry": {
+            "id": "I"
+        }
+    }
+}
+```
+
+> **⚠️ Memory Warning:** Memory requirements increase dramatically with the number of subunits and subunit length. The memory footprint scales approximately quadratically with the number of subunits due to pairwise interactions. For higher-order symmetries (T: 12 subunits, O: 24 subunits, I: 60 subunits), it is **essential** to:
+> - Set `diffusion_batch_size=1` (required for all symmetry types)
+> - Enable `low_memory_mode=True` for T, O, and I symmetries
+> - Consider reducing subunit length if you encounter out-of-memory errors
+> - For icosahedral symmetry (60 subunits), expect memory usage to be 25-100× higher than a single chain design
+
 ## Designs with motifs
 
-As mentioned above, symmetry sampling currently only supports pre-symmetrized motifs around the origin. Therefore, `is_symmetric_motif` is set to `true` by default. 
+Symmetry sampling currently only supports pre-symmetrized motifs around the origin. Therefore, `is_symmetric_motif` is set to `true` by default. 
 The following are example JSON specifications for different symmetric motif scaffolding. You can also find the corresponding input PDBs in `docs/input_pdbs/symmetry_examples`. Although we only give JSON examples, you can also use YAML for everything shown below.   
 
 The tasks that these examples describe are as follows:
