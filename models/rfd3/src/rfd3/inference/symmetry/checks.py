@@ -29,7 +29,9 @@ def check_symmetry_config(
 
     if not is_motif_atom.any():
         sym_conf.is_symmetric_motif = None
-        ranked_logger.warning("No motifs found in atom array. Setting is_symmetric_motif to None.")
+        ranked_logger.warning(
+            "No motifs found in atom array. Setting is_symmetric_motif to None."
+        )
         return sym_conf
 
     if sym_conf.is_unsym_motif:
@@ -56,7 +58,6 @@ def check_symmetry_config(
         raise ValueError(
             "Partial diffusion with symmetry is only supported for symmetric inputs."
         )
-    
     return sym_conf
 
 
