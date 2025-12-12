@@ -43,6 +43,7 @@ The following provides a general overview of the types of symmetry and examples 
 {
     "uncond_C15": {
         "length": 100,
+        "is_non_loopy": true,
         "symmetry": {
             "id": "C15"
         }
@@ -57,6 +58,7 @@ The following provides a general overview of the types of symmetry and examples 
 {
     "uncond_D4": { 
         "length": 100,
+        "is_non_loopy": true,
         "symmetry": {
             "id": "D4"
         }
@@ -88,7 +90,6 @@ The tasks that these examples describe are as follows:
         "ligand": "ORO,ZN",
         "unindex": "A250",
         "length": 130,
-        "is_non_loopy": true,
         "select_fixed_atoms": {
             "A250": "OD1,CG"
         }
@@ -102,7 +103,6 @@ The tasks that these examples describe are as follows:
         "ligand": "DXC",
         "unindex": "A16,A40,A100,A103",
         "length": 80,
-        "is_non_loopy": true,
         "select_fixed_atoms": {
             "A16": "OH,CZ,CE1,CE2",
             "A40": "OD2,CG",
@@ -120,7 +120,6 @@ The tasks that these examples describe are as follows:
         "ligand": "HEM",
         "contig": "51,M52,80",
         "length": null,
-        "is_non_loopy": true,
         "select_fixed_atoms": {
             "M52": "CG,SD,CE"
         }
