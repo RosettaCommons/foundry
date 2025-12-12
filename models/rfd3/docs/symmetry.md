@@ -88,6 +88,7 @@ The tasks that these examples describe are as follows:
         "ligand": "ORO,ZN",
         "unindex": "A250",
         "length": 130,
+        "is_non_loopy": true,
         "select_fixed_atoms": {
             "A250": "OD1,CG"
         }
@@ -101,6 +102,7 @@ The tasks that these examples describe are as follows:
         "ligand": "DXC",
         "unindex": "A16,A40,A100,A103",
         "length": 80,
+        "is_non_loopy": true,
         "select_fixed_atoms": {
             "A16": "OH,CZ,CE1,CE2",
             "A40": "OD2,CG",
@@ -118,11 +120,12 @@ The tasks that these examples describe are as follows:
         "ligand": "HEM",
         "contig": "51,M52,80",
         "length": null,
+        "is_non_loopy": true,
         "select_fixed_atoms": {
             "M52": "CG,SD,CE"
         }
     },
-    "uncond_unsym_C3_6t8h": {
+    "unsym_C3_6t8h": {
         "symmetry": {
             "id": "C3",
             "is_symmetric_motif": true,
@@ -130,7 +133,8 @@ The tasks that these examples describe are as follows:
         },
         "input": "symmetry_examples/6t8h_C3.pdb",
         "contig": "150-150,/0,Y1-11,/0,Z16-25",
-        "length": null
+        "length": null,
+        "is_non_loopy": true
     }
 }
 ```
