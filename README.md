@@ -4,6 +4,10 @@ Foundry provides tooling and infrastructure for using and training all classes o
 
 All models within Foundry rely on [AtomWorks](https://github.com/RosettaCommons/atomworks) - a unified framework for manipulating and processing biomolecular structures - for both training and inference. 
 
+
+> [!NOTE]
+> We have a slack now! Join for updates and to get your questions answered [here](https://join.slack.com/t/proteinmodelfoundry/shared_invite/zt-3kpwru8c6-nrmTW6LNHnSE7h16GNnfLA).
+
 ## Getting Started
 ### Quickstart guide
 **Installation**
