@@ -5,6 +5,7 @@ import biotite.structure as struc
 import numpy as np
 from atomworks.enums import ChainType
 from atomworks.io.transforms.atom_array import remove_hydrogens
+from foundry.metrics.base import Metric
 from rfd3.constants import (
     ATOM14_ATOM_NAMES,
     SELECTION_NONPROTEIN,
@@ -16,7 +17,6 @@ from rfd3.transforms.hbonds import (
     calculate_hbonds,
 )
 
-from foundry.metrics.base import Metric
 from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)

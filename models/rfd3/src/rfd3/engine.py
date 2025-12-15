@@ -23,6 +23,7 @@ from rfd3.inference.datasets import (
 )
 from rfd3.inference.input_parsing import DesignInputSpecification
 from rfd3.model.inference_sampler import SampleDiffusionConfig
+from rfd3.utils.add_oxt import add_oxt_each_chain
 from rfd3.utils.inference import (
     ensure_inference_sampler_matches_design_spec,
     ensure_input_is_abspath,
@@ -93,6 +94,10 @@ class RFD3Output:
     example_id: str
     denoised_trajectory_stack: Optional[AtomArrayStack] = None
     noisy_trajectory_stack: Optional[AtomArrayStack] = None
+
+    # Automatically process atom_array to add OXT atoms
+    def __post_init__(self):
+        self.atom_array = add_oxt_each_chain(self.atom_array)
 
     def dump(
         self,
