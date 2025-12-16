@@ -274,7 +274,7 @@ def get_sparse_attention_indices_with_inter_chain(
             other_chain_atoms = torch.where(other_chain_mask)[0]
 
             if len(other_chain_atoms) > 0:
-                # Get distances to other chains 
+                # Get distances to other chains
                 distances_to_other = D_LL[b, c, other_chain_atoms]
 
                 # Select k_inter closest atoms from other chains

@@ -9,12 +9,12 @@ from rfd3.inference.symmetry.symmetry_utils import apply_symmetry_to_xyz_atomwis
 from rfd3.model.cfg_utils import strip_X
 
 from foundry.common import exists
+from foundry.utils.alignment import weighted_rigid_align
 from foundry.utils.ddp import RankedLogger
 from foundry.utils.rotation_augmentation import (
     rot_vec_mul,
     uniform_random_rotation,
 )
-from foundry.utils.alignment import weighted_rigid_align
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
