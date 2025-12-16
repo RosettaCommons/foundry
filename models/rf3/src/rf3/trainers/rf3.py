@@ -24,15 +24,6 @@ from foundry.utils.torch import assert_no_nans, assert_same_shape
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 
-def _remap_outputs(
-    xyz: Float[torch.Tensor, "D L 3"], mapping: Int[torch.Tensor, "D L"]
-) -> Float[torch.Tensor, "D L 3"]:
-    """Helper function to remap outputs using a mapping tensor."""
-    for i in range(xyz.shape[0]):
-        xyz[i, mapping[i]] = xyz[i].clone()
-    return xyz
-
-
 class RF3Trainer(FabricTrainer):
     """Standard Trainer for AF3-style models"""
 

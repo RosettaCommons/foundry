@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from beartype.typing import Any, List, Union
+from jaxtyping import Float, Int
 from biotite.structure import AtomArray, AtomArrayStack
 from biotite.structure.residues import get_residue_starts
 from einops import repeat
@@ -27,6 +28,15 @@ from foundry.utils.ddp import RankedLogger
 from foundry.utils.torch import assert_no_nans, assert_same_shape
 
 global_logger = RankedLogger(__name__, rank_zero_only=False)
+
+
+def _remap_outputs(
+    xyz: Float[torch.Tensor, "D L 3"], mapping: Int[torch.Tensor, "D L"]
+) -> Float[torch.Tensor, "D L 3"]:
+    """Helper function to remap outputs using a mapping tensor."""
+    for i in range(xyz.shape[0]):
+        xyz[i, mapping[i]] = xyz[i].clone()
+    return xyz
 
 
 class AADesignTrainer(FabricTrainer):
