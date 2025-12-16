@@ -100,13 +100,10 @@ def make_symmetric_atom_array(
             src_atom_array is not None
         ), "Source atom array must be provided for symmetric motifs"
         frames = get_symmetry_frames_from_atom_array(src_atom_array, frames)
-    elif sym_conf.is_symmetric_motif is None:
+    else:
+        # At this point, asym case would have been caught by the check_symmetry_config function.
         ranked_logger.info(
             "No motifs found in atom array. Generating unconditional symmetric proteins."
-        )
-    else:
-        raise ValueError(
-            "Asymmetric motif inputs are not supported yet. Please provide a symmetric motif or no motifs."
         )
 
     # Add symmetry annotations to the asu atom array

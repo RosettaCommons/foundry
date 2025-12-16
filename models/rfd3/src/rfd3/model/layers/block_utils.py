@@ -118,14 +118,14 @@ def scatter_add_pair_features(P_LK_tgt, P_LK_indices, P_LA_src, P_LA_indices):
 
     Parameters
     ----------
-    P_LK_indices   : (D, L, k) LongTensor
+    P_LK_indices   : (B, L, k) LongTensor
         Key indices | P_LK_indices[d, i, k] = global atom index for which atom i attends to.
-    P_LK : (D, L, k, c) FloatTensor
+    P_LK : (B, L, k, c) FloatTensor
         Key features to scatter add into
 
-    P_LA_indices   : (D, L, a) LongTensor
+    P_LA_indices   : (B, L, a) LongTensor
         Additional feature indices to scatter into P_LK.
-    P_LA : (D, L, a, c) FloatTensor
+    P_LA : (B, L, a, c) FloatTensor
         Features corresponding to P_LA.
 
     Both index tensors contain indices representing D batch dim,
@@ -135,42 +135,42 @@ def scatter_add_pair_features(P_LK_tgt, P_LK_indices, P_LA_src, P_LA_indices):
 
     """
     # Handle case when indices and P_LA don't have batch dimensions
-    D, L, k = P_LK_indices.shape
+    B, L, k = P_LK_indices.shape
     if P_LA_indices.ndim == 2:
-        P_LA_indices = P_LA_indices.unsqueeze(0).expand(D, -1, -1)
+        P_LA_indices = P_LA_indices.unsqueeze(0).expand(B, -1, -1)
     if P_LA_src.ndim == 3:
-        P_LA_src = P_LA_src.unsqueeze(0).expand(D, -1, -1)
+        P_LA_src = P_LA_src.unsqueeze(0).expand(B, -1, -1)
     assert (
         P_LA_src.shape[-1] == P_LK_tgt.shape[-1]
     ), "Channel dims do not match, got: {} vs {}".format(
         P_LA_src.shape[-1], P_LK_tgt.shape[-1]
     )
 
-    matches = P_LA_indices.unsqueeze(-1) == P_LK_indices.unsqueeze(-2)  # (D, L, a, k)
+    matches = P_LA_indices.unsqueeze(-1) == P_LK_indices.unsqueeze(-2)  # (B, L, a, k)
     if not torch.all(matches.sum(dim=(-1, -2)) >= 1):
         raise ValueError("Found multiple scatter indices for some atoms")
     elif not torch.all(matches.sum(dim=-1) <= 1):
         raise ValueError("Did not find a scatter index for every atom")
-    k_indices = matches.long().argmax(dim=-1)  # (D, L, a)
+    k_indices = matches.long().argmax(dim=-1)  # (B, L, a)
     scatter_indices = k_indices.unsqueeze(-1).expand(
         -1, -1, -1, P_LK_tgt.shape[-1]
-    )  # (D, L, a, c)
+    )  # (B, L, a, c)
     P_LK_tgt = P_LK_tgt.scatter_add(dim=2, index=scatter_indices, src=P_LA_src)
     return P_LK_tgt
 
 
 def _batched_gather(values: torch.Tensor, idx: torch.Tensor) -> torch.Tensor:
     """
-    values : (D, L, C)
-    idx    : (D, L, k)
-    returns: (D, L, k, C)
+    values : (B, L, C)
+    idx    : (B, L, k)
+    returns: (B, L, k, C)
     """
-    D, L, C = values.shape
+    B, L, C = values.shape
     k = idx.shape[-1]
 
-    #   (D, L, 1, C)  → stride-0 along k  → (D, L, k, C)
+    #   (B, L, 1, C)  → stride-0 along k  → (B, L, k, C)
     src = values.unsqueeze(2).expand(-1, -1, k, -1)
-    idx = idx.unsqueeze(-1).expand(-1, -1, -1, C)  # (D, L, k, C)
+    idx = idx.unsqueeze(-1).expand(-1, -1, -1, C)  # (B, L, k, C)
 
     return torch.gather(src, 1, idx)  # dim=1 is the L-axis
 
@@ -196,7 +196,7 @@ def create_attention_indices(
         X_L = torch.randn(
             (1, L, 3), device=device, dtype=torch.float
         )  # [L, 3] - random
-    D_LL = torch.cdist(X_L, X_L, p=2)  # [D, L, L] - pairwise atom distances
+    D_LL = torch.cdist(X_L, X_L, p=2)  # [B, L, L] - pairwise atom distances
 
     # Create attention indices using neighbour distances
     base_mask = ~f["unindexing_pair_mask"][
@@ -231,7 +231,7 @@ def create_attention_indices(
             k_max=k_actual,
             chain_id=chain_ids,
             base_mask=base_mask,
-        )  # [D, L, k] | indices[b, i, j] = atom index for atom i to j-th attn query
+        )  # [B, L, k] | indices[b, i, j] = atom index for atom i to j-th attn query
 
     return attn_indices
 
@@ -245,7 +245,7 @@ def get_sparse_attention_indices_with_inter_chain(
 
     Args:
         tok_idx: atom to token mapping
-        D_LL: pairwise distances [D, L, L]
+        D_LL: pairwise distances [B, L, L]
         n_seq_neighbours: number of sequence neighbors
         k_intra: number of intra-chain attention keys
         k_inter: number of inter-chain attention keys
@@ -253,29 +253,29 @@ def get_sparse_attention_indices_with_inter_chain(
         base_mask: base mask for valid pairs
 
     Returns:
-        attn_indices: [D, L, k_total] where k_total = k_intra + k_inter
+        attn_indices: [B, L, k_total] where k_total = k_intra + k_inter
     """
-    D, L, _ = D_LL.shape
+    B, L, _ = D_LL.shape
 
     # Get regular intra-chain indices (limited to k_intra)
     intra_indices = get_sparse_attention_indices(
         tok_idx, D_LL, n_seq_neighbours, k_intra, chain_id, base_mask
-    )  # [D, L, k_intra]
+    )  # [B, L, k_intra]
 
     # Get inter-chain indices for clash avoidance
-    inter_indices = torch.zeros(D, L, k_inter, dtype=torch.long, device=D_LL.device)
-
-    for d in range(D):
-        for l in range(L):
-            query_chain = chain_id[l]
+    inter_indices = torch.zeros(B, L, k_inter, dtype=torch.long, device=D_LL.device)
+    unique_chains = torch.unique(chain_id)
+    for b in range(B):
+        for c in unique_chains:
+            query_chain = chain_id[c]
 
             # Find atoms from different chains
-            other_chain_mask = (chain_id != query_chain) & base_mask[l, :]
+            other_chain_mask = (chain_id != query_chain) & base_mask[c, :]
             other_chain_atoms = torch.where(other_chain_mask)[0]
 
             if len(other_chain_atoms) > 0:
-                # Get distances to other chains
-                distances_to_other = D_LL[d, l, other_chain_atoms]
+                # Get distances to other chains 
+                distances_to_other = D_LL[b, c, other_chain_atoms]
 
                 # Select k_inter closest atoms from other chains
                 n_select = min(k_inter, len(other_chain_atoms))
@@ -283,23 +283,23 @@ def get_sparse_attention_indices_with_inter_chain(
                 selected_atoms = other_chain_atoms[closest_idx]
 
                 # Fill inter-chain indices
-                inter_indices[d, l, :n_select] = selected_atoms
+                inter_indices[b, c, :n_select] = selected_atoms
                 # Pad with random atoms if needed
                 if n_select < k_inter:
                     padding = torch.randint(
                         0, L, (k_inter - n_select,), device=D_LL.device
                     )
-                    inter_indices[d, l, n_select:] = padding
+                    inter_indices[b, c, n_select:] = padding
             else:
                 # No other chains found, fill with random indices
-                inter_indices[d, l, :] = torch.randint(
+                inter_indices[b, c, :] = torch.randint(
                     0, L, (k_inter,), device=D_LL.device
                 )
 
     # Combine intra and inter chain indices
     combined_indices = torch.cat(
         [intra_indices, inter_indices], dim=-1
-    )  # [D, L, k_total]
+    )  # [B, L, k_total]
 
     return combined_indices
 
