@@ -222,7 +222,7 @@ logs/
 *.ckpt
 **/distillation/
 **/benchmarks/
-!models/rfd3/configs/datasets/val/benchmarks
+!models/rfd3/configs/datasets/val/benchmarks/
 
 # AI
 **/CLAUDE.md
