@@ -30,6 +30,7 @@ from rfd3.transforms.conditioning_base import (
     set_default_conditioning_annotations,
 )
 from rfd3.transforms.conditioning_utils import sample_island_tokens
+from rfd3.inference.input_parsing import DesignInputSpecification
 
 from foundry.common import exists
 from foundry.utils.components import (
