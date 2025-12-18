@@ -412,7 +412,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                         f"Skipping design specification for example {example_id} | Already exists."
                     )
                     continue
-                design_specifications[example_id] = copy.deepcopy(example_spec)
+                design_specifications[example_id] = example_spec
         return design_specifications
 
 
