@@ -365,7 +365,7 @@ def inference_load_(
     return data
 
 
-def ensure_input_is_abspath(args: dict, path: PathLike | None):
+def ensure_input_is_abspath(args: Dict[str, DesignInputSpecification | dict], path: PathLike | None):
     """
     Ensures the input source is an absolute path if exists, if not it will convert
 
@@ -381,9 +381,11 @@ def ensure_input_is_abspath(args: dict, path: PathLike | None):
         )
     if "input" not in args or not exists(args["input"]):
         return args
-    input = args["input"]
+    input = str(args["input"])
     if not os.path.isabs(input):
-        input = os.path.abspath(os.path.join(os.path.dirname(path), input))
+        if path is not None:
+            raise ValueError("input path provided in input, but no path to resolve relative to (required).")
+        input = os.path.abspath(os.path.join(os.path.dirname(str(path)), input))
         ranked_logger.info(
             f"Input source path is relative, converted to absolute path: {input}"
         )
@@ -401,7 +403,7 @@ def ensure_inference_sampler_matches_design_spec(
         inference_sampler: Inference sampler dictionary
     """
     has_symmetry_specification = [
-        True if "symmetry" in item.keys() else False for item in design_spec.values()
+        True if "symmetry" in item.keys() and item.get("symmetry") is not None else False for item in design_spec.values()
     ]
     if any(has_symmetry_specification):
         if (
