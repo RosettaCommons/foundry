@@ -391,9 +391,12 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         design_specifications = {}
         for prefix, example_spec in inputs.items():
             # Record task name in the specification
-            if "extra" not in example_spec:
-                example_spec["extra"] = {}
-            example_spec["extra"]["task_name"] = prefix
+            if isinstance(example_spec, DesignInputSpecification):
+                example_spec.extra['task_name'] = prefix
+            else:
+                if "extra" not in example_spec:
+                    example_spec["extra"] = {}
+                example_spec["extra"]["task_name"] = prefix
 
             # ... Create n_batches for example
             for batch_id in range((n_batches) if exists(n_batches) else 1):
@@ -409,7 +412,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                         f"Skipping design specification for example {example_id} | Already exists."
                     )
                     continue
-                design_specifications[example_id] = example_spec
+                design_specifications[example_id] = copy.deepcopy(example_spec)
         return design_specifications
 
 
