@@ -3,7 +3,6 @@ Utilities for inference input preparation
 """
 
 import logging
-import os
 from os import PathLike
 from typing import Dict
 
@@ -25,7 +24,6 @@ from atomworks.ml.utils.token import (
 from rfd3.constants import (
     REQUIRED_CONDITIONING_ANNOTATIONS,
 )
-from rfd3.inference.input_parsing import DesignInputSpecification
 from rfd3.transforms.conditioning_base import (
     convert_existing_annotations_to_bool,
     set_default_conditioning_annotations,
@@ -364,38 +362,6 @@ def inference_load_(
     }
 
     return data
-
-
-def ensure_input_is_abspath(
-    args: Dict[str, DesignInputSpecification | dict], path: PathLike | None
-):
-    """
-    Ensures the input source is an absolute path if exists, if not it will convert
-
-    args:
-        spec: Inference specification for atom array
-        path: None or file to which the input is relative to.
-    """
-    if isinstance(args, str):
-        raise ValueError(
-            "Expected args to be a dictionary, got a string: {}. If you are using an input JSON ensure it contains dictionaries of arguments".format(
-                args
-            )
-        )
-    if "input" not in args or not exists(args["input"]):
-        return args
-    input = str(args["input"])
-    if not os.path.isabs(input):
-        if path is None:
-            raise ValueError(
-                "input path provided in input, but no path to resolve relative to (required)."
-            )
-        input = os.path.abspath(os.path.join(os.path.dirname(str(path)), input))
-        ranked_logger.info(
-            f"Input source path is relative, converted to absolute path: {input}"
-        )
-        args["input"] = input
-    return args
 
 
 def ensure_inference_sampler_matches_design_spec(
