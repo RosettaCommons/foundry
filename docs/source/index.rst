@@ -10,14 +10,14 @@ Welcome to the official documentation for foundry
 many of the machine learning models produced by `Rosetta Commons member labs <https://rosettacommons.org/about/labs/>`_. 
 
 .. toctree::
-   :maxdepth: 2
-   :caption: General:
+   :maxdepth: 1
+   :caption: General
 
    readme_link.rst
    license_link.rst
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Models
 
    models/rfd3/index
