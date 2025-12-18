@@ -1154,4 +1154,3 @@ def ensure_input_is_abspath(
         )
         args["input"] = input
     return args
-
