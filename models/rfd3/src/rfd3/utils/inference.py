@@ -384,7 +384,7 @@ def ensure_input_is_abspath(args: Dict[str, DesignInputSpecification | dict], pa
         return args
     input = str(args["input"])
     if not os.path.isabs(input):
-        if path is not None:
+        if path is None:
             raise ValueError("input path provided in input, but no path to resolve relative to (required).")
         input = os.path.abspath(os.path.join(os.path.dirname(str(path)), input))
         ranked_logger.info(
