@@ -25,12 +25,12 @@ from atomworks.ml.utils.token import (
 from rfd3.constants import (
     REQUIRED_CONDITIONING_ANNOTATIONS,
 )
+from rfd3.inference.input_parsing import DesignInputSpecification
 from rfd3.transforms.conditioning_base import (
     convert_existing_annotations_to_bool,
     set_default_conditioning_annotations,
 )
 from rfd3.transforms.conditioning_utils import sample_island_tokens
-from rfd3.inference.input_parsing import DesignInputSpecification
 
 from foundry.common import exists
 from foundry.utils.components import (
@@ -366,7 +366,9 @@ def inference_load_(
     return data
 
 
-def ensure_input_is_abspath(args: Dict[str, DesignInputSpecification | dict], path: PathLike | None):
+def ensure_input_is_abspath(
+    args: Dict[str, DesignInputSpecification | dict], path: PathLike | None
+):
     """
     Ensures the input source is an absolute path if exists, if not it will convert
 
@@ -385,7 +387,9 @@ def ensure_input_is_abspath(args: Dict[str, DesignInputSpecification | dict], pa
     input = str(args["input"])
     if not os.path.isabs(input):
         if path is None:
-            raise ValueError("input path provided in input, but no path to resolve relative to (required).")
+            raise ValueError(
+                "input path provided in input, but no path to resolve relative to (required)."
+            )
         input = os.path.abspath(os.path.join(os.path.dirname(str(path)), input))
         ranked_logger.info(
             f"Input source path is relative, converted to absolute path: {input}"
@@ -404,7 +408,10 @@ def ensure_inference_sampler_matches_design_spec(
         inference_sampler: Inference sampler dictionary
     """
     has_symmetry_specification = [
-        True if "symmetry" in item.keys() and item.get("symmetry") is not None else False for item in design_spec.values()
+        True
+        if "symmetry" in item.keys() and item.get("symmetry") is not None
+        else False
+        for item in design_spec.values()
     ]
     if any(has_symmetry_specification):
         if (
