@@ -394,6 +394,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         for prefix, example_spec in inputs.items():
             # Record task name in the specification
             if isinstance(example_spec, DesignInputSpecification):
+                example_spec.extra = example_spec.extra or {}
                 example_spec.extra["task_name"] = prefix
             else:
                 if "extra" not in example_spec:
