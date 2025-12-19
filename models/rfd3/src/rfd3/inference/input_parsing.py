@@ -1146,7 +1146,7 @@ def ensure_input_is_abspath(
     if not os.path.isabs(input):
         if path is None:
             raise ValueError(
-                "input path provided in input, but no path to resolve relative to (required)."
+                "Input path is relative, but no base path was provided to resolve it against."
             )
         input = os.path.abspath(os.path.join(os.path.dirname(str(path)), input))
         logger.info(
