@@ -1129,7 +1129,7 @@ def ensure_input_is_abspath(args: Dict[str, Any], path: PathLike | None):
     Ensures the input source is an absolute path if exists, if not it will convert
 
     args:
-        spec: Inference specification for atom array
+        args: Inference specification for atom array
         path: None or file to which the input is relative to.
     """
     if isinstance(args, str):
