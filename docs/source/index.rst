@@ -13,7 +13,8 @@ many of the machine learning models produced by `Rosetta Commons member labs <ht
    :maxdepth: 1
    :caption: General
 
-   readme_link.rst
+   .. readme_link.rst
+   
    license_link.rst
 
 .. toctree::

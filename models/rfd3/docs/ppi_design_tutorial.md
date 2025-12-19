@@ -1,7 +1,9 @@
 # Protein-Protein Interface Design in RFdiffusion3
 
 ## Before We Get Started...
-This tutorial does not cover installing RFD3, before continuing you should make sure that RFdiffusion3 (RFD3) is installed and able to be run on your system. See the [README](../README.md) for how to install RFD3. You will need to remember the path to the directory where you stored your checkpoint files. 
+This tutorial does not cover installing RFD3, before continuing you should make sure that RFdiffusion3 (RFD3) is installed and able to be run on your system. 
+
+See the [README](../README.md) for installation instructions. You will need to remember the path to the directory where you stored your checkpoint files. 
 
 ```{note}
 The instructions below assume that you have installed RFD3 via the pip commands.
@@ -10,7 +12,7 @@ You may need to slightly modify how you run the calculations based on your setup
 
 Make sure you have activated any environments you used to install RFD3.
 
-RFD3 runs best on GPUs. It is suggested to follow this activity on an interactive GPU node, if you have access to one. <!-- TO DO: Say memory requirement-->
+RFD3 runs best on GPUs. It is suggested to follow this tutorial on an interactive GPU node, if you have access to one. <!-- TO DO: Say memory requirement-->
 
 You will need the file `4zxb_cropped.pdb`. This is provided in [`foundry/models/rfd3/docs/input_pdbs`](input_pdbs/4zxb_cropped.pdb).
 
@@ -38,11 +40,11 @@ There is also an already made YAML file available here. <!-- TO DO: Add example 
 In this tutorial, we will be briefly describing each of the settings we will be using for this example binder design project. 
 
 1. Using your editor of choice, open a new file called `rfd3_ppi_tutorial.yaml`. This is where we will be storing all of the settings that tell RFD3 the type of designs we would like to make. 
-1. Our calculation needs a name. For this tutorial, we will only be including one example calculation, but your YAML file could have several. A name allows you to differentiate them. Since we are designing binders for the human insulin receptor, let's just call it `insulinr`:
+1. Our calculation needs a name. For this tutorial, we will only be including one example calculation, but your YAML file could have several. A name allows you (and RFD3) to differentiate them. Since we are designing binders for the human insulin receptor, let's just call it `insulinr`:
     ```yaml
     insulinr:
     ```
-    Everything that comes after this should be indented to show that it's part of this `insulinr` calculation. You will want to use spaces, not the tab character. If a tab character (`\t `) is found in the file RFD3 will crash.
+    Everything that comes after this should be indented to show that it's part of this `insulinr` calculation. You will want to use spaces, not the tab character. If a tab character (`\t `) is found in the file, RFD3 will crash.
 1. Tell RFD3 where to find your input file:
     ```yaml
         input: /path/to/rfd3_ppi_tutorial/4zxb_cropped.pdb
@@ -85,6 +87,7 @@ In this tutorial, we will be briefly describing each of the settings we will be 
         infer_ori_strategy: hotspots
     ```
     This setting will place the ORI token 10Å outward from the center of mass of the `hotspots`. The center of mass of the diffused region should be within 5Å of the ORI token.
+1. Save you file and close it.
 
 ### Other useful settings
 1. RFD3 does atom-level diffusion, so it can redesign side chains (change the sequence) we will leave this setting set to `false`. If you would like to see what happens when RFD3 redesigns the target/motif (your input structure), try setting this to `true`: <!-- Maybe add a sentence about when people should think about doing this. -->
@@ -100,10 +103,13 @@ In this tutorial, we will be briefly describing each of the settings we will be 
     ```
     Here, an empty list indicates that all atoms are flexible, `BKBN` keeps the backbone atoms fixed while allowing side chain atoms to move, and for the last residue, specific atoms are fixed in place while allowing the others to move. Feel free to try adding this to your YAML file as well. 
 
-Save your file and close it.
-
 ## Running RFD3
-To actually run RFD3 you need to know the directory you want the outputs to be stored in, the path to the YAML (or JSON) file that stores the specific settings for the calculation, and the location of your checkpoint files. Once you have these three things you can run something like this from the command line:
+To actually run RFD3 you need to know:
+- the directory you want the outputs to be stored in
+- the path to the YAML (or JSON) file that stores the specific settings for the calculation
+- the location of your checkpoint files
+
+Once you have these three things you can run something like this from the command line:
 ```bash
 rfd3 design out_dir=ppi_tutorial_outputs/0 inputs=ppi_tutorial.yaml ckpt_path=/path/to/your/checkpoint/files/rfd3_latest.ckpt
 ```
@@ -116,7 +122,7 @@ You may see several warning messages when you run RFD3, these should not interfe
 ## Analyzing the Outputs
 You should end up with 8 designs, numbered 0-7, each with its own `.cif.gz` and `.json` file. If you want to adjust the number, add the configuration option `diffusion_batch_size` to your `rfd3 design` command.
 
-The JSON file has many details about your diffusion run, including the options in your YAML file. The compressed CIF file that you can easily visualize with tools like PyMOL. 
+The JSON file has many details about your diffusion run, including the options in the YAML file you created. The compressed CIF file that you can easily visualize with tools like PyMOL. 
 
 Your results should look something like this: 
 ```{figure} .assets/ppi_tutorial/example_output_w_hotspots.png
