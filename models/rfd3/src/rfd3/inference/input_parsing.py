@@ -1125,7 +1125,7 @@ def accumulate_components(
 
 
 def ensure_input_is_abspath(
-    args: Dict[str, DesignInputSpecification | dict], path: PathLike | None
+    args: Dict[str, Any], path: PathLike | None
 ):
     """
     Ensures the input source is an absolute path if exists, if not it will convert
