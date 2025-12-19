@@ -21,11 +21,13 @@ from rfd3.constants import SAVED_CONDITIONING_ANNOTATIONS
 from rfd3.inference.datasets import (
     assemble_distributed_inference_loader_from_json,
 )
-from rfd3.inference.input_parsing import DesignInputSpecification
+from rfd3.inference.input_parsing import (
+    DesignInputSpecification,
+    ensure_input_is_abspath,
+)
 from rfd3.model.inference_sampler import SampleDiffusionConfig
 from rfd3.utils.inference import (
     ensure_inference_sampler_matches_design_spec,
-    ensure_input_is_abspath,
 )
 from rfd3.utils.io import (
     CIF_LIKE_EXTENSIONS,
@@ -391,9 +393,13 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         design_specifications = {}
         for prefix, example_spec in inputs.items():
             # Record task name in the specification
-            if "extra" not in example_spec:
-                example_spec["extra"] = {}
-            example_spec["extra"]["task_name"] = prefix
+            if isinstance(example_spec, DesignInputSpecification):
+                example_spec.extra = example_spec.extra or {}
+                example_spec.extra["task_name"] = prefix
+            else:
+                if "extra" not in example_spec:
+                    example_spec["extra"] = {}
+                example_spec["extra"]["task_name"] = prefix
 
             # ... Create n_batches for example
             for batch_id in range((n_batches) if exists(n_batches) else 1):

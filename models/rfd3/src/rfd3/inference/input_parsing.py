@@ -5,6 +5,7 @@ import os
 import time
 import warnings
 from contextlib import contextmanager
+from os import PathLike
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -1121,3 +1122,33 @@ def accumulate_components(
     if atom_array_accum.bonds is None:
         atom_array_accum.bonds = BondList(atom_array_accum.array_length())
     return atom_array_accum
+
+
+def ensure_input_is_abspath(args: Dict[str, Any], path: PathLike | None):
+    """
+    Ensures the input source is an absolute path if exists, if not it will convert
+
+    args:
+        args: Inference specification for atom array
+        path: None or file to which the input is relative to.
+    """
+    if isinstance(args, str):
+        raise ValueError(
+            "Expected args to be a dictionary, got a string: {}. If you are using an input JSON ensure it contains dictionaries of arguments".format(
+                args
+            )
+        )
+    if "input" not in args or not exists(args["input"]):
+        return args
+    input = str(args["input"])
+    if not os.path.isabs(input):
+        if path is None:
+            raise ValueError(
+                "Input path is relative, but no base path was provided to resolve it against."
+            )
+        input = os.path.abspath(os.path.join(os.path.dirname(str(path)), input))
+        logger.info(
+            f"Input source path is relative, converted to absolute path: {input}"
+        )
+        args["input"] = input
+    return args

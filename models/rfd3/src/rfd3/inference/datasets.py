@@ -14,8 +14,8 @@ from atomworks.ml.transforms.base import Compose, Transform
 from omegaconf import DictConfig, OmegaConf
 from rfd3.inference.input_parsing import (
     DesignInputSpecification,
+    ensure_input_is_abspath,
 )
-from rfd3.utils.inference import ensure_input_is_abspath
 from torch.utils.data import (
     DataLoader,
     SequentialSampler,

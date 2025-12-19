@@ -3,7 +3,6 @@ Utilities for inference input preparation
 """
 
 import logging
-import os
 from os import PathLike
 from typing import Dict
 
@@ -365,32 +364,6 @@ def inference_load_(
     return data
 
 
-def ensure_input_is_abspath(args: dict, path: PathLike | None):
-    """
-    Ensures the input source is an absolute path if exists, if not it will convert
-
-    args:
-        spec: Inference specification for atom array
-        path: None or file to which the input is relative to.
-    """
-    if isinstance(args, str):
-        raise ValueError(
-            "Expected args to be a dictionary, got a string: {}. If you are using an input JSON ensure it contains dictionaries of arguments".format(
-                args
-            )
-        )
-    if "input" not in args or not exists(args["input"]):
-        return args
-    input = args["input"]
-    if not os.path.isabs(input):
-        input = os.path.abspath(os.path.join(os.path.dirname(path), input))
-        ranked_logger.info(
-            f"Input source path is relative, converted to absolute path: {input}"
-        )
-        args["input"] = input
-    return args
-
-
 def ensure_inference_sampler_matches_design_spec(
     design_spec: dict, inference_sampler: dict | None = None
 ):
@@ -401,7 +374,10 @@ def ensure_inference_sampler_matches_design_spec(
         inference_sampler: Inference sampler dictionary
     """
     has_symmetry_specification = [
-        True if "symmetry" in item.keys() else False for item in design_spec.values()
+        True
+        if "symmetry" in item.keys() and item.get("symmetry") is not None
+        else False
+        for item in design_spec.values()
     ]
     if any(has_symmetry_specification):
         if (
