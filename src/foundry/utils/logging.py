@@ -4,7 +4,7 @@ from contextlib import contextmanager
 
 import pandas as pd
 from beartype.typing import Any
-from lightning_fabric.utilities import rank_zero_only
+from lightning.fabric.utilities import rank_zero_only
 from omegaconf import DictConfig, OmegaConf
 from rich.console import Console
 from rich.syntax import Syntax

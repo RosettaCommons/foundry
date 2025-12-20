@@ -99,11 +99,11 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "vcs"
 fallback-version = "0.0.0"
+local-scheme = "no-local-version"
 
 [tool.hatch.build.hooks.vcs]
 version-file = "src/foundry/version.py"
 tag-pattern = "^v(?P<version>.*)$"
-local-scheme = "no-local-version"
 
 [tool.hatch.metadata]
 allow-direct-references = true
