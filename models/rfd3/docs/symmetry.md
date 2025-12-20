@@ -25,7 +25,7 @@ symmetry:
 - `is_unsym_motif`    : Comma separated string list of contig/ligand names that should NOT be symmetrized (e.g. DNA strands). If not provided, all motifs are assumed to be symmetrized. See [Designs with motifs](#designs-with-motifs) section for details.
 - `is_symmetric_motif`: Boolean value whether the input motif is symmetric. Currently only symmetric input motifs are supported, therefore, `true` by default.
 
-> **⚠️ Memory Warning:** Memory requirements scale quadratically with the number of subunits. For larger complexes (especially T, O, and I symmetries), memory usage can become very high. Always use `diffusion_batch_size=1` for symmetry, and consider enabling `low_memory_mode=True` for higher-order symmetries. The memory footprint increases dramatically as both the number of subunits and the length of each subunit increase.
+> **⚠️ Memory Warning:** Memory requirements scale quadratically with the number of subunits. For larger complexes (especially T, O, and I symmetries), memory usage can become very high. Always use `diffusion_batch_size=1` for symmetry, and consider enabling `low_memory_mode=True` for higher-order symmetries. The memory footprint increases dramatically as both the number of subunits and the length of each subunit increase. Note: many higher order symmetires run out of memory even on large cards such as H200s, we are working on optimizations to make these networks more memory efficient. 
 
 
 ## Example command 
