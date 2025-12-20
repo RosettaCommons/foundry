@@ -16,8 +16,9 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 load_dotenv(override=True)
 
-_config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rf3/configs")
-
+_config_path = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs"
+)
 
 @hydra.main(
     config_path=_config_path,
