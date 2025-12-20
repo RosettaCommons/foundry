@@ -20,6 +20,7 @@ _config_path = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs"
 )
 
+
 @hydra.main(
     config_path=_config_path,
     config_name="inference",
