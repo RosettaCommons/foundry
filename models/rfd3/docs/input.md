@@ -136,8 +136,8 @@ Breaks between unindexed components follow the contig conventions you’re used 
 
 lists multiple unindexed components; internal “breakpoints” are inferred and logged. (Offset syntax like A11-12 or A11,0,A12 still ties residues.)
 
-# Appendix
-## FAQ / gotchas
+## Appendix
+### FAQ / gotchas
 <details>
   <summary><b>Do I need select_fixed_atoms & select_unfixed_sequence every time?</b></summary>
 
@@ -175,7 +175,7 @@ lists multiple unindexed components; internal “breakpoints” are inferred and
   You gave input but no contig, unindex, or partial_t.
   </details>
 
-## Shorthand atoms for easy specification
+### Shorthand atoms for easy specification
 Keyword	Expands to
 BKBN	N, CA, C, O
 TIP	Residue-specific “tip” atoms

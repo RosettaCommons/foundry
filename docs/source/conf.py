@@ -52,3 +52,8 @@ html_theme_options = {
         "color-brand-visited": "#37939B",
         }
     }
+
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+    }

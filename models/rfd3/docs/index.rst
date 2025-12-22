@@ -6,6 +6,14 @@ study ligand-protein interactions, create nucleic acid-protein interfaces, and
 design enzymes with specific catalytic activities. It is designed to be highly flexible and 
 user-friendly, making it suitable for a wide range of applications in computational biology and biochemistry.
 
+General
+---------
+.. toctree::
+   :maxdepth: 1
+
+   intro_inference_calculations.md
+   input.md
+
 Tutorials
 ---------
 .. toctree::
