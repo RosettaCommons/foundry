@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import torch
 import yaml
@@ -378,7 +378,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
 
     def _multiply_specifications(
         self, inputs: Dict[str, dict | DesignInputSpecification], n_batches=None
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> Dict[str, dict | DesignInputSpecification]:
         # Find existing example IDS in output directory
         if exists(self.out_dir):
             existing_example_ids = set(

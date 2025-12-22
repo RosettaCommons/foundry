@@ -373,12 +373,13 @@ def ensure_inference_sampler_matches_design_spec(
         design_spec: Design specification dictionary
         inference_sampler: Inference sampler dictionary
     """
-    has_symmetry_specification = [
-        True
-        if "symmetry" in item.keys() and item.get("symmetry") is not None
-        else False
-        for item in design_spec.values()
-    ]
+    has_symmetry_specification = []
+    for item in design_spec.values():
+        if hasattr(item, "symmetry"):
+            has_symmetry = item.symmetry is not None
+        else:
+            has_symmetry = "symmetry" in item and item.get("symmetry") is not None
+        has_symmetry_specification.append(has_symmetry)
     if any(has_symmetry_specification):
         if (
             inference_sampler is None
