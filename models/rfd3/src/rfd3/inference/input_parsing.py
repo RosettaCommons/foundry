@@ -128,8 +128,10 @@ class DesignInputSpecification(BaseModel):
     # Motif selection from input file
     contig:  Optional[InputSelection] = Field(None, description="Contig specification string (e.g. 'A1-10,B1-5')")
     unindex: Optional[InputSelection] = Field(None, 
-        description="Unindexed components string (components must not overlap with contig). "\
-        "E.g. 'A15-20,B6-10' or dict. We recommend specifying")
+        description="Unindexed components selection. Components to fix in the generated structure without specifying sequence index. "\
+        "Components must not overlap with `contig` argument. "\
+        "E.g. 'A15-20,B6-10' or dict. We recommend specifying unindexed residues as a contig string, "\
+        "then using select_fixed_atoms will subset the atoms to the specified atoms")
     # Extra args:
     length:  Optional[str] = Field(None, description="Length range as 'min-max' or int. Constrains length of contig if provided")
     ligand:  Optional[str] = Field(None, description="Ligand name or index to include in design.")
