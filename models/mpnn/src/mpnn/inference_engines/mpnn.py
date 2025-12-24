@@ -274,6 +274,53 @@ class MPNNInferenceEngine:
         self._write_outputs(results)
 
         return results
+    
+    def _atom_array_to_one_letter_seq(
+        self,
+        atom_array: AtomArray,
+    ) -> str:
+        """
+        Convert an AtomArray to a one-letter sequence string. The string will
+        include chain delimiters for multiple chains.
+        """
+        # Grab the non-atomized atom array.
+        non_atomized_array = atom_array[~atom_array.atomize]
+
+        # Get the token-level non-atomized array.
+        non_atomized_token_starts = get_token_starts(non_atomized_array)
+        non_atomized_token_level = non_atomized_array[non_atomized_token_starts]
+
+        # Determine the unique chain_iids (chain_iid used over chain_id to
+        # handle symmetric assemblies correctly), in input order.
+        if "chain_iid" not in non_atomized_token_level.get_annotation_categories():
+            raise ValueError(
+                "Cannot extract one-letter sequence: 'chain_iid' annotation "
+                "is missing from AtomArray."
+            )
+        sorted_chain_iids, chain_start_indices = np.unique(
+            non_atomized_token_level.chain_iid, return_index=True
+        )
+        chain_iids = sorted_chain_iids[np.argsort(chain_start_indices)]
+
+        # Build the one-letter sequences per chain.
+        chain_one_letter_seqs = []
+        for chain_iid in chain_iids:
+            chain_mask = non_atomized_token_level.chain_iid == chain_iid
+            chain_res_names = non_atomized_token_level.res_name[chain_mask]
+            chain_one_letter_seq = "".join(
+                [
+                    DICT_THREE_TO_ONE.get(
+                        res_name, DICT_THREE_TO_ONE[UNKNOWN_AA]
+                    )
+                    for res_name in chain_res_names
+                ]
+            )
+            chain_one_letter_seqs.append(chain_one_letter_seq)
+        
+        # Join chains with chain delimiters.
+        one_letter_seq = ":".join(chain_one_letter_seqs)
+
+        return one_letter_seq
 
     def _run_batch(
         self,
@@ -382,6 +429,11 @@ class MPNNInferenceEngine:
         # Grab the index to token mapping from the model.
         idx_to_token = MPNN_TOKEN_ENCODING.idx_to_token
 
+        # Determine the one-letter input sequence.
+        input_one_letter_seq = self._atom_array_to_one_letter_seq(
+            atom_array=pipeline_output["atom_array"],
+        )
+
         # Construct the output objects.
         outputs: list[MPNNInferenceOutput] = []
         for design_idx in range(input_dict["batch_size"]):
@@ -449,14 +501,12 @@ class MPNNInferenceEngine:
                 | design_is_fixed_atom
             ]
 
-            # Construct one letter sequence and recovery metrics for
-            # output dict.
-            one_letter_seq = "".join(
-                [
-                    DICT_THREE_TO_ONE.get(res_name, DICT_THREE_TO_ONE[UNKNOWN_AA])
-                    for res_name in designed_resnames
-                ]
+            # Construct the one-letter original and designed sequences. 
+            designed_one_letter_seq = self._atom_array_to_one_letter_seq(
+                atom_array=design_atom_array,
             )
+
+            # Calculate per-design metrics.
             sequence_recovery = float(sequence_recovery_per_design[design_idx])
             if interface_sequence_recovery_per_design is not None:
                 ligand_interface_sequence_recovery = float(
@@ -469,7 +519,8 @@ class MPNNInferenceEngine:
             output_dict = {
                 "batch_idx": batch_idx,
                 "design_idx": design_idx,
-                "designed_sequence": one_letter_seq,
+                "input_sequence": input_one_letter_seq,
+                "designed_sequence": designed_one_letter_seq,
                 "sequence_recovery": sequence_recovery,
                 "ligand_interface_sequence_recovery": (
                     ligand_interface_sequence_recovery
@@ -552,5 +603,10 @@ class MPNNInferenceEngine:
                 fasta_path = out_dir_path / f"{name}.fa"
                 # Append mode so that multiple runs can accumulate designs.
                 with fasta_path.open("a") as handle:
-                    for result in group:
-                        result.write_fasta(handle=handle)
+                    for result_idx, result in enumerate(group):
+                        # On the first write, include input entry.
+                        if result_idx == 0:
+                            write_input_entry = True
+                        else:
+                            write_input_entry = False
+                        result.write_fasta(handle=handle, write_input_entry=write_input_entry)

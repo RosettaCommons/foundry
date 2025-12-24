@@ -2209,6 +2209,7 @@ class MPNNInferenceOutput:
         Per-design metadata, not stored in the AtomArray:
             - 'batch_idx'
             - 'design_idx'
+            - 'input_sequence'
             - 'designed_sequence'
             - 'sequence_recovery'
             - 'ligand_interface_sequence_recovery'
@@ -2218,6 +2219,19 @@ class MPNNInferenceOutput:
     input_dict:
         The JSON-like config dict used for this design.
     """
+
+    def _serialize_value(self, value: Any) -> Any:
+        """Serialize a single value for CIF or FASTA output."""
+        # For scalar values, return directly.
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        # JSON-serializable types: convert to JSON string.
+        elif isinstance(value, (list, dict, type(None))):
+            return json.dumps(value)
+        else:
+            raise ValueError(
+                f"Cannot serialize value {value!r} of type {type(value)}."
+            )
 
     atom_array: AtomArray
     output_dict: dict[str, Any]
@@ -2248,16 +2262,7 @@ class MPNNInferenceOutput:
 
             for key, value in category_dict.items():
                 # For scalar values, store directly.
-                if isinstance(value, (str, int, float, bool)):
-                    categories[category_name][key] = [value]
-                # JSON-serializable types: convert to JSON string.
-                elif isinstance(value, (list, dict, type(None))):
-                    categories[category_name][key] = [json.dumps(value)]
-                else:
-                    raise ValueError(
-                        f"Cannot serialize key {key!r} with value {value!r} "
-                        f"of type {type(value)} in category {category_name!r}."
-                    )
+                categories[category_name][key] = [self._serialize_value(value)]
 
         return categories
 
@@ -2310,11 +2315,108 @@ class MPNNInferenceOutput:
             extra_categories=extra_categories,
         )
 
+    def _create_input_fasta_entry(
+        self,      
+    ) -> str:
+        """
+        Create a FASTA entry for the input sequence with detailed header,
+        containing all input parameters and select output parameters.
+        """
+        # Extract the input sequence.
+        input_sequence = self.output_dict.get("input_sequence")
+        if not input_sequence:
+            raise ValueError("No input_sequence found for FASTA output.")
+
+        # Extract name.
+        name = self.input_dict["name"]
+
+        # Create the header fields list.
+        header_fields = []
+
+        # Construct the decorated name for the header.
+        name_fields = []
+        if name is not None:
+            name_fields.append(name)
+        name_fields.append("input")
+        header_fields.append("_".join(name_fields))
+
+        # Add all input_dict parameters to the header.
+        for key, value in self.input_dict.items():
+            header_fields.append(f"{key}={self._serialize_value(value)}")
+        
+        # Add select output_dict parameters to the header.
+        for key, value in self.output_dict.items():
+            if key in ["model_type", "checkpoint_path", "is_legacy_weights"]:
+                header_fields.append(f"{key}={self._serialize_value(value)}")
+        
+        # Construct the header.
+        header = ">" + ";\t".join(header_fields)
+
+        # Construct the FASTA entry.
+        input_fasta_entry = f"{header}\n{input_sequence}\n"
+
+        return input_fasta_entry
+
+    def _create_design_fasta_entry(
+        self,
+    ) -> str:
+        """
+
+        """
+        # Extract the designed sequence.
+        designed_sequence = self.output_dict.get("designed_sequence")
+        if not designed_sequence:
+            raise ValueError("No designed_sequence found for FASTA output.")
+
+        # Extract name, batch_idx, and design_idx.
+        name = self.input_dict["name"]
+        batch_idx = self.output_dict["batch_idx"]
+        design_idx = self.output_dict["design_idx"]
+
+        # Create the header fields list.
+        header_fields = []
+
+        # Construct the decorated name for the header.
+        name_fields = []
+        if name is not None:
+            name_fields.append(name)
+        if batch_idx is not None:
+            name_fields.append(f"b{batch_idx}")
+        if design_idx is not None:
+            name_fields.append(f"d{design_idx}")
+        
+        if name_fields:
+            header_fields.append("_".join(name_fields))
+        
+        # Add select input_dict parameters to the header.
+        for key, value in self.input_dict.items():
+            if key in ["name"]:
+                header_fields.append(f"{key}={self._serialize_value(value)}")
+        
+        # Add select output_dict parameters to the header.
+        for key, value in self.output_dict.items():
+            if key in [
+                "batch_idx",
+                "design_idx",
+                "sequence_recovery", 
+                "ligand_interface_sequence_recovery"
+            ]:
+                header_fields.append(f"{key}={self._serialize_value(value)}")
+        
+        # Construct the header.
+        header = ">" + ";\t".join(header_fields)
+
+        # Construct the FASTA entry.
+        design_fasta_entry = f"{header}\n{designed_sequence}\n"
+
+        return design_fasta_entry
+
     def write_fasta(
         self,
         *,
         base_path: PathLike | None = None,
         handle=None,
+        write_input_entry: bool = True,
     ) -> None:
         """
         Write a single FASTA record for this design.
@@ -2327,6 +2429,9 @@ class MPNNInferenceOutput:
         handle:
             An open writable file-like handle. If None, 'base_path' must be
             provided.
+        write_input_entry:
+            If True, write an additional FASTA entry containing the input
+            sequence before the designed sequence.
         """
         # At least one of handle or base_path must be provided, and they
         # are mutually exclusive.
@@ -2335,63 +2440,19 @@ class MPNNInferenceOutput:
         if handle is not None and base_path is not None:
             raise ValueError("handle and base_path are mutually exclusive arguments.")
 
-        # Extract sequence.
-        seq = self.output_dict.get("designed_sequence")
-        if not seq:
-            raise ValueError("No designed_sequence found for FASTA output.")
-
-        # Extract name, batch_idx, and design_idx.
-        name = self.input_dict["name"]
-        batch_idx = self.output_dict["batch_idx"]
-        design_idx = self.output_dict["design_idx"]
-
-        # Extract recovery metrics.
-        sequence_recovery = self.output_dict["sequence_recovery"]
-        ligand_interface_sequence_recovery = self.output_dict[
-            "ligand_interface_sequence_recovery"
-        ]
-
-        # Initialize the header fields list.
-        header_fields = []
-
-        # Construct the decorated name for the header.
-        name_fields = []
-        if name is not None:
-            name_fields.append(name)
-        if batch_idx is not None:
-            name_fields.append(f"b{batch_idx}")
-        if design_idx is not None:
-            name_fields.append(f"d{design_idx}")
-
-        if name_fields:
-            decorated_name = "_".join(name_fields)
-            header_fields.append(decorated_name)
-
-        # Construct the recovery fields for the header.
-        if sequence_recovery is not None:
-            header_fields.append(f"sequence_recovery={float(sequence_recovery):.4f}")
-        if ligand_interface_sequence_recovery is not None:
-            header_fields.append(
-                f"ligand_interface_sequence_recovery="
-                f"{float(ligand_interface_sequence_recovery):.4f}"
-            )
-
-        # Construct the header string.
-        header = ">" + ", ".join(header_fields)
+        # Create FASTA entries.
+        entries = []
+        if write_input_entry:
+            entries.append(self._create_input_fasta_entry())
+        entries.append(self._create_design_fasta_entry())
 
         # If the handle is provided, write to it directly.
         if handle is not None:
             # Write the header.
-            handle.write(f"{header}\n")
-
-            # Write the sequence.
-            handle.write(f"{seq}\n")
+            handle.write("".join(entries))
         # Otherwise, open the file at base_path and write to it.
         else:
             fasta_path = Path(base_path).with_suffix(".fa")
             with open(fasta_path, "w") as handle:
                 # Write the header.
-                handle.write(f"{header}\n")
-
-                # Write the sequence.
-                handle.write(f"{seq}\n")
+                handle.write("".join(entries))
