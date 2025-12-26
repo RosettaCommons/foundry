@@ -27,6 +27,7 @@ Examples
    :maxdepth: 1 
 
    na_binder_design.md
+   sm_binder_design.md
    protein_binder_design.md
    symmetry.md
    enzyme_design.md

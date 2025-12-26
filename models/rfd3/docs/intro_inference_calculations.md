@@ -92,11 +92,11 @@ Several options are available to you as well to control the number of designs, w
 ## Output Files
 At the end of your inference calculation, you will be left with several output files in the directory you specified. At minimum (if you did not change any settings to include more outputs) you will be left with a JSON and a compressed CIF file (`.cif.gz`) for each design. The names of the files will be as follows: 
 ```bash
-<name of the json or yaml file>_<settings group name>_0_model_n.<suffix>
+<name of the json or yaml file>_<settings group name>_<batch_number>_model_n.<suffix>
 ```
 Where `n` is the design number, the numbering for the designs will start at 0. 
 
-For an example, if I called the my JSON file `rfd3_example.json` and had a group of settings in it labeled `example_1` I would get files with names like: 
+For an example, if I called the my JSON file `rfd3_example.json`, only ran one batch, and had a group of settings in it labeled `example_1` I would get files with names like: 
 ```bash
 rfd3_example_example_1_0_model_0.cif.gz
 rfd3_example_example_1_0_model_0.json
