@@ -120,8 +120,10 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                 ranked_logger.info(
                     f"Using fallback: final step with t={noise_schedule[0].item():.6f}"
                 )
+        else:
+            noise_schedule = t_hat
 
-        return t_hat
+        return noise_schedule
 
     def _get_initial_structure(
         self,
