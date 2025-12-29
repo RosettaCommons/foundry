@@ -1,14 +1,74 @@
+import string
+
 import numpy as np
 from rfd3.inference.symmetry.frames import (
     decompose_symmetry_frame,
     get_symmetry_frames_from_symmetry_id,
 )
 
-from foundry.utils.ddp import RankedLogger
-
 FIXED_TRANSFORM_ID = -1
 FIXED_ENTITY_ID = -1
-ranked_logger = RankedLogger(__name__, rank_zero_only=True)
+
+# Alphabet for chain ID generation (uppercase letters only, per wwPDB convention)
+_CHAIN_ALPHABET = string.ascii_uppercase
+
+
+def index_to_chain_id(index: int) -> str:
+    """
+    Convert a zero-based index to a chain ID following wwPDB convention.
+
+    The naming follows the wwPDB-assigned chain ID system:
+    - 0-25: A-Z (single letter)
+    - 26-701: AA-ZZ (double letter)
+    - 702-18277: AAA-ZZZ (triple letter)
+    - And so on...
+
+    This is similar to Excel column naming (A, B, ..., Z, AA, AB, ...).
+
+    Arguments:
+        index: zero-based index (0 -> 'A', 25 -> 'Z', 26 -> 'AA', etc.)
+    Returns:
+        chain_id: string chain identifier
+    """
+    if index < 0:
+        raise ValueError(f"Chain index must be non-negative, got {index}")
+
+    result = ""
+    remaining = index
+
+    # Convert to bijective base-26 (like Excel columns)
+    while True:
+        result = _CHAIN_ALPHABET[remaining % 26] + result
+        remaining = remaining // 26 - 1
+        if remaining < 0:
+            break
+
+    return result
+
+
+def chain_id_to_index(chain_id: str) -> int:
+    """
+    Convert a chain ID back to a zero-based index.
+
+    Inverse of index_to_chain_id.
+
+    Arguments:
+        chain_id: string chain identifier (e.g., 'A', 'Z', 'AA', 'AB')
+    Returns:
+        index: zero-based index
+    """
+    if not chain_id or not all(c in _CHAIN_ALPHABET for c in chain_id):
+        raise ValueError(f"Invalid chain ID: {chain_id}")
+
+    # Offset for all shorter chain IDs (26 + 26^2 + ... + 26^(len-1))
+    offset = sum(26**k for k in range(1, len(chain_id)))
+
+    # Value within the current length group (standard base-26)
+    value = 0
+    for char in chain_id:
+        value = value * 26 + _CHAIN_ALPHABET.index(char)
+
+    return offset + value
 
 
 ########################################################
@@ -28,7 +88,7 @@ def add_sym_annotations(atom_array, sym_conf):
     is_asu = np.full(n, True, dtype=np.bool_)
     atom_array.set_annotation("is_sym_asu", is_asu)
     # symmetry_id
-    symmetry_ids = np.full(n, sym_conf.get("id"), dtype="U6")
+    symmetry_ids = np.full(n, sym_conf.id, dtype="U6")
     atom_array.set_annotation("symmetry_id", symmetry_ids)
     return atom_array
 
@@ -251,11 +311,13 @@ def reset_chain_ids(atom_array, start_id):
     Reset the chain ids and pn_unit_iids of an atom array to start from the given id.
     Arguments:
         atom_array: atom array with chain_ids and pn_unit_iids annotated
+        start_id: starting chain ID (e.g., 'A')
     """
     chain_ids = np.unique(atom_array.chain_id)
-    new_chain_range = range(ord(start_id), ord(start_id) + len(chain_ids))
-    for new_id, old_id in zip(new_chain_range, chain_ids):
-        atom_array.chain_id[atom_array.chain_id == old_id] = chr(new_id)
+    start_index = chain_id_to_index(start_id)
+    for i, old_id in enumerate(chain_ids):
+        new_id = index_to_chain_id(start_index + i)
+        atom_array.chain_id[atom_array.chain_id == old_id] = new_id
     atom_array.pn_unit_iid = atom_array.chain_id
     return atom_array
 
@@ -263,15 +325,18 @@ def reset_chain_ids(atom_array, start_id):
 def reannotate_chain_ids(atom_array, offset, multiplier=0):
     """
     Reannotate the chain ids and pn_unit_iids of an atom array.
+
+    Uses wwPDB-style chain IDs (A-Z, AA-ZZ, AAA-ZZZ, ...) to support
+    any number of chains.
+
     Arguments:
         atom_array: protein atom array with chain_ids and pn_unit_iids annotated
-        offset: offset to add to the chain ids
-        multiplier: multiplier to add to the chain ids
+        offset: offset to add to the chain ids (typically num_chains in ASU)
+        multiplier: multiplier for the offset (typically transform index)
     """
-    chain_ids_int = (
-        np.array([ord(c) for c in atom_array.chain_id]) + offset * multiplier
-    )
-    chain_ids = np.array([chr(id) for id in chain_ids_int], dtype=str)
+    chain_ids_indices = np.array([chain_id_to_index(c) for c in atom_array.chain_id])
+    new_indices = chain_ids_indices + offset * multiplier
+    chain_ids = np.array([index_to_chain_id(idx) for idx in new_indices], dtype="U4")
     atom_array.chain_id = chain_ids
     atom_array.pn_unit_iid = chain_ids
     return atom_array

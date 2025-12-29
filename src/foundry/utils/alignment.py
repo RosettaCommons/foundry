@@ -18,20 +18,28 @@ def weighted_rigid_align(
     Returns:
       X_align_L: [B, L, 3]
     """
-    assert X_L.shape == X_gt_L.shape
-    assert X_L.shape[:-1] == w_L.shape
 
+    # Canonicalize dimensions
+    if X_L.ndim == 2:
+        X_L = X_L[None]
+    if X_gt_L.ndim == 2:
+        X_gt_L = X_gt_L[None]
     if X_exists_L is None:
         X_exists_L = torch.ones((X_L.shape[-2]), dtype=torch.bool)
     if w_L is None:
         w_L = torch.ones_like(X_L[..., 0])
     else:
+        if w_L.ndim == 1:
+            w_L = w_L[None]
         w_L = w_L.to(torch.float32)
 
     # Assert `X_exists_L` is a boolean mask
     assert (
         X_exists_L.dtype == torch.bool
     ), "X_exists_L should be a boolean mask! Otherwise, the alignment will be incorrect (silent failure)!"
+
+    assert X_L.shape == X_gt_L.shape
+    assert X_L.shape[:-1] == w_L.shape
 
     X_resolved = X_L[:, X_exists_L]
     X_gt_resolved = X_gt_L[:, X_exists_L]

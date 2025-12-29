@@ -30,7 +30,8 @@ The length attribute should be the sum of all polymer lengths. in this case (120
         "input": "./input_pdbs/1bna.pdb",
         "contig": "A1-10,/0,B15-24,/0,120-130",
         "length": "140-150",
-        "ori_token": [24,20,10]
+        "ori_token": [24,20,10],
+        "is_non_loopy": true
     }
 }
 ```
@@ -45,7 +46,8 @@ Similar to the previous example, but done for a PDB containing one DNA strand (A
         "input": "./input_pdbs/5o4d.pdb",
         "contig": "A1-23,/0,120-130",
         "length": "143-153",
-        "ori_token": [-5,-10,8]
+        "ori_token": [-5,-10,8],
+        "is_non_loopy": true
     }
 }
 ```
@@ -59,7 +61,8 @@ Similar to the previous example but the input PDB has a dsDNA. One of the chains
         "input": "./input_pdbs/1bna.pdb",
         "contig": "A1-10,/0,120-130",
         "length": "130-140",
-        "select_fixed_atoms": {"A1-10":""}
+        "select_fixed_atoms": {"A1-10":""},
+        "is_non_loopy": true
     }
 }
 ```
@@ -74,7 +77,8 @@ Example on RNA. Similar to the ssDNA example, example 2.
         "input": "./input_pdbs/1q75.pdb",
         "contig": "A1-15,/0,120-130",
         "length": "135-145",
-        "ori_token": [15,2,-4]
+        "ori_token": [15,2,-4],
+        "is_non_loopy": true
     }   
 }
 ```
@@ -83,7 +87,7 @@ Example on RNA. Similar to the ssDNA example, example 2.
 
 This is a complex example which has a dsDNA specified in the contig: `C5-18` and `D24-37`. However, it also specifies an indexed protein motif component (`A146-154`) and diffuses the two flanks of the protein indexed region in the same chain. The diffused protein region has an unindexed motif specified via `"unindex": "/0,/0,B251-B255".` (*Note: the chain breaks applied are analogous to the contig string*). Parts of the DNA have been specified as fixed or to be sampled by RFD3 (`select_fixed_atoms`). Additionally hydrogen bond conditioning is applied to some backbone and base atoms of a few DNA bases.
 
-To run this without warnings, you will need to install [hpblus](https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/) to enable hydrogen bond metrics computation. This is discussed at the end of the RFD3 README, but the instructions are reproduced here for convenience:
+To run this without warnings, you will need to install [hbplus](https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/) to enable hydrogen bond metrics computation. This is discussed at the end of the RFD3 README, but the instructions are reproduced here for convenience:
 
 1. Download hbplus from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
 2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
@@ -104,7 +108,8 @@ To run this without warnings, you will need to install [hpblus](https://www.ebi.
         },
         "ori_token":[25,35,20],
         "select_hbond_acceptor": {"C16":"N7,O6", "D31-32":"N7", "D28-30":"OP1,OP2,O3',O5'"},
-        "select_hbond_donor": {"D31-32":"N6"}
+        "select_hbond_donor": {"D31-32":"N6"},
+        "is_non_loopy": true
 
     }
 }

@@ -8,7 +8,8 @@
             "E64": "CD2,CZ",
             "E88": "CG,CZ",
             "E96": "CD1,CZ"
-        }
+       },
+       "is_non_loopy": true
     },
     "pdl1": {
         "dialect": 2,
@@ -19,6 +20,7 @@
             "A56": "CG,OH",
             "A115": "CG,SD",
             "A123": "CD2,OH"
-       }
+       },
+       "is_non_loopy": true
     }
 }

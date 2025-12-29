@@ -139,13 +139,18 @@ def fetch_motif_residue_(
         subarray, motif=True, unindexed=False, dtype=int
     )  # all values init to True (fix all)
 
+    to_unindex = f"{src_chain}{src_resid}" in unindexed_components
+    to_index = f"{src_chain}{src_resid}" in components
+
     # Assign is motif atom and sequence
     if exists(atoms := fixed_atoms.get(f"{src_chain}{src_resid}")):
+        # If specified, we set fixed atoms in the residue to be motif atoms
         atom_mask = get_name_mask(subarray.atom_name, atoms, res_name)
         subarray.set_annotation("is_motif_atom", atom_mask)
         # subarray.set_annotation("is_motif_atom_with_fixed_coord", atom_mask)  # BUGFIX: uncomment
 
     elif redesign_motif_sidechains and res_name in STANDARD_AA:
+        # If redesign_motif_sidechains is True, we only make the backbone atoms to be motif atoms
         n_atoms = subarray.shape[0]
         diffuse_oxygen = False
         if n_atoms < 3:
@@ -178,6 +183,18 @@ def fetch_motif_residue_(
         subarray.set_annotation(
             "is_motif_atom_with_fixed_seq", np.zeros(subarray.shape[0], dtype=int)
         )
+    elif to_index or to_unindex:
+        # If the residue is in the contig or unindexed components,
+        # we set all atoms in the residue to be motif atoms
+        subarray.set_annotation("is_motif_atom", np.ones(subarray.shape[0], dtype=int))
+    else:
+        if to_unindex and not (
+            unfix_all or f"{src_chain}{src_resid}" in unfix_residues
+        ):
+            raise ValueError(
+                f"{src_chain}{src_resid} is not found in fixed_atoms, contig or unindex contig."
+                "Please check your input and contig specification."
+            )
     if unfix_all or f"{src_chain}{src_resid}" in unfix_residues:
         subarray.set_annotation(
             "is_motif_atom_with_fixed_coord", np.zeros(subarray.shape[0], dtype=int)
@@ -197,7 +214,6 @@ def fetch_motif_residue_(
         subarray.set_annotation(
             "is_flexible_motif_atom", np.zeros(subarray.shape[0], dtype=bool)
         )
-    to_unindex = f"{src_chain}{src_resid}" in unindexed_components
     if to_unindex:
         subarray.set_annotation(
             "is_motif_atom_unindexed", subarray.is_motif_atom.copy()

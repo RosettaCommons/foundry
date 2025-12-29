@@ -7,7 +7,7 @@ _target_: rfd3.engine.RFD3InferenceEngine
 
 out_dir: ???
 inputs: ???  # null, json, pdb or 
-ckpt_path: null
+ckpt_path: rfd3
 json_keys_subset: null
 skip_existing: True
 
@@ -61,5 +61,5 @@ global_prefix: null
 dump_prediction_metadata_json: True
 dump_trajectories: False
 align_trajectory_structures: False
-prevalidate_inputs: True
+prevalidate_inputs: False
 low_memory_mode: False # False for standard mode, True for memory efficient tokenization mode

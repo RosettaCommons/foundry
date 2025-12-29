@@ -7,44 +7,43 @@ This repository contains both the training and inference code, and
 both are described in more detail below. 
 
 <p align="center">
-  <img src="docs/.assets/trajectory.png" alt="All-atom diffusion with RFD3">
+  <img src="docs/.assets/overview.png" alt="All-atom design with RFD3">
 </p>
 
-## Get Started
-1. Install RFdiffusion3. See [Main README](../../README.md) for instructions how to install all models to run full pipeline (recommended). If you have already installed all the models skip [here](#run-inference). 
+> [!NOTE]
+> Looking for config documentation? See [here](./docs/input.md)
+
+## Getting Started
+1. Install RFdiffusion3. See [Main README](../../README.md) for instructions how to install all models to run full pipeline (recommended). If you have already installed all the models skip [here](#run-inference).
 ```bash
 pip install rc-foundry[rfd3]
 ```
 2. Download checkpoint to your desired checkpoint location.
 ```bash
-foundry install rfd3 --checkpoint-dir /path/to/ckpt/dir
+foundry install rfd3 --checkpoint-dir <path/to/ckpt/dir>
 ```
+This sets `FOUNDRY_CHECKPOINT_DIRS` and will in future look for checkpoints in that directory (alongside the default `~/.foundry/checkpoints` location), allowing you to run inference without supplying the checkpoint path. The checkpoint directory is optional, defaulting to `~/.foundry/checkpoints` if unset.
 
-## Run Inference
-To run the demo, you need to have a local clone of `foundry`. 
-You do not need to do any additional installation steps (unless
-you want to), this is just to get the files used in the examples
-below.
+## Running Inference
 
-
-```bash 
-cur_ckpt=/path/to/rfd3_latest.ckpt
-```
-
-To run inference
+To run inference (with foundry installed in your environment, or RFD3 & Foundry src in PYTHONPATH):
 ```bash
-cd foundry
-rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json ckpt_path=$cur_ckpt
+rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json skip_existing=False dump_trajectories=True prevalidate_inputs=True
 ```
 
-> [!NOTE]
-> This demo will take a very long amount of time if run on a
-> CPU instead of a GPU. On a GPU, this should take on the
-> order of 10 minutes.
+Additional unnecessary args here are added:
+- Including dumping and aligning trajectory structures can be useful for debugging your setup or making cool gifs.
+- Printing the config and dumping trajectories are turned off by default, but turned on here for verbosity
+- `prevalidate_inputs` will check that your inputs are valid before running inference. Helpful if your json has a number of different configs you want to debug / double check are valid before loading the checkpoints.
+- Only `out_dir` and `inputs` are required. The output directory will automatically be created. 
 
-Additional args here are added for verbosity, aligning trajectory structures, printing the config and dumping trajectories are turned off by default.
 
-The output directory will automatically be created.
+There are various interesting ways you can use RFD3 beyond Atom14 design as it's trained on a large array of different tasks.
+For example, you can fix sequence and not structure (prediction-type task), fix the backbone and unfix the sequence (MPNN-type inverse folding) or unfix the sidechains only (PLACER/ChemNet-style):
+
+<p align="center">
+  <img src="docs/.assets/conditioning.png" alt="Conditioning options for RFD3">
+</p>
 
 For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `foundry/models/rfd3/configs/inference_engine/rfdiffusion3.yaml` for even more options.
 
@@ -57,15 +56,6 @@ In the examples the paths to the input files are specified assuming
 that you are running the examples from the `foundry/models/rfd3/docs`
 directory. If you would like to run RFD3 from a different location, 
 you will need to change the path in the `.json` file(s) before running.
-
-### Install HBPLUS for hydrogen bond conditioning:
-One of the examples shows how to incorporate hydrogen bond conditioning 
-into your designs. To make use of this feature, you will need to 
-additionally complete the following steps:
-
-1. Download hbplus from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
-2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
-3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
 
 <table>
   <tr>
@@ -94,7 +84,7 @@ additionally complete the following steps:
   </tr>
 </table>
 
-## Training:
+## Training and Fine-Tuning
 
 We make available to the community not only the weights to run RFdiffusion3 but also the complete training code, easily extendable to additional use cases. Any AtomWorks-compatible dataset (and thus, any collection of structure files) can be readily incorporated and used for training or fine-tuning.
 
@@ -116,9 +106,10 @@ RFdiffusion3 supports arbitrary datasets of structure files for training and fin
 
 After setting up Hydra configs, launch a training run:
 ```bash
-uv run python models/rfd3/src/rfd3/train.py experiment=pretrain
+uv run python models/rfd3/src/rfd3/train.py experiment=pretrain ckpt_path=<path/to/ckpt>
 ```
 
+Supplying `ckpt_path=null` (default) will start with fresh weights.
 See the [path configs](/models/rfd3/configs/paths/) to customize data input and log output directories.
 
 ### Logging Configuration
@@ -165,6 +156,17 @@ further optimization!
 In `models/rfd3/configs/datasets/design_base.yaml` there's the shared configs for all datasets under `global_transform_args`. The dials that control the conditioning described above go under `training_conditions`, where for example `tipatom` - a specific preset conditioning sampler which more frequently fixes few tokens with few atoms - and others can be found.
 
 **Training with WandB:** We strongly recommend tracking your runs via wandb. To use it, simply have your WANDB_API_KEY set and use the wandb logger. For more details see [here](wandb.ai)
+
+# Appendix
+
+## Install HBPLUS for hydrogen bond conditioning:
+One of the examples shows how to incorporate hydrogen bond conditioning 
+into your designs. To make use of this feature, you will need to 
+additionally complete the following steps:
+
+1. Download hbplus from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
+2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
+3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
 
 ## Citation
 

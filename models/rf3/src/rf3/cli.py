@@ -23,10 +23,19 @@ def fold(
         configure_minimal_inference_logging()
 
     # Find the RF3 configs directory relative to this file
-    # This file is at: models/rf3/src/rf3/cli.py
-    # Configs are at: models/rf3/configs/
-    rf3_package_dir = Path(__file__).parent.parent.parent  # Go up to models/rf3/
-    config_path = str(rf3_package_dir / "configs")
+    # In development: models/rf3/src/rf3/cli.py -> models/rf3/configs/
+    # When installed: site-packages/rf3/cli.py -> site-packages/rf3/configs/
+    rf3_file_dir = Path(__file__).parent
+
+    # Check if we're in installed mode (configs are sibling to this file)
+    # or development mode (configs are ../../../configs)
+    if (rf3_file_dir / "configs").exists():
+        # Installed mode
+        config_path = str(rf3_file_dir / "configs")
+    else:
+        # Development mode
+        rf3_package_dir = rf3_file_dir.parent.parent  # Go up to models/rf3/
+        config_path = str(rf3_package_dir / "configs")
 
     # Get all arguments
     args = ctx.params.get("args", []) + ctx.args

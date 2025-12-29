@@ -1,101 +1,141 @@
 # Overview of Symmetry in RFD3
 
-### Inference pipeline flow chart
-Below shows the general capabilities of symmetry in RFD3. In general, inference is always defined with respect to the asymmetric unit, including motif residues to be scaffolded into the ASU. See different examples for how you might use different design specifications depending on your problem.
-
-```mermaid
-flowchart TD
-  %% Boxes
-  A[**Symmetric Inference**]:::head
-  
-  B1[Canonical Symmetry
-    <sub><code>C2,C3,D2...</code>
-    </sub>]
-  B2[Input-Defined Symmetry
-    <sub>non-canonical derived from PDB
-    </sub>]
-  
-  C[Design Specifications
-    <sub><code>length:</code> 100
-    <code>id</code>: C2, C3, input_defined ...
-    </sub>]
-  
-  D1[Unconditional]
-  D2[Conditional]
-
-  E1[Motif Scaffolding
-    <sub><code>indexed</code> or <code>unindexed</code>
-    </sub>]
-
-    F1[Asymmetric Motif
-      <sub>not fixed between subunits
-      <code>is_symmetric_motif:</code> False
-      </sub>]
-    F2[Symmetric Motif
-      <sub>fixed between subunits
-      <code>is_symmetric_motif:</code> True
-      </sub>]
-  
-  FINAL[Designs]:::outputs
-
-  %% Style
-  classDef head fill:#A1C181,stroke:#426C6C,color:#000000,stroke-width:3
-  classDef outputs fill:#FDA53A,stroke:#CB5201,color:#000000,stroke-width:3
-
-  %% Flow
-  A --> B1
-  A --> B2
-  B1 -- get frames --> C
-  B2 -- get frames --> C
-
-  C --> D1
-  C --> D2
-  
-  D2 --> E1
-  E1 -- 2D-conditioned only --> F1
-  E1 -- 2D- or 3D-conditioned --> F2
-
-  D1 --> FINAL
-  F1 -- 1 motif x n subunits --> FINAL
-  F2 -- preserve symmetry of input --> FINAL
-
-```
-
 ## Specifying symmetry in your input specifications
-Symmetry configurations are specified within the input `json` file, nested under its own specific configuration. The symmetry specific config has the following:
+Symmetry configurations are specified within the input JSON or YAML file, nested under its own specific configuration. The symmetry specific config has the following:
+```json
+symmetry: {
+    "id": "C3",
+    "is_unsym_motif": "Y1-11,Z16-25",
+    "is_symmetric_motif": true
+
+}
 ```
+```yaml
 symmetry:
-    id: null # e.g. "C3", "D2". # NOTE!!! Right now only C and D are supported.
-    is_unsym_motif: null # boolean array of which chains are the motif that should NOT be symmetrized (e.g. DNA strands). If not provided, all motifs are assumed to be symmetrized.
-    is_symmetric_motif: True # NOTE!!! Currently only symmetrized input motifs are supported
+    id: "C3"
+    is_unsym_motif: "Y1-11,Z16-25"
+    is_symmetric_motif: true
 ```
+- `id`                : Symmetry group ID. Supported symmetry types:
+  - **Cyclic (C)**: e.g. "C3" for a cyclic protein with 3 subunits
+  - **Dihedral (D)**: e.g. "D2" for a dihedral protein with 4 subunits (2×2)
+  - **Tetrahedral (T)**: "T" for tetrahedral symmetry with 12 subunits
+  - **Octahedral (O)**: "O" for octahedral symmetry with 24 subunits
+  - **Icosahedral (I)**: "I" for icosahedral symmetry with 60 subunits
+- `is_unsym_motif`    : Comma separated string list of contig/ligand names that should NOT be symmetrized (e.g. DNA strands). If not provided, all motifs are assumed to be symmetrized. See [Designs with motifs](#designs-with-motifs) section for details.
+- `is_symmetric_motif`: Boolean value whether the input motif is symmetric. Currently only symmetric input motifs are supported, therefore, `true` by default.
+
+> **⚠️ Memory Warning:** Memory requirements scale quadratically with the number of subunits. For larger complexes (especially T, O, and I symmetries), memory usage can become very high. Always use `diffusion_batch_size=1` for symmetry, and consider enabling `low_memory_mode=True` for higher-order symmetries. The memory footprint increases dramatically as both the number of subunits and the length of each subunit increase. Note: many higher order symmetires run out of memory even on large cards such as H200s, we are working on optimizations to make these networks more memory efficient. 
+
 
 ## Example command 
 You can run the following example command:
 ```
-./src/foundry/inference.py inference_sampler.kind=symmetry inference_sampler.gamma_0=0.6 out_dir=logs/inference_outs/sym_demo/0 ckpt_path=$cur_ckpt inputs=./projects/aa_design/tests/test_data/sym_tests.json diffusion_batch_size=1 
+./src/modelhub/inference.py inference_sampler.kind=symmetry out_dir=logs/inference_outs/sym_demo/0 ckpt_path=$cur_ckpt inputs=./projects/aa_design/tests/test_data/sym_tests.json diffusion_batch_size=1 
 ```
-`diffusion_batch_size` is 8 by default, but it is recommended to set it to 1 for symmetry due to memory limitations.
+- `inference_sampler.kind`: Set `symmetry` to turn on symmetry mode.
+- `diffusion_batch_size`  : **Must be set to `1` for all symmetry types** due to memory limitations. Memory scales quadratically with the number of subunits.
+- `low_memory_mode`       : **Strongly recommended** for T, O, and I symmetries. Set to `True` if you encounter memory errors (e.g. "CUDA error: out of memory"). Note that this will significantly slow the inference but is often necessary for larger complexes.
 
-The following checkpoint is updated continuously (see channel https://chat.ipd.uw.edu/ipd/channels/rfdiffusion3):
-```bash
-export cur_ckpt=/projects/ml/aa_design/models/rfd3_latest.ckpt
-```
 
-## Example json
-You can also find the same JSON at `foundry/projects/aa_design/tests/test_data/sym_tests.json` and the input PDBS can be found at `modelhub/projects/aa_design/tests/test_data/symmetry_examples`.
+## Unconditional multimer design
 
-The tasks that these examples describe are as follows:
-- 1j79_C2, 1e3v_C2: 
- Unindexed motif scaffolding for symmetric enzyme active sites.
- Each active site is located within a subunit. 
-- 1bfr_C2:
- Unindexed motif scaffolding for a single active site held by a symmetric enzyme. `is_unsym_motif` is used to specify the ligand that shouldn't be symmetrized.
-- 6t8h_C3:
- Indexed-unindexed combined motif scafolding for a C3 symmetric DNA binder. The DNA strands are indexed, and the motif residue is unindexed. `is_unsym_motif` is used to specify the DNA strands that shouldn't be symmetrized.
+The following provides a general overview of the supported symmetry types and examples of how to run:
+
+### Cyclic (C)
+Cyclic symmetry with n-fold rotational symmetry around a single axis. Generates n identical subunits.
+
 ```json
 {
-    "1j79_C2": {
+    "uncond_C15": {
+        "length": 100,
+        "is_non_loopy": true,
+        "symmetry": {
+            "id": "C15"
+        }
+    }
+}
+```
+
+### Dihedral (D)
+Dihedral symmetry combines n-fold rotational symmetry with a 2-fold rotation perpendicular to the main axis. Generates 2n identical subunits.
+
+```json
+{
+    "uncond_D4": { 
+        "length": 100,
+        "is_non_loopy": true,
+        "symmetry": {
+            "id": "D4"
+        }
+    }
+}
+```
+
+### Tetrahedral (T)
+Tetrahedral symmetry based on the symmetry of a tetrahedron. Generates 12 identical subunits.
+
+```json
+{
+    "uncond_T": { 
+        "length": 100,
+        "symmetry": {
+            "id": "T"
+        }
+    }
+}
+```
+
+### Octahedral (O)
+Octahedral symmetry based on the symmetry of a cube/octahedron. Generates 24 identical subunits.
+
+```json
+{
+    "uncond_O": { 
+        "length": 100,
+        "symmetry": {
+            "id": "O"
+        }
+    }
+}
+```
+
+### Icosahedral (I)
+Icosahedral symmetry based on the symmetry of an icosahedron/dodecahedron. Generates 60 identical subunits. This is the largest point group symmetry and is commonly found in viral capsids.
+
+```json
+{
+    "uncond_I": { 
+        "length": 100,
+        "symmetry": {
+            "id": "I"
+        }
+    }
+}
+```
+
+> **⚠️ Memory Warning:** Memory requirements increase dramatically with the number of subunits and subunit length. The memory footprint scales approximately quadratically with the number of subunits due to pairwise interactions. For higher-order symmetries (T: 12 subunits, O: 24 subunits, I: 60 subunits), it is **essential** to:
+> - Set `diffusion_batch_size=1` (required for all symmetry types)
+> - Enable `low_memory_mode=True` for T, O, and I symmetries
+> - Consider reducing subunit length if you encounter out-of-memory errors
+> - For icosahedral symmetry (60 subunits), expect memory usage to be 25-100× higher than a single chain design
+
+## Designs with motifs
+
+Symmetry sampling currently only supports pre-symmetrized motifs around the origin. Therefore, `is_symmetric_motif` is set to `true` by default. 
+The following are example JSON specifications for different symmetric motif scaffolding. You can also find the corresponding input PDBs in `docs/input_pdbs/symmetry_examples`. Although we only give JSON examples, you can also use YAML for everything shown below.   
+
+The tasks that these examples describe are as follows:
+- unindexed_C2_1j79, unindexed_C2_1e3v: 
+ Unindexed motif scaffolding for symmetric enzyme active sites. The motifs are located within a subunit; no inter-subunit motifs.
+- indexed_unsym_C2_1bfr:
+ Indexed motif scaffolding for a single active site held by a symmetric enzyme. `is_unsym_motif` specifies the ligand that shouldn't be symmetrized.
+- uncond_unsym_C3_6t8h:
+ Unconditional generation of C3 proteins around a DNA helix. The DNA chains are the motifs. `is_unsym_motif` specifies the DNA strands that shouldn't be symmetrized.
+
+```json
+{
+    "unindexed_C2_1j79": {
         "symmetry": {
             "id": "C2",
             "is_symmetric_motif": true
@@ -103,14 +143,12 @@ The tasks that these examples describe are as follows:
         "input": "symmetry_examples/M0630_1j79_symmedORO.pdb",
         "ligand": "ORO,ZN",
         "unindex": "A250",
-        "length": 290,
-        "fixed_atoms": {
-            "A250": "OD1,CG",
-            "ORO": "N3,C2,C4,N1",
-            "ZN": "ZN"
+        "length": 130,
+        "select_fixed_atoms": {
+            "A250": "OD1,CG"
         }
     },
-    "1e3v_C2": {
+    "unindexed_C2_1e3v": {
         "symmetry": {
             "id": "C2",
             "is_symmetric_motif": true
@@ -118,16 +156,15 @@ The tasks that these examples describe are as follows:
         "input": "symmetry_examples/M0349_1e3v.pdb",
         "ligand": "DXC",
         "unindex": "A16,A40,A100,A103",
-        "length": 130,
-        "fixed_atoms": {
+        "length": 80,
+        "select_fixed_atoms": {
             "A16": "OH,CZ,CE1,CE2",
             "A40": "OD2,CG",
             "A100": "N,CA,C,CB",
-            "A103": "OD2,CG",
-            "DXC": "C23,C22,O3,C21,C19,C17,C24,C12,C16,C11,C13,C20,C15,C9,C14,O1,C8,C10,C7,C4,C3,C5,C18"
+            "A103": "OD2,CG"
         }
     },
-    "1bfr_C2": {
+    "indexed_unsym_C2_1bfr": {
         "symmetry": {
             "id": "C2",
             "is_symmetric_motif": true,
@@ -135,33 +172,22 @@ The tasks that these examples describe are as follows:
         },
         "input": "symmetry_examples/1bfr_C2.pdb",
         "ligand": "HEM",
-        "unindex": "M52",
-        "length": 150,
-        "fixed_atoms": {
+        "contig": "51,M52,80",
+        "length": null,
+        "select_fixed_atoms": {
             "M52": "CG,SD,CE"
         }
     },
-    "6t8h_C3": {
+    "unsym_C3_6t8h": {
         "symmetry": {
             "id": "C3",
             "is_symmetric_motif": true,
             "is_unsym_motif": "Y1-11,Z16-25"
         },
         "input": "symmetry_examples/6t8h_C3.pdb",
-        "unindex": "A11",
         "contig": "150-150,/0,Y1-11,/0,Z16-25",
         "length": null,
-        "fixed_atoms": {
-            "A11": "NZ,CE,CD"
-        }
+        "is_non_loopy": true
     }
 }
 ```
-
-
-## TO-DO:
-- Implementation of 2D-conditioning for symmetric motifs
-  - will require figuring out how to read in motif, make symmetric when atom array is symmetrized, and then make sure that the 2D-cond labels get copied over too. 
-- Improve helical symmetry
-
-

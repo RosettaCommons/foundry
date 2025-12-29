@@ -1,4 +1,6 @@
 # For docs / outputs from example notebooks;
+demo/*/**.cif*
+demo/*/**.json
 examples/*.cif
 **.ckpt
 **.pt
@@ -187,7 +189,6 @@ dev.py
 *.benchmarks/
 
 # Images
-*.png
 *.pdf
 *.svg
 *.jpg

@@ -3,7 +3,6 @@ Utilities for inference input preparation
 """
 
 import logging
-import os
 from os import PathLike
 from typing import Dict
 
@@ -365,30 +364,31 @@ def inference_load_(
     return data
 
 
-def ensure_input_is_abspath(args: dict, path: PathLike | None):
+def ensure_inference_sampler_matches_design_spec(
+    design_spec: dict, inference_sampler: dict | None = None
+):
     """
-    Ensures the input source is an absolute path if exists, if not it will convert
-
-    args:
-        spec: Inference specification for atom array
-        path: None or file to which the input is relative to.
+    Ensure the inference sampler is set to the correct sampler for the design specification.
+    Args:
+        design_spec: Design specification dictionary
+        inference_sampler: Inference sampler dictionary
     """
-    if isinstance(args, str):
-        raise ValueError(
-            "Expected args to be a dictionary, got a string: {}. If you are using an input JSON ensure it contains dictionaries of arguments".format(
-                args
+    has_symmetry_specification = []
+    for item in design_spec.values():
+        if hasattr(item, "symmetry"):
+            has_symmetry = item.symmetry is not None
+        else:
+            has_symmetry = "symmetry" in item and item.get("symmetry") is not None
+        has_symmetry_specification.append(has_symmetry)
+    if any(has_symmetry_specification):
+        if (
+            inference_sampler is None
+            or inference_sampler.get("kind", "default") != "symmetry"
+        ):
+            raise ValueError(
+                "You requested for symmetric designs, but inference sampler is not set to symmetry. "
+                "Please add inference_sampler.kind='symmetry' to your command."
             )
-        )
-    if "input" not in args or not exists(args["input"]):
-        return args
-    input = args["input"]
-    if not os.path.isabs(input):
-        input = os.path.abspath(os.path.join(os.path.dirname(path), input))
-        ranked_logger.info(
-            f"Input source path is relative, converted to absolute path: {input}"
-        )
-        args["input"] = input
-    return args
 
 
 #################################################################################

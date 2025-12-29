@@ -5,6 +5,7 @@ import os
 import time
 import warnings
 from contextlib import contextmanager
+from os import PathLike
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -127,8 +128,10 @@ class DesignInputSpecification(BaseModel):
     # Motif selection from input file
     contig:  Optional[InputSelection] = Field(None, description="Contig specification string (e.g. 'A1-10,B1-5')")
     unindex: Optional[InputSelection] = Field(None, 
-        description="Unindexed components string (components must not overlap with contig). "\
-        "E.g. 'A15-20,B6-10' or dict. We recommend specifying")
+        description="Unindexed components selection. Components to fix in the generated structure without specifying sequence index. "\
+        "Components must not overlap with `contig` argument. "\
+        "E.g. 'A15-20,B6-10' or dict. We recommend specifying unindexed residues as a contig string, "\
+        "then using select_fixed_atoms will subset the atoms to the specified atoms")
     # Extra args:
     length:  Optional[str] = Field(None, description="Length range as 'min-max' or int. Constrains length of contig if provided")
     ligand:  Optional[str] = Field(None, description="Ligand name or index to include in design.")
@@ -696,7 +699,7 @@ class DesignInputSpecification(BaseModel):
             # Partial diffusion: use COM, keep all coordinates
             if exists(self.symmetry) and self.symmetry.id:
                 # For symmetric structures, avoid COM centering that would collapse chains
-                ranked_logger.info(
+                logger.info(
                     "Partial diffusion with symmetry: skipping COM centering to preserve chain spacing"
                 )
             else:
@@ -1121,3 +1124,33 @@ def accumulate_components(
     if atom_array_accum.bonds is None:
         atom_array_accum.bonds = BondList(atom_array_accum.array_length())
     return atom_array_accum
+
+
+def ensure_input_is_abspath(args: Dict[str, Any], path: PathLike | None):
+    """
+    Ensures the input source is an absolute path if exists, if not it will convert
+
+    args:
+        args: Inference specification for atom array
+        path: None or file to which the input is relative to.
+    """
+    if isinstance(args, str):
+        raise ValueError(
+            "Expected args to be a dictionary, got a string: {}. If you are using an input JSON ensure it contains dictionaries of arguments".format(
+                args
+            )
+        )
+    if "input" not in args or not exists(args["input"]):
+        return args
+    input = str(args["input"])
+    if not os.path.isabs(input):
+        if path is None:
+            raise ValueError(
+                "Input path is relative, but no base path was provided to resolve it against."
+            )
+        input = os.path.abspath(os.path.join(os.path.dirname(str(path)), input))
+        logger.info(
+            f"Input source path is relative, converted to absolute path: {input}"
+        )
+        args["input"] = input
+    return args

@@ -1,11 +1,15 @@
 import inspect
+import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
 import torch
 from jaxtyping import Float
+from rfd3.inference.symmetry.symmetry_utils import apply_symmetry_to_xyz_atomwise
+from rfd3.model.cfg_utils import strip_X
 
 from foundry.common import exists
+from foundry.utils.alignment import weighted_rigid_align
 from foundry.utils.ddp import RankedLogger
 from foundry.utils.rotation_augmentation import (
     rot_vec_mul,
@@ -110,14 +114,16 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                 )
                 # Fallback to smallest available step
                 noise_schedule_original = self._construct_inference_noise_schedule(
-                    device=coord_atom_lvl_to_be_noised.device
+                    device=device
                 )
                 noise_schedule = noise_schedule_original[-1:]  # Just use the final step
                 ranked_logger.info(
                     f"Using fallback: final step with t={noise_schedule[0].item():.6f}"
                 )
+        else:
+            noise_schedule = t_hat
 
-        return t_hat
+        return noise_schedule
 
     def _get_initial_structure(
         self,
@@ -221,6 +227,7 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
             # Handle chunked mode vs standard mode
             if "chunked_pairwise_embedder" in initializer_outputs:
                 # Chunked mode: explicitly provide P_LL=None
+                tic = time.time()
                 chunked_embedder = initializer_outputs[
                     "chunked_pairwise_embedder"
                 ]  # Don't pop, just get
@@ -238,6 +245,8 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                     initializer_outputs=other_outputs,
                     **other_outputs,
                 )
+                toc = time.time()
+                ranked_logger.info(f"Chunked mode time: {toc - tic} seconds")
             else:
                 # Standard mode: P_LL is included in initializer_outputs
                 outs = diffusion_module(
@@ -445,6 +454,7 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
             # Handle chunked mode vs standard mode (same as default sampler)
             if "chunked_pairwise_embedder" in initializer_outputs:
                 # Chunked mode: explicitly provide P_LL=None
+                tic = time.time()
                 chunked_embedder = initializer_outputs[
                     "chunked_pairwise_embedder"
                 ]  # Don't pop, just get
@@ -462,6 +472,8 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
                     initializer_outputs=other_outputs,
                     **other_outputs,
                 )
+                toc = time.time()
+                ranked_logger.info(f"Chunked mode time: {toc - tic} seconds")
             else:
                 # Standard mode: P_LL is included in initializer_outputs
                 outs = diffusion_module(
