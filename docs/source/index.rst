@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 Welcome to the official documentation for foundry
-================================================
+=================================================
 
 `foundry <https://github.com/RosettaCommons/foundry/tree/production>`_ is a home for
 many of the machine learning models produced by `Rosetta Commons member labs <https://rosettacommons.org/about/labs/>`_. 
@@ -12,8 +12,6 @@ many of the machine learning models produced by `Rosetta Commons member labs <ht
 .. toctree::
    :maxdepth: 1
    :caption: General
-
-   .. readme_link.rst
    
    license_link.rst
 

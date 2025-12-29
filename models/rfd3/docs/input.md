@@ -12,6 +12,7 @@ This document outlines the various input settings and configurations you can use
 - [Quick start](#quick-start)
 - [CLI arguments](#cli-arguments)
   - [Required CLI Arguments](#required-cli-arguments)
+  - [Other Useful CLI Arguments](#other-useful-cli-arguments)
   - [Other CLI options](#other-CLI-options)
 - [InputSpecification fields](#inputspecification-fields)
 - [The `InputSelection` mini-language](#the-inputselection-mini-language)
@@ -19,13 +20,14 @@ This document outlines the various input settings and configurations you can use
 - [Input Option Specifics](#input-option-specifics)
   - [Unindexing Specifics](#unindexing-specifics)
   - [Partial Diffusion](#partial-diffusion)
-  - [CIF Parser Options](#cif_parser_options)
+  - [CIF Parser Options](#cif-parser-options)
   - [Select Fixed Atoms](#select-fixed-atoms)
 - [Debugging recommendations](#debugging-recommendations)
 - [FAQ / Gotchas](#faq--gotchas)
 
 ---
 
+(quick-start)=
 ## Quick start
 > For more detailed information on RFdiffusion3 inputs and outputs, see {doc}`intro_inference_calculations`
 
@@ -49,12 +51,17 @@ You can then run inference at the command line with:
 rfd3 design out_dir=<path/to/outdir> inputs=<path/to/inputs>
 ```
 
+(cli-arguments)=
 ## CLI arguments
+
+(required-cli-arguments)=
 ### Required CLI arguments:
 - `out_dir` — The directory that output files from the inference run will be stored in. If the directory does not exist it will be created. **This does not change how the output files are named.**
 - `inputs` — The path and file name of the JSON or YAML file where you have defined your inference constraints. 
 
-### Other Useful CLI arguments (from the [default config](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/configs/inference_engine/rfdiffusion3.yaml)):
+(other-useful-cli-arguments)=
+### Other Useful CLI arguments:
+(From the [default config](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/configs/inference_engine/rfdiffusion3.yaml))
 - `n_batches` — number of batches to generate per input key (default: 1). 
 - `diffusion_batch_size` — number of diffusion samples (designs) per batch (default: 8). If `n_batches=1` and `diffusion_batch_size=8` then 8 designs will be generated from the inference run. 
 - `specification` — JSON overrides for the per-example InputSpecification (default: `{}`). For example, you can run `rfd3 design inputs=null specification.length=200` for a quick debug of creating a 200-length protein.
@@ -68,7 +75,7 @@ rfd3 design out_dir=<path/to/outdir> inputs=<path/to/inputs>
 - `prevalidate_inputs` — Check that your inputs (JSON or YAML file) are valid before running inference (default: False).
 - `low_memory_mode` - Set to True (default: False) for memory efficient tokenization mode. 
 
-
+(other-cli-options)=
 ### Other CLI Options:
 - `json_keys_subset` — Allows the user to extract only a subset of the JSON keys provided in the `inputs` file (default: null).
 - `inference_sampler` —
@@ -99,6 +106,7 @@ rfd3 design out_dir=<path/to/outdir> inputs=<path/to/inputs>
 
 The full config of default arguments that are applied can be seen in [inference_engine/rfdiffusion3.yaml](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/configs/inference_engine/rfdiffusion3.yaml)
 
+(inputspecification-fields)=
 ## InputSpecification fields
 
 Below is a table of all of the inputs that the `InputSpecification` accepts. Use these fields to describe the constraints you want to apply to your system during inference.
@@ -125,7 +133,7 @@ Below is a table of all of the inputs that the `InputSpecification` accepts. Use
 | `select_hbond_donor` / `select_hbond_acceptor`                 | `InputSelection`  | Atom-wise donor/acceptor flags. Atom-wise selection of hydrogen bond donors and acceptors, respectively. Only dictionary inputs allowed. See {doc}`na_binder_design` for an example. |
 | `select_hotspots`                                              | `InputSelection`  | Atom-level or residue-level hotspots. Hotspots will typically be at most 4.5 Å to any heavy atom in the designed structure. Typically used for designing binders. |
 | `redesign_motif_sidechains`                                    | `bool`            | Fixed backbone, redesigned sidechains for motifs (input structures). |
-| `symmetry`                                                     | `SymmetryConfig`  | See {doc}`symmetry.md`.                                               |
+| `symmetry`                                                     | `SymmetryConfig`  | See {doc}`symmetry`.                                               |
 | `ori_token`                                                    | `list[float]`     | `[x,y,z]` origin override to control COM (center of mass) placement of designed structure. |
 | `infer_ori_strategy`                                           | `str`             | `"com"` or `"hotspots"`.  The center of mass of the diffused region will typically be within 5Å of the ORI token. Using `hotspots` will place the ORI token 10Å outward from the center of mass of the specified hotspots. Using `com` will place the token at the center of mass of the input structure.|
 | `plddt_enhanced`                                               | `bool`            | Default `True`. Enables pLDDT (predicted Local Distance Difference Test) enhancement. |
@@ -148,6 +156,7 @@ A few notes on the above:
 - **Backwards compatible.** Add `"dialect": 1` to keep your old configs running while you migrate. (Deprecated.)
 
 ---
+(the-inputselection-mini-language)=
 ## The InputSelection Mini-Language
 
 Fields marked as `InputSelection` accept either a boolean, a contig-style string, or a dictionary. Dictionaries are the most expressive and can also use shorthand values like `ALL`, `TIP`, or `BKBN`:
@@ -160,11 +169,20 @@ select_fixed_atoms:
   LIG: ''  # selects no atoms (i.e. unfixes the atoms for ligands named `LIG`)
 ```
 
-<p align="center">
+<!--<p align="center">
   <img src=".assets/input_selection.png" alt="InputSelection language for foundry" width=500>
-</p>
+</p>-->
+```{figure} .assets/input_selection.png
+---
+alt: Input selection language for foundry.
+width: 500px
+---
+Graphical representation of the different ways to specify portions of a structure using RFD3's InputSelection mini-language. 
+```
 
-## Contig String
+
+(contig-strings)=
+## Contig Strings
 A 'contig string' is a string that contains residue information and is used in many of the settings in the table above. Here are some formatting specifics: 
 - Different pieces of information included in the string are separated by commas
 - Ranges of residues are specified by a dash (`-`) between the starting and ending residue
@@ -186,8 +204,10 @@ my_calculation:
 - `B3-B45`: Residues B3 thru B45 are taken from the input structure. 
 - `60-80`: A design region is added B45 that will be between 60 and 80 residues long.
 
+(input-option-specifics)=
 ## Input Option Specifics
 
+(unindexing-specifics)=
 ### Unindexing Specifics
 
 `unindex` marks motif tokens whose relative sequence placement is unknown to the model (useful for scaffolding around active sites, etc.).
@@ -198,6 +218,7 @@ You can specify consecutive residues as e.g. `A11-12` (instead of `A11,A12`), th
 Similarly, you can specify manually any number of residues that offsets two components, e.g. `A11,0,A12` (0 sequence offset, equivalent to just `A11-12`), or `A11,3,A12` (3-residue separation).
 From our initial tests this only leads to a slight bias in the model, but newer models may show better adherence!
 
+(partial-diffusion)=
 ### Partial Diffusion
 To enable partial diffusion, you can pass `partial_t` with any example. This sets the *noise level* in *angstroms* for the sampler:
 - The `specification.partial_t` argument can be specified from JSON or the command line.
@@ -222,10 +243,15 @@ In the following example, RFD3 will noise out by 15 angstroms and constrain atom
 }
 ```
 Below is an example of what the output should look like (diffusion outputs in teal, original native in navajo white):
-<p align="center">
+<!--<p align="center">
   <img src=".assets/partial_diff.png" alt="Partial diffusion" width=650>
-</p>
+</p>-->
+```{image} .assets/partial_diff.png
+:alt: Partial diffusion.
+:width: 650px
+```
 
+(cif-parser-options)=
 ### CIF Parser Options
 The `cif_parser_args` setting that you can include in your input JSON or YAML file accepts several possible values as a dictionary: 
 - `cache_dir`: String specifying the path to the directory where cache files are stored (default: null).
@@ -239,6 +265,7 @@ The `cif_parser_args` setting that you can include in your input JSON or YAML fi
 
 You can also use `STANDARD_PARSER_ARGS` from [AtomWorks](https://github.com/RosettaCommons/atomworks), more information can be found at [atomworks/io/parser.py](https://github.com/RosettaCommons/atomworks/blob/production/src/atomworks/io/parser.py)
 
+(select-fixed-atoms)=
 ### Select Fixed Atoms
 The `select_fixed_atoms` input setting can take a boolean, dictionary or contig string as input: 
 - `True`: All atoms pulled from the input file (via `contig`, for example) are fixed in 3D space
@@ -246,11 +273,13 @@ The `select_fixed_atoms` input setting can take a boolean, dictionary or contig 
 - Contig string: See the [Contig Strings](#contig-strings) section for formatting. Specifying a contig string for this setting allows for the specification of several components to fix in 3D space. This string should only reference residues from the input. Chain breaks are irrelevant for this setting. 
 - Dictionary: Allows for the specification of specific atoms within the residue to be fixed in 3D space. For example, `{"A1": "N,CA,C,O,CB,CG", "A2-10": "BKBN"}` fixes backbone and CB for residues 1 and 2, and all atoms for residues 3-10 in chain A.
 
+(debugging-recommendations)=
 ## Debugging recommendations
 - For unindexed scaffolding, you can use the option `cleanup_guideposts=False` to keep the models' outputs for the guideposts. The guideposts are saved as separate chains based on whether their relative indices were leaked to the model: e.g. for `unindex=A11-12,A22`, you should see `A11` and `A12` indexed together on one chain and `A22` on its own chain, indicating the model was provided with the fact that `A11` and `A12` are immediately next to one another in sequence but their distance to `A22` is unknown.
 - To see the full 14 diffused virtual atoms you can use `cleanup_virtual_atoms=False`. Default is to discard them for the sake of downstream processing.
 - To see the trajectories, you can use `dump_trajectories=True`. This can be useful if the outputs look strange but the config is correct, or if you want to make cool gifs of course! Trajectories do not have sequence labels and contain virtual atoms.
 
+(faq--gotchas)=
 ## FAQ / Gotchas
 
 <details>

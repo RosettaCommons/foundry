@@ -19,7 +19,7 @@ extensions = ["myst_parser",
               ]
 
 templates_path = ['_templates']
-exclude_patterns = []
+exclude_patterns = ["readme.md", "readmelink.md", "readme_link.rst"]
 
 
 

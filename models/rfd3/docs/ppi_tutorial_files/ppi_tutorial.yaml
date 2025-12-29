@@ -1,0 +1,14 @@
+insulinr:
+    input: 4zxb_cropped.pdb
+    contig: 40-120,/0,E6-155
+    length: 190-270
+    select_hotspots:
+        E64: CD2,CZ
+        E88: CG,CZ
+        E96: CD1,CZ
+    infer_ori_strategy: hotspots
+    is_non_loopy: true
+    select_fixed_atoms: 
+        E25: []
+        E26: BKBN
+        E27: CA,CB,OG
