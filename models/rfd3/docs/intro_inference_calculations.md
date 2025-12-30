@@ -2,79 +2,12 @@
 In RFdiffusion3 (RFD3), [YAML](https://yaml.org/) or [JSON](https://www.json.org/json-en.html) files are used to specify the **settings** for your inference calculations and [**configuration options**](https://hydra.cc/docs/configure_hydra/intro/) are used to provide other information about your calculation, such as the location and name of the checkpoint file you want to use. 
 
 ## Inference Settings
-The inference 'settings' are how you constrain your inference calculation, such as specifying portions of the output you wish to have designed (`contig`) and specifying any symmetries that exist in your system (`symmetry`). These settings are stored in either a YAML or JSON file to be interpreted by RFdiffusion3. We will briefly discuss these file formats below and runnable examples of these files can be found in `foundry/models/rfd3/docs`.
+The inference 'settings' are how you constrain your inference calculation, such as specifying portions of the output you wish to have designed (`contig`) and specifying any symmetries that exist in your system (`symmetry`). These settings are stored in either a YAML or JSON file to be interpreted by RFdiffusion3. Runnable example sof json and yaml files can be found in `foundry/models/rfd3/docs`.
 
 Using this type of input specification allows you to define different types of inference calculations all in the same file, and either run all of the calculation types defined in the file or specify the specific calculation you want to run via the command line. 
 
 ```{note}
 For more information on many of the available options, see {doc}`input`. To see all available options, see [input_parsing.py](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/src/rfd3/inference/input_parsing.py). 
-```
-
-### JSON File Format
-In a JSON file different groupings of settings are denoted by curly braces (`{}`), colons (`:`) are used to specify the chosen setting for each setting type, and commas are used to separate different settings. Any strings included in the file need to be in quotes.
-
-To start, the contents of the entire file should be surrounded by curly braces. To start a new group of settings you want to use for an inference run, give it a name (in quotes) then use a colon and an open brace to denote that you are starting a new group of settings related to that name:
-```json
-{
-    "inference_calculation_1":{
-        "setting1": "my_setting_1",
-    }
-}
-```
-
-If you have more than one inference calculation defined in your JSON file, make sure to add a comma between different groups: 
-```json
-{
-    "inference_calculation_1":{
-        "setting1": "my_setting_1",
-    },
-     "inference_calculation_2":{
-        "setting1": "my_setting_1",
-    }
-}
-```
-Some settings will be one line while others will require defining a dictionary, leading to another set of braces: 
-```json
-{
-    "inference_calculation_1":{
-        "string_setting": "my_string_1",
-        "boolean_setting": true,
-        "number_setting": -27.4,
-        "dictionary_setting":{
-            "key1": 2,
-            "key2": false,
-            "key3": "my_string_2, my_string_3"
-        }
-    }
-}
-```
-There is no syntax for comments in JSON files - you can't comment out a line or add notes. This results in very skimmable and easy to read file, but might feel limiting for taking notes or troubleshooting.
-
-### YAML File Format
-YAML files use indentation to denote different groupings, however **tab characters are not allowed**. Comments in YAML files are denoted with `#` and can be anywhere in the line. List members are denoted using hyphens (`-`) or by enclosing comma-separated items in square brackets (`[]`). For the purposes of RFD3, strings do not need to be inclosed by quotes to be parsed correctly. The inference settings in RFD3 are interpreted as key value pairs, so when you are defining your groups, make sure to use colons (`:`) to denote a relationship between the setting name and the value you want to give it. 
-
-To start a set of inference settings, name the group and then include your settings in an indented chunk below it. For multiple inference calculations, go back one indentation level to name the new group and then continue on as before: 
-```yaml
-# Information about what is stored in this YAML file
-inference_calculation_1: # Information about calculation 1
-    # Your settings go here
-inference_calculation_2: 
-    # Your settings go here
-```
-And here's what your YAML file will look like with some settings added:
-```yaml
-inference_calculation_1: 
-    string_setting:  my_string
-    boolean_setting: true
-    number_setting: -27.4
-    list_setting: 
-        - 0.0
-        - 1.0
-        - 2.0
-    dictionary_setting: 
-        key1: value1
-        key2: value2
-        key3: value3
 ```
 
 ## Job configurations
