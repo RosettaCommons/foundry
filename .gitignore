@@ -136,6 +136,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+local-pyproject.toml
 env/
 venv/
 ENV/
@@ -205,6 +206,9 @@ wandb/
 
 # Hydra
 .hydra/
+
+# AtomWorks / Foundry local mirrors (large; keep out of git)
+.foundry_mirrors/
 
 # Logs
 logs/

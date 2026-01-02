@@ -1,0 +1,126 @@
+[project]
+name = "molecore-foundry-env"
+version = "0.0.0"
+description = "Portable uv environment spec for molecore_foundry (macOS CPU + Linux GPU opt-in)."
+requires-python = ">=3.12"
+dependencies = [
+  # Minimal, safe defaults (usable even without ML stacks)
+  "pip>=24",
+  "setuptools",
+  "wheel",
+
+  # Common IO + config
+  "requests>=2.32",
+  "python-dotenv>=1.0",
+  "pyyaml>=6.0",
+
+  # Data + notebooks
+  "pandas>=2.2",
+  "ipykernel>=6.29",
+  "jupyterlab>=4.0",
+  "tqdm>=4.66",
+
+  # AtomWorks is central for Foundry-style biomolecular workflows.
+  # Keep the base install as `atomworks` (IO-focused; no torch requirement).
+  "atomworks",
+
+  # Central structure + ML runtime (CPU-safe defaults; Linux GPU machines can override per README)
+  "biotite>=0.41",
+  "torch>=2.2.0,<3",
+]
+
+[project.optional-dependencies]
+# Your prior lightweight zipbio11_dev utilities (captured via pip freeze)
+zipbio11_dev = [
+  "beautifulsoup4==4.12.3",
+  "lxml==6.0.2",
+  "nltk==3.9.2",
+  "pygithub==2.8.1",
+  "python-dateutil==2.9.0",
+  "selenium==4.39.0",
+  "sendgrid==6.12.5",
+  "spacy==3.8.11",
+  "sqlalchemy==2.0.45",
+  "tenacity==9.0.0",
+  "webdriver-manager==4.0.2",
+]
+
+# Bio + structure file utilities (portable, CPU-safe)
+bio = [
+  "numpy>=1.26",
+  "scipy>=1.12",
+  "biopython>=1.83",
+]
+
+# AtomWorks (RosettaCommons) — install only what you need:
+# - `atomworks` for `atomworks.io` (no torch requirement)
+# - `atomworks[ml]` for `atomworks.ml` (pulls torch + ML deps)
+atomworks_ml = [
+  "atomworks[ml]",
+]
+
+# Direct access to common biological databases/services
+db = [
+  "rcsbsearchapi>=2.0.0",
+  "bioservices>=1.11",
+  "httpx>=0.27",
+  "gget>=0.28",
+]
+
+# Visualization helpers that tend to be pip-friendly
+viz = [
+  "matplotlib>=3.8",
+  "seaborn>=0.13",
+  "py3dmol>=2.4",
+  "nglview>=3.1",
+]
+
+# PyMOL: the full application is often easiest via system/conda.
+# This provides a Python wrapper to drive PyMOL from scripts when available.
+pymol = [
+  "pymolpy3",
+]
+
+# Agentic workflows (optional):
+# Keep this lightweight and vendor-neutral; add provider SDKs only as needed.
+agentic = [
+  "pydantic>=2.8",
+  "tenacity>=9.0",
+  "httpx>=0.27",
+  "rich>=13.9",
+  "typer>=0.20",
+  "orjson>=3.10",
+
+  # Common LLM provider SDKs (optional but useful for agentic scripting)
+  "openai>=1.0",
+  "anthropic>=0.40",
+]
+
+# Modal (serverless GPU/CPU compute) client libraries (optional)
+modal = [
+  "modal",
+  "modalkit",
+]
+
+# Foundry itself (choose either editable install of the repo, or install rc-foundry from PyPI)
+foundry = [
+  "rc-foundry[all]>=0.0.0",
+]
+
+# Rosetta/PyRosetta (best-effort: requires post-install step)
+rosetta = [
+  "pyrosetta-installer",
+]
+
+# CUDA is intentionally NOT specified here, because selecting the correct CUDA wheels is
+# a machine-specific action. See README for the recommended `uv pip install --index-url ...` steps.
+cuda = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/molecore_foundry_env"]
+
+

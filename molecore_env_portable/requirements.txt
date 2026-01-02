@@ -1,0 +1,15 @@
+beautifulsoup4 @ file:///home/conda/feedstock_root/build_artifacts/beautifulsoup4_1705564648255/work
+lxml==6.0.2
+nltk==3.9.2
+pandas @ file:///Users/runner/miniforge3/conda-bld/pandas_1715897646986/work
+PyGithub==2.8.1
+python-dateutil @ file:///home/conda/feedstock_root/build_artifacts/python-dateutil_1709299778482/work
+python-dotenv==1.0.1
+PyYAML @ file:///Users/runner/miniforge3/conda-bld/pyyaml_1695373486380/work
+requests @ file:///home/conda/feedstock_root/build_artifacts/requests_1717057054362/work
+selenium==4.39.0
+sendgrid==6.12.5
+spacy==3.8.11
+SQLAlchemy==2.0.45
+tenacity==9.0.0
+webdriver-manager==4.0.2
