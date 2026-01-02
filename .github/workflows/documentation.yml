@@ -17,6 +17,8 @@ jobs:
       - name: Sphinx build
         run: |
           sphinx-build -M html docs/source/ docs/build/
+      - name: Disable Jekyll
+        run: touch docs/build/html/.nojekyll
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/production' }}
