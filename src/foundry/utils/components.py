@@ -5,11 +5,11 @@ from typing import List
 import numpy as np
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from biotite.structure import AtomArray
-from rfd3.constants import (
-    TIP_BY_RESTYPE,
-)
 
 from foundry.common import exists
+from foundry.constants import (
+    TIP_BY_RESTYPE,
+)
 from foundry.utils.ddp import RankedLogger
 
 global_logger = RankedLogger(__name__, rank_zero_only=False)
