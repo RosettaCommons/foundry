@@ -5,7 +5,7 @@ from typing import List
 import numpy as np
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from biotite.structure import AtomArray
-from rfd3.constants import (
+from foundry.constants import (
     TIP_BY_RESTYPE,
 )
 
