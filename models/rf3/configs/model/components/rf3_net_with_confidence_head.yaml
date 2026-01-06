@@ -36,6 +36,7 @@ confidence_head:
       d_hidden: 32
     attention_pair_bias:
       n_head: 16 
+      kq_norm: true
   n_bins_pae: 64
   n_bins_pde: 64
   n_bins_plddt: 50

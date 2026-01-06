@@ -1,0 +1,56 @@
+# @package _global_
+
+name: rf3-with-confidence
+project: rf3
+
+tags:
+  # list of tags to add to the run ( & on wandb to easily find & filter runs)
+  - full
+
+defaults:
+  - override /datasets: pdb_only
+  - override /model: rf3_with_confidence
+  - override /trainer: rf3_with_confidence
+
+ckpt_config:
+  _target_: foundry.utils.weights.CheckpointConfig
+  path: null
+  reset_optimizer: true
+
+model:
+  lr_scheduler:
+    base_lr: 0.9e-3 # 1/2 of original learning rate (1.8e-3)
+
+# load confidence features
+# remove within_20_closest_chains from loaders
+datasets:
+  run_confidence_head: true
+  train:
+    pdb:
+      sub_datasets:
+          pn_unit:
+            dataset:
+              dataset:
+                filters:
+                  # filters common across all PDB datasets
+                  - "deposition_date < '2024-01-01'"
+                  - "resolution < 9.0"
+                  - "num_polymer_pn_units <= 300"
+                  - "cluster.notnull()"
+                  - "pdb_id not in ${resolve_import:atomworks.constants,PDB_IDS_WITH_UNPHYSICAL_BONDS}"
+                  # pn_unit specific filters
+                  - "~(q_pn_unit_non_polymer_res_names.notnull() and q_pn_unit_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+          interface:
+            dataset:
+              dataset:
+                filters:
+                  # filters common across all PDB datasets
+                  - "deposition_date < '2024-01-01'"
+                  - "resolution < 9.0"
+                  - "num_polymer_pn_units <= 300"
+                  - "cluster.notnull()"
+                  - "pdb_id not in ${resolve_import:atomworks.constants,PDB_IDS_WITH_UNPHYSICAL_BONDS}"
+                  # interface specific filters
+                  - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+                  - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+                  - "is_inter_molecule"
