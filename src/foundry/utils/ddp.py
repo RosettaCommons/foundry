@@ -20,7 +20,7 @@ def is_rank_zero() -> bool:
 
 
 def set_accelerator_based_on_availability(cfg: dict | DictConfig):
-    """Set training accelerator to CPU if no GPUs are available.
+    """Set training accelerator based on available hardware.
 
     Args:
         cfg: Hydra object with trainer settings "accelerator", "devices_per_node", and "num_nodes".
@@ -28,22 +28,25 @@ def set_accelerator_based_on_availability(cfg: dict | DictConfig):
     Returns:
         None; modifies the input `cfg` object in place.
     """
-    if not torch.cuda.is_available():
-        logger.error(
-            "No GPUs available - Setting accelerator to 'cpu'. Are you sure you are using the correct configs?"
-        )
-        assert "trainer" in cfg, "Configuration object must have a 'trainer' key."
-        for key in ["accelerator", "devices_per_node", "num_nodes"]:
-            assert (
-                key in cfg.trainer
-            ), f"Configuration object must have a 'trainer.{key}' key."
+    assert "trainer" in cfg, "Configuration object must have a 'trainer' key."
+    for key in ["accelerator", "devices_per_node", "num_nodes"]:
+        assert (
+            key in cfg.trainer
+        ), f"Configuration object must have a 'trainer.{key}' key."
 
-        # Override accelerator settings
+    if torch.cuda.is_available():
+        cfg.trainer.accelerator = "gpu"
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        logger.info("Intel XPU detected - using XPU accelerator")
+        cfg.trainer.accelerator = "xpu"
+    else:
+        logger.error(
+            "No GPUs/XPUs available - Setting accelerator to 'cpu'. Are you sure you are using the correct configs?"
+        )
         cfg.trainer.accelerator = "cpu"
         cfg.trainer.devices_per_node = 1
         cfg.trainer.num_nodes = 1
-    else:
-        cfg.trainer.accelerator = "gpu"
+
     return cfg
 
 

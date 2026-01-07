@@ -36,6 +36,11 @@ from foundry.utils.weights import (
     freeze_parameters_with_config,
     load_weights_with_policies,
 )
+from foundry.utils.xpu import (
+    SingleXPUStrategy,
+    XPUAccelerator,
+    XPUMixedPrecision,
+)
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
@@ -122,8 +127,17 @@ class FabricTrainer(ABC):
             (3) Fabric Loggers (https://lightning.ai/docs/fabric/2.4.0/api/loggers.html)
             (4) Efficient Gradient Accumulation (https://lightning.ai/docs/fabric/2.4.0/advanced/gradient_accumulation.html)
         """
-        # Use custom DDP strategy only for multi-device, non-interactive environments
-        if (
+        # Handle XPU accelerator
+        is_xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
+        if accelerator == "xpu" or (accelerator == "auto" and is_xpu and not torch.cuda.is_available()):
+            accelerator = XPUAccelerator()
+            precision_plugin = None
+            if precision in ("16-mixed", "bf16-mixed"):
+                precision_plugin = XPUMixedPrecision(precision=precision)
+                precision = None  # Handled by plugin
+            strategy = SingleXPUStrategy(precision_plugin=precision_plugin)
+            ranked_logger.info("Using Intel XPU with SingleXPUStrategy")
+        elif (
             strategy == "ddp"
             and not is_interactive_environment()
             and not (num_nodes == 1 and devices_per_node == 1)

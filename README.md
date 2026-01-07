@@ -15,6 +15,16 @@ All models within Foundry rely on [AtomWorks](https://github.com/RosettaCommons/
 pip install "rc-foundry[all]"
 ```
 
+**Intel XPU Installation**
+
+For Intel XPU devices, install PyTorch with XPU support first, then install Foundry.
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/xpu
+pip install "rc-foundry[all]"
+```
+> [!NOTE]
+> Use `pip` (not `uv`) for XPU installs since UV re-resolves dependencies and may replace your XPU torch with the standard PyPI version.
+
 **Downloading weights** Models can be downloaded to a target folder with:
 ```
 foundry install base-models --checkpoint-dir <path/to/ckpt/dir>
