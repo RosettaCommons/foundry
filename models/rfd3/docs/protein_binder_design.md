@@ -8,15 +8,17 @@ RFD3 is a highly proficient protein binder designer. The following arguments hav
 In addition, we strongly recommend the following setting, which encourages the model to make more structured designs:
 - is_non_loopy: true
 
-Some useful command-line overrides to experiment with include `inference_sampler.step_scale` (defaults to 1.5) and
-`inference_sampler.gamma_0` (defaults to 0.6). Increasing the `step_scale` and decreasing `gamma_0` yields lower-temperature
-designs, which tends to increase designability and decrease diversity.
+We also recommend the following command-line overrides: `inference_sampler.step_scale=3` (defaults to 1.5) and
+`inference_sampler.gamma_0=0.2` (defaults to 0.6). Increasing the `step_scale` and decreasing `gamma_0` yields lower-temperature
+designs, which greatly increases PPI designability.
 
 If you would like to run the examples below, `protein_binder_design.json`, located in this directory, contains the example code. You can run it via:
 ```
 rfd3 design out_dir=inference_outputs/protein_binder/0 \
 ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
-inputs=./protein_binder_design.json
+inputs=./protein_binder_design.json \
+inference_sampler.step_scale=3 \
+inference_sampler.gamma_0=0.2
 ```
 
 Or, if you have cloned the repo rather than using `pip install`:
@@ -24,7 +26,9 @@ Or, if you have cloned the repo rather than using `pip install`:
 python path/to/foundry/models/rfd3/src/rfd3/run_inference.py \
 out_dir=inference_outputs/protein_binder/0 \
 ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
-inputs=./protein_binder_design.json 
+inputs=./protein_binder_design.json \
+inference_sampler.step_scale=3 \
+inference_sampler.gamma_0=0.2
 ```
 
 An example script for running these examples in batches is also provided in `run_inf_tutorial.sh`.

@@ -113,7 +113,7 @@ To actually run RFD3 you need to know:
 
 Once you have these three things you can run something like this from the command line:
 ```bash
-rfd3 design out_dir=ppi_tutorial_outputs/0 inputs=ppi_tutorial.yaml ckpt_path=/path/to/your/checkpoint/files/rfd3_latest.ckpt
+rfd3 design out_dir=ppi_tutorial_outputs/0 inputs=ppi_tutorial.yaml ckpt_path=/path/to/your/checkpoint/files/rfd3_latest.ckpt inference_sampler.step_scale=3 inference_sampler.gamma_0=0.2
 ```
 Your output files will be placed in a new directory `ppi_tutorial_outputs/0`. If you run the tutorial again, change the `0` to another number to not overwrite your outputs. Your output files will be named `ppi_tutorial_insulinr_0_model_n.cif.gz` where `n` is the number of the design. `ppi_tutorial` comes from the name of the YAML file and `insulinr` comes from the name you gave your calculation in the YAML file.
 
