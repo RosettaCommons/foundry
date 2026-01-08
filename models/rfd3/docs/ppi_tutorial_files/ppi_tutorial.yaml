@@ -1,5 +1,5 @@
 insulinr:
-    input: 4zxb_cropped.pdb
+    input: ../input_pdbs/4zxb_cropped.pdb
     contig: 40-120,/0,E6-155
     length: 190-270
     select_hotspots:
