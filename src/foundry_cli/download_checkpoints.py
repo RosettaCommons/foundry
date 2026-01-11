@@ -132,7 +132,9 @@ def install_model(model_name: str, checkpoint_dir: Path, force: bool = False) ->
     )
 
     try:
-        download_file(checkpoint_info.url, dest_path, checkpoint_info.sha256)
+        download_file(
+            checkpoint_info.url, dest_path, checkpoint_info.sha256
+        )
         console.print(
             f"[green]✓[/green] Successfully installed {model_name} to {dest_path}"
         )
