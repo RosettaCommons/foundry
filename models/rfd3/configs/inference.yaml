@@ -2,6 +2,7 @@
 
 hydra:
   searchpath:
+    - pkg://rfd3.configs
     - pkg://configs
 
 defaults:
