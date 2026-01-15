@@ -45,4 +45,3 @@ class SingleXPUStrategy(SingleDeviceStrategy):
         # Precision is handled via the _precision property in newer Lightning versions
         if precision_plugin is not None:
             self._precision = precision_plugin
-

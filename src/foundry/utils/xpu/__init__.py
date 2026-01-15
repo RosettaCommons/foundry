@@ -25,4 +25,3 @@ from .xpu_accelerator import XPUAccelerator
 from .xpu_precision import XPUMixedPrecision
 
 __all__ = ["SingleXPUStrategy", "XPUAccelerator", "XPUMixedPrecision"]
-

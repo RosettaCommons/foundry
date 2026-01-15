@@ -129,7 +129,9 @@ class FabricTrainer(ABC):
         """
         # Handle XPU accelerator
         is_xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
-        if accelerator == "xpu" or (accelerator == "auto" and is_xpu and not torch.cuda.is_available()):
+        if accelerator == "xpu" or (
+            accelerator == "auto" and is_xpu and not torch.cuda.is_available()
+        ):
             accelerator = XPUAccelerator()
             precision_plugin = None
             if precision in ("16-mixed", "bf16-mixed"):

@@ -70,4 +70,3 @@ class XPUMixedPrecision(MixedPrecision):
         if isinstance(data, Tensor) and data.is_floating_point():
             return data.to(self._desired_input_dtype)
         return data
-

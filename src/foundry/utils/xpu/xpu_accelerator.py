@@ -89,4 +89,3 @@ class XPUAccelerator(Accelerator):
         """Clean up XPU accelerator resources."""
         # Empty implementation required by base class
         pass
-
