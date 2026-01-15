@@ -223,6 +223,9 @@ logs/
 **/distillation/
 **/benchmarks/
 
+# macOS
+.DS_Store
+
 # AI
 **/CLAUDE.md
 **/.claude
