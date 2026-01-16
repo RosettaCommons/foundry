@@ -66,7 +66,7 @@ rf3 fold inputs='tests/data/5vht_from_json.json' ckpt_path='/path/to/rf3_921.pt'
 > For our inference API, we use [hydra](https://hydra.cc/docs/tutorials/basic/your_first_app/simple_cli/) to prepare arguments; the [Hydra documentation](https://hydra.cc/docs/advanced/override_grammar/basic/) describes the command-line override syntax that we use below. Note that Hydra syntax differes from typical CLI or `argparse` syntax in that we don't use `--arg value`, but instead `arg=value`. See below for examples.
 
 > [!TIP]
-> Rather than `rf3 fold`, you may also directly use `python src/foundry/inference.py inputs='tests/data/5vht_from_json.json'` to interface with the Hydra entrypoint. This approach may yield more informative error messages in some cases.
+> Rather than `rf3 fold`, you may also directly use `python models/rf3/src/rf3/inference.py inputs='tests/data/5vht_from_json.json'` to interface with the Hydra entrypoint. This approach may yield more informative error messages in some cases.
 
 From the above command, you should see several outputs:
 - `5vht_from_json_metrics.csv` — overall confidence metrics for this example
