@@ -53,7 +53,6 @@ def map_to_association_scheme(
     else:
         return ATOM_NAMES[idxs]
 
-
 def map_names_to_elements(
     atom_names: list | str, default=VIRTUAL_ATOM_ELEMENT_NAME
 ) -> np.ndarray:
@@ -180,7 +179,7 @@ class PadTokensWithVirtualAtoms(Transform):
         token_ids = np.unique(atom_array.token_id)
         assert len(token_ids) == len(
             is_motif_atom_with_fixed_seq
-        ), "Token ids and token level array have different lengths!"
+            ), "Token ids and token level array have different lengths!"
 
         # Unindexed tokens are never fully atomized, but may be assigned as atomized to have repr atoms:
         if self.association_scheme == "atom23":
@@ -212,7 +211,6 @@ class PadTokensWithVirtualAtoms(Transform):
             is_non_paddable_residue = is_residue & (
                 is_motif_atom_with_fixed_seq | is_motif_token_unindexed
             )
-
         # Collect virtual atoms to insert (we will insert them all at once)
         virtual_atoms_to_insert = []
         insert_positions = []

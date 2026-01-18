@@ -72,9 +72,11 @@ class IslandCondition(TrainingCondition):
         p_fix_motif_coordinates,
         p_fix_motif_sequence,
         p_unindex_motif_tokens,
+        association_scheme = 'atom14',
     ):
         self.name = name
         self.frequency = frequency
+        self.association_scheme = association_scheme
 
         # Token selection
         self.island_sampling_kwargs = island_sampling_kwargs
@@ -89,6 +91,8 @@ class IslandCondition(TrainingCondition):
         self.p_fix_motif_coordinates = p_fix_motif_coordinates
         self.p_fix_motif_sequence = p_fix_motif_sequence
         self.p_unindex_motif_tokens = p_unindex_motif_tokens
+        
+        self.association_scheme = association_scheme
 
     def is_valid_for_example(self, data) -> bool:
         is_protein = data["atom_array"].is_protein
@@ -521,6 +525,7 @@ def sample_is_motif_atom_with_fixed_seq(
         is_motif_atom_with_fixed_seq = (
             is_motif_atom_with_fixed_seq | ~atom_array.is_protein
         )
+    
 
     return is_motif_atom_with_fixed_seq
 

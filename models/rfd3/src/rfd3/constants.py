@@ -401,7 +401,6 @@ association_schemes["atom23"]["X"] = (
 ATOM23_ATOM_NAMES_RNA = np.array(
     [item.strip() for item in backbone_atomscheme_RNA]
     + [f"V{i}" for i in range(23 - len(backbone_atomscheme_RNA))]
-)
 """Atom23 atom names (e.g. CA, V1)"""
 
 ATOM23_ATOM_ELEMENTS_RNA = np.array(
