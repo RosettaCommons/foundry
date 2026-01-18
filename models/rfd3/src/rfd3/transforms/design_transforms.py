@@ -698,6 +698,7 @@ class AddAdditional1dFeaturesToFeats(Transform):
         atom_1d_features,
         autofill_zeros_if_not_present_in_atomarray=False,
         association_scheme="atom14",
+        association_scheme='atom14'
     ):
         self.autofill = autofill_zeros_if_not_present_in_atomarray
         self.token_1d_features = token_1d_features
@@ -754,6 +755,11 @@ class AddAdditional1dFeaturesToFeats(Transform):
         """
         if "feats" not in data.keys():
             data["feats"] = {}
+        
+        if association_scheme == 'atom23':
+            data['atom_array'].set_annotation('is_protein_token', data['atom_array'].is_protein)
+            data['atom_array'].set_annotation('is_dna_token', data['atom_array'].is_dna)
+            data['atom_array'].set_annotation('is_rna_token', data['atom_array'].is_rna)
 
         if self.association_scheme == "atom23":
             data["atom_array"].set_annotation(
