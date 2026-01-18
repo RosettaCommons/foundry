@@ -70,9 +70,11 @@ class IslandCondition(TrainingCondition):
         p_fix_motif_coordinates,
         p_fix_motif_sequence,
         p_unindex_motif_tokens,
+        association_scheme = 'atom14',
     ):
         self.name = name
         self.frequency = frequency
+        self.association_scheme = association_scheme
 
         # Token selection
         self.island_sampling_kwargs = island_sampling_kwargs
@@ -87,11 +89,21 @@ class IslandCondition(TrainingCondition):
         self.p_fix_motif_coordinates = p_fix_motif_coordinates
         self.p_fix_motif_sequence = p_fix_motif_sequence
         self.p_unindex_motif_tokens = p_unindex_motif_tokens
+        
+        self.association_scheme = association_scheme
 
     def is_valid_for_example(self, data) -> bool:
         is_protein = data["atom_array"].is_protein
-        if not np.any(is_protein):
-            return False
+        is_dna = data["atom_array"].is_dna
+        is_rna = data["atom_array"].is_rna
+        ### updating this to allow other polymers
+        if self.association_scheme is not 'atom23':
+            if not np.any(is_protein | is_dna | is_rna):
+                return False
+        else:
+            if not np.any(is_protein):
+                return False
+
         return True
 
     def sample_motif_tokens(self, atom_array):
@@ -101,13 +113,24 @@ class IslandCondition(TrainingCondition):
         token_level_array = atom_array[get_token_starts(atom_array)]
 
         # initialize motif tokens as all non-protein tokens
-        is_motif_token = np.asarray(~token_level_array.is_protein, dtype=bool).copy()
-        n_protein_tokens = np.sum(token_level_array.is_protein)
-        islands_mask = sample_island_tokens(
-            n_protein_tokens,
-            **self.island_sampling_kwargs,
-        )
-        is_motif_token[token_level_array.is_protein] = islands_mask
+        if self.association_scheme is 'atom23':
+            polymer_mask = (token_level_array.is_protein | token_level_array.is_dna | token_level_array.is_rna)
+            is_motif_token = np.asarray(~polymer_mask, dtype=bool).copy()
+            n_polymer_tokens = np.sum(polymer_mask)
+            islands_mask = sample_island_tokens(
+                n_polymer_tokens,
+                **self.island_sampling_kwargs,
+            )
+            is_motif_token[polymer_mask] = islands_mask
+        else:
+            is_motif_token = np.asarray(~token_level_array.is_protein, dtype=bool).copy()
+            n_protein_tokens = np.sum(token_level_array.is_protein)
+
+            slands_mask = sample_island_tokens(
+                _protein_tokens,
+                *self.island_sampling_kwargs,
+            
+            is_motif_token[token_level_array.is_protein] = islands_mask
 
         # TODO: Atoms with covalent bonds should be motif, needs FlagAndReassignCovalentModifications transform prior to this
         # atom_with_coval_bond = token_level_array.covale  # (n_atoms, )
@@ -137,6 +160,7 @@ class IslandCondition(TrainingCondition):
             is_motif_atom = sample_motif_subgraphs(
                 atom_array=atom_array,
                 **self.subgraph_sampling_kwargs,
+                association_scheme=self.association_scheme 
             )
 
         # We also only want resolved atoms to be motif
@@ -158,6 +182,7 @@ class IslandCondition(TrainingCondition):
             p_fix_motif_sequence=self.p_fix_motif_sequence,
             p_fix_motif_coordinates=self.p_fix_motif_coordinates,
             p_unindex_motif_tokens=self.p_unindex_motif_tokens,
+            association_scheme=self.association_scheme
         )
 
         atom_array.set_annotation(
@@ -177,6 +202,7 @@ class PPICondition(TrainingCondition):
     """Get condition indicating what is motif and what is to be diffused for protein-protein interaction training."""
 
     name = "ppi"
+    association_scheme = 'atom14'
 
     def is_valid_for_example(self, data):
         # Extract relevant data
@@ -275,6 +301,7 @@ class SubtypeCondition(TrainingCondition):
     """
 
     name = "subtype"
+    association_scheme = 'atom14'
 
     def __init__(self, frequency: float, subtype: list[str], fix_pos: bool = False):
         self.frequency = frequency
@@ -370,6 +397,7 @@ def sample_motif_subgraphs(
     hetatom_n_bond_expectation,
     residue_p_fix_all,
     hetatom_p_fix_all,
+    association_scheme = 'atom14'
 ):
     """
     Returns a boolean mask over atoms, indicating which atoms are part of the sampled motif.
@@ -402,7 +430,13 @@ def sample_motif_subgraphs(
             "n_bond_expectation": residue_n_bond_expectation,
             "p_fix_all": residue_p_fix_all,
         }
-        if not atom_array_subset.is_protein.all():
+
+        if association_scheme is 'atom23':
+            clause = atom_array_subset.is_protein.all() | atom_array_subset.is_dna.all() | atom_array_subset.is_rna.all()
+        else:
+            clause = atom_array_subset.is_potein.all()
+
+        if not clause:
             args.update(
                 {
                     "p_seed_furthest_from_o": 0.0,
@@ -431,11 +465,12 @@ def sample_conditioning_strategy(
     p_fix_motif_sequence,
     p_fix_motif_coordinates,
     p_unindex_motif_tokens,
+    association_scheme
 ):
     atom_array.set_annotation(
         "is_motif_atom_with_fixed_seq",
         sample_is_motif_atom_with_fixed_seq(
-            atom_array, p_fix_motif_sequence=p_fix_motif_sequence
+            atom_array, p_fix_motif_sequence=p_fix_motif_sequence, association_scheme=association_scheme
         ),
     )
 
@@ -456,7 +491,7 @@ def sample_conditioning_strategy(
     return atom_array
 
 
-def sample_is_motif_atom_with_fixed_seq(atom_array, p_fix_motif_sequence):
+def sample_is_motif_atom_with_fixed_seq(atom_array, p_fix_motif_sequence, association_scheme):
     """
     Samples what kind of conditioning to apply to motif tokens.
 
@@ -469,7 +504,11 @@ def sample_is_motif_atom_with_fixed_seq(atom_array, p_fix_motif_sequence):
         is_motif_atom_with_fixed_seq = np.zeros(atom_array.array_length(), dtype=bool)
 
     # By default reveal sequence for non-protein
-    is_motif_atom_with_fixed_seq = is_motif_atom_with_fixed_seq | ~atom_array.is_protein
+    
+    if association_scheme is not 'atom23':
+        is_motif_atom_with_fixed_seq = is_motif_atom_with_fixed_seq | ~atom_array.is_protein
+    
+
     return is_motif_atom_with_fixed_seq
 
 
@@ -487,7 +526,7 @@ def sample_fix_motif_coordinates(atom_array, p_fix_motif_coordinates):
     return is_motif_atom_with_fixed_coord
 
 
-def sample_unindexed_atoms(atom_array, p_unindex_motif_tokens):
+def sample_unindexed_atoms(atom_array, p_unindex_motif_tokens, association_scheme='atom14'):
     """
     Samples which atoms in motif tokens should be flagged for unindexing.
 
@@ -500,9 +539,15 @@ def sample_unindexed_atoms(atom_array, p_unindex_motif_tokens):
         is_motif_atom_unindexed = np.zeros(atom_array.array_length(), dtype=bool)
 
     # ensure non-residue atoms are not already flagged
-    is_motif_atom_unindexed = np.logical_and(
-        is_motif_atom_unindexed, atom_array.is_residue
-    )
+    if association_scheme  == 'atom23':
+        is_motif_atom_unindexed = np.logical_and(
+            is_motif_atom_unindexed, (atom_array.is_residue | atom_array.is_dna | atom_array.is_rna)
+        ) # is_residue refers to is_protein here
+    else:
+        is_motif_atom_unindexed = np.logical_and(
+            is_motif_atom_unindexed, atom_array.is_residue
+        ) 
+
 
     return is_motif_atom_unindexed
 

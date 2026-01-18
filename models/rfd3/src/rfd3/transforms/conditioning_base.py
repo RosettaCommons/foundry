@@ -235,6 +235,7 @@ class SampleConditioningType(Transform):
         train_conditions: dict,
         meta_conditioning_probabilities: dict,
         sequence_encoding,
+        association_scheme,
     ):
         if exists(train_conditions):
             train_conditions = hydra.utils.instantiate(
@@ -243,6 +244,7 @@ class SampleConditioningType(Transform):
         self.meta_conditioning_probabilities = meta_conditioning_probabilities
         self.train_conditions = train_conditions
         self.sequence_encoding = sequence_encoding
+        self.association_scheme = association_scheme
 
     def check_input(self, data: dict):
         assert not data["is_inference"], "This transform is only used during training!"
@@ -278,6 +280,8 @@ class SampleConditioningType(Transform):
         i_cond = np.random.choice(np.arange(len(p_cond)), p=p_cond)
         cond = valid_conditions[i_cond]
 
+        cond.association_scheme = self.association_scheme
+        
         data["sampled_condition"] = cond
         data["sampled_condition_name"] = cond.name
         data["sampled_condition_cls"] = cond.__class__
@@ -295,6 +299,8 @@ class SampleConditioningFlags(Transform):
         "AssignTypes",
         "SampleConditioningType",
     ]  # We use is_protein in the PPI training condition
+    def __init__(self, association_scheme):
+        self.association_scheme = association_scheme
 
     def check_input(self, data):
         assert not data[
@@ -317,13 +323,14 @@ class UnindexFlaggedTokens(Transform):
     Serves as the merge point between training / infernece conditioning pipelines
     """
 
-    def __init__(self, central_atom):
+    def __init__(self, central_atom, association_scheme):
         """
         Args:
             central_atom: The atom to use as the central atom for unindexed motifs.
         """
         super().__init__()
         self.central_atom = central_atom
+        self.association_scheme = association_scheme
 
     def check_input(self, data: dict):
         check_contains_keys(data, ["atom_array"])
@@ -368,8 +375,16 @@ class UnindexFlaggedTokens(Transform):
             token.res_id = token.res_id + max_resid
             token.is_C_terminus[:] = False
             token.is_N_terminus[:] = False
-            assert token.is_protein.all(), f"Cannot unindex non-protein token: {token}"
-            token = add_representative_atom(token, central_atom=self.central_atom)
+            
+            if association_scheme is not 'atom23':
+                assert token.is_protein.all(), f"Cannot unindex non-protein token: {token} unless using atom23 association scheme"
+                token = add_representative_atom(token, central_atom=self.central_atom)
+            else:
+                if token.is_protein.all():
+                    token = add_representative_atom(token, central_atom=self.central_atom)
+                else:
+                    token = add_representative_atom(token, central_atom="C1'")
+
             unindexed_tokens.append(token)
 
         # ... Remove original tokens e.g. during inference

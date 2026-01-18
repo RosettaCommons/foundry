@@ -252,13 +252,13 @@ def get_af3_token_representative_masks(
     atom_array: AtomArray, central_atom: str = "CA"
 ) -> np.ndarray:
     pyrimidine_representative_atom = is_pyrimidine(atom_array.res_name) & (
-        atom_array.atom_name == "C2"
+        atom_array.atom_name == "C1'"
     )
     purine_representative_atom = is_purine(atom_array.res_name) & (
-        atom_array.atom_name == "C4"
+        atom_array.atom_name == "C1'"
     )
     unknown_na_representative_atom = is_unknown_nucleotide(atom_array.res_name) & (
-        atom_array.atom_name == "C4"
+        atom_array.atom_name == "C1'"
     )
 
     glycine_representative_atom = is_glycine(atom_array.res_name) & (

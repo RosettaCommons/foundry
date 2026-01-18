@@ -10,8 +10,11 @@ from atomworks.ml.transforms.base import (
 )
 from atomworks.ml.utils.token import get_token_starts
 from rfd3.constants import (
+    ATOM23_ATOM_NAME_TO_ELEMENT,
     ATOM14_ATOM_NAME_TO_ELEMENT,
     ATOM14_ATOM_NAMES,
+    ATOM23_ATOM_NAMES_RNA,
+    ATOM23_ATOM_NAMES_DNA,
     VIRTUAL_ATOM_ELEMENT_NAME,
     association_schemes,
     association_schemes_stripped,
@@ -28,7 +31,7 @@ from rfd3.transforms.util_transforms import (
 from foundry.common import exists
 
 
-def map_to_association_scheme(atom_names: list | str, res_name: str, scheme="atom14"):
+def map_to_association_scheme(atom_names: list | str, res_name: str, scheme="atom14", ATOM_NAMES=None):
     """
     Maps a list of names to the atom14 naming scheme for that particular name (within a specific residue)
     NB this function is a bit more general since it is used to handle tipatoms too.
@@ -37,17 +40,17 @@ def map_to_association_scheme(atom_names: list | str, res_name: str, scheme="ato
         raise ValueError(
             f"Scheme {scheme} not found in association_schemes_stripped. Available schemes: {list(association_schemes_stripped.keys())}"
         )
-    atom_names = (
-        [str(atom_names)] if isinstance(atom_names, (str, np.str_)) else atom_names
-    )
+    atom_names = [atom_names] if isinstance(atom_names, str) else atom_names
     idxs = np.array(
         [
             association_schemes_stripped[scheme][res_name].index(name)
             for name in atom_names
         ]
     )
-    return ATOM14_ATOM_NAMES[idxs]
-
+    if ATOM_NAMES is None:
+        return ATOM14_ATOM_NAMES[idxs]
+    else:
+        return ATOM_NAMES[idxs]
 
 def map_names_to_elements(
     atom_names: list | str, default=VIRTUAL_ATOM_ELEMENT_NAME
@@ -68,17 +71,17 @@ def generate_atom_mappings_(scheme="atom14"):
     atom_mapping = {}
     symmetry_mapping = {}
 
-    for aaa, atom14_names in ccd_ordering_atomchar.items():
-        mapping = list(range(14))
+    for aaa, atom_names in ccd_ordering_atomchar.items():
+        mapping = list(range(len(atom_names)))
         scheme_names = scheme[aaa]
 
-        for ccd_index in range(len(atom14_names)):
-            atom14_name = atom14_names[ccd_index]
-            if atom14_name is not None:
+        for ccd_index in range(len(atom_names)):
+            atom_name = atom_names[ccd_index]
+            if atom_name is not None:
                 assert (
-                    atom14_name in scheme_names
-                ), f"{atom14_name} not in CCD ordering for {aaa}"
-                scheme_index = scheme_names.index(atom14_name)
+                    atom_name in scheme_names
+                ), f"{atom_name} not in CCD ordering for {aaa}"
+                scheme_index = scheme_names.index(atom_name)
                 scheme_index_in_cur_mapping = mapping.index(scheme_index)
                 mapping[ccd_index], mapping[scheme_index_in_cur_mapping] = (
                     mapping[scheme_index_in_cur_mapping],
@@ -121,6 +124,12 @@ def permute_symmetric_atom_names_(
 ) -> list:
     # NB: Can leak GT sequence if the model receives the canconical ordering of atoms as input
     # With the structure-local atom attention it will not unless N_keys(n_attn_seq_neighbours) > n_atom_attn_queries.
+
+    ## fail safe, no symmetry confusion in NA bases ##
+    if (atom_names[0] == "P"):
+        return atom_names
+    ##################################################
+    
     if res_name in association_map:
         idx_to_swap = association_map[res_name]
         atom_names = atom_names[idx_to_swap]
@@ -171,20 +180,38 @@ class PadTokensWithVirtualAtoms(Transform):
         token_ids = np.unique(atom_array.token_id)
         assert len(token_ids) == len(
             is_motif_atom_with_fixed_seq
-        ), "Token ids and token level array have different lengths!"
+            ), "Token ids and token level array have different lengths!"
 
-        # Unindexed tokens are never fully atomized, but may be assigned as atomized to have repr atoms:
-        is_residue = (
-            token_level_array.is_protein & ~token_level_array.atomize
-        ) | is_motif_token_unindexed
+            # Unindexed tokens are never fully atomized, but may be assigned as atomized to have repr atoms:
+            if self.association_scheme == 'atom23':
+                 is_residue = (
+                token_level_array.is_protein & ~token_level_array.atomize
+            ) | is_motif_token_unindexed
+            
+            is_residue_NA = (
+                (token_level_array.is_dna | token_level_array.is_rna) & ~token_level_array.atomize
+            ) | is_motif_token_unindexed
 
-        # Unindexed tokens are never padded, and so are treated as residues with fixed sequence.
-        is_paddable = is_residue & ~(
-            is_motif_atom_with_fixed_seq | is_motif_token_unindexed
-        )
-        is_non_paddable_residue = is_residue & (
-            is_motif_atom_with_fixed_seq | is_motif_token_unindexed
-        )
+            # Unindexed tokens are never padded, and so are treated as residues with fixed sequence.
+            is_paddable = (is_residue_NA | is_residue) & ~(
+                is_motif_atom_with_fixed_seq | is_motif_token_unindexed
+            )
+            is_non_paddable_residue = (is_residue_NA | is_residue) & (
+                is_motif_atom_with_fixed_seq | is_motif_token_unindexed
+            )
+        else:
+            is_residue = (
+                token_level_array.is_protein & ~token_level_array.atomize
+            ) | is_motif_token_unindexed
+
+            # Unindexed tokens are never padded, and so are treated as residues with fixed sequence.
+            is_paddable = is_residue & ~(
+                is_motif_atom_with_fixed_seq | is_motif_token_unindexed
+            )
+            is_non_paddable_residue = is_residue & (
+                is_motif_atom_with_fixed_seq | is_motif_token_unindexed
+            )
+        
 
         # Collect virtual atoms to insert (we will insert them all at once)
         virtual_atoms_to_insert = []
@@ -194,8 +221,16 @@ class PadTokensWithVirtualAtoms(Transform):
         for token_id, (start, end) in enumerate(zip(starts[:-1], starts[1:])):
             if is_paddable[token_id]:
                 token = atom_array[start:end]
+                
                 # First, pad with virtual atoms if needed
-                n_pad = self.n_atoms_per_token - len(token)
+                if self.association_scheme == "atom23" and atom_array[start].is_dna:
+                    n_atoms_per_token = 22
+                elif self.association_scheme == "atom23" and atom_array[start].is_rna:
+                    n_atoms_per_token = 23
+                else:
+                    n_atoms_per_token = self.n_atoms_per_token
+                n_pad = n_atoms_per_token - len(token)
+                
                 if n_pad > 0:
                     mask = get_af3_token_representative_masks(
                         token, central_atom=self.atom_to_pad_from
@@ -262,18 +297,26 @@ class PadTokensWithVirtualAtoms(Transform):
 
         for token_id, (start, end) in enumerate(
             zip(starts_padded[:-1], starts_padded[1:])
-        ):
+        ):  
+            if (atom_array_padded[start].is_dna):
+                ATOM_NAMES = ATOM23_ATOM_NAMES_DNA
+            elif (atom_array_padded[start].is_rna):
+                ATOM_NAMES = ATOM23_ATOM_NAMES_RNA
+            else:
+                ATOM_NAMES = ATOM14_ATOM_NAMES
+
             if is_paddable[token_id]:
                 # ... Permutation of atom names during training
                 if not data["is_inference"] and exists(self.association_scheme):
                     atom_names = permute_symmetric_atom_names_(
-                        ATOM14_ATOM_NAMES,
+                        ATOM_NAMES,
                         atom_array_padded.res_name[start],
                         association_map=self.association_map_,
                         symmetry_map=self.symmetry_map_,
                     )
                 else:
-                    atom_names = ATOM14_ATOM_NAMES
+                    atom_names = ATOM_NAMES
+
                 atom_array_padded.atom_name[start:end] = atom_names
                 atom_array_padded.get_annotation("gt_atom_name")[start:end] = atom_names
 
@@ -285,7 +328,7 @@ class PadTokensWithVirtualAtoms(Transform):
                 )
                 atom_array_padded.get_annotation("gt_atom_name")[start:end] = atom_names
                 atom_names = map_to_association_scheme(
-                    atom_names, res_name, scheme=self.association_scheme
+                    atom_names, res_name, scheme=self.association_scheme, ATOM_NAMES=ATOM_NAMES
                 )
                 atom_array_padded.atom_name[start:end] = atom_names
             else:
