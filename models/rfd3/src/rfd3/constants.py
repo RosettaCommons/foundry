@@ -242,6 +242,35 @@ SELECTION_NONPROTEIN = [
     "POLYDEOXYRIBONUCLEOTIDE/POLYRIBONUCLEOTIDE HYBRID",
 ]
 
+backbone_atomscheme_DNA = [
+    " P  ",
+    " OP1",
+    " OP2",
+    " O5'",
+    " C5'",
+    " C4'",
+    " O4'",
+    " C3'",
+    " O3'",
+    " C2'",
+    " C1'",
+]  # , None]
+
+backbone_atomscheme_RNA = [
+    " P  ",
+    " OP1",
+    " OP2",
+    " O5'",
+    " C5'",
+    " C4'",
+    " O4'",
+    " C3'",
+    " O3'",
+    " C2'",
+    " O2'",
+    " C1'",
+]
+
 DNA_atoms = {
     "DA": [
         " N9 ",
@@ -409,7 +438,6 @@ association_schemes_stripped = {
 
 backbone_atoms_RNA = strip_list(backbone_atomscheme_RNA)
 backbone_atoms_DNA = strip_list(backbone_atomscheme_DNA)
-
 
 # Mapping from residue type to its backbone and sidechain atoms (for convenience)
 ATOM_REGION_BY_RESI = {

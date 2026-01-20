@@ -186,6 +186,7 @@ def fetch_motif_residue_(
         subarray.set_annotation(
             "is_motif_atom_with_fixed_seq", np.zeros(subarray.shape[0], dtype=int)
         )
+
     elif redesign_motif_sidechains and res_name in (STANDARD_DNA + STANDARD_RNA):
         is_backbone = np.isin(subarray.atom_name, backbone_atoms_RNA)
         subarray.set_annotation("is_motif_atom", is_backbone)

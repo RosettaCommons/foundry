@@ -523,7 +523,7 @@ def build_atom14_base_pipeline_(
             autofill_zeros_if_not_present_in_atomarray=True,
             token_1d_features=token_1d_features,
             atom_1d_features=atom_1d_features,
-            association_scheme=association_scheme
+            association_scheme=association_scheme,
         ),
         AddAF3TokenBondFeatures(),
         AddGroundTruthSequence(sequence_encoding=af3_sequence_encoding),

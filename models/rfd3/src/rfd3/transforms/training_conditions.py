@@ -72,11 +72,9 @@ class IslandCondition(TrainingCondition):
         p_fix_motif_coordinates,
         p_fix_motif_sequence,
         p_unindex_motif_tokens,
-        association_scheme = 'atom14',
     ):
         self.name = name
         self.frequency = frequency
-        self.association_scheme = association_scheme
 
         # Token selection
         self.island_sampling_kwargs = island_sampling_kwargs
@@ -91,8 +89,6 @@ class IslandCondition(TrainingCondition):
         self.p_fix_motif_coordinates = p_fix_motif_coordinates
         self.p_fix_motif_sequence = p_fix_motif_sequence
         self.p_unindex_motif_tokens = p_unindex_motif_tokens
-        
-        self.association_scheme = association_scheme
 
     def is_valid_for_example(self, data) -> bool:
         is_protein = data["atom_array"].is_protein
@@ -138,7 +134,6 @@ class IslandCondition(TrainingCondition):
                 n_protein_tokens,
                 **self.island_sampling_kwargs,
             )
-            
             is_motif_token[token_level_array.is_protein] = islands_mask
 
         # TODO: Atoms with covalent bonds should be motif, needs FlagAndReassignCovalentModifications transform prior to this
@@ -310,7 +305,7 @@ class SubtypeCondition(TrainingCondition):
     """
 
     name = "subtype"
-    association_scheme = 'atom14'
+    association_scheme = "atom14"
 
     def __init__(self, frequency: float, subtype: list[str], fix_pos: bool = False):
         self.frequency = frequency
@@ -526,8 +521,6 @@ def sample_is_motif_atom_with_fixed_seq(
         is_motif_atom_with_fixed_seq = (
             is_motif_atom_with_fixed_seq | ~atom_array.is_protein
         )
-    
-    
 
     return is_motif_atom_with_fixed_seq
 
@@ -570,7 +563,6 @@ def sample_unindexed_atoms(
         is_motif_atom_unindexed = np.logical_and(
             is_motif_atom_unindexed, atom_array.is_residue
         )
-
 
     return is_motif_atom_unindexed
 

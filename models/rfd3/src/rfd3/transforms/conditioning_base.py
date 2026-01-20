@@ -281,7 +281,7 @@ class SampleConditioningType(Transform):
         cond = valid_conditions[i_cond]
 
         cond.association_scheme = self.association_scheme
-        
+
         data["sampled_condition"] = cond
         data["sampled_condition_name"] = cond.name
         data["sampled_condition_cls"] = cond.__class__
@@ -299,6 +299,7 @@ class SampleConditioningFlags(Transform):
         "AssignTypes",
         "SampleConditioningType",
     ]  # We use is_protein in the PPI training condition
+
     def __init__(self, association_scheme):
         self.association_scheme = association_scheme
 
