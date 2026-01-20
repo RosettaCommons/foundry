@@ -281,7 +281,7 @@ class SampleConditioningType(Transform):
         cond = valid_conditions[i_cond]
 
         cond.association_scheme = self.association_scheme
-        
+
         data["sampled_condition"] = cond
         data["sampled_condition_name"] = cond.name
         data["sampled_condition_cls"] = cond.__class__
@@ -299,6 +299,7 @@ class SampleConditioningFlags(Transform):
         "AssignTypes",
         "SampleConditioningType",
     ]  # We use is_protein in the PPI training condition
+
     def __init__(self, association_scheme):
         self.association_scheme = association_scheme
 
@@ -375,13 +376,15 @@ class UnindexFlaggedTokens(Transform):
             token.res_id = token.res_id + max_resid
             token.is_C_terminus[:] = False
             token.is_N_terminus[:] = False
-            
-            if association_scheme is not 'atom23':
+
+            if not self.association_scheme == "atom23":
                 assert token.is_protein.all(), f"Cannot unindex non-protein token: {token} unless using atom23 association scheme"
                 token = add_representative_atom(token, central_atom=self.central_atom)
             else:
                 if token.is_protein.all():
-                    token = add_representative_atom(token, central_atom=self.central_atom)
+                    token = add_representative_atom(
+                        token, central_atom=self.central_atom
+                    )
                 else:
                     token = add_representative_atom(token, central_atom="C1'")
 

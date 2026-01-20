@@ -11,6 +11,8 @@ from biotite.structure import concatenate, infer_elements
 from jaxtyping import Float, Int
 from rfd3.constants import (
     ATOM14_ATOM_NAMES,
+    ATOM23_ATOM_NAMES_DNA,
+    ATOM23_ATOM_NAMES_RNA,
     VIRTUAL_ATOM_ELEMENT_NAME,
     association_schemes,
     association_schemes_stripped,
@@ -252,13 +254,19 @@ def _readout_seq_from_struc(
                     continue
 
                 # ... Find the index of virtual atom names in the standard atom14 names
+                ATOM_NAMES = ATOM14_ATOM_NAMES
+                if restype in STANDARD_DNA:
+                    ATOM_NAMES = ATOM23_ATOM_NAMES_DNA
+                if restype in STANDARD_RNA:
+                    ATOM_NAMES = ATOM23_ATOM_NAMES_RNA
+
                 atom_name_idx_in_atom14_scheme = np.array(
                     [
-                        np.where(ATOM14_ATOM_NAMES == atom_name)[0][0]
+                        np.where(ATOM_NAMES == atom_name)[0][0]
                         for atom_name in cur_pred_res_atom_names
                     ]
                 )  # five backbone atoms + some virtual atoms, returning e.g. [0, 1, 2, 3, 4, 11, 7]
-                atom14_scheme_mask = np.zeros_like(ATOM14_ATOM_NAMES, dtype=bool)
+                atom14_scheme_mask = np.zeros_like(ATOM_NAMES, dtype=bool)
                 atom14_scheme_mask[atom_name_idx_in_atom14_scheme] = True
 
                 # ... Find the matched restype by checking if all the non-None posititons and None positions match
@@ -428,11 +436,29 @@ def process_unindexed_outputs(
                 join_atom = None
 
             if join_atom is None:
+                pass
+            else:
+                dist = float(dists[row_ind[join_atom], col_ind[join_atom]])
+
+        elif not np.any(
+            np.isin(
+                token.atom_name, [item.replace(" ", "") for item in backbone_atoms_RNA]
+            )
+        ):
+            if np.sum(token.atomize) == 1:
+                join_atom = np.where(token.atomize)[0][0]
+            elif "C1'" in token.atom_name:
+                join_atom = np.where(token.atom_name == "C1'")[0][0]
+            else:
+                join_atom = None
+
+            if join_atom is None:
                 global_logger.warning(
-                    f"Token {token_pdb_id} does not contain backbone atoms or CB, skipping join point distance calculation {token}."
+                    "Skipping joint point rmsd, neither protein or NA backbone"
                 )
             else:
                 dist = float(dists[row_ind[join_atom], col_ind[join_atom]])
+
             metadata["join_point_rmsd_by_token"][token_pdb_id] = dist
 
         metadata["diffused_index_map"][token_pdb_id] = f"{chain_id}{res_id}"

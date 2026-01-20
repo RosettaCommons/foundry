@@ -383,7 +383,7 @@ def build_atom14_base_pipeline_(
                 train_conditions=train_conditions,
                 meta_conditioning_probabilities=meta_conditioning_probabilities,
                 sequence_encoding=af3_sequence_encoding,
-                association_scheme=association_scheme
+                association_scheme=association_scheme,
             ),
         ),
     ]
@@ -423,7 +423,9 @@ def build_atom14_base_pipeline_(
     # ... Add global token features (since number of tokens is fixed after cropping)
     transforms.append(AddGlobalTokenIdAnnotation())
     # ... Create masks (NOTE: Modulates token count, and resets global token id if necessary)
-    transforms.append(TrainingRoute(SampleConditioningFlags(association_scheme=association_scheme)))
+    transforms.append(
+        TrainingRoute(SampleConditioningFlags(association_scheme=association_scheme))
+    )
 
     # Post-crop transforms
     transforms.append(
@@ -443,7 +445,9 @@ def build_atom14_base_pipeline_(
             sharding_depth=1,
         ),
         # ... Fuse inference and training conditioning assignments
-        UnindexFlaggedTokens(central_atom=central_atom),
+        UnindexFlaggedTokens(
+            central_atom=central_atom, association_scheme=association_scheme
+        ),
         # ... Virtual atom padding (NOTE: Last transform which modulates atom count)
         PadTokensWithVirtualAtoms(
             n_atoms_per_token=n_atoms_per_token,
@@ -519,7 +523,7 @@ def build_atom14_base_pipeline_(
             autofill_zeros_if_not_present_in_atomarray=True,
             token_1d_features=token_1d_features,
             atom_1d_features=atom_1d_features,
-            association_scheme=association_scheme
+            association_scheme=association_scheme,
         ),
         AddAF3TokenBondFeatures(),
         AddGroundTruthSequence(sequence_encoding=af3_sequence_encoding),

@@ -428,9 +428,14 @@ class AADesignTrainer(FabricTrainer):
 
             # ... Delete virtual atoms and assign atom names and elements
             if self.cleanup_virtual_atoms:
-                atom_array = _cleanup_virtual_atoms_and_assign_atom_name_elements(
-                    atom_array, association_scheme=self.association_scheme
-                )
+                try:
+                    atom_array = _cleanup_virtual_atoms_and_assign_atom_name_elements(
+                        atom_array, association_scheme=self.association_scheme
+                    )
+                except Exception as e:
+                    global_logger.warning(
+                        f"Failed to cleanup virtual atoms from diffusion output: {e}"
+                    )
 
                 # ... When cleaning up virtual atoms, we can also calculate native_array_metricsl
                 metadata_dict[i]["metrics"] |= get_all_backbone_metrics(

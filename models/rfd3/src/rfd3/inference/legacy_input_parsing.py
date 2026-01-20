@@ -5,16 +5,19 @@ from os import PathLike
 
 import biotite.structure as struc
 import numpy as np
-from atomworks.constants import STANDARD_AA
+from atomworks.constants import STANDARD_AA, STANDARD_DNA, STANDARD_RNA
 from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from atomworks.ml.utils.token import (
     get_token_starts,
 )
+from biotite.structure import AtomArray, concatenate, get_residue_starts
 from rfd3.constants import (
     INFERENCE_ANNOTATIONS,
     OPTIONAL_CONDITIONING_VALUES,
     REQUIRED_INFERENCE_ANNOTATIONS,
+    backbone_atoms_DNA,
+    backbone_atoms_RNA,
 )
 from rfd3.inference.symmetry.symmetry_utils import (
     center_symmetric_src_atom_array,
@@ -183,6 +186,27 @@ def fetch_motif_residue_(
         subarray.set_annotation(
             "is_motif_atom_with_fixed_seq", np.zeros(subarray.shape[0], dtype=int)
         )
+    elif redesign_motif_sidechains and res_name in (STANDARD_DNA + STANDARD_RNA):
+        is_backbone = np.isin(subarray.atom_name, backbone_atoms_RNA)
+        subarray.set_annotation("is_motif_atom", is_backbone)
+
+        subarray.set_annotation(
+            "is_motif_atom", is_backbone & (subarray.atom_name != "C1'")
+        )
+
+        subarray.set_annotation(
+            "is_motif_atom_with_fixed_seq", np.zeros(subarray.shape[0], dtype=int)
+        )
+        if res_name in STANDARD_DNA:
+            subarray.res_name = np.full_like(
+                subarray.res_name, "DA", dtype=subarray.res_name.dtype
+            )
+        else:
+            subarray.res_name = np.full_like(
+                subarray.res_name, "A", dtype=subarray.res_name.dtype
+            )
+        subarray = subarray[is_backbone]
+
     elif to_index or to_unindex:
         # If the residue is in the contig or unindexed components,
         # we set all atoms in the residue to be motif atoms
@@ -195,6 +219,8 @@ def fetch_motif_residue_(
                 f"{src_chain}{src_resid} is not found in fixed_atoms, contig or unindex contig."
                 "Please check your input and contig specification."
             )
+
+    
     if unfix_all or f"{src_chain}{src_resid}" in unfix_residues:
         subarray.set_annotation(
             "is_motif_atom_with_fixed_coord", np.zeros(subarray.shape[0], dtype=int)
@@ -507,6 +533,17 @@ def create_atom_array_from_design_specification_legacy(
         fixed_atoms = {}
 
     optional_conditions = []
+
+    ########## reorder NA atoms ###########
+    is_dna = np.isin(atom_array_input.res_name, ["DA", "DC", "DG", "DT"])
+    is_rna = np.isin(atom_array_input.res_name, ["A", "C", "G", "U"])
+    dna_array = atom_array_input[is_dna]
+    rna_array = atom_array_input[is_rna]
+
+    atom_array_input[is_dna] = reorder_atoms_per_residue(dna_array, backbone_atoms_DNA)
+    atom_array_input[is_rna] = reorder_atoms_per_residue(rna_array, backbone_atoms_RNA)
+    #######################################
+
     if exists(atomwise_rasa):
         set_atom_level_argument(atom_array_input, atomwise_rasa, "rasa_bin")
         optional_conditions.append("rasa_bin")
@@ -731,3 +768,46 @@ def create_atom_array_from_design_specification_legacy(
         to_cif_file(atom_array, out_path, extra_fields=INFERENCE_ANNOTATIONS)
 
     return atom_array
+
+
+def reorder_atoms_per_residue(
+    atom_array: AtomArray, desired_order: list[str]
+) -> AtomArray:
+    """
+    Reorder atoms within each residue of an AtomArray.
+    Atoms in `desired_order` appear first (in that order), followed by all others
+    in original order. Faster version using get_residue_starts().
+
+    Parameters:
+    - atom_array: AtomArray to reorder.
+    - desired_order: List of atom names in the desired per-residue order.
+
+    Returns:
+    - AtomArray with reordered atoms per residue.
+    """
+    if len(atom_array) == 0:
+        return atom_array
+    res_starts = get_residue_starts(atom_array)
+    res_starts = np.append(res_starts, len(atom_array))  # add end index for slicing
+    reordered_chunks = []
+    order_dict = {name: i for i, name in enumerate(desired_order)}
+
+    for i in range(len(res_starts) - 1):
+        start, end = res_starts[i], res_starts[i + 1]
+        residue = atom_array[start:end]
+
+        # Boolean masks for matching and non-matching atom names
+        in_order_mask = np.isin(residue.atom_name, desired_order)
+        not_in_order_mask = ~in_order_mask
+
+        # Sort matching atoms by desired order
+        atoms_in_order = residue[in_order_mask]
+        sort_idx = np.argsort([order_dict[name] for name in atoms_in_order.atom_name])
+        ordered_atoms = atoms_in_order[sort_idx]
+
+        # Remaining atoms as-is
+        remaining_atoms = residue[not_in_order_mask]
+
+        # Concatenate reordered residue
+        reordered_chunks.append(concatenate([ordered_atoms, remaining_atoms]))
+    return concatenate(reordered_chunks)

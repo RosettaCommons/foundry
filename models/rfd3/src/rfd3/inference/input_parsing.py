@@ -30,9 +30,12 @@ from rfd3.constants import (
     OPTIONAL_CONDITIONING_VALUES,
     REQUIRED_CONDITIONING_ANNOTATION_VALUES,
     REQUIRED_INFERENCE_ANNOTATIONS,
+    backbone_atoms_DNA,
+    backbone_atoms_RNA,
 )
 from rfd3.inference.legacy_input_parsing import (
     create_atom_array_from_design_specification_legacy,
+    reorder_atoms_per_residue,
 )
 from rfd3.inference.parsing import InputSelection
 from rfd3.inference.symmetry.symmetry_utils import (
@@ -66,7 +69,6 @@ from foundry.utils.ddp import RankedLogger
 logging.basicConfig(level=logging.DEBUG)
 
 logger = RankedLogger(__name__, rank_zero_only=True)
-
 
 #################################################################################
 # Custom infer_ori functions
@@ -505,6 +507,21 @@ class DesignInputSpecification(BaseModel):
     def build(self, return_metadata=False):
         """Main build pipeline."""
         atom_array_input_annotated = copy.deepcopy(self.atom_array_input)
+
+        ########## reorder NA atoms ###########
+        is_dna = np.isin(atom_array_input_annotated.res_name, ["DA", "DC", "DG", "DT"])
+        is_rna = np.isin(atom_array_input_annotated.res_name, ["A", "C", "G", "U"])
+        dna_array = atom_array_input_annotated[is_dna]
+        rna_array = atom_array_input_annotated[is_rna]
+
+        atom_array_input_annotated[is_dna] = reorder_atoms_per_residue(
+            dna_array, backbone_atoms_DNA
+        )
+        atom_array_input_annotated[is_rna] = reorder_atoms_per_residue(
+            rna_array, backbone_atoms_RNA
+        )
+        #######################################
+
         atom_array = self._build_init(atom_array_input_annotated)
 
         # Apply post-processing
@@ -894,9 +911,34 @@ def validator_context(validator_name: str, data: dict = None):
         raise e
 
 
-def create_diffused_residues(n, additional_annotations=None):
+def create_diffused_residues(n, additional_annotations=None, polymer_type="P"):
+    from rfd3.constants import (
+        ATOM23_ATOM_NAME_TO_ELEMENT,
+        backbone_atoms_DNA,
+        backbone_atoms_RNA,
+    )
+
     if n <= 0:
         raise ValueError(f"Negative/null residue count ({n}) not allowed.")
+
+    if polymer_type == "P":
+        res_name = "ALA"
+        bb_len = 5
+        bb_atom_names = ["N", "CA", "C", "O", "CB"]
+    elif polymer_type == "R":
+        res_name = "A"
+        bb_len = len(backbone_atoms_RNA)
+        bb_atom_names = strip_list(backbone_atoms_RNA)
+    elif polymer_type == "D":
+        res_name = "DA"
+        bb_len = len(backbone_atoms_DNA)
+        bb_atom_names = strip_list(backbone_atoms_DNA)
+    else:
+        raise ValueError(
+            f"invalid polymer type detected: {polymer_type}, check contig!"
+        )
+
+    bb_elements = [ATOM23_ATOM_NAME_TO_ELEMENT[item] for item in bb_atom_names]
 
     atoms = []
     [
@@ -904,21 +946,17 @@ def create_diffused_residues(n, additional_annotations=None):
             [
                 struc.Atom(
                     np.array([0.0, 0.0, 0.0], dtype=np.float32),
-                    res_name="ALA",
+                    res_name=res_name,
                     res_id=idx,
                 )
-                for _ in range(5)
+                for _ in range(bb_len)
             ]
         )
         for idx in range(1, n + 1)
     ]
     array = struc.array(atoms)
-    array.set_annotation(
-        "element", np.array(["N", "C", "C", "O", "C"] * n, dtype="<U2")
-    )
-    array.set_annotation(
-        "atom_name", np.array(["N", "CA", "C", "O", "CB"] * n, dtype="<U2")
-    )
+    array.set_annotation("element", np.array(bb_elements * n, dtype="<U2"))
+    array.set_annotation("atom_name", np.array(bb_atom_names * n, dtype="<U2"))
     array = set_default_conditioning_annotations(
         array, motif=False, additional=additional_annotations
     )
@@ -1065,14 +1103,20 @@ def accumulate_components(
                     np.zeros(token.shape[0], dtype=int),
                 )
         else:
-            n = int(component)
+            if component[-1] in ["P", "R", "D"]:  # if polymer type specified
+                polymer_type = component[-1]  # can be 'P'rotein, 'R'NA, 'D'NA
+                n = int(component[:-1])
+            else:
+                polymer_type = "P"
+                n = int(components)
+
             # ... Skip if none or unindexed
             if n == 0 or unindexed_components_started:
                 res_id += n
                 continue
 
             # ... Create diffused residues
-            token = create_diffused_residues(n, all_annots)
+            token = create_diffused_residues(n, all_annots, polymer_type)
 
         # ... Set index of insertion
         token = set_indices(
