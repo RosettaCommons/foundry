@@ -96,7 +96,8 @@ def calculate_hbonds(
         )
 
         hb2_path = pdb_path.replace(".pdb", ".hb2")
-        HB = open(hb2_path, "r").readlines()
+        with open(hb2_path, "r") as hb_file:
+            HB = hb_file.readlines()
         hbonds = []
         for i in range(8, len(HB)):
             d_chain = HB[i][0]
