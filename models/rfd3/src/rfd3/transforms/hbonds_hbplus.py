@@ -79,7 +79,7 @@ def calculate_hbonds(
         dtstr = datetime.now().strftime("%Y%m%d%H%M%S")
         pdb_filename = f"{dtstr}_{np.random.randint(10000)}.pdb"
         pdb_path = os.path.join(tmpdir, pdb_filename)
-        atom_array, nan_mask, chain_map = save_atomarray_to_pdb(atom_array, pdb_path)
+        atom_array, _, chain_map = save_atomarray_to_pdb(atom_array, pdb_path)
 
         subprocess.call(
             [
