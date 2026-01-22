@@ -1,6 +1,7 @@
 import os
 import string
 import subprocess
+import tempfile
 from datetime import datetime
 from typing import Any, Tuple
 
@@ -66,10 +67,6 @@ def calculate_hbonds(
     cutoff_HA_dist: float = 3,
     cutoff_DA_distance: float = 3.5,
 ) -> Tuple[np.ndarray, np.ndarray, AtomArray]:
-    dtstr = datetime.now().strftime("%Y%m%d%H%M%S")
-    pdb_path = f"{dtstr}_{np.random.randint(10000)}.pdb"
-    atom_array, nan_mask, chain_map = save_atomarray_to_pdb(atom_array, pdb_path)
-
     hbplus_exe = os.environ.get("HBPLUS_PATH")
 
     if hbplus_exe is None or hbplus_exe == "":
@@ -78,49 +75,56 @@ def calculate_hbonds(
             "Please set it to the path of the hbplus executable in order to calculate hydrogen bonds."
         )
 
-    subprocess.call(
-        [
-            hbplus_exe,
-            "-h",
-            str(cutoff_HA_dist),
-            "-d",
-            str(cutoff_DA_distance),
-            pdb_path,
-            pdb_path,
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dtstr = datetime.now().strftime("%Y%m%d%H%M%S")
+        pdb_filename = f"{dtstr}_{np.random.randint(10000)}.pdb"
+        pdb_path = os.path.join(tmpdir, pdb_filename)
+        atom_array, nan_mask, chain_map = save_atomarray_to_pdb(atom_array, pdb_path)
 
-    HB = open(pdb_path.replace("pdb", "hb2"), "r").readlines()
-    hbonds = []
-    for i in range(8, len(HB)):
-        d_chain = HB[i][0]
-        d_resi = str(int(HB[i][1:5].strip()))
-        d_resn = HB[i][6:9].strip()
-        d_ins = HB[i][5].replace("-", " ")
-        d_atom = HB[i][9:13].strip()
-        a_chain = HB[i][14]
-        a_resi = str(int(HB[i][15:19].strip()))
-        a_ins = HB[i][19].replace("-", " ")
-        a_resn = HB[i][20:23].strip()
-        a_atom = HB[i][23:27].strip()
-        dist = float(HB[i][27:32].strip())
+        subprocess.call(
+            [
+                hbplus_exe,
+                "-h",
+                str(cutoff_HA_dist),
+                "-d",
+                str(cutoff_DA_distance),
+                pdb_path,
+                pdb_path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
-        items = {
-            "d_chain": chain_map[d_chain],
-            "d_resi": d_resi,
-            "d_resn": d_resn,
-            "d_ins": d_ins,
-            "d_atom": d_atom,
-            "a_chain": chain_map[a_chain],
-            "a_resi": a_resi,
-            "a_resn": a_resn,
-            "a_ins": a_ins,
-            "a_atom": a_atom,
-            "dist": dist,
-        }
-        hbonds.append(items)
+        hb2_path = pdb_path.replace(".pdb", ".hb2")
+        HB = open(hb2_path, "r").readlines()
+        hbonds = []
+        for i in range(8, len(HB)):
+            d_chain = HB[i][0]
+            d_resi = str(int(HB[i][1:5].strip()))
+            d_resn = HB[i][6:9].strip()
+            d_ins = HB[i][5].replace("-", " ")
+            d_atom = HB[i][9:13].strip()
+            a_chain = HB[i][14]
+            a_resi = str(int(HB[i][15:19].strip()))
+            a_ins = HB[i][19].replace("-", " ")
+            a_resn = HB[i][20:23].strip()
+            a_atom = HB[i][23:27].strip()
+            dist = float(HB[i][27:32].strip())
+
+            items = {
+                "d_chain": chain_map[d_chain],
+                "d_resi": d_resi,
+                "d_resn": d_resn,
+                "d_ins": d_ins,
+                "d_atom": d_atom,
+                "a_chain": chain_map[a_chain],
+                "a_resi": a_resi,
+                "a_resn": a_resn,
+                "a_ins": a_ins,
+                "a_atom": a_atom,
+                "dist": dist,
+            }
+            hbonds.append(items)
 
     donor_array = np.zeros(len(atom_array))
     acceptor_array = np.zeros(len(atom_array))
@@ -162,8 +166,6 @@ def calculate_hbonds(
     donor_array[donor_mask] = 1
     acceptor_array[acceptor_mask] = 1
 
-    os.remove(pdb_path)
-    os.remove(pdb_path.replace("pdb", "hb2"))
     atom_array.set_annotation("active_donor", donor_array)
     atom_array.set_annotation("active_acceptor", acceptor_array)
 
