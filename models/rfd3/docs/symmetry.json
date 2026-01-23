@@ -1,0 +1,70 @@
+{
+    "uncond_C5": {
+        "length": 100,
+        "is_non_loopy": true,
+        "symmetry": {
+            "id": "C5"
+        }
+    },
+    "uncond_D4": { 
+        "length": 50,
+        "is_non_loopy": true,
+        "symmetry": {
+            "id": "D4"
+        }
+    },
+    "unindexed_C2_1j79": {
+        "symmetry": {
+            "id": "C2",
+            "is_symmetric_motif": true
+        },
+        "input": "input_pdbs/symmetry_examples/1j79_C2.pdb",
+        "ligand": "ORO,ZN",
+        "unindex": "A250",
+        "length": 130,
+        "select_fixed_atoms": {
+            "A250": "OD1,CG"
+        }
+    },
+    "unindexed_C2_1e3v": {
+        "symmetry": {
+            "id": "C2",
+            "is_symmetric_motif": true
+        },
+        "input": "input_pdbs/symmetry_examples/1e3v_C2.pdb",
+        "ligand": "DXC",
+        "unindex": "A16,A40,A100,A103",
+        "length": 80,
+        "select_fixed_atoms": {
+            "A16": "OH,CZ,CE1,CE2",
+            "A40": "OD2,CG",
+            "A100": "N,CA,C,CB",
+            "A103": "OD2,CG"
+        }
+    },
+    "indexed_unsym_C2_1bfr": {
+        "symmetry": {
+            "id": "C2",
+            "is_symmetric_motif": true,
+            "is_unsym_motif": "HEM"
+        },
+        "input": "input_pdbs/symmetry_examples/1bfr_C2.pdb",
+        "ligand": "HEM",
+        "contig": "51,M52,80",
+        "length": null,
+        "select_fixed_atoms": {
+            "M52": "CG,SD,CE"
+        }
+    },
+    "unsym_C3_6t8h": {
+        "symmetry": {
+            "id": "C3",
+            "is_symmetric_motif": true,
+            "is_unsym_motif": "Y1-11,Z16-25"
+        },
+        "input": "input_pdbs/symmetry_examples/6t8h_C3.pdb",
+        "contig": "100-100,/0,Y1-11,/0,Z16-25",
+        "length": null,
+        "is_non_loopy": true
+    }
+}

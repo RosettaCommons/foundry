@@ -60,22 +60,13 @@ class AddSymmetryFeats(Transform):
         )
         TIDs = torch.from_numpy(atom_array.get_annotation("sym_transform_id"))
 
-        # Get unique transforms by TID (more robust than unique_consecutive on each array)
-        unique_TIDs, inverse_indices = torch.unique(TIDs, return_inverse=True)
-
-        # Get the first occurrence of each unique TID
-        first_occurrence = torch.zeros(len(unique_TIDs), dtype=torch.long)
-        for i in range(len(TIDs)):
-            tid_idx = inverse_indices[i]
-            if first_occurrence[tid_idx] == 0 or i < first_occurrence[tid_idx]:
-                first_occurrence[tid_idx] = i
-
-        # Extract Ori, X, Y for each unique transform
-        Oris = Oris[first_occurrence]
-        Xs = Xs[first_occurrence]
-        Ys = Ys[first_occurrence]
-        TIDs = unique_TIDs
-
+        Oris = torch.unique_consecutive(Oris, dim=0)
+        Xs = torch.unique_consecutive(Xs, dim=0)
+        Ys = torch.unique_consecutive(Ys, dim=0)
+        TIDs = torch.unique_consecutive(TIDs, dim=0)
+        # the case in which there is only rotation (no translation), Ori = [0,0,0]
+        if len(Oris) == 1 and (Oris == 0).all():
+            Oris = Oris.repeat(len(Xs), 1)
         Rs, Ts = framecoords_to_RTs(Oris, Xs, Ys)
 
         for R, T, transform_id in zip(Rs, Ts, TIDs):
