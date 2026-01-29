@@ -21,3 +21,5 @@ many of the machine learning models produced by `Rosetta Commons member labs <ht
    :caption: Models
 
    models/rfd3/index
+   models/rf3/index
+   models/mpnn/index
