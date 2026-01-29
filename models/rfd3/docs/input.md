@@ -88,9 +88,9 @@ rfd3 design out_dir=<path/to/outdir> inputs=<path/to/inputs>
     - `all` — (default) Uses the center of mass (COM) of all atoms
     - `motif` — Uses the COM of the motif atoms with fixed coordinates
     - `diffuse` — Uses the COM of all fixed coordinates that are not part of motif atoms
-  - `s_trans` — Translational noise scale for augmentation during inference (default: 1.0).
+  - `s_trans` — Translational noise scale for augmentation during inference (default: 1.0). 
   <!-- `inference_noise_scaling_factor` As far as I can tell there isn't actually any code to make use of this setting -->
-  - `allow realignment` — If set to `True` (default: False) then the noised structure can be realigned during inference based on the location of a given motif.
+  - `allow_realignment` — If set to `True` (default: False) then the noised structure can be realigned during inference based on the location of a given motif. From [Issue #154](https://github.com/RosettaCommons/foundry/issues/154): It is generally not needed to include this option, there are fewer 'weird' interactions with motif scaffolding when it's set to False.
   - `noise_scale` — This parameter sets the scaling for the noise during inference (default 1.003). A smaller value will lead to less noise in your system leading to less diversity in the outputs. 
   - `p` — Determines the 'shape' of the noise schedule (default: 7).
   - `gamma_0` — This value (default: 0.6) influences the diversity of the designs from RFD3. A lower value increases designability but decreases diversity. 
@@ -137,7 +137,7 @@ Below is a table of all of the inputs that the `InputSpecification` accepts. Use
 | `ori_token`                                                    | `list[float]`     | `[x,y,z]` origin override to control COM (center of mass) placement of designed structure. |
 | `infer_ori_strategy`                                           | `str`             | `"com"` or `"hotspots"`.  The center of mass of the diffused region will typically be within 5Å of the ORI token. Using `hotspots` will place the ORI token 10Å outward from the center of mass of the specified hotspots. Using `com` will place the token at the center of mass of the input structure.|
 | `plddt_enhanced`                                               | `bool`            | Default `True`. Enables pLDDT (predicted Local Distance Difference Test) enhancement. |
-| `is_non_loopy`                                                 | `bool`            | Default `True`. Produces output structures with fewer loops.|
+| `is_non_loopy`                                                 | `bool`            | Default `None`. Produces output structures with fewer loops if set to True. |
 | `partial_t`                                                    | `float`           | Noise (Å) for partial diffusion, enables partial diffusion (sets the noise level.) Recommended values are 5.0-15.0 Å. See [Partial Diffusion](#partial-diffusion) for more information. |
 
 
@@ -209,10 +209,14 @@ my_calculation:
 
 (unindexing-specifics)=
 ### Unindexing Specifics
+```{note}
+Unindexed atoms are **always** fixed unless otherwise specified in the `select_fixed_atoms` option. At least one atom in any unidexed residue needs to be fixed.
+```
 
-`unindex` marks motif tokens whose relative sequence placement is unknown to the model (useful for scaffolding around active sites, etc.).
-Use a string to list the unindexed components and where breaks occur.
-Use a dictionary if you want to fix specific atoms of those residues; atoms not fixed are not copied from the input (they will be diffused).
+`unindex` marks motif tokens whose relative sequence placement is unknown to the model (useful for scaffolding around active sites, etc.). 
+To specify the unindexed regions of your design you can: 
+- Use a string to list the unindexed components and where breaks occur.
+- Use a dictionary if you want to fix specific atoms of those residues; atoms not fixed are not copied from the input (they will be diffused).
 Breaks between unindexed components follow the contig conventions you’re used to. For example: `"A244,A274,A320,A329,A375"` lists multiple unindexed components; internal “breakpoints” are inferred and logged. (Offset syntax like `A11-12` or `A11,0,A12` still ties residues.)
 You can specify consecutive residues as e.g. `A11-12` (instead of `A11,A12`), this will tie the two components together in sequence (or at least it leaks to the model that residues are together in sequence). 
 Similarly, you can specify manually any number of residues that offsets two components, e.g. `A11,0,A12` (0 sequence offset, equivalent to just `A11-12`), or `A11,3,A12` (3-residue separation).
@@ -220,8 +224,13 @@ From our initial tests this only leads to a slight bias in the model, but newer 
 
 (partial-diffusion)=
 ### Partial Diffusion
+
+```{important}
+Partial diffusion (`partial_t`) does *not* directly change the number of timesteps reversed during the inference process. It sets the standard deviation of the noise added back. This value is nonlinear, so it is recommended to start with a relatively small value (2Å) and gradually raise it. 
+```
+
 To enable partial diffusion, you can pass `partial_t` with any example. This sets the *noise level* in *angstroms* for the sampler:
-- The `specification.partial_t` argument can be specified from JSON or the command line.
+- The `specification.partial_t` argument can be specified from your JSON/YAML input file
 - Partial diffusion will fix/unfix ligands and nucleic acids as normal, by default it will fix non-protein components and they must be specified explicitly.
 - By default, the ca-aligned `ca_rmsd_to_input` will be logged.
 - Currently, partial diffusion subsets the inference schedule based on the partial_t, so `inference_sampler.num_timesteps` will affect how many steps are used but it is not equal to the number of steps used.
