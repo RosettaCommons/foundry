@@ -1,0 +1,9 @@
+
+defaults:
+  - unconditional
+  - _self_
+
+dataset:
+  name: pseudoknot
+  eval_every_n: 1
+  data: /home/afavor/git/RFD3/modelhub/projects/aa_design/tests/test_data/pseudoknot.json

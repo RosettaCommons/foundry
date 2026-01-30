@@ -72,6 +72,7 @@ from rfd3.transforms.conditioning_base import (
 )
 from rfd3.transforms.design_transforms import (
     AddAdditional1dFeaturesToFeats,
+    AddAdditional2dFeaturesToFeats,
     AddGroundTruthSequence,
     AddIsXFeats,
     AssignTypes,
@@ -84,6 +85,7 @@ from rfd3.transforms.design_transforms import (
 )
 from rfd3.transforms.dna_crop import ProteinDNAContactContiguousCrop
 from rfd3.transforms.hbonds_hbplus import CalculateHbondsPlus
+from rfd3.transforms.na_geom import CalculateNucleicAcidGeomFeats
 from rfd3.transforms.ppi_transforms import (
     Add1DSSFeature,
     AddGlobalIsNonLoopyFeature,
@@ -350,6 +352,7 @@ def build_atom14_base_pipeline_(
     center_option: str,
     atom_1d_features: dict | None,
     token_1d_features: dict | None,
+    token_2d_features: dict | None,
     # PPI features
     max_ppi_hotspots_frac_to_provide: float,
     ppi_hotspot_max_distance: float,
@@ -357,6 +360,8 @@ def build_atom14_base_pipeline_(
     max_ss_frac_to_provide: float,
     min_ss_island_len: int,
     max_ss_island_len: int,
+    # Nucleic acid features
+    add_na_pair_features: bool,
     **_,  # dump additional kwargs (e.g. msa stuff)
 ):
     """
@@ -437,6 +442,15 @@ def build_atom14_base_pipeline_(
             ),
         )
     )
+    # Add nucleic acid geometry features
+    if add_na_pair_features:
+        transforms.append(
+            CalculateNucleicAcidGeomFeats(
+                is_inference,
+                NA_only=False,
+                planar_only=True,
+            )
+        )
 
     # Design Transforms
     transforms += [
@@ -523,6 +537,11 @@ def build_atom14_base_pipeline_(
             autofill_zeros_if_not_present_in_atomarray=True,
             token_1d_features=token_1d_features,
             atom_1d_features=atom_1d_features,
+            association_scheme=association_scheme,
+        ),
+        AddAdditional2dFeaturesToFeats(
+            autofill_zeros_if_not_present_in_atomarray=True,
+            token_2d_features=token_2d_features,
             association_scheme=association_scheme,
         ),
         AddAF3TokenBondFeatures(),
@@ -615,6 +634,7 @@ def build_atom14_base_pipeline(
         kwargs.setdefault("min_ss_island_len", 0)
         kwargs.setdefault("max_ss_island_len", 999)
         kwargs.setdefault("max_binder_length", 999)
+        kwargs.setdefault("add_na_pair_features", False)
 
         kwargs.setdefault("b_factor_min", None)
         kwargs.setdefault("zero_occ_on_exposure_after_cropping", False)

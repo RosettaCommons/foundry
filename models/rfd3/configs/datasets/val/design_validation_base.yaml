@@ -38,3 +38,4 @@ dataset:
     # Other dataset-specific parameters
     atom_1d_features: ${model.net.token_initializer.atom_1d_features}
     token_1d_features: ${model.net.token_initializer.token_1d_features}
+    token_2d_features: ${model.net.token_initializer.token_2d_features}

@@ -43,6 +43,9 @@ dataset:
     min_ss_island_len: ${datasets.global_transform_args.min_ss_island_len}
     max_ss_island_len: ${datasets.global_transform_args.max_ss_island_len}
 
+    # Nucleic acid features
+    add_na_pair_features: ${datasets.global_transform_args.add_na_pair_features}
+
     # Cropping
     crop_size: ${datasets.crop_size}
     max_atoms_in_crop: ${datasets.max_atoms_in_crop}
@@ -57,3 +60,4 @@ dataset:
     # Other dataset-specific parameters
     atom_1d_features: ${model.net.token_initializer.atom_1d_features}
     token_1d_features: ${model.net.token_initializer.token_1d_features}
+    token_2d_features: ${model.net.token_initializer.token_2d_features}

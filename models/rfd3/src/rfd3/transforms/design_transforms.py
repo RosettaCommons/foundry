@@ -45,6 +45,7 @@ from rfd3.transforms.util_transforms import (
     get_af3_token_representative_masks,
 )
 from rfd3.transforms.virtual_atoms import PadTokensWithVirtualAtoms
+from rfd3.transforms.na_geom import get_bp_feats_from_atom_array
 
 from foundry.utils.ddp import RankedLogger  # noqa
 
@@ -774,6 +775,90 @@ class AddAdditional1dFeaturesToFeats(Transform):
 
         for feature_name, n_dims in self.atom_1d_features.items():
             data = self.generate_feature(feature_name, n_dims, data, "atom")
+
+        return data
+    
+
+
+class AddAdditional2dFeaturesToFeats(Transform):
+    """
+    Adds any net.token_initializer.token_2d_features and net.diffusion_module.diffusion_atom_encoder.atom_2d_features present in the atomarray but not in data['feats'] to data['feats']
+    Args:
+        - autofill_zeros_if_not_present_in_atomarray: self explanatory
+        - token_2d_features: List of single-item dictionaries, corresponding to feature_name: n_feature_dims. Should be hydra interpolated from
+            net.token_initializer.token_2d_features
+    """
+
+    incompatible_previous_transforms = ["AddAdditional2dFeaturesToFeats"]
+
+    def __init__(
+        self,
+        token_2d_features,
+        autofill_zeros_if_not_present_in_atomarray=False,
+        association_scheme="atom14",
+    ):
+        self.autofill = autofill_zeros_if_not_present_in_atomarray
+        self.token_2d_features = token_2d_features
+        self.association_scheme = association_scheme
+
+        # Need to pre-define custom constructor functions 
+        # to map from atomarray annotations to tensors.
+        self.constructor_functions = {
+            'bp_partners': get_bp_feats_from_atom_array,
+        }
+
+    def check_input(self, data) -> None:
+        check_contains_keys(data, ["atom_array"])
+        check_is_instance(data, "atom_array", AtomArray)
+
+    def generate_token_feature(self, feature_name, n_dims, data):
+
+        # Don't do this if we already have the feature
+        if feature_name in data["feats"].keys():
+            return data
+
+        # For these, we need to use a constructor function mapping,
+        # since pair features may require custom logic/conventions.
+        if feature_name in self.constructor_functions.keys():
+            feature_array = self.constructor_functions[feature_name](data["atom_array"])
+        else:
+            raise ValueError(
+                f"No constructor function found for 2d feature `{feature_name}`"
+            )
+        
+        # We can fix shape issues here:
+        if len(feature_array.shape) == 2 and n_dims == 1:
+            feature_array = feature_array.unsqueeze(1)
+        
+        # ensure that feature_array is a 3d array with third dim == n_dims:
+        if len(feature_array.shape) != 3:
+            raise ValueError(
+                f"token 2d_feature `{feature_name}` must be a 3d array, got {len(feature_array.shape)}d."
+            )
+        if feature_array.shape[2] != n_dims:
+            raise ValueError(
+                f"token 2d_feature `{feature_name}` dimensions in atomarray ({feature_array.shape[-1]}) does not match dimension declared in config, ({n_dims})"
+            )
+        # Ensure correct shape in first two dims (I,I,...)
+        if feature_array.shape[0] != feature_array.shape[1]:
+            raise ValueError(
+                f"token 2d_feature `{feature_name}` first two dimensions must be equal (square matrix), got {feature_array.shape[0]} and {feature_array.shape[1]}"
+            )
+
+        data["feats"][feature_name] = feature_array
+
+        return data
+
+    def forward(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Checks if the 2d_features are present in data['feats']. If not present, adds them from the atomarray.
+        If annotation is not present in atomarray, either autofills the feature with 0s or throws an error
+        """
+        if "feats" not in data.keys():
+            data["feats"] = {}
+        # Only apply for features that the model is expecting:
+        for feature_name, n_dims in self.token_2d_features.items():
+            data = self.generate_token_feature(feature_name, n_dims, data)
 
         return data
 

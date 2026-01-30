@@ -25,6 +25,9 @@ token_initializer: # formerly known as the trunk
     ref_plddt: 1
     is_non_loopy: 1
 
+  # Optional 2D token feature definitions (empty by default)
+  token_2d_features: {}
+  
   downcast: ${model.net.diffusion_module.downcast}
   atom_1d_features:
     ref_atom_name_chars: 256

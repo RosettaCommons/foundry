@@ -143,6 +143,38 @@ class OneDFeatureEmbedder(nn.Module):
             )
         )
 
+class TwoDFeatureEmbedder(nn.Module):
+    """
+    Embeds 2D features into a single vector.
+
+    Args:
+        features (dict): Dictionary of feature names and their number of channels.
+        output_channels (int): Output dimension of the projected embedding.
+    """
+
+    def __init__(self, features, output_channels):
+        super().__init__()
+        self.features = {k: v for k, v in features.items() if exists(v)}
+        total_embedding_input_features = sum(self.features.values())
+        self.embedders = nn.ModuleDict(
+            {
+                feature: EmbeddingLayer(
+                    n_channels, total_embedding_input_features, output_channels
+                )
+                for feature, n_channels in self.features.items()
+            }
+        )
+    def collapse2D(self, x, L):
+        return x.reshape((L, L, x.numel() // (L * L)))
+
+    def forward(self, f, collapse_length):
+        return sum(
+            tuple(
+                self.embedders[feature](self.collapse2D(f[feature].float(), collapse_length))
+                for feature, n_channels in self.features.items()
+                if exists(n_channels)
+            )
+        )
 
 class SinusoidalDistEmbed(nn.Module):
     """

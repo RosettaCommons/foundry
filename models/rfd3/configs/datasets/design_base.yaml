@@ -62,6 +62,9 @@ global_transform_args:
   min_ss_island_len: 1
   max_ss_island_len: 10
 
+  # Nucleic acid features
+  add_na_pair_features: false
+
   train_conditions:
     unconditional:
       frequency: 5.0
