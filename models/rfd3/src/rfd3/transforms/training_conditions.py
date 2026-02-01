@@ -96,13 +96,13 @@ class IslandCondition(TrainingCondition):
         is_rna = data["atom_array"].is_rna
         ### updating this to allow other polymers
         if self.association_scheme == "atom23":
-            if not np.any(is_protein | is_dna | is_rna):
-                return False
+            if np.any(is_protein | is_dna | is_rna):
+                return True
         else:
-            if not np.any(is_protein):
-                return False
-
-        return True
+            if np.any(is_protein):
+                return True
+        
+        return False
 
     def sample_motif_tokens(self, atom_array):
         """

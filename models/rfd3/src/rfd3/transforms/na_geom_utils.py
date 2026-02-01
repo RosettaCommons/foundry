@@ -1321,6 +1321,8 @@ def bp_partner_to_ss_matrix(
     *,
     feature_info: Optional[dict] = None,
     mol_info: Optional[NucMolInfo] = None,
+    NA_only: Optional[bool] = False,
+    planar_only: Optional[bool] = False,
     include_loops: bool = True,
     token_level_data: Optional[dict] = None,
 ) -> np.ndarray:

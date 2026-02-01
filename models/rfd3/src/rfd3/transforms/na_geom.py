@@ -119,7 +119,7 @@ class CalculateNucleicAcidGeomFeats(Transform):
     def __init__(
         self,
         is_inference,
-        add_nucleic_ss_feats: bool = True,
+        meta_conditioning_probabilities,
 
         p_is_nucleic_ss_example: float = 0.3,
         p_show_partial_feats: float = 0.5,
@@ -136,9 +136,18 @@ class CalculateNucleicAcidGeomFeats(Transform):
     ):
         # Critical, must always have to know how to handle
         self.is_inference = is_inference 
-
+        if not self.is_inference:
+            ## relevant in training
+            self.sampling_prob = meta_conditioning_probabilities['calculate_NA_SS']
+        else:
+            ## irrelevant in inference
+            self.sampling_prob = 0
         # For sampling whether we add nucleic-ss features (extra t2d)
-        self.add_nucleic_ss_feats    = add_nucleic_ss_feats
+        
+        # relevant in training
+        self.add_nucleic_ss_feats    = (self.sampling_prob > 0)
+        ######
+
         self.p_canonical_bp_filter   = p_canonical_bp_filter # enforce that bp labels are only canonical
         self.p_is_nucleic_ss_example = p_is_nucleic_ss_example
         self.nucleic_ss_min_shown    = nucleic_ss_min_shown
@@ -189,7 +198,7 @@ class CalculateNucleicAcidGeomFeats(Transform):
         n_tokens = len(token_starts)
         print(" DO I NEED TO CHANGE TO TOKEN_ID???")
         # Handle the training case with ground truth and masking:
-        if not self.is_inference:
+        if not self.is_inference and (np.random.rand() < self.sampling_prob):
 
             # First, annotate as usual
             # atom_array = annotate_na_ss(atom_array, **kwargs)
@@ -226,8 +235,9 @@ class CalculateNucleicAcidGeomFeats(Transform):
             - 3). Lists of paired indices
 
             """
-            is_nucleic_ss_example=True
-            give_partial_feats=False
+            #is_nucleic_ss_example=True
+            #give_partial_feats=False
+
             atom_array = annotate_na_ss_from_data_specification(
                 data,
                 overwrite=True,

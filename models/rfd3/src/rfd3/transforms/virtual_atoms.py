@@ -225,17 +225,21 @@ class PadTokensWithVirtualAtoms(Transform):
                 # First, pad with virtual atoms if needed
                 if self.association_scheme == "atom23" and atom_array[start].is_dna:
                     n_atoms_per_token = 22
+                    central_atom = "C1'"
                 elif self.association_scheme == "atom23" and atom_array[start].is_rna:
                     n_atoms_per_token = 23
+                    central_atom = "C1'"
                 else:
                     n_atoms_per_token = self.n_atoms_per_token
+                    central_atom = self.atom_to_pad_from
+                
                 n_pad = n_atoms_per_token - len(token)
 
                 if n_pad > 0:
                     mask = get_af3_token_representative_masks(
-                        token, central_atom=self.atom_to_pad_from
+                        token, central_atom=central_atom
                     )
-                    assert_single_representative(token)
+                    assert_single_representative(token, central_atom=central_atom)
 
                     # ... Create virtual atoms
                     pad_atoms = token[mask].copy()

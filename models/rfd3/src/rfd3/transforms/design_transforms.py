@@ -71,8 +71,10 @@ class SubsampleToTypes(Transform):
     def __init__(
         self,
         allowed_types: list | str = ["is_protein"],
+        association_scheme: str = 'atom14'
     ):
         self.allowed_types = allowed_types
+        self.association_scheme = association_scheme
         if not self.allowed_types == "ALL":
             for k in allowed_types:
                 if not k.startswith("is_"):
@@ -104,7 +106,7 @@ class SubsampleToTypes(Transform):
                 )
             )
 
-        if atom_array.is_protein.sum() == 0:
+        if self.association_scheme != 'atom23' and atom_array.is_protein.sum() == 0:
             raise ValueError(
                 "No protein atoms found in the atom array. Example ID: {}".format(
                     data.get("example_id", "unknown")

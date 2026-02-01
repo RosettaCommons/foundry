@@ -196,6 +196,7 @@ def get_crop_transform(
     max_binder_length: int,
     max_atoms_in_crop: int | None,
     allowed_types: List[str],
+    association_scheme: str,
 ):
     if (
         crop_contiguous_probability > 0
@@ -215,7 +216,7 @@ def get_crop_transform(
         ), "Crop center cutoff distance must be greater than 0"
 
     pre_crop_transforms = [
-        SubsampleToTypes(allowed_types=allowed_types),
+        SubsampleToTypes(allowed_types=allowed_types, association_scheme=association_scheme),
     ]
 
     cropping_transform = RandomRoute(
@@ -360,8 +361,11 @@ def build_atom14_base_pipeline_(
     max_ss_frac_to_provide: float,
     min_ss_island_len: int,
     max_ss_island_len: int,
-    # Nucleic acid features
-    add_na_pair_features: bool,
+
+    ## Nucleic acid features #####
+    #add_na_pair_features: bool, 
+    ## This should not be necessary, controlled through feature names in model, and meta conditioning probabilities, inference behavior handled in transform itself #####
+
     **_,  # dump additional kwargs (e.g. msa stuff)
 ):
     """
@@ -411,6 +415,7 @@ def build_atom14_base_pipeline_(
         max_binder_length=max_binder_length,
         max_atoms_in_crop=max_atoms_in_crop,
         allowed_types=allowed_types,
+        association_scheme=association_scheme
     )
 
     if zero_occ_on_exposure_after_cropping:
@@ -443,14 +448,15 @@ def build_atom14_base_pipeline_(
         )
     )
     # Add nucleic acid geometry features
-    if add_na_pair_features:
-        transforms.append(
-            CalculateNucleicAcidGeomFeats(
-                is_inference,
-                NA_only=False,
-                planar_only=True,
-            )
+    #if add_na_pair_features:
+    transforms.append(
+        CalculateNucleicAcidGeomFeats(
+            is_inference,
+            meta_conditioning_probabilities,
+            NA_only=False,
+            planar_only=True,
         )
+    )
 
     # Design Transforms
     transforms += [
@@ -618,7 +624,6 @@ def build_atom14_base_pipeline(
     Wrapper around pipeline construction to handle empty training args
     Sets default behaviour for inference to keep backward compatibility
     """
-
     if is_inference:
         # Provide explicit defaults for training-only args
         kwargs.setdefault("crop_size", 512)
@@ -634,7 +639,8 @@ def build_atom14_base_pipeline(
         kwargs.setdefault("min_ss_island_len", 0)
         kwargs.setdefault("max_ss_island_len", 999)
         kwargs.setdefault("max_binder_length", 999)
-        kwargs.setdefault("add_na_pair_features", False)
+        # This should not be necessary. 
+        #kwargs.setdefault("add_na_pair_features", False)
 
         kwargs.setdefault("b_factor_min", None)
         kwargs.setdefault("zero_occ_on_exposure_after_cropping", False)

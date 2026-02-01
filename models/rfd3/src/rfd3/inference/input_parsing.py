@@ -9,7 +9,7 @@ from os import PathLike
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-from atomworks.constants import STANDARD_AA
+from atomworks.constants import STANDARD_AA, STANDARD_DNA, STANDARD_RNA
 from atomworks.io.parser import parse_atom_array
 
 # from atomworks.ml.datasets.datasets import BaseDataset
@@ -119,7 +119,9 @@ class DesignInputSpecification(BaseModel):
         validate_assignment=False,
         str_strip_whitespace=True,
         str_min_length=1,
-        extra="forbid",
+        #extra="forbid", ####################################################
+        extra="allow"
+        ## for now allowing extra for rfd3na-ss purposes, can decide later ##
     )
     # fmt: off
     # ========================================================================
@@ -494,6 +496,12 @@ class DesignInputSpecification(BaseModel):
                 aa.is_motif_atom_with_fixed_seq[start:end] = np.full_like(
                     is_bkbn, False, dtype=int
                 )
+            elif aa.res_name[start] in (STANDARD_DNA + STANDARD_RNA) and self.redesign_motif_sidechains:
+                is_bkbn = np.isin(aa.atom_name[start:end], backbone_atoms_RNA)
+                aa.is_motif_atom_with_fixed_coord[start:end] = is_bkbn.astype(int)
+                aa.is_motif_atom_with_fixed_seq[start:end] = np.full_like(
+                    is_bkbn, False, dtype=int
+                )
 
             # ... Apply selections on top
             apply_selections(start, end)
@@ -509,17 +517,18 @@ class DesignInputSpecification(BaseModel):
         atom_array_input_annotated = copy.deepcopy(self.atom_array_input)
 
         ########## reorder NA atoms ###########
-        is_dna = np.isin(atom_array_input_annotated.res_name, ["DA", "DC", "DG", "DT"])
-        is_rna = np.isin(atom_array_input_annotated.res_name, ["A", "C", "G", "U"])
-        dna_array = atom_array_input_annotated[is_dna]
-        rna_array = atom_array_input_annotated[is_rna]
+        if exists(atom_array_input_annotated):
+            is_dna = np.isin(atom_array_input_annotated.res_name, ["DA", "DC", "DG", "DT"])
+            is_rna = np.isin(atom_array_input_annotated.res_name, ["A", "C", "G", "U"])
+            dna_array = atom_array_input_annotated[is_dna]
+            rna_array = atom_array_input_annotated[is_rna]
 
-        atom_array_input_annotated[is_dna] = reorder_atoms_per_residue(
-            dna_array, backbone_atoms_DNA
-        )
-        atom_array_input_annotated[is_rna] = reorder_atoms_per_residue(
-            rna_array, backbone_atoms_RNA
-        )
+            atom_array_input_annotated[is_dna] = reorder_atoms_per_residue(
+                dna_array, backbone_atoms_DNA
+            )
+            atom_array_input_annotated[is_rna] = reorder_atoms_per_residue(
+                rna_array, backbone_atoms_RNA
+            )
         #######################################
 
         atom_array = self._build_init(atom_array_input_annotated)
@@ -928,11 +937,11 @@ def create_diffused_residues(n, additional_annotations=None, polymer_type="P"):
     elif polymer_type == "R":
         res_name = "A"
         bb_len = len(backbone_atoms_RNA)
-        bb_atom_names = strip_list(backbone_atoms_RNA)
+        bb_atom_names = backbone_atoms_RNA
     elif polymer_type == "D":
         res_name = "DA"
         bb_len = len(backbone_atoms_DNA)
-        bb_atom_names = strip_list(backbone_atoms_DNA)
+        bb_atom_names = backbone_atoms_DNA
     else:
         raise ValueError(
             f"invalid polymer type detected: {polymer_type}, check contig!"
@@ -955,12 +964,13 @@ def create_diffused_residues(n, additional_annotations=None, polymer_type="P"):
         for idx in range(1, n + 1)
     ]
     array = struc.array(atoms)
-    array.set_annotation("element", np.array(bb_elements * n, dtype="<U2"))
-    array.set_annotation("atom_name", np.array(bb_atom_names * n, dtype="<U2"))
+    array.set_annotation("element", np.array(bb_elements * n, dtype="<U3"))
+    array.set_annotation("atom_name", np.array(bb_atom_names * n, dtype="<U3"))
     array = set_default_conditioning_annotations(
         array, motif=False, additional=additional_annotations
     )
     array = set_common_annotations(array)
+
     return array
 
 

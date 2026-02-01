@@ -243,6 +243,10 @@ class SampleConditioningType(Transform):
             )
         self.meta_conditioning_probabilities = meta_conditioning_probabilities
         self.train_conditions = train_conditions
+        
+        for item in self.train_conditions:
+            self.train_conditions[item].association_scheme = association_scheme
+
         self.sequence_encoding = sequence_encoding
         self.association_scheme = association_scheme
 
@@ -261,12 +265,15 @@ class SampleConditioningType(Transform):
         assert "conditions" in data, "Conditioning dict not initialized"
 
     def forward(self, data):
+        #for item in self.train_conditions:
+        #    print(self.train_conditions[item].is_valid_for_example(data))
+
         valid_conditions = [
             cond
             for cond in self.train_conditions.values()
-            if cond.frequency > 0 and cond.is_valid_for_example(data)
+            if cond.is_valid_for_example(data) and cond.frequency > 0 
         ]
-
+        
         if len(valid_conditions) == 0:
             raise InvalidSampledConditionException("No valid condition was found.")
 
@@ -279,8 +286,6 @@ class SampleConditioningType(Transform):
         p_cond /= p_cond.sum()
         i_cond = np.random.choice(np.arange(len(p_cond)), p=p_cond)
         cond = valid_conditions[i_cond]
-
-        cond.association_scheme = self.association_scheme
 
         data["sampled_condition"] = cond
         data["sampled_condition_name"] = cond.name

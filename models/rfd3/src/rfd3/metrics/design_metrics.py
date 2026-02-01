@@ -291,6 +291,7 @@ class BackboneMetrics(Metric):
             3.0  # maximum closest-neighbour distance before considered a floating atom
         )
         self.standard_ca_dist = 3.8
+        self.standard_PP_dist = 6.4
         self.compute_for_diffused_region_only = compute_for_diffused_region_only
 
     @property
@@ -310,6 +311,8 @@ class BackboneMetrics(Metric):
         )  # N_atoms x N_atoms
 
         is_protein = f["is_protein"][tok_idx].cpu().numpy()  # n_atoms
+        is_rna = f["is_rna"][tok_idx].cpu().numpy()
+        is_dna = f["is_dna"][tok_idx].cpu().numpy()
 
         mask = np.zeros_like(dists, dtype=bool)
         mask = mask | (np.eye(dists.shape[-1], dtype=bool))[None]
@@ -362,22 +365,41 @@ class BackboneMetrics(Metric):
             if self.compute_for_diffused_region_only:
                 is_ca = is_ca[diffused_region]
                 is_protein = is_protein[diffused_region]
-            idx_mask = is_ca & is_protein
+                is_dna = is_dna[diffused_region]
+                is_rna = is_rna[diffused_region]
+            protein_idx_mask = is_ca & (is_protein) 
+            na_idx_mask = is_ca & (is_rna | is_dna)
+
             if self.compute_for_diffused_region_only:
-                xyz = X_L.cpu()[:, diffused_region][:, idx_mask]
+                xyz_protein = X_L.cpu()[:, diffused_region][:, protein_idx_mask]
+                xyz_na = X_L.cpu()[:, diffused_region][:, na_idx_mask]
             else:
-                xyz = X_L.cpu()[:, idx_mask]
+                xyz_protein = X_L.cpu()[:, protein_idx_mask]
+                xyz_na = X_L.cpu()[:, na_idx_mask]
 
-            ca_dists = torch.norm(xyz[:, 1:] - xyz[:, :-1], dim=-1)
-            deviation = torch.abs(ca_dists - self.standard_ca_dist)  # B, (I-1)
-            is_chainbreak = deviation > 0.75
+            ca_dists_protein = torch.norm(xyz_protein[:, 1:] - xyz_protein[:, :-1], dim=-1)
+            ca_dists_na = torch.norm(xyz_na[:, 1:] - xyz_na[:, :-1], dim=-1)
+            
+            deviation_protein = torch.abs(ca_dists_protein - self.standard_ca_dist)  # B, (I-1)
+            deviation_na = torch.abs(ca_dists_na - self.standard_PP_dist)  # B, (I-1)
+            is_chainbreak_protein = deviation_protein > 0.75
+            is_chainbreak_na = deviation_na > 1
 
-            o["max_ca_deviation"] = float(deviation.max(-1).values.mean())
-            o["fraction_chainbreaks"] = float(is_chainbreak.float().mean(-1).mean())
-            o["n_chainbreaks"] = float(is_chainbreak.float().sum(-1).mean())
+        try:
+            o["max_ca_deviation_protein"] = float(deviation_protein.max(-1).values.mean())
+            o["fraction_chainbreaks_protein"] = float(is_chainbreak_protein.float().mean(-1).mean())
+            o["n_chainbreaks_protein"] = float(is_chainbreak_protein.float().sum(-1).mean())
+        except:
+            print("No protein in this example, skipping protein chainbreak metrics")
+
+        try:
+            o["max_ca_deviation_na"] = float(deviation_na.max(-1).values.mean())
+            o["fraction_chainbreaks_na"] = float(is_chainbreak_na.float().mean(-1).mean())
+            o["n_chainbreaks_na"] = float(is_chainbreak_na.float().sum(-1).mean())
+        except:
+            print("No NA in this example, skipping NA chainbreak metrics")
 
         return o
-
 
 class PPIMetrics(Metric):
     """PPI-specific metrics"""

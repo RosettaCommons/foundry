@@ -536,13 +536,14 @@ def create_atom_array_from_design_specification_legacy(
     optional_conditions = []
 
     ########## reorder NA atoms ###########
-    is_dna = np.isin(atom_array_input.res_name, ["DA", "DC", "DG", "DT"])
-    is_rna = np.isin(atom_array_input.res_name, ["A", "C", "G", "U"])
-    dna_array = atom_array_input[is_dna]
-    rna_array = atom_array_input[is_rna]
+    if exists(atom_array_input):
+        is_dna = np.isin(atom_array_input.res_name, ["DA", "DC", "DG", "DT"])
+        is_rna = np.isin(atom_array_input.res_name, ["A", "C", "G", "U"])
+        dna_array = atom_array_input[is_dna]
+        rna_array = atom_array_input[is_rna]
 
-    atom_array_input[is_dna] = reorder_atoms_per_residue(dna_array, backbone_atoms_DNA)
-    atom_array_input[is_rna] = reorder_atoms_per_residue(rna_array, backbone_atoms_RNA)
+        atom_array_input[is_dna] = reorder_atoms_per_residue(dna_array, backbone_atoms_DNA)
+        atom_array_input[is_rna] = reorder_atoms_per_residue(rna_array, backbone_atoms_RNA)
     #######################################
 
     if exists(atomwise_rasa):
