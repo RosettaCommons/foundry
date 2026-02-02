@@ -3,7 +3,7 @@
 If you would like to run the examples below, `na_binder_design.json`, located in this directory, contains the example code. You can run it via:
 ```
 rfd3 design out_dir=inference_outputs/na_binder/0 \
-ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
+ckpt_path=/path/to/rfd3_latest.ckpt \
 inputs=./na_binder_design.json
 ```
 
@@ -11,7 +11,7 @@ Or, if you have cloned the repo rather than using `pip install`:
 ```
 python path/to/foundry/models/rfd3/src/rfd3/run_inference.py \
 out_dir=inference_outputs/na_binder/0 \
-ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
+ckpt_path=/path/to/rfd3_latest.ckpt \
 inputs=./na_binder_design.json 
 ```
 

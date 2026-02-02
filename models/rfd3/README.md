@@ -11,34 +11,49 @@ both are described in more detail below.
 </p>
 
 > [!NOTE]
-> Looking for config documentation? See [here](./docs/input.md)
+> Looking for information about configuration options? See a through list of possible inputs in our [external documentation](https://rosettacommons.github.io/foundry/models/rfd3/input.html).
 
 ## Getting Started
-1. Install RFdiffusion3. See [Main README](../../README.md) for instructions how to install all models to run full pipeline (recommended). If you have already installed all the models skip [here](#run-inference).
-```bash
-pip install rc-foundry[rfd3]
-```
+1. Install RFdiffusion3. 
+  If you have already installed all the models and **are not** interested in hydrogen bond conditioning skip [here](#running-inference). <br><br>
+  If you have already installed all the models and **are** interested in hydrogen bond conditioning skip [here](#hydrogen-bond-conditioning)
+  If you would like to install all of the foundry models (recommended), see the [foundry README](../../README.md) for instructions. <br><br>
+  If you would like to install only RFD3: 
+    ```bash
+    pip install rc-foundry[rfd3]
+    ```
+
 2. Download checkpoint to your desired checkpoint location.
-```bash
-foundry install rfd3 --checkpoint-dir <path/to/ckpt/dir>
-```
-This sets `FOUNDRY_CHECKPOINT_DIRS` and will in future look for checkpoints in that directory (alongside the default `~/.foundry/checkpoints` location), allowing you to run inference without supplying the checkpoint path. The checkpoint directory is optional, defaulting to `~/.foundry/checkpoints` if unset.
+    ```bash
+    foundry install rfd3 --checkpoint-dir <path/to/ckpt/dir>
+    ```
+    This sets `FOUNDRY_CHECKPOINT_DIRS` and will in future look for checkpoints in that directory (alongside the default `~/.foundry/checkpoints` location), allowing you to run inference without supplying the checkpoint path. The checkpoint directory is optional, defaulting to `~/.foundry/checkpoints` if unset.
+
+### Hydrogen Bond Conditioning
+If you would like to use hydrogen bond conditioning in your designs, 
+you need to install [HBPLUS](https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/). This is **not** installed by default:
+
+3. Download HBPLUS from here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/download.html (available for free)
+4. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
+5. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
 
 ## Running Inference
+
+Below is a quick inference example to run to test that your setup
+is working correctly. If you are new to RFdiffusion methods or JSON/YAML structure, we recommend that you follow the [PPI tutorial](https://rosettacommons.github.io/foundry/models/rfd3/ppi_design_tutorial.html) to set up your first calculation.
 
 To run inference (with foundry installed in your environment, or RFD3 & Foundry src in PYTHONPATH):
 ```bash
 rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json skip_existing=False dump_trajectories=True prevalidate_inputs=True
 ```
+To run RFD3, you only need to provide the input (`inputs`) JSON/YAML file (see the [external documentation for more details](https://rosettacommons.github.io/foundry/models/rfd3/index.html#general)) where you specify your design constraints and the output directory (`out_dir`) where you want to store the files RFD3 generates.
 
-Additional unnecessary args here are added:
-- Including dumping and aligning trajectory structures can be useful for debugging your setup or making cool gifs.
-- Printing the config and dumping trajectories are turned off by default, but turned on here for verbosity
-- `prevalidate_inputs` will check that your inputs are valid before running inference. Helpful if your json has a number of different configs you want to debug / double check are valid before loading the checkpoints.
-- Only `out_dir` and `inputs` are required. The output directory will automatically be created. 
+Additional unnecessary (but useful!) options are added to the above command:
+- `dump_trajectories`: Dumps trajectory structures, can be useful for debugging your setup or making cool gifs. However, trajectory files are large, thus this setting is False by default.
+- `prevalidate_inputs`: Checks that your inputs are valid before running inference. Helpful if your JSON/YAML has a number of different configs you want to debug / double check are valid before loading the checkpoints.
+- `skip_existing`: Skips any existing files that would be in the same place and have the same name as the calculation being run. If you are testing your setup multiple times, including this option is important so that you actually run RFdiffusion3. 
 
-
-There are various interesting ways you can use RFD3 beyond Atom14 design as it's trained on a large array of different tasks.
+There are various interesting ways you can use RFD3 beyond [Atom14](https://www.biorxiv.org/content/10.1101/2024.08.16.608235v4) design as it's trained on a large array of different tasks.
 For example, you can fix sequence and not structure (prediction-type task), fix the backbone and unfix the sequence (MPNN-type inverse folding) or unfix the sidechains only (PLACER/ChemNet-style):
 
 <p align="center">
@@ -47,7 +62,7 @@ For example, you can fix sequence and not structure (prediction-type task), fix 
 
 For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `foundry/models/rfd3/configs/inference_engine/rfdiffusion3.yaml` for even more options.
 
-## Further example jsons for different applications
+## Further example JSONs for different applications
 Additional examples are broken up by use case. If you have cloned the
 repository, matching `.json` files are in `foundry/models/rfd3/docs`
 that can be run directly, similar to the previous example. 
