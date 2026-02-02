@@ -137,7 +137,7 @@ Below is a table of all of the inputs that the `InputSpecification` accepts. Use
 | `ori_token`                                                    | `list[float]`     | `[x,y,z]` origin override to control COM (center of mass) placement of designed structure. |
 | `infer_ori_strategy`                                           | `str`             | `"com"` or `"hotspots"`.  The center of mass of the diffused region will typically be within 5Å of the ORI token. Using `hotspots` will place the ORI token 10Å outward from the center of mass of the specified hotspots. Using `com` will place the token at the center of mass of the input structure.|
 | `plddt_enhanced`                                               | `bool`            | Default `True`. Enables pLDDT (predicted Local Distance Difference Test) enhancement. |
-| `is_non_loopy`                                                 | `bool \| None`            | Default `None`. If `True`/`False`, produces outputs structures with more/fewer loops.|
+| `is_non_loopy`                                                 | `bool \| None`            | Default `None`. If `True`/`False`, produces output structures with fewer/more loops.|
 | `partial_t`                                                    | `float`           | Noise (Å) for partial diffusion, enables partial diffusion (sets the noise level.) Recommended values are 5.0-15.0 Å. See [Partial Diffusion](#partial-diffusion) for more information. |
 
 
