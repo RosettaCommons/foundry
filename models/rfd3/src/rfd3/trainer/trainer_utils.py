@@ -13,6 +13,7 @@ from rfd3.constants import (
     ATOM14_ATOM_NAMES,
     ATOM23_ATOM_NAMES_DNA,
     ATOM23_ATOM_NAMES_RNA,
+    backbone_atoms_RNA,
     VIRTUAL_ATOM_ELEMENT_NAME,
     association_schemes,
     association_schemes_stripped,
