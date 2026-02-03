@@ -1,0 +1,26 @@
+{
+    "1euv": {
+        "input": "./1euv_lig.pdb", 
+        "ligand": "l:g",        
+        "unindex": "A514,A531,A574,A579-581",         
+        "length": "100-200",
+        "ori_token": [0, 1, 0],  
+        "select_fixed_atoms": {
+            "A514":"NE2,CE1,ND1,CD2,CG,CB",  
+            "A531":"OD1,CG,OD2,CB",                              
+            "A574":"NE2,CD,OE1,CG", 
+            "A579":"C,O,CA,N", 
+            "A580":"SG,CB,CA,N,C,O", 
+            "A581":"C,O,CA,N"
+        },
+        "select_buried": {
+            "l:g": "O1,C8,O3,C4,C5,C23,C24,C25,C26,C27"
+        },
+        "select_exposed": {
+            "l:g": "C2,C22,C19,C18,C17,C20,C16,C15,O21,O14,C13,C12"
+        },
+        "select_unfixed_sequence": "A579,A581",
+        "redesign_motif_sidechains": false
+        
+    }
+}

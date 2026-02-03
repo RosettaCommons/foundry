@@ -20,6 +20,7 @@ Tutorials
    :maxdepth: 1
 
    ppi_design_tutorial.md
+   enzyme_design_tutorial.md
 
 Examples
 --------
