@@ -237,6 +237,7 @@ class PadTokensWithVirtualAtoms(Transform):
                     mask = get_af3_token_representative_masks(
                         token, central_atom=central_atom
                     )
+                    
                     assert_single_representative(token, central_atom=central_atom)
 
                     # ... Create virtual atoms

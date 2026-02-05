@@ -117,7 +117,6 @@ def fetch_motif_residue_(
     NB: For glycines, we extend the array with a CB position so as to not leak whether
     the original residue is a glycine if sequence is masked during inference.
     """
-
     assert (
         src_atom_array is not None
     ), "Motif provided in contigs, but no input provided. input={} contig={}".format(
@@ -227,9 +226,15 @@ def fetch_motif_residue_(
             "is_motif_atom_with_fixed_coord", np.zeros(subarray.shape[0], dtype=int)
         )
     else:
-        subarray.set_annotation(
-            "is_motif_atom_with_fixed_coord", subarray.is_motif_atom.copy()
-        )
+        if "is_motif_atom" in subarray.get_annotation_categories():
+            subarray.set_annotation(
+                "is_motif_atom_with_fixed_coord", subarray.is_motif_atom.copy()
+            )
+        else:
+            subarray.set_annotation(
+                "is_motif_atom_with_fixed_coord", np.array([True]*len(subarray))
+            )
+
     if flexible_backbone:
         backbone_atoms = ["N", "CA", "C", "O"]
         is_flexible_motif_atom = np.isin(subarray.atom_name, backbone_atoms)
@@ -242,12 +247,17 @@ def fetch_motif_residue_(
             "is_flexible_motif_atom", np.zeros(subarray.shape[0], dtype=bool)
         )
     if to_unindex:
-        subarray.set_annotation(
-            "is_motif_atom_unindexed", subarray.is_motif_atom.copy()
-        )
+        if "is_motif_atom" in subarray.get_annotation_categories():
+            subarray.set_annotation(
+                "is_motif_atom_unindexed", subarray.is_motif_atom.copy()
+            )
+        else:
+            subarray.set_annotation(
+                "is_motif_atom_unindexed", np.array([True]*len(subarray))
+            )
         # Subset to desired motif atoms
         subarray = subarray[subarray.is_motif_atom.astype(bool)]
-
+    
     # ... Relax sequence constraint if provided
     if (
         exists(unfixed_sequence_components)
