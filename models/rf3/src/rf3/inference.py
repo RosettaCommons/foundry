@@ -12,7 +12,10 @@ from foundry.utils.logging import suppress_warnings
 
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
-rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+try:
+    rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+except Exception:
+    pass
 
 load_dotenv(override=True)
 
