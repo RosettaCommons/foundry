@@ -251,12 +251,12 @@ def fetch_motif_residue_(
             subarray.set_annotation(
                 "is_motif_atom_unindexed", subarray.is_motif_atom.copy()
             )
+            # Subset to desired motif atoms
+            subarray = subarray[subarray.is_motif_atom.astype(bool)]
         else:
             subarray.set_annotation(
                 "is_motif_atom_unindexed", np.array([True]*len(subarray))
             )
-        # Subset to desired motif atoms
-        subarray = subarray[subarray.is_motif_atom.astype(bool)]
     
     # ... Relax sequence constraint if provided
     if (
