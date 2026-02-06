@@ -6,7 +6,7 @@ All models within Foundry rely on [AtomWorks](https://github.com/RosettaCommons/
 
 
 > [!NOTE]
-> We have a slack now! Join for updates and to get your questions answered [here](https://join.slack.com/t/proteinmodelfoundry/shared_invite/zt-3kpwru8c6-nrmTW6LNHnSE7h16GNnfLA).
+> We have a slack now! Join for updates and to get your questions answered [here](https://join.slack.com/t/proteinmodelfoundry/shared_invite/zt-3pj032444-jC8MRqsV8nhpKX0PGowQ4A).
 
 ## Getting Started
 ### Quickstart guide
