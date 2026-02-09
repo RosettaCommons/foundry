@@ -823,9 +823,11 @@ class AddAdditional2dFeaturesToFeats(Transform):
         # Don't do this if we already have the feature
         if feature_name in data["feats"].keys():
             return data
-
+        
         # For these, we need to use a constructor function mapping,
         # since pair features may require custom logic/conventions.
+
+        ## for old ckpt handling ##
         if feature_name in self.constructor_functions.keys():
             feature_array = self.constructor_functions[feature_name](data["atom_array"])
         else:

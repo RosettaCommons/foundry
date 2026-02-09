@@ -196,7 +196,7 @@ class CalculateNucleicAcidGeomFeats(Transform):
         token_level_array = atom_array[token_starts]
         token_ids = [int(t) for t in token_level_array.token_id]
         n_tokens = len(token_starts)
-        print(" DO I NEED TO CHANGE TO TOKEN_ID???")
+        #TODO print(" DO I NEED TO CHANGE TO TOKEN_ID???")
         # Handle the training case with ground truth and masking:
         if not self.is_inference and (np.random.rand() < self.sampling_prob):
 
