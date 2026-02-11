@@ -452,7 +452,7 @@ as input and return a three-element list or numpy array of floats.
 
 
 def set_com(
-    atom_array, ori_token: list | None = None, infer_ori_strategy: str | None = None
+        atom_array, ori_token: list | None = None, infer_ori_strategy: str | None = None, ori_jitter: float | None = None
 ):
     if exists(ori_token):
         center = np.array([float(x) for x in ori_token], dtype=atom_array.coord.dtype)
@@ -505,6 +505,17 @@ def set_com(
             atom_array.coord = np.zeros_like(
                 atom_array.coord, dtype=atom_array.coord.dtype
             )
+    if ori_jitter is not None:
+        # randomly jitter ori with given scale
+        direction = np.random.normal(size=3)
+        direction /= np.linalg.norm(direction)
+
+        # Random length (mean ~ scale)
+        length = np.random.exponential(scale=scale)
+        jittered_offset = direction*length
+
+        atom_array.coord -= jittered_offset
+
     return atom_array
 
 

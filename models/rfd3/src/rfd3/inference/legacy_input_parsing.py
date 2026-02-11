@@ -736,6 +736,12 @@ def create_atom_array_from_design_specification_legacy(
             + np.max(atom_array.res_id)
             + 1
         )
+        chain_cand = 'X'
+        while chain_cand in atom_array.chain_id.tolist():
+            chain_cand = chain_cand + chain_cand
+        ligand_chain = np.array([chain_cand]*len(ligand_array))
+        ligand_array.chain_id = ligand_chain
+
         atom_array = atom_array + ligand_array
 
     # ... Apply symmetry if it exists ahead of any other processing

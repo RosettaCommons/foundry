@@ -184,6 +184,7 @@ class DesignInputSpecification(BaseModel):
     symmetry: Optional[SymmetryConfig] = Field(None, description="Symmetry specification, see docs/symmetry.md")
     # Centering & COM guidance
     ori_token: Optional[list[float]] = Field(None, description="Origin coordinates")
+    ori_jitter: Optional[float] = Field(None, description="Jitter ori in a random direction and use ori_jitter to sample distance via exponential distribution")
     infer_ori_strategy: Optional[str] = Field(None, description="Strategy for inferring origin; `com` or `hotspots`")
     # Additional global conditioning
     plddt_enhanced: Optional[bool] = Field(True, description="Enable pLDDT enhancement")
@@ -725,6 +726,13 @@ class DesignInputSpecification(BaseModel):
                     ligand_array.set_annotation(
                         annot, np.full(ligand_array.array_length(), default)
                     )
+            
+            chain_cand = 'X'
+            while chain_cand in atom_array.chain_id.tolist():
+                chain_cand = chain_cand + chain_cand
+            ligand_chain = np.array([chain_cand]*len(ligand_array))
+            ligand_array.chain_id = ligand_chain
+
             atom_array = atom_array + ligand_array
         return atom_array
 
@@ -749,8 +757,10 @@ class DesignInputSpecification(BaseModel):
                     "Partial diffusion with symmetry: skipping COM centering to preserve chain spacing"
                 )
             else:
+                if not exists(self.ori_jitter):
+                   self.ori_jitter = None
                 atom_array = set_com(
-                    atom_array, ori_token=None, infer_ori_strategy="com"
+                    atom_array, ori_token=None, infer_ori_strategy="com", ori_jitter=self.ori_jitter
                 )
         else:
             # Standard: set ori token, zero out diffused atoms
