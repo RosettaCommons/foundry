@@ -18,11 +18,11 @@ You will need the file `4zxb_cropped.pdb`. This is provided in [`foundry/models/
 
 Lastly, we will be visualizing the outputs of the calculations presented in the tutorial using [PyMOL](https://pymol.org/). The visualization steps are completely optional, but if you would like to follow along you will need to have PyMOL installed. 
 
-(learning-objectives)=
+(ppi-learning-objectives)=
 ## Learning Objectives
 In this tutorial, we will design a binder for the human insulin receptor to explore the settings available in RFD3 that are useful in protein-protein interface (PPI) design. 
 
-(setup)=
+(ppi-setup)=
 ## Setup
 Create a directory named `rfd3_ppi_tutorial` and `cd` into it:
 ```bash
@@ -35,7 +35,7 @@ The 'basic' zip file contains outputs that did not use the setting discussed in 
 
 There is also a pre-made YAML file available in `foundry/models/rfd3/docs/ppi_tutorial_files`. We recommend following the tutorial to create this file yourself to better understand the RFD3 options that are relevant to PPI design. 
 
-(creating-the-yaml-file)=
+(ppi-creating-the-yaml-file)=
 ## Creating the YAML file
 In this tutorial, we will be briefly describing each of the settings we will be using for this example binder design project. 
 
@@ -47,7 +47,7 @@ In this tutorial, we will be briefly describing each of the settings we will be 
     Everything that comes after this should be indented to show that it's part of this `insulinr` calculation. You will want to use spaces, not the tab character. If a tab character (`\t `) is found in the file, RFD3 will crash.
 1. Tell RFD3 where to find your input file:
     ```yaml
-        input: /path/to/rfd3_ppi_tutorial/4zxb_cropped.pdb
+        input: /path/to/4zxb_cropped.pdb
     ```
     This file was directly cropped from the 4zxb structure that can be found in the [RSCB PDB library](https://www.rcsb.org/). *If you visualize the cropped structure against the full one from the RSCB library, they may not appear to be exactly the same structure. However, if you align the two you will get an RMSD of 0.0.*
     <!-- ```{figure} .assets/ppi_tutorial/cropped_vs_full.png
@@ -93,7 +93,7 @@ In this tutorial, we will be briefly describing each of the settings we will be 
     ```
 1. Save your file and close it. If you run the file now, your files should be similar to what is stored in `basic.zip`.
 
-(other-useful-settings)=
+(ppi-other-useful-settings)=
 ### Other Useful Settings
 This section provides other settings that are useful for protein-protein binder design tasks, but you may or may not need depending on your specific project. 
 
@@ -108,7 +108,7 @@ This section provides other settings that are useful for protein-protein binder 
 
     Including this setting will give you structures similar to what is in `fixed.zip`.
 
-(running-rfd3)=
+(ppi-running-rfd3)=
 ## Running RFD3
 To actually run RFD3 you need to know:
 - the directory you want the outputs to be stored in
@@ -119,13 +119,13 @@ Once you have these three things you can run something like this from the comman
 ```bash
 rfd3 design out_dir=ppi_tutorial_outputs/0 inputs=ppi_tutorial.yaml ckpt_path=/path/to/your/checkpoint/files/rfd3_latest.ckpt inference_sampler.step_scale=3 inference_sampler.gamma_0=0.2
 ```
-Your output files will be placed in a new directory `ppi_tutorial_outputs/0`. If you run the tutorial again, change the `0` to another number to not overwrite your outputs. Your output files will be named `ppi_tutorial_insulinr_0_model_n.cif.gz` where `n` is the number of the design. `ppi_tutorial` comes from the name of the YAML file and `insulinr` comes from the name you gave your calculation in the YAML file.
+Your output files will be placed in a new directory `ppi_tutorial_outputs/0`. Your output files will be named `ppi_tutorial_insulinr_0_model_n.cif.gz` where `n` is the number of the design. `ppi_tutorial` comes from the name of the YAML file and `insulinr` comes from the name you gave your calculation in the YAML file.
 
 ```{note}
 You may see several warning messages when you run RFD3, these should not interfere with the calculation. 
 ```
 
-(analyzing-the-outputs)=
+(ppi-analyzing-the-outputs)=
 ## Analyzing the Outputs
 You should end up with 8 designs, numbered 0-7, each with its own `.cif.gz` and `.json` file. If you want to adjust the number, add the configuration option `diffusion_batch_size` to your `rfd3 design` command.
 
@@ -142,7 +142,7 @@ You'll notice that the binders are always on the side of the input structure clo
 The lengths of the designed binders are all also between 40 and 120 amino acids long. However, you'll also notice that they are all the same length!
 This is because RFD3 runs batched inference calculations. All of the calculations in a single 'batch' will have the same randomly sampled length, while designs from other batches will have different lengths. If you want to change the number of batches, you will want to add the setting `n_batches` to your `run rfd3` command.
 
-(references-and-further-reading)=
+(ppi-references-and-further-reading)=
 ## References and Further Reading
 - For more information on the different inference settings in RFD3, see [input.md](input.md)
 - For more information on the example used here, see [*De novo design of protein structure and function with RFdiffusion*](https://www.nature.com/articles/s41586-023-06415-8#Sec12) by Joseph L. Watson, et al.
