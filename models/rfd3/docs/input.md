@@ -120,7 +120,7 @@ Below is a table of all of the inputs that the `InputSpecification` accepts. Use
 | -------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------- |
 | `input`                                                        | `str`             | Path to and file name of **PDB/CIF**. Required if you provide contig+length.    |
 | `atom_array_input`                                             | internal          | Pre-loaded [`AtomArray`](https://www.biotite-python.org/latest/apidoc/biotite.structure.AtomArray.html) (not recommended). |
-| `contig`                                                       | `InputSelection`  | (Can only pass a contig string.) Indexed motif specification, e.g., `"A1-80,10,\0,B5-12"`.             |
+| `contig`                                                       | `InputSelection`  | (Can only pass a contig string.) Indexed motif specification, e.g., `"A1-80,10,/0,B5-12"`.             |
 | `unindex`                                                      | `InputSelection`  | (Can only pass a contig string or dictionary.) Unindexed motif components, the specified residues can be anywhere in the final sequence. See [Unindexing Specifics](#unindexing-specifics) for more information. |
 | `length`                                                       | `str`             | Total design length constraint; `"min-max"` or int for specified length.                   |
 | `ligand`                                                       | `str`             | Ligand(s) by chemical component name (from [RSCB PDB](https://www.rcsb.org/)) or index. |
@@ -186,7 +186,7 @@ Graphical representation of the different ways to specify portions of a structur
 A 'contig string' is a string that contains residue information and is used in many of the settings in the table above. Here are some formatting specifics: 
 - Different pieces of information included in the string are separated by commas
 - Ranges of residues are specified by a dash (`-`) between the starting and ending residue
-- Chain breaks are represented by `\0`
+- Chain breaks are represented by `/0`
 - Residue numbers or ranges with a chain label before the number come from the input structure
 - Residue numbers or ranges without a chain label before the number will be designed. If given a range, the designed region will have a length that is uniformly random within the specified range. 
 
@@ -194,13 +194,13 @@ For example:
 ```yaml
 my_calculation: 
     input: path/to/my/input.pdb
-    contig: A40-60,70,A120-170,A203,\0,B3-45,60-80
+    contig: A40-60,70,A120-170,A203,/0,B3-45,60-80
 ```
 - `A40-60`: the design will start with residues 40-60 from the A chain of the input structure. 
 - `70`: RFD3 will design a chain with exactly 70 residues that will connect to A60
 - `A120-170`: RFD3 will include a bond between the last designed residue and residue A120, and then include residues A120-A170 from the input structure.
 - `A203`: A bond will be created between A170 and A203 and A203 will be in the final structure. However, residues A171-A202 will not be in the final structure. 
-- `\0`: Chain break. There is no peptide bond between A203 and B3 in the output structure
+- `/0`: Chain break. There is no peptide bond between A203 and B3 in the output structure
 - `B3-B45`: Residues B3 thru B45 are taken from the input structure. 
 - `60-80`: A design region is added B45 that will be between 60 and 80 residues long.
 
