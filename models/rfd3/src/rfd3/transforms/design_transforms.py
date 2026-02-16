@@ -45,7 +45,7 @@ from rfd3.transforms.util_transforms import (
     get_af3_token_representative_masks,
 )
 from rfd3.transforms.virtual_atoms import PadTokensWithVirtualAtoms
-from rfd3.transforms.na_geom import get_bp_feats_from_atom_array
+from rfd3.transforms.na_geom import na_ss_feats_from_annotation
 
 from foundry.utils.ddp import RankedLogger  # noqa
 
@@ -811,7 +811,7 @@ class AddAdditional2dFeaturesToFeats(Transform):
         # Need to pre-define custom constructor functions 
         # to map from atomarray annotations to tensors.
         self.constructor_functions = {
-            'bp_partners': get_bp_feats_from_atom_array,
+            'bp_partners': na_ss_feats_from_annotation,
         }
 
     def check_input(self, data) -> None:
