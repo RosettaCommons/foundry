@@ -50,9 +50,9 @@ class TokenInitializer(nn.Module):
         pairformer_block,
         downcast,
         token_1d_features,
-        token_2d_features,
         atom_1d_features,
         atom_transformer,
+        token_2d_features=None,
         use_chunked_pll=False,  # New parameter for memory optimization
     ):
         super().__init__()
@@ -64,7 +64,10 @@ class TokenInitializer(nn.Module):
         self.atom_1d_embedder_1 = OneDFeatureEmbedder(atom_1d_features, c_s)
         self.atom_1d_embedder_2 = OneDFeatureEmbedder(atom_1d_features, c_atom)
         self.token_1d_embedder = OneDFeatureEmbedder(token_1d_features, c_s)
-        self.token_2d_embedder = TwoDFeatureEmbedder(token_2d_features, c_z)
+        if token_2d_features != None:
+            self.token_2d_embedder = TwoDFeatureEmbedder(token_2d_features, c_z)
+        else:
+            self.token_2d_embedder = None
 
         self.downcast_atom = Downcast(c_atom=c_s, c_token=c_s, c_s=None, **downcast)
         self.transition_post_token = Transition(c=c_s, n=2)
@@ -206,7 +209,8 @@ class TokenInitializer(nn.Module):
                 f["ref_pos"][f["is_ca"]], valid_mask
             )
             # Add extra token pair features
-            Z_init_II = Z_init_II + self.token_2d_embedder(f, I)
+            if self.token_2d_embedder != None:
+                Z_init_II = Z_init_II + self.token_2d_embedder(f, I)
 
             # Run a small transformer to provide position encodings to single.
             for block in self.transformer_stack:

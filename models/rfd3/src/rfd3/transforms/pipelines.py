@@ -353,7 +353,7 @@ def build_atom14_base_pipeline_(
     center_option: str,
     atom_1d_features: dict | None,
     token_1d_features: dict | None,
-    token_2d_features: dict | None,
+    token_2d_features: dict | None = None,
     # PPI features
     max_ppi_hotspots_frac_to_provide: float,
     ppi_hotspot_max_distance: float,
@@ -373,7 +373,7 @@ def build_atom14_base_pipeline_(
     """
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     warnings.filterwarnings("ignore", category=DeprecationWarning)
-
+    
     # Add any data necessary for downstream transforms
     transforms = [
         AddData(
@@ -653,7 +653,7 @@ def build_atom14_base_pipeline(
         kwargs.setdefault("residue_cache_dir", None)
 
         # TODO: Delete these once all checkpoints are updated with the latest defaults
-        kwargs.setdefault("generate_conformers_for_non_protein_only", True)
+        kwargs.setdefault("generate_conformers_for_non_protein_only", False)
         kwargs.setdefault("return_atom_array", True)
         kwargs.setdefault("provide_elements_for_unindexed_components", False)
         kwargs.setdefault("center_option", "all")

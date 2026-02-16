@@ -803,7 +803,7 @@ class AddAdditional2dFeaturesToFeats(Transform):
         token_2d_features,
         autofill_zeros_if_not_present_in_atomarray=False,
         association_scheme="atom14",
-    ):
+    ):  
         self.autofill = autofill_zeros_if_not_present_in_atomarray
         self.token_2d_features = token_2d_features
         self.association_scheme = association_scheme
@@ -866,6 +866,8 @@ class AddAdditional2dFeaturesToFeats(Transform):
         if "feats" not in data.keys():
             data["feats"] = {}
         # Only apply for features that the model is expecting:
+        if self.token_2d_features == None:
+            return data
         for feature_name, n_dims in self.token_2d_features.items():
             data = self.generate_token_feature(feature_name, n_dims, data)
 
