@@ -2,14 +2,13 @@
 # Training configuration for RFD3
 
 defaults:
-  # - /debug/default
-  - /debug/default
+  #- /debug/default
   - override /model: rfd3_base
-  - override /logger: null
+  - override /logger: wandb
   - override /datasets: design_base_rfd3na
   - _self_
 
-name: rfd3na-SScond
+name: rfd3na
 tags: [print-model]
 ckpt_path: null
 
@@ -59,6 +58,8 @@ datasets:
       p_is_nucleic_ss_example: 1.0
       p_nucleic_ss_show_partial_feats: 0.7
       p_canonical_bp_filter: 0.2
+      calculate_NA_SS: 0.3
+
     association_scheme: atom23
     #add_na_pair_features: true
     train_conditions:
@@ -94,4 +95,4 @@ trainer:
   #limit_train_batches: 10
   #limit_val_batches: 1
   validate_every_n_epochs: 5
-  prevalidate: true
+  prevalidate: false

@@ -1,5 +1,6 @@
 defaults:
   - train_logging
+  - metrics_logging
   - _self_
 
 log_learning_rate_callback:
