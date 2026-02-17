@@ -95,4 +95,4 @@ trainer:
   #limit_train_batches: 10
   #limit_val_batches: 1
   validate_every_n_epochs: 5
-  prevalidate: false
+  prevalidate: true
