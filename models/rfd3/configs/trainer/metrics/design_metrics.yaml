@@ -29,3 +29,7 @@ nucleic_ss_similarity:
   annotation_NA_only: False
   annotation_planar_only: True
 
+rna_aptamer_contacts:
+  _target_: rfd3.metrics.rna_aptamer_metrics.LigandContactMetrics
+  restrict_to_nucleic: True
+
