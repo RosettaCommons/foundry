@@ -1,22 +1,15 @@
 # Nuclei Acid Binder Design in RFdiffusion3
 
 ## Before We Get Started...
-This tutorial does not cover installing RFD3. Before continuing, you should make sure that RFdiffusion3 (RFD3) is installed and runnable on your system. 
-
-See the [README](https://github.com/RosettaCommons/foundry/tree/production/models/rfd3) for installation instructions. You will need to remember the path to the directory where you stored your checkpoint files. 
+This tutorial does not cover installing RFD3. Before continuing, you should make sure that RFdiffusion3 (RFD3) is installed and runnable on your system. See the [README](https://github.com/RosettaCommons/foundry/tree/production/models/rfd3) for installation instructions. 
 
 ```{note}
-The instructions below assume that you have installed RFD3 via the pip commands.
-You may need to slightly modify how you run the calculations based on your setup.
+You will need to clone the repository to access the tutorial files. Using the `pip` commands to install the model does not automatically download the files required to complete this tutorial.
 ```
-
-Make sure you have activated any environment(s) you used to install RFD3.
 
 RFD3 runs best on GPUs. It is suggested to follow this tutorial on an interactive GPU node if you have access to one.
 
 You will need the file `2r5z.pdb`. <!-- TODO --> This is provided in [`foundry/models/rfd3/docs/input_pdbs`](./input_pdbs/2r5z.pdb). You can clone the [`foundry`](https://github.com/RosettaCommons/foundry) repository to easily access files related to this tutorial. 
-
-Lastly, we will be visualizing the outputs of the calculations presented in the tutorial using [PyMOL](https://pymol.org/). The visualization steps are completely optional, but if you would like to follow along you will need to have PyMOL installed.
 
 (na-learning-objectives)=
 ## Learning Objectives
