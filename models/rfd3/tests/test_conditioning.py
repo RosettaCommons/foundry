@@ -47,7 +47,7 @@ plddt_cfg.datasets.global_transform_args.meta_conditioning_probabilities.featuri
 plddt_cfg.datasets.train.pdb.sub_datasets.interface.dataset.transform.meta_conditioning_probabilities.featurize_plddt = 1.0
 plddt_pipes = build_pipelines(
     composed_config=plddt_cfg,
-    train_dataset_nested_keys=["monomer_distillation"],
+    train_dataset_nested_keys=["pdb", "sub_datasets", "interface"],
     b_factor_min=70,
 )
 
