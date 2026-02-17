@@ -93,6 +93,7 @@ def calculate_hbonds(
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            cwd=tmpdir,
         )
 
         hb2_path = pdb_path.replace(".pdb", ".hb2")
