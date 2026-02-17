@@ -16,6 +16,14 @@ logging.basicConfig(level=logging.INFO)
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 
 
+def _get_bp_partners_annotation(atom_array: AtomArray):
+    """Return bp-partners annotation."""
+    categories = atom_array.get_annotation_categories()
+    if "bp_partners" in categories:
+        return atom_array.bp_partners
+    raise ValueError("atom_array missing bp_partners annotation")
+
+
 def _safe_f1_from_sizes(intersection_n: int, pred_n: int, gt_n: int) -> float:
     """Return F1 with sensible empty-set handling."""
     if pred_n == 0 and gt_n == 0:
@@ -76,19 +84,16 @@ def _extract_bp_pairs(
     *,
     allowed_token_ids: set[int],
 ) -> set[tuple[int, int]]:
-    """Extract unordered base-pair edges from bp_partner annotations.
+    """Extract unordered base-pair edges from bp-partner annotations.
 
     Pairs are represented as (min_token_id, max_token_id).
     """
-    if "bp_partner" not in atom_array.get_annotation_categories():
-        raise ValueError("atom_array missing bp_partner annotation")
-
     token_starts = get_token_starts(atom_array)
     token_level_array = atom_array[token_starts]
     token_ids = np.asarray(token_level_array.token_id, dtype=int)
     token_id_to_pos = {int(tid): i for i, tid in enumerate(token_ids.tolist())}
 
-    bp_partner_ann = atom_array.bp_partner
+    bp_partner_ann = _get_bp_partners_annotation(atom_array)
     pairs: set[tuple[int, int]] = set()
 
     for pos, start_idx in enumerate(token_starts.tolist()):
@@ -126,15 +131,12 @@ def _extract_loop_and_paired_token_ids(
     allowed_token_ids: set[int],
 ) -> tuple[set[int], set[int]]:
     """Return (loop_token_ids, paired_token_ids) within the allowed token set."""
-    if "bp_partner" not in atom_array.get_annotation_categories():
-        raise ValueError("atom_array missing bp_partner annotation")
-
     token_starts = get_token_starts(atom_array)
     token_level_array = atom_array[token_starts]
     token_ids = np.asarray(token_level_array.token_id, dtype=int)
     token_id_to_pos = {int(tid): i for i, tid in enumerate(token_ids.tolist())}
 
-    bp_partner_ann = atom_array.bp_partner
+    bp_partner_ann = _get_bp_partners_annotation(atom_array)
 
     loop_token_ids: set[int] = set()
     paired_token_ids: set[int] = set()
@@ -176,9 +178,9 @@ class NucleicSSSimilarityMetrics(Metric):
     """Secondary-structure similarity for nucleic acids.
 
         Reports:
-        - `pair_f1`: F1 over the set of basepair edges implied by token-level `bp_partner`.
-        - `loop_f1`: F1 over explicitly-unpaired loop tokens (`bp_partner == []`).
-            Unannotated tokens (`bp_partner is None`) are masked.
+        - `pair_f1`: F1 over basepair edges from token-level bp-partner annotation.
+        - `loop_f1`: F1 over explicitly-unpaired loop tokens (`bp_partners == []`).
+            Unannotated tokens (`bp_partners is None`) are masked.
         - `weighted_f1`: GT-weighted average of `pair_f1` and `loop_f1`, weighted by
             the prevalence of paired vs loop tokens in the GT.
         """
@@ -217,91 +219,84 @@ class NucleicSSSimilarityMetrics(Metric):
         n_valid = 0
 
         for gt_arr, pred_arr in zip(ground_truth_atom_array_stack, predicted_atom_array_stack):
-            try:
-                if "bp_partner" not in gt_arr.get_annotation_categories():
-                    continue
-
-                # Important: predicted AtomArrays are built from a template AtomArray.
-                # If that template already carries bp_partner (often GT-derived), the
-                # prediction can inherit it, yielding artificially perfect scores.
-                # Optionally recompute bp_partner from the *predicted coordinates*.
-
-                if self.annotate_predicted_fresh:
-                    annotate_na_ss(
-                        pred_arr,
-                        NA_only=self.annotation_NA_only,
-                        planar_only=self.annotation_planar_only,
-                        overwrite=True,
-                        p_canonical_bp_filter=0.0,
-                    )
-
-                if "bp_partner" not in pred_arr.get_annotation_categories():
-                    continue
-
-                # Basic sanity check: token counts should match for aligned comparisons.
-                gt_token_ids = _get_token_ids(gt_arr)
-                pred_token_ids = _get_token_ids(pred_arr)
-                if len(gt_token_ids) != len(pred_token_ids):
-                    continue
-
-                # Restrict to token_ids that are valid in both arrays.
-                gt_allowed = _get_candidate_token_ids(
-                    gt_arr,
-                    restrict_to_nucleic=self.restrict_to_nucleic,
-                    compute_for_diffused_region_only=self.compute_for_diffused_region_only,
-                )
-                pred_allowed = _get_candidate_token_ids(
-                    pred_arr,
-                    restrict_to_nucleic=self.restrict_to_nucleic,
-                    compute_for_diffused_region_only=self.compute_for_diffused_region_only,
-                )
-                allowed = gt_allowed & pred_allowed
-
-                if len(allowed) == 0:
-                    continue
-
-                gt_pairs = _extract_bp_pairs(gt_arr, allowed_token_ids=allowed)
-                pred_pairs = _extract_bp_pairs(pred_arr, allowed_token_ids=allowed)
-
-                gt_loop, gt_paired_tokens = _extract_loop_and_paired_token_ids(
-                    gt_arr, allowed_token_ids=allowed
-                )
-                pred_loop, _pred_paired_tokens = _extract_loop_and_paired_token_ids(
-                    pred_arr, allowed_token_ids=allowed
-                )
-
-                pair_tp = len(gt_pairs & pred_pairs)
-                pair_pred_n = len(pred_pairs)
-                pair_gt_n = len(gt_pairs)
-
-                loop_tp = len(gt_loop & pred_loop)
-                loop_pred_n = len(pred_loop)
-                loop_gt_n = len(gt_loop)
-
-                pair_f1 = _safe_f1_from_sizes(pair_tp, pair_pred_n, pair_gt_n)
-                loop_f1 = _safe_f1_from_sizes(loop_tp, loop_pred_n, loop_gt_n)
-
-                pair_weight = len(gt_paired_tokens)
-                loop_weight = len(gt_loop)
-                total_weight = pair_weight + loop_weight
-                if total_weight == 0:
-                    weighted_f1 = 1.0
-                else:
-                    weighted_f1 = float(
-                        (pair_weight * pair_f1 + loop_weight * loop_f1) / total_weight
-                    )
-
-                pair_f1_list.append(pair_f1)
-                loop_f1_list.append(loop_f1)
-                weighted_f1_list.append(weighted_f1)
-                n_valid += 1
-
-            except bdb.BdbQuit:
-                # Allow interactive debuggers (pdb) to cleanly abort without being swallowed.
-                raise
-            except Exception as e:
-                global_logger.error(f"Error computing nucleic-SS similarity: {e} | Skipping")
+            gt_categories = gt_arr.get_annotation_categories()
+            if "bp_partners" not in gt_categories:
                 continue
+
+            # Important: predicted AtomArrays are built from a template AtomArray.
+            # If that template already carries bp_partners (often GT-derived), the
+            # prediction can inherit it, yielding artificially perfect scores.
+            # Optionally recompute bp_partners from the *predicted coordinates*.
+            if self.annotate_predicted_fresh:
+                annotate_na_ss(
+                    pred_arr,
+                    NA_only=self.annotation_NA_only,
+                    planar_only=self.annotation_planar_only,
+                    overwrite=True,
+                    p_canonical_bp_filter=0.0,
+                )
+
+            pred_categories = pred_arr.get_annotation_categories()
+            if "bp_partners" not in pred_categories:
+                continue
+
+            # Basic sanity check: token counts should match for aligned comparisons.
+            gt_token_ids = _get_token_ids(gt_arr)
+            pred_token_ids = _get_token_ids(pred_arr)
+            if len(gt_token_ids) != len(pred_token_ids):
+                continue
+
+            # Restrict to token_ids that are valid in both arrays.
+            gt_allowed = _get_candidate_token_ids(
+                gt_arr,
+                restrict_to_nucleic=self.restrict_to_nucleic,
+                compute_for_diffused_region_only=self.compute_for_diffused_region_only,
+            )
+            pred_allowed = _get_candidate_token_ids(
+                pred_arr,
+                restrict_to_nucleic=self.restrict_to_nucleic,
+                compute_for_diffused_region_only=self.compute_for_diffused_region_only,
+            )
+            allowed = gt_allowed & pred_allowed
+
+            if len(allowed) == 0:
+                continue
+
+            gt_pairs = _extract_bp_pairs(gt_arr, allowed_token_ids=allowed)
+            pred_pairs = _extract_bp_pairs(pred_arr, allowed_token_ids=allowed)
+
+            gt_loop, gt_paired_tokens = _extract_loop_and_paired_token_ids(
+                gt_arr, allowed_token_ids=allowed
+            )
+            pred_loop, _pred_paired_tokens = _extract_loop_and_paired_token_ids(
+                pred_arr, allowed_token_ids=allowed
+            )
+
+            pair_tp = len(gt_pairs & pred_pairs)
+            pair_pred_n = len(pred_pairs)
+            pair_gt_n = len(gt_pairs)
+
+            loop_tp = len(gt_loop & pred_loop)
+            loop_pred_n = len(pred_loop)
+            loop_gt_n = len(gt_loop)
+
+            pair_f1 = _safe_f1_from_sizes(pair_tp, pair_pred_n, pair_gt_n)
+            loop_f1 = _safe_f1_from_sizes(loop_tp, loop_pred_n, loop_gt_n)
+
+            pair_weight = len(gt_paired_tokens)
+            loop_weight = len(gt_loop)
+            total_weight = pair_weight + loop_weight
+            if total_weight == 0:
+                weighted_f1 = 1.0
+            else:
+                weighted_f1 = float(
+                    (pair_weight * pair_f1 + loop_weight * loop_f1) / total_weight
+                )
+
+            pair_f1_list.append(pair_f1)
+            loop_f1_list.append(loop_f1)
+            weighted_f1_list.append(weighted_f1)
+            n_valid += 1
 
         if n_valid == 0:
             return {}

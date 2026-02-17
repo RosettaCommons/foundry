@@ -2,6 +2,7 @@
 # Training configuration for RFD3
 
 defaults:
+  # - /debug/default
   - /debug/default
   - override /model: rfd3_base
   - override /logger: null
@@ -54,6 +55,10 @@ datasets:
   crop_size: 256
   max_atoms_in_crop: 2560  # ~10x crop size.
   global_transform_args:
+    meta_conditioning_probabilities:
+      p_is_nucleic_ss_example: 1.0
+      p_nucleic_ss_show_partial_feats: 0.7
+      p_canonical_bp_filter: 0.2
     association_scheme: atom23
     #add_na_pair_features: true
     train_conditions:
@@ -70,19 +75,23 @@ datasets:
   train:
     # These are the ratios used in the preprint but we set all pdb sampling by default since not everyone might download the distillation data.
     pdb:
-      probability: 0.5
+      # probability: 0.5
+      probability: 0.75
+      # probability: 0.0
     rna_monomer_distillation:
-       probability: 0.5
+      # probability: 0.2
+      probability: 0.25
+      # probability: 1.0
 
   val:
     pseudoknot:
       dataset:
         # eval_every_n: 10
-        eval_every_n: 1
+        eval_every_n: 5
 
 trainer:
-  devices_per_node: 1
-  limit_train_batches: 10
-  limit_val_batches: 1
+  #devices_per_node: 1
+  #limit_train_batches: 10
+  #limit_val_batches: 1
   validate_every_n_epochs: 5
   prevalidate: true

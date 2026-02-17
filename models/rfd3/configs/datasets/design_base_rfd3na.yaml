@@ -81,7 +81,9 @@ global_transform_args:
 
   # Used to create simple boolean flags for downstream conditioning
   meta_conditioning_probabilities:
-    calculate_NA_SS: 1.0
+    # calculate_NA_SS: 1.0
+    p_is_nucleic_ss_example: 0.1
+    p_nucleic_ss_show_partial_feats: 0.7
     calculate_hbonds: 0.2
     calculate_rasa: 0.6
 

@@ -98,3 +98,8 @@ global_transform_args:
     # PPI
     add_ppi_hotspots: 0.75
     full_binder_crop: 0.75
+
+    # Nucleic SS:
+    p_is_nucleic_ss_example: 0.0
+    p_nucleic_ss_show_partial_feats: 0.0
+    

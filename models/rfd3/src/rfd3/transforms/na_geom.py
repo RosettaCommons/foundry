@@ -100,12 +100,12 @@ class CalculateNucleicAcidGeomFeats(Transform):
 
         Training:
             - Computes geometry/H-bond-based base pairs and writes them onto the AtomArray
-                via the ``bp_partner`` annotation (annotation-first), then reconstructs the
+                via the ``bp_partners`` annotation (annotation-first), then reconstructs the
                 matrix (and optionally masks parts of it) before one-hot encoding.
 
         Inference:
             - Interprets user-provided secondary-structure specifications, writes the same
-                ``bp_partner`` annotation, then follows the same matrix + one-hot path.
+                ``bp_partners`` annotation, then follows the same matrix + one-hot path.
 
         Note: helical-parameter features are not implemented/used in this refactored path.
     """
@@ -113,16 +113,14 @@ class CalculateNucleicAcidGeomFeats(Transform):
     def __init__(
         self,
         is_inference,
-        add_nucleic_ss_feats: bool = True,
-        # Conditional sampling parameters:
-        p_is_nucleic_ss_example: float = 0.3,
-        p_show_partial_feats: float = 0.7,
+        # Conditional sampling parameters all stored in this dict:
+        meta_conditioning_probabilities: dict[str, float] = None,
+        
         # Mask control paramerers:
         nucleic_ss_min_shown: float = 0.2,
         nucleic_ss_max_shown: float = 1.0,
         n_islands_min: int = 1,
         n_islands_max: int = 6,
-        p_canonical_bp_filter: float = 0.0,
 
         # USE_RF2AA_NAMES: bool = False,
         NA_only: bool = False,
@@ -131,21 +129,27 @@ class CalculateNucleicAcidGeomFeats(Transform):
     ):
         # Critical, must always have to know how to handle
         self.is_inference = is_inference 
+        
+        self.meta_conditioning_probabilities = meta_conditioning_probabilities or {}
+        
+        # Control whether we show some nucleic SS or default to full 2D mask
+        self.p_is_nucleic_ss_example = self.meta_conditioning_probabilities.get("p_is_nucleic_ss_example", 0.0)
 
-        self.add_nucleic_ss_feats    = add_nucleic_ss_feats
-        self.p_canonical_bp_filter   = p_canonical_bp_filter # enforce that bp labels are only canonical
-        self.p_is_nucleic_ss_example = p_is_nucleic_ss_example
-        self.p_show_partial_feats = p_show_partial_feats
+        # Control whether we define full SS or just part of it (only applies if is NA SS example)
+        self.p_show_partial_feats    = self.meta_conditioning_probabilities.get("p_nucleic_ss_show_partial_feats", 0.0)
+
+        # Some frac of time default to only showing canonical base pairs
+        self.p_canonical_bp_filter   = self.meta_conditioning_probabilities.get("p_canonical_bp_filter", 0.5)
+        
+        # mask patterning control to make things resemble design scenarios
         self.nucleic_ss_min_shown    = nucleic_ss_min_shown
         self.nucleic_ss_max_shown    = nucleic_ss_max_shown
         self.n_islands_min           = n_islands_min
         self.n_islands_max           = n_islands_max
 
-
         # Filters for what can be considered a planar contact interaction
         self.NA_only = NA_only # only annotate base-like interactions for nucleic acid residues
         self.planar_only = planar_only # only consider planar atoms in sidechains for geometry calculations,
-        self.p_canonical_bp_filter = p_canonical_bp_filter # probability of enforcing canonical base pair filter
 
 
 
@@ -168,13 +172,8 @@ class CalculateNucleicAcidGeomFeats(Transform):
 
         # Calculate n_tokens (assuming one token per residue for simplicity)
         token_starts = get_token_starts(atom_array)
-        token_level_array = atom_array[token_starts]
         n_tokens = len(token_starts)
-
-        # Defaults for feature visibility
-        is_nucleic_ss_example = True
-        give_partial_feats = False
-        token_mask_to_show = np.ones(n_tokens, dtype=bool)
+        # token_level_array = atom_array[token_starts]
 
         # Handle the training case with ground truth and masking
         if not self.is_inference:

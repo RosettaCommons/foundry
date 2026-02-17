@@ -1050,6 +1050,40 @@ def compute_nucleic_ss(
     hbond_count   = np.asarray(hbond_count)[mask_1d, :][:, mask_1d]                                      # [I, I, 3]
     seq_neighbors = np.asarray(token_level_data["seq_neighbors"], dtype=bool)[mask_1d, :][:, mask_1d]     # [I, I]
 
+    # Nothing passed NA/planar filtering for this structure.
+    # Return empty outputs instead of failing downstream on np.stack([]).
+    if len(xyz_planar) == 0:
+        if return_basepairs_only:
+            return np.zeros((0, 0), dtype=bool)
+
+        pair_params: dict[str, np.ndarray] = {
+            "H_ij": np.zeros((0, 0), dtype=np.float32),
+            "B_ij": np.zeros((0, 0), dtype=np.float32),
+            "P_ij": np.zeros((0, 0), dtype=np.float32),
+            "base_ori_ij": np.zeros((0, 0), dtype=np.float32),
+            "basepairs_bool_ij": np.zeros((0, 0), dtype=bool),
+            "basepairs_ij": np.zeros((0, 0), dtype=np.float32),
+            "hbond_summation": np.zeros((0, 0), dtype=np.float32),
+        }
+
+        if return_opening_angle:
+            pair_params["O_ij"] = np.zeros((0, 0), dtype=np.float32)
+
+        if return_pairwise_geometry:
+            pair_params["X_ij"] = np.zeros((0, 0), dtype=np.float32)
+            pair_params["Y_ij"] = np.zeros((0, 0), dtype=np.float32)
+            pair_params["Z_ij"] = np.zeros((0, 0), dtype=np.float32)
+
+        nucleic_ss_data: dict = {"pair_params": pair_params}
+        if return_local_params:
+            nucleic_ss_data["local_params"] = {
+                "X_i": np.zeros((0, 3), dtype=np.float32),
+                "Y_i": np.zeros((0, 3), dtype=np.float32),
+                "Z_i": np.zeros((0, 3), dtype=np.float32),
+            }
+
+        return nucleic_ss_data
+
     # --- Precompute centroids and displacement vectors -----------
     planar_centers = np.stack(  # [I, 3]
         [np.nanmean(np.asarray(xyz_i, dtype=np.float32), axis=0) for xyz_i in xyz_planar],
@@ -1441,19 +1475,6 @@ def annotate_na_ss_from_specification(
     token_ids: list[int] = [int(t) for t in list(token_level_array.token_id)]
     n_tokens = len(token_starts)
 
-    # Explicit loops are only meaningful for nucleic-acid tokens.
-    # Instantiate encoding locally to avoid retaining large arrays at module scope.
-    sequence_encoding = AF3SequenceEncoding()
-    is_rna_like = np.isin(
-        token_level_array.res_name,
-        sequence_encoding.all_res_names[sequence_encoding.is_rna_like],
-    )
-    is_dna_like = np.isin(
-        token_level_array.res_name,
-        sequence_encoding.all_res_names[sequence_encoding.is_dna_like],
-    )
-    is_na_token = np.asarray(is_rna_like | is_dna_like, dtype=bool)
-
     # Prepare/overwrite annotation array
     if (not overwrite) and ("bp_partners" in atom_array.get_annotation_categories()):
         bp_partners_ann = atom_array.bp_partners
@@ -1527,8 +1548,6 @@ def annotate_na_ss_from_specification(
         if not (0 <= i < n_tokens and 0 <= j < n_tokens):
             return
         if i == j:
-            return
-        if (not bool(is_na_token[int(i)])) or (not bool(is_na_token[int(j)])):
             return
         if i in loop_token_idxs or j in loop_token_idxs:
             return
@@ -1619,9 +1638,6 @@ def annotate_na_ss_from_specification(
     for i in list(loop_token_idxs):
         if not (0 <= i < n_tokens):
             continue
-        if not bool(is_na_token[int(i)]):
-            loop_token_idxs.discard(int(i))
-            continue
         for j in list(partners[i]):
             partners[j].discard(i)
         partners[i].clear()
@@ -1630,8 +1646,6 @@ def annotate_na_ss_from_specification(
     # Unspecified tokens remain unannotated (None) -> NA_SS_MASK.
     for i in range(n_tokens):
         atom_i = int(token_starts[i])
-        if not bool(is_na_token[int(i)]):
-            continue
         if len(partners[i]) > 0:
             bp_partners_ann[atom_i] = []
             for j in sorted(partners[i]):
