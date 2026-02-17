@@ -40,7 +40,7 @@ The input files for the different examples are provided in `foundry/models/rfd3/
     "insulinr": {
         "dialect": 2,
         "infer_ori_strategy": "hotspots",
-        "input": "input_pdbs/4zxb_cropped.pdb",
+        "input": "../input_pdbs/4zxb_cropped.pdb",
         "contig": "40-120,/0,E6-155",
         "select_hotspots": {
             "E64": "CD2,CZ",
@@ -52,7 +52,7 @@ The input files for the different examples are provided in `foundry/models/rfd3/
     "pdl1": {
         "dialect": 2,
         "infer_ori_strategy": "hotspots",
-        "input": "input_pdbs/5o45_cropped.pdb",
+        "input": "../input_pdbs/5o45_cropped.pdb",
         "contig": "50-120,/0,A17-131",
         "select_hotspots": {
             "A56": "CG,OH",
