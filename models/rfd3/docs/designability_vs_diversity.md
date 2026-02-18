@@ -1,18 +1,18 @@
 # Designability vs. Diversity
 
-When using RFdiffusion3 there is a balance between designability and diversity of generated structures. Increasing the diversity of the designs RFdiffusion3 produces will lead to a greater number of novel folds, however, there will also be a larger portion of structures that have low confidence scores when refolded. 
+When using RFdiffusion3 there is a balance between designability and diversity of generated structures. Increasing the diversity of the designs will lead to a greater number of novel folds, however, there will also be a larger portion of structures that have low confidence scores when refolded. 
 
 Whether you are struggling to produce designable structures or you are looking to increase the diversity of the folds you see, here are a few settings to try changing: 
 - **Low temperature sampling:**
     
-    One can increase `inference_sampler.step_scale` and decrease `inference_sampler.gamma_0` to decrease the sampling space that RFdiffusion3 has access to, similar to what lowering the temperature does in physics-based design methods. These settings directly change how the RFdiffusion3 inference engine works, so these options are CLI options, not options you specify in your input JSON or YAML file.
+    One can increase `inference_sampler.step_scale` and decrease `inference_sampler.gamma_0` to decrease the sampling space that RFdiffusion3 has access to, similar to what lowering the temperature does in physics-based design methods. These settings directly change how the RFdiffusion3 inference engine works, so these options are specified in the CLI, and are not options you specify in your input JSON or YAML file.
     
     Here are what these settings do:
     - `inference_sampler.step_scale`: Changing this value (default 1.5) changes the diffusion step size, or how much you go towards the most probable result. Increasing this setting will increase the designability of the output structures, as these are more probable, but will also decrease the diversity of the produced structures. 
     - `inference_sampler.gamma_0`: Changing this value (default 0.6) will change how much randomness there is at the beginning of an inference run. Decreasing this setting will increase the designability of the output structures as the reduced randomness will lead RFdiffusion3 to higher-probability structures. Increase this quantity to increase the diversity of designed structures.
 - **`is_non_loopy` setting:**
 
-    The `is_non_loopy` setting is a constraint on the designs RFdiffusion3 produces, which makes it a setting provided in a JSON/YAML file for a design task. If `True` it biases the model away from forming structures with many regions without a defined secondary structure. This will slightly decrease the diversity of structures that RFdiffusion3 produces while increasing the designability. 
+    The `is_non_loopy` setting is a constraint on the designs RFdiffusion3 produces, which makes it a setting provided in a JSON/YAML file. If `True` it biases the model away from forming structures with many regions without a defined secondary structure. This will slightly decrease the diversity of structures that RFdiffusion3 produces while increasing the designability. 
 
 Here are a few plots showing the impacts of these settings in protein-protein interface design tasks: 
 ```{note}
