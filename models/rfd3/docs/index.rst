@@ -13,6 +13,7 @@ General
 
    intro_inference_calculations.md
    input.md
+   designability_vs_diversity.md
 
 Tutorials
 ---------

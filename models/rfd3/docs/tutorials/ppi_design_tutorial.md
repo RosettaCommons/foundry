@@ -128,13 +128,6 @@ Your output files will be placed in a new directory `ppi_tutorial_outputs/0`. Yo
 You may see several warning messages when you run RFD3, these should not interfere with the calculation. 
 ```
 
-### Improving Designability
-When working on your protein design projects you may find it useful to adjust these two parameters to improve the 'designability' of your outputs: 
-- inference_sampler.gamma_0 - scales the diffusion step size, a **higher** value decreases designability and increases the diversity of output structures
-- inference_sampler.step_scale - influences the diversity of the designs, a **lower** value decreases designability and increases the diversity of output structures
-
-These options are not used for the purposes of this tutorial, however, if you are having trouble having your designs (from your own projects) refold using tools like [RosettaFold3](https://www.biorxiv.org/content/10.1101/2025.08.14.670328v2), try adjusting these values.
-
 (ppi-analyzing-the-outputs)=
 ## Analyzing the Outputs
 You should end up with 8 designs, numbered 0-7, each with its own `.cif.gz` and `.json` file. If you want to adjust the number, add the configuration option `diffusion_batch_size` to your `rfd3 design` command.
@@ -154,6 +147,8 @@ This is because RFD3 runs batched inference calculations. All of the calculation
 
 ## What's Next? 
 For your actual projects, you would want to filter the designed structures based on metrics relevant to your design task. Then, even though RFD3 outputs come with a sequence, it is recommended to still use sequence design tools ([MPNN](https://rosettacommons.github.io/foundry/models/mpnn/index.html)) to redesign the sequence. Finally you will want to see if the sequence refolds into a similar structure as was predicted by RFD3 using tools like [RosettaFold3](https://www.biorxiv.org/content/10.1101/2025.08.14.670328v2).
+
+If you are working on a PPI design project, {doc}`../designability_vs_diversity` shows how different settings impact the designability of RFD3-produced structures in a PPI benchmark. 
 
 Feel free to go through the [other tutorials](https://rosettacommons.github.io/foundry/models/rfd3/index.html#tutorials) and other files provided in the documentation. 
 
