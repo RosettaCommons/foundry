@@ -132,9 +132,17 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
         L: int,
         coord_atom_lvl_to_be_noised: torch.Tensor,
         is_motif_atom_with_fixed_coord,
+        is_ligand_atom=None,
     ) -> torch.Tensor:
         noise = c0 * torch.normal(mean=0.0, std=1.0, size=(D, L, 3), device=c0.device)
         noise[..., is_motif_atom_with_fixed_coord, :] = 0  # Zero out noise going in
+        # Zero out noise for unfixed ligand atoms so they start near their
+        # original positions, maintaining connectivity with fixed ligand atoms.
+        # They are NOT reinserted (unlike fixed atoms), so the model can still
+        # adjust their positions through denoising predictions.
+        if is_ligand_atom is not None:
+            unfixed_ligand = is_ligand_atom & ~is_motif_atom_with_fixed_coord
+            noise[..., unfixed_ligand, :] = 0
         X_L = noise + coord_atom_lvl_to_be_noised
         return X_L
 
@@ -151,6 +159,7 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
     ) -> dict[str, Any]:
         # Motif setup to recenter the motif at every step
         is_motif_atom_with_fixed_coord = f["is_motif_atom_with_fixed_coord"]
+        is_ligand_atom = f.get("is_ligand_atom", None)
 
         # Book-keeping
         noise_schedule = self._construct_inference_noise_schedule(
@@ -167,6 +176,7 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
             L=L,
             coord_atom_lvl_to_be_noised=coord_atom_lvl_to_be_noised.clone(),
             is_motif_atom_with_fixed_coord=is_motif_atom_with_fixed_coord,
+            is_ligand_atom=is_ligand_atom,
         )  # (D, L, 3)
 
         if self.s_jitter_origin > 0.0:
@@ -203,6 +213,7 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                     # If keeping the motif position wrt the origin fixed, we can't do translational augmentation
                     # We want to keep this position fixed in the interval where the model is not allowed to change it
                     s_trans=self.s_trans if step_num >= threshold_step else 0.0,
+                    is_ligand_atom=is_ligand_atom,
                 )
 
             # Update gamma & step scale
@@ -221,6 +232,11 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
             epsilon_L[..., is_motif_atom_with_fixed_coord, :] = (
                 0  # No noise injection for fixed atoms
             )
+            # No noise injection for unfixed ligand atoms either - they must
+            # stay near their original positions to maintain molecular connectivity.
+            if is_ligand_atom is not None:
+                unfixed_ligand = is_ligand_atom & ~is_motif_atom_with_fixed_coord
+                epsilon_L[..., unfixed_ligand, :] = 0
             X_noisy_L = X_L + epsilon_L
 
             # Denoise the coordinates
@@ -324,6 +340,7 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                 coord_atom_lvl_to_be_noised,
                 is_motif_atom_with_fixed_coord,
                 reinsert_motif=self.insert_motif_at_end,
+                is_ligand_atom=is_ligand_atom,
             )
 
             # Align prediction to original motif
@@ -386,6 +403,7 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
     ) -> dict[str, Any]:
         # Motif setup to recenter the motif at every step
         is_motif_atom_with_fixed_coord = f["is_motif_atom_with_fixed_coord"]
+        is_ligand_atom = f.get("is_ligand_atom", None)
         # Book-keeping
         noise_schedule = self._construct_inference_noise_schedule(
             device=coord_atom_lvl_to_be_noised.device,
@@ -400,6 +418,7 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
             L=L,
             coord_atom_lvl_to_be_noised=coord_atom_lvl_to_be_noised.clone(),
             is_motif_atom_with_fixed_coord=is_motif_atom_with_fixed_coord,
+            is_ligand_atom=is_ligand_atom,
         )  # (D, L, 3)
 
         X_noisy_L_traj = []
@@ -428,6 +447,7 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
                     X_L,
                     coord_atom_lvl_to_be_noised,
                     is_motif_atom_with_fixed_coord,
+                    is_ligand_atom=is_ligand_atom,
                 )
 
             # Update gamma & step scale
@@ -446,6 +466,11 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
             epsilon_L[..., is_motif_atom_with_fixed_coord, :] = (
                 0  # No noise injection for fixed atoms
             )
+            # No noise injection for unfixed ligand atoms either - they must
+            # stay near their original positions to maintain molecular connectivity.
+            if is_ligand_atom is not None:
+                unfixed_ligand = is_ligand_atom & ~is_motif_atom_with_fixed_coord
+                epsilon_L[..., unfixed_ligand, :] = 0
 
             # NOTE: no symmetry applied to the noisy structure
             X_noisy_L = X_L + epsilon_L
@@ -526,6 +551,7 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
                 coord_atom_lvl_to_be_noised,
                 is_motif_atom_with_fixed_coord,
                 reinsert_motif=self.insert_motif_at_end,
+                is_ligand_atom=is_ligand_atom,
             )
 
             # apply symmetry frame shift to X_L
@@ -600,6 +626,7 @@ def centre_random_augment_around_motif(
     center_option: str = "all",
     centering_affects_motif: bool = True,
     reinsert_motif=True,
+    is_ligand_atom: torch.Tensor | None = None,  # (L,) mask for ligand atoms
 ):
     D, L, _ = X_L.shape
 
@@ -633,8 +660,14 @@ def centre_random_augment_around_motif(
     if centering_affects_motif:
         X_L = X_L - center
     else:
-        X_L[..., ~is_motif_atom_with_fixed_coord, :] = (
-            X_L[..., ~is_motif_atom_with_fixed_coord, :] - center
+        # When centering only affects non-motif atoms, exclude ligand atoms
+        # from centering to prevent unfixed ligand atoms from drifting away
+        # from their fixed counterparts (which would fragment the molecule).
+        atoms_to_center = ~is_motif_atom_with_fixed_coord
+        if is_ligand_atom is not None:
+            atoms_to_center = atoms_to_center & ~is_ligand_atom
+        X_L[..., atoms_to_center, :] = (
+            X_L[..., atoms_to_center, :] - center
         )
 
     # ... Random augmentation

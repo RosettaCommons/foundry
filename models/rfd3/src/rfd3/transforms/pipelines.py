@@ -509,6 +509,8 @@ def build_atom14_base_pipeline_(
                 "is_motif_atom_unindexed",
                 "is_motif_atom_with_fixed_seq",
                 "is_motif_token_with_fully_fixed_coord",
+                # Ligand mask (atom-level) for partial-ligand-fix handling
+                "is_ligand_atom",
             ],
             central_atom=central_atom,
         ),

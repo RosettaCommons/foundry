@@ -117,7 +117,6 @@ def from_any_(v: Any, atom_array: AtomArray):
 
         # Split to atom names
         data_split[idx] = token.atom_name[comp_mask_subset].tolist()
-        # TODO: there is a bug where when you select specifc atoms within a ligand, output ligand is fragmented
 
         # Update mask & token dictionary
         mask[comp_mask] = comp_mask_subset
