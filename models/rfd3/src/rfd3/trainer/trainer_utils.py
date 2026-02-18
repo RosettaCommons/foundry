@@ -25,6 +25,7 @@ from scipy.optimize import linear_sum_assignment
 
 from foundry.common import exists
 from foundry.utils.ddp import RankedLogger
+from atomworks.constants import STANDARD_DNA, STANDARD_RNA
 
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 
@@ -221,10 +222,14 @@ def _readout_seq_from_struc(
             # There might be a better way to do this.
             CA_coord = cur_res_atom_array.coord[cur_res_atom_array.atom_name == "CA"]
             CB_coord = cur_res_atom_array.coord[cur_res_atom_array.atom_name == "CB"]
-            if np.linalg.norm(CA_coord - CB_coord) < threshold:
+            
+            if cur_res_atom_array.is_dna[0] or cur_res_atom_array.is_rna[0]:
+                cur_central_atom = "C1'"
+            elif np.linalg.norm(CA_coord - CB_coord) < threshold:
                 cur_central_atom = "CA"
             else:
                 cur_central_atom = central_atom
+
 
             central_mask = cur_res_atom_array.atom_name == cur_central_atom
 
@@ -258,8 +263,12 @@ def _readout_seq_from_struc(
                 ATOM_NAMES = ATOM14_ATOM_NAMES
                 if restype in STANDARD_DNA:
                     ATOM_NAMES = ATOM23_ATOM_NAMES_DNA
+                    if not cur_res_atom_array.is_dna[0]:
+                        continue
                 if restype in STANDARD_RNA:
                     ATOM_NAMES = ATOM23_ATOM_NAMES_RNA
+                    if not cur_res_atom_array.is_rna[0]:
+                        continue
 
                 atom_name_idx_in_atom14_scheme = np.array(
                     [
@@ -269,7 +278,6 @@ def _readout_seq_from_struc(
                 )  # five backbone atoms + some virtual atoms, returning e.g. [0, 1, 2, 3, 4, 11, 7]
                 atom14_scheme_mask = np.zeros_like(ATOM_NAMES, dtype=bool)
                 atom14_scheme_mask[atom_name_idx_in_atom14_scheme] = True
-
                 # ... Find the matched restype by checking if all the non-None posititons and None positions match
                 # This is designed to keep virtual atoms and doesn't assign the atom names for now, which will be handled later.
                 if all(x is not None for x in atom_names[atom14_scheme_mask]) and all(

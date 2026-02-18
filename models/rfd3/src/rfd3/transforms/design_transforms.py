@@ -870,7 +870,6 @@ class AddAdditional2dFeaturesToFeats(Transform):
             return data
         for feature_name, n_dims in self.token_2d_features.items():
             data = self.generate_token_feature(feature_name, n_dims, data)
-
         return data
 
 

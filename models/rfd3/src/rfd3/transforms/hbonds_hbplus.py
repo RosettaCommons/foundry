@@ -248,3 +248,5 @@ def subsample_one_hot_np(array, fraction):
         new_array[i, j] = 1
 
     return new_array
+
+
