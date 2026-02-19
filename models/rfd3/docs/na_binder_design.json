@@ -30,8 +30,8 @@
     "dsDNA_complex": {
         "input": "./input_pdbs/2r5z.pdb",
         "contig": "C5-18,/0,D24-37,/0,40-50,A146-154,80-90",
-        "length": "147-167",
-        "unindex": "/0,/0,B251-B255",
+        "length": "157-177",
+        "unindex": "/0,/0,B251-255",
         "select_fixed_atoms": {
             "C9-14":"ALL",
             "D28-33":"ALL",
