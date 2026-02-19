@@ -230,7 +230,6 @@ class NucleicSSSimilarityMetrics(Metric):
             # prediction can inherit it, yielding artificially perfect scores.
             # Optionally recompute bp_partners from the *predicted coordinates*.
             if self.annotate_predicted_fresh:
-
                 # Infer res name from geometry first
                 pred_arr = _readout_seq_from_struc(
                     pred_arr,
@@ -255,7 +254,6 @@ class NucleicSSSimilarityMetrics(Metric):
                     overwrite=True,
                     p_canonical_bp_filter=0.0,
                 )
-                
             pred_categories = pred_arr.get_annotation_categories()
             if "bp_partners" not in pred_categories:
                 continue
