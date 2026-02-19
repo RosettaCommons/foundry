@@ -230,8 +230,24 @@ class NucleicSSSimilarityMetrics(Metric):
             # prediction can inherit it, yielding artificially perfect scores.
             # Optionally recompute bp_partners from the *predicted coordinates*.
             if self.annotate_predicted_fresh:
-                #pred_arr = _cleanup_virtual_atoms_and_assign_atom_name_elements(pred_arr, association_scheme = "atom23")
-                pred_arr = _readout_seq_from_struc(pred_arr, central_atom="C1'", threshold=0.5, association_scheme = "atom23")
+
+                # Infer res name from geometry first
+                pred_arr = _readout_seq_from_struc(
+                    pred_arr,
+                    central_atom="C1'",
+                    threshold=0.5,
+                    association_scheme="atom23",
+                )
+                # strip virtuals and set final atom names/elements
+                pred_arr = _cleanup_virtual_atoms_and_assign_atom_name_elements(
+                    pred_arr,
+                    association_scheme="atom23",
+                )
+                # clear annotation to avoid potential info leak
+                if "bp_partners" in pred_arr.get_annotation_categories():
+                    pred_arr.del_annotation("bp_partners")
+                
+                # add nucleic-ss annotations
                 annotate_na_ss(
                     pred_arr,
                     NA_only=self.annotation_NA_only,
@@ -239,7 +255,7 @@ class NucleicSSSimilarityMetrics(Metric):
                     overwrite=True,
                     p_canonical_bp_filter=0.0,
                 )
-                import pdb; pdb.set_trace()#TODO
+                
             pred_categories = pred_arr.get_annotation_categories()
             if "bp_partners" not in pred_categories:
                 continue
@@ -304,7 +320,13 @@ class NucleicSSSimilarityMetrics(Metric):
 
         if n_valid == 0:
             return {}
-
+        aaa = {
+            "pair_f1": float(np.mean(pair_f1_list)),
+            "loop_f1": float(np.mean(loop_f1_list)),
+            "weighted_f1": float(np.mean(weighted_f1_list)),
+            "n_valid_samples": int(n_valid),
+        }
+        print(aaa)
         return {
             "pair_f1": float(np.mean(pair_f1_list)),
             "loop_f1": float(np.mean(loop_f1_list)),

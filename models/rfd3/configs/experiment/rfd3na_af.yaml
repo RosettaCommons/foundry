@@ -1,0 +1,99 @@
+# @package _global_
+# Training configuration for RFD3
+
+defaults:
+  - /debug/default
+  - override /model: rfd3_base
+  # - override /logger: wandb
+  - override /datasets: design_base_rfd3na
+  - _self_
+
+name: rfd3na-fine-tune
+tags: [print-model]
+ckpt_path: /projects/ml/aa_design/models/rfd3_latest_foundry.ckpt
+
+model:
+  net:
+    token_initializer:
+      token_1d_features:
+        ref_motif_token_type: 3
+        restype: 32
+        is_dna_token: 1
+        is_rna_token: 1
+        is_protein_token: 1
+      token_2d_features:
+        bp_partners: 3 # Unspecified, pair, loop
+      atom_1d_features:
+        ref_atom_name_chars: 256
+        ref_element: 128
+        ref_charge: 1
+        ref_mask: 1
+        ref_is_motif_atom_with_fixed_coord: 1
+        ref_is_motif_atom_unindexed: 1
+        has_zero_occupancy: 1
+        ref_pos: 3
+
+        # Guided features
+        ref_atomwise_rasa: 3
+        active_donor: 1
+        active_acceptor: 1
+        is_atom_level_hotspot: 1
+    diffusion_module:
+      n_recycle: 2
+      use_local_token_attention: True
+      diffusion_transformer:
+        n_local_tokens: 32
+        n_keys: 128
+
+    inference_sampler:
+      num_timesteps: 100
+
+
+datasets:
+  diffusion_batch_size_train: 16
+  crop_size: 256
+  max_atoms_in_crop: 2560  # ~10x crop size.
+  global_transform_args:
+    meta_conditioning_probabilities:
+      # p_is_nucleic_ss_example: 0.25
+      # p_nucleic_ss_show_partial_feats: 0.7
+      # p_canonical_bp_filter: 0.2
+      p_is_nucleic_ss_example: 1.0
+      p_nucleic_ss_show_partial_feats: 0.0
+      p_canonical_bp_filter: 0.0
+      #calculate_NA_SS: 0.3
+
+    association_scheme: atom23
+    #add_na_pair_features: true
+    train_conditions:
+      unconditional:
+        frequency: 2.0
+      island:
+        frequency: 2.0
+      sequence_design:
+        frequency: 0.5
+      tipatom:
+        frequency: 5.0
+      ppi:
+        frequency: 0.0
+  train:
+    # These are the ratios used in the preprint but we set all pdb sampling by default since not everyone might download the distillation data.
+    pdb:
+      probability: 0.0
+    rna_monomer_distillation:
+      probability: 1.0
+    monomer_distillation:
+      probability: 0.0
+
+  val:
+    pseudoknot:
+      dataset:
+        # eval_every_n: 10
+        eval_every_n: 5
+
+trainer:
+  #devices_per_node: 1
+  #limit_train_batches: 10
+  #limit_val_batches: 1
+  validate_every_n_epochs: 5
+  prevalidate: true
