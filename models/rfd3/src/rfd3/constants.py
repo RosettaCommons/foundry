@@ -226,10 +226,7 @@ ATOM14_ATOM_NAME_TO_ELEMENT = {
 
 strip_list = lambda x: [(x.strip() if x is not None else None) for x in x]  # noqa
 
-association_schemes_stripped = {
-    name: {k: strip_list(v) for k, v in scheme.items()}
-    for name, scheme in association_schemes.items()
-}
+
 SELECTION_PROTEIN = ["POLYPEPTIDE(D)", "POLYPEPTIDE(L)"]
 SELECTION_NONPROTEIN = [
     "POLYDEOXYRIBONUCLEOTIDE",
