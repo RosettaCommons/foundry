@@ -264,9 +264,13 @@ def _readout_seq_from_struc(
                     ATOM_NAMES = ATOM23_ATOM_NAMES_DNA
                     if not cur_res_atom_array.is_dna[0]:
                         continue
-                if restype in STANDARD_RNA:
+                elif restype in STANDARD_RNA:
                     ATOM_NAMES = ATOM23_ATOM_NAMES_RNA
                     if not cur_res_atom_array.is_rna[0]:
+                        continue
+                else:
+                    #ATOM_NAMES = ATOM23_ATOM_NAMES_RNA
+                    if not cur_res_atom_array.is_protein[0]:
                         continue
 
                 atom_name_idx_in_atom14_scheme = np.array(
