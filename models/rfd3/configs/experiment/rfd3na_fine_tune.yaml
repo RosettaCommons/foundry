@@ -2,18 +2,15 @@
 # Training configuration for RFD3
 
 defaults:
-  - /debug/default
+  #- /debug/default
   - override /model: rfd3_base
-  #- override /logger: wandb
+  - override /logger: wandb
   - override /datasets: design_base_rfd3na
   - _self_
 
-name: rfd3na_scratch_clean_test
+name: rfd3na-fine-tune
 tags: [print-model]
-
-#ckpt_path: /net/scratch/raktim/training/logs/train/rfd3na-fine-tune/2026-02-17_15-21_JOB_3608285/ckpt/epoch-0590.ckpt
-#ckpt_path: /net/scratch/raktim/training/logs/train/rfd3na_scratch/2026-02-17_17-56_JOB_3620867/ckpt/epoch-0030.ckpt
-
+ckpt_path: /projects/ml/aa_design/models/rfd3_latest_foundry.ckpt
 
 model:
   net:
@@ -58,7 +55,7 @@ datasets:
   max_atoms_in_crop: 2560  # ~10x crop size.
   global_transform_args:
     meta_conditioning_probabilities:
-      p_is_nucleic_ss_example: 1.0
+      p_is_nucleic_ss_example: 0.25
       p_nucleic_ss_show_partial_feats: 0.7
       p_canonical_bp_filter: 0.2
       #calculate_NA_SS: 0.3

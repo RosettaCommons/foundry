@@ -152,7 +152,6 @@ def _cleanup_virtual_atoms_and_assign_atom_name_elements(
         is_seq_known = all(
             np.array(res_array.is_motif_atom_with_fixed_seq, dtype=bool)
         ) or all(np.array(res_array.is_motif_atom_unindexed, dtype=bool))
-
         # ... If sequence is known for the original atom array, just skip
         if is_seq_known:
             ret_mask += [True] * len(res_array)

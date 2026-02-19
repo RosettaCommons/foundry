@@ -12,6 +12,8 @@ from rfd3.transforms.na_geom_utils import annotate_na_ss
 from foundry.metrics.metric import Metric
 from foundry.utils.ddp import RankedLogger
 
+from rfd3.trainer.trainer_utils import _readout_seq_from_struc, _cleanup_virtual_atoms_and_assign_atom_name_elements
+
 logging.basicConfig(level=logging.INFO)
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 
@@ -228,6 +230,8 @@ class NucleicSSSimilarityMetrics(Metric):
             # prediction can inherit it, yielding artificially perfect scores.
             # Optionally recompute bp_partners from the *predicted coordinates*.
             if self.annotate_predicted_fresh:
+                #pred_arr = _cleanup_virtual_atoms_and_assign_atom_name_elements(pred_arr, association_scheme = "atom23")
+                pred_arr = _readout_seq_from_struc(pred_arr, central_atom="C1'", threshold=0.5, association_scheme = "atom23")
                 annotate_na_ss(
                     pred_arr,
                     NA_only=self.annotation_NA_only,
@@ -235,7 +239,7 @@ class NucleicSSSimilarityMetrics(Metric):
                     overwrite=True,
                     p_canonical_bp_filter=0.0,
                 )
-
+                import pdb; pdb.set_trace()#TODO
             pred_categories = pred_arr.get_annotation_categories()
             if "bp_partners" not in pred_categories:
                 continue
