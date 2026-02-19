@@ -230,18 +230,24 @@ class NucleicSSSimilarityMetrics(Metric):
             # prediction can inherit it, yielding artificially perfect scores.
             # Optionally recompute bp_partners from the *predicted coordinates*.
             if self.annotate_predicted_fresh:
-                # Infer res name from geometry first
-                pred_arr = _readout_seq_from_struc(
-                    pred_arr,
-                    central_atom="C1'",
-                    threshold=0.5,
-                    association_scheme="atom23",
-                )
-                # strip virtuals and set final atom names/elements
-                pred_arr = _cleanup_virtual_atoms_and_assign_atom_name_elements(
-                    pred_arr,
-                    association_scheme="atom23",
-                )
+                try:
+                    # Infer res name from geometry first
+                    pred_arr = _readout_seq_from_struc(
+                        pred_arr,
+                        central_atom="C1'",
+                        threshold=0.5,
+                        association_scheme="atom23",
+                    )
+
+                    # strip virtuals and set final atom names/elements
+                    pred_arr = _cleanup_virtual_atoms_and_assign_atom_name_elements(
+                        pred_arr,
+                        association_scheme="atom23",
+                    )
+                except:
+                    # this can fail early in training
+                    print("could not cleanup virtuals for nucleic ss metric compute")
+                    pass
                 # clear annotation to avoid potential info leak
                 if "bp_partners" in pred_arr.get_annotation_categories():
                     pred_arr.del_annotation("bp_partners")
