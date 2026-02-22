@@ -97,9 +97,9 @@ MPNN_PER_INPUT_INFERENCE_DEFAULTS: dict[str, Any] = {
 
 def str2bool(v: str) -> bool:
     """Helper function to parse boolean CLI args."""
-    if v in ("True", "1"):
+    if v in ("True", "true", "1"):
         return True
-    elif v in ("False", "0"):
+    elif v in ("False", "false", "0"):
         return False
     else:
         raise argparse.ArgumentTypeError(f"Boolean value expected, got {v!r}")
