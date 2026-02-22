@@ -94,7 +94,7 @@ In this tutorial, we will be briefly describing each of the settings we will be 
     ```yaml
         is_non_loopy: true
     ```
-1. Save your file and close it. If you run the file now, your files should be similar to what is stored in `basic.zip`.
+1. Save your file and close it. If you run the file now, your outputs should be similar to what is stored in `basic.zip`.
 
 (ppi-other-useful-settings)=
 ### Other Useful Settings
