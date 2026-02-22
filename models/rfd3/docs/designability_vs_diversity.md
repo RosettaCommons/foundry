@@ -9,7 +9,7 @@ Whether you are struggling to produce designable structures or you are looking t
     
     Here are what these settings do:
     - `inference_sampler.step_scale`: Changing this value (default 1.5) changes the diffusion step size, or how much you go towards the most probable result. Increasing this setting will increase the designability of the output structures, as these are more probable, but will also decrease the diversity of the produced structures. 
-    - `inference_sampler.gamma_0`: Changing this value (default 0.6) will change how much randomness there is at the beginning of an inference run. Decreasing this setting will increase the designability of the output structures as the reduced randomness will lead RFdiffusion3 to higher-probability structures. Increase this quantity to increase the diversity of designed structures.
+    - `inference_sampler.gamma_0`: Changing this value (default 0.6) will change how much noise is added at each step in the inference trajectory. Decreasing this setting will increase the designability of the output structures as the reduced randomness will lead RFdiffusion3 to higher-probability structures. Increase this quantity to increase the diversity of designed structures.
 - **`is_non_loopy` setting:**
 
     The `is_non_loopy` setting is a constraint on the designs RFdiffusion3 produces, which makes it a setting provided in a JSON/YAML file. If `True` it biases the model away from forming structures with many regions without a defined secondary structure. This will slightly decrease the diversity of structures that RFdiffusion3 produces while increasing the designability. 
