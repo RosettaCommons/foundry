@@ -2313,6 +2313,7 @@ class MPNNInferenceOutput:
             file_type=file_type,
             extra_fields=extra_fields,
             extra_categories=extra_categories,
+            include_nan_coords=False,
         )
 
     def _create_input_fasta_entry(
