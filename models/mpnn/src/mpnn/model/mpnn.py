@@ -507,20 +507,6 @@ class ProteinMPNN(nn.Module):
             permutation_matrix_reverse,
         )
 
-        # If the symmetry equivalence group is not None, then we need to
-        # mask out residues that belong to the same symmetry group.
-        if input_features["symmetry_equivalence_group"] is not None:
-            # same_symmetry_group [B, L, L] - a mask for the residues that
-            # belong to the same symmetry group, where True is a residue pair
-            # that belongs to the same symmetry group, and False is a residue
-            # pair that does not belong to the same symmetry group.
-            same_symmetry_group = (
-                input_features["symmetry_equivalence_group"][:, :, None]
-                == input_features["symmetry_equivalence_group"][:, None, :]
-            )
-
-            permuted_causal_mask_all_by_all[same_symmetry_group] = 0.0
-
         # causal_mask_nearest_neighbors [B, L, K, 1] - the causal mask for
         # the decoder, gathered at the neighbor indices. This limits the
         # attention to the nearest neighbors.
