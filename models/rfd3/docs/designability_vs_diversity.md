@@ -19,7 +19,7 @@ Here are a few plots showing the impacts of these settings in protein-protein in
 For the purposes of the plots below:
 * `Low temperature` means a `step_scale` of 3 and a `gamma_0` of 0.2. 
 * Pass rates are refolding pass rates, the number of backbones that pass after four attempts at designing the sequence using MPNN-based methods.
-* 'Cluster' refers to `foldseek-based clusters <https://www.nature.com/articles/s41587-023-01773-0>`_, and a cluster pass rate is how many clusters are represented among the passing designs.
+* 'Cluster' refers to `foldseek-based clusters <https://www.nature.com/articles/s41587-023-01773-0>`_, and the cluster pass rate is the number of clusters represented among the passing designs divided by the total number of designed backbones.
 
 ```
 
