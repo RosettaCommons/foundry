@@ -168,7 +168,7 @@ You can see that the portion of the ligand that was specified as exposed (blue) 
 ```
 
 ## Conclusion
-You have now set up an RFD3 calculation and successfully ran the inference code for an enzyme design problem. While the options discussed here are particularly useful in enzyme design projects, RFD3 has many more that you can explore by looking at (input.m).
+You have now set up an RFD3 calculation and successfully ran the inference code for an enzyme design problem. While the options discussed here are particularly useful in enzyme design projects, RFD3 has many more that you can explore by looking at (input.md).
 
 (enzyme-references)=
 ## References and Further Reading
