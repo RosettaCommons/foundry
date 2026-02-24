@@ -13,6 +13,7 @@ from rfd3.trainer.trainer_utils import (
     _build_atom_array_stack,
     _cleanup_virtual_atoms_and_assign_atom_name_elements,
     _reassign_unindexed_token_chains,
+    _remap_outputs,
     _reorder_dict,
     process_unindexed_outputs,
 )

@@ -1,4 +1,5 @@
 import inspect
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -16,6 +17,7 @@ from foundry.utils.rotation_augmentation import (
     uniform_random_rotation,
 )
 
+logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 
@@ -246,7 +248,9 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                     **other_outputs,
                 )
                 toc = time.time()
-                ranked_logger.info(f"Chunked mode time: {toc - tic} seconds")
+                ranked_logger.info(
+                    f"[chunked] step {step_num}: {(toc - tic)*1000:.1f} ms"
+                )
             else:
                 # Standard mode: P_LL is included in initializer_outputs
                 outs = diffusion_module(
@@ -473,7 +477,9 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
                     **other_outputs,
                 )
                 toc = time.time()
-                ranked_logger.info(f"Chunked mode time: {toc - tic} seconds")
+                ranked_logger.info(
+                    f"[chunked] step {step_num}: {(toc - tic)*1000:.1f} ms"
+                )
             else:
                 # Standard mode: P_LL is included in initializer_outputs
                 outs = diffusion_module(
