@@ -3,7 +3,7 @@ name = "rc-foundry"
 dynamic = ["version"]
 description = "Shared utilities and training infrastructure for biomolecular structure prediction models."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.12"
 authors = [
     { name = "Institute for Protein Design", email = "contact@ipd.uw.edu" },
 ]
