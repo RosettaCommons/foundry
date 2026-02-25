@@ -75,7 +75,9 @@ def calculate_hbonds(
             "Please set it to the path of the hbplus executable in order to calculate hydrogen bonds."
         )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # Explicitly use /tmp to avoid writing temp files to the working directory
+    temp_base_dir = os.environ.get("TMPDIR", "/tmp")
+    with tempfile.TemporaryDirectory(dir=temp_base_dir) as tmpdir:
         dtstr = datetime.now().strftime("%Y%m%d%H%M%S")
         pdb_filename = f"{dtstr}_{np.random.randint(10000)}.pdb"
         pdb_path = os.path.join(tmpdir, pdb_filename)
