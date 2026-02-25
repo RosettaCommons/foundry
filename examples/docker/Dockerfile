@@ -9,7 +9,7 @@
 # Authors:
 # Hope Woods <hope.woods@omsf.io>
 # Rachel Clune <rachel.clune@omsf.io>
-# Sergey Lyskov <sergey.lyskov@gmail.com>
+# Sergey Lyskov <sergey.lyskov@jhu.edu>
 
 ARG BASE_IMAGE=ubuntu:22.04
 FROM ${BASE_IMAGE} AS BUILDER
