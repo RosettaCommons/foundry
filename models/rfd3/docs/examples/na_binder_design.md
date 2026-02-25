@@ -3,7 +3,7 @@
 If you would like to run the examples below, `na_binder_design.json`, located in this directory, contains the example code. You can run it via:
 ```
 rfd3 design out_dir=inference_outputs/na_binder/0 \
-ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
+ckpt_path=/path/to/rfd3_latest.ckpt \
 inputs=./na_binder_design.json
 ```
 
@@ -11,7 +11,7 @@ Or, if you have cloned the repo rather than using `pip install`:
 ```
 python path/to/foundry/models/rfd3/src/rfd3/run_inference.py \
 out_dir=inference_outputs/na_binder/0 \
-ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
+ckpt_path=/path/to/rfd3_latest.ckpt \
 inputs=./na_binder_design.json 
 ```
 
@@ -27,7 +27,7 @@ The length attribute should be the sum of all polymer lengths. in this case (120
 ```json
 {
     "dsDNA_basic": { 
-        "input": "./input_pdbs/1bna.pdb",
+        "input": "../input_pdbs/1bna.pdb",
         "contig": "A1-10,/0,B15-24,/0,120-130",
         "length": "140-150",
         "ori_token": [24,20,10],
@@ -43,7 +43,7 @@ Similar to the previous example, but done for a PDB containing one DNA strand (A
 ```json
 {
     "ssDNA_basic": {
-        "input": "./input_pdbs/5o4d.pdb",
+        "input": "../input_pdbs/5o4d.pdb",
         "contig": "A1-23,/0,120-130",
         "length": "143-153",
         "ori_token": [-5,-10,8],
@@ -58,7 +58,7 @@ Similar to the previous example but the input PDB has a dsDNA. One of the chains
 ```json
 {
     "ssDNA_diffused_from_dsDNA_pdb":{
-        "input": "./input_pdbs/1bna.pdb",
+        "input": "../input_pdbs/1bna.pdb",
         "contig": "A1-10,/0,120-130",
         "length": "130-140",
         "select_fixed_atoms": {"A1-10":""},
@@ -74,7 +74,7 @@ Example on RNA. Similar to the ssDNA example, example 2.
 ```json
 {
     "RNA_basic": {
-        "input": "./input_pdbs/1q75.pdb",
+        "input": "../input_pdbs/1q75.pdb",
         "contig": "A1-15,/0,120-130",
         "length": "135-145",
         "ori_token": [15,2,-4],
@@ -96,7 +96,7 @@ To run this without warnings, you will need to install [hbplus](https://www.ebi.
 ```json
 {
     "dsDNA_complex": {
-        "input": "./input_pdbs/2r5z.pdb",
+        "input": "../input_pdbs/2r5z.pdb",
         "contig": "C5-18,/0,D24-37,/0,40-50,A146-154,80-90",
         "length": "147-167",
         "unindex": "/0,/0,B251-B255",

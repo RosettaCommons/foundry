@@ -1,6 +1,6 @@
 {
     "M0255_1mg5_unfixed": {
-        "input": "./input_pdbs/M0255_1mg5.pdb", 
+        "input": "../input_pdbs/M0255_1mg5.pdb", 
         "ligand": "NAI,ACT",    
         "unindex": "A108,A139,A152,A156",
         "length": "180-200",
@@ -14,7 +14,7 @@
         }
     },
     "partial_diffusion": {
-        "input": "./input_pdbs/7v11.pdb", 
+        "input": "../input_pdbs/7v11.pdb", 
         "ligand": "OQO", 
         "partial_t": 15.0,
         "contig": "A431",
@@ -26,7 +26,7 @@
         }
     },
     "dsDNA_basic": {
-        "input": "./input_pdbs/1bna.pdb",
+        "input": "../input_pdbs/1bna.pdb",
         "contig": "A1-10,/0,B15-24,/0,120-130",
         "length": "140-150",
         "ori_token": [24,20,10],

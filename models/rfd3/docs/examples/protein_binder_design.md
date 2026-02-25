@@ -15,7 +15,7 @@ designs, which greatly increases PPI designability.
 If you would like to run the examples below, `protein_binder_design.json`, located in this directory, contains the example code. You can run it via:
 ```
 rfd3 design out_dir=inference_outputs/protein_binder/0 \
-ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
+ckpt_path=/path/to/rfd3_latest.ckpt \
 inputs=./protein_binder_design.json \
 inference_sampler.step_scale=3 \
 inference_sampler.gamma_0=0.2
@@ -25,7 +25,7 @@ Or, if you have cloned the repo rather than using `pip install`:
 ```
 python path/to/foundry/models/rfd3/src/rfd3/run_inference.py \
 out_dir=inference_outputs/protein_binder/0 \
-ckpt_path=/path/to/rfd3_foundry_2025_12_01.ckpt \
+ckpt_path=/path/to/rfd3_latest.ckpt \
 inputs=./protein_binder_design.json \
 inference_sampler.step_scale=3 \
 inference_sampler.gamma_0=0.2
@@ -40,7 +40,7 @@ The input files for the different examples are provided in `foundry/models/rfd3/
     "insulinr": {
         "dialect": 2,
         "infer_ori_strategy": "hotspots",
-        "input": "input_pdbs/4zxb_cropped.pdb",
+        "input": "../input_pdbs/4zxb_cropped.pdb",
         "contig": "40-120,/0,E6-155",
         "select_hotspots": {
             "E64": "CD2,CZ",
@@ -52,7 +52,7 @@ The input files for the different examples are provided in `foundry/models/rfd3/
     "pdl1": {
         "dialect": 2,
         "infer_ori_strategy": "hotspots",
-        "input": "input_pdbs/5o45_cropped.pdb",
+        "input": "../input_pdbs/5o45_cropped.pdb",
         "contig": "50-120,/0,A17-131",
         "select_hotspots": {
             "A56": "CG,OH",

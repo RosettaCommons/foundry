@@ -2,6 +2,7 @@ import os
 import string
 import subprocess
 import tempfile
+import tempfile
 from datetime import datetime
 from typing import Any, Tuple
 
@@ -113,6 +114,20 @@ def calculate_hbonds(
             a_atom = HB[i][23:27].strip()
             dist = float(HB[i][27:32].strip())
 
+            items = {
+                "d_chain": chain_map[d_chain],
+                "d_resi": d_resi,
+                "d_resn": d_resn,
+                "d_ins": d_ins,
+                "d_atom": d_atom,
+                "a_chain": chain_map[a_chain],
+                "a_resi": a_resi,
+                "a_resn": a_resn,
+                "a_ins": a_ins,
+                "a_atom": a_atom,
+                "dist": dist,
+            }
+            hbonds.append(items)
             items = {
                 "d_chain": chain_map[d_chain],
                 "d_resi": d_resi,

@@ -27,6 +27,7 @@ from pydantic import (
 )
 from rfd3.constants import (
     INFERENCE_ANNOTATIONS,
+    OPTIONAL_CONDITIONING_VALUES,
     REQUIRED_CONDITIONING_ANNOTATION_VALUES,
     REQUIRED_INFERENCE_ANNOTATIONS,
 )
@@ -685,6 +686,25 @@ class DesignInputSpecification(BaseModel):
                 + np.max(atom_array.res_id)
                 + 1
             )
+            # Harmonize conditioning annotations before concatenation: biotite's
+            # concatenate only preserves annotations present in ALL arrays (set
+            # intersection), so mismatched optional conditioning annotations
+            # (e.g. is_atom_level_hotspot) get silently dropped.
+            for annot, default in OPTIONAL_CONDITIONING_VALUES.items():
+                if (
+                    annot in ligand_array.get_annotation_categories()
+                    and annot not in atom_array.get_annotation_categories()
+                ):
+                    atom_array.set_annotation(
+                        annot, np.full(atom_array.array_length(), default)
+                    )
+                elif (
+                    annot in atom_array.get_annotation_categories()
+                    and annot not in ligand_array.get_annotation_categories()
+                ):
+                    ligand_array.set_annotation(
+                        annot, np.full(ligand_array.array_length(), default)
+                    )
             atom_array = atom_array + ligand_array
         return atom_array
 

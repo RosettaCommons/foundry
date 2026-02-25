@@ -6,7 +6,7 @@ All models within Foundry rely on [AtomWorks](https://github.com/RosettaCommons/
 
 
 > [!NOTE]
-> We have a slack now! Join for updates and to get your questions answered [here](https://join.slack.com/t/proteinmodelfoundry/shared_invite/zt-3kpwru8c6-nrmTW6LNHnSE7h16GNnfLA).
+> We have a slack now! Join for updates and to get your questions answered [here](https://join.slack.com/t/proteinmodelfoundry/shared_invite/zt-3pj032444-jC8MRqsV8nhpKX0PGowQ4A).
 
 ## Getting Started
 ### Quickstart guide
@@ -40,6 +40,14 @@ foundry list-installed
 ```
 
 >*See `examples/all.ipynb` for how to run each model and design proteins end-to-end in a notebook.*
+
+### Docker Image
+
+There is an official [Foundry image](https://hub.docker.com/r/rosettacommons/foundry) maintained by the [Rosetta Commons](https://rosettacommons.org/). The default image comes with the model weights for the available models, but you can use the `slim` tag to either use pre-exiting model weights or use the image to download the available model weights. 
+
+For more information and example syntax, see the [Overview on DockerHub](https://hub.docker.com/r/rosettacommons/foundry).
+
+The recipe to create the Docker image can be found in `foundry/examples/docker` and can be used as a "blue-print" for creating your own images. 
 
 ### Google Colab
 For an interactive Google Colab notebook walking through a basic design pipeline with RFD3, MPNN, and RF3, please see the [IPD Design Pipeline Tutorial](https://colab.research.google.com/drive/1ZwIMV3n9h0ZOnIXX0GyKUuoiahgifBxh?usp=sharing).
