@@ -1,5 +1,5 @@
 {
-    "cys_1euv_lig": {
+    "1euv": {
         "input": "./1euv_lig.pdb", 
         "ligand": "l:g",        
         "unindex": "A514,A531,A574,A579-581",         

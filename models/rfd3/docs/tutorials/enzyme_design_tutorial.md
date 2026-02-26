@@ -33,7 +33,7 @@ There is also a pre-made JSON file available in `foundry/models/rfd3/docs/enzyme
 
 (enzyme-creating-the-json-file)=
 ## Creating the JSON file
-In the next few sections we will be briefly describing the settings we will be using for this example enzyme design project. If you would like more information about the options discussed here or information about the other options that are available, see the [input specification](input.md) documentation.
+In the next few sections we will be briefly describing the settings we will be using for this example enzyme design project. If you would like more information about the options discussed here or information about the other options that are available, see the [input specification](../input.md) documentation.
 
 1. Using your editor of choice, open a new file called `rfd3_enzyme_tutorial.json`. This is where we will be storing the options we will use to constrain our enzyme design. 
 1. This is a JSON file, so all of the options contained in it need to be encapsulated in curly braces ({}). Go ahead and add a pair of these to your file.
@@ -55,7 +55,7 @@ In the next few sections we will be briefly describing the settings we will be u
     "ligand": "l:g",
     ```
     ```{note}
-    The ligand used in this tutorial is not a real molecule. Placing a colon (:) in your ligand name ensures that it does not match a molecule in the [Chemical Component Database](https://www.wwpdb.org/data/ccd). If you are running a calculation that uses a real ligand, feel free to use its actual chemical identifier. 
+    The ligand in this tutorial is a real molecule, but not one listed in the [Chemical Component Database](https://www.wwpdb.org/data/ccd) or the [RCSB Protein Data Bank](https://www.rcsb.org/). Placing a colon (:) in your ligand name ensures that it does not match a molecule in the Chemical Component Database. If you are running a calculation that uses a real ligand, feel free to use its actual chemical identifier. 
     ```
 1. Add an option to `unindex` the residues in the input file. These residues were determined to be important for the enzymatic activity we are trying to create and design a protein around. However, we don't know where in our designed structure we want these enzymes to be, making this option incredibly useful for enzyme design:
     ```json
@@ -168,10 +168,10 @@ You can see that the portion of the ligand that was specified as exposed (blue) 
 ```
 
 ## Conclusion
-You have now set up an RFD3 calculation and successfully ran the inference code for an enzyme design problem. While the options discussed here are particularly useful in enzyme design projects, RFD3 has many more that you can explore by looking at (input.md).
+You have now set up an RFD3 calculation and successfully ran the inference code for an enzyme design problem. While the options discussed here are particularly useful in enzyme design projects, RFD3 has many more that you can explore by looking at {doc}`../input`.
 
 (enzyme-references)=
 ## References and Further Reading
-- For more information on the different inference settings in RFD3, see [input.md](../input.md)
+- For more information on the different inference settings in RFD3, see {doc}`../input`
 - The calculation presented here was used to benchmark RFdiffusion2, for more information see [Atom-level enzyme active site scaffolding using RFdiffusion2](https://www.nature.com/articles/s41592-025-02975-x)
 - A more thorough discussion of the settings and configuration options in RFD3 can be found [here](../intro_inference_calculations.md)
