@@ -8,6 +8,7 @@ from lightning_utilities import apply_to_collection
 from omegaconf import DictConfig
 from rfd3.metrics.design_metrics import get_all_backbone_metrics
 from rfd3.metrics.hbonds_hbplus_metrics import get_hbond_metrics
+from rfd3.metrics.nucleic_ss_metrics import get_NA_SS_F1
 from rfd3.trainer.recycling import get_recycle_schedule
 from rfd3.trainer.trainer_utils import (
     _build_atom_array_stack,
@@ -448,6 +449,15 @@ class AADesignTrainer(FabricTrainer):
                 or "active_acceptor" in atom_array.get_annotation_categories()
             ):
                 metadata_dict[i]["metrics"] |= get_hbond_metrics(atom_array)
+
+            if (
+                "bp_partners" in atom_array.get_annotation_categories()
+            ):
+                if not np.all(atom_array.bp_partners == None): 
+                    try:
+                        metadata_dict[i]["metrics"] |= get_NA_SS_F1(atom_array)
+                    except:
+                        pass
 
             if "partial_t" in f:
                 # Try calcualte a CA RMSD to input:
