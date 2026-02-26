@@ -156,7 +156,7 @@ Example output for the enzyme scaffold design. The input structure is in green a
 ```
 
 You'll notice:
-- The fixed atoms have stayed in place, once the structures have been aligned
+- The fixed atoms have stayed in place, once the structures have been aligned to the ligand
 - The index of the original residues has changed (easy to tell in this example because we have held their coordinates fixed, you can see the mapping in the output JSON file.)
 - The structures are all the same length, which is between 100 and 200 residues long. (All designs in the same batch will have the same length. Set the batch size to 1 if you want to design proteins with all different lengths.)
 

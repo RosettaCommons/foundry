@@ -14,11 +14,11 @@
             "A581":"C,O,CA,N"
         },
         "select_buried": {
-	    "l:g": "O1,C8,O3,C4,C5,C23,C24,C25,C26,C27"
-	},
+            "l:g": "O1,C8,O3,C4,C5,C23,C24,C25,C26,C27"
+        },
         "select_exposed": {
-	    "l:g": "C2,C22,C19,C18,C17,C20,C16,C15,O21,O14,C13,C12"
-	},
+            "l:g": "C2,C22,C19,C18,C17,C20,C16,C15,O21,O14,C13,C12"
+        },
         "select_unfixed_sequence": "A579,A581"
     }
 }

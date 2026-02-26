@@ -130,10 +130,10 @@ Below is a table of all of the inputs that the `InputSpecification` accepts. Use
 | `select_fixed_atoms`                                           | `InputSelection`  | Atoms with fixed coordinates. See the [Select Fixed Atoms](#select-fixed-atoms) subsection for more information. |
 | `select_unfixed_sequence`                                      | `InputSelection`  | Where sequence can change. Default is `True` - all input regions have fixed sequences. Contig string input specifies components to unfix the sequence for. Dictionary inputs are allowed but not recommended.|
 | `select_buried` / `select_partially_buried` / `select_exposed` | `InputSelection`  | Selection of RASA (Relatively Accessible Surface Area) for buried, partially buried, and exposed conditioning, respectively. Only contig string and dictionary are acceptable inputs. |
-| `select_hbond_donor` / `select_hbond_acceptor`                 | `InputSelection`  | Atom-wise donor/acceptor flags. Atom-wise selection of hydrogen bond donors and acceptors, respectively. Only dictionary inputs allowed. See {doc}`na_binder_design` for an example. |
+| `select_hbond_donor` / `select_hbond_acceptor`                 | `InputSelection`  | Atom-wise donor/acceptor flags. Atom-wise selection of hydrogen bond donors and acceptors, respectively. Only dictionary inputs allowed. See {doc}`examples/na_binder_design` for an example. |
 | `select_hotspots`                                              | `InputSelection`  | Atom-level or residue-level hotspots. Hotspots will typically be at most 4.5 Å to any heavy atom in the designed structure. Typically used for designing binders. |
 | `redesign_motif_sidechains`                                    | `bool`            | Fixed backbone, redesigned sidechains for motifs (input structures). |
-| `symmetry`                                                     | `SymmetryConfig`  | See {doc}`symmetry`.                                               |
+| `symmetry`                                                     | `SymmetryConfig`  | See {doc}`examples/symmetry`.                                               |
 | `ori_token`                                                    | `list[float]`     | `[x,y,z]` origin override to control COM (center of mass) placement of designed structure. |
 | `infer_ori_strategy`                                           | `str`             | `"com"` or `"hotspots"`.  The center of mass of the diffused region will typically be within 5Å of the ORI token. Using `hotspots` will place the ORI token 10Å outward from the center of mass of the specified hotspots. Using `com` will place the token at the center of mass of the input structure.|
 | `plddt_enhanced`                                               | `bool`            | Default `True`. Enables pLDDT (predicted Local Distance Difference Test) enhancement. |
@@ -239,7 +239,7 @@ In the following example, RFD3 will noise out by 15 angstroms and constrain atom
 ```json
 {
     "partial_diffusion": {
-        "input": "paper_examples/7v11.cif", 
+        "input": "input_pdbs/7v11.cif", 
         "ligand": "OQO", 
         "partial_t": 15.0,
         "unindex": "A431,A572-573",
