@@ -10,7 +10,8 @@ defaults:
 
 name: rfd3na_no_distill
 tags: [print-model]
-ckpt_path: /net/scratch/raktim/training/logs/train/rfd3na_no_distill/2026-02-17_15-21_JOB_3608348/ckpt/epoch-0020.ckpt
+#ckpt_path: null
+ckpt_path: /net/scratch/raktim/training/logs/train/rfd3na_no_distill/2026-02-19_02-16_JOB_3988845/ckpt/epoch-0170.ckpt
 
 model:
   net:
@@ -76,9 +77,9 @@ datasets:
   train:
     # These are the ratios used in the preprint but we set all pdb sampling by default since not everyone might download the distillation data.
     pdb:
-      probability: 0.6
+      probability: 0.7
     rna_monomer_distillation:
-      probability: 0.4
+      probability: 0.3
     monomer_distillation:
       probability: 0.0
 

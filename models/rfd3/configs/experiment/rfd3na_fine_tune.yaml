@@ -8,9 +8,10 @@ defaults:
   - override /datasets: design_base_rfd3na
   - _self_
 
-name: rfd3na-fine-tune
+name: rfd3na-fine-tune-ss0.5
 tags: [print-model]
-ckpt_path: /projects/ml/aa_design/models/rfd3_latest_foundry.ckpt
+#ckpt_path: /projects/ml/aa_design/models/rfd3_latest_foundry.ckpt
+ckpt_path: /net/scratch/raktim/training/logs/train/rfd3na-fine-tune-ss0.5/2026-02-23_23-57_JOB_4717793/ckpt/epoch-0820.ckpt
 
 model:
   net:
@@ -55,7 +56,7 @@ datasets:
   max_atoms_in_crop: 2560  # ~10x crop size.
   global_transform_args:
     meta_conditioning_probabilities:
-      p_is_nucleic_ss_example: 0.25
+      p_is_nucleic_ss_example: 0.5
       p_nucleic_ss_show_partial_feats: 0.7
       p_canonical_bp_filter: 0.2
       #calculate_NA_SS: 0.3
@@ -76,11 +77,11 @@ datasets:
   train:
     # These are the ratios used in the preprint but we set all pdb sampling by default since not everyone might download the distillation data.
     pdb:
-      probability: 0.5
+      probability: 0.6
     rna_monomer_distillation:
       probability: 0.3
     monomer_distillation:
-      probability: 0.2
+      probability: 0.1
 
   val:
     pseudoknot:

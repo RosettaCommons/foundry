@@ -2,17 +2,18 @@
 # Training configuration for RFD3
 
 defaults:
-  - /debug/default
+  #- /debug/default
   - override /model: rfd3_base
-  #- override /logger: wandb
+  - override /logger: wandb
   - override /datasets: design_base_rfd3na
   - _self_
 
 name: rfd3na_scratch_clean_test
 tags: [print-model]
 
+#ckpt: null
 #ckpt_path: /net/scratch/raktim/training/logs/train/rfd3na-fine-tune/2026-02-17_15-21_JOB_3608285/ckpt/epoch-0590.ckpt
-#ckpt_path: /net/scratch/raktim/training/logs/train/rfd3na_scratch/2026-02-17_17-56_JOB_3620867/ckpt/epoch-0030.ckpt
+ckpt_path: /net/scratch/raktim/training/logs/train/rfd3na_scratch_clean_test/2026-02-19_01-58_JOB_3986244/ckpt/epoch-0180.ckpt
 
 
 model:
@@ -58,7 +59,7 @@ datasets:
   max_atoms_in_crop: 2560  # ~10x crop size.
   global_transform_args:
     meta_conditioning_probabilities:
-      p_is_nucleic_ss_example: 1.0
+      p_is_nucleic_ss_example: 0.25
       p_nucleic_ss_show_partial_feats: 0.7
       p_canonical_bp_filter: 0.2
       #calculate_NA_SS: 0.3
@@ -79,11 +80,11 @@ datasets:
   train:
     # These are the ratios used in the preprint but we set all pdb sampling by default since not everyone might download the distillation data.
     pdb:
-      probability: 0.5
+      probability: 0.6
     rna_monomer_distillation:
       probability: 0.3
     monomer_distillation:
-      probability: 0.2
+      probability: 0.1
 
   val:
     pseudoknot:
