@@ -44,7 +44,7 @@ is working correctly. If you are new to RFdiffusion methods or JSON/YAML structu
 
 To run inference (with foundry installed in your environment, or RFD3 & Foundry src in PYTHONPATH):
 ```bash
-rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/demo.json skip_existing=False dump_trajectories=True prevalidate_inputs=True
+rfd3 design out_dir=logs/inference_outs/demo/0 inputs=models/rfd3/docs/examples/demo.json skip_existing=False dump_trajectories=True prevalidate_inputs=True
 ```
 To run RFD3, you only need to provide the input (`inputs`) JSON/YAML file (see the [external documentation for more details](https://rosettacommons.github.io/foundry/models/rfd3/index.html#general)) where you specify your design constraints and the output directory (`out_dir`) where you want to store the files RFD3 generates.
 
@@ -64,11 +64,11 @@ For full details on how to specify inputs, see the [input specification document
 
 ## Further example JSONs for different applications
 Additional examples are broken up by use case. If you have cloned the
-repository, matching `.json` files are in `foundry/models/rfd3/docs`
+repository, matching `.json` files are in `foundry/models/rfd3/docs/examples`
 that can be run directly, similar to the previous example. 
 
-In the examples the paths to the input files are specified assuming
-that you are running the examples from the `foundry/models/rfd3/docs`
+In the examples, the paths to the input files are specified assuming
+that you are running the examples from the `foundry/models/rfd3/docs/examples`
 directory. If you would like to run RFD3 from a different location, 
 you will need to change the path in the `.json` file(s) before running.
 
@@ -170,7 +170,7 @@ further optimization!
 
 In `models/rfd3/configs/datasets/design_base.yaml` there's the shared configs for all datasets under `global_transform_args`. The dials that control the conditioning described above go under `training_conditions`, where for example `tipatom` - a specific preset conditioning sampler which more frequently fixes few tokens with few atoms - and others can be found.
 
-**Training with WandB:** We strongly recommend tracking your runs via wandb. To use it, simply have your WANDB_API_KEY set and use the wandb logger. For more details see [here](wandb.ai)
+**Training with WandB:** We strongly recommend tracking your runs via wandb. To use it, simply have your WANDB_API_KEY set and use the wandb logger. For more details see [here](https://wandb.ai/site/)
 
 # Appendix
 

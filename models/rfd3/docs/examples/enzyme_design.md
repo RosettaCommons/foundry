@@ -28,7 +28,7 @@ The input files for the different examples are provided in `foundry/models/rfd3/
 ```json
 {
     "M0255_1mg5_unfixed": {
-        "input": "./input_pdbs/M0255_1mg5.pdb", 
+        "input": "../input_pdbs/M0255_1mg5.pdb", 
         "ligand": "NAI,ACT",
         "unindex": "A108,A139,A152,A156",
         "length": "180-200",

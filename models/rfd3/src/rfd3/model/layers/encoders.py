@@ -128,17 +128,21 @@ class TokenInitializer(nn.Module):
 
         # Atom pair feature processing
         if self.use_chunked_pll:
-            # Initialize chunked embedders and share the trained MLPs!
+            # Share trained components so chunked inference uses same weights as full training.
+            motif_pos_embedder = ChunkedSinusoidalDistEmbed(
+                embedder_instance=self.motif_pos_embedder
+            )
+            ref_pos_embedder = ChunkedPositionPairDistEmbedder(
+                embedder_instance=self.ref_pos_embedder
+            )
             self.chunked_pairwise_embedder = ChunkedPairwiseEmbedder(
                 c_atompair=c_atompair,
-                motif_pos_embedder=ChunkedSinusoidalDistEmbed(c_atompair=c_atompair),
-                ref_pos_embedder=ChunkedPositionPairDistEmbedder(
-                    c_atompair, embed_frame=False
-                ),
-                process_single_l=self.process_single_l,  # Share trained parameters!
-                process_single_m=self.process_single_m,  # Share trained parameters!
-                process_z=self.process_z,  # Share trained parameters!
-                pair_mlp=self.pair_mlp,  # Share trained parameters!
+                motif_pos_embedder=motif_pos_embedder,
+                ref_pos_embedder=ref_pos_embedder,
+                process_single_l=self.process_single_l,
+                process_single_m=self.process_single_m,
+                process_z=self.process_z,
+                pair_mlp=self.pair_mlp,
             )
         self.process_pll = linearNoBias(c_atompair, c_atompair)
         self.project_pll = linearNoBias(c_atompair, c_z)
@@ -223,7 +227,9 @@ class TokenInitializer(nn.Module):
             C_L = Q_L_init + self.process_s_trunk(S_init_I)[..., tok_idx, :]
 
             if self.use_chunked_pll:
-                # Chunked mode: return embedder for later sparse computation
+                # Precompute static MLP projections once so forward_chunked can
+                # skip those MLP calls at every subsequent diffusion step.
+                self.chunked_pairwise_embedder.cache_static_projections(C_L, Z_init_II)
                 return {
                     "Q_L_init": Q_L_init,
                     "C_L": C_L,
