@@ -7,24 +7,30 @@
 > [!IMPORTANT]
 > We are currently finalizing some cleanup work on the inference API. Please expect the API (including input formats and confidence outputs) to stabilize in the upcoming weeks. Thank you for your patience!
 
-RF3 is an all-atom biomolecular structure prediction network competitive with leading open-source models. By including additional features at train-time – implicit chirality representations and atom-level geometric conditioning – we improve performance on tasks such as prediction of chiral ligands and fixed-backbone or fixed-conformer docking.
+RoseTTAFold3 (RF3) is an all-atom biomolecular structure prediction network competitive with leading open-source models. By including additional features at train-time – implicit chirality representations and atom-level geometric conditioning – we improve performance on tasks such as prediction of chiral ligands and fixed-backbone or fixed-conformer docking.
 
 For more information, please see our preprint, [Accelerating Biomolecular Modeling with AtomWorks and RF3](https://doi.org/10.1101/2025.08.14.670328).
 
 This guide provides instructions on preparing inputs and running inference for RF3. 
 
 ##  Installation, Setup, and a Basic Prediction
-### A. Installation using `uv`
+If you have already installed all of the models available in Foundry and downloaded the available model weights (see the [Foundry README](../../README.md) for details), skip [here](#c-run-a-test-prediction). 
+
+### A. Installation
+
+If you would like to install only RF3: 
 ```bash
-git clone https://github.com/RosettaCommons/foundry.git \
-  && cd foundry \
-  && uv python install 3.12 \
-  && uv venv --python 3.12 \
-  && source .venv/bin/activate \
-  && uv pip install -e ".[rf3]"
+pip install rc-foundry[rf3]
 ```
 
 ### B. Download model weights for RF3
+> [!IMPORTANT]
+> If you downloaded the Foundry weights via 
+> ```bash
+> foundry install base-models
+> ```
+> then only the 'latest' model checkpoint was downloaded. 
+> If you want the model checkpoints from the preprint or the benchmark, follow the instructions below.
 
 We offer three model checkpoints:
 
@@ -36,7 +42,7 @@ We offer three model checkpoints:
 
 **Latest (recommended):**
 ```bash
-wget http://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_latest.ckpt
+wget http://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_latest_remapped.ckpt
 ```
 
 **Preprint:**
@@ -53,13 +59,16 @@ wget http://files.ipd.uw.edu/pub/rf3/rf3_foundry_09_21_preprint.ckpt
 > The inference API is identical across all checkpoints.
 
 ### C. Run a test prediction
+> [!NOTE]
+> The input file in the example below includes a path to the MSA file required to run it. This path assumes that you are running this example from the Foundry root directory. 
+
 ```bash
-rf3 fold inputs='tests/data/5vht_from_json.json'
+rf3 fold inputs='/path/to/foundry/models/rf3/tests/data/5vht_from_json.json' out_dir='/path/to/your/output/directory'
 ```
 
 You may then specify the specific checkpoint, if desired, with:
 ```bash
-rf3 fold inputs='tests/data/5vht_from_json.json' ckpt_path='/path/to/rf3_921.pt'
+rf3 fold inputs='path/to/foundry/models/rf3/tests/data/5vht_from_json.json' ckpt_path='/path/to/rf3_921.pt' out_dir='/path/to/your/output/directory'
 ```
 
 > [!NOTE]
@@ -69,13 +78,13 @@ rf3 fold inputs='tests/data/5vht_from_json.json' ckpt_path='/path/to/rf3_921.pt'
 > Rather than `rf3 fold`, you may also directly use `python models/rf3/src/rf3/inference.py inputs='tests/data/5vht_from_json.json'` to interface with the Hydra entrypoint. This approach may yield more informative error messages in some cases.
 
 From the above command, you should see several outputs:
-- `5vht_from_json_metrics.csv` — overall confidence metrics for this example
-- `5vht_from_json.score` - more granular confidence metrics for this example
-- `5vht_from_json_model_0.cif.gz` - zipped model prediction for the first diffusion seed (PyMol can open `.gz` files directly)
-- `5vht_from_json_model_1.cif.gz` - zipped model prediction for the second diffusion seed
-- ...
+- `5vht_from_json_confidences.csv` — overall confidence metrics for this example
+- `5vht_from_json_ranking_scores.csv` - more granular confidence metrics for this example
+- `5vht_from_json_model.cif` - structure file for the highest ranked structure
+- `5vht_from_json_summary_confidences.json` - contains additional data you can use to help analyze the quality of the highest-scoring fold
+- `seed-0_sample-n` - folders that contain similar information and structure files for the other generated folds, n is the sample number
 
-For this example, the pTM in the `metrics.csv` should be `>0.8` (even without an MSA); if not, there may be something wrong with your setup.
+For this example, the pTM in the `5vht_from_json_summary_confidences.json` should be `>0.8` (even without an MSA); if not, there may be something wrong with your setup.
 
 ## Common Scenarios
 
@@ -84,7 +93,7 @@ For this example, the pTM in the `metrics.csv` should be `>0.8` (even without an
 
 RF3 supports `.a3m` and `.fasta` files as input MSA formats; `.a3m` is recommended. We do not at the moment support pre-paired MSAs (we will pair on-the-fly) or on-the-fly MSA computation, but both are on the roadmap. Please raise an issue if these limitations are critical for your project and we can prioritize accordingly.
 
-📝 **Example JSON configuration** (full example found at `../../docs/releases/rf3/examples/3en2_from_json_with_msa.json`):
+📝 **Example JSON configuration** (full example found at `foundry/models/rf3/docs/examples/3en2_from_json_with_msa.json`):
 
 ```json
 {
@@ -102,7 +111,7 @@ RF3 supports `.a3m` and `.fasta` files as input MSA formats; `.a3m` is recommend
 🚀 **Run the example:**
 
 ```bash
-rf3 fold inputs='../../docs/releases/rf3/examples/3en2_from_json_with_msa.json'
+rf3 fold inputs='models/rf3/docs/examples/3en2_from_json_with_msa.json'
 ```
 
 ---
@@ -110,26 +119,26 @@ rf3 fold inputs='../../docs/releases/rf3/examples/3en2_from_json_with_msa.json'
 If performing inference from a prepared `.cif` file, MSAs can also be specified directly as a category within the raw CIF data.
 We will automatically extract the correct MSA paths during parsing.
 
-📝 **Example CIF header** (full example found at `../../docs/releases/rf3/examples/3en2_from_file.cif`):
+📝 **Example CIF header** (full example found at `models/rf3/docs/examples/3en2_from_file.cif`):
 ```cif
 data_3EN2
 #
-_msa_paths_by_chain_id.A   ../../docs/releases/rf3/examples/msas/b3a35202064.a3m.gz
-_msa_paths_by_chain_id.B   ../../docs/releases/rf3/examples/msas/b3a35202064.a3m.gz
+_msa_paths_by_chain_id.A   models/rf3/docs/examples/msas/b3a35202064.a3m.gz
+_msa_paths_by_chain_id.B   models/rf3/docs/examples/msas/b3a35202064.a3m.gz
 # 
 ```
 
 🚀 **Run the example:**
 
 ```bash
-rf3 fold inputs='docs/rf3/3en2_from_file.cif
+rf3 fold inputs='models/rf3/docs/3en2_from_file.cif
 ```
 
 > [!TIP]
 > Without an MSA and using default settings, the above examples will trigger "early stopping." This means that if the model determines early on that a correct prediction is unlikely, it will stop computation and only output a `metrics.csv` and `.score` file to save compute resources. You can adjust this behavior using the `early_stopping_plddt_threshold` argument (see below). In our group, we find this argument can save wasted compute on erroneous inputs.
 
 > [!TIP]
-> To ensure that a provided MSA is loaded correctly, you may use the `raise_if_missing_msa_for_protein_of_length_n` command-line argument. For example, `rf3 fold inputs='../../docs/releases/rf3/examples/3en2_from_json_with_msa.json' raise_if_missing_msa_for_protein_of_length_n=10` would raise an error if there were any proteins >=10 residues without compatible MSAs.
+> To ensure that a provided MSA is loaded correctly, you may use the `raise_if_missing_msa_for_protein_of_length_n` command-line argument. For example, `rf3 fold inputs='models/rf3/docs/examples/3en2_from_json_with_msa.json' raise_if_missing_msa_for_protein_of_length_n=10` would raise an error if there were any proteins >=10 residues without compatible MSAs.
 
 > [!TIP]
 > For non-canonical amino acids, most MSA generation algorithms substitute `X` (unknown residue)! Ensure your MSAs adhere to this convention.
@@ -155,7 +164,7 @@ We will automatically distribute predictions across GPU's if running in a multi-
 
 ### 1️⃣ **Single JSON with Multiple Examples**
 
-📝 **Example JSON configuration** (full example found at `../../docs/releases/rf3/examples/multiple_example_from_json.json`)
+📝 **Example JSON configuration** (full example found at `models/rf3/docs/examples/multiple_example_from_json.json`)
 
 ```json
 [
@@ -189,7 +198,7 @@ We will automatically distribute predictions across GPU's if running in a multi-
 🚀 **Run the example:**
 
 ```bash
-rf3 fold inputs='../../docs/releases/rf3/examples/multiple_examples_from_json.json'
+rf3 fold inputs='models/rf3/docs/examples/multiple_examples_from_json.json'
 ```
 
 ---
@@ -199,7 +208,7 @@ rf3 fold inputs='../../docs/releases/rf3/examples/multiple_examples_from_json.js
 You can specify multiple files/directories using Hydra's list syntax:
 
 ```bash
-rf3 fold inputs='[../../docs/releases/rf3/examples/701r_from_file.cif, ../../docs/releases/rf3/examples/701r_from_json.json]'
+rf3 fold inputs='[models/rf3/docs/examples/701r_from_file.cif, models/rf3/docs/examples/701r_from_json.json]'
 ```
 
 ---
@@ -209,14 +218,14 @@ rf3 fold inputs='[../../docs/releases/rf3/examples/701r_from_file.cif, ../../doc
 Process all CIF/PDB/JSON files in a directory at once (we will distribute across GPU's if running within a multi-GPU environment):
 
 ```bash
-rf3 fold inputs='docs/rf3/examples'
+rf3 fold inputs='models/rf3/docs/examples'
 ```
 
 > [!TIP]
 > **Performance Tip**: For large batches, consider using `early_stopping_plddt_threshold=0.5` or lower to quickly filter out low-confidence predictions and save compute time on obviously incorrect structures.
 
 > [!NOTE]
-> All outputs will be saved in the same directory (or `out_dir` if specified), with filenames based on the `name` field in your JSON or the original input filenames.
+> Without providing an output directory via `out_dir` the outputs will only be stored in memory, which means they will not be accessible once the job(s) are completed. If you want to access the results of RF3, specify an out_dir.
 
 </details>
 
@@ -228,7 +237,7 @@ Complex assemblies containing arbitrary biomolecules can be easily folded if pre
 
 🚀 **Run an example from a prepared CIF file:**
 ```bash
-rf3 fold inputs='../../docs/releases/rf3/examples/7o1r_from_file.cif'
+rf3 fold inputs='models/rf3/docs/examples/7o1r_from_file.cif'
 ```
 
 Such files (including all bonds, covalent modifications, non-canonical amino acids, etc.) can be created either (a) directly from ProteinMPNN/LigandMPNN or other software that generates structural files; or, (b) assembled with [AtomWorks](https://github.com/RosettaCommons/atomworks) or another CIF-processing library.
@@ -236,9 +245,9 @@ Such files (including all bonds, covalent modifications, non-canonical amino aci
 For convenience, we also support a `json` API analogous to that implemented by AF3. We omit covalent modifications below as those are described in a subsequent example.
 
 > [!TIP]
-> **Performance Tip**: For small molecules, a general rule-of-thumb is that performance is best when using `CCD` codes directly, followed by `cif`/`sdf` files, and finally SMILES.
+> **Performance Tip**: For small molecules, a general rule-of-thumb is that performance is best when using [`CCD`](https://www.wwpdb.org/data/ccd) codes directly, followed by `cif`/`sdf` files, and finally SMILES.
 
-📝 **Example JSON configuration with arbitrary biomolecules** (full example found at `../../docs/releases/rf3/examples/7o1r_from_json.json`):
+📝 **Example JSON configuration with arbitrary biomolecules** (full example found at `models/rf3/docs/examples/7o1r_from_json.json`):
 ```json
 [
     {
@@ -246,7 +255,7 @@ For convenience, we also support a `json` API analogous to that implemented by A
         "components": [
             {
                 "seq": "MKSLSFSLALGFGSTLVYSAPSPSSGWQAPGPNDVRAPCPMLNTLANHGFLPHDGKGITVNKTIDALGSALNIDANLSTLLFGFAATTNPQPNATFFDLDHLSRHNILEHDASLSRQDSYFGPADVFNEAVFNQTKSFWTGDIIDVQMAANARIVRLLTSNLTNPEYSLSDLGSAFSIGESAAYIGILGDKKSATVPKSWVEYLFENERLPYELGFKRPNDPFTTDDLGDLSTQIINAQHFPQSPGKVEKRGDTRCPYGYH",
-                "msa_path": "../../docs/releases/rf3/examples/msas/7o1r_A.a3m.gz",
+                "msa_path": "models/rf3/docs/examples/msas/7o1r_A.a3m.gz",
                 "chain_id": "A"
             },
             {
@@ -259,7 +268,7 @@ For convenience, we also support a `json` API analogous to that implemented by A
             {
                 // We provide the heme (HEME) via SDF from the CCD; we could have also used a CIF file
                 // We will automatically name the atoms (SDF files do not specify atom names)
-                "path": "../../docs/releases/rf3/examples/ligands/HEM.sdf"
+                "path": "models/rf3/docs/examples/ligands/HEM.sdf"
             },
             {
                 // We provide the imidazole ring (IMD) via SMILES
@@ -274,7 +283,7 @@ For convenience, we also support a `json` API analogous to that implemented by A
 🚀 **Run the example:**
 
 ```bash
-rf3 fold inputs='../../docs/releases/rf3/examples/7o1r_from_json.json'
+rf3 fold inputs='models/rf3/docs/examples/7o1r_from_json.json'
 ```
 
 **Supported input options:**
@@ -289,18 +298,15 @@ rf3 fold inputs='../../docs/releases/rf3/examples/7o1r_from_json.json'
 <details>
 <summary><strong>Folding with a Covalent Modification</strong></summary>
 
-RF3 supports both standard (e.g., in the CCD) covalent modifications and custom (e.g., not in the CCD) covalent modifications.
+RF3 supports both standard (e.g., in the [CCD](https://www.wwpdb.org/data/ccd)) covalent modifications and custom (e.g., not in the CCD) covalent modifications.
 
 As described in the example [Folding with Arbitrary Biomolecules](#folding-with-arbitrary-biomolecules), a well-formed CIF file includes `struct_conn` records that detail covalent modifications. RF3 can natively handle such an input.
 
 For example, folding `7o1r`, which contains two N-glycosylations:
 ```bash
-rf3 fold inputs='../../docs/releases/rf3/examples/7o1r_from_file.cif'
+rf3 fold inputs='models/rf3/docs/examples/7o1r_from_file.cif'
 ```
 
-<p align="center">
-  <img src="../../docs/_static/7o1r_covalent_modification.png" alt="7o1r Covalent Modification" width="25%"/>
-</p>
 <p align="center">
   <em>Figure: `7o1r` structure showing N-glycosylation covalent modification prediction with RF3 and ground truth crystal structure.</em>
 </p>
@@ -309,7 +315,7 @@ Such `.cif` files complete with appropriate bonds can be composed with AtomWorks
 
 If you would prefer to use the JSON API, bonds can be explicitly given using PyMol-like strings of the form `chain_id/res_name/res_id/atom_name`. You will need to know the specific chain ID, residue name, residue ID, and atom name between the relevant pairs of atoms to unambiguously specify the bond.
 
-📝 **Example JSON configuration with covalent modifcations** (full example found at `../../docs/releases/rf3/examples/7o1r_from_json.json`):
+📝 **Example JSON configuration with covalent modifcations** (full example found at `models/rf3/docs/examples/7o1r_from_json.json`):
 ```json
 [
     {
@@ -317,7 +323,7 @@ If you would prefer to use the JSON API, bonds can be explicitly given using PyM
         "components": [
             {
                 "seq": "MKSLSFSLALGFGSTLVYSAPSPSSGWQAPGPNDVRAPCPMLNTLANHGFLPHDGKGITVNKTIDALGSALNIDANLSTLLFGFAATTNPQPNATFFDLDHLSRHNILEHDASLSRQDSYFGPADVFNEAVFNQTKSFWTGDIIDVQMAANARIVRLLTSNLTNPEYSLSDLGSAFSIGESAAYIGILGDKKSATVPKSWVEYLFENERLPYELGFKRPNDPFTTDDLGDLSTQIINAQHFPQSPGKVEKRGDTRCPYGYH",
-                "msa_path": "../../docs/releases/rf3/examples/msas/7o1r_A.a3m.gz",
+                "msa_path": "models/rf3/docs/examples/msas/7o1r_A.a3m.gz",
                 "chain_id": "A"
             },
             {
@@ -325,10 +331,10 @@ If you would prefer to use the JSON API, bonds can be explicitly given using PyM
             },
             {
                 // We provide one sugar via a CIF file, with complete control over bonds and atom names (as we use the atom names from the CIF file)
-                "path": "../../docs/releases/rf3/examples/ligands/NAG.cif"
+                "path": "models/rf3/docs/examples/ligands/NAG.cif"
             },
             {
-                "path": "../../docs/releases/rf3/examples/ligands/HEM.sdf"
+                "path": "models/rf3/docs/examples/ligands/HEM.sdf"
             },
             {
                 "smiles": "[nH]1cc[nH+]c1"
@@ -359,7 +365,7 @@ If you would prefer to use the JSON API, bonds can be explicitly given using PyM
 
 For some more convoluted applications it is necessary to provide custom CIF files. For example, if one wants to include a bespoke covalent modification. In such situations, generally the easiest path is to use AtomWorks to create and validate the file beforehand.
 
-For example, in the covalent modifcation example above, the custom `NAG` `.cif` file was created with:
+For example, in the covalent modification example above, the custom `NAG` `.cif` file was created with:
 
 ```python
 from atomworks.io.utils.io_utils import read_any, to_cif_file
@@ -368,7 +374,7 @@ from atomworks.io.utils.visualize import view
 import numpy as np
 
 # Load an SDF file into an AtomArray
-sdf_path = "../../docs/releases/rf3/examples/ligands/NAG.sdf"
+sdf_path = "models/rf3/docs/examples/ligands/NAG.sdf"
 
 # Load into an AtomArray
 # Since SDF file files do not have atom names, we automatically generate them (e.g., C1, C2, C3, etc.)
@@ -417,7 +423,7 @@ We now know exactly which atom name corresponds to which atom, enabling us to un
 RF3 departs from prior structure prediction models by including explicit atomic-level, ground-truth templates during training. That is, with some probability, we show the model a portion of the **the actual ground-truth crystal structure** rather than a template identified through homology-based search like prior methods. We make this choice to maximize flexibility during inference, where we often want to fix portions of the structure while allowing other components to fold.
 
 More specifically, we template in two ways:
-- At the token-level, by providing a ground-truth distogram
+- At the token-level, by providing a ground-truth distogram (histogram of distances)
 - At the atom-level through the reference-conformer track, where we provide an explicit "ground truth conformer"
 
 Different templating techniques are appropriate for different situations. Templating polymer structure is best accomplished through the token-level track (`template_selection`). Small molecule templating (but only if we want to template the entire residue) is best accomplished through the `ground_truth_conformer_selection` track, but could also be done through `template_selection` in cases where we do not want to fix the entire residue.
@@ -465,17 +471,17 @@ RF3 uses AtomWorks' flexible `AtomSelectionStack` query syntax for specifying st
 
 It is often helpful to template one or multiple polymer chains while allowing the other chain(s) to fold unconstrained. We demonstrate with an nanobody-antigen use case below how to apply templates.
 
-📝 **Example JSON configuration templating the antigen and the nanobody framework** (full example found at `../../docs/releases/rf3/examples/7xli_template_antigen_and_framework.json`):
+📝 **Example JSON configuration templating the antigen and the nanobody framework** (full example found at `models/rf3/docs/examples/7xli_template_antigen_and_framework.json`):
 ```json
 [
     {
         "name": "7xli_template_antigen",
         "components": [
             {
-                "path": "../../docs/releases/rf3/examples/templates/7xli_chain_A.cif"
+                "path": "models/rf3/docs/examples/templates/7xli_chain_A.cif"
             },
             {
-                "path": "../../docs/releases/rf3/examples/templates/7xli_chain_B.cif"
+                "path": "models/rf3/docs/examples/templates/7xli_chain_B.cif"
             }
         ],
         "template_selection": ["A", "B/*/1-42", "B/*/49-63", "B/*/71-102", "B/*/108-125"]
@@ -486,7 +492,7 @@ It is often helpful to template one or multiple polymer chains while allowing th
 🚀 **Run the example:**
 
 ```bash
-rf3 fold inputs='../../docs/releases/rf3/examples/7xli_template_antigen_and_framework.json'
+rf3 fold inputs='models/rf3/docs/examples/7xli_template_antigen_and_framework.json'
 ```
 
 You may also specify templating directly via the CLI using `template_selection="[A, B/*/1-42, ...]"`.
@@ -494,20 +500,22 @@ You may also specify templating directly via the CLI using `template_selection="
 > [!NOTE]
 > **Pairwise Contact Support**: The model was trained with random pairwise contacts; our inference API could be further extended to support specification of individual (token-level) pairwise contacts in the future. Please let us know if this would be helpful for your usecase and we can prioritize appropriately.
 
+<!-- THE BELOW WAS COMMENTED OUT DUE TO MISSING FILES 
+
 #### Templating a Small Molecule
 
 We find that enforcing a particular small molecule conformation has various applications within fixed-ligand protein docking, enzyme activity filtering, and other biologically relevant tasks. RF3 natively enables encouraging a particular small molecule conformations via both the ground truth reference conformer track and the template selection track. 
 
 For the moment, the ground truth conformer track is only effective if we want to template the *entire* small molecule. Partial templating of small molecules is still possible via the `template_selection` approach. We encourage exploration of both templating techniques to find what combination(s) are most effective for a given problem. Below we provide both, which represents the strongest possible conditioning.
 
-📝 **Example JSON configuration templating a small molecule and the corresponding protein** (full example found at `../../docs/releases/rf3/examples/1eiz_template_ligand_and_protein.json`):
+📝 **Example JSON configuration templating a small molecule and the corresponding protein** (full example found at `models/rf3/docs/examples/1eiz_template_ligand_and_protein.json`):
 ```json
 [
     {
         "name": "9dfn_template_ligand_and_protein",
         "components": [
             {
-                "path": "../../docs/releases/rf3/examples/9dfn.cif"
+                "path": "models/rf3/docs/examples/9dfn.cif"
             }
         ],
         "template_selection": ["A", "C", "D"],
@@ -523,7 +531,7 @@ For the moment, the ground truth conformer track is only effective if we want to
 🚀 **Run the example:**
 
 ```bash
-rf3 fold inputs='../../docs/releases/rf3/examples/8cdz_templating_ligand.json'
+rf3 fold inputs='models/rf3/docs/examples/8cdz_templating_ligand.json'
 ```
 
 You may also specify the ground truth conformer selection directly via the CLI, e.g., using `ground_truth_conformer_selection="[E]"`
@@ -532,7 +540,7 @@ You may also specify the ground truth conformer selection directly via the CLI, 
 
 RF3 was also trained to respect interface templates; that is, pairwise distances between tokens across an interface. We have yet to extend our inference API to support this use case; if it would be helpful, please raise an issue on GitHub and we can re-prioritize accordingly.
 
-*Content coming soon...*
+*Content coming soon...* -->
 
 </details>
 

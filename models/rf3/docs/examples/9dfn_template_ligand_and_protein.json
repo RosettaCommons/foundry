@@ -3,7 +3,7 @@
         "name": "9dfn_template_ligand_and_protein",
         "components": [
             {
-                "path": "docs/rf3/examples/9dfn.cif"
+                "path": "models/rf3/docs/examples/9dfn.cif"
             }
         ],
         "template_selection": ["A", "C", "D"],
