@@ -57,9 +57,14 @@ def strip_f(
 
         # set the feature to default value if it is in the cfg_features
         if k in cfg_features:
-            v_cropped = torch.zeros_like(v_cropped).to(
-                v_cropped.device, dtype=v_cropped.dtype
-            )
+            if k not in ["bp_partners"]:
+                v_cropped = torch.zeros_like(v_cropped).to(
+                    v_cropped.device, dtype=v_cropped.dtype
+                )
+            else:
+                ## for bp_partners default is a mask feature
+                v_cropped[:,:,0] = 1
+                v_cropped[:,:,1:] = 0
 
         # update the feature in the dictionary
         f_stripped[k] = v_cropped
