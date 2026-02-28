@@ -13,23 +13,24 @@ General
 
    intro_inference_calculations.md
    input.md
+   designability_vs_diversity.md
 
 Tutorials
 ---------
 .. toctree::
    :maxdepth: 1
 
-   ppi_design_tutorial.md
-   enzyme_design_tutorial.md
-   na_binder_tutorial.md
+   tutorials/ppi_design_tutorial.md
+   tutorials/enzyme_design_tutorial.md
+   tutorials/na_binder_tutorial.md
 
 Examples
 --------
 .. toctree::
    :maxdepth: 1 
 
-   na_binder_design.md
-   sm_binder_design.md
-   protein_binder_design.md
-   symmetry.md
-   enzyme_design.md
+   examples/na_binder_design.md
+   examples/sm_binder_design.md
+   examples/protein_binder_design.md
+   examples/symmetry.md
+   examples/enzyme_design.md
