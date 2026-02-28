@@ -2,7 +2,7 @@
 In RFdiffusion3 (RFD3), [YAML](https://yaml.org/) or [JSON](https://www.json.org/json-en.html) files are used to specify the **settings** for your inference calculations and [**configuration options**](https://hydra.cc/docs/configure_hydra/intro/) are used to provide other information about your calculation, such as the location and name of the checkpoint file you want to use. 
 
 ## Inference Settings
-The inference 'settings' are how you constrain your inference calculation, such as specifying portions of the output you wish to have designed (`contig`) and specifying any symmetries that exist in your system (`symmetry`). These settings are stored in either a YAML or JSON file to be interpreted by RFdiffusion3. Runnable example sof json and yaml files can be found in `foundry/models/rfd3/docs`.
+The inference 'settings' are how you constrain your inference calculation, such as specifying portions of the output you wish to have designed (`contig`) and specifying any symmetries that exist in your system (`symmetry`). These settings are stored in either a YAML or JSON file to be interpreted by RFdiffusion3. Runnable examples of json and yaml files can be found in `foundry/models/rfd3/docs/examples`.
 
 Using this type of input specification allows you to define different types of inference calculations all in the same file, and either run all of the calculation types defined in the file or specify the specific calculation you want to run via the command line. 
 

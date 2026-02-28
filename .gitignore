@@ -184,6 +184,9 @@ ruff.toml
 
 # Development
 dev.py
+lib
+.gitmodules
+.ipd/
 
 # Pytest
 *.benchmarks/

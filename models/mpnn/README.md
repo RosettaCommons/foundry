@@ -18,8 +18,8 @@ This guide provides instructions on preparing inputs and running inference for P
 ## Installation
 ### A. Installation using `uv`
 ```bash
-git clone https://github.com/RosettaCommons/rc-foundry.git \
-  && cd rc-foundry \
+git clone https://github.com/RosettaCommons/foundry.git \
+  && cd foundry \
   && uv python install 3.12 \
   && uv venv --python 3.12 \
   && source .venv/bin/activate \

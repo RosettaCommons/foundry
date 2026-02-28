@@ -4,17 +4,17 @@
         "components": [
             {
                 "seq": "MKSLSFSLALGFGSTLVYSAPSPSSGWQAPGPNDVRAPCPMLNTLANHGFLPHDGKGITVNKTIDALGSALNIDANLSTLLFGFAATTNPQPNATFFDLDHLSRHNILEHDASLSRQDSYFGPADVFNEAVFNQTKSFWTGDIIDVQMAANARIVRLLTSNLTNPEYSLSDLGSAFSIGESAAYIGILGDKKSATVPKSWVEYLFENERLPYELGFKRPNDPFTTDDLGDLSTQIINAQHFPQSPGKVEKRGDTRCPYGYH",
-                "msa_path": "docs/rf3/examples/msas/7o1r_A.a3m.gz",
+                "msa_path": "models/rf3/docs/examples/msas/7o1r_A.a3m.gz",
                 "chain_id": "A"
             },
             {
                 "ccd_code": "MG"
             },
             {
-                "path": "docs/rf3/examples/ligands/NAG.cif"
+                "path": "models/rf3/docs/examples/ligands/NAG.cif"
             },
             {
-                "path": "docs/rf3/examples/ligands/HEM.sdf"
+                "path": "models/rf3/docs/examples/ligands/HEM.sdf"
             },
             {
                 "smiles": "[nH]1cc[nH+]c1"

@@ -31,7 +31,7 @@ RFD3 is also capable of designing proteins that bind small molecules. Here are s
 ```json
 {
     "buried": {
-        "input": "./input_pdbs/IAI.pdb",
+        "input": "../input_pdbs/IAI.pdb",
         "length": "180-180",
         "ligand": "IAI",
         "select_fixed_atoms": {
@@ -42,7 +42,7 @@ RFD3 is also capable of designing proteins that bind small molecules. Here are s
         }
     },
     "partial": {
-        "input": "./input_pdbs/IAI.pdb",
+        "input": "../input_pdbs/IAI.pdb",
         "ligand": "IAI",
         "length": "180-180",
         "select_fixed_atoms": {

@@ -86,7 +86,7 @@ The tasks that these examples describe are as follows:
             "id": "C2",
             "is_symmetric_motif": true
         },
-        "input": "input_pdbs/symmetry_examples/1j79_C2.pdb",
+        "input": "../input_pdbs/symmetry_examples/1j79_C2.pdb",
         "ligand": "ORO,ZN",
         "unindex": "A250",
         "length": 130,
@@ -99,7 +99,7 @@ The tasks that these examples describe are as follows:
             "id": "C2",
             "is_symmetric_motif": true
         },
-        "input": "input_pdbs/symmetry_examples/1e3v_C2.pdb",
+        "input": "../input_pdbs/symmetry_examples/1e3v_C2.pdb",
         "ligand": "DXC",
         "unindex": "A16,A40,A100,A103",
         "length": 80,
@@ -116,7 +116,7 @@ The tasks that these examples describe are as follows:
             "is_symmetric_motif": true,
             "is_unsym_motif": "HEM"
         },
-        "input": "input_pdbs/symmetry_examples/1bfr_C2.pdb",
+        "input": "../input_pdbs/symmetry_examples/1bfr_C2.pdb",
         "ligand": "HEM",
         "contig": "51,M52,80",
         "length": null,
@@ -130,7 +130,7 @@ The tasks that these examples describe are as follows:
             "is_symmetric_motif": true,
             "is_unsym_motif": "Y1-11,Z16-25"
         },
-        "input": "input_pdbs/symmetry_examples/6t8h_C3.pdb",
+        "input": "../input_pdbs/symmetry_examples/6t8h_C3.pdb",
         "contig": "150-150,/0,Y1-11,/0,Z16-25",
         "length": null,
         "is_non_loopy": true
