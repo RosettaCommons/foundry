@@ -196,7 +196,7 @@ def create_attention_indices(
         X_L = torch.randn(
             (1, L, 3), device=device, dtype=torch.float
         )  # [L, 3] - random
-    D_LL = torch.cdist(X_L, X_L, p=2)  # [B, L, L] - pairwise atom distances
+    D_LL = torch.cdist(X_L.float(), X_L.float(), p=2)  # [B, L, L] - always float32: bfloat16 quantises distances severely at large t, causing topk ties and duplicate attention indices
 
     # Create attention indices using neighbour distances
     base_mask = ~f["unindexing_pair_mask"][
