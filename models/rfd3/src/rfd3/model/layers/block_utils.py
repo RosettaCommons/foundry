@@ -197,6 +197,7 @@ def create_attention_indices(
             (1, L, 3), device=device, dtype=torch.float
         )  # [L, 3] - random
     D_LL = torch.cdist(X_L.float(), X_L.float(), p=2)  # [B, L, L] - always float32: bfloat16 quantises distances severely at large t, causing topk ties and duplicate attention indices
+    D_LL = D_LL.nan_to_num(nan=1e8)  # bfloat16 overflow at high noise t produces NaN coords → NaN distances → topk undefined behaviour → duplicate indices
 
     # Create attention indices using neighbour distances
     base_mask = ~f["unindexing_pair_mask"][
