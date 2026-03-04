@@ -313,15 +313,24 @@ class ProteinMPNN(nn.Module):
         for layer in self.encoder_layers:
             # h_V [B, L, self.hidden_dim] - the updated node features.
             # h_E [B, L, K, self.hidden_dim] - the updated edge features.
-            h_V, h_E = torch.utils.checkpoint.checkpoint(
-                layer,
-                h_V,
-                h_E,
-                graph_features["E_idx"],
-                mask_V=input_features["residue_mask"],
-                mask_E=mask_E,
-                use_reentrant=False,
-            )
+            if self.training and torch.is_grad_enabled():
+                h_V, h_E = torch.utils.checkpoint.checkpoint(
+                    layer,
+                    h_V,
+                    h_E,
+                    graph_features["E_idx"],
+                    mask_V=input_features["residue_mask"],
+                    mask_E=mask_E,
+                    use_reentrant=False,
+                )
+            else:
+                h_V, h_E = layer(
+                    h_V,
+                    h_E,
+                    graph_features["E_idx"],
+                    mask_V=input_features["residue_mask"],
+                    mask_E=mask_E,
+                )
 
         # Create the encoder features dictionary.
         encoder_features = {
@@ -1104,14 +1113,22 @@ class ProteinMPNN(nn.Module):
 
             # h_V_decoder [B, L, H] - the updated node features for the
             # decoder.
-            h_V_decoder = torch.utils.checkpoint.checkpoint(
-                layer,
-                h_V_decoder,
-                h_ESV,
-                mask_V=input_features["residue_mask"],
-                mask_E=mask_E,
-                use_reentrant=False,
-            )
+            if self.training and torch.is_grad_enabled():
+                h_V_decoder = torch.utils.checkpoint.checkpoint(
+                    layer,
+                    h_V_decoder,
+                    h_ESV,
+                    mask_V=input_features["residue_mask"],
+                    mask_E=mask_E,
+                    use_reentrant=False,
+                )
+            else:
+                h_V_decoder = layer(
+                    h_V_decoder,
+                    h_ESV,
+                    mask_V=input_features["residue_mask"],
+                    mask_E=mask_E,
+                )
 
         # logits [B, L, self.vocab_size] - project the final node features to
         # get the sequence logits.
@@ -1574,14 +1591,22 @@ class ProteinMPNN(nn.Module):
                 # h_V_decoder_i [B, 1, H] - the updated node features for the
                 # decoder, after applying the layer at the current decoding
                 # index.
-                h_V_decoder_i = torch.utils.checkpoint.checkpoint(
-                    layer,
-                    h_V_decoder_stack[layer_idx][batch_idx, i],
-                    h_ESV_i,
-                    mask_V=residue_mask_i,
-                    mask_E=mask_E_i,
-                    use_reentrant=False,
-                )
+                if self.training and torch.is_grad_enabled():
+                    h_V_decoder_i = torch.utils.checkpoint.checkpoint(
+                        layer,
+                        h_V_decoder_stack[layer_idx][batch_idx, i],
+                        h_ESV_i,
+                        mask_V=residue_mask_i,
+                        mask_E=mask_E_i,
+                        use_reentrant=False,
+                    )
+                else:
+                    h_V_decoder_i = layer(
+                        h_V_decoder_stack[layer_idx][batch_idx, i],
+                        h_ESV_i,
+                        mask_V=residue_mask_i,
+                        mask_E=mask_E_i,
+                    )
 
                 # h_V_decoder_stack[layer_idx + 1][batch_idx, i] [B, 1, H] -
                 # the updated node features for the decoder, after applying the
@@ -2510,14 +2535,22 @@ class LigandMPNN(ProteinMPNN):
             # not concatenated into ligand_subgraph_edges; This breaks message
             # passing in the small molecule graph (no message passing in the
             # ligand subgraph).
-            h_ligand_subgraph_nodes = torch.utils.checkpoint.checkpoint(
-                self.ligand_context_encoder_layers[i],
-                h_ligand_subgraph_nodes,
-                h_ligand_subgraph_edges,
-                input_features["ligand_subgraph_Y_m"],
-                ligand_subgraph_Y_m_edges,
-                use_reentrant=False,
-            )
+            if self.training and torch.is_grad_enabled():
+                h_ligand_subgraph_nodes = torch.utils.checkpoint.checkpoint(
+                    self.ligand_context_encoder_layers[i],
+                    h_ligand_subgraph_nodes,
+                    h_ligand_subgraph_edges,
+                    input_features["ligand_subgraph_Y_m"],
+                    ligand_subgraph_Y_m_edges,
+                    use_reentrant=False,
+                )
+            else:
+                h_ligand_subgraph_nodes = self.ligand_context_encoder_layers[i](
+                    h_ligand_subgraph_nodes,
+                    h_ligand_subgraph_edges,
+                    input_features["ligand_subgraph_Y_m"],
+                    ligand_subgraph_Y_m_edges,
+                )
 
             # Concatenate the protein-ligand edge features with the ligand
             # hidden note features (effectively treating the ligand subgraph
@@ -2530,14 +2563,22 @@ class LigandMPNN(ProteinMPNN):
 
             # h_V_context [B, L, self.hidden_dim] - the updated context node
             # features. Message passing from ligand subgraph to the protein.
-            h_V_context = torch.utils.checkpoint.checkpoint(
-                self.protein_ligand_context_encoder_layers[i],
-                h_V_context,
-                h_E_protein_to_ligand_cat,
-                input_features["residue_mask"],
-                input_features["ligand_subgraph_Y_m"],
-                use_reentrant=False,
-            )
+            if self.training and torch.is_grad_enabled():
+                h_V_context = torch.utils.checkpoint.checkpoint(
+                    self.protein_ligand_context_encoder_layers[i],
+                    h_V_context,
+                    h_E_protein_to_ligand_cat,
+                    input_features["residue_mask"],
+                    input_features["ligand_subgraph_Y_m"],
+                    use_reentrant=False,
+                )
+            else:
+                h_V_context = self.protein_ligand_context_encoder_layers[i](
+                    h_V_context,
+                    h_E_protein_to_ligand_cat,
+                    input_features["residue_mask"],
+                    input_features["ligand_subgraph_Y_m"],
+                )
 
         # Final context embedding.
         h_V_context = self.W_final_context_embed(h_V_context)

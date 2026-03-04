@@ -386,7 +386,7 @@ class MPNNInferenceEngine:
         network_input = collator([pipeline_output])
 
         # Run the model forward pass.
-        with torch.no_grad():
+        with torch.inference_mode():
             network_output = self.model(network_input)
 
         # Compute metrics once per batch.
