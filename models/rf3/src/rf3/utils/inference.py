@@ -75,6 +75,7 @@ class InferenceInput:
         example_id: str | None = None,
         template_selection: list[str] | str | None = None,
         ground_truth_conformer_selection: list[str] | str | None = None,
+        add_missing_atoms: bool = True,
     ) -> "InferenceInput":
         """Load from CIF/PDB file.
 
@@ -83,11 +84,19 @@ class InferenceInput:
           example_id: Example ID. Defaults to filename stem.
           template_selection: Template selection override.
           ground_truth_conformer_selection: Conformer selection override.
+          add_missing_atoms: Whether to add missing atoms from the CCD to partially/fully
+            unresolved residues. Defaults to True (atomworks parser default). Set to False
+            to keep only the atoms present in the file.
 
         Returns:
           InferenceInput object.
         """
-        parsed = parse(path, hydrogen_policy="remove", keep_cif_block=True)
+        parsed = parse(
+            path,
+            hydrogen_policy="remove",
+            keep_cif_block=True,
+            add_missing_atoms=add_missing_atoms,
+        )
 
         atom_array = (
             parsed["assemblies"]["1"][0]
@@ -288,6 +297,7 @@ def _process_single_path(
     sharding_pattern: str | None,
     template_selection: list[str] | str | None,
     ground_truth_conformer_selection: list[str] | str | None,
+    add_missing_atoms: bool = True,
 ) -> list[InferenceInput]:
     """Worker function to process a single input file path.
 
@@ -299,6 +309,7 @@ def _process_single_path(
       sharding_pattern: Sharding pattern for output paths.
       template_selection: Override for template selection.
       ground_truth_conformer_selection: Override for conformer selection.
+      add_missing_atoms: Whether to add missing atoms from the CCD. Defaults to True.
 
     Returns:
       List of InferenceInput objects (may be empty if file is skipped).
@@ -345,6 +356,7 @@ def _process_single_path(
                     example_id=example_id,
                     template_selection=template_selection,
                     ground_truth_conformer_selection=ground_truth_conformer_selection,
+                    add_missing_atoms=add_missing_atoms,
                 )
             )
     else:
@@ -362,6 +374,7 @@ def prepare_inference_inputs_from_paths(
     sharding_pattern: str | None = None,
     template_selection: list[str] | str | None = None,
     ground_truth_conformer_selection: list[str] | str | None = None,
+    add_missing_atoms: bool = True,
 ) -> list[InferenceInput]:
     """Load InferenceInput objects from file paths.
 
@@ -374,6 +387,7 @@ def prepare_inference_inputs_from_paths(
       sharding_pattern: Sharding pattern for output paths.
       template_selection: Override for template selection (applied to all inputs).
       ground_truth_conformer_selection: Override for conformer selection (applied to all inputs).
+      add_missing_atoms: Whether to add missing atoms from the CCD. Defaults to True.
 
     Returns:
       List of InferenceInput objects.
@@ -413,6 +427,7 @@ def prepare_inference_inputs_from_paths(
                 sharding_pattern,
                 template_selection,
                 ground_truth_conformer_selection,
+                add_missing_atoms,
             )
             for path in paths_to_raw_input_files
         ]

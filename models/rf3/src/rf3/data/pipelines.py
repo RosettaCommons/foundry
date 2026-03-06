@@ -99,7 +99,10 @@ from atomworks.ml.transforms.rdkit_utils import GetRDKitChiralCenters
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
 from omegaconf import DictConfig
 from rf3.data.cyclic_transform import AddCyclicBonds
-from rf3.data.extra_xforms import CheckForNaNsInInputs
+from rf3.data.extra_xforms import (
+    CheckForNaNsInInputs,
+    patch_conformer_fallback_to_input_coords,
+)
 from rf3.data.pipeline_utils import (
     annotate_post_crop_hash,
     annotate_pre_crop_hash,
@@ -189,6 +192,7 @@ def build_af3_transform_pipeline(
     add_cyclic_bonds: bool = True,
     metrics_tags: list[str] | set[str] | None = None,
     p_dropout_ref_conf: float = 0.0,  # Unused
+    fallback_conformer_to_input_coords: bool = True,
 ):
     """Build the AF3 pipeline with specified parameters.
 
@@ -237,6 +241,9 @@ def build_af3_transform_pipeline(
         assert (
             crop_center_cutoff_distance > 0
         ), "Crop center cutoff distance must be greater than 0"
+
+    if fallback_conformer_to_input_coords:
+        patch_conformer_fallback_to_input_coords()
 
     af3_sequence_encoding = AF3SequenceEncoding()
     rf2aa_sequence_encoding = RF2AA_ATOM36_ENCODING
