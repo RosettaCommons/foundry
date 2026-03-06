@@ -6,7 +6,7 @@ defaults:
 
 _target_: rf3.inference_engines.rf3.RF3InferenceEngine
 
-ckpt_path: rf3_foundry_01_24_latest.ckpt
+ckpt_path: rf3
 
 # Transform arguments
 n_recycles: 10

@@ -247,6 +247,8 @@ class RF3InferenceEngine(BaseInferenceEngine):
         # Templating, MSAs, etc.
         template_noise_scale: float = 1e-5,
         raise_if_missing_msa_for_protein_of_length_n: int | None = None,
+        # Conformer generation
+        fallback_conformer_to_input_coords: bool = True,
         # Output control
         compress_outputs: bool = False,
         early_stopping_plddt_threshold: float | None = None,
@@ -264,6 +266,9 @@ class RF3InferenceEngine(BaseInferenceEngine):
           num_steps: Number of diffusion steps. Defaults to ``50``.
           template_noise_scale: Noise scale for template coordinates. Defaults to ``1e-5``.
           raise_if_missing_msa_for_protein_of_length_n: Debug flag for MSA checking. Defaults to ``None``.
+          fallback_conformer_to_input_coords: If True, residues with unknown CCD codes that fail
+              conformer generation will use their input PDB coordinates (centered) instead of zeros.
+              Defaults to ``False``.
           compress_outputs: Whether to gzip output files. Defaults to ``False``.
           early_stopping_plddt_threshold: Stop early if pLDDT below threshold. Defaults to ``None``.
           metrics_cfg: Metrics configuration. Can be:
@@ -296,6 +301,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
                 "diffusion_batch_size": diffusion_batch_size,
                 "n_recycles": n_recycles,
                 "raise_if_missing_msa_for_protein_of_length_n": raise_if_missing_msa_for_protein_of_length_n,
+                "fallback_conformer_to_input_coords": fallback_conformer_to_input_coords,
                 "undesired_res_names": [],
                 "template_noise_scales": {
                     "atomized": template_noise_scale,
@@ -391,6 +397,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
         template_selection: list[str] | str | None = None,
         ground_truth_conformer_selection: list[str] | str | None = None,
         cyclic_chains: list[str] = [],
+        add_missing_atoms: bool = True,
     ) -> dict[str, dict] | None:
         """Run inference on inputs.
 
@@ -408,6 +415,9 @@ class RF3InferenceEngine(BaseInferenceEngine):
           template_selection: Template selection override. Defaults to ``None``.
           ground_truth_conformer_selection: Conformer selection override. Defaults to ``None``.
           cyclic_chains: List of chain IDs to cyclize. Defaults to ``[]``.
+          add_missing_atoms: Whether to add missing atoms from the CCD when parsing CIF/PDB
+            inputs. Has no effect when inputs are already InferenceInput or AtomArray objects.
+            Defaults to ``True``.
 
         Returns:
           If ``out_dir`` is None: Dict mapping example_id to list of RF3Output objects.
@@ -472,6 +482,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
                 sharding_pattern=sharding_pattern,
                 template_selection=template_selection,
                 ground_truth_conformer_selection=ground_truth_conformer_selection,
+                add_missing_atoms=add_missing_atoms,
             )
         else:
             raise ValueError(f"Unsupported inputs type: {type(inputs)}")

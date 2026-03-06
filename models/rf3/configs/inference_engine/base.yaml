@@ -20,4 +20,6 @@ sharding_pattern: null
 skip_existing: false
 template_selection: null
 ground_truth_conformer_selection: null
+fallback_conformer_to_input_coords: true
 cyclic_chains: []
+add_missing_atoms: true

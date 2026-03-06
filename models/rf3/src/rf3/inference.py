@@ -50,6 +50,7 @@ def run_inference(cfg: DictConfig) -> None:
             "ground_truth_conformer_selection", None
         ),
         "cyclic_chains": cfg.get("cyclic_chains", []),
+        "add_missing_atoms": cfg.get("add_missing_atoms", True),
     }
 
     # Create init config with only __init__ params
