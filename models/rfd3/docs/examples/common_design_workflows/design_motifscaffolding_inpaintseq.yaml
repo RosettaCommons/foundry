@@ -1,0 +1,8 @@
+# This example scaffolds site 5 from the RSV-F protein
+# This is similar to design_motifscaffolding.yaml but a portion of the motif sequence will be redesigned
+motif_scaffolding_inpaintseq:
+  input_pdb: ../../input_pdbs/5TPN.pdb
+  contig: 10-40,A163-181,10-40
+  select_unfixed_sequence: A163-168,A170-171,A179
+
+# might also need to unfix sequences, need to rerun the original example to see what the output is like

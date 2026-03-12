@@ -1,0 +1,6 @@
+# This example scaffolds site 5 from the RSV-F protein
+# Taken from design_motifscaffolding.sh example in the RFdiffusion repository.
+
+design_motifscaffolding:
+  input: ../../input_pdbs/5TPN.pdb
+  contig: 10-40,A163-181,10-40
