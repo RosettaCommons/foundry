@@ -74,7 +74,7 @@ In this tutorial, we will be briefly describing each of the settings we will be 
         "D24-27,D34-37": ""
     },
     ```
-    ```{figure} ../.assets/na_tutorial/select_fixed_atoms.png
+    ```{figure} ../.assets/na_tutorial/renabindertutorialupdate/fixed_and_unfixed_residues.png
     :width: 60%
 
     Image of the input structure with the fixed residues highlighted in cyan and the residues allowed to move highlighted in red. 
@@ -93,8 +93,8 @@ In this tutorial, we will be briefly describing each of the settings we will be 
     In this example the ori token is placed close to the center of our input structure. When designing your own enzyme scaffolds, you should try many ORI token placements. See the [RFdiffusion2 paper](https://www.nature.com/articles/s41592-025-02975-x) for more information about how ORI tokens impact the results of diffusion calculations.
     ```
 
-    ```{figure} ../.assets/na_tutorial/pseudoatom.png
-    :width: 60%
+    ```{figure} ../.assets/na_tutorial/renabindertutorialupdate/ori_token_input_structure.png
+    :width: 80%
 
     The input structure with the addition of a white sphere to represent the location of the ORI token. 
     ```
@@ -166,7 +166,7 @@ You should end up with 8 designs, numbered 0-7, each with its own `.cif.gz` and 
 The JSON file has many details about your diffusion run, including the options in the JSON file you created. The compressed CIF file contains information about the final diffused structure that you can easily visualize with tools like PyMOL. 
 
 Your results should look something like this: 
-```{figure} ../.assets/na_tutorial/example_output.png
+```{figure} ../.assets/na_tutorial/renabindertutorialupdate/possible_output_structure_0.png
 :width: 60%
 
 Image of a possible output for this calculation visualized in PyMOL. 
@@ -174,24 +174,24 @@ Image of a possible output for this calculation visualized in PyMOL.
 
 However, if we visualize the location of our original ORI token it is no where near the center of our output structure! This is because RFD3 has completely moved our structure in coordinate space, and has moved the ORI token with it. In the output JSON files for your designs, the new location of the ORI token can be found by looking at the `diffused_com`.  
 
-```{figure} ../.assets/na_tutorial/ori_token_output.png
+```{figure} ../.assets/na_tutorial/renabindertutorialupdate/compare_ori_tokens.png
 :width: 100%
 
-The input structure is in green with the original location of the ORI token represented by a light pink sphere. An example output structure is shown in cyan with the adjusted location of the ORI token shown as a red sphere. 
+The input structure (right) with its ORI token represented as a white sphere. An example output (left) is shown with the location of the `diffused_com` represented as a red sphere. 
 ```
 
 You can also align the 2R5Z structure with any of the outputs to see that the atoms selected in `select_fixed_atoms` have stayed in the same physical locations. 
 
-```{figure} ../.assets/na_tutorial/select_fixed_atoms_output.png
+```{figure} ../.assets/na_tutorial/renabindertutorialupdate/aligning_dna_strands.png
 :width: 60%
 
-The DNA strands from the input (orange, light green, lightpink) and a possible output structure (dark green, dark pink). The portions held fixed are in pink and the portions allowed to move are in green. 
+The DNA strands from the input (lavender, light green, light blue) and a possible output structure (dark green, dark blue). The portions held fixed are in blue and the portions allowed to move are in green. 
 ```
 
 Checking that our unindexed motif is present in our designs is a bit more difficult, but the information we need is provided in the JSON file that is created with each design. If you open one of these JSON files, the first piece of information you see is a `diffused_index_map` that connects the residues from the input to residues in the output design. You should see that residues B251-255 have been mapped to residues in your output structure. 
 
-```{figure} ../.assets/na_tutorial/unfixed_motif_out.png
-:width: 60%
+```{figure} ../.assets/na_tutorial/renabindertutorialupdate/unindexed_motif.png
+:width: 80%
 
 Input structure (green) and model_0 (cyan) from the basic.zip outputs with the unindexed motif highlighted in magenta. For this output (model_0 in outputs.zip), the unindexed motif is found in residues C130-134. 
 ```
@@ -200,8 +200,8 @@ If you added the additional hydrogen bonding constraints, the outputs should loo
 
 If you added the `select_unfixed_sequence` constraint, you will see that your output JSON files still have a mapping between residues B251-255 in the input to the output structure and that the backbones have remained the same but the side chains have changed. For example: 
 
-```{figure} ../.assets/na_tutorial/unfix_sequence_output.png
-:width: 60%
+```{figure} ../.assets/na_tutorial/renabindertutorialupdate/unfix_ligands.png
+:width: 80%
 
 The input structure (green) and output structure (cyan) with the unindexed motif colored pink. Note how the backbone structures have remained the same, but the side chains have changed. 
 ```
@@ -211,5 +211,5 @@ For your actual projects, you would want to filter the designed structures based
 
 (na-references-and-further-reading)=
 ## References and Further Reading
-- For more information on the different inference settings in RFD3, see [input.md](input.md)
-- A more thorough discussion of the settings and configuration options in RFD3 can be found [here](intro_inference_calculations.md)
+- For more information on the different inference settings in RFD3, see [input.md](../input.md)
+- A more thorough discussion of the settings and configuration options in RFD3 can be found [here](../intro_inference_calculations.md)
