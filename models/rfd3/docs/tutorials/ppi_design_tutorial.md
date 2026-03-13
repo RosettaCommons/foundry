@@ -154,9 +154,9 @@ Feel free to go through the [other tutorials](https://rosettacommons.github.io/f
 
 (ppi-references-and-further-reading)=
 ## References and Further Reading
-- For more information on the different inference settings in RFD3, see [input.md](../input.md)
-- For more information on the example used here, see [*De novo design of protein structure and function with RFdiffusion*](https://www.nature.com/articles/s41586-023-06415-8#Sec12) by Joseph L. Watson, et al.
-- A more thorough discussion of the settings and configuration options in RFD3 can be found [here](../intro_inference_calculations.md)
+- For more information on the different inference settings in RFD3, see [input.md](input.md)
+- For more information on the example used here, see [*De novo design of protein structure and function with RFdiffusion*](https://www.nature.com/articles/s41586-023-06415-8#Sec12) by Joeseph L. Watson, et. al.
+- A more thorough discussion of the settings and configuration options in RFD3 can be found [here](intro_inference_calculations.md)
 
 
 

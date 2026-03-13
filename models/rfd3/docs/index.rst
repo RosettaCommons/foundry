@@ -22,6 +22,7 @@ Tutorials
 
    tutorials/ppi_design_tutorial.md
    tutorials/enzyme_design_tutorial.md
+   tutorials/na_binder_tutorial.md
 
 Examples
 --------
