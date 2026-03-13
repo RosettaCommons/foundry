@@ -211,5 +211,5 @@ For your actual projects, you would want to filter the designed structures based
 
 (na-references-and-further-reading)=
 ## References and Further Reading
-- For more information on the different inference settings in RFD3, see [input.md](../input.md)
-- A more thorough discussion of the settings and configuration options in RFD3 can be found [here](../intro_inference_calculations.md)
+- For more information on the different inference settings in RFD3, see {doc}`input.md <../input>`
+- A more thorough discussion of the settings and configuration options in RFD3 can be found {doc}`here <../intro_inference_calculations>`

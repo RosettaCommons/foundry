@@ -174,4 +174,4 @@ You have now set up an RFD3 calculation and successfully ran the inference code 
 ## References and Further Reading
 - For more information on the different inference settings in RFD3, see {doc}`../input`
 - The calculation presented here was used to benchmark RFdiffusion2, for more information see [Atom-level enzyme active site scaffolding using RFdiffusion2](https://www.nature.com/articles/s41592-025-02975-x)
-- A more thorough discussion of the settings and configuration options in RFD3 can be found [here](../intro_inference_calculations.md)
+- A more thorough discussion of the settings and configuration options in RFD3 can be found {doc}`here <../intro_inference_calculations>`
