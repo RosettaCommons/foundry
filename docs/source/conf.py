@@ -57,8 +57,3 @@ source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
     }
-
-html_js_files = [
-    'https://www.googletagmanager.com/gtag/js?id=G-6Q7T573HLF',
-    'ga.js',
-]
