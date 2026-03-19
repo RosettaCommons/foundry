@@ -434,7 +434,6 @@ class UnindexFlaggedTokens(Transform):
             f"Failed to create uniquely recognised tokens after concatenation.\n"
             f"Concatenated tokens: {get_token_count(atom_array_full)}, unindexed: {n_unindexed_tokens}"
         )
-
         return atom_array_full
 
     def create_unindexed_masks(

@@ -19,6 +19,8 @@ from rfd3.transforms.conditioning_utils import (
     sample_subgraph_atoms,
 )
 
+from rfd3.constants import backbone_atoms_RNA
+
 nx.from_numpy_matrix = nx.from_numpy_array
 logger = logging.getLogger(__name__)
 
@@ -158,7 +160,9 @@ class IslandCondition(TrainingCondition):
         is_motif_atom = np.asarray(atom_array.is_motif_token, dtype=bool).copy()
 
         if random_condition(self.p_diffuse_motif_sidechains):
-            backbone_atoms = ["N", "C", "CA"]
+            backbone_atoms = backbone_atoms_RNA.copy()
+            backbone_atoms.remove("C1'")
+            backbone_atoms = ["N", "C", "CA"] + backbone_atoms #covers DNA also
             if random_condition(self.p_include_oxygen_in_backbone_mask):
                 backbone_atoms.append("O")
             is_motif_atom = is_motif_atom & np.isin(
@@ -173,7 +177,6 @@ class IslandCondition(TrainingCondition):
 
         # We also only want resolved atoms to be motif
         is_motif_atom = (is_motif_atom) & (atom_array.occupancy > 0.0)
-
         return is_motif_atom
 
     def sample(self, data):
@@ -202,7 +205,6 @@ class IslandCondition(TrainingCondition):
                 leak_global_index=data["conditions"]["unindex_leak_global_index"],
             ),
         )
-
         return atom_array
 
 
@@ -498,10 +500,9 @@ def sample_conditioning_strategy(
     atom_array.set_annotation(
         "is_motif_atom_unindexed",
         sample_unindexed_atoms(
-            atom_array, p_unindex_motif_tokens=p_unindex_motif_tokens
+            atom_array, p_unindex_motif_tokens=p_unindex_motif_tokens, association_scheme=association_scheme
         ),
     )
-
     return atom_array
 
 
@@ -557,7 +558,6 @@ def sample_unindexed_atoms(
         is_motif_atom_unindexed = atom_array.is_motif_atom.copy()
     else:
         is_motif_atom_unindexed = np.zeros(atom_array.array_length(), dtype=bool)
-
     # ensure non-residue atoms are not already flagged
     if association_scheme == "atom23":
         is_motif_atom_unindexed = np.logical_and(

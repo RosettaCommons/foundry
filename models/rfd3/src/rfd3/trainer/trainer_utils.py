@@ -470,8 +470,11 @@ def process_unindexed_outputs(
                 )
             else:
                 dist = float(dists[row_ind[join_atom], col_ind[join_atom]])
-
+        
+        try:
             metadata["join_point_rmsd_by_token"][token_pdb_id] = dist
+        except:
+            pass
 
         metadata["diffused_index_map"][token_pdb_id] = f"{chain_id}{res_id}"
 
