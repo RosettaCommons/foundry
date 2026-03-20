@@ -758,18 +758,6 @@ class AddAdditional1dFeaturesToFeats(Transform):
         if "feats" not in data.keys():
             data["feats"] = {}
         
-        if association_scheme == 'atom23':
-            data['atom_array'].set_annotation('is_protein_token', data['atom_array'].is_protein)
-            data['atom_array'].set_annotation('is_dna_token', data['atom_array'].is_dna)
-            data['atom_array'].set_annotation('is_rna_token', data['atom_array'].is_rna)
-
-        if self.association_scheme == "atom23":
-            data["atom_array"].set_annotation(
-                "is_protein_token", data["atom_array"].is_protein
-            )
-            data["atom_array"].set_annotation("is_dna_token", data["atom_array"].is_dna)
-            data["atom_array"].set_annotation("is_rna_token", data["atom_array"].is_rna)
-
         if self.association_scheme == "atom23":
             data["atom_array"].set_annotation(
                 "is_protein_token", data["atom_array"].is_protein
