@@ -53,14 +53,14 @@ We use the Protein Data Bank structure [**1MG5**](https://www.rcsb.org/structure
 (intermediate_enzyme_example_structure)=
 ### Example Structure
 
-Alcohol dehydrogenase (ADH) from *Drosophila* catalyzes the oxidation of alcohols. However, the reaction does not necessarily stop at the aldehyde stage – it has been demonstrated that *Drosophila* ADH can further oxidize acetaldehyde to acetate. (ref link)
+Alcohol dehydrogenase (ADH) from *Drosophila* catalyzes the oxidation of alcohols. However, the reaction does not necessarily stop at the aldehyde stage – it has been demonstrated in [this paper](https://doi.org/10.1016/j.jmb.2004.10.028) that *Drosophila* ADH can further oxidize acetaldehyde to acetate. 
 
 In the 1MG5 structure, the relevant ligands are:
 
 - **NAI** – nicotinamide cofactor  
 - **ACT** – acetate  
 
-The catalytic triad is composed of **Ser139, Tyr152, and Lys156**. In addition, **Asn108** is also crucial for catalysis, so we will focus on these residues for our design. We have highlighted these important structural components below: 
+The catalytic triad is composed of **Ser139, Tyr152, and Lys156**, based on [this paper](https://doi.org/10.1016/j.jmb.2004.10.028). In addition, **Asn108** is also crucial for catalysis (see [this paper](https://www.sciencedirect.com/science/article/pii/S0021925819665348)), so we will focus on these residues for our design. We have highlighted these important structural components below: 
 
 ```{figure} ../.assets/intermediate_enzyme_tutorial/1mg5_final.png
 :width: 80%
@@ -166,6 +166,14 @@ Here's a brief description of the options used in the JSON file:
 For more information about the options used in this JSON file, see the {doc}`introductory enzyme design tutorial <enzyme_design_tutorial>` or {ref}`inputspecification-fields`
 ```
 
+### Fixing the Atoms
+The choice of the fixed atoms will vary by project and requires knowledge of your structure and possibly some trial and error. Let's go through an example of how some of the fixed atoms where chosen for this tutorial: 
+
+For Lys156, it is know that NZ is the "reactive atom" so it needs to be fixed to maintain its precise placement relative to the ligand/substrate. The carbons near it, the delta and epsilon carbons, are also held fix to ensure the orientation of the side chain tip have the correct geometry. The rest of the side chain and backbone is allowed to adapt to the designed backbone structure. 
+
+### Unindexing the Motif
+We have listed the catalytic residues as 'unindexed' so that RFdiffusion can fully design a new protein backbone around these residues. This will not limit how many residues need to come before, between, or after these residues. This flexibility is also why none of the backbone atoms are included in the `select_fixed_atoms` constraint – including them would likely over constrain the backbone and produce strained designs. 
+
 ---
 (intermediate_enzyme_inference)=
 ## Run Inference
@@ -194,7 +202,13 @@ Navigate to where your output files have been saved. In the next few sections we
 
 Open the output files in your favorite text editor.
 
-Locate the metrics file (JSON file) for one of your designs, for example <!-- TODO: put example output file name here! --> and examine key values such as `join_point_rmsd`, secondary structure fractions, and the total number of residues. A straightforward evaluation focuses on a low `join_point_rmsd`, the absence of chain breaks (`n_chainbreaks`), and a reasonable secondary structure composition.
+Locate the metrics file (JSON file) for one of your designs, for example <!-- TODO: put example output file name here! --> and examine key values such as `join_point_rmsd`, `loop fraction`, `helix_fraction`, `sheet_fraction`. A straightforward evaluation focuses on:
+- a low `join_point_rmsd`
+    - For this example below ~0.5 Å is considered good, but a different threshold may be needed for your own projects
+- the absence of chain breaks (`n_chainbreaks`)
+- a reasonable secondary structure composition
+    - Look at `loop_fraction`, `helix_fraction`, and `sheet_fraction`
+    - For most design problems, you'll want the helix and loop fractions to be higher and the sheet fractions to be lower
 
 ```json
 "metrics": {
