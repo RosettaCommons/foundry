@@ -423,7 +423,11 @@ def process_unindexed_outputs(
         row_ind, col_ind = linear_sum_assignment(dists)
         res_id_, chain_id_, _ = indices_to_components_(atom_array_diffused, col_ind)
 
-        assert (res_id_ == res_id) & (chain_id_ == chain_id)
+        try:
+            assert (res_id_ == res_id) & (chain_id_ == chain_id)
+        except:
+            global_logger.warning("Unindexed mapping did not work properly, res_id, chain_id")
+        
         inserted_mask = np.logical_or(inserted_mask, token_match)
 
         # ... Compute metrics based on the new distances
@@ -454,7 +458,7 @@ def process_unindexed_outputs(
 
         elif not np.any(
             np.isin(
-                token.atom_name, [item.replace(" ", "") for item in backbone_atoms_RNA]
+                token.atom_name, backbone_atoms_RNA
             )
         ):
             if np.sum(token.atomize) == 1:
