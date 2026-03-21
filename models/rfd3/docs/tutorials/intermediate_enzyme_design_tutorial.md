@@ -40,7 +40,11 @@ than the current document.
 - Protein visualization software, here we will use [PyMOL](https://www.pymol.org/)
 
 ---
-<!-- TO DO: make setup section and create folder with relevant files -->
+## Set-up
+
+No input files are required for this tutorial as this tutorial walks you through how to create your input PDB. However, example input files and output files are provided at `foundry/models/rfd3/docs/tutorials/intermediate_enzyme_tutorial_files`.
+
+---
 
 (intermediate_enzyme_motif_prep)=
 ## Motif Preparation
@@ -74,7 +78,7 @@ The alcohol dehydrogenase 1MG5 structure is displayed, with the relevant catalyt
 In this section we will use PyMOL to manipulate our the PDB file we retrieved to isolate the portion of the structure we want to use as the input to RFD3. 
 
 ```{important}
-The use of PyMOL is not required for this tutorial. Other visualization tools can be used and a prepared input PDB is available in the tutorial files. <!-- TODO: link tutorial files-->
+The use of PyMOL is not required for this tutorial. Other visualization tools can be used and a prepared input PDB is available [here](./intermediate_enzyme_tutorial_files/1mg5_motif.pdb).
 ```
 
 1. Using the PDB identifier, one can fetch the structure in PyMOL using a single command. 
@@ -89,7 +93,9 @@ The use of PyMOL is not required for this tutorial. Other visualization tools ca
     To learn more about PyMOL's `create` functionality, see the [PyMOL wiki](https://pymolwiki.org/Create).
     ```
 
-    Verify that your selection matches the image below. You may have to unselect the original 1mg5 structure to see only the 'motif'.
+    Verify that your selection matches the image below. Note that your selection will still have the backbone for residues 108, 139, 152, and 156. They have been removed from the image below for the sake of clarity. 
+    
+    You may have to unselect the original 1mg5 structure to see only the 'motif'.
     
     ```{figure} ../.assets/intermediate_enzyme_tutorial/1mg5_theozyme_final.png
     :width: 80%
@@ -149,6 +155,11 @@ Create a file named `1mg5_motif.json` and open it in your favorite [text editor]
     }  
 }
 ```
+
+```{important}
+You will need to change the path to the input structure based on where you placed it in your file system. 
+```
+
 This configuration instructs RFdiffusion3 to **generate a protein scaffold around a catalytic motif while maintaining key structural constraints**.
 The top-level key defines a **named inference configuration**.
 
@@ -167,12 +178,12 @@ For more information about the options used in this JSON file, see the {doc}`int
 ```
 
 ### Fixing the Atoms
-The choice of the fixed atoms will vary by project and requires knowledge of your structure and possibly some trial and error. Let's go through an example of how some of the fixed atoms where chosen for this tutorial: 
+The choice of the fixed atoms will vary by project and requires knowledge of the reactivity of your structure. Let's go through an example of how some of the fixed atoms where chosen for this tutorial: 
 
-For Lys156, it is know that NZ is the "reactive atom" so it needs to be fixed to maintain its precise placement relative to the ligand/substrate. The carbons near it, the delta and epsilon carbons, are also held fix to ensure the orientation of the side chain tip have the correct geometry. The rest of the side chain and backbone is allowed to adapt to the designed backbone structure. 
+For Lys156, it is know that NZ is the "reactive atom" so it needs to be fixed to maintain its precise placement relative to the ligand/substrate. The carbons near it, the delta and epsilon carbons, are also held fixed to ensure the orientation of the tip of the side chain is correct relative to the ligand/substrate. The rest of the side chain and backbone is allowed to adapt to the designed backbone structure. 
 
 ### Unindexing the Motif
-We have listed the catalytic residues as 'unindexed' so that RFdiffusion can fully design a new protein backbone around these residues. This will not limit how many residues need to come before, between, or after these residues. This flexibility is also why none of the backbone atoms are included in the `select_fixed_atoms` constraint – including them would likely over constrain the backbone and produce strained designs. 
+We have listed the catalytic residues as 'unindexed' so that RFdiffusion can fully design a new protein backbone around these residues. This will not limit how many residues need to come before, between, or after each residue. This flexibility is also why none of the backbone atoms are included in the `select_fixed_atoms` constraint – including them would likely over constrain the backbone and produce strained designs. 
 
 ---
 (intermediate_enzyme_inference)=
@@ -238,7 +249,7 @@ Locate the metrics file (JSON file) for one of your designs, for example <!-- TO
         "glycine_content": 0.07772020725388601,
         "num_residues": 193
 ```
-Above is an example metrics file for one of the designs. This example is provided for illustration, your data will be different.
+Above is an example metrics section for a design. This example is provided for illustration, your data will be different.
 
 ---
 (intermediate_enzyme_structure)=
