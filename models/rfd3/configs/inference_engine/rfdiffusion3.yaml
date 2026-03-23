@@ -25,9 +25,9 @@ inference_sampler:
   kind: "default" # "default" or "symmetry" to choose the sampler
   # Classifier-free guidance args:
   cfg_features:  # set to 0 in the reference CFG step
-    #- active_donor
-    #- active_acceptor
-    #- ref_atomwise_rasa
+    - active_donor
+    - active_acceptor
+    - ref_atomwise_rasa
     - bp_partners
 
   use_classifier_free_guidance: False

@@ -62,9 +62,6 @@ global_transform_args:
   min_ss_island_len: 1
   max_ss_island_len: 10
 
-  # Nucleic acid features
-  add_na_pair_features: false
-
   train_conditions:
     unconditional:
       frequency: 5.0
@@ -98,8 +95,3 @@ global_transform_args:
     # PPI
     add_ppi_hotspots: 0.75
     full_binder_crop: 0.75
-
-    # Nucleic SS:
-    p_is_nucleic_ss_example: 0.0
-    p_nucleic_ss_show_partial_feats: 0.0
-    

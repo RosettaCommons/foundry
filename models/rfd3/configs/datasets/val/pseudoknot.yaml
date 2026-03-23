@@ -6,5 +6,4 @@ defaults:
 dataset:
   name: pseudoknot
   eval_every_n: 1
-  #data: ${paths.data.design_benchmark_data_dir}/pseudoknot_debug.json
   data: ${paths.data.design_benchmark_data_dir}/pseudoknot.json

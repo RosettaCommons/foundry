@@ -10,8 +10,7 @@ defaults:
 
 name: rfd3na-fine-tune-ss0.5
 tags: [print-model]
-#ckpt_path: /projects/ml/aa_design/models/rfd3_latest_foundry.ckpt
-ckpt_path: /net/scratch/raktim/training/logs/train/rfd3na-fine-tune-ss0.5/2026-02-23_23-57_JOB_4717793/ckpt/epoch-0820.ckpt
+ckpt_path: null
 
 model:
   net:
@@ -78,6 +77,15 @@ datasets:
     # These are the ratios used in the preprint but we set all pdb sampling by default since not everyone might download the distillation data.
     pdb:
       probability: 0.6
+      sub_datasets:
+        pn_unit:
+          weights:
+            alphas:
+              a_nuc: 3.0
+        interface:
+          weights:
+            alphas:
+              a_nuc: 3.0
     rna_monomer_distillation:
       probability: 0.3
     monomer_distillation:
