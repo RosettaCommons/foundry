@@ -64,7 +64,11 @@ In the 1MG5 structure, the relevant ligands are:
 - **NAI** – nicotinamide cofactor  
 - **ACT** – acetate  
 
-The catalytic triad is composed of **Ser139, Tyr152, and Lys156**, based on [this paper](https://doi.org/10.1016/j.jmb.2004.10.028). In addition, **Asn108** is also crucial for catalysis (see [this paper](https://www.sciencedirect.com/science/article/pii/S0021925819665348)), so we will focus on these residues for our design. We have highlighted these important structural components below: 
+The catalytic triad is composed of **Ser139, Tyr152, and Lys156**. In addition, **Asn108** is also crucial for catalysis, so we will focus on these residues for our design. You can find more information about the structure of the catalytic site in these two papers: 
+- [Drosophila Alcohol Dehydrogenase: Acetate–Enzyme Interactions and Novel Insights into the Effects of Electrostatics on Catalysis](https://doi.org/10.1016/j.jmb.2004.10.028)
+- [Critical Residues for Structure and Catalysis in Short-chain Dehydrogenases/Reductases](https://www.sciencedirect.com/science/article/pii/S0021925819665348)
+
+We have highlighted these important structural components below: 
 
 ```{figure} ../.assets/intermediate_enzyme_tutorial/1mg5_final.png
 :width: 80%
