@@ -189,7 +189,17 @@ def _cleanup_virtual_atoms_and_assign_atom_name_elements(
         atom_array.element,
     )
     atom_array.res_name[invalid_mask] = np.array(["UNK"] * sum(invalid_mask))
-    return atom_array[ret_mask]
+    result = atom_array[ret_mask]
+
+    # Strip atom_id annotation to prevent duplicate _atom_site.id values
+    # in CIF output. PadTokensWithVirtualAtoms copies the central atom (CB)
+    # including its atom_id; after virtual atoms are removed, sidechain atoms
+    # retain the duplicated atom_id. Removing it lets the CIF writer
+    # auto-generate unique sequential IDs.
+    if "atom_id" in result.get_annotation_categories():
+        result.del_annotation("atom_id")
+
+    return result
 
 
 def _readout_seq_from_struc(
