@@ -40,7 +40,7 @@ you need to install [HBPLUS](https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/
 ## Running Inference
 
 Below is a quick inference example to run to test that your setup
-is working correctly. If you are new to RFdiffusion methods or JSON/YAML structure, we recommend that you follow the [PPI tutorial](https://rosettacommons.github.io/foundry/models/rfd3/ppi_design_tutorial.html) to set up your first calculation.
+is working correctly. If you are new to RFdiffusion methods or JSON/YAML structure, we recommend that you follow the [PPI tutorial]( https://rosettacommons.github.io/foundry/models/rfd3/tutorials/ppi_design_tutorial.html) to set up your first calculation.
 
 To run inference (with foundry installed in your environment, or RFD3 & Foundry src in PYTHONPATH):
 ```bash
