@@ -75,10 +75,6 @@ you will need to change the path in the `.json` file(s) before running.
 <table>
   <tr>
     <td align="center">
-      <h3><a href="./docs/na_binder_design.md">Nucleic acid binder design</a></h3>
-      <img src="docs/.assets/dna.png" height="150" />
-    </td>
-    <td align="center">
       <h3><a href="./docs/sm_binder_design.md">Small molecule binder design</a></h3>
       <img src="docs/.assets/sm.png" height="150" />
     </td>
@@ -86,6 +82,11 @@ you will need to change the path in the `.json` file(s) before running.
       <h3><a href="./docs/protein_binder_design.md">Protein binder design</a></h3>
       <img src="docs/.assets/ppi.png" height="150" />
     </td>
+     <td align="center">
+      <h3><a href="./docs/na_binder_design.md">Nucleic acid binder design</a></h3>
+      <img src="docs/.assets/dna.png" height="150" />
+    </td>
+
   </tr>
   <tr>
     <td align="center">
@@ -96,6 +97,11 @@ you will need to change the path in the `.json` file(s) before running.
       <h3><a href="./docs/symmetry.md">Symmetric design</a></h3>
       <img src="docs/.assets/symm.png" height="150" />
     </td>
+    <td align="center">
+      <h3><a href="./docs/multipolymer.md">Multipolymer design</a></h3>
+      <img src="docs/.assets/multipolymer.png" height="150" />
+    </td>
+
   </tr>
 </table>
 
