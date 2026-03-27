@@ -119,8 +119,8 @@ class DesignInputSpecification(BaseModel):
         validate_assignment=False,
         str_strip_whitespace=True,
         str_min_length=1,
-        #extra="forbid", ####################################################
-        extra="allow"
+        # extra="forbid", ####################################################
+        extra="allow",
         ## for now allowing extra for rfd3na-ss purposes, can decide later ##
     )
     # fmt: off
@@ -497,7 +497,10 @@ class DesignInputSpecification(BaseModel):
                 aa.is_motif_atom_with_fixed_seq[start:end] = np.full_like(
                     is_bkbn, False, dtype=int
                 )
-            elif aa.res_name[start] in (STANDARD_DNA + STANDARD_RNA) and self.redesign_motif_sidechains:
+            elif (
+                aa.res_name[start] in (STANDARD_DNA + STANDARD_RNA)
+                and self.redesign_motif_sidechains
+            ):
                 is_bkbn = np.isin(aa.atom_name[start:end], backbone_atoms_RNA)
                 aa.is_motif_atom_with_fixed_coord[start:end] = is_bkbn.astype(int)
                 aa.is_motif_atom_with_fixed_seq[start:end] = np.full_like(
@@ -519,7 +522,9 @@ class DesignInputSpecification(BaseModel):
 
         ########## reorder NA atoms ###########
         if exists(atom_array_input_annotated):
-            is_dna = np.isin(atom_array_input_annotated.res_name, ["DA", "DC", "DG", "DT"])
+            is_dna = np.isin(
+                atom_array_input_annotated.res_name, ["DA", "DC", "DG", "DT"]
+            )
             is_rna = np.isin(atom_array_input_annotated.res_name, ["A", "C", "G", "U"])
             dna_array = atom_array_input_annotated[is_dna]
             rna_array = atom_array_input_annotated[is_rna]
@@ -726,11 +731,11 @@ class DesignInputSpecification(BaseModel):
                     ligand_array.set_annotation(
                         annot, np.full(ligand_array.array_length(), default)
                     )
-            
-            chain_cand = 'X'
+
+            chain_cand = "X"
             while chain_cand in atom_array.chain_id.tolist():
                 chain_cand = chain_cand + chain_cand
-            ligand_chain = np.array([chain_cand]*len(ligand_array))
+            ligand_chain = np.array([chain_cand] * len(ligand_array))
             ligand_array.chain_id = ligand_chain
 
             atom_array = atom_array + ligand_array
@@ -758,9 +763,12 @@ class DesignInputSpecification(BaseModel):
                 )
             else:
                 if not exists(self.ori_jitter):
-                   self.ori_jitter = None
+                    self.ori_jitter = None
                 atom_array = set_com(
-                    atom_array, ori_token=None, infer_ori_strategy="com", ori_jitter=self.ori_jitter
+                    atom_array,
+                    ori_token=None,
+                    infer_ori_strategy="com",
+                    ori_jitter=self.ori_jitter,
                 )
         else:
             # Standard: set ori token, zero out diffused atoms

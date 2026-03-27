@@ -2,6 +2,7 @@ from collections import Counter, OrderedDict
 
 import numpy as np
 import torch
+from atomworks.constants import STANDARD_DNA, STANDARD_RNA
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from atomworks.ml.utils.token import (
     get_token_starts,
@@ -13,10 +14,10 @@ from rfd3.constants import (
     ATOM14_ATOM_NAMES,
     ATOM23_ATOM_NAMES_DNA,
     ATOM23_ATOM_NAMES_RNA,
-    backbone_atoms_RNA,
     VIRTUAL_ATOM_ELEMENT_NAME,
     association_schemes,
     association_schemes_stripped,
+    backbone_atoms_RNA,
 )
 from rfd3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
@@ -25,7 +26,6 @@ from scipy.optimize import linear_sum_assignment
 
 from foundry.common import exists
 from foundry.utils.ddp import RankedLogger
-from atomworks.constants import STANDARD_DNA, STANDARD_RNA
 
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 
@@ -221,14 +221,13 @@ def _readout_seq_from_struc(
             # There might be a better way to do this.
             CA_coord = cur_res_atom_array.coord[cur_res_atom_array.atom_name == "CA"]
             CB_coord = cur_res_atom_array.coord[cur_res_atom_array.atom_name == "CB"]
-            
+
             if cur_res_atom_array.is_dna[0] or cur_res_atom_array.is_rna[0]:
                 cur_central_atom = "C1'"
             elif np.linalg.norm(CA_coord - CB_coord) < threshold:
                 cur_central_atom = "CA"
             else:
                 cur_central_atom = central_atom
-
 
             central_mask = cur_res_atom_array.atom_name == cur_central_atom
 
@@ -269,7 +268,7 @@ def _readout_seq_from_struc(
                     if not cur_res_atom_array.is_rna[0]:
                         continue
                 else:
-                    #ATOM_NAMES = ATOM23_ATOM_NAMES_RNA
+                    # ATOM_NAMES = ATOM23_ATOM_NAMES_RNA
                     if not cur_res_atom_array.is_protein[0]:
                         continue
 
@@ -425,9 +424,11 @@ def process_unindexed_outputs(
 
         try:
             assert (res_id_ == res_id) & (chain_id_ == chain_id)
-        except:
-            global_logger.warning("Unindexed mapping did not work properly, res_id, chain_id")
-        
+        except Exception:
+            global_logger.warning(
+                "Unindexed mapping did not work properly, res_id, chain_id"
+            )
+
         inserted_mask = np.logical_or(inserted_mask, token_match)
 
         # ... Compute metrics based on the new distances
@@ -456,11 +457,7 @@ def process_unindexed_outputs(
             else:
                 dist = float(dists[row_ind[join_atom], col_ind[join_atom]])
 
-        elif not np.any(
-            np.isin(
-                token.atom_name, backbone_atoms_RNA
-            )
-        ):
+        elif not np.any(np.isin(token.atom_name, backbone_atoms_RNA)):
             if np.sum(token.atomize) == 1:
                 join_atom = np.where(token.atomize)[0][0]
             elif "C1'" in token.atom_name:
@@ -474,10 +471,10 @@ def process_unindexed_outputs(
                 )
             else:
                 dist = float(dists[row_ind[join_atom], col_ind[join_atom]])
-        
+
         try:
             metadata["join_point_rmsd_by_token"][token_pdb_id] = dist
-        except:
+        except Exception:
             pass
 
         metadata["diffused_index_map"][token_pdb_id] = f"{chain_id}{res_id}"

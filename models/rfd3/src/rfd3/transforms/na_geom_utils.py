@@ -1,22 +1,22 @@
+import math
 import os
 import subprocess
+import tempfile
 from datetime import datetime
 from typing import Dict, Optional
-import math
-import numpy as np
-import biotite.structure as struc
-from biotite.structure import AtomArray
 
+import biotite.structure as struc
+import numpy as np
 from atomworks.constants import (
-    STANDARD_AA, 
+    STANDARD_AA,
     STANDARD_DNA,
     STANDARD_RNA,
 )
-
 from atomworks.io.utils.sequence import (
     is_purine,
     is_pyrimidine,
 )
+from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from atomworks.ml.utils.token import (
     get_token_starts,
     is_glycine,
@@ -24,15 +24,12 @@ from atomworks.ml.utils.token import (
     is_standard_aa_not_glycine,
     is_unknown_nucleotide,
 )
-from rfd3.transforms.hbonds_hbplus import save_atomarray_to_pdb
-
-from atomworks.ml.encoding_definitions import AF3SequenceEncoding
-
+from biotite.structure import AtomArray
 from rfd3.constants import (
-ATOM_REGION_BY_RESI,
-PLANAR_ATOMS_BY_RESI,
+    ATOM_REGION_BY_RESI,
+    PLANAR_ATOMS_BY_RESI,
 )
-import tempfile
+from rfd3.transforms.hbonds_hbplus import save_atomarray_to_pdb
 
 # Derived: True when the residue has any planar sidechain atoms
 HAS_PLANAR_SC = {res: bool(atoms) for res, atoms in PLANAR_ATOMS_BY_RESI.items()}
@@ -43,15 +40,23 @@ DEFAULT_NA_SS_FEATURE_INFO: dict[str, int] = {
     "NA_SS_LOOP": 2,
 }
 
-AA_PLANAR_ATOMS = sorted(set(
-    atom for res in STANDARD_AA if res in PLANAR_ATOMS_BY_RESI
-    for atom in PLANAR_ATOMS_BY_RESI[res]
-))
+AA_PLANAR_ATOMS = sorted(
+    set(
+        atom
+        for res in STANDARD_AA
+        if res in PLANAR_ATOMS_BY_RESI
+        for atom in PLANAR_ATOMS_BY_RESI[res]
+    )
+)
 
-NA_PLANAR_ATOMS = sorted(set(
-    atom for res in (*STANDARD_RNA, *STANDARD_DNA) if res in PLANAR_ATOMS_BY_RESI
-    for atom in PLANAR_ATOMS_BY_RESI[res]
-))
+NA_PLANAR_ATOMS = sorted(
+    set(
+        atom
+        for res in (*STANDARD_RNA, *STANDARD_DNA)
+        if res in PLANAR_ATOMS_BY_RESI
+        for atom in PLANAR_ATOMS_BY_RESI[res]
+    )
+)
 
 
 class NucMolInfo:
@@ -62,53 +67,126 @@ class NucMolInfo:
     """
 
     def __init__(self) -> None:
-
-
         # Hbond interaction-class indices of the `hbond_count`` array:
-        # `hbond_count`` array is (L, L, 3), where the last dimension 
+        # `hbond_count`` array is (L, L, 3), where the last dimension
         # encodes interaction type between tokens i & j
-        self.BB_BB = 0 # backbone-backbone hbond interactions
-        self.BB_SC = 1 # backbone-sidechain hbond interactions
-        self.SC_SC = 2 # sidechain-sidechain hbond interactions
+        self.BB_BB = 0  # backbone-backbone hbond interactions
+        self.BB_SC = 1  # backbone-sidechain hbond interactions
+        self.SC_SC = 2  # sidechain-sidechain hbond interactions
 
-        # We sum over the last dimension of the hbond_count array, scaling 
+        # We sum over the last dimension of the hbond_count array, scaling
         # count by the following weights to get the interaction score:
         self.bp_weight_BB_BB = 0.0
         self.bp_weight_BB_SC = 0.5
         self.bp_weight_SC_SC = 1.0
-        self.bp_summation_weights = [self.bp_weight_BB_BB,
-                                     self.bp_weight_BB_SC,
-                                     self.bp_weight_SC_SC]
+        self.bp_summation_weights = [
+            self.bp_weight_BB_BB,
+            self.bp_weight_BB_SC,
+            self.bp_weight_SC_SC,
+        ]
 
-        # Parameters fo sigmoid function that gives us a continuous step function for 
+        # Parameters fo sigmoid function that gives us a continuous step function for
         # meeting basepair interaction criteria based on hbond counts alone (1st filter).
         # Calibrated such that:
         # >= 2 base-base H-bonds -> ~1.0
         # 1 base-base H-bond + 1 base-backbone H-bond -> ~0.5
         self.min_hbonds_for_bp = 2.0
-        self.bp_hbond_coeff    = 9.8 # determined heuristically
-        self.bp_val_cutoff     = 0.5 # minimum basepairing score for binarizing basepairs when needed
+        self.bp_hbond_coeff = 9.8  # determined heuristically
+        self.bp_val_cutoff = (
+            0.5  # minimum basepairing score for binarizing basepairs when needed
+        )
 
         self.base_geometry_limits = {}
-        self.base_geometry_limits['D_ij'] = 16.0
-        self.base_geometry_limits['H_ij'] = 1.5
-        self.base_geometry_limits['P_ij'] = math.pi/5
-        self.base_geometry_limits['B_ij'] = math.pi/5
+        self.base_geometry_limits["D_ij"] = 16.0
+        self.base_geometry_limits["H_ij"] = 1.5
+        self.base_geometry_limits["P_ij"] = math.pi / 5
+        self.base_geometry_limits["B_ij"] = math.pi / 5
 
-        self.rep_atom_dict={"protein": "CA", "rna": "C1'", "dna": "C1'"}
+        self.rep_atom_dict = {"protein": "CA", "rna": "C1'", "dna": "C1'"}
 
         # go through self.vec_atom_dict and remove spaces from atom names (values in inner dicts), and remove spaces from keys + replace 'R' with '' in outer dict keys
         self.vec_atom_dict = {
-                "DA": {"W_start":"N1", "W_stop":"N6", "H_start":"N7", "H_stop":"N6", "S_start":"C1'", "S_stop":"N3", "B_start":"C1'", "B_stop":"N9" },
-                "DG": {"W_start":"N1", "W_stop":"O6", "H_start":"N7", "H_stop":"O6", "S_start":"C1'", "S_stop":"N3", "B_start":"C1'", "B_stop":"N9" },
-                "DC": {"W_start":"N3", "W_stop":"N4", "H_start":"C5", "H_stop":"N4", "S_start":"C1'", "S_stop":"O2", "B_start":"C1'", "B_stop":"N1" },
-                "DT": {"W_start":"N3", "W_stop":"O4", "H_start":"C5", "H_stop":"O4", "S_start":"C1'", "S_stop":"O2", "B_start":"C1'", "B_stop":"N1" },
-                "A": {"W_start":"N1", "W_stop":"N6", "H_start":"N7", "H_stop":"N6", "S_start":"C1'", "S_stop":"N3", "B_start":"C1'", "B_stop":"N9" },
-                "G": {"W_start":"N1", "W_stop":"O6", "H_start":"N7", "H_stop":"O6", "S_start":"C1'", "S_stop":"N3", "B_start":"C1'", "B_stop":"N9" },
-                "C": {"W_start":"N3", "W_stop":"N4", "H_start":"C5", "H_stop":"N4", "S_start":"C1'", "S_stop":"O2", "B_start":"C1'", "B_stop":"N1" },
-                "U": {"W_start":"N3", "W_stop":"O4", "H_start":"C5", "H_stop":"O4", "S_start":"C1'", "S_stop":"O2", "B_start":"C1'", "B_stop":"N1" },
-            }
-
+            "DA": {
+                "W_start": "N1",
+                "W_stop": "N6",
+                "H_start": "N7",
+                "H_stop": "N6",
+                "S_start": "C1'",
+                "S_stop": "N3",
+                "B_start": "C1'",
+                "B_stop": "N9",
+            },
+            "DG": {
+                "W_start": "N1",
+                "W_stop": "O6",
+                "H_start": "N7",
+                "H_stop": "O6",
+                "S_start": "C1'",
+                "S_stop": "N3",
+                "B_start": "C1'",
+                "B_stop": "N9",
+            },
+            "DC": {
+                "W_start": "N3",
+                "W_stop": "N4",
+                "H_start": "C5",
+                "H_stop": "N4",
+                "S_start": "C1'",
+                "S_stop": "O2",
+                "B_start": "C1'",
+                "B_stop": "N1",
+            },
+            "DT": {
+                "W_start": "N3",
+                "W_stop": "O4",
+                "H_start": "C5",
+                "H_stop": "O4",
+                "S_start": "C1'",
+                "S_stop": "O2",
+                "B_start": "C1'",
+                "B_stop": "N1",
+            },
+            "A": {
+                "W_start": "N1",
+                "W_stop": "N6",
+                "H_start": "N7",
+                "H_stop": "N6",
+                "S_start": "C1'",
+                "S_stop": "N3",
+                "B_start": "C1'",
+                "B_stop": "N9",
+            },
+            "G": {
+                "W_start": "N1",
+                "W_stop": "O6",
+                "H_start": "N7",
+                "H_stop": "O6",
+                "S_start": "C1'",
+                "S_stop": "N3",
+                "B_start": "C1'",
+                "B_stop": "N9",
+            },
+            "C": {
+                "W_start": "N3",
+                "W_stop": "N4",
+                "H_start": "C5",
+                "H_stop": "N4",
+                "S_start": "C1'",
+                "S_stop": "O2",
+                "B_start": "C1'",
+                "B_stop": "N1",
+            },
+            "U": {
+                "W_start": "N3",
+                "W_stop": "O4",
+                "H_start": "C5",
+                "H_stop": "O4",
+                "S_start": "C1'",
+                "S_stop": "O2",
+                "B_start": "C1'",
+                "B_stop": "N1",
+            },
+        }
 
 
 def calculate_hb_counts(
@@ -117,7 +195,7 @@ def calculate_hb_counts(
     mol_info: NucMolInfo,
     cutoff_HA_dist: float = 2.5,
     cutoff_DA_dist: float = 3.9,
-    ):
+):
     """Count hydrogen bonds between residue pairs using HBPLUS.
 
     Args:
@@ -195,14 +273,16 @@ def calculate_hb_counts(
                 )
                 # d_atm = atom_array[d_mask]
                 # d_idx = d_atm.token_id
-                d_idx = token_level_data["resi2index"].get(f"{d_chain_iid}__{d_resi}", None)
+                d_idx = token_level_data["resi2index"].get(
+                    f"{d_chain_iid}__{d_resi}", None
+                )
                 if d_idx is None:
                     continue
 
                 # Handle standard polymer residues for donor atom:
                 if d_resn in ATOM_REGION_BY_RESI.keys():
-                    d_is_sc = (d_atom_name in ATOM_REGION_BY_RESI[d_resn]['sc'])
-                    d_is_bb = (d_atom_name in ATOM_REGION_BY_RESI[d_resn]['bb'])
+                    d_is_sc = d_atom_name in ATOM_REGION_BY_RESI[d_resn]["sc"]
+                    d_is_bb = d_atom_name in ATOM_REGION_BY_RESI[d_resn]["bb"]
                 else:
                     # If non-polymer, define any ligand HBonding atom as backbone:
                     if d_mask.sum() > 0:
@@ -219,45 +299,51 @@ def calculate_hb_counts(
                     & (atom_array.res_id == a_resi)
                     & (atom_array.chain_iid == a_chain_iid)
                 )
-                a_idx = token_level_data["resi2index"].get(f"{a_chain_iid}__{a_resi}", None)
+                a_idx = token_level_data["resi2index"].get(
+                    f"{a_chain_iid}__{a_resi}", None
+                )
                 if a_idx is None:
                     continue
 
                 # Handle standard polymer residues for acceptor atom:
                 if a_resn in ATOM_REGION_BY_RESI.keys():
-                    a_is_sc = (a_atom_name in ATOM_REGION_BY_RESI[a_resn]['sc'])
-                    a_is_bb = (a_atom_name in ATOM_REGION_BY_RESI[a_resn]['bb'])
+                    a_is_sc = a_atom_name in ATOM_REGION_BY_RESI[a_resn]["sc"]
+                    a_is_bb = a_atom_name in ATOM_REGION_BY_RESI[a_resn]["bb"]
                 else:
                     # If non-polymer, define any ligand HBonding atom as backbone:
                     if a_mask.sum() > 0:
                         a_is_bb = atom_array[a_mask][0].is_ligand
 
                 # 0 -> both backbone (BB-BB)
-                hbond_count[a_idx, d_idx, 0] += (a_is_bb * d_is_bb)
-                hbond_count[d_idx, a_idx, 0] += (d_is_bb * a_is_bb)
+                hbond_count[a_idx, d_idx, 0] += a_is_bb * d_is_bb
+                hbond_count[d_idx, a_idx, 0] += d_is_bb * a_is_bb
 
                 # 1 -> one backbone, one sidechain (BB-SC)
-                hbond_count[a_idx, d_idx, 1] += (a_is_bb * d_is_sc) | (a_is_sc * d_is_bb)
-                hbond_count[d_idx, a_idx, 1] += (d_is_bb * a_is_sc) | (d_is_sc * a_is_bb)
+                hbond_count[a_idx, d_idx, 1] += (a_is_bb * d_is_sc) | (
+                    a_is_sc * d_is_bb
+                )
+                hbond_count[d_idx, a_idx, 1] += (d_is_bb * a_is_sc) | (
+                    d_is_sc * a_is_bb
+                )
 
                 # 2 -> both sidechain (SC-SC)
-                hbond_count[a_idx, d_idx, 2] += (a_is_sc * d_is_sc)
-                hbond_count[d_idx, a_idx, 2] += (d_is_sc * a_is_sc)
-    '''    
+                hbond_count[a_idx, d_idx, 2] += a_is_sc * d_is_sc
+                hbond_count[d_idx, a_idx, 2] += d_is_sc * a_is_sc
+    """    
     try:
         os.remove(pdb_path)
         os.remove(hb2_path)
     except:
         print("temp pdb/hb already removed or not created to begin with")
-    '''
+    """
     return hbond_count
 
 
 def find_planar_positions(
-                atom_array: AtomArray, 
-                mol_info: NucMolInfo,
-                tol: float = 1e-2,
-                ) -> Dict:
+    atom_array: AtomArray,
+    mol_info: NucMolInfo,
+    tol: float = 1e-2,
+) -> Dict:
     """Identify residues with planar sidechains via known atom lists or PCA plane-fitting.
 
     For canonical residues the planar atoms are looked up from ``mol_info``;
@@ -285,11 +371,10 @@ def find_planar_positions(
 
     # for chain_iid, res_id in unique_positions_list:
     for chain_iid, res_id, res_name in unique_positions_list:
-
         mask = (
-            (atom_array.chain_iid == chain_iid) &
-            (atom_array.res_id == res_id) & 
-            (atom_array.res_name == res_name)
+            (atom_array.chain_iid == chain_iid)
+            & (atom_array.res_id == res_id)
+            & (atom_array.res_name == res_name)
         )
         res_atoms = atom_array[mask]
 
@@ -297,9 +382,9 @@ def find_planar_positions(
         if res_name in PLANAR_ATOMS_BY_RESI.keys():
             # Shared atoms between residue and known planar atoms for that residue type:
             planar_atom_list = list(
-                set([atm.atom_name for atm in res_atoms]) & 
-                set(PLANAR_ATOMS_BY_RESI[res_name])
-                )
+                set([atm.atom_name for atm in res_atoms])
+                & set(PLANAR_ATOMS_BY_RESI[res_name])
+            )
             planar_atom_list_dict[(chain_iid, res_id)] = planar_atom_list
 
         # If unknown or noncanonical residue, compute planar atoms geometrically:
@@ -337,7 +422,9 @@ def find_planar_positions(
                 all_quad_centered = coords - quad_center
                 quad_centered = quad_coords - quad_center
                 # covariance matrix
-                quad_cov = (quad_centered.T @ quad_centered) / max(quad_coords.shape[0] - 1, 1)
+                quad_cov = (quad_centered.T @ quad_centered) / max(
+                    quad_coords.shape[0] - 1, 1
+                )
                 # eigen decomposition
                 _, quad_eigvecs = np.linalg.eigh(quad_cov)
                 quad_normal = quad_eigvecs[:, 0]  # eigenvector with smallest eigenvalue
@@ -348,34 +435,39 @@ def find_planar_positions(
                 quad_valid_mask = quad_dists <= tol
 
                 # Filter for if we have a valid plane in the first place:
-                valid_plane_filter = (np.nanmax(quad_dists[:4]) < tol)
+                valid_plane_filter = np.nanmax(quad_dists[:4]) < tol
                 # Filter for if we have enough atoms in the plane:
-                plane_atom_filter = (int(np.sum(quad_valid_mask)) >= 4)
+                plane_atom_filter = int(np.sum(quad_valid_mask)) >= 4
                 if valid_plane_filter and plane_atom_filter:
-                    # Set the planar atom list for this position to those that are within tol of the plane: 
+                    # Set the planar atom list for this position to those that are within tol of the plane:
                     # using quad_valid_mask and candidate_planar_atm_names:
-                    planar_atom_list = [n for n, keep in zip(candidate_planar_atm_names, quad_valid_mask.tolist()) if keep]
-                
+                    planar_atom_list = [
+                        n
+                        for n, keep in zip(
+                            candidate_planar_atm_names, quad_valid_mask.tolist()
+                        )
+                        if keep
+                    ]
+
                 # not enough atoms close to a common plane
                 else:
                     planar_atom_list = []
 
             else:
-
                 # need at least 4 atoms to define a robust plane
                 planar_atom_list = []
-                
-            planar_atom_list_dict[(chain_iid, res_id)] = planar_atom_list
 
+            planar_atom_list_dict[(chain_iid, res_id)] = planar_atom_list
 
     return planar_atom_list_dict
 
 
-def make_coord_list(atom_array: AtomArray, 
-                    residue_list: list[str], 
-                    chain_list: list[str],  
-                    atom_list: list[str],
-                    ) -> list[list[str]]:
+def make_coord_list(
+    atom_array: AtomArray,
+    residue_list: list[str],
+    chain_list: list[str],
+    atom_list: list[str],
+) -> list[list[str]]:
     """Extract per-residue representative coordinates from an AtomArray.
 
     All three input lists must have the same length. Missing atoms are
@@ -393,24 +485,20 @@ def make_coord_list(atom_array: AtomArray,
     """
     coord_list = []
     for res_id, chain_id, atom_name in zip(residue_list, chain_list, atom_list):
-
         # Check if the residue exists in the atom array
         if atom_name == "atomized":
             # Check for atomized residue, in which case we take the first atom of the residue
             # full mask should be length-1 if atomized
-            mask = (
-                (atom_array.chain_id == chain_id) & 
-                (atom_array.res_id == res_id)
-                )
+            mask = (atom_array.chain_id == chain_id) & (atom_array.res_id == res_id)
         else:
             # General case for non-atomized residues
             # should have a unique solution, but we take the first entry either way.
             mask = (
-                (atom_array.chain_id == chain_id) & 
-                (atom_array.res_id == res_id) & 
-                (atom_array.atom_name == atom_name)
-                )
-            
+                (atom_array.chain_id == chain_id)
+                & (atom_array.res_id == res_id)
+                & (atom_array.atom_name == atom_name)
+            )
+
         # Get the coordinates for the masked atoms
         coords = atom_array.coord[mask][0:1]
 
@@ -428,8 +516,8 @@ def get_token_level_metadata(
     *,
     NA_only: bool = False,
     planar_only: bool = True,
-    seq_cutoff = 2,
-    gap_length = 200
+    seq_cutoff=2,
+    gap_length=200,
 ) -> dict:
     """Build lightweight token-level metadata (no coordinate geometry).
 
@@ -468,9 +556,21 @@ def get_token_level_metadata(
     # molecule type flags
     # Instantiate encoding locally to avoid retaining large arrays at module scope.
     sequence_encoding = AF3SequenceEncoding()
-    is_protein = np.isin(token_level_array.res_name, sequence_encoding.all_res_names[sequence_encoding.is_aa_like])
-    is_rna = np.isin(token_level_array.res_name, sequence_encoding.all_res_names[sequence_encoding.is_rna_like])
-    is_dna = np.isin(token_level_array.res_name, sequence_encoding.all_res_names[sequence_encoding.is_dna_like])
+
+    ###################
+    # is_protein = np.isin(
+    #    token_level_array.res_name,
+    #    sequence_encoding.all_res_names[sequence_encoding.is_aa_like],
+    # )
+    ##################
+    is_rna = np.isin(
+        token_level_array.res_name,
+        sequence_encoding.all_res_names[sequence_encoding.is_rna_like],
+    )
+    is_dna = np.isin(
+        token_level_array.res_name,
+        sequence_encoding.all_res_names[sequence_encoding.is_dna_like],
+    )
 
     is_na_arr = (is_dna | is_rna).astype(bool)
 
@@ -500,7 +600,7 @@ def get_token_level_metadata(
             sc_planarity_list.append(False)
 
         # representative & sugar-edge atoms
-        if (is_glycine(atm.res_name) | is_protein_unknown(atm.res_name)):
+        if is_glycine(atm.res_name) | is_protein_unknown(atm.res_name):
             rep_atom_i = "CA"
             S_start_atom_i = None
             S_stop_atom_i = None
@@ -534,7 +634,9 @@ def get_token_level_metadata(
         S_stop_atom_list.append(S_stop_atom_i)
 
     # residue index <-> token index map
-    resi2index = {f"{c}__{r}": i for c, r, i in zip(chain_iid_list, resi_list, ind_list)}
+    resi2index = {
+        f"{c}__{r}": i for c, r, i in zip(chain_iid_list, resi_list, ind_list)
+    }
 
     # relative sequence positions w/ chain gaps
     rel_pos_list: list[int] = []
@@ -547,9 +649,7 @@ def get_token_level_metadata(
         rel_pos_list.append(int(r + chn_bias))
 
     rel_pos = np.asarray(rel_pos_list, dtype=np.int64)
-    seq_neighbors = (
-        np.abs(rel_pos[:, None] - rel_pos[None, :]) <= int(seq_cutoff)
-    )
+    seq_neighbors = np.abs(rel_pos[:, None] - rel_pos[None, :]) <= int(seq_cutoff)
 
     na_inds = np.nonzero(is_na_arr)[0].tolist()
     na_tensor_inds = {na_i: i for i, na_i in enumerate(na_inds)}
@@ -647,12 +747,16 @@ def add_token_level_geometry_data(
     S_start_atom_list: list[str | None] = token_level_data["S_start_atom_list"]
     S_stop_atom_list: list[str | None] = token_level_data["S_stop_atom_list"]
 
-    planar_atom_list_dict = find_planar_positions(atom_array, mol_info)  # {(chain_iid, res_id): [atom_name, ...]}
+    planar_atom_list_dict = find_planar_positions(
+        atom_array, mol_info
+    )  # {(chain_iid, res_id): [atom_name, ...]}
     has_planar_sc: list[bool] = []
 
-    xyz_planar: list[list[list[float]]] = []    # list[I] of [K_i, 3]  (K_i varies per residue)
-    xyz_S_start: list[list[float]] = []         # list[I] of [3]
-    xyz_S_stop: list[list[float]] = []          # list[I] of [3]
+    xyz_planar: list[
+        list[list[float]]
+    ] = []  # list[I] of [K_i, 3]  (K_i varies per residue)
+    xyz_S_start: list[list[float]] = []  # list[I] of [3]
+    xyz_S_stop: list[list[float]] = []  # list[I] of [3]
 
     for c, r, S_start_atm, S_stop_atm in zip(
         chain_iid_list,
@@ -663,7 +767,9 @@ def add_token_level_geometry_data(
         planar_atoms_i = planar_atom_list_dict[(c, r)]
         has_planar_sc.append(bool(len(planar_atoms_i) >= 4))
 
-        atom_array_i = atom_array[(atom_array.chain_iid == c) & (atom_array.res_id == r)]
+        atom_array_i = atom_array[
+            (atom_array.chain_iid == c) & (atom_array.res_id == r)
+        ]
 
         planar_coords_i: list[list[float]] = []
         for pl_atm_name_j in planar_atoms_i:
@@ -673,7 +779,9 @@ def add_token_level_geometry_data(
             else:
                 planar_coords_i.append(pl_atom_array_ij[0].coord)
 
-        xyz_planar.append(planar_coords_i if len(planar_coords_i) > 3 else [[float("nan")] * 3])
+        xyz_planar.append(
+            planar_coords_i if len(planar_coords_i) > 3 else [[float("nan")] * 3]
+        )
 
         if S_start_atm is None:
             xyz_S_start.append([float("nan"), float("nan"), float("nan")])
@@ -698,21 +806,26 @@ def add_token_level_geometry_data(
         del atom_array_i
 
     # frame coordinates and backbone direction
-    frame_xyz = np.asarray(                                                            # [I, 3]  representative-atom coordinates
+    frame_xyz = np.asarray(  # [I, 3]  representative-atom coordinates
         make_coord_list(atom_array, resi_list, chain_list, rep_atom_list),
         dtype=np.float32,
     )
 
-    padded_centers = np.concatenate([frame_xyz[:1], frame_xyz, frame_xyz[-1:]], axis=0) # [I+2, 3]
-    M_i = (                                                                            # [I, 3]  smoothed backbone-direction vectors
-        (padded_centers[1:-1] - padded_centers[:-2])
-        + (padded_centers[2:] - padded_centers[1:-1])
-    ) / 2.0
+    padded_centers = np.concatenate(
+        [frame_xyz[:1], frame_xyz, frame_xyz[-1:]], axis=0
+    )  # [I+2, 3]
+    M_i = (
+        (  # [I, 3]  smoothed backbone-direction vectors
+            (padded_centers[1:-1] - padded_centers[:-2])
+            + (padded_centers[2:] - padded_centers[1:-1])
+        )
+        / 2.0
+    )
 
-    is_planar_arr = np.asarray(has_planar_sc, dtype=bool)                               # [I]
+    is_planar_arr = np.asarray(has_planar_sc, dtype=bool)  # [I]
     token_level_data["is_planar"] = is_planar_arr
 
-    is_na_arr = np.asarray(token_level_data["is_na"], dtype=bool)                       # [I]
+    is_na_arr = np.asarray(token_level_data["is_na"], dtype=bool)  # [I]
     if NA_only and planar_only:
         filter_mask = is_na_arr & is_planar_arr
     elif NA_only and (not planar_only):
@@ -721,7 +834,7 @@ def add_token_level_geometry_data(
         filter_mask = is_planar_arr.copy()
     else:
         filter_mask = np.ones_like(is_na_arr, dtype=bool)
-    token_level_data["filter_mask"] = filter_mask                                      # [I]  bool
+    token_level_data["filter_mask"] = filter_mask  # [I]  bool
 
     token_level_data.update(
         {
@@ -777,7 +890,7 @@ def _compute_local_frames(
     n_tokens = len(xyz_planar)
 
     # Mean-centre the planar atoms per residue
-    centered_points = [                                # list[I] of [K_i, 3]
+    centered_points = [  # list[I] of [K_i, 3]
         np.asarray(xyz_i, dtype=np.float32) - cen_i
         for xyz_i, cen_i in zip(xyz_planar, planar_centers)
     ]
@@ -857,19 +970,23 @@ def _compute_pairwise_geometry(
         ``"Z_ij"`` [I, I, 3], and optionally ``"O_ij"`` [I, I].
     """
     # Orientation-selected pairwise Z-axis
-    Z_sum = Z_i[:, None, :] + Z_i[None, :, :]    # [I, I, 3]
-    Z_diff = Z_i[:, None, :] - Z_i[None, :, :]   # [I, I, 3]
+    Z_sum = Z_i[:, None, :] + Z_i[None, :, :]  # [I, I, 3]
+    Z_diff = Z_i[:, None, :] - Z_i[None, :, :]  # [I, I, 3]
     Z_ij_oris = 0.5 * np.stack((Z_sum, Z_diff), axis=0)  # [2, I, I, 3]
 
     base_ori_ij = (  # [I, I]  0=parallel, 1=antiparallel
         np.linalg.norm(Z_ij_oris[1], axis=-1) > np.linalg.norm(Z_ij_oris[0], axis=-1)
     ).astype(np.int64)
 
-    Z_ij = np.where(base_ori_ij[..., None] == 0, Z_ij_oris[0], Z_ij_oris[1])  # [I, I, 3]
+    Z_ij = np.where(
+        base_ori_ij[..., None] == 0, Z_ij_oris[0], Z_ij_oris[1]
+    )  # [I, I, 3]
     Z_ij = Z_ij / (np.linalg.norm(Z_ij, axis=-1, keepdims=True) + eps)
 
     # Pairwise Y (inter-residue direction) and X axes
-    Y_ij = frame_D_ij_vec / (np.linalg.norm(frame_D_ij_vec, axis=-1, keepdims=True) + eps)  # [I, I, 3]
+    Y_ij = frame_D_ij_vec / (
+        np.linalg.norm(frame_D_ij_vec, axis=-1, keepdims=True) + eps
+    )  # [I, I, 3]
     X_ij = np.cross(Z_ij, Y_ij)  # [I, I, 3]
     X_ij = X_ij / (np.linalg.norm(X_ij, axis=-1, keepdims=True) + eps)
 
@@ -882,22 +999,30 @@ def _compute_pairwise_geometry(
         np.sum(Z_i[:, None, :] * Y_ij, axis=-1, keepdims=True) * Y_ij
         + np.sum(Z_i[:, None, :] * Z_ij, axis=-1, keepdims=True) * Z_ij
     )
-    proj_Z_i_YZ_norm = proj_Z_i_YZ / (np.linalg.norm(proj_Z_i_YZ, axis=-1, keepdims=True) + eps)
-    cos_buckle = np.sum(proj_Z_i_YZ_norm * (-proj_Z_i_YZ_norm.swapaxes(0, 1)), axis=-1)  # [I, I]
+    proj_Z_i_YZ_norm = proj_Z_i_YZ / (
+        np.linalg.norm(proj_Z_i_YZ, axis=-1, keepdims=True) + eps
+    )
+    cos_buckle = np.sum(
+        proj_Z_i_YZ_norm * (-proj_Z_i_YZ_norm.swapaxes(0, 1)), axis=-1
+    )  # [I, I]
 
     # Propeller (P_ij)
     proj_Z_i_ZX = (  # [I, I, 3]
         np.sum(Z_i[:, None, :] * Z_ij, axis=-1, keepdims=True) * Z_ij
         + np.sum(Z_i[:, None, :] * X_ij, axis=-1, keepdims=True) * X_ij
     )
-    proj_Z_i_ZX_norm = proj_Z_i_ZX / (np.linalg.norm(proj_Z_i_ZX, axis=-1, keepdims=True) + eps)
-    cos_propeller = np.sum(proj_Z_i_ZX_norm * (-proj_Z_i_ZX_norm.swapaxes(0, 1)), axis=-1)  # [I, I]
+    proj_Z_i_ZX_norm = proj_Z_i_ZX / (
+        np.linalg.norm(proj_Z_i_ZX, axis=-1, keepdims=True) + eps
+    )
+    cos_propeller = np.sum(
+        proj_Z_i_ZX_norm * (-proj_Z_i_ZX_norm.swapaxes(0, 1)), axis=-1
+    )  # [I, I]
 
     if clamp:
         cos_buckle = np.clip(cos_buckle, -1.0, 1.0)
         cos_propeller = np.clip(cos_propeller, -1.0, 1.0)
 
-    B_ij = np.arccos(cos_buckle)    # [I, I]
+    B_ij = np.arccos(cos_buckle)  # [I, I]
     P_ij = np.arccos(cos_propeller)  # [I, I]
 
     result: dict[str, np.ndarray] = {
@@ -920,8 +1045,12 @@ def _compute_pairwise_geometry(
             np.sum(X_i[:, None, :] * X_ij, axis=-1, keepdims=True) * X_ij
             + np.sum(X_i[:, None, :] * Y_ij, axis=-1, keepdims=True) * Y_ij
         )
-        proj_X_i_XY_norm = proj_X_i_XY / (np.linalg.norm(proj_X_i_XY, axis=-1, keepdims=True) + eps)
-        cos_opening = np.sum(proj_X_i_XY_norm * proj_X_i_XY_norm.swapaxes(0, 1), axis=-1)  # [I, I]
+        proj_X_i_XY_norm = proj_X_i_XY / (
+            np.linalg.norm(proj_X_i_XY, axis=-1, keepdims=True) + eps
+        )
+        cos_opening = np.sum(
+            proj_X_i_XY_norm * proj_X_i_XY_norm.swapaxes(0, 1), axis=-1
+        )  # [I, I]
         if clamp:
             cos_opening = np.clip(cos_opening, -1.0, 1.0)
         result["O_ij"] = np.arccos(cos_opening)  # [I, I]
@@ -989,13 +1118,14 @@ def _compute_basepair_mask(
         | (P_ij >= math.pi - mol_info.base_geometry_limits["P_ij"])
     )
 
-    D_ij_filter = (D_ij <= mol_info.base_geometry_limits["D_ij"])
+    D_ij_filter = D_ij <= mol_info.base_geometry_limits["D_ij"]
 
     bp_geom_filter = H_ij_filter & B_ij_filter & P_ij_filter & D_ij_filter  # [I, I]
 
     if bool_only:
         basepairs_bool_ij = (  # [I, I]
-            (~seq_neighbors) & bp_geom_filter
+            (~seq_neighbors)
+            & bp_geom_filter
             & (bp_preds >= float(mol_info.bp_val_cutoff))
         )
         return basepairs_bool_ij
@@ -1015,7 +1145,7 @@ def _compute_basepair_mask(
 
 
 def compute_nucleic_ss(
-    mol_info, 
+    mol_info,
     token_level_data,
     hbond_count,
     clamp_pairwise_params=True,
@@ -1061,14 +1191,24 @@ def compute_nucleic_ss(
     mask_1d = np.asarray(token_level_data["filter_mask"], dtype=bool)  # [I_full]
 
     # --- Unpack and filter token-level data ----------------------
-    M_i         = np.asarray(token_level_data["M_i"], dtype=np.float32)[mask_1d]        # [I, 3]
-    frame_xyz   = np.asarray(token_level_data["frame_xyz"], dtype=np.float32)[mask_1d]  # [I, 3]
-    xyz_S_start = [v for v, k in zip(token_level_data["xyz_S_start"], mask_1d) if k]    # list[I] of [3]
-    xyz_S_stop  = [v for v, k in zip(token_level_data["xyz_S_stop"],  mask_1d) if k]    # list[I] of [3]
-    xyz_planar  = [v for v, k in zip(token_level_data["xyz_planar"],  mask_1d) if k]    # list[I] of [K_i, 3]
+    M_i = np.asarray(token_level_data["M_i"], dtype=np.float32)[mask_1d]  # [I, 3]
+    frame_xyz = np.asarray(token_level_data["frame_xyz"], dtype=np.float32)[
+        mask_1d
+    ]  # [I, 3]
+    xyz_S_start = [
+        v for v, k in zip(token_level_data["xyz_S_start"], mask_1d) if k
+    ]  # list[I] of [3]
+    xyz_S_stop = [
+        v for v, k in zip(token_level_data["xyz_S_stop"], mask_1d) if k
+    ]  # list[I] of [3]
+    xyz_planar = [
+        v for v, k in zip(token_level_data["xyz_planar"], mask_1d) if k
+    ]  # list[I] of [K_i, 3]
 
-    hbond_count   = np.asarray(hbond_count)[mask_1d, :][:, mask_1d]                                      # [I, I, 3]
-    seq_neighbors = np.asarray(token_level_data["seq_neighbors"], dtype=bool)[mask_1d, :][:, mask_1d]     # [I, I]
+    hbond_count = np.asarray(hbond_count)[mask_1d, :][:, mask_1d]  # [I, I, 3]
+    seq_neighbors = np.asarray(token_level_data["seq_neighbors"], dtype=bool)[
+        mask_1d, :
+    ][:, mask_1d]  # [I, I]
 
     # Nothing passed NA/planar filtering for this structure.
     # Return empty outputs instead of failing downstream on np.stack([]).
@@ -1107,12 +1247,15 @@ def compute_nucleic_ss(
 
     # --- Precompute centroids and displacement vectors -----------
     planar_centers = np.stack(  # [I, 3]
-        [np.nanmean(np.asarray(xyz_i, dtype=np.float32), axis=0) for xyz_i in xyz_planar],
+        [
+            np.nanmean(np.asarray(xyz_i, dtype=np.float32), axis=0)
+            for xyz_i in xyz_planar
+        ],
         axis=0,
     ).astype(np.float32)
 
-    frame_D_ij_vec = frame_xyz[None, :, :] - frame_xyz[:, None, :]          # [I, I, 3]
-    sc_D_ij_vec    = planar_centers[None, :, :] - planar_centers[:, None, :]  # [I, I, 3]
+    frame_D_ij_vec = frame_xyz[None, :, :] - frame_xyz[:, None, :]  # [I, I, 3]
+    sc_D_ij_vec = planar_centers[None, :, :] - planar_centers[:, None, :]  # [I, I, 3]
 
     # --- CALC I: per-residue local coordinate frames -------------
     need_full_frame = return_local_params or return_opening_angle
@@ -1125,8 +1268,8 @@ def compute_nucleic_ss(
         compute_full_frame=need_full_frame,
         eps=eps,
     )
-    Z_i = local_frames["Z_i"]                           # [I, 3]
-    X_i = local_frames.get("X_i")                       # [I, 3] or None
+    Z_i = local_frames["Z_i"]  # [I, 3]
+    X_i = local_frames.get("X_i")  # [I, 3] or None
 
     # --- CALC II: pairwise base-step geometry --------------------
     pw_geom = _compute_pairwise_geometry(
@@ -1185,7 +1328,6 @@ def compute_nucleic_ss(
         }
 
     return nucleic_ss_data
-
 
 
 def annotate_na_ss(
@@ -1258,10 +1400,10 @@ def annotate_na_ss(
         NA_only=NA_only,
         planar_only=planar_only,
     )
-    # Note: this mask gives positions that are *chemically valid* for forming 
+    # Note: this mask gives positions that are *chemically valid* for forming
     # base pairs, which is different from custom mask-generation for features
     mask_1d = np.asarray(token_level_data["filter_mask"], dtype=bool)
-    
+
     subset_idxs = np.nonzero(mask_1d)[0]
 
     is_na_full = np.asarray(token_level_data["is_na"], dtype=bool)
@@ -1295,15 +1437,19 @@ def annotate_na_ss(
     if planar_only:
         n_tokens = bp_bool.shape[0]
         has_planar_sc = np.asarray(
-            token_level_data.get("has_planar_sc", np.ones(n_tokens, dtype=bool)), dtype=bool
+            token_level_data.get("has_planar_sc", np.ones(n_tokens, dtype=bool)),
+            dtype=bool,
         )
         bp_bool &= has_planar_sc[:, None]
         bp_bool &= has_planar_sc[None, :]
 
     # Optional: filter to canonical Watson-Crick basepairs only.
     # Sampled probabilistically to allow mixed supervision during training.
-    do_canonical_filter = bool(p_canonical_bp_filter and (np.random.rand() < float(p_canonical_bp_filter)))
+    do_canonical_filter = bool(
+        p_canonical_bp_filter and (np.random.rand() < float(p_canonical_bp_filter))
+    )
     if do_canonical_filter:
+
         def _base_letter(res_name: str) -> str | None:
             rn = str(res_name).strip().upper()
             if rn in STANDARD_RNA:
@@ -1313,11 +1459,16 @@ def annotate_na_ss(
             return None
 
         allowed_pairs = {
-            ("A", "U"), ("U", "A"),
-            ("A", "T"), ("T", "A"),
-            ("G", "C"), ("C", "G"),
+            ("A", "U"),
+            ("U", "A"),
+            ("A", "T"),
+            ("T", "A"),
+            ("G", "C"),
+            ("C", "G"),
         }
-        base_letters_full: list[str | None] = [_base_letter(rn) for rn in token_res_names]
+        base_letters_full: list[str | None] = [
+            _base_letter(rn) for rn in token_res_names
+        ]
 
         bp_bool = np.asarray(bp_bool, dtype=bool)
         bp_rows_tmp, bp_cols_tmp = np.nonzero(bp_bool)
@@ -1401,7 +1552,9 @@ def annotate_na_ss(
             continue
         # A residue is treated as atomized if any atom in the residue carries atomize=True.
         if "atomize" in atom_array.get_annotation_categories():
-            residue_is_atomized = bool(np.any(np.asarray(atom_array.atomize[int(start):stop], dtype=bool)))
+            residue_is_atomized = bool(
+                np.any(np.asarray(atom_array.atomize[int(start) : stop], dtype=bool))
+            )
         else:
             residue_is_atomized = False
         if residue_is_atomized:

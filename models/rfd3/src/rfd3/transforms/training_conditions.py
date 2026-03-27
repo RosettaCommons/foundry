@@ -13,13 +13,12 @@ from atomworks.ml.utils.token import (
     spread_token_wise,
 )
 from biotite.structure import AtomArray, get_residue_starts
+from rfd3.constants import backbone_atoms_RNA
 from rfd3.transforms.conditioning_utils import (
     random_condition,
     sample_island_tokens,
     sample_subgraph_atoms,
 )
-
-from rfd3.constants import backbone_atoms_RNA
 
 nx.from_numpy_matrix = nx.from_numpy_array
 logger = logging.getLogger(__name__)
@@ -74,7 +73,7 @@ class IslandCondition(TrainingCondition):
         p_fix_motif_coordinates,
         p_fix_motif_sequence,
         p_unindex_motif_tokens,
-        association_scheme = 'atom14',
+        association_scheme="atom14",
     ):
         self.name = name
         self.frequency = frequency
@@ -93,7 +92,7 @@ class IslandCondition(TrainingCondition):
         self.p_fix_motif_coordinates = p_fix_motif_coordinates
         self.p_fix_motif_sequence = p_fix_motif_sequence
         self.p_unindex_motif_tokens = p_unindex_motif_tokens
-        
+
         self.association_scheme = association_scheme
 
     def is_valid_for_example(self, data) -> bool:
@@ -107,7 +106,7 @@ class IslandCondition(TrainingCondition):
         else:
             if np.any(is_protein):
                 return True
-        
+
         return False
 
     def sample_motif_tokens(self, atom_array):
@@ -162,7 +161,7 @@ class IslandCondition(TrainingCondition):
         if random_condition(self.p_diffuse_motif_sidechains):
             backbone_atoms = backbone_atoms_RNA.copy()
             backbone_atoms.remove("C1'")
-            backbone_atoms = ["N", "C", "CA"] + backbone_atoms #covers DNA also
+            backbone_atoms = ["N", "C", "CA"] + backbone_atoms  # covers DNA also
             if random_condition(self.p_include_oxygen_in_backbone_mask):
                 backbone_atoms.append("O")
             is_motif_atom = is_motif_atom & np.isin(
@@ -500,7 +499,9 @@ def sample_conditioning_strategy(
     atom_array.set_annotation(
         "is_motif_atom_unindexed",
         sample_unindexed_atoms(
-            atom_array, p_unindex_motif_tokens=p_unindex_motif_tokens, association_scheme=association_scheme
+            atom_array,
+            p_unindex_motif_tokens=p_unindex_motif_tokens,
+            association_scheme=association_scheme,
         ),
     )
     return atom_array
@@ -526,7 +527,6 @@ def sample_is_motif_atom_with_fixed_seq(
         is_motif_atom_with_fixed_seq = (
             is_motif_atom_with_fixed_seq | ~atom_array.is_protein
         )
-    
 
     return is_motif_atom_with_fixed_seq
 

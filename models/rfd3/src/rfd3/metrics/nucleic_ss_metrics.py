@@ -1,18 +1,18 @@
 import logging
 
-import bdb
 import numpy as np
-from biotite.structure import AtomArray
 from atomworks.ml.utils.token import (
     get_token_starts,
 )
-
+from biotite.structure import AtomArray
+from rfd3.trainer.trainer_utils import (
+    _cleanup_virtual_atoms_and_assign_atom_name_elements,
+    _readout_seq_from_struc,
+)
 from rfd3.transforms.na_geom_utils import annotate_na_ss
 
 from foundry.metrics.metric import Metric
 from foundry.utils.ddp import RankedLogger
-
-from rfd3.trainer.trainer_utils import _readout_seq_from_struc, _cleanup_virtual_atoms_and_assign_atom_name_elements
 
 logging.basicConfig(level=logging.INFO)
 global_logger = RankedLogger(__name__, rank_zero_only=False)
@@ -70,7 +70,9 @@ def _get_candidate_token_ids(
             if hasattr(token_level_array, "is_dna")
             else np.zeros(len(token_ids), dtype=bool)
         )
-        token_mask &= (is_rna | is_dna) if (is_rna.any() or is_dna.any()) else token_mask
+        token_mask &= (
+            (is_rna | is_dna) if (is_rna.any() or is_dna.any()) else token_mask
+        )
 
     if compute_for_diffused_region_only:
         if hasattr(token_level_array, "is_motif_atom"):
@@ -175,7 +177,10 @@ def _extract_loop_and_paired_token_ids(
 
     return loop_token_ids, paired_token_ids
 
-def compute_from_two_arr(gt_arr, pred_arr, restrict_to_nucleic=True, compute_for_diffused_region_only = False):
+
+def compute_from_two_arr(
+    gt_arr, pred_arr, restrict_to_nucleic=True, compute_for_diffused_region_only=False
+):
     gt_token_ids = _get_token_ids(gt_arr)
     pred_token_ids = _get_token_ids(pred_arr)
     if len(gt_token_ids) != len(pred_token_ids):
@@ -228,26 +233,25 @@ def compute_from_two_arr(gt_arr, pred_arr, restrict_to_nucleic=True, compute_for
             (pair_weight * pair_f1 + loop_weight * loop_f1) / total_weight
         )
 
-
     return pair_f1, loop_f1, weighted_f1
 
+
 def get_NA_SS_F1(pred_array):
-    
     ## save the original bop_partner annotation
     gt_array = pred_array.copy()
 
     ## replace by annotating again
     pred_array = annotate_na_ss(
-                    pred_array,
-                    NA_only=True,
-                    planar_only=True,
-                    overwrite=True,
-                    p_canonical_bp_filter=0.0,
-                )
-    
+        pred_array,
+        NA_only=True,
+        planar_only=True,
+        overwrite=True,
+        p_canonical_bp_filter=0.0,
+    )
+
     try:
         pair_f1, loop_f1, weighted_f1 = compute_from_two_arr(gt_array, pred_array)
-    except:
+    except Exception:
         # fails when returns None because expects three returns
         return {}
 
@@ -261,13 +265,13 @@ def get_NA_SS_F1(pred_array):
 class NucleicSSSimilarityMetrics(Metric):
     """Secondary-structure similarity for nucleic acids.
 
-        Reports:
-        - `pair_f1`: F1 over basepair edges from token-level bp-partner annotation.
-        - `loop_f1`: F1 over explicitly-unpaired loop tokens (`bp_partners == []`).
-            Unannotated tokens (`bp_partners is None`) are masked.
-        - `weighted_f1`: GT-weighted average of `pair_f1` and `loop_f1`, weighted by
-            the prevalence of paired vs loop tokens in the GT.
-        """
+    Reports:
+    - `pair_f1`: F1 over basepair edges from token-level bp-partner annotation.
+    - `loop_f1`: F1 over explicitly-unpaired loop tokens (`bp_partners == []`).
+        Unannotated tokens (`bp_partners is None`) are masked.
+    - `weighted_f1`: GT-weighted average of `pair_f1` and `loop_f1`, weighted by
+        the prevalence of paired vs loop tokens in the GT.
+    """
 
     def __init__(
         self,
@@ -302,7 +306,9 @@ class NucleicSSSimilarityMetrics(Metric):
 
         n_valid = 0
 
-        for gt_arr, pred_arr in zip(ground_truth_atom_array_stack, predicted_atom_array_stack):
+        for gt_arr, pred_arr in zip(
+            ground_truth_atom_array_stack, predicted_atom_array_stack
+        ):
             gt_categories = gt_arr.get_annotation_categories()
             if "bp_partners" not in gt_categories:
                 continue
@@ -326,14 +332,14 @@ class NucleicSSSimilarityMetrics(Metric):
                         pred_arr,
                         association_scheme="atom23",
                     )
-                except:
+                except Exception:
                     # this can fail early in training
                     print("could not cleanup virtuals for nucleic ss metric compute")
                     pass
                 # clear annotation to avoid potential info leak
                 if "bp_partners" in pred_arr.get_annotation_categories():
                     pred_arr.del_annotation("bp_partners")
-                
+
                 # add nucleic-ss annotations
                 annotate_na_ss(
                     pred_arr,
@@ -348,8 +354,13 @@ class NucleicSSSimilarityMetrics(Metric):
 
             # Basic sanity check: token counts should match for aligned comparisons
             try:
-                pair_f1, loop_f1, weighted_f1 = compute_from_two_arr(gt_arr, pred_arr, restrict_to_nucleic=self.restrict_to_nucleic, compute_for_diffused_region_only = self.compute_for_diffused_region_only)
-            except:
+                pair_f1, loop_f1, weighted_f1 = compute_from_two_arr(
+                    gt_arr,
+                    pred_arr,
+                    restrict_to_nucleic=self.restrict_to_nucleic,
+                    compute_for_diffused_region_only=self.compute_for_diffused_region_only,
+                )
+            except Exception:
                 # fails when returns None because expects three returns
                 continue
 
@@ -360,7 +371,7 @@ class NucleicSSSimilarityMetrics(Metric):
 
         if n_valid == 0:
             return {}
-        
+
         return {
             "pair_f1": float(np.mean(pair_f1_list)),
             "loop_f1": float(np.mean(loop_f1_list)),

@@ -63,8 +63,8 @@ def strip_f(
                 )
             else:
                 ## for bp_partners default is a mask feature
-                v_cropped[:,:,0] = 1
-                v_cropped[:,:,1:] = 0
+                v_cropped[:, :, 0] = 1
+                v_cropped[:, :, 1:] = 0
 
         # update the feature in the dictionary
         f_stripped[k] = v_cropped

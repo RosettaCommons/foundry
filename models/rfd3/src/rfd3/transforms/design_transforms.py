@@ -38,6 +38,7 @@ from rfd3.transforms.conditioning_base import (
     UnindexFlaggedTokens,
     get_motif_features,
 )
+from rfd3.transforms.na_geom import na_ss_feats_from_annotation
 from rfd3.transforms.rasa import discretize_rasa
 from rfd3.transforms.util_transforms import (
     AssignTypes,
@@ -45,7 +46,6 @@ from rfd3.transforms.util_transforms import (
     get_af3_token_representative_masks,
 )
 from rfd3.transforms.virtual_atoms import PadTokensWithVirtualAtoms
-from rfd3.transforms.na_geom import na_ss_feats_from_annotation
 
 from foundry.utils.ddp import RankedLogger  # noqa
 
@@ -71,7 +71,7 @@ class SubsampleToTypes(Transform):
     def __init__(
         self,
         allowed_types: list | str = ["is_protein"],
-        association_scheme: str = 'atom14'
+        association_scheme: str = "atom14",
     ):
         self.allowed_types = allowed_types
         self.association_scheme = association_scheme
@@ -106,7 +106,7 @@ class SubsampleToTypes(Transform):
                 )
             )
 
-        if self.association_scheme != 'atom23' and atom_array.is_protein.sum() == 0:
+        if self.association_scheme != "atom23" and atom_array.is_protein.sum() == 0:
             raise ValueError(
                 "No protein atoms found in the atom array. Example ID: {}".format(
                     data.get("example_id", "unknown")
@@ -757,7 +757,7 @@ class AddAdditional1dFeaturesToFeats(Transform):
         """
         if "feats" not in data.keys():
             data["feats"] = {}
-        
+
         if self.association_scheme == "atom23":
             data["atom_array"].set_annotation(
                 "is_protein_token", data["atom_array"].is_protein
@@ -772,7 +772,6 @@ class AddAdditional1dFeaturesToFeats(Transform):
             data = self.generate_feature(feature_name, n_dims, data, "atom")
 
         return data
-    
 
 
 class AddAdditional2dFeaturesToFeats(Transform):
@@ -791,15 +790,15 @@ class AddAdditional2dFeaturesToFeats(Transform):
         token_2d_features,
         autofill_zeros_if_not_present_in_atomarray=False,
         association_scheme="atom14",
-    ):  
+    ):
         self.autofill = autofill_zeros_if_not_present_in_atomarray
         self.token_2d_features = token_2d_features
         self.association_scheme = association_scheme
 
-        # Need to pre-define custom constructor functions 
+        # Need to pre-define custom constructor functions
         # to map from atomarray annotations to tensors.
         self.constructor_functions = {
-            'bp_partners': na_ss_feats_from_annotation,
+            "bp_partners": na_ss_feats_from_annotation,
         }
 
     def check_input(self, data) -> None:
@@ -807,11 +806,10 @@ class AddAdditional2dFeaturesToFeats(Transform):
         check_is_instance(data, "atom_array", AtomArray)
 
     def generate_token_feature(self, feature_name, n_dims, data):
-
         # Don't do this if we already have the feature
         if feature_name in data["feats"].keys():
             return data
-        
+
         # For these, we need to use a constructor function mapping,
         # since pair features may require custom logic/conventions.
 
@@ -822,11 +820,11 @@ class AddAdditional2dFeaturesToFeats(Transform):
             raise ValueError(
                 f"No constructor function found for 2d feature `{feature_name}`"
             )
-        
+
         # We can fix shape issues here:
         if len(feature_array.shape) == 2 and n_dims == 1:
             feature_array = feature_array.unsqueeze(1)
-        
+
         # ensure that feature_array is a 3d array with third dim == n_dims:
         if len(feature_array.shape) != 3:
             raise ValueError(
@@ -854,7 +852,7 @@ class AddAdditional2dFeaturesToFeats(Transform):
         if "feats" not in data.keys():
             data["feats"] = {}
         # Only apply for features that the model is expecting:
-        if self.token_2d_features == None:
+        if self.token_2d_features is None:
             return data
         for feature_name, n_dims in self.token_2d_features.items():
             data = self.generate_token_feature(feature_name, n_dims, data)

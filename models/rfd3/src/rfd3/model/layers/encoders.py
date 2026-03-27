@@ -11,10 +11,10 @@ from rfd3.model.layers.blocks import (
     Downcast,
     LocalAtomTransformer,
     OneDFeatureEmbedder,
-    TwoDFeatureEmbedder,
     PositionPairDistEmbedder,
     RelativePositionEncodingWithIndexRemoval,
     SinusoidalDistEmbed,
+    TwoDFeatureEmbedder,
 )
 from rfd3.model.layers.chunked_pairwise import (
     ChunkedPairwiseEmbedder,
@@ -64,7 +64,7 @@ class TokenInitializer(nn.Module):
         self.atom_1d_embedder_1 = OneDFeatureEmbedder(atom_1d_features, c_s)
         self.atom_1d_embedder_2 = OneDFeatureEmbedder(atom_1d_features, c_atom)
         self.token_1d_embedder = OneDFeatureEmbedder(token_1d_features, c_s)
-        if token_2d_features != None:
+        if token_2d_features is not None:
             self.token_2d_embedder = TwoDFeatureEmbedder(token_2d_features, c_z)
         else:
             self.token_2d_embedder = None
@@ -209,7 +209,7 @@ class TokenInitializer(nn.Module):
                 f["ref_pos"][f["is_ca"]], valid_mask
             )
             # Add extra token pair features
-            if self.token_2d_embedder != None:
+            if self.token_2d_embedder is not None:
                 Z_init_II = Z_init_II + self.token_2d_embedder(f, I)
 
             # Run a small transformer to provide position encodings to single.

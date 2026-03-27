@@ -143,6 +143,7 @@ class OneDFeatureEmbedder(nn.Module):
             )
         )
 
+
 class TwoDFeatureEmbedder(nn.Module):
     """
     Embeds 2D features into a single vector.
@@ -164,17 +165,21 @@ class TwoDFeatureEmbedder(nn.Module):
                 for feature, n_channels in self.features.items()
             }
         )
+
     def collapse2D(self, x, L):
         return x.reshape((L, L, x.numel() // (L * L)))
 
     def forward(self, f, collapse_length):
         return sum(
             tuple(
-                self.embedders[feature](self.collapse2D(f[feature].float(), collapse_length))
+                self.embedders[feature](
+                    self.collapse2D(f[feature].float(), collapse_length)
+                )
                 for feature, n_channels in self.features.items()
                 if exists(n_channels)
             )
         )
+
 
 class SinusoidalDistEmbed(nn.Module):
     """

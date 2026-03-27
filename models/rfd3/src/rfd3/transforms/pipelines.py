@@ -216,7 +216,9 @@ def get_crop_transform(
         ), "Crop center cutoff distance must be greater than 0"
 
     pre_crop_transforms = [
-        SubsampleToTypes(allowed_types=allowed_types, association_scheme=association_scheme),
+        SubsampleToTypes(
+            allowed_types=allowed_types, association_scheme=association_scheme
+        ),
     ]
 
     cropping_transform = RandomRoute(
@@ -361,11 +363,9 @@ def build_atom14_base_pipeline_(
     max_ss_frac_to_provide: float,
     min_ss_island_len: int,
     max_ss_island_len: int,
-
     ## Nucleic acid features #####
-    #add_na_pair_features: bool, 
+    # add_na_pair_features: bool,
     ## This should not be necessary, controlled through feature names in model, and meta conditioning probabilities, inference behavior handled in transform itself #####
-
     **_,  # dump additional kwargs (e.g. msa stuff)
 ):
     """
@@ -373,7 +373,7 @@ def build_atom14_base_pipeline_(
     """
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     warnings.filterwarnings("ignore", category=DeprecationWarning)
-    
+
     # Add any data necessary for downstream transforms
     transforms = [
         AddData(
@@ -415,7 +415,7 @@ def build_atom14_base_pipeline_(
         max_binder_length=max_binder_length,
         max_atoms_in_crop=max_atoms_in_crop,
         allowed_types=allowed_types,
-        association_scheme=association_scheme
+        association_scheme=association_scheme,
     )
 
     if zero_occ_on_exposure_after_cropping:
@@ -448,7 +448,7 @@ def build_atom14_base_pipeline_(
         )
     )
     # Add nucleic acid geometry features
-    #if add_na_pair_features:
+    # if add_na_pair_features:
     transforms.append(
         CalculateNucleicAcidGeomFeats(
             is_inference,
@@ -639,8 +639,8 @@ def build_atom14_base_pipeline(
         kwargs.setdefault("min_ss_island_len", 0)
         kwargs.setdefault("max_ss_island_len", 999)
         kwargs.setdefault("max_binder_length", 999)
-        # This should not be necessary. 
-        #kwargs.setdefault("add_na_pair_features", False)
+        # This should not be necessary.
+        # kwargs.setdefault("add_na_pair_features", False)
 
         kwargs.setdefault("b_factor_min", None)
         kwargs.setdefault("zero_occ_on_exposure_after_cropping", False)

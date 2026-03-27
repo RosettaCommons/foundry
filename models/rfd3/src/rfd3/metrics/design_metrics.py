@@ -4,6 +4,7 @@ from atomworks.ml.utils.token import (
     get_token_starts,
 )
 from beartype.typing import Any
+from rfd3.constants import backbone_atoms_RNA
 from rfd3.metrics.metrics_utils import (
     _flatten_dict,
     get_hotspot_contacts,
@@ -12,10 +13,10 @@ from rfd3.metrics.metrics_utils import (
 
 from foundry.common import exists
 from foundry.metrics.metric import Metric
-from rfd3.constants import backbone_atoms_RNA
 
 STANDARD_CACA_DIST = 3.8
-STANDARD_P_P_DISTANCE = 6.4 ## average of B and A form 7 and 5.9
+STANDARD_P_P_DISTANCE = 6.4  ## average of B and A form 7 and 5.9
+
 
 def get_clash_metrics(
     atom_array,
@@ -35,11 +36,11 @@ def get_clash_metrics(
         elif "P" in atom_array.atom_name:
             ca_atoms = atom_array[atom_array.atom_name == "P"]
             cut_off = STANDARD_P_P_DISTANCE
-        
+
         xyz = ca_atoms.coord
         xyz = torch.from_numpy(xyz)
         ca_dists = torch.norm(xyz[1:] - xyz[:-1], dim=-1)
-        deviation = torch.abs(ca_dists - STANDARD_CACA_DIST)
+        deviation = torch.abs(ca_dists - cut_off)
 
         # Allow leniency for expected chain breaks (e.g. PPI)
         chain_breaks = ca_atoms.chain_iid[1:] != ca_atoms.chain_iid[:-1]
@@ -52,7 +53,9 @@ def get_clash_metrics(
         }
 
     def get_interresidue_clashes(backbone_only=False):
-        protein_array = atom_array[atom_array.is_protein | atom_array.is_dna | atom_array.is_rna]
+        protein_array = atom_array[
+            atom_array.is_protein | atom_array.is_dna | atom_array.is_rna
+        ]
         resid = protein_array.res_id - protein_array.res_id.min()
         xyz = protein_array.coord
         dists = np.linalg.norm(xyz[:, None] - xyz[None], axis=-1)  # N_atoms x N_atoms
@@ -65,7 +68,9 @@ def get_clash_metrics(
 
         if backbone_only:
             # Block out non-backbone atoms
-            backbone_mask = np.isin(protein_array.atom_name, ["N", "CA", "C"] + backbone_atoms_RNA)
+            backbone_mask = np.isin(
+                protein_array.atom_name, ["N", "CA", "C"] + backbone_atoms_RNA
+            )
             mask = backbone_mask[:, None] & backbone_mask[None, :]
             dists[~mask] = 999
 
@@ -374,7 +379,7 @@ class BackboneMetrics(Metric):
                 is_protein = is_protein[diffused_region]
                 is_dna = is_dna[diffused_region]
                 is_rna = is_rna[diffused_region]
-            protein_idx_mask = is_ca & (is_protein) 
+            protein_idx_mask = is_ca & (is_protein)
             na_idx_mask = is_ca & (is_rna | is_dna)
 
             if self.compute_for_diffused_region_only:
@@ -384,29 +389,42 @@ class BackboneMetrics(Metric):
                 xyz_protein = X_L.cpu()[:, protein_idx_mask]
                 xyz_na = X_L.cpu()[:, na_idx_mask]
 
-            ca_dists_protein = torch.norm(xyz_protein[:, 1:] - xyz_protein[:, :-1], dim=-1)
+            ca_dists_protein = torch.norm(
+                xyz_protein[:, 1:] - xyz_protein[:, :-1], dim=-1
+            )
             ca_dists_na = torch.norm(xyz_na[:, 1:] - xyz_na[:, :-1], dim=-1)
-            
-            deviation_protein = torch.abs(ca_dists_protein - self.standard_ca_dist)  # B, (I-1)
+
+            deviation_protein = torch.abs(
+                ca_dists_protein - self.standard_ca_dist
+            )  # B, (I-1)
             deviation_na = torch.abs(ca_dists_na - self.standard_PP_dist)  # B, (I-1)
             is_chainbreak_protein = deviation_protein > 0.75
             is_chainbreak_na = deviation_na > 1
 
         try:
-            o["max_ca_deviation_protein"] = float(deviation_protein.max(-1).values.mean())
-            o["fraction_chainbreaks_protein"] = float(is_chainbreak_protein.float().mean(-1).mean())
-            o["n_chainbreaks_protein"] = float(is_chainbreak_protein.float().sum(-1).mean())
-        except:
+            o["max_ca_deviation_protein"] = float(
+                deviation_protein.max(-1).values.mean()
+            )
+            o["fraction_chainbreaks_protein"] = float(
+                is_chainbreak_protein.float().mean(-1).mean()
+            )
+            o["n_chainbreaks_protein"] = float(
+                is_chainbreak_protein.float().sum(-1).mean()
+            )
+        except Exception:
             print("No protein in this example, skipping protein chainbreak metrics")
 
         try:
             o["max_ca_deviation_na"] = float(deviation_na.max(-1).values.mean())
-            o["fraction_chainbreaks_na"] = float(is_chainbreak_na.float().mean(-1).mean())
+            o["fraction_chainbreaks_na"] = float(
+                is_chainbreak_na.float().mean(-1).mean()
+            )
             o["n_chainbreaks_na"] = float(is_chainbreak_na.float().sum(-1).mean())
-        except:
+        except Exception:
             print("No NA in this example, skipping NA chainbreak metrics")
 
         return o
+
 
 class PPIMetrics(Metric):
     """PPI-specific metrics"""

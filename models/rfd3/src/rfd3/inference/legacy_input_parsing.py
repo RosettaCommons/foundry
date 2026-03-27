@@ -220,7 +220,6 @@ def fetch_motif_residue_(
                 "Please check your input and contig specification."
             )
 
-    
     if unfix_all or f"{src_chain}{src_resid}" in unfix_residues:
         subarray.set_annotation(
             "is_motif_atom_with_fixed_coord", np.zeros(subarray.shape[0], dtype=int)
@@ -232,7 +231,7 @@ def fetch_motif_residue_(
             )
         else:
             subarray.set_annotation(
-                "is_motif_atom_with_fixed_coord", np.array([True]*len(subarray))
+                "is_motif_atom_with_fixed_coord", np.array([True] * len(subarray))
             )
 
     if flexible_backbone:
@@ -255,9 +254,9 @@ def fetch_motif_residue_(
             subarray = subarray[subarray.is_motif_atom.astype(bool)]
         else:
             subarray.set_annotation(
-                "is_motif_atom_unindexed", np.array([True]*len(subarray))
+                "is_motif_atom_unindexed", np.array([True] * len(subarray))
             )
-    
+
     # ... Relax sequence constraint if provided
     if (
         exists(unfixed_sequence_components)
@@ -278,32 +277,35 @@ def fetch_motif_residue_(
     return subarray
 
 
-def create_diffused_residues_(n, polymer_type='p'):
+def create_diffused_residues_(n, polymer_type="p"):
     from rfd3.constants import (
         ATOM23_ATOM_NAME_TO_ELEMENT,
         backbone_atoms_DNA,
         backbone_atoms_RNA,
     )
+
     if n <= 0:
         raise ValueError(f"Negative/null residue count ({n}) not allowed.")
-    
-    if polymer_type == 'P':
-        res_name = 'ALA'
+
+    if polymer_type == "P":
+        res_name = "ALA"
         bb_len = 5
         bb_atom_names = ["N", "CA", "C", "O", "CB"]
-    elif polymer_type == 'R':
-        res_name = 'A'
+    elif polymer_type == "R":
+        res_name = "A"
         bb_len = len(backbone_atoms_RNA)
         bb_atom_names = backbone_atoms_RNA
-    elif polymer_type == 'D':
-        res_name = 'DA'
+    elif polymer_type == "D":
+        res_name = "DA"
         bb_len = len(backbone_atoms_DNA)
         bb_atom_names = backbone_atoms_DNA
     else:
-        raise ValueError(f"invalid polymer type detected: {polymer_type}, check contig!")
-    
+        raise ValueError(
+            f"invalid polymer type detected: {polymer_type}, check contig!"
+        )
+
     bb_elements = [ATOM23_ATOM_NAME_TO_ELEMENT[item] for item in bb_atom_names]
-    
+
     atoms = []
     [
         atoms.extend(
@@ -319,15 +321,12 @@ def create_diffused_residues_(n, polymer_type='p'):
         for idx in range(1, n + 1)
     ]
     array = struc.array(atoms)
-    array.set_annotation(
-        "element", np.array(bb_elements * n, dtype="<U2")
-    )
-    array.set_annotation(
-        "atom_name", np.array(bb_atom_names * n, dtype="<U3")
-    )
+    array.set_annotation("element", np.array(bb_elements * n, dtype="<U2"))
+    array.set_annotation("atom_name", np.array(bb_atom_names * n, dtype="<U3"))
     array = set_default_conditioning_annotations(array, motif=False)
     array = set_common_annotations(array)
     return array
+
 
 def accumulate_components(
     components,
@@ -578,8 +577,12 @@ def create_atom_array_from_design_specification_legacy(
         dna_array = atom_array_input[is_dna]
         rna_array = atom_array_input[is_rna]
 
-        atom_array_input[is_dna] = reorder_atoms_per_residue(dna_array, backbone_atoms_DNA)
-        atom_array_input[is_rna] = reorder_atoms_per_residue(rna_array, backbone_atoms_RNA)
+        atom_array_input[is_dna] = reorder_atoms_per_residue(
+            dna_array, backbone_atoms_DNA
+        )
+        atom_array_input[is_rna] = reorder_atoms_per_residue(
+            rna_array, backbone_atoms_RNA
+        )
     #######################################
 
     if exists(atomwise_rasa):
@@ -736,10 +739,10 @@ def create_atom_array_from_design_specification_legacy(
             + np.max(atom_array.res_id)
             + 1
         )
-        chain_cand = 'X'
+        chain_cand = "X"
         while chain_cand in atom_array.chain_id.tolist():
             chain_cand = chain_cand + chain_cand
-        ligand_chain = np.array([chain_cand]*len(ligand_array))
+        ligand_chain = np.array([chain_cand] * len(ligand_array))
         ligand_array.chain_id = ligand_chain
 
         atom_array = atom_array + ligand_array

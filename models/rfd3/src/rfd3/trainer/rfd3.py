@@ -450,15 +450,12 @@ class AADesignTrainer(FabricTrainer):
             ):
                 metadata_dict[i]["metrics"] |= get_hbond_metrics(atom_array)
 
-            if (
-                "bp_partners" in atom_array.get_annotation_categories()
-            ):
-                if not np.all(atom_array.bp_partners == None): 
+            if "bp_partners" in atom_array.get_annotation_categories():
+                if not np.all(atom_array.bp_partners == None):  # noqa: E711
                     try:
                         metadata_dict[i]["metrics"] |= get_NA_SS_F1(atom_array)
-                    except:
+                    except Exception:
                         pass
-
             if "partial_t" in f:
                 # Try calcualte a CA RMSD to input:
                 aa_in = example["atom_array"]
