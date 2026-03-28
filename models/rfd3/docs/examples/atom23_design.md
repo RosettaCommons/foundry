@@ -133,7 +133,7 @@ Used in:
     }
 }
 ```
-### Note: Most of the above jsons is not actually reading the `input` field. Kept as a dummy for the `inference3_engine`.
+### Note: Most of the above jsons is not actually reading the `input` field. Kept as a dummy for the `inference_engine`.
 
 ## 4. Ligand-Conditioned Aptamer Design
 

@@ -1,6 +1,6 @@
 # De novo Design of Biomolecular Interactions with RFdiffusion3
 
-RFdiffusion3 (RFD3) is a diffusion method that can design protein structures 
+RFdiffusion3 (RFD3) is a diffusion method that can design biopolymer structures 
 under complex constraints. 
 
 This repository contains both the training and inference code, and
@@ -62,6 +62,8 @@ For example, you can fix sequence and not structure (prediction-type task), fix 
 
 For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `foundry/models/rfd3/configs/inference_engine/rfdiffusion3.yaml` for even more options.
 
+Nucleic acid design, along with proteins, is also possible using RFD3 using the atom23 checkpoints. For full details see the [atom23 design documentation](./docs/examples/atom23_design.md)
+
 ## Further example JSONs for different applications
 Additional examples are broken up by use case. If you have cloned the
 repository, matching `.json` files are in `foundry/models/rfd3/docs/examples`
@@ -75,30 +77,30 @@ you will need to change the path in the `.json` file(s) before running.
 <table>
   <tr>
     <td align="center">
-      <h3><a href="./docs/sm_binder_design.md">Small molecule binder design</a></h3>
+      <h3><a href="./docs/examples/sm_binder_design.md">Small molecule binder design</a></h3>
       <img src="docs/.assets/sm.png" height="150" />
     </td>
     <td align="center">
-      <h3><a href="./docs/protein_binder_design.md">Protein binder design</a></h3>
+      <h3><a href="./docs/examples/protein_binder_design.md">Protein binder design</a></h3>
       <img src="docs/.assets/ppi.png" height="150" />
     </td>
      <td align="center">
-      <h3><a href="./docs/na_binder_design.md">Nucleic acid binder design</a></h3>
+      <h3><a href="./docs/examples/na_binder_design.md">Nucleic acid binder design</a></h3>
       <img src="docs/.assets/dna.png" height="150" />
     </td>
 
   </tr>
   <tr>
     <td align="center">
-      <h3><a href="./docs/enzyme_design.md">Enzyme design</a></h3>
+      <h3><a href="./docs/examples/enzyme_design.md">Enzyme design</a></h3>
       <img src="docs/.assets/enzyme.png" height="150" />
     </td>
     <td align="center">
-      <h3><a href="./docs/symmetry.md">Symmetric design</a></h3>
+      <h3><a href="./docs/examples/symmetry.md">Symmetric design</a></h3>
       <img src="docs/.assets/symm.png" height="150" />
     </td>
     <td align="center">
-      <h3><a href="./docs/multipolymer.md">Multipolymer design</a></h3>
+      <h3><a href="./docs/examples/atom23_design.md">Multipolymer design</a></h3>
       <img src="docs/.assets/multipolymer.png" height="150" />
     </td>
 
