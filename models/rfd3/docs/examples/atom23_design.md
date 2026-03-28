@@ -205,19 +205,19 @@ Ligands (MG, PO4) included in design context
 
 Useful for catalytic residues or structural motifs
 
-## 7. Summary of New Features
+## 7. Summary of Features Used
 
 R / D suffix → RNA / DNA specification in contigs
 
-`ss_dbn` → global secondary structure constraint (optional)
+`ss_dbn` → global secondary structure constraint
 
-`ss_dbn_dict` → local secondary structure constraints (optional)
+`ss_dbn_dict` → local secondary structure constraints
 
-`paired_region_list` → helix-level pairing constraints (optional)
+`paired_region_list` → helix-level pairing constraints
 
-`paired_position_list` → base-level pairing constraints (optional)
+`paired_position_list` → base-level pairing constraints
 
-ligand + selection options → aptamer design
+ligand + selection options → aptamer design 
 
 `unindex` → remove residues from indexing
 
