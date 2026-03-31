@@ -427,7 +427,7 @@ class AttentionPairBiasDiffusion(nn.Module):
             # zero out layer norms for the key and query
             return self.atom_attention(A_I, S_I, Z_II)
 
-        if self.use_deepspeed_evo or self.force_bfloat16:
+        if (self.use_deepspeed_evo or self.force_bfloat16) and A_I.device.type != "mps":
             A_I = A_I.to(torch.bfloat16)
             assert len(A_I.shape) == 3, f"(Diffusion batch, I, C_a) but got {A_I.shape}"
 

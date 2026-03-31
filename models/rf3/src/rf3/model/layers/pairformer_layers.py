@@ -253,7 +253,7 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
         assert S_I is None
         A_I = self.ln_1(A_I)
 
-        if self.use_deepspeed_evo or self.force_bfloat16:
+        if (self.use_deepspeed_evo or self.force_bfloat16) and A_I.device.type != "mps":
             A_I = A_I.to(torch.bfloat16)
 
         Q_IH = self.to_q(A_I)  # / np.sqrt(self.c)
@@ -266,7 +266,7 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
 
         if not self.use_deepspeed_evo or L <= 24:
             Q_IH = Q_IH / torch.sqrt(
-                torch.tensor(self.c).to(Q_IH.device, torch.bfloat16)
+                torch.tensor(self.c).to(Q_IH.device, Q_IH.dtype)
             )
             # Attention
             A_IIH = torch.softmax(
