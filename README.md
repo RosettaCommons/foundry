@@ -25,6 +25,18 @@ pip install "rc-foundry[all]"
 > [!NOTE]
 > Use `pip` (not `uv`) for XPU installs since UV re-resolves dependencies and may replace your XPU torch with the standard PyPI version.
 
+**macOS (Apple Silicon) Installation**
+
+MPS support is available via a community fork. Install PyTorch first, then install directly from the fork:
+```bash
+pip install torch
+pip install "rc-foundry[rfd3] @ git+https://github.com/fnachon/foundry.git"
+```
+
+> [!NOTE]
+> The `rf3` extra (cuEquivariance) is Linux-only and is automatically skipped on macOS. Use `"32-true"` precision — `bfloat16` is not supported on MPS.
+> Inference only; multi-GPU training is not supported on MPS.
+
 **Downloading weights** Models can be downloaded to a target folder with:
 ```
 foundry install base-models --checkpoint-dir <path/to/ckpt/dir>
