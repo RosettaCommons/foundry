@@ -30,7 +30,7 @@ pip install "rc-foundry[all]"
 MPS support is available via a community fork. Install PyTorch first, then install directly from the fork:
 ```bash
 pip install torch
-pip install "rc-foundry[rfd3] @ git+https://github.com/fnachon/foundry.git"
+pip install "rc-foundry[all] @ git+https://github.com/fnachon/foundry.git"
 ```
 
 > [!NOTE]
