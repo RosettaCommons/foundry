@@ -2,6 +2,7 @@ import copy
 import functools
 import logging
 from os import PathLike
+from typing import Dict
 
 import biotite.structure as struc
 import numpy as np
@@ -138,6 +139,10 @@ def fetch_motif_residue_(
     subarray = set_default_conditioning_annotations(
         subarray, motif=True, unindexed=False, dtype=int
     )  # all values init to True (fix all)
+    if "is_motif_atom" not in subarray.get_annotation_categories():
+        subarray.set_annotation(
+            "is_motif_atom", np.ones(subarray.shape[0], dtype=int)
+        )
 
     to_unindex = f"{src_chain}{src_resid}" in unindexed_components
     to_index = f"{src_chain}{src_resid}" in components
@@ -268,7 +273,190 @@ def create_diffused_residues_(n):
     )
     array = set_default_conditioning_annotations(array, motif=False)
     array = set_common_annotations(array)
+    if "is_motif_atom" not in array.get_annotation_categories():
+        array.set_annotation(
+            "is_motif_atom", np.zeros(array.array_length(), dtype=int)
+        )
     return array
+
+
+def _check_has_backbone_connections_to_nonstandard_residues(
+    atom_array_accum, src_atom_array
+):
+    """
+    Check if the source atom array has backbone C-N bonds involving non-standard residues.
+    This is used to determine if we need to restore bonds in accumulate_components.
+    Only backbone peptide bonds (C-N) are considered.
+    Returns:
+        True if there are backbone C-N bonds involving at least one non-standard residue
+    """
+
+    if atom_array_accum is None or src_atom_array is None:
+        return False
+    if (
+        not hasattr(atom_array_accum, "bonds")
+        or atom_array_accum.bonds is None
+        or not hasattr(src_atom_array, "bonds")
+        or src_atom_array.bonds is None
+    ):
+        return False
+
+    bonds = src_atom_array.bonds.as_array()
+    if len(bonds) == 0:
+        return False
+
+    unique_res_names = np.unique(atom_array_accum.res_name)
+    has_nonstandard = any(res_name not in STANDARD_AA for res_name in unique_res_names)
+
+    if not has_nonstandard:
+        return False
+
+    for bond in bonds:
+        atom_i, atom_j, _ = bond
+        atom_i_obj = src_atom_array[int(atom_i)]
+        atom_j_obj = src_atom_array[int(atom_j)]
+
+        is_backbone_bond = (
+            atom_i_obj.atom_name == "C" and atom_j_obj.atom_name == "N"
+        ) or (atom_i_obj.atom_name == "N" and atom_j_obj.atom_name == "C")
+
+        if not is_backbone_bond:
+            continue
+
+        res_i_is_standard = atom_i_obj.res_name in STANDARD_AA
+        res_j_is_standard = atom_j_obj.res_name in STANDARD_AA
+
+        if not (res_i_is_standard and res_j_is_standard):
+            ranked_logger.debug(
+                "Found backbone C-N bond involving non-standard residue: %s%s:%s - %s%s:%s",
+                atom_i_obj.res_name,
+                atom_i_obj.res_id,
+                atom_i_obj.atom_name,
+                atom_j_obj.res_name,
+                atom_j_obj.res_id,
+                atom_j_obj.atom_name,
+            )
+            return True
+
+    return False
+
+
+def _restore_bonds_for_nonstandard_residues(
+    atom_array_accum: struc.AtomArray,
+    src_atom_array: struc.AtomArray | None,
+    source_to_accum_idx: Dict[int, int],
+) -> struc.AtomArray:
+    """
+    Restores and creates bonds for non-standard residues (PTMs, modified AAs, etc.)
+    from source structure and between consecutive residues.
+
+    This function:
+    1. Preserves inter-residue bonds from the source structure (if available)
+    2. Adds backbone C-N bonds between consecutive residues where at least one is non-standard
+    """
+
+    if atom_array_accum.bonds is None:
+        atom_array_accum.bonds = struc.BondList(atom_array_accum.array_length())
+
+    if (
+        src_atom_array is not None
+        and hasattr(src_atom_array, "bonds")
+        and src_atom_array.bonds is not None
+    ):
+        original_bonds = src_atom_array.bonds.as_array()
+        if len(original_bonds) > 0:
+            bonds_to_add = []
+            for bond in original_bonds:
+                atom_i, atom_j, bond_type = bond
+                if (
+                    int(atom_i) in source_to_accum_idx
+                    and int(atom_j) in source_to_accum_idx
+                ):
+                    src_res_i = src_atom_array[int(atom_i)].res_name
+                    src_res_j = src_atom_array[int(atom_j)].res_name
+
+                    if src_res_i not in STANDARD_AA or src_res_j not in STANDARD_AA:
+                        new_i = source_to_accum_idx[int(atom_i)]
+                        new_j = source_to_accum_idx[int(atom_j)]
+                        bonds_to_add.append([new_i, new_j, int(bond_type)])
+
+            if bonds_to_add:
+                new_bonds = struc.BondList(
+                    atom_array_accum.array_length(),
+                    np.array(bonds_to_add, dtype=np.int64),
+                )
+                atom_array_accum.bonds = atom_array_accum.bonds.merge(new_bonds)
+                ranked_logger.info(
+                    "Preserved %s inter-residue bonds involving non-standard residues from source structure",
+                    len(bonds_to_add),
+                )
+
+    bonds_to_add = []
+    token_starts = get_token_starts(atom_array_accum, add_exclusive_stop=True)
+
+    for i in range(len(token_starts) - 2):
+        curr_start, curr_end = token_starts[i], token_starts[i + 1]
+        next_start, next_end = token_starts[i + 1], token_starts[i + 2]
+
+        curr_residue = atom_array_accum[curr_start:curr_end]
+        next_residue = atom_array_accum[next_start:next_end]
+
+        curr_is_nonstandard = curr_residue.res_name[0] not in STANDARD_AA
+        next_is_nonstandard = next_residue.res_name[0] not in STANDARD_AA
+
+        if not (curr_is_nonstandard or next_is_nonstandard):
+            continue
+
+        if curr_residue.chain_id[0] != next_residue.chain_id[0]:
+            continue
+        if next_residue.res_id[0] - curr_residue.res_id[0] != 1:
+            continue
+
+        c_mask = curr_residue.atom_name == "C"
+        if not np.any(c_mask):
+            if curr_is_nonstandard and next_is_nonstandard:
+                ranked_logger.debug(
+                    "Non-standard residue %s (res_id %s) has no C atom - cannot form backbone bond to next residue",
+                    curr_residue.res_name[0],
+                    curr_residue.res_id[0],
+                )
+            continue
+        c_idx = curr_start + np.where(c_mask)[0][0]
+
+        n_mask = next_residue.atom_name == "N"
+        if not np.any(n_mask):
+            if curr_is_nonstandard and next_is_nonstandard:
+                ranked_logger.debug(
+                    "Non-standard residue %s (res_id %s) has no N atom - cannot form backbone bond from previous residue",
+                    next_residue.res_name[0],
+                    next_residue.res_id[0],
+                )
+            continue
+        n_idx = next_start + np.where(n_mask)[0][0]
+
+        existing_bonds = atom_array_accum.bonds.as_array()
+        bond_exists = False
+        if len(existing_bonds) > 0:
+            for existing_bond in existing_bonds:
+                if (existing_bond[0] == c_idx and existing_bond[1] == n_idx) or (
+                    existing_bond[0] == n_idx and existing_bond[1] == c_idx
+                ):
+                    bond_exists = True
+                    break
+
+        if not bond_exists:
+            bonds_to_add.append([c_idx, n_idx, struc.BondType.SINGLE])
+
+    if bonds_to_add:
+        new_bonds = struc.BondList(
+            atom_array_accum.array_length(), np.array(bonds_to_add, dtype=np.int64)
+        )
+        atom_array_accum.bonds = atom_array_accum.bonds.merge(new_bonds)
+        ranked_logger.info(
+            "Added %s backbone bonds involving non-standard residues", len(bonds_to_add)
+        )
+
+    return atom_array_accum
 
 
 def accumulate_components(
@@ -330,6 +518,8 @@ def accumulate_components(
     chain = start_chain
     res_id = start_resid
     molecule_id = 0
+    source_to_accum_idx: Dict[int, int] = {}
+    current_accum_idx = 0
     # 2) Insert contig information one- by one-
     for component, is_break in zip(components, breaks):
         if component == "/0":
@@ -343,6 +533,15 @@ def accumulate_components(
         if str(component)[0].isalpha():  # motif (e.g. "A22")
             atom_array_insert = fetch_motif_residue(*split_contig(component))
             n = 1
+            src_indices = None
+            if src_atom_array is not None:
+                try:
+                    src_mask = fetch_mask_from_idx(
+                        component, atom_array=src_atom_array
+                    )
+                    src_indices = np.where(src_mask)[0]
+                except Exception:
+                    src_indices = None
             if exists(is_break) and is_break:
                 if not unindexed_components_started:
                     chain = start_chain
@@ -380,12 +579,39 @@ def accumulate_components(
             len(get_token_starts(atom_array_insert)) == n
         ), f"Mismatch in number of residues: expected {n}, got {len(get_token_starts(atom_array_insert))} in \n{atom_array_insert}"
 
+        if (
+            src_atom_array is not None
+            and str(component)[0].isalpha()
+            and src_indices is not None
+            and len(src_indices) == len(atom_array_insert)
+        ):
+            for i, src_idx in enumerate(src_indices):
+                source_to_accum_idx[int(src_idx)] = current_accum_idx + i
+
         # ... Insert & Increment residue ID
         atom_array_accum.append(atom_array_insert)
         res_id += n
+        current_accum_idx += len(atom_array_insert)
 
     atom_array_accum = struc.concatenate(atom_array_accum)
     atom_array_accum.set_annotation("pn_unit_iid", atom_array_accum.chain_id)
+
+    should_restore_bonds = (
+        src_atom_array is not None
+        and bool(source_to_accum_idx)
+        and _check_has_backbone_connections_to_nonstandard_residues(
+            atom_array_accum, src_atom_array
+        )
+    )
+    if should_restore_bonds:
+        assert not unindexed_components, (
+            "PTM backbone bond restoration is not compatible with unindexed components. "
+            "PTMs must be specified as indexed components (using 'contig' parameter, not 'unindex'). "
+            f"Found unindexed components: {unindexed_components}"
+        )
+        atom_array_accum = _restore_bonds_for_nonstandard_residues(
+            atom_array_accum, src_atom_array, source_to_accum_idx
+        )
 
     # Reset res_id for unindexed residues to avoid duplicates (ridiculously long lines of code, cleanup later)
     if np.any(atom_array_accum.is_motif_atom_unindexed.astype(bool)) and not np.all(
@@ -404,6 +630,9 @@ def accumulate_components(
         atom_array_accum.res_id[
             atom_array_accum.is_motif_atom_unindexed.astype(bool)
         ] += max_id - min_id_udx + 1
+
+    if atom_array_accum.bonds is None:
+        atom_array_accum.bonds = struc.BondList(atom_array_accum.array_length())
 
     return atom_array_accum
 
