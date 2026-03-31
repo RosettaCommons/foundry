@@ -39,9 +39,12 @@ def set_accelerator_based_on_availability(cfg: dict | DictConfig):
     elif hasattr(torch, "xpu") and torch.xpu.is_available():
         logger.info("Intel XPU detected - using XPU accelerator")
         cfg.trainer.accelerator = "xpu"
+    elif torch.backends.mps.is_available():
+        logger.info("Apple MPS detected - using MPS accelerator")
+        cfg.trainer.accelerator = "mps"
     else:
         logger.error(
-            "No GPUs/XPUs available - Setting accelerator to 'cpu'. Are you sure you are using the correct configs?"
+            "No GPUs/XPUs/MPS available - Setting accelerator to 'cpu'. Are you sure you are using the correct configs?"
         )
         cfg.trainer.accelerator = "cpu"
         cfg.trainer.devices_per_node = 1

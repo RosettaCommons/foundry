@@ -1364,7 +1364,7 @@ class ProteinMPNN(nn.Module):
         # precision settings. This works because the W_out layer is a linear
         # layer, which has predictable dtype behavior with AMP.
         device = input_features["residue_mask"].device
-        if device.type in ("cuda", "cpu") and torch.is_autocast_enabled(
+        if device.type in ("cuda", "cpu", "mps") and torch.is_autocast_enabled(
             device_type=device.type
         ):
             output_dtype = torch.get_autocast_dtype(device_type=device.type)
