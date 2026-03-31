@@ -1099,12 +1099,8 @@ def _restore_component_bonds(
                     )
             # Only warn when we retained one side of a cross-residue/chain linkage
             # (e.g., glycan partner missing), not for missing intra-residue atoms.
-            if (
-                (mapped_i is not None or mapped_j is not None)
-                and (
-                    atom_i.chain_id != atom_j.chain_id
-                    or atom_i.res_id != atom_j.res_id
-                )
+            if (mapped_i is not None or mapped_j is not None) and (
+                atom_i.chain_id != atom_j.chain_id or atom_i.res_id != atom_j.res_id
             ):
                 logger.warning(
                     (

@@ -6,11 +6,11 @@ import numpy as np
 import pytest
 from atomworks.io.tools.inference import components_to_atom_array
 from biotite import structure as struc
-
-from foundry.utils.components import fetch_mask_from_idx
 from rfd3.inference.legacy_input_parsing import accumulate_components
 from rfd3.transforms.conditioning_base import set_default_conditioning_annotations
 from rfd3.utils.inference import set_common_annotations
+
+from foundry.utils.components import fetch_mask_from_idx
 
 
 def _create_ptm_structure():

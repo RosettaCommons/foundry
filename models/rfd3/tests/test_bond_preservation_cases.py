@@ -10,9 +10,6 @@ import pytest
 from atomworks.io.parser import STANDARD_PARSER_ARGS, parse
 from atomworks.io.tools.inference import components_to_atom_array
 from biotite import structure as struc
-
-from foundry.utils.components import fetch_mask_from_idx
-from rfd3.utils.inference import set_common_annotations
 from rfd3.inference.input_parsing import (
     accumulate_components,
     create_atom_array_from_design_specification,
@@ -20,6 +17,9 @@ from rfd3.inference.input_parsing import (
 from rfd3.transforms.conditioning_base import (
     set_default_conditioning_annotations,
 )
+from rfd3.utils.inference import set_common_annotations
+
+from foundry.utils.components import fetch_mask_from_idx
 
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
 
