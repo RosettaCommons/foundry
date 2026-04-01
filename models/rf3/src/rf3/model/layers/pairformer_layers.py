@@ -21,6 +21,7 @@ from torch.nn.functional import one_hot, relu
 
 from foundry.model.layers.blocks import Dropout
 from foundry.training.checkpoint import activation_checkpointing
+from foundry.utils.torch import scatter_mean
 
 
 class AtomAttentionEncoderPairformer(nn.Module):
@@ -198,17 +199,12 @@ class AtomAttentionEncoderPairformer(nn.Module):
             # Ensure dtype consistency for index_reduce
             processed_Q_L = processed_Q_L.to(Q_L.dtype)
 
-            A_I = torch.zeros(
-                A_I_shape, device=Q_L.device, dtype=Q_L.dtype
-            ).index_reduce(
-                -2,  # Operate on the second-to-last dimension (the atom dimension)
-                f[
-                    "atom_to_token_map"
-                ].long(),  # [L], mapping from atom index to token index. Must be a torch.int64 or torch.int32 tensor.
-                processed_Q_L,  # [L, C_atom] -> [L, C_token]
-                "mean",
-                include_self=False,  # Do not use the original values in A_I (all zeros) when aggregating
-            )  # [L, C_atom] -> [I, C_token]
+            A_I = scatter_mean(
+                torch.zeros(A_I_shape, device=Q_L.device, dtype=Q_L.dtype),
+                -2,
+                f["atom_to_token_map"].long(),  # [L], mapping from atom index to token index
+                processed_Q_L,  # (..., L, C_token)
+            )  # (..., I, C_token)
 
             return A_I, Q_L, C_L, P_LL
 

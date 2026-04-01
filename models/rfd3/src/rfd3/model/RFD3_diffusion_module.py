@@ -239,8 +239,6 @@ class RFD3DiffusionModule(nn.Module):
             Q_L = self.encoder(Q_L, C_L, P_LL, indices=f["attn_indices"])
         A_I = self.downcast_q(Q_L, A_I=A_I, S_I=S_I, tok_idx=tok_idx)
 
-        # Debug chunked parameters
-
         # ... Run forward with recycling
         recycled_features = self.forward_with_recycle(
             n_recycle,
@@ -340,7 +338,6 @@ class RFD3DiffusionModule(nn.Module):
             ),
             full=not (os.environ.get("RFD3_LOW_MEMORY_MODE", None) == "1"),
         )
-
         # ... Decoder readout
         # Check if using chunked P_LL mode
 

@@ -40,8 +40,10 @@ def set_accelerator_based_on_availability(cfg: dict | DictConfig):
         logger.info("Intel XPU detected - using XPU accelerator")
         cfg.trainer.accelerator = "xpu"
     elif torch.backends.mps.is_available():
-        logger.info("Apple MPS detected - using MPS accelerator")
+        logger.info("Apple MPS detected - using MPS accelerator with float32 precision")
         cfg.trainer.accelerator = "mps"
+        if hasattr(cfg.trainer, "precision"):
+            cfg.trainer.precision = "32-true"
     else:
         logger.error(
             "No GPUs/XPUs/MPS available - Setting accelerator to 'cpu'. Are you sure you are using the correct configs?"

@@ -33,9 +33,13 @@ pip install torch
 pip install "rc-foundry[all] @ git+https://github.com/fnachon/foundry.git"
 ```
 
+All three models — **RFD3**, **RF3**, and **ProteinMPNN/LigandMPNN** — run on Apple Silicon MPS.
+
 > [!NOTE]
-> The `rf3` extra (cuEquivariance) is Linux-only and is automatically skipped on macOS. Use `"32-true"` precision — `bfloat16` is not supported on MPS.
-> Inference only; multi-GPU training is not supported on MPS.
+> - The `rf3` extra (cuEquivariance) is Linux-only and is automatically skipped on macOS.
+> - Use `float32` precision — `bfloat16` is not supported on MPS. The MPS accelerator is selected and float32 precision is enforced automatically.
+> - Inference only; multi-GPU training is not supported on MPS.
+> - For `rf3 fold`, pass an absolute path to the input CIF file.
 
 **Downloading weights** Models can be downloaded to a target folder with:
 ```
