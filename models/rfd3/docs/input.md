@@ -82,8 +82,8 @@ rfd3 design out_dir=<path/to/outdir> inputs=<path/to/inputs>
   - `num_timesteps` — Number of diffusion denoising timesteps (default: 200). Controls how many steps the reverse diffusion process takes. More steps can improve quality at the cost of runtime.
   - `n_recycle` — Number of recycling iterations per diffusion step (default: null, uses the model checkpoint default of 2). Recycling allows the network to refine its predictions iteratively within each denoising step.
   - `kind` — Change this value to `symmetry` (default: default) to turn on symmetry mode for the inference sampler.
-  - `cfg_features` — The values specified (options are `active donor, active_acceptor, or ref_atomwise_rasa`) are set to 0 for classifier-free guidance. Classifier-free guidance is how the diffusion model can steer the calculation towards a condition without training a separate classifier.
-  - `use_classifier_free_guidance` — If set to `True`, RFD3 can use classifier-free guidance to guide the system towards a condition without training a separate classifier (default: `Fasle`).
+  - `cfg_features` — The values specified (options are `active_donor, active_acceptor, or ref_atomwise_rasa`) are set to 0 for classifier-free guidance. Classifier-free guidance is how the diffusion model can steer the calculation towards a condition without training a separate classifier.
+  - `use_classifier_free_guidance` — If set to `True`, RFD3 can use classifier-free guidance to guide the system towards a condition without training a separate classifier (default: `False`).
   - `cfg_t_max` — The maximum time to apply classifier-free guidance to the inference run (default: null).
   - `cfg_scale` — Controls the influence of the classifier-free guidance adjustment (default: 1.5).
   - `center_option`: Specifies how to center the coordinates during the inference run to ensure that structures are alined around a specific point. Options include: 
