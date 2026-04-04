@@ -499,7 +499,6 @@ class AttentionPairBiasDiffusion(nn.Module):
         Q_IH = self.to_q(A_I)
         K_IH = self.to_k(A_I)
         V_IH = self.to_v(A_I)
-        B_IIH = self.to_b(self.ln_0(Z_II))
         G_IH = self.to_g(A_I)
 
         if self.kq_norm:
@@ -523,12 +522,18 @@ class AttentionPairBiasDiffusion(nn.Module):
         maskK = (indicesK < 0) | (indicesK > L - 1)
         indicesK = torch.clamp(indicesK, 0, L - 1)
 
+        # Compute pair bias within local windows only, to avoid applying
+        # LayerNorm to the full [1, L, L, c_pair] tensor which can exceed
+        # 2^32 elements for large systems and silently corrupt CUDA outputs.
+        Z_local = Z_II[:, indicesQ[:, :, None], indicesK[:, None, :]]
+        B_local = self.to_b(self.ln_0(Z_local))
+
         query_subset = Q_IH[:, indicesQ]
         key_subset = K_IH[:, indicesK]
         attn = torch.einsum("...ihd,...jhd->...ijh", query_subset, key_subset)
         attn = attn / (self.c**0.5)
 
-        attn += B_IIH[:, indicesQ[:, :, None], indicesK[:, None, :]] - 1e9 * (
+        attn += B_local - 1e9 * (
             maskQ[None, :, :, None, None] + maskK[None, :, None, :, None]
         )
         attn = torch.softmax(attn, dim=-2)
