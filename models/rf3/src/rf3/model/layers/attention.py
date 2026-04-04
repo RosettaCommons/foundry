@@ -101,7 +101,7 @@ class TriangleAttention(nn.Module):
         """cuEquivariance triangle attention implementation."""
         # Handle autocast conversion
         if torch.is_autocast_enabled():
-            dtype = torch.get_autocast_dtype("cuda")
+            dtype = torch.get_autocast_dtype(pair.device.type)
             pair = pair.to(dtype=dtype)
             bias = bias.to(dtype=dtype)
 
@@ -288,7 +288,7 @@ class TriangleMultiplication(nn.Module):
         # Handle autocast conversion
         # (Use bfloat16 for optimal performance)
         if torch.is_autocast_enabled():
-            dtype = torch.get_autocast_dtype("cuda")
+            dtype = torch.get_autocast_dtype(pair.device.type)
             pair = pair.to(dtype=dtype)
 
         assert (

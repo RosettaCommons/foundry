@@ -1,6 +1,12 @@
 """General convenience utilities for PyTorch."""
 
-__all__ = ["map_to", "assert_no_nans", "assert_shape", "assert_same_shape"]
+__all__ = [
+    "map_to",
+    "assert_no_nans",
+    "assert_shape",
+    "assert_same_shape",
+    "scatter_mean",
+]
 
 import time
 import warnings
@@ -196,6 +202,48 @@ def assert_shape(tensor: Tensor, ref_shape: Sequence[int | None]):
 def assert_same_shape(tensor: Tensor, ref_tensor: Tensor) -> None:
     """Assert that two tensors have the same shape."""
     assert_shape(tensor, ref_tensor.shape)
+
+
+def scatter_mean(zeros: Tensor, dim: int, index: Tensor, source: Tensor) -> Tensor:
+    """Scatter-mean aggregation, with an MPS-compatible fallback.
+
+    On non-MPS devices uses index_reduce (faster, in-place kernel).
+    On MPS, index_reduce is not implemented so falls back to scatter_add + count.
+
+    Equivalent to: zeros.index_reduce(dim, index, source, 'mean', include_self=False)
+
+    Args:
+        zeros: Pre-allocated zero tensor, shape (..., I, C). Will not be modified in-place.
+        dim: Dimension to scatter along. Must not be the last dimension.
+        index: 1D index tensor of shape (N,) mapping source positions to output positions.
+        source: Source tensor where size at `dim` equals N.
+
+    Returns:
+        Tensor of same shape as zeros.
+    """
+    if zeros.device.type != "mps":
+        return zeros.index_reduce(dim, index, source, "mean", include_self=False)
+
+    ndim = source.dim()
+    if dim < 0:
+        dim = ndim + dim
+
+    # Expand 1D index (N,) to match source shape (..., N, C)
+    shape = [1] * ndim
+    shape[dim] = index.shape[0]
+    idx = index.view(shape).expand_as(source)
+
+    # Sum source values into output positions
+    result = zeros.scatter_add(dim, idx, source)
+
+    # Count how many source values land in each output position.
+    # Take a single slice along the last dim to avoid allocating a full (N, C) ones tensor.
+    idx_count = idx[..., :1]  # (..., N, 1)
+    ones = torch.ones_like(source[..., :1])  # (..., N, 1)
+    count = torch.zeros(*zeros.shape[:-1], 1, device=zeros.device, dtype=zeros.dtype)
+    count = count.scatter_add(dim, idx_count, ones)  # (..., I, 1)
+
+    return result / count.clamp(min=1)
 
 
 def device_of(obj: Any) -> torch.device:

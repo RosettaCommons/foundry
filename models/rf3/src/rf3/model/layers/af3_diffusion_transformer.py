@@ -12,7 +12,7 @@ from rf3.model.layers.layer_utils import (
 from rf3.model.layers.mlff import ConformerEmbeddingWeightedAverage
 
 from foundry.training.checkpoint import activation_checkpointing
-from foundry.utils.torch import device_of
+from foundry.utils.torch import device_of, scatter_mean
 
 
 class AtomAttentionEncoderDiffusion(nn.Module):
@@ -241,16 +241,11 @@ class AtomAttentionEncoderDiffusion(nn.Module):
             # Ensure dtype consistency for index_reduce
             processed_Q_L = processed_Q_L.to(Q_L.dtype)
 
-            A_I = (
-                torch.zeros(A_I_shape, device=Q_L.device, dtype=Q_L.dtype)
-                .index_reduce(
-                    -2,
-                    f["atom_to_token_map"].long(),
-                    processed_Q_L,
-                    "mean",
-                    include_self=False,
-                )
-                .clone()
+            A_I = scatter_mean(
+                torch.zeros(A_I_shape, device=Q_L.device, dtype=Q_L.dtype),
+                -2,
+                f["atom_to_token_map"].long(),
+                processed_Q_L,
             )
 
             return A_I, Q_L, C_L, P_LL
@@ -427,7 +422,7 @@ class AttentionPairBiasDiffusion(nn.Module):
             # zero out layer norms for the key and query
             return self.atom_attention(A_I, S_I, Z_II)
 
-        if self.use_deepspeed_evo or self.force_bfloat16:
+        if (self.use_deepspeed_evo or self.force_bfloat16) and A_I.device.type != "mps":
             A_I = A_I.to(torch.bfloat16)
             assert len(A_I.shape) == 3, f"(Diffusion batch, I, C_a) but got {A_I.shape}"
 
