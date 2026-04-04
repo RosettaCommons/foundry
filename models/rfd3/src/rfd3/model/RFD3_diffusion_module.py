@@ -270,7 +270,7 @@ class RFD3DiffusionModule(nn.Module):
         **kwargs,
     ):
         if not self.training:
-            n_recycle = self.n_recycle
+            n_recycle = n_recycle if n_recycle is not None else self.n_recycle
         else:
             assert n_recycle is not None
 

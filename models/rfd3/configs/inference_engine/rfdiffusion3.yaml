@@ -37,6 +37,9 @@ inference_sampler:
   inference_noise_scaling_factor: 1.0
   allow_realignment: False
 
+  # Recycling
+  n_recycle: null  # Override model default n_recycle for inference (default from checkpoint: 2)
+
   # Diffusion args:
   num_timesteps: 200
   step_scale: 1.5  # 1.5 - 1.0   |   Higher values lead to less diverse, more designable, structures
