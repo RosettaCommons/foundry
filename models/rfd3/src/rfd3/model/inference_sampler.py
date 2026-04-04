@@ -51,6 +51,9 @@ class SampleDiffusionConfig:
     cfg_scale: float = 2.0
     cfg_t_max: float | None = None
 
+    # Recycling
+    n_recycle: int | None = None  # Override model default n_recycle for inference
+
 
 class SampleDiffusionWithMotif(SampleDiffusionConfig):
     """Diffusion sampler that supports optional motif alignment."""
@@ -245,6 +248,7 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                     P_LL=None,  # Not used in chunked mode
                     chunked_pairwise_embedder=chunked_embedder,
                     initializer_outputs=other_outputs,
+                    n_recycle=self.n_recycle,
                     **other_outputs,
                 )
                 toc = time.time()
@@ -257,6 +261,7 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                     X_noisy_L=X_noisy_L,
                     t=t_hat.tile(D),
                     f=f,
+                    n_recycle=self.n_recycle,
                     **initializer_outputs,
                 )
 
@@ -278,6 +283,7 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                     X_noisy_L=X_noisy_L_stripped,  # modify X
                     t=t_hat.tile(D),
                     f=f_ref,  # modified f
+                    n_recycle=self.n_recycle,
                     **ref_initializer_outputs,
                 )
 
@@ -474,6 +480,7 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
                     P_LL=None,  # Not used in chunked mode
                     chunked_pairwise_embedder=chunked_embedder,
                     initializer_outputs=other_outputs,
+                    n_recycle=self.n_recycle,
                     **other_outputs,
                 )
                 toc = time.time()
@@ -486,6 +493,7 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
                     X_noisy_L=X_noisy_L,
                     t=t_hat.tile(D),
                     f=f,
+                    n_recycle=self.n_recycle,
                     **initializer_outputs,
                 )
             # apply symmetry to X_denoised_L

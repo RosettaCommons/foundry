@@ -10,8 +10,8 @@ both are described in more detail below.
   <img src="docs/.assets/overview.png" alt="All-atom design with RFD3">
 </p>
 
-> [!NOTE]
-> Looking for information about configuration options? See a through list of possible inputs in our [external documentation](https://rosettacommons.github.io/foundry/models/rfd3/input.html).
+> [!IMPORTANT]
+> **Looking for the InputSpecification?** The complete reference for all input fields, CLI arguments, and inference sampler options is in [`docs/input.md`](./docs/input.md) ([external docs](https://rosettacommons.github.io/foundry/models/rfd3/input.html)). This covers everything from contig strings and conditioning options to diffusion sampler parameters like `num_timesteps` and `n_recycle`.
 
 ## Getting Started
 1. Install RFdiffusion3. 
