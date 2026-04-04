@@ -16,6 +16,7 @@ from rf3.model.RF3_structure import DiffusionModule, DistogramHead, Recycler
 from torch import nn
 
 from foundry.training.checkpoint import create_custom_forward
+from foundry.utils.torch import device_of
 
 """
 Shape Annotation Glossary:
@@ -148,7 +149,7 @@ class RF3(nn.Module):
         """
         # Cast features to lower precision if autocast is enabled
         if torch.is_autocast_enabled():
-            autocast_dtype = torch.get_autocast_dtype("cuda")
+            autocast_dtype = torch.get_autocast_dtype(device_of(self).type)
             for x in [
                 "msa_stack",
                 "profile",
@@ -382,7 +383,7 @@ class RF3WithConfidence(RF3):
         """
         # Cast features to lower precision if autocast is enabled
         if torch.is_autocast_enabled():
-            autocast_dtype = torch.get_autocast_dtype("cuda")
+            autocast_dtype = torch.get_autocast_dtype(device_of(self).type)
             for x in [
                 "msa_stack",
                 "profile",

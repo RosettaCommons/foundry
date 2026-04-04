@@ -51,7 +51,12 @@ def forward(example, trainer, model, is_inference=is_inference):
     network_input = trainer._assemble_network_inputs(example)
 
     # Forward pass
-    device = "cuda:0"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
 
     def _inmap(path, x):
         if hasattr(x, "cpu") and path != ("f", "msa_stack"):
