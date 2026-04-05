@@ -139,8 +139,6 @@ def fetch_motif_residue_(
     subarray = set_default_conditioning_annotations(
         subarray, motif=True, unindexed=False, dtype=int
     )  # all values init to True (fix all)
-    if "is_motif_atom" not in subarray.get_annotation_categories():
-        subarray.set_annotation("is_motif_atom", np.ones(subarray.shape[0], dtype=int))
 
     to_unindex = f"{src_chain}{src_resid}" in unindexed_components
     to_index = f"{src_chain}{src_resid}" in components
@@ -271,8 +269,6 @@ def create_diffused_residues_(n):
     )
     array = set_default_conditioning_annotations(array, motif=False)
     array = set_common_annotations(array)
-    if "is_motif_atom" not in array.get_annotation_categories():
-        array.set_annotation("is_motif_atom", np.zeros(array.array_length(), dtype=int))
     return array
 
 
