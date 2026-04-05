@@ -136,6 +136,7 @@ class DesignInputSpecification(BaseModel):
     # Extra args:
     length:  Optional[str] = Field(None, description="Length range as 'min-max' or int. Constrains length of contig if provided")
     ligand:  Optional[str] = Field(None, description="Ligand name or index to include in design.")
+    allow_ligand_on_chain_a: bool = Field(False, description="If True, suppress the error when a ligand is on chain A (the protein chain). Use with caution — chain ID is leaked to the model.")
     cif_parser_args: Optional[Dict[str, Any]] = Field(None, description="CIF parser arguments")
     extra: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Extra metadata to include in output (useful for logging additional info in metadata)")
     dialect: int = Field(2, description="RFdiffusion3 input dialect. 1: legacy, 2: release.")
@@ -672,14 +673,26 @@ class DesignInputSpecification(BaseModel):
                     + list(atom_array_input_annotated.get_annotation_categories())
                 ),
             )
-            # Offset ligand residue ids based on the original input to avoid clashes
-            # with any newly created residues (matches legacy behaviour).
-            ligand_array.res_id = (
-                ligand_array.res_id
-                - np.min(ligand_array.res_id)
-                + np.max(atom_array.res_id)
-                + 1
-            )
+            # Error if any ligand sits on chain A (the protein chain) unless
+            # explicitly overridden — chain ID is leaked to the model so this
+            # is a significant difference from the expected convention.
+            ligand_chains = np.unique(ligand_array.chain_id)
+            if "A" in ligand_chains and not self.allow_ligand_on_chain_a:
+                raise ValueError(
+                    f"Ligand found on chain A, which is reserved for the protein. "
+                    f"Ligand chain(s): {ligand_chains.tolist()}. "
+                    f"Place ligands on separate chains (B, C, D, ...) or set "
+                    f"'allow_ligand_on_chain_a: true' to override this check."
+                )
+            # Reset ligand res_id to start from 1 per chain, matching the
+            # convention AF3 uses in its output CIF files.  Use dense
+            # rank-based renumbering so gaps in the original numbering
+            # (e.g. res_id 850, 900) become sequential (1, 2).
+            for chain in ligand_chains:
+                mask = ligand_array.chain_id == chain
+                chain_res_ids = ligand_array.res_id[mask]
+                _, inverse = np.unique(chain_res_ids, return_inverse=True)
+                ligand_array.res_id[mask] = inverse + 1
             # Harmonize conditioning annotations before concatenation: biotite's
             # concatenate only preserves annotations present in ALL arrays (set
             # intersection), so mismatched optional conditioning annotations
