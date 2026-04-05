@@ -673,28 +673,36 @@ class DesignInputSpecification(BaseModel):
                     + list(atom_array_input_annotated.get_annotation_categories())
                 ),
             )
-            # Error if any ligand shares a chain ID with the already-built
-            # atom array — chain ID is leaked to the model so collisions
-            # represent a significant deviation from the expected convention.
+            # Validate chain assignments — chain ID is leaked to the model
+            # so collisions are a significant deviation from convention.
             ligand_chains = np.unique(ligand_array.chain_id)
             existing_chains = set(np.unique(atom_array.chain_id))
             overlapping = sorted(existing_chains & set(ligand_chains))
-            if overlapping and not self.allow_ligand_on_existing_chain:
-                raise ValueError(
-                    f"Ligand chain(s) {overlapping} overlap with existing "
-                    f"chain(s) {sorted(existing_chains)}. Place ligands on "
-                    f"separate chains or set 'allow_ligand_on_existing_chain: "
-                    f"true' to override this check."
-                )
-            # Reset ligand res_id to start from 1 per chain, matching the
-            # convention AF3 uses in its output CIF files.  Use dense
-            # rank-based renumbering so gaps in the original numbering
-            # (e.g. res_id 850, 900) become sequential (1, 2).
+            if not self.allow_ligand_on_existing_chain:
+                if overlapping:
+                    raise ValueError(
+                        f"Ligand chain(s) {overlapping} overlap with existing "
+                        f"chain(s) {sorted(existing_chains)}. Place ligands on "
+                        f"separate chains or set 'allow_ligand_on_existing_chain: "
+                        f"true' to override this check."
+                    )
+                # Multiple ligands must each be on their own chain.
+                for chain in ligand_chains:
+                    n_residues = len(
+                        np.unique(ligand_array.res_id[ligand_array.chain_id == chain])
+                    )
+                    if n_residues > 1:
+                        raise ValueError(
+                            f"Multiple ligand residues on chain {chain}. Each "
+                            f"ligand must be on its own chain, or set "
+                            f"'allow_ligand_on_existing_chain: true' to override."
+                        )
+            # Reset ligand res_id to start from 1 per chain. When ligands
+            # share a chain (override mode), preserve relative gaps.
             for chain in ligand_chains:
                 mask = ligand_array.chain_id == chain
                 chain_res_ids = ligand_array.res_id[mask]
-                _, inverse = np.unique(chain_res_ids, return_inverse=True)
-                ligand_array.res_id[mask] = inverse + 1
+                ligand_array.res_id[mask] = chain_res_ids - np.min(chain_res_ids) + 1
             # Harmonize conditioning annotations before concatenation: biotite's
             # concatenate only preserves annotations present in ALL arrays (set
             # intersection), so mismatched optional conditioning annotations
