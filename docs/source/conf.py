@@ -57,3 +57,5 @@ source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
     }
+
+suppress_warnings = ["myst.xref_missing"]
