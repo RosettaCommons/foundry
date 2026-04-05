@@ -33,6 +33,7 @@ from rfd3.constants import (
     REQUIRED_INFERENCE_ANNOTATIONS,
 )
 from rfd3.inference.legacy_input_parsing import (
+    _check_has_backbone_connections_to_nonstandard_residues,
     create_atom_array_from_design_specification_legacy,
 )
 from rfd3.inference.parsing import InputSelection
@@ -1361,17 +1362,25 @@ def accumulate_components(
     # ... Concatenate all components
     atom_array_accum = struc.concatenate(atom_array_accum)
     atom_array_accum.set_annotation("pn_unit_iid", atom_array_accum.chain_id)
-    atom_array_accum = _restore_component_bonds(
-        atom_array_accum=atom_array_accum,
-        src_atom_array=src_atom_array,
-        source_to_accum_idx=source_to_accum_idx,
-        source_idx_to_component=source_idx_to_component,
-        unindexed_components=unindexed_component_names,
+    should_restore_bonds = (
+        src_atom_array is not None
+        and bool(source_to_accum_idx)
+        and _check_has_backbone_connections_to_nonstandard_residues(
+            atom_array_accum, src_atom_array
+        )
     )
-    atom_array_accum = _add_backbone_bonds_for_nonstandard_residues(
-        atom_array_accum=atom_array_accum
-    )
-    atom_array_accum = _sort_bonds(atom_array_accum)
+    if should_restore_bonds:
+        atom_array_accum = _restore_component_bonds(
+            atom_array_accum=atom_array_accum,
+            src_atom_array=src_atom_array,
+            source_to_accum_idx=source_to_accum_idx,
+            source_idx_to_component=source_idx_to_component,
+            unindexed_components=unindexed_component_names,
+        )
+        atom_array_accum = _add_backbone_bonds_for_nonstandard_residues(
+            atom_array_accum=atom_array_accum
+        )
+        atom_array_accum = _sort_bonds(atom_array_accum)
 
     # Reset res_id for unindexed residues to avoid duplicates (ridiculously long lines of code, cleanup later)
     if np.any(atom_array_accum.is_motif_atom_unindexed.astype(bool)) and not np.all(
