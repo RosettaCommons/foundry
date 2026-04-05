@@ -684,7 +684,7 @@ class DesignInputSpecification(BaseModel):
                         f"Ligand chain(s) {overlapping} overlap with existing "
                         f"chain(s) {sorted(existing_chains)}. Place ligands on "
                         f"separate chains or set 'allow_ligand_on_existing_chain: "
-                        f"true' to override this check."
+                        f"true' to restore the old behaviour."
                     )
                 # Multiple ligands must each be on their own chain.
                 for chain in ligand_chains:
@@ -695,7 +695,8 @@ class DesignInputSpecification(BaseModel):
                         raise ValueError(
                             f"Multiple ligand residues on chain {chain}. Each "
                             f"ligand must be on its own chain, or set "
-                            f"'allow_ligand_on_existing_chain: true' to override."
+                            f"'allow_ligand_on_existing_chain: true' to restore "
+                            f"the old behaviour."
                         )
             if self.allow_ligand_on_existing_chain:
                 # Legacy behaviour: offset from protein max to avoid clashes.
