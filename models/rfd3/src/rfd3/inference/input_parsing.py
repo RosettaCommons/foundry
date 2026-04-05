@@ -697,12 +697,20 @@ class DesignInputSpecification(BaseModel):
                             f"ligand must be on its own chain, or set "
                             f"'allow_ligand_on_existing_chain: true' to override."
                         )
-            # Reset ligand res_id to start from 1 per chain. When ligands
-            # share a chain (override mode), preserve relative gaps.
-            for chain in ligand_chains:
-                mask = ligand_array.chain_id == chain
-                chain_res_ids = ligand_array.res_id[mask]
-                ligand_array.res_id[mask] = chain_res_ids - np.min(chain_res_ids) + 1
+            if self.allow_ligand_on_existing_chain:
+                # Legacy behaviour: offset from protein max to avoid clashes.
+                ligand_array.res_id = (
+                    ligand_array.res_id
+                    - np.min(ligand_array.res_id)
+                    + np.max(atom_array.res_id)
+                    + 1
+                )
+            else:
+                # Reset ligand res_id to start from 1 per chain, matching
+                # the convention AF3 uses in its output CIF files.
+                for chain in ligand_chains:
+                    mask = ligand_array.chain_id == chain
+                    ligand_array.res_id[mask] = 1
             # Harmonize conditioning annotations before concatenation: biotite's
             # concatenate only preserves annotations present in ALL arrays (set
             # intersection), so mismatched optional conditioning annotations
