@@ -15,3 +15,10 @@ competitive with leading open-source models. By including additional features at
 For more information on how to run RF3, see the [README](https://github.com/RosettaCommons/foundry/blob/production/models/rf3/README.md).
 
 You can install RF3, and the other models included in [Foundry](https://github.com/RosettaCommons/foundry) by following the instructions in [Foundry's README](https://github.com/RosettaCommons/foundry/blob/production/README.md). 
+
+```{toctree}
+:maxdepth: 2
+:caption: Contents
+
+examples/index.rst
+```
