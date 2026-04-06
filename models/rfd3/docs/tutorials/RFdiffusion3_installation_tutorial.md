@@ -19,7 +19,7 @@ By the end of this tutorial, you will be able to install RFdiffusion3 (RFD3) on 
 
 (install_tutorial_prereqs)=
 ## Prerequisites  
-RFdiffusion3 is supported on Unix-based systems (Linux or macOS). Windows is not officially supported unless used through a Linux subsystem (e.g., [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install)). While not strictly required, using an environment manager such as [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), [pixi](https://pixi.prefix.dev/latest/), [mamba](https://github.com/mamba-org/mamba), or [uv](https://docs.astral.sh/uv/) can be helpful to manage the dependencies that RFD3 relies on. For practical protein design workloads, a machine equipped with an NVIDIA GPU with ~3 GB of memory is highly recommended, as GPU acceleration substantially reduces inference time. This requires a recent NVIDIA driver installation. RFdiffusion3 can also run on CPU-only systems, however, runtime may increase significantly depending on the design task.
+RFdiffusion3 is supported on Unix-based systems (Linux or MacOS). Windows is not officially supported unless used through a Linux subsystem (e.g., [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install)). While not strictly required, using an environment manager such as [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), [pixi](https://pixi.prefix.dev/latest/), [mamba](https://github.com/mamba-org/mamba), or [uv](https://docs.astral.sh/uv/) can be helpful to manage the dependencies that RFD3 relies on. For practical protein design workloads, a machine equipped with an NVIDIA GPU with ~3 GB of memory is highly recommended, as GPU acceleration substantially reduces inference time. This requires a recent NVIDIA driver installation. RFdiffusion3 can also run on CPU-only systems, however, runtime may increase significantly depending on the design task.
 
 List of requirements:
 - Unix-based system
@@ -35,7 +35,7 @@ List of requirements:
 <details>
 <summary><strong>Mini Tutorial: Requesting an Interactive GPU Node on SLURM systems</strong></summary>
 
-Installing RFdiffusion and its dependencies is a computationally heavy process. If you are installing any of the models in Foundry on a high performance computing (HPC) cluster, you should install them on a compute node, not the login node. For those new to using these types of resources, we will go through how to request an interactive GPU node to use for installing RFD3 here. You can also run RFD3 by requesting an interactive GPU node. 
+If you are installing any of the models in Foundry on a high performance computing (HPC) cluster, you should install them from a compute node – specifically a GPU node is possible – not the login node. For those new to using these types of resources, we will go through how to request an interactive GPU node to use for installing RFD3 here. You can also run RFD3 by requesting an interactive GPU node. 
 
 ```{important}
 This "Mini Tutorial" shows how to request an interactive GPU node for systems using [SLURM](https://slurm.schedmd.com/overview.html). This is a common workload manager that helps allocate resources and schedule jobs that various users want to run on the cluster. If your HPC system uses a different workload manager or you are using cloud computing, you will need to go to your cluster's documentation to learn how to do this. 
@@ -53,17 +53,17 @@ This requests:
 The partition and account names are going to be specific to your cluster and lab, respectively. Look through the documentation for your HPC resources or ask your lab members if you do not know what to put for these.
 
 ```{note}
-Typically your interactive session will not start right away, you will need to wait until resources become available. How long this wait is depends on your system. Once it is ready you should see the command prompt reappear in your terminal window, perhaps slightly changed to reflect that you are now on a specific node. This means the allocation was "granted."
+Typically your interactive session will not start right away, you will need to wait until resources become available. How long you need to wait depends on your system. Once it is ready you should see the command prompt reappear in your terminal window, perhaps slightly changed to reflect that you are now on a specific node. This means the allocation was "granted."
 ```
 
 You can directly run the commands to install and run tools like RFD3 from this command prompt, however it's good practice to open an interactive shell. This will be configured better for running commands on the interactive node: 
 ```bash
 srun --pty $SHELL
 ```
-Doing this likely won't change anything that you can see, but if you run the command `hostname` before and after you will see different results. 
+Doing this likely won't change anything that you can see, but if you run the command `hostname` before and after you run this command, you will see different results. 
 
 ```{note}
-Some systems will automatically put you on an interactive shell on the allocated compute node after running salloc. In this case running the command to create an interactive shell will do nothing, running `hostname` before and after will result in the same information printed to screen.
+Some systems will automatically put you on an interactive shell on the allocated compute node after running salloc. In this case running the command to create an interactive shell will do nothing – running `hostname` before and after will result in the same information printed to screen.
 ```
 
 You can often add other information to your resource allocation request. For example: 
@@ -76,6 +76,8 @@ This command includes:
 - The time limit for your interactive node
 
 Your cluster will have limits on the number of CPUs, memory, and time that you can request. Refer to the documentation specific for your cluster if you need these pieces of information. 
+
+Now that you have your interactive GPU session running, continue to installing RFD3 on your system. 
 <hr>
 </details>
 
@@ -111,7 +113,11 @@ If the allocation was successful, this command will display information such as 
 
 (install_tutorial_step_1)=
 ### Step 1: Creating a conda environment
-Next, create an isolated [environment](#environment_def). Here we will specifically create a conda environment, which requires [Anaconda](https://www.anaconda.com/download) or its lightweight variants, [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/main) and Miniforge[https://conda-forge.org/download/]. These are often already installed on HPC clusters.
+Next, create an isolated [environment](#environment_def). Here we will specifically create a conda environment, which requires [Anaconda](https://www.anaconda.com/download) or its lightweight variants, [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/main) and Miniforge[https://conda-forge.org/download/]. These are often already installed on HPC clusters. 
+
+```{note}
+The rest of the tutorial assumes that you are working in a conda environment, but the commands can work with other package managers (uv, pixi, etc.) with only minor changes required. Using conda is not required for this installation or for running RFD3. 
+```
 
 Environments allow you to isolate the all the packages you need to install and any associated libraries from your system-wide installation. This prevents dependency conflicts when different tools need different dependency versions (e.g. your backbone design tool needs NumPy v.2.4.0 but your sequence generation tool needs v.2.3.5) and ensures that your global environment remains unaffected. If any issues occur during installation, the environment can simply be removed without impacting the rest of your system.
 
@@ -121,26 +127,28 @@ conda create -n RFD3_env python=3.12 -y
 ```
 
 Here:
-- <code>-n RFD3_env </code>specifies the name of the environment.
-- <code>python=3.12 </code>defines the Python version (a recent version like 3.9-3.12 is recommended).
-- <code>-y </code>automatically confirms installation prompts
+- `-n RFD3_env` specifies the name of the environment.
+- `python=3.12` defines the Python version (a version between 3.9 and 3.12 is recommended).
+- `-y` automatically confirms installation prompts
 
 Once the creation is completed, activate the environment with:  
 ```bash
 conda activate RFD3_env
 ```
 
-You should now see <code>(RFD3_env)</code> prefixed in your terminal prompt, indicating that the environment is active. 
+You should now see `(RFD3_env)` prefixed in your terminal prompt, indicating that the environment is active. 
 To verify that the correct Python interpreter is being used, run:  
 ```bash
 which python
 ```
 The displayed path should point to the newly created [environment](#environment_def), for example:  
-<code>/home/username/miniconda3/envs/RFD3_env/bin/python</code>  
+```bash
+/home/username/miniconda3/envs/RFD3_env/bin/python`
+```
 
 (install_tutorial_step_2)=
 ### Step 2: Installing RFdiffusion3
-RFdiffusion3 is distributed as part of the [Foundry](https://github.com/RosettaCommons/foundry/tree/production) ([`rc-foundry`](https://pypi.org/project/rc-foundry/) on PyPI) Python package. Foundry is the RosettaCommons framework that provides a unified [command-line interface](#cli_def) for running multiple protein modeling and design deep learning models. In machine learning disciplines, this type of resource is often referred to as a ['model zoo'](#model_zoo_def). As of the last update of this tutorial, it includes [RosettaFold3 (RF3)](https://github.com/RosettaCommons/foundry/tree/production/models/rf3) for structure prediction, [MPNN](https://github.com/RosettaCommons/foundry/tree/production/models/mpnn) for inverse folding and [RFdiffusion3](https://github.com/RosettaCommons/foundry/tree/production/models/rfd3) for generative protein design. While this tutorial focuses on RFdiffusion3, RosettaFold3, and MPNN can be installed in a similar manner.  
+RFdiffusion3 is distributed as part of the [Foundry](https://github.com/RosettaCommons/foundry/tree/production) ([`rc-foundry`](https://pypi.org/project/rc-foundry/) on PyPI) Python package. Foundry is the RosettaCommons framework that provides a unified [command-line interface](#cli_def) for running multiple protein modeling and design deep learning models. In machine learning disciplines, this type of resource is often referred to as a ['model zoo'](#model_zoo_def). As of the last update of this tutorial, it includes [RosettaFold3 (RF3)](https://github.com/RosettaCommons/foundry/tree/production/models/rf3) for structure prediction, [MPNN](https://github.com/RosettaCommons/foundry/tree/production/models/mpnn) for inverse folding, and [RFdiffusion3](https://github.com/RosettaCommons/foundry/tree/production/models/rfd3) for generative protein design. While this tutorial focuses on RFdiffusion3, RosettaFold3 and MPNN can be installed in a similar manner.  
 
 Install RFdiffusion3 using:  
 ```bash
@@ -153,19 +161,19 @@ The quotation marks around `rc-foundry[rfd3]` are important in shells such as `z
 (install_tutorial_checkpoint)=
 #### Dowloading the model checkpoint  
 RFdiffusion3 requires a trained model file (a [checkpoint](#checkpoint_def)) file containing the learned neural network weights (~3 GB).  
-Download the [checkpoint](#checkpoint_def) file using:  
+Download the checkpoint file using:  
 ```bash
 foundry install rfd3
 ```
 By default, this command will download the [checkpoint](#checkpoint_def) file to `~/.foundry/checkpoints`.  
 
-```{note}
-If you prefer to store the [checkpoint](#checkpoint_def) files in a custom location (for example, on a cluster with limited home directory space), you can specify a custom [checkpoint](#checkpoint_def) directory using the `--checkpoint-dir`flag:  
-```
+
+If you prefer to store the [checkpoint](#checkpoint_def) files in a custom location (for example, on a cluster with limited home directory space), you can specify a custom checkpoint directory using the `--checkpoint-dir`flag:  
 ```bash
-foundry install rfd3 --checkpoint-dir <path/to/checkpoint_dir>
+foundry install rfd3 --checkpoint-dir <path/to/checkpoint_dir>`
 ```
-This will download the [checkpoint](#checkpoint_def) file to the specified directory and register that directory via the `FOUNDRY_CHECKPOINT_DIRS` [environment variable](#env_var_def), so that RFdiffusion3 automatically searches it in future runs (in addition to the default `~/.foundry/checkpoints` location).
+
+This will download the [checkpoint](#checkpoint_def) file to the specified directory and register that directory via the `FOUNDRY_CHECKPOINT_DIRS` [environment variable](#env_var_def), so that RFdiffusion3 automatically searches for it there in future runs (in addition to the default `~/.foundry/checkpoints` location).
 
 (install_tutorial_step_3)=
 ### Step 3: Verify the installation
@@ -178,6 +186,11 @@ wget -P input_pdbs https://raw.githubusercontent.com/RosettaCommons/foundry/prod
 wget -P input_pdbs https://raw.githubusercontent.com/RosettaCommons/foundry/production/models/rfd3/docs/input_pdbs/7v11.pdb  
 wget -P input_pdbs https://raw.githubusercontent.com/RosettaCommons/foundry/production/models/rfd3/docs/input_pdbs/1bna.pdb
 ```
+
+```{note}
+If you have trouble accessing the files via `wget`, you can also place them on your cluster via [`scp`](https://snapshooter.com/learn/linux/copy-files-scp#scp-from-local-to-remote). A zip file has been created with just these JSON and PDB files and can be found [here](https://github.com/RosettaCommons/foundry/tree/production/models/rfd3/docs/tutorials/installation_tutorial).
+```
+
 After downloading the files, enter the working directory and run the demo using:  
 ```bash
 cd verify_installation
@@ -210,7 +223,7 @@ print(torch.cuda.device_count(), "GPUs detected")
 print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU")
 EOF
 ```
-Make sure your Conda environment is activated before running this check.
+Make sure your environment is activated before running this check.
 If `CUDA available: True` is printed and a GPU name appears, PyTorch can access your GPU.
 
 (install_tutorial_blackwell)=
@@ -235,7 +248,7 @@ pip install --pre torch torchvision torchaudio \
 
 Important notes:
 - Replace cu128 with the CUDA version supported by your driver (check via `nvidia-smi`, if your system uses NVIDIA GPUs).
-- Installing a nightly PyTorch build overrides the version originally installed with <code>rc-foundry</code>.
+- Installing a nightly PyTorch build overrides the version originally installed with `rc-foundry`.
 - After upgrading PyTorch, verify GPU detection again using the [Python check](#install_tutorial_detecting_gpu) from above.
 
 (install_tutorial_glossary)=
@@ -247,11 +260,11 @@ A binary file that contains the trained model weights of a neural network model.
 
 (cli_def)=
 ### CLI (Command-Line Interface)
-A way to interact with software by typing commands in a terminal. Foundry and RFdiffusion3 provide CLI commands like `foundry install rfd3` and `rfd3`
+A way to interact with software by typing commands in a terminal. Foundry and RFdiffusion3 provide CLI commands like `foundry install rfd3` and `rfd3`.
 
 (environment_def)=
 ### Environment
-An isolated Python environment created using Conda or Miniconda. It keeps project dependencies separate from your system Python to prevent version conflicts.
+An isolated Python environment created using a package manager. It keeps project dependencies separate from your system Python to prevent version conflicts.
 
 (env_var_def)=
 ### Environment Variable
