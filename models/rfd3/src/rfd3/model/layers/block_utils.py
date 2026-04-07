@@ -54,6 +54,11 @@ def build_valid_mask(
     return valid_mask
 
 
+def _atom_flat_idx(valid_mask: torch.Tensor) -> torch.Tensor:
+    """Return the 1-D indices of valid atoms in the flattened (n_tokens * A) grid."""
+    return valid_mask.flatten().nonzero(as_tuple=False).squeeze(1)
+
+
 def ungroup_atoms(Q_L, valid_mask):
     """
     Args
@@ -67,11 +72,20 @@ def ungroup_atoms(Q_L, valid_mask):
     """
     B, n_atoms, c = Q_L.shape
     n_tokens, A = valid_mask.shape
-    Q_IA = torch.zeros(B, n_tokens, A, c, dtype=Q_L.dtype, device=Q_L.device)
-    mask4d = valid_mask.unsqueeze(0).unsqueeze(-1)  # (1, n_tok, A, 1)
-    mask4d = mask4d.expand(B, -1, -1, c)  # (B, n_tok, A, c)
-    Q_IA.masked_scatter_(mask4d, Q_L)
-    return Q_IA
+    if Q_L.device.type == "mps":
+        # masked_scatter_ with non-contiguous masks is unreliable on MPS;
+        # use scatter with integer indices instead.
+        flat_idx = _atom_flat_idx(valid_mask)  # (n_atoms,)
+        idx = flat_idx.view(1, -1, 1).expand(B, -1, c)  # (B, n_atoms, c)
+        Q_IA = torch.zeros(B, n_tokens * A, c, dtype=Q_L.dtype, device=Q_L.device)
+        Q_IA = Q_IA.scatter(1, idx, Q_L)
+        return Q_IA.reshape(B, n_tokens, A, c)
+    else:
+        Q_IA = torch.zeros(B, n_tokens, A, c, dtype=Q_L.dtype, device=Q_L.device)
+        mask4d = valid_mask.unsqueeze(0).unsqueeze(-1)  # (1, n_tok, A, 1)
+        mask4d = mask4d.expand(B, -1, -1, c)  # (B, n_tok, A, c)
+        Q_IA.masked_scatter_(mask4d, Q_L)
+        return Q_IA
 
 
 def group_atoms(Q_IA: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
@@ -85,10 +99,17 @@ def group_atoms(Q_IA: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
     -------
     Q_L        : (B, n_atoms, c)  flattened real atoms, order preserved
     """
-    B, _, _, c = Q_IA.shape
-    mask4d = valid_mask.unsqueeze(0).unsqueeze(-1).expand(B, -1, -1, c)  # (B,n_tok,A,c)
-    Q_L = Q_IA[mask4d].view(B, -1, c)  # restore 2‑D shape
-    return Q_L
+    B, n_tok, A, c = Q_IA.shape
+    if Q_IA.device.type == "mps":
+        # Boolean indexing with non-contiguous expanded masks is unreliable on MPS;
+        # use integer index gather instead.
+        flat_idx = _atom_flat_idx(valid_mask)  # (n_atoms,)
+        Q_L = Q_IA.reshape(B, n_tok * A, c)[:, flat_idx, :]
+        return Q_L.contiguous()
+    else:
+        mask4d = valid_mask.unsqueeze(0).unsqueeze(-1).expand(B, -1, -1, c)
+        Q_L = Q_IA[mask4d].view(B, -1, c)
+        return Q_L
 
 
 def group_pair(P_IAA, valid_mask):
@@ -137,9 +158,9 @@ def scatter_add_pair_features(P_LK_tgt, P_LK_indices, P_LA_src, P_LA_indices):
     # Handle case when indices and P_LA don't have batch dimensions
     B, L, k = P_LK_indices.shape
     if P_LA_indices.ndim == 2:
-        P_LA_indices = P_LA_indices.unsqueeze(0).expand(B, -1, -1)
+        P_LA_indices = P_LA_indices.unsqueeze(0).expand(B, -1, -1).contiguous()
     if P_LA_src.ndim == 3:
-        P_LA_src = P_LA_src.unsqueeze(0).expand(B, -1, -1)
+        P_LA_src = P_LA_src.unsqueeze(0).expand(B, -1, -1).contiguous()
     assert (
         P_LA_src.shape[-1] == P_LK_tgt.shape[-1]
     ), "Channel dims do not match, got: {} vs {}".format(
@@ -152,10 +173,12 @@ def scatter_add_pair_features(P_LK_tgt, P_LK_indices, P_LA_src, P_LA_indices):
     elif not torch.all(matches.sum(dim=-1) <= 1):
         raise ValueError("Did not find a scatter index for every atom")
     k_indices = matches.long().argmax(dim=-1)  # (B, L, a)
-    scatter_indices = k_indices.unsqueeze(-1).expand(
-        -1, -1, -1, P_LK_tgt.shape[-1]
+    scatter_indices = (
+        k_indices.unsqueeze(-1).expand(-1, -1, -1, P_LK_tgt.shape[-1]).contiguous()
     )  # (B, L, a, c)
-    P_LK_tgt = P_LK_tgt.scatter_add(dim=2, index=scatter_indices, src=P_LA_src)
+    P_LK_tgt = P_LK_tgt.scatter_add(
+        dim=2, index=scatter_indices, src=P_LA_src.contiguous()
+    )
     return P_LK_tgt
 
 
@@ -169,8 +192,8 @@ def _batched_gather(values: torch.Tensor, idx: torch.Tensor) -> torch.Tensor:
     k = idx.shape[-1]
 
     #   (B, L, 1, C)  → stride-0 along k  → (B, L, k, C)
-    src = values.unsqueeze(2).expand(-1, -1, k, -1)
-    idx = idx.unsqueeze(-1).expand(-1, -1, -1, C)  # (B, L, k, C)
+    src = values.unsqueeze(2).expand(-1, -1, k, -1).contiguous()
+    idx = idx.unsqueeze(-1).expand(-1, -1, -1, C).contiguous()  # (B, L, k, C)
 
     return torch.gather(src, 1, idx)  # dim=1 is the L-axis
 
@@ -350,7 +373,7 @@ def build_index_mask(
     # Exclude tokens which are partially filled (L, I)
     n_query_per_token = torch.zeros((L, I), device=device).float()
     n_query_per_token.scatter_add_(
-        1, tok_idx.long()[None, :].expand(L, -1), mask.float()
+        1, tok_idx.long()[None, :].expand(L, -1).contiguous(), mask.float()
     )
 
     # Find mask for the atoms for which the number of keys
@@ -407,12 +430,19 @@ def extend_index_mask_with_neighbours(
     inf = torch.tensor(float("inf"), dtype=D_LL.dtype, device=device)
 
     # 1. Selection of sequence neighbours
-    all_idx_row = torch.arange(L, device=device).expand(L, L)
-    indices = torch.where(mask, all_idx_row, inf)  # sentinel inf if not-forced
+    # MPS does not handle non-contiguous inputs to torch.where correctly,
+    # so use .repeat() (allocates) there; .expand() (zero-copy view) elsewhere.
+    if device.type == "mps":
+        all_idx_row = torch.arange(L, device=device).unsqueeze(0).repeat(L, 1)
+    else:
+        all_idx_row = torch.arange(L, device=device).unsqueeze(0).expand(L, L)
+    indices = torch.where(
+        mask.contiguous(), all_idx_row, inf
+    )  # sentinel inf if not-forced
     indices = indices.sort(dim=1)[0][:, :k]  # (L, k)
 
     # 2. Find k-nn excluding forced indices
-    D_LL = torch.where(mask, inf, D_LL)
+    D_LL = torch.where(mask.contiguous(), inf, D_LL)
     filler_idx = torch.topk(D_LL, k, dim=-1, largest=False).indices
 
     # ... Reverse last axis s.t. best matched indices are last
@@ -420,8 +450,8 @@ def extend_index_mask_with_neighbours(
 
     # 3. Fill indices
     to_fill = indices == inf
-    to_fill = to_fill.expand_as(filler_idx)
-    indices = indices.expand_as(filler_idx)
+    to_fill = to_fill.expand_as(filler_idx).contiguous()
+    indices = indices.expand_as(filler_idx).contiguous()
     indices = torch.where(to_fill, filler_idx, indices)
 
     return indices.long()  # (B, L, k)
@@ -437,7 +467,7 @@ def get_sparse_attention_indices(
 
     # Sort and assert no duplicates (optional but good practise)
     indices, _ = torch.sort(indices, dim=-1)
-    if (indices[..., 1:] == indices[..., :-1]).any():
+    if indices.device.type != "mps" and (indices[..., 1:] == indices[..., :-1]).any():
         raise AssertionError("Tensor has duplicate elements along the last dimension.")
 
     assert (

@@ -3,10 +3,10 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to the official documentation for foundry
+Welcome to the official documentation for Foundry
 =================================================
 
-`foundry <https://github.com/RosettaCommons/foundry/tree/production>`_ is a home for
+`Foundry <https://github.com/RosettaCommons/foundry/tree/production>`_ is a home for
 many of the machine learning models produced by `Rosetta Commons member labs <https://rosettacommons.org/about/labs/>`_. 
 
 .. toctree::
@@ -15,6 +15,7 @@ many of the machine learning models produced by `Rosetta Commons member labs <ht
    
    license_link.rst
    installation_faq.md
+   contributing_link.rst
 
 .. toctree::
    :maxdepth: 1

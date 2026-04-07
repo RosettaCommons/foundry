@@ -178,7 +178,8 @@ def _align(X_fixed, X_moving):
     R = U @ V
     if is_torch:
         F = torch.eye(3, 3, device=R.device).expand(B, 3, 3).clone()
-        F[..., -1, -1] = torch.sign(torch.linalg.det(R))
+        det = torch.linalg.det(R)
+        F[..., -1, -1] = torch.sign(det)
     else:
         F = np.broadcast_to(np.eye(3, 3), (B, 3, 3)).copy()
         F[..., -1, -1] = np.sign(np.linalg.det(R))

@@ -49,7 +49,7 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
         assert S_I is None
         A_I = self.ln_1(A_I)
 
-        if self.use_deepspeed_evo or self.force_bfloat16:
+        if (self.use_deepspeed_evo or self.force_bfloat16) and A_I.device.type != "mps":
             A_I = A_I.to(torch.bfloat16)
 
         Q_IH = self.to_q(A_I)  # / np.sqrt(self.c)
@@ -61,9 +61,7 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
         B, L = B_IIH.shape[:2]
 
         if not self.use_deepspeed_evo or L <= 24:
-            Q_IH = Q_IH / torch.sqrt(
-                torch.tensor(self.c).to(Q_IH.device, torch.bfloat16)
-            )
+            Q_IH = Q_IH / torch.sqrt(torch.tensor(self.c).to(Q_IH.device, Q_IH.dtype))
             # Attention
             A_IIH = torch.softmax(
                 torch.einsum("...ihd,...jhd->...ijh", Q_IH, K_IH) + B_IIH, dim=-2
@@ -116,8 +114,10 @@ class PairformerBlock(nn.Module):
 
     @activation_checkpointing
     def forward(self, S_I, Z_II):
+        _device = device_of(self)
+        _use_autocast = _device.type != "mps"
         with torch.amp.autocast(
-            device_type=device_of(self).type, enabled=True, dtype=torch.bfloat16
+            device_type=_device.type, enabled=_use_autocast, dtype=torch.bfloat16
         ):
             Z_II = Z_II + self.z_transition(Z_II)
             if S_I is not None:

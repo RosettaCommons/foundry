@@ -12,7 +12,7 @@ from rf3.model.layers.layer_utils import (
 from rf3.model.layers.mlff import ConformerEmbeddingWeightedAverage
 
 from foundry.training.checkpoint import activation_checkpointing
-from foundry.utils.torch import device_of
+from foundry.utils.torch import device_of, scatter_mean
 
 
 class AtomAttentionEncoderDiffusion(nn.Module):
@@ -241,16 +241,11 @@ class AtomAttentionEncoderDiffusion(nn.Module):
             # Ensure dtype consistency for index_reduce
             processed_Q_L = processed_Q_L.to(Q_L.dtype)
 
-            A_I = (
-                torch.zeros(A_I_shape, device=Q_L.device, dtype=Q_L.dtype)
-                .index_reduce(
-                    -2,
-                    f["atom_to_token_map"].long(),
-                    processed_Q_L,
-                    "mean",
-                    include_self=False,
-                )
-                .clone()
+            A_I = scatter_mean(
+                torch.zeros(A_I_shape, device=Q_L.device, dtype=Q_L.dtype),
+                -2,
+                f["atom_to_token_map"].long(),
+                processed_Q_L,
             )
 
             return A_I, Q_L, C_L, P_LL
@@ -427,7 +422,7 @@ class AttentionPairBiasDiffusion(nn.Module):
             # zero out layer norms for the key and query
             return self.atom_attention(A_I, S_I, Z_II)
 
-        if self.use_deepspeed_evo or self.force_bfloat16:
+        if (self.use_deepspeed_evo or self.force_bfloat16) and A_I.device.type != "mps":
             A_I = A_I.to(torch.bfloat16)
             assert len(A_I.shape) == 3, f"(Diffusion batch, I, C_a) but got {A_I.shape}"
 
@@ -499,7 +494,6 @@ class AttentionPairBiasDiffusion(nn.Module):
         Q_IH = self.to_q(A_I)
         K_IH = self.to_k(A_I)
         V_IH = self.to_v(A_I)
-        B_IIH = self.to_b(self.ln_0(Z_II))
         G_IH = self.to_g(A_I)
 
         if self.kq_norm:
@@ -523,12 +517,18 @@ class AttentionPairBiasDiffusion(nn.Module):
         maskK = (indicesK < 0) | (indicesK > L - 1)
         indicesK = torch.clamp(indicesK, 0, L - 1)
 
+        # Compute pair bias within local windows only, to avoid applying
+        # LayerNorm to the full [1, L, L, c_pair] tensor which can exceed
+        # 2^32 elements for large systems and silently corrupt CUDA outputs.
+        Z_local = Z_II[:, indicesQ[:, :, None], indicesK[:, None, :]]
+        B_local = self.to_b(self.ln_0(Z_local))
+
         query_subset = Q_IH[:, indicesQ]
         key_subset = K_IH[:, indicesK]
         attn = torch.einsum("...ihd,...jhd->...ijh", query_subset, key_subset)
         attn = attn / (self.c**0.5)
 
-        attn += B_IIH[:, indicesQ[:, :, None], indicesK[:, None, :]] - 1e9 * (
+        attn += B_local - 1e9 * (
             maskQ[None, :, :, None, None] + maskK[None, :, None, :, None]
         )
         attn = torch.softmax(attn, dim=-2)

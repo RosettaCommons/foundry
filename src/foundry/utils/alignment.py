@@ -69,7 +69,8 @@ def weighted_rigid_align(
         )
     )
 
-    F[..., -1, -1] = torch.sign(torch.linalg.det(R))
+    det = torch.linalg.det(R)
+    F[..., -1, -1] = torch.sign(det)
     R = U @ F @ V
 
     X_gt_L = X_gt_L - u_X_gt.unsqueeze(-2)

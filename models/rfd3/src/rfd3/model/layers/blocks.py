@@ -30,6 +30,7 @@ from torch.nn.functional import one_hot
 
 from foundry import DISABLE_CHECKPOINTING
 from foundry.common import exists
+from foundry.utils.torch import scatter_mean
 
 logger = logging.getLogger(__name__)
 
@@ -213,16 +214,11 @@ class LinearEmbedWithPool(nn.Module):
             self.c_token,
         )
         Q_L = self.linear(R_L)
-        A_I = (
-            torch.zeros(A_I_shape, device=R_L.device, dtype=Q_L.dtype)
-            .index_reduce(
-                -2,
-                tok_idx.long(),
-                Q_L,
-                "mean",
-                include_self=False,
-            )
-            .clone()
+        A_I = scatter_mean(
+            torch.zeros(A_I_shape, device=R_L.device, dtype=Q_L.dtype),
+            -2,
+            tok_idx.long(),
+            Q_L,
         )
         return A_I
 
