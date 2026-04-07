@@ -139,34 +139,3 @@ def plot_pae(
     plt.colorbar(im, ax=ax, label="Expected position error (Angstroms)", shrink=0.8)
     plt.tight_layout()
     return fig, ax
-
-
-
-def compute_contacts(
-    atom_array: struc.AtomArray, chain1: str, chain2: str, cutoff: float = 8.0,
-) -> set[tuple[int, int]]:
-    """Compute residue-level contacts between two chains."""
-    c1 = atom_array[(atom_array.chain_id == chain1) & (atom_array.element != "H")]
-    c2 = atom_array[(atom_array.chain_id == chain2) & (atom_array.element != "H")]
-    cell_list = struc.CellList(c2, cutoff)
-    contacts = set()
-    for i in range(len(c1)):
-        neighbors = cell_list.get_atoms(c1.coord[i], cutoff)
-        if len(neighbors) > 0:
-            for j in neighbors:
-                contacts.add((int(c1.res_id[i]), int(c2.res_id[j])))
-    return contacts
-
-
-def compare_contacts(
-    pred_contacts: set[tuple[int, int]], ref_contacts: set[tuple[int, int]],
-) -> dict:
-    """Compare predicted vs reference contacts. Returns precision, recall, F1."""
-    tp = len(pred_contacts & ref_contacts)
-    fp = len(pred_contacts - ref_contacts)
-    fn = len(ref_contacts - pred_contacts)
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-    return {"true_positives": tp, "false_positives": fp, "false_negatives": fn,
-            "precision": precision, "recall": recall, "f1": f1}
