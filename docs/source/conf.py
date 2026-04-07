@@ -59,6 +59,5 @@ source_suffix = {
     }
 
 html_js_files = [
-    'https://www.googletagmanager.com/gtag/js?id=G-6Q7T573HLF',
-    'ga.js',
+    ('https://scripts.simpleanalyticscdn.com/latest.js', {'async': 'async', 'defer': 'defer'}),
 ]
