@@ -11,6 +11,7 @@ General
 .. toctree::
    :maxdepth: 1
 
+   tutorials/RFdiffusion3_installation_tutorial.md
    intro_inference_calculations.md
    input.md
    designability_vs_diversity.md
