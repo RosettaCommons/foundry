@@ -24,7 +24,6 @@ smoke_test = list(TEST_JSON_DATA.keys())
 
 @pytest.mark.fast
 def test_imports():
-
     import foundry
 
     print("Imported rfd3 version:", rfd3)
