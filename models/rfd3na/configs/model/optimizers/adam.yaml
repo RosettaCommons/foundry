@@ -1,0 +1,5 @@
+# Optimizer
+_target_: torch.optim.Adam
+lr: 0 # Will be set by the scheduler (starts at 0, increasing to `base_lr`)
+betas: [0.9, 0.95]
+eps: 1.0e-8

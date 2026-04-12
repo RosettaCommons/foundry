@@ -1,0 +1,17 @@
+defaults:
+  - island
+  - _self_
+
+frequency: 1.0
+name: sequence_design
+
+island_sampling_kwargs:
+  island_len_min: 99999
+  island_len_max: 999999999
+
+p_diffuse_motif_sidechains: 1.0
+p_unindex_motif_tokens: 0.0
+
+# For ChemNet-style sampling  < 1.0
+p_fix_motif_coordinates: 0.8
+p_fix_motif_sequence: 0.1

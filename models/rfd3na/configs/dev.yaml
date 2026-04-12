@@ -1,0 +1,10 @@
+# @package _global_
+# Inference engine config for development
+hydra:
+  searchpath:
+    - pkg://rfd3na.configs
+    - pkg://configs
+
+defaults:
+  - inference_engine: dev
+  - _self_

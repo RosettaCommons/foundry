@@ -1,0 +1,13 @@
+defaults:
+  - design_validation_base
+  - _self_
+
+dataset:
+  data: ${paths.data.design_benchmark_data_dir}/sm_binder_hbonds.json
+  eval_every_n: 5
+  name: sm_binder_hbonds-design
+  subset_to_keys:
+    - FAD
+    - IAI
+    - OQO
+    - SAM

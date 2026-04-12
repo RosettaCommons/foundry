@@ -1,0 +1,20 @@
+defaults:
+  - base_no_weights
+  - _self_
+
+dataset:
+  dataset_parser:
+    _target_: atomworks.ml.datasets.parsers.GenericDFParser
+    pn_unit_iid_colnames: null
+
+  dataset:
+    name: tf_distillation
+    data: /projects/ml/prot_dna/transcriptionFactor_distillation_rf3.newDL.csv
+    columns_to_load:
+      - example_id
+      - path
+    
+  transform:
+    crop_contiguous_probability: 0.4
+    crop_spatial_probability: 0.0
+    dna_contact_crop_probability: 0.6

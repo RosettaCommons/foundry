@@ -1,0 +1,19 @@
+defaults:
+  - base_transform_args
+  - _self_
+
+dataset:
+  _target_: atomworks.ml.datasets.StructuralDatasetWrapper
+  save_failed_examples_to_dir: ${paths.data.failed_examples_dir}
+  cif_parser_args:
+    cache_dir: null
+    load_from_cache: false
+    save_to_cache: false
+  dataset:
+    _target_: atomworks.ml.datasets.PandasDataset
+    # we will use the example_id as the unique column
+    id_column: example_id
+  transform:
+    # common Transform pipeline components for all PDB datasets
+    _target_: ${datasets.pipeline_target}
+    is_inference: False

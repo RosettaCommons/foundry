@@ -1,0 +1,15 @@
+# @package _global_
+
+defaults:
+  - /hydra: no_logging
+
+# Parameters for RFD3InferenceEngine.__init__()
+ckpt_path: ???
+num_nodes: 1
+devices_per_node: 1
+verbose: false
+seed: null
+
+# Parameters for RFD3InferenceEngine.run()
+inputs: ???
+out_dir: ???

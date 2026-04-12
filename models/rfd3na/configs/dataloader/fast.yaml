@@ -1,0 +1,11 @@
+defaults:
+  - default
+
+train:
+  dataloader_params:
+    num_workers: 2
+    prefetch_factor: 6
+val: 
+  dataloader_params:
+    num_workers: 2
+    prefetch_factor: 6

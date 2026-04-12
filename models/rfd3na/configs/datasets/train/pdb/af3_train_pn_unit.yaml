@@ -1,0 +1,42 @@
+defaults:
+  - base
+
+dataset: 
+  dataset_parser:
+    _target_: atomworks.ml.datasets.parsers.PNUnitsDFParser
+    base_dir: ${paths.data.pdb_data_dir}
+  dataset:
+    name: pn_unit
+    data: ${paths.data.pdb_parquet_dir}/pn_units_df_train.parquet
+    filters:
+        # filters common across all PDB datasets
+      - "deposition_date < '2021-09-30'"
+      - "resolution < 9.0"
+      - "num_polymer_pn_units <= 300" 
+      - "cluster.notnull()"
+      # pn_unit specific filters
+      - "~(q_pn_unit_non_polymer_res_names.notnull() and q_pn_unit_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+    columns_to_load:
+      # columns common across all PDB datasets
+      - example_id
+      - pdb_id
+      - assembly_id
+      - deposition_date
+      - resolution
+      - num_polymer_pn_units
+      - method
+      - cluster
+      - n_prot
+      - n_nuc
+      - n_ligand
+      - n_peptide
+      - total_num_atoms_in_unprocessed_assembly
+      # pn_unit specific columns
+      - q_pn_unit_iid
+      - q_pn_unit_non_polymer_res_names
+      - all_pn_unit_iids_after_processing
+      - q_pn_unit_is_loi
+  transform:
+    # pn_unit-specific Transform pipeline parameters
+    crop_contiguous_probability: 0.3333333333333333
+    crop_spatial_probability: 0.6666666666666667

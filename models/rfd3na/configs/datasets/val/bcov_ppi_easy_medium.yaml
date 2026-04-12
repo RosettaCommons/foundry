@@ -1,0 +1,9 @@
+
+defaults:
+  - design_validation_base
+  - val_examples/bcov_ppi_easy_medium_with_ori@dataset.data
+  - _self_
+
+dataset:
+  eval_every_n: 1
+  name: bcov-ppi-easy-medium

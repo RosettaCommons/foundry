@@ -1,0 +1,6 @@
+defaults:
+  - aa_design
+
+accelerator: cpu
+devices_per_node: 1
+num_nodes: 1

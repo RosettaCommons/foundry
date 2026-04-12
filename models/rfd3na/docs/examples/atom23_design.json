@@ -1,0 +1,98 @@
+{
+    "multipolymer": {
+        "contig": "40-50R,/0,10-20D,/0,80-110",
+        "length": "130-180",
+        "input": "../input_pdbs/AMP.pdb"
+    },
+    "W05": {
+        "ss_dbn": ".(((((((((((((((((((..[[[[[[.)))))(((....)))(((....)))))))))))))))))((((((..]]]]]].)))))).",
+        "select_fixed_atoms": false,
+        "contig": "90-90R",
+        "length": "90-90",
+        "input": "../input_pdbs/AMP.pdb"
+    },
+    "AMP_aptamer": {
+        "input": "../input_pdbs/AMP.pdb",
+	"ligand": "AMP",
+	"contig": "40-50R",
+        "length": "40-50",
+        "ori_jitter": 1,
+        "select_buried": {"AMP": "ALL"},
+        "select_hbond_acceptor": {
+            "AMP": "N7,O4',O1P,O2P,O3P,N3,N1"
+        },
+        "select_hbond_donor": {
+            "AMP": "N6,O3',O2'"
+        }
+    },
+    "FMN_aptamer": {
+        "input": "../input_pdbs/FMN_3x21.pdb",
+	"ligand": "FMN",
+	"contig": "40-50R",
+        "length": "40-50",
+        "ori_jitter": 1,
+        "select_buried": {"FMN": "ALL"},
+        "select_hbond_acceptor": {
+            "FMN": "O2,O4,N1,N5,O5',O2P,O3P"
+        },
+        "select_hbond_donor": {
+            "FMN": "N3,O2',O3',O4'"
+        }
+    },
+    "AMP_aptamer_noh": {
+        "input": "../input_pdbs/AMP.pdb",
+	"ligand": "AMP",
+	"contig": "40-50R",
+        "length": "40-50",
+        "ori_jitter": 1,
+        "select_buried": {"AMP": "ALL"}
+    },
+    "FMN_aptamer_noh": {
+        "input": "../input_pdbs/FMN_3x21.pdb",
+	"ligand": "FMN",
+	"contig": "40-50R",
+        "length": "40-50",
+        "ori_jitter": 1,
+        "select_buried": {"FMN": "ALL"}
+    },
+    "unindexed_rnasep": {
+        "input": "../input_pdbs/rnase_p_3q1q_active_site_small.pdb",
+        "contig": "50-80R,/0,100-120,/0,C1-4,C79-86",
+        "length": "162-212",
+        "ligand": "MG,PO4",
+        "unindex": "B49,B50,B51,B52,B321,/0,A56-58,/0",
+        "select_fixed_atoms": {
+            "B49": "ALL",
+            "B50": "ALL",
+            "B51": "ALL",
+            "B52": "ALL",
+            "B321": "ALL",
+            "A56-58": "ALL",
+            "C1-4": "ALL",
+            "C79-86": "ALL"
+        }
+    },
+    "dict_input_ss": {
+        "ss_dbn_dict": {
+            "A6-25":"(((..)))....(((..)))",
+            "B1-20":"((((..))))...((...))"
+        },
+        "contig":"30-30R,/0,30-30R",
+        "length":"60-60",
+        "input":"../input_pdbs/AMP.pdb"
+    },
+    "paired_region_input_ss": {
+        "paired_region_list": ["A20-25,B10-15"],
+        "loop_region_list":["A10-19","B20-30"],
+        "contig":"50-50R,/0,50-50R",
+        "length":"100-100",
+        "input":"../input_pdbs/AMP.pdb"
+    },
+    "paired_position_input_ss": {
+        "paired_position_list": ["A3,B3","A5,B5","A7,B7","A9,B9","A11,B11","A13,B13","A15,B15","A17,B17","A19,B19"],
+        "contig":"20-20R,/0,20-20R",
+        "length":"40-40",
+        "input":"../input_pdbs/AMP.pdb"
+
+    }
+}

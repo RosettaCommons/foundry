@@ -1,0 +1,28 @@
+defaults:
+  - bcov_ppi_easy_medium_with_ori
+  - _self_
+
+insulinr:
+  contig: 65-120,/0,B1-150
+  length: 215-270
+pdl1:
+  contig: 65-120,/0,B1-115
+  length: 215-215
+vegfr:
+  contig: 65-120,/0,B1-200
+  length: 300-300
+rbd:
+  contig: 65-120,/0,B1-195
+  length: 295-295
+cd28:
+  contig: 65-120,/0,B1-118
+  length: 218-218
+il2ra:
+  contig: 65-120,/0,B1-122
+  length: 222-222
+il10ra:
+  contig: 65-120,/0,B1-207
+  length: 307-307
+tie2:
+  contig: 65-120,/0,B1-188
+  length: 288-288

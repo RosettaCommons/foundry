@@ -1,0 +1,10 @@
+# @package _global_
+
+hydra:
+  searchpath:
+    - pkg://rfd3na.configs
+    - pkg://configs
+
+defaults:
+  - inference_engine: rfdiffusion3
+  - _self_

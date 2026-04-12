@@ -1,0 +1,18 @@
+# path to directory with training splits
+pdb_data_dir: /projects/ml/frozen_pdb_copies/2025_07_13_pdb
+pdb_parquet_dir: /projects/ml/datahub/dfs/af3_splits/2024_12_16/  # TODO: uncomment
+
+# monomer distillation dataset
+monomer_distillation_data_dir: /squash/af2_distillation_facebook/
+monomer_distillation_parquet_dir: /projects/ml/datahub/dfs/distillation/af2_distillation_facebook
+
+# path to save examples that fail during the Transform pipeline (null = do not save)
+failed_examples_dir: null
+
+design_benchmark_data_dir: /projects/ml/aa_design/benchmarks
+design_model_weight_dir: /projects/ml/aa_design/models
+
+# path to directory with cached residue data
+residue_cache_dir: /net/tukwila/lschaaf/datahub/MACE-Egret-3-noH/mace_embeddings
+
+cif_cache_dir: /net/tukwila/ncorley/cifutils/cache

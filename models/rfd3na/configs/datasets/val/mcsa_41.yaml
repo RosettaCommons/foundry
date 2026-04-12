@@ -1,0 +1,9 @@
+
+defaults:
+  - design_validation_base
+  - _self_
+
+dataset:
+  data: ${paths.data.design_benchmark_data_dir}/mcsa_41.json
+  name: woodys-benchmark
+  eval_every_n: 16

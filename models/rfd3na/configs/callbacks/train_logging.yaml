@@ -1,0 +1,24 @@
+log_af3_training_losses_callback:
+    _target_: foundry.callbacks.train_logging.LogAF3TrainingLossesCallback
+    log_every_n: 10
+    log_full_batch_losses: true
+
+log_learning_rate_callback:
+    _target_: foundry.callbacks.train_logging.LogLearningRateCallback
+    log_every_n: 10
+
+log_model_parameters_callback:
+    _target_: foundry.callbacks.train_logging.LogModelParametersCallback
+
+log_dataset_sampling_ratios_callback:
+    _target_: foundry.callbacks.train_logging.LogDatasetSamplingRatiosCallback
+
+# Optional health logging
+#   activations_tracking_callback:
+#     _target_: foundry.callbacks.health_logging.ActivationsGradientsWeightsTracker
+# log_freq: 100
+# keep_cache: True  # --> WARNING: Do not run this in a production run, this will lead to a memory leak! Meant for debugging.
+# activations_tracking_callback:
+#   _target_: foundry.callbacks.health_logging.ActivationsGradientsWeightsTracker
+#   log_freq: 100
+# keep_cache: True  # --> WARNING: Do not run this in a production run, this will lead to a memory leak! Meant for debugging.
