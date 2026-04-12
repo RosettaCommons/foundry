@@ -11,7 +11,8 @@
             "A156": "NZ,CE,CD",
             "ACT": "OXT",
             "NAI": ""
-        }
+        },
+        "allow_ligand_on_existing_chain": true
     },
     "partial_diffusion": {
         "input": "../input_pdbs/7v11.pdb", 
@@ -23,7 +24,8 @@
             "A431": "TIP",
             "A572": "BKBN",
             "A573": "BKBN"
-        }
+        },
+        "allow_ligand_on_existing_chain": true
     },
     "dsDNA_basic": {
         "input": "../input_pdbs/1bna.pdb",

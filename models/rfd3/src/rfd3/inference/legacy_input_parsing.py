@@ -542,8 +542,7 @@ def accumulate_components(
                 )
         else:
             ## foundry components update sends P for protein tokens
-            if component[-1] in ["P"]:
-                n = int(component[:-1])
+            n = int(component[:-1])
             if n == 0 or unindexed_components_started:
                 res_id += n
                 continue
