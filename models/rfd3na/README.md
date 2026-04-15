@@ -7,7 +7,7 @@ both are described in more detail below.
 
 
 <p align="center">
-  <img src="docs/.assets/rfd3na_rnasep.png" alt="All-atom design with RFD3NA">
+  <img src="docs/.assets/rfd3na_rnasep.jpg" alt="All-atom design with RFD3NA">
 </p>
 
 ## Getting Started
@@ -61,6 +61,24 @@ Additional unnecessary (but useful!) options are added to the above command:
 - `prevalidate_inputs`: Checks that your inputs are valid before running inference. Helpful if your JSON/YAML has a number of different configs you want to debug / double check are valid before loading the checkpoints.
 - `skip_existing`: Skips any existing files that would be in the same place and have the same name as the calculation being run. If you are testing your setup multiple times, including this option is important so that you actually run RFdiffusion3. 
 
+## Further example JSONs for different applications of RFD3NA
+Additional examples are are available. If you have cloned the
+repository, matching `.json` files are in `foundry/models/rfd3/docs/examples`
+that can be run directly, similar to the previous example. 
+
+<div align="center">
+  <h2>
+    <a href="./docs/examples/atom23_design.md"><sub></sub>Multipolymer design examples</a>
+  </h2>
+  <img src="docs/.assets/atom23.gif" height="500">
+</div>
+
+
+In the examples, the paths to the input files are specified assuming
+that you are running the examples from the `foundry/models/rfd3/docs/examples`
+directory. If you would like to run RFD3NA from a different location, 
+you will need to change the path in the `.json` file(s) before running. 
+
 There are various interesting ways you can use RFD3NA design as it's trained on a large array of different tasks for botjh protein and nucleic acids.
 For example, you can fix sequence and not structure (prediction-type task), fix the backbone and unfix the sequence (MPNN-type inverse folding) or unfix the sidechains only (PLACER/ChemNet-style):
 
@@ -71,49 +89,6 @@ For example, you can fix sequence and not structure (prediction-type task), fix 
 For full details on how to specify inputs, see the [input specification documentation](./docs/input.md). You can also see `foundry/models/rfd3/configs/inference_engine/rfdiffusion3.yaml` for even more options.
 The `BKBN` and `TIP` shorthands do not apply to nucleic acids, but the functionalities exist. Should specify corresponding atom names.
 
-
-## Further example JSONs for different applications
-Additional examples are broken up by use case. If you have cloned the
-repository, matching `.json` files are in `foundry/models/rfd3/docs/examples`
-that can be run directly, similar to the previous example. 
-
-In the examples, the paths to the input files are specified assuming
-that you are running the examples from the `foundry/models/rfd3/docs/examples`
-directory. If you would like to run RFD3 from a different location, 
-you will need to change the path in the `.json` file(s) before running.
-
-<table>
-  <tr>
-    <td align="center">
-      <h3><a href="./docs/examples/atom23_design.md">Multipolymer design</a></h3>
-      <img src="docs/.assets/multipolymer.png" height="150" />
-    </td>
-     <td align="center">
-      <h3><a href="./docs/examples/na_binder_design.md">Nucleic acid binder design</a></h3>
-      <img src="docs/.assets/dna.png" height="150" />
-    </td>
-    <td align="center">
-      <h3><a href="./docs/examples/protein_binder_design.md">Protein binder design</a></h3>
-      <img src="docs/.assets/ppi.png" height="150" />
-    </td>
-
-  </tr>
-  <tr>
-    <td align="center">
-      <h3><a href="./docs/examples/enzyme_design.md">Enzyme design</a></h3>
-      <img src="docs/.assets/enzyme.png" height="150" />
-    </td>
-    <td align="center">
-      <h3><a href="./docs/examples/symmetry.md">Symmetric design</a></h3>
-      <img src="docs/.assets/symm.png" height="150" />
-    </td>
-    <td align="center">
-      <h3><a href="./docs/examples/sm_binder_design.md">Small molecule binder design</a></h3>
-      <img src="docs/.assets/sm.png" height="150" />
-    </td>
-
-  </tr>
-</table>
 
 ## Training and Fine-Tuning
 
