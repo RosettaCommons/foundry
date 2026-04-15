@@ -1,5 +1,5 @@
 # @package _global_
-# Training configuration for RFD3
+# Training configuration for RFD3NA
 
 defaults:
   #- /debug/default

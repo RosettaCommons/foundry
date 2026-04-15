@@ -17,7 +17,7 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 load_dotenv(override=True)
 
-_config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rfd3/configs")
+_config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rfd3na/configs")
 
 _spawning_process_logger = logging.getLogger(__name__)
 
