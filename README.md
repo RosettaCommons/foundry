@@ -78,6 +78,16 @@ For an interactive Google Colab notebook walking through a basic design pipeline
 
 > *See [models/rfd3/README.md](models/rfd3/README.md) for complete documentation.*
 
+### RFdiffusion3NA (RFD3NA)
+
+[RFdiffusion3NA](https://www.biorxiv.org/content/10.1101/2025.09.18.676967v3) is an extension of RFDiffusion3 capable of designing also nucleic acid structures under complex constraints. 
+
+<div align="center">
+  <img src="models/rfd3na/docs/.assets/multipolymer.png" alt="RFdiffusion3NA multi polymer" width="400">
+</div>
+
+> *See [models/rfd3na/README.md](models/rfd3na/README.md) for complete documentation.*
+
 ### RosettaFold3 (RF3)
 
 [RF3](https://doi.org/10.1101/2025.08.14.670328) is a structure prediction neural network that narrows the gap between closed-source AF-3 and open-source alternatives.
