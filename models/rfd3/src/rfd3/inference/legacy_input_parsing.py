@@ -541,7 +541,8 @@ def accumulate_components(
                     np.ones(atom_array_insert.shape[0], dtype=int),
                 )
         else:
-            n = int(component)
+            ## foundry components update sends P for protein tokens
+            n = int(component[:-1])
             if n == 0 or unindexed_components_started:
                 res_id += n
                 continue

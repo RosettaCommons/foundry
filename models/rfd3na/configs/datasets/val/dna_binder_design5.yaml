@@ -1,0 +1,9 @@
+
+defaults:
+  - design_validation_base
+  - _self_
+
+dataset:
+  data: ${paths.data.design_benchmark_data_dir}/dna_binder.json
+  name: dna_binder_design
+  eval_every_n: 1

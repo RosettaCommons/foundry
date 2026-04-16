@@ -1,0 +1,21 @@
+# @package _global_
+
+# See: https://hydra.cc/docs/patterns/configuring_experiments/
+
+# to execute this experiment run:
+# python train.py +debug=train_single_example [any other arguments] 
+
+defaults:
+  - default
+  - gpu
+
+datasets: 
+  # you can add specific example IDs here to load a subset of the dataset (training)
+  subset_to_example_ids:
+    - "{['pdb', 'pn_units']}{3px1}{1}{['A_3']}"
+  val: null
+
+tags:
+  - debug
+  - train
+  - specific-examples

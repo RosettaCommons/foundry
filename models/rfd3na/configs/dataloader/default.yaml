@@ -1,0 +1,15 @@
+train: 
+  dataloader_params:
+    # These parameters will be unpacked as kwargs for the DataLoader
+    batch_size: 1
+    num_workers: 2
+    prefetch_factor: 3
+  n_fallback_retries: 4
+
+val: 
+  dataloader_params:
+    # These parameters will be unpacked as kwargs for the DataLoader
+    batch_size: 1
+    num_workers: 2
+    prefetch_factor: 3
+  n_fallback_retries: 0 # Disable fallback retries for validation

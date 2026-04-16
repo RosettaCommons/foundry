@@ -1,0 +1,9 @@
+
+defaults:
+  - unconditional
+  - _self_
+
+dataset:
+  data: ${paths.data.design_benchmark_data_dir}/unconditional_deep.json
+  name: unconditional-design-deep
+  eval_every_n: 8

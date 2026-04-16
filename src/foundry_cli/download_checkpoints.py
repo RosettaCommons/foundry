@@ -107,7 +107,7 @@ def install_model(model_name: str, checkpoint_dir: Path, force: bool = False) ->
     """Install a single model checkpoint.
 
     Args:
-        model_name: Name of the model (rfd3, rf3, mpnn)
+        model_name: Name of the model (rfd3, rfd3na, rf3, mpnn)
         checkpoint_dir: Directory to save checkpoints
         force: Overwrite existing checkpoint if it exists
     """
@@ -145,7 +145,7 @@ def install_model(model_name: str, checkpoint_dir: Path, force: bool = False) ->
 def install(
     models: list[str] = typer.Argument(
         ...,
-        help="Models to install: 'all', 'rfd3', 'rf3', 'mpnn', or a combination thereof",
+        help="Models to install: 'all', 'rfd3', 'rfd3na', 'rf3', 'mpnn', or a combination thereof",
     ),
     checkpoint_dir: Optional[Path] = typer.Option(
         None,
@@ -160,7 +160,7 @@ def install(
     """Install model checkpoints for foundry.
     Examples:
         foundry install all
-        foundry install rfd3 rf3
+        foundry install rfd3 rfd3na rf3
         foundry install proteinmpnn --checkpoint-dir ./checkpoints
     """
     # Determine checkpoint directory
@@ -173,7 +173,7 @@ def install(
     if "all" in models:
         models_to_install = list(REGISTERED_CHECKPOINTS.keys())
     elif "base-models" in models:
-        models_to_install = ["rfd3", "proteinmpnn", "ligandmpnn", "rf3"]
+        models_to_install = ["rfd3", "rfd3na", "proteinmpnn", "ligandmpnn", "rf3"]
     else:
         models_to_install = models
 

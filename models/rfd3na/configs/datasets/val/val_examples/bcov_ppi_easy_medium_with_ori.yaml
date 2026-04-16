@@ -1,0 +1,151 @@
+global_args:
+  infer_ori_strategy: hotspots
+
+insulinr:
+  input: /projects/ml/aa_design/benchmarks/bcov_af3_ppi_benchmark/insulin_target.pdb
+  contig: 100-100,/0,B1-150
+  contig_atoms: '{}'
+  length: 250-250
+  redesign_motif_sidechains: false
+  atom_level_hotspots:
+    B59:
+      CG,CZ: 1
+    B83:
+      CG,CZ: 1
+    B91:
+      CG,CZ: 1
+pdl1:
+  input: /projects/ml/aa_design/benchmarks/bcov_af3_ppi_benchmark/5o45_pdl1.pdb
+  contig: 100-100,/0,B1-115
+  contig_atoms: '{}'
+  length: 215-215
+  redesign_motif_sidechains: false
+  atom_level_hotspots:
+    B40:
+      CG,CZ: 1
+    B99:
+      CG,SD: 1
+    B107:
+      CG,CZ: 1
+vegfr:
+  input: /projects/ml/aa_design/benchmarks/bcov_af3_ppi_benchmark/vegfr_2x1w_and_af2_B.pdb
+  contig: 100-100,/0,B1-200
+  contig_atoms: '{}'
+  length: 300-300
+  redesign_motif_sidechains: false
+  atom_level_hotspots:
+    B13:
+      CG1,CG2: 1
+    B15:
+      CG,CZ: 1
+    B43:
+      CG,CZ: 1
+    B75:
+      CG,SD: 1
+    B89:
+      CD1,CG2: 1
+    B91:
+      CG1,CG2: 1
+    B187:
+      CG,CD1: 1
+rbd:
+  input: /projects/ml/aa_design/benchmarks/bcov_af3_ppi_benchmark/COVID19_target.pdb
+  contig: 100-100,/0,B1-195
+  contig_atoms: '{}'
+  length: 295-295
+  redesign_motif_sidechains: false
+  atom_level_hotspots:
+    B89:
+      CG,CZ: 1
+    B121:
+      CG,CZ: 1
+    B123:
+      CG,CD1: 1
+    B124:
+      CG,CZ: 1
+    B141:
+      CG,CZ: 1
+    B157:
+      CG,CZ: 1
+    B163:
+      CG,CZ: 1
+    B165:
+      CG,CZ: 1
+    B173:
+      CG,CZ: 1
+cd28:
+  input: /projects/ml/aa_design/benchmarks/bcov_af3_ppi_benchmark/cd28_1yjd_B.pdb
+  contig: 100-100,/0,B1-118
+  contig_atoms: '{}'
+  length: 218-218
+  redesign_motif_sidechains: false
+  atom_level_hotspots:
+    B51:
+      CG,CZ: 1
+    B61:
+      CG,CZ: 1
+    B99:
+      CG,SD: 1
+    B104:
+      CG,CZ: 1
+il2ra:
+  input: /projects/ml/aa_design/benchmarks/bcov_af3_ppi_benchmark/il2ra_1z92_B.pdb
+  contig: 100-100,/0,B1-122
+  contig_atoms: '{}'
+  length: 222-222
+  redesign_motif_sidechains: false
+  atom_level_hotspots:
+    B3:
+      CG,CD1: 1
+    B26:
+      CG,SD: 1
+    B43:
+      CG,CD1: 1
+    B44:
+      CG,CZ: 1
+    B46:
+      CG,CD1: 1
+il10ra:
+  input: /projects/ml/aa_design/benchmarks/bcov_af3_ppi_benchmark/il10rb_1lqs_B.pdb
+  contig: 100-100,/0,B1-207
+  contig_atoms: '{}'
+  length: 307-307
+  redesign_motif_sidechains: false
+  atom_level_hotspots:
+    B39:
+      CG,CD1: 1
+    B50:
+      CD1,CG2: 1
+    B59:
+      CG,CZ: 1
+    B63:
+      CA,CB: 1
+    B64:
+      CG1,CG2: 1
+    B66:
+      CG,CD1: 1
+tie2:
+  input: /projects/ml/aa_design/benchmarks/bcov_af3_ppi_benchmark/tie2_2gy5_official_B.pdb
+  contig: 100-100,/0,B1-188
+  contig_atoms: '{}'
+  length: 288-288
+  redesign_motif_sidechains: false
+  atom_level_hotspots:
+    B132:
+      CG1,CG2: 1
+    B134:
+      CG,CZ: 1
+    B135:
+      CG,CD: 1
+    B139:
+      CG,CZ: 1
+    B140:
+      CD1,CG2: 1
+    B154:
+      CG1,CG2: 1
+    B156:
+      CG,CD1: 1
+    B167:
+      CG,CZ: 1
+    B172:
+      CD1,CG2: 1

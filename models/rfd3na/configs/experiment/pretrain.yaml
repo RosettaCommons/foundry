@@ -1,0 +1,31 @@
+# @package _global_
+# Training configuration for RFD3
+
+name: train-base
+tags: [print-model]
+ckpt_path: null
+
+datasets:
+  diffusion_batch_size_train: 16
+  crop_size: 256
+  max_atoms_in_crop: 2560  # ~10x crop size.
+  global_transform_args:
+    train_conditions:
+      unconditional:
+        frequency: 2.0
+      island:
+        frequency: 2.0
+      sequence_design:
+        frequency: 0.5
+      tipatom:
+        frequency: 5.0
+      ppi:
+        frequency: 0.0
+  train:
+    # These are the ratios used in the preprint but we set all pdb sampling by default since not everyone might download the distillation data.
+    #pdb:
+      #probability: 0.10
+    #monomer_distillation:
+      #probability: 0.90
+    pdb:
+      probability: 1.0

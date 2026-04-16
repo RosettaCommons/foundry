@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - /debug/default
+  - override /logger: csv
+
+name: a14-debug
+tags:
+  - debug
+project: test
+ckpt_path: null
+
+trainer:
+  prevalidate: True

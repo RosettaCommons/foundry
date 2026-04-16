@@ -1,0 +1,46 @@
+defaults:
+  - base
+
+dataset:
+  dataset_parser:
+    _target_: atomworks.ml.datasets.parsers.InterfacesDFParser
+    base_dir: ${paths.data.pdb_data_dir}
+  dataset:
+    name: interface
+    data: ${paths.data.pdb_parquet_dir}/interfaces_df_train.parquet
+    filters:
+      # filters common across all PDB datasets
+      - "deposition_date < '2021-09-30'"
+      - "resolution < 9.0"
+      - "num_polymer_pn_units <= 300" 
+      - "cluster.notnull()"
+      # interface specific filters
+      - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+      - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+      - "is_inter_molecule"
+    columns_to_load:
+      # columns common across all PDB datasets
+      - example_id
+      - pdb_id
+      - assembly_id
+      - deposition_date
+      - resolution
+      - num_polymer_pn_units
+      - method
+      - cluster
+      - n_prot
+      - n_nuc
+      - n_ligand
+      - n_peptide
+      # interface specific columns
+      - pn_unit_1_iid
+      - pn_unit_2_iid
+      - pn_unit_1_non_polymer_res_names
+      - pn_unit_2_non_polymer_res_names
+      - is_inter_molecule
+      - all_pn_unit_iids_after_processing
+      - involves_loi
+  transform:
+    # interface-specific Transform pipeline parameters
+    crop_contiguous_probability: 0.0
+    crop_spatial_probability: 1.0

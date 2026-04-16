@@ -1,0 +1,212 @@
+defaults:
+  - bcov_ppi_easy_medium_with_ori
+  - _self_
+
+# Note: I have removed the more "internal" hotspot atoms on residues that also have
+# hbonds to avoid giving conflicting information with the h-bond conditioning.
+# For targets with no polar hotspots, I have inserted h-bond conditioning to nearby
+# residues.
+
+insulinr:
+  hbond_donors:
+    B113:
+      NH1,NH2: 1
+    B116:
+      NZ: 1
+    B139:
+      NE2: 1
+  hbond_acceptors:
+    B115:
+      OE2: 1 # OE1 is already h-bonded
+    B139:
+      ND1: 1
+
+  atom_level_hotspots:
+    B59:
+      CG,CZ: 1
+    B83:
+      CG,CZ: 1
+    B91:
+      CG,CZ: 1
+pdl1:
+  hbond_donors:
+    B107:
+      OH: 1
+    B109:
+      NH1,NH2: 1
+  hbond_acceptors:
+    B40:
+      OH: 1
+    B107:
+      OH: 1
+  atom_level_hotspots:
+    B40:
+      CZ: 1
+    B99:
+      CG,SD: 1
+    B107:
+      CZ: 1
+vegfr:
+  hbond_donors:
+    B15:
+      OH: 1
+    B43:
+      OH: 1
+  hbond_acceptors:
+    B9: # ASP
+      OD1,OD2: 1
+    B15:
+      OH: 1
+    B43:
+      OH: 1
+  atom_level_hotspots:
+    B13:
+      CG1,CG2: 1
+    B15:
+      CZ: 1
+    B43:
+      CZ: 1
+    B75:
+      CG,SD: 1
+    B89:
+      CD1,CG2: 1
+    B91:
+      CG1,CG2: 1
+    B187:
+      CG,CD1: 1
+rbd:
+  hbond_donors:
+    B89:
+      OH: 1
+    B121:
+      OH: 1
+    B141:
+      OH: 1
+  hbond_acceptors:
+    B157:
+      OH: 1
+    B163:
+      OH: 1
+    B173:
+      OH: 1
+  atom_level_hotspots:
+    B89:
+      CZ: 1
+    B121:
+      CZ: 1
+    B123:
+      CG,CD1: 1
+    B124:
+      CG,CZ: 1
+    B141:
+      CZ: 1
+    B157:
+      CZ: 1
+    B163:
+      CZ: 1
+    B165:
+      CG,CZ: 1
+    B173:
+      CZ: 1
+cd28:
+  hbond_donors:
+    B51:
+      OH: 1
+    B61:
+      OH: 1
+    B104:
+      OH: 1
+  hbond_acceptors:
+    B51:
+      OH: 1
+    B61:
+      OH: 1
+    B104:
+      OH: 1
+  atom_level_hotspots:
+    B51:
+      CZ: 1
+    B61:
+      CZ: 1
+    B99:
+      CG,SD: 1
+    B104:
+      CZ: 1
+il2ra:
+  hbond_donors:
+    B44:
+      OH: 1
+  hbond_acceptors:
+    B44:
+      OH: 1
+    B77: # HIS
+      ND1: 1
+    B2: # GLU
+      OE1,OE2: 1
+  atom_level_hotspots:
+    B3:
+      CG,CD1: 1
+    B26:
+      CG,SD: 1
+    B43:
+      CG,CD1: 1
+    B44:
+      CZ: 1
+    B46:
+      CG,CD1: 1
+il10ra:
+  hbond_donors:
+    B48: # ASN
+      ND2: 1
+    B59:
+      OH: 1
+  hbond_acceptors:
+    B48: # ASN
+      OD1: 1
+    B59:
+      OH: 1
+  atom_level_hotspots:
+    B39:
+      CG,CD1: 1
+    B50:
+      CD1,CG2: 1
+    B59:
+      CZ: 1
+    B63:
+      CA,CB: 1
+    B64:
+      CG1,CG2: 1
+    B66:
+      CG,CD1: 1
+tie2:
+  hbond_donors:
+    B134:
+      OH: 1
+    B135:
+      NZ: 1
+    B167:
+      OH: 1
+  hbond_acceptors:
+    B134:
+      OH: 1
+    B167:
+      OH: 1
+  atom_level_hotspots:
+    B132:
+      CG1,CG2: 1
+    B134:
+      CZ: 1
+    B135:
+      CD: 1
+    B139:
+      CG,CZ: 1
+    B140:
+      CD1,CG2: 1
+    B154:
+      CG1,CG2: 1
+    B156:
+      CG,CD1: 1
+    B167:
+      CZ: 1
+    B172:
+      CD1,CG2: 1

@@ -1,0 +1,38 @@
+defaults:
+  - pdb/base_transform_args@monomer_distillation
+  - _self_
+
+monomer_distillation:
+  dataset:
+    _target_: atomworks.ml.datasets.StructuralDatasetWrapper
+    save_failed_examples_to_dir: ${paths.data.failed_examples_dir}
+    # Explicitly do not load from cache.
+    # Dataset too big, and structures are small
+    cif_parser_args:
+      cache_dir: null
+      load_from_cache: False
+      save_to_cache: False
+
+    # metadata dataset
+    dataset:
+      _target_: atomworks.ml.datasets.PandasDataset
+      name: af2fb_distillation
+      id_column: example_id
+      data: ${paths.data.monomer_distillation_parquet_dir}/af2_distillation_facebook.parquet
+      columns_to_load:
+        - example_id
+        - path
+      
+    # metadata parser
+    dataset_parser:
+      _target_: atomworks.ml.datasets.parsers.GenericDFParser
+      pn_unit_iid_colnames: null
+  
+    transform:
+      _target_: ${datasets.pipeline_target}
+      is_inference: False
+      # protein_msa_dirs: [{"dir": "${paths.data.monomer_distillation_data_dir}/msa", "extension": ".a3m", "directory_depth": 2}]
+      # rna_msa_dirs: []
+      crop_contiguous_probability: 0.25
+      crop_spatial_probability: 0.75
+      b_factor_min: 70

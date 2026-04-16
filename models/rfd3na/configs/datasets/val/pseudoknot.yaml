@@ -1,0 +1,9 @@
+
+defaults:
+  - design_validation_base
+  - _self_
+
+dataset:
+  name: pseudoknot
+  eval_every_n: 1
+  data: ${paths.data.design_benchmark_data_dir}/pseudoknot.json
