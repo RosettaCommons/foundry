@@ -83,7 +83,6 @@ REGISTERED_CHECKPOINTS = {
         filename="rfd3na_1190.ckpt",
         description="RFdiffusion3NA checkpoint",
     ),
-
     "rfd3": RegisteredCheckpoint(
         url="https://files.ipd.uw.edu/pub/rfd3/rfd3_foundry_2025_12_01_remapped.ckpt",
         filename="rfd3_latest.ckpt",
