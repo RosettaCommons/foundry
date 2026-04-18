@@ -42,12 +42,8 @@ def _make_alanine_array_with_duplicate_atom_ids(n_residues=4):
     atoms.set_annotation("atom_id", atom_ids)
 
     # Annotations required by _cleanup_virtual_atoms_and_assign_atom_name_elements
-    atoms.set_annotation(
-        "is_motif_atom_with_fixed_seq", np.ones(n_atoms, dtype=bool)
-    )
-    atoms.set_annotation(
-        "is_motif_atom_unindexed", np.zeros(n_atoms, dtype=bool)
-    )
+    atoms.set_annotation("is_motif_atom_with_fixed_seq", np.ones(n_atoms, dtype=bool))
+    atoms.set_annotation("is_motif_atom_unindexed", np.zeros(n_atoms, dtype=bool))
     atoms.set_annotation("gt_atom_name", atoms.atom_name.copy())
 
     return atoms
