@@ -640,7 +640,7 @@ class DesignInputSpecification(BaseModel):
             ).astype(int)
 
             # ... Subset to residues only
-            atom_array_in = atom_array_in[atom_array_in.is_protein]
+            atom_array_in = atom_array_in[atom_array_in.is_protein | atom_array_in.is_dna | atom_array_in.is_rna]
 
             # ... Set chain ID for unindexed residues as whatever the input has
             start_resid = np.max(atom_array_in.res_id) + 1
