@@ -752,16 +752,43 @@ class DesignInputSpecification(BaseModel):
     def _set_origin(self, atom_array):
         """Set origin token and initialize coordinates."""
         if self.is_partial_diffusion:
-            # Partial diffusion: use COM, keep all coordinates
+            # Partial diffusion: keep all coordinates. Centering rules:
+            #   1. If symmetric: skip centering to preserve chain spacing.
+            #   2. If the user supplied `ori_token` or `infer_ori_strategy`,
+            #      honor it (same path as regular diffusion). Previously this
+            #      branch hard-coded `ori_token=None`, silently dropping the
+            #      user's request.
+            #   3. Otherwise default to centering on the diffused-region COM
+            #      (matches training `center_option=diffuse`). Centering on the
+            #      joint target+binder COM places the binder far from origin in
+            #      a frame the model never saw at training, biasing denoising
+            #      to drag the binder toward the target's COM.
             if exists(self.symmetry) and self.symmetry.id:
-                # For symmetric structures, avoid COM centering that would collapse chains
                 logger.info(
                     "Partial diffusion with symmetry: skipping COM centering to preserve chain spacing"
                 )
-            else:
+            elif exists(self.ori_token) or exists(self.infer_ori_strategy):
                 atom_array = set_com(
-                    atom_array, ori_token=None, infer_ori_strategy="com"
+                    atom_array,
+                    ori_token=self.ori_token,
+                    infer_ori_strategy=self.infer_ori_strategy,
                 )
+            else:
+                is_motif = atom_array.is_motif_atom_with_fixed_coord.astype(bool)
+                if is_motif.any() and (~is_motif).any():
+                    diffused_coord = atom_array.coord[~is_motif]
+                    finite = np.isfinite(diffused_coord).all(axis=-1)
+                    center = np.nan_to_num(
+                        np.mean(diffused_coord[finite], axis=0)
+                    )
+                    atom_array.coord = atom_array.coord - center
+                    logger.info(
+                        f"Partial diffusion: centering on diffused-region COM ({center})."
+                    )
+                else:
+                    atom_array = set_com(
+                        atom_array, ori_token=None, infer_ori_strategy="com"
+                    )
         else:
             # Standard: set ori token, zero out diffused atoms
             atom_array = set_com(
