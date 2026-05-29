@@ -73,6 +73,8 @@ dev = [
     "assertpy",
     "ruff==0.8.3",
     "ipdb",
+    # Type checking
+    "mypy>=1.13,<2",
     # Debugger/interactive
     "debugpy>=1.8.5,<2",
     "ipykernel>=6.29.4,<7",
@@ -200,6 +202,53 @@ ignore = [
 
 [tool.pyright]
 typeCheckingMode = "off"
+
+# Type checking ----------------------------------------------------------------------
+# Lenient baseline so the existing largely-unannotated code does not fail the gate.
+# Per-module strictness is ratcheted up via [tool.mypy.overrides] as annotations land.
+[tool.mypy]
+python_version = "3.12"
+files = ["src/foundry", "src/foundry_cli"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+# Modules with pre-existing type errors at bootstrap time. These are the track-1
+# ratchet list — fix the errors and remove the entry to enable type-checking for
+# that module. Do NOT add modules to this list; only remove from it.
+[[tool.mypy.overrides]]
+module = [
+    "foundry.callbacks.health_logging",
+    "foundry.callbacks.metrics_logging",
+    "foundry.callbacks.train_logging",
+    "foundry.common",
+    "foundry.hydra.resolvers",
+    "foundry.inference_engines.base",
+    "foundry.metrics.metric",
+    "foundry.trainers.fabric",
+    "foundry.utils.components",
+    "foundry.utils.datasets",
+    "foundry.utils.ddp",
+    "foundry.utils.rigid",
+    "foundry.utils.weights",
+    "foundry_cli.download_checkpoints",
+]
+ignore_errors = true
+
+# Testing ----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+
+[tool.coverage.run]
+source = ["src/foundry", "src/foundry_cli"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
 
 [dependency-groups]
 dev = [
