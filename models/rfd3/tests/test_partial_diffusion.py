@@ -58,12 +58,12 @@ def test_partial_diffusion_respects_ori_token():
     delta = aa_shift.coord.mean(axis=0) - aa_default.coord.mean(axis=0)
     # Coords are translated by -ori_token at parse time, so the post-parse
     # whole-structure mean must drop by ~50 Å on x.
-    assert delta[0] == pytest.approx(-50.0, abs=1.5), (
-        f"ori_token=[50,0,0] should shift coords by -50 in x; got delta={delta}"
-    )
-    assert abs(delta[1]) < 1.5 and abs(delta[2]) < 1.5, (
-        f"ori_token=[50,0,0] should not move y/z; got delta={delta}"
-    )
+    assert delta[0] == pytest.approx(
+        -50.0, abs=1.5
+    ), f"ori_token=[50,0,0] should shift coords by -50 in x; got delta={delta}"
+    assert (
+        abs(delta[1]) < 1.5 and abs(delta[2]) < 1.5
+    ), f"ori_token=[50,0,0] should not move y/z; got delta={delta}"
 
 
 @pytest.mark.fast
@@ -86,9 +86,9 @@ def test_partial_diffusion_defaults_to_diffused_region_com():
         pytest.skip("Test fixture has no separable motif/diffused split")
 
     diffused_com = aa.coord[~is_motif].mean(axis=0)
-    assert np.allclose(diffused_com, 0, atol=1e-3), (
-        f"diffused-region COM should be at origin after centering; got {diffused_com}"
-    )
+    assert np.allclose(
+        diffused_com, 0, atol=1e-3
+    ), f"diffused-region COM should be at origin after centering; got {diffused_com}"
 
 
 if __name__ == "__main__":

@@ -778,9 +778,7 @@ class DesignInputSpecification(BaseModel):
                 if is_motif.any() and (~is_motif).any():
                     diffused_coord = atom_array.coord[~is_motif]
                     finite = np.isfinite(diffused_coord).all(axis=-1)
-                    center = np.nan_to_num(
-                        np.mean(diffused_coord[finite], axis=0)
-                    )
+                    center = np.nan_to_num(np.mean(diffused_coord[finite], axis=0))
                     atom_array.coord = atom_array.coord - center
                     logger.info(
                         f"Partial diffusion: centering on diffused-region COM ({center})."
