@@ -227,12 +227,16 @@ module = [
     "foundry.hydra.resolvers",
     "foundry.inference_engines.base",
     "foundry.metrics.metric",
+    "foundry.model.layers.blocks",
     "foundry.trainers.fabric",
+    "foundry.training.schedulers",
     "foundry.utils.components",
     "foundry.utils.datasets",
     "foundry.utils.ddp",
+    "foundry.utils.logging",
     "foundry.utils.rigid",
     "foundry.utils.weights",
+    "foundry.utils.xpu.xpu_accelerator",
     "foundry_cli.download_checkpoints",
 ]
 ignore_errors = true
