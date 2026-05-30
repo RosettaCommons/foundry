@@ -85,7 +85,7 @@ Example on RNA. Similar to the ssDNA example, example 2.
 
 ### 5. Complex example based on a protein-dsDNA input pdb with parts of protein and dna partially fixed (indexed and unindexed), with Hbond conditioning
 
-This is a complex example which has a dsDNA specified in the contig: `C5-18` and `D24-37`. However, it also specifies an indexed protein motif component (`A146-154`) and diffuses the two flanks of the protein indexed region in the same chain. The diffused protein region has an unindexed motif specified via `"unindex": "/0,/0,B251-B255".` (*Note: the chain breaks applied are analogous to the contig string*). Parts of the DNA have been specified as fixed or to be sampled by RFD3 (`select_fixed_atoms`). Additionally hydrogen bond conditioning is applied to some backbone and base atoms of a few DNA bases.
+This is a complex example which has a dsDNA specified in the contig: `C5-18` and `D24-37`. However, it also specifies an indexed protein motif component (`A146-154`) and diffuses the two flanks of the protein indexed region in the same chain. The diffused protein region has an unindexed motif specified via `"unindex": "/0,/0,B251-255".` (*Note: the chain breaks applied are analogous to the contig string*). Parts of the DNA have been specified as fixed or to be sampled by RFD3 (`select_fixed_atoms`). Additionally hydrogen bond conditioning is applied to some backbone and base atoms of a few DNA bases.
 
 To run this without warnings, you will need to install [hbplus](https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/) to enable hydrogen bond metrics computation. This is discussed at the end of the RFD3 README, but the instructions are reproduced here for convenience:
 
