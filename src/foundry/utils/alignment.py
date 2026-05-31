@@ -57,7 +57,9 @@ def weighted_rigid_align(
     # Computation of the covariance matrix
     C = torch.einsum("bji,bjk->bik", w_resolved[..., None] * X_gt_resolved, X_resolved)
 
-    U, S, V = torch.linalg.svd(C)
+    # SVD has no bf16/half CUDA kernel and is numerically sensitive; compute the
+    # rotation in float32 and cast it back to the input dtype below.
+    U, S, V = torch.linalg.svd(C.float())
 
     R = U @ V
     B, _, _ = X_L.shape
@@ -71,7 +73,7 @@ def weighted_rigid_align(
 
     det = torch.linalg.det(R)
     F[..., -1, -1] = torch.sign(det)
-    R = U @ F @ V
+    R = (U @ F @ V).to(X_gt_L.dtype)
 
     X_gt_L = X_gt_L - u_X_gt.unsqueeze(-2)
     X_align_L = X_gt_L @ R + u_X.unsqueeze(-2)
