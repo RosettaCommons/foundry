@@ -102,7 +102,7 @@ class BaseInferenceEngine:
         self.transform_overrides = transform_overrides
         self.overrides: dict[str, Any] = {}
 
-        base_overrides = {
+        base_overrides: dict[str, Any] = {
             "trainer.seed": seed,
             "trainer.metrics": {},
             "trainer.loss": None,

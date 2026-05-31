@@ -25,7 +25,7 @@ def register_resolvers():
         OmegaConf.register_new_resolver(name, resolver)
 
 
-def resolve_import(module_path: str, attribute_path: str = None) -> Any:
+def resolve_import(module_path: str, attribute_path: str | None = None) -> Any:
     """
     Import a module and access a specific attribute from it.
 

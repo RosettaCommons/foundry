@@ -167,7 +167,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         files = list(self.save_dir.glob(pattern))
 
         # Track which example_id + dataset combinations we've already seen
-        seen_examples = set()
+        seen_examples: set[str] = set()
         final_dataframes = []
 
         for f in files:

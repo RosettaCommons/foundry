@@ -144,7 +144,7 @@ class LogAF3TrainingLossesCallback(BaseCallback):
         self.logger = RankedLogger(__name__, rank_zero_only=True)
 
         # This dict will store key -> MeanMetric() for each loss
-        self.loss_trackers = {}
+        self.loss_trackers: dict[str, MeanMetric] = {}
 
     def on_train_epoch_start(self, trainer):
         # Record the start time of the epoch

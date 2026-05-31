@@ -19,7 +19,7 @@ def run_once(fn: Callable) -> Callable:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         if getattr(wrapper, "_has_run", False):
             return
-        wrapper._has_run = True
+        setattr(wrapper, "_has_run", True)
         return fn(*args, **kwargs)
 
     return wrapper
