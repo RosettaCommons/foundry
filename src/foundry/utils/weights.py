@@ -6,7 +6,7 @@ from enum import StrEnum, auto
 from os import PathLike
 
 import torch
-from beartype.typing import Pattern
+from beartype.typing import Any, Pattern
 from torch import nn
 
 from foundry.utils.ddp import RankedLogger
@@ -52,7 +52,7 @@ class _PatternPolicyMixin:
         - "model.encoder.*.bias" matches any bias parameter in encoder submodules
     """
 
-    _compiled_patterns: dict[Pattern, any]
+    _compiled_patterns: dict[Pattern, Any]
 
     @staticmethod
     def _glob_to_regex(pattern: str) -> str:
@@ -65,7 +65,7 @@ class _PatternPolicyMixin:
             .replace("]", "]")
         )
 
-    def _compile_patterns(self, policy_dict: dict[str, any]) -> dict[Pattern, any]:
+    def _compile_patterns(self, policy_dict: dict[str, Any]) -> dict[Pattern, Any]:
         compiled = {}
         for pattern, value in list(policy_dict.items()):
             if any(c in pattern for c in ["*", "?", "[", "]"]):
@@ -74,8 +74,8 @@ class _PatternPolicyMixin:
         return compiled
 
     def _get_policy_by_pattern(
-        self, param_name: str, policy_dict: dict[str, any], default: any
-    ) -> any:
+        self, param_name: str, policy_dict: dict[str, Any], default: Any
+    ) -> Any:
         # Exact match first
         if policy_dict and param_name in policy_dict:
             return policy_dict[param_name]
@@ -250,8 +250,11 @@ def load_weights_with_policies(
             ranked_logger.warning(
                 f"Failed to apply policy: '{policy}' to '{name}': {str(e)}. Falling back to policy: '{config.fallback_policy}'."
             )
+            # __post_init__ normalises fallback_policy from str to the enum.
+            fallback_policy = config.fallback_policy
+            assert isinstance(fallback_policy, WeightLoadingPolicy)
             result = _apply_policy(
-                name, current_param, checkpoint_param, config.fallback_policy
+                name, current_param, checkpoint_param, fallback_policy
             )
             updated_state[name] = result
 

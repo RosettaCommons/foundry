@@ -92,8 +92,8 @@ def download_file(url: str, dest: Path, verify_hash: Optional[str] = None) -> No
                         hasher.update(chunk)
                     progress.update(task, advance=len(chunk))
 
-    # Verify hash if provided
-    if verify_hash:
+    # Verify hash if provided (hasher is non-None exactly when verify_hash is set)
+    if hasher is not None:
         computed_hash = hasher.hexdigest()
         if computed_hash != verify_hash:
             dest.unlink()  # Remove corrupted file
@@ -246,7 +246,7 @@ def clean(
         raise typer.Exit(0)
 
     console.print("[bold]Files to delete:[/bold]")
-    total_size = 0
+    total_size = 0.0
     for ckpt in sorted(checkpoint_files, key=str):
         size = ckpt.stat().st_size / (1024**3)  # GB
         total_size += size
