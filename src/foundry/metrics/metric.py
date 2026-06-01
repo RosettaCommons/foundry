@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 
 import hydra
-from atomworks.common import exists
 from atomworks.ml.utils import error, nested_dict
 from beartype.typing import Any
 from omegaconf import DictConfig
@@ -24,6 +23,8 @@ def instantiate_metric_manager(
     """
     metrics = {}
     for name, cfg in metrics_cfg.items():
+        # DictConfig.items() types keys as a str|bytes|int|... union; metric names are strings.
+        name = str(name)
         metric = hydra.utils.instantiate(cfg)
         if not isinstance(metric, Metric):
             raise TypeError(f"{name} must be a Metric instance")
@@ -125,7 +126,11 @@ class MetricManager:
 
         # Extract example_id if it exists
         example_id = nested_dict.get(
-            kwargs, key=("extra_info", "example_id"), default=None
+            # atomworks annotates `d` as dict[tuple[str, ...], Any] but navigates a
+            # nested dict[str, Any] by string keys — the annotation is wrong upstream.
+            kwargs,  # type: ignore[arg-type]
+            key=("extra_info", "example_id"),
+            default=None,
         )
 
         # Initialize results dictionary
@@ -200,13 +205,13 @@ class Metric(ABC):
     ) -> None:
         # Set required and prohibited tags
         self.required_tags_all = (
-            set(required_tags_all) if exists(required_tags_all) else set()
+            set(required_tags_all) if required_tags_all is not None else set()
         )
         self.required_tags_any = (
-            set(required_tags_any) if exists(required_tags_any) else set()
+            set(required_tags_any) if required_tags_any is not None else set()
         )
         self.prohibited_tags = (
-            set(prohibited_tags) if exists(prohibited_tags) else set()
+            set(prohibited_tags) if prohibited_tags is not None else set()
         )
         required_tags = self.required_tags_all.union(self.required_tags_any)
         if required_tags.intersection(self.prohibited_tags):
@@ -241,7 +246,9 @@ class Metric(ABC):
 
         return frozenset(self.kwargs_to_compute_args.values())
 
-    def compute_from_kwargs(self, **kwargs: Any) -> dict[str, Any]:
+    def compute_from_kwargs(
+        self, **kwargs: Any
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Run compute with an arbitrary dictionary of input keys and values.
 
         The 'kwargs_to_compute_args' property here will determine
@@ -255,15 +262,18 @@ class Metric(ABC):
                 if compute_arg in self.optional_kwargs:
                     # Optional parameter - only add if present
                     try:
+                        # nested_dict arg-type ignores: see note in MetricManager.__call__
                         compute_inputs[compute_arg] = nested_dict.getitem(
-                            kwargs, key=kwargs_key
+                            kwargs,  # type: ignore[arg-type]
+                            key=kwargs_key,
                         )
                     except KeyError:
                         pass  # Don't pass this parameter to compute()
                 else:
                     # Required parameter - use getitem (will raise if missing)
                     compute_inputs[compute_arg] = nested_dict.getitem(
-                        kwargs, key=kwargs_key
+                        kwargs,  # type: ignore[arg-type]
+                        key=kwargs_key,
                     )
         else:
             # If kwargs_to_compute_args is not defined, use kwargs directly
@@ -271,7 +281,7 @@ class Metric(ABC):
         return self.compute(**compute_inputs)
 
     @property
-    def kwargs_to_compute_args(self) -> dict[str, Any]:
+    def kwargs_to_compute_args(self) -> dict[str, Any] | None:
         """Map input keys to a flat dictionary.
 
         If not implemented, we return None, and pass the kwargs directly to the compute method.
