@@ -222,9 +222,6 @@ check_untyped_defs = false
 module = [
     "foundry.callbacks.health_logging",
     "foundry.trainers.fabric",
-    "foundry.utils.datasets",
-    "foundry.utils.ddp",
-    "foundry.utils.rigid",
 ]
 ignore_errors = true
 
