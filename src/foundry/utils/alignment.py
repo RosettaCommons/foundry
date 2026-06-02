@@ -61,7 +61,12 @@ def weighted_rigid_align(
 
     R = U @ V
     B, _, _ = X_L.shape
-    F = torch.eye(3, 3, device=X_L.device)[None].tile(
+    # F is the reflection correction for the Kabsch rotation: its last diagonal
+    # entry flips to -1 when det(R) < 0 so R stays a proper rotation. It feeds
+    # `U @ F @ V` below, where matmul requires a shared dtype — U and V carry
+    # X_L's dtype (SVD of an input-derived covariance), so F must too. torch.eye
+    # defaults to float32, so without dtype= float64 inputs raise a mismatch.
+    F = torch.eye(3, 3, device=X_L.device, dtype=X_L.dtype)[None].tile(
         (
             B,
             1,
