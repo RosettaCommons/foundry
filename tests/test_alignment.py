@@ -65,6 +65,24 @@ def test_float64_inputs_supported():
     assert aligned.dtype == torch.float64
     assert torch.allclose(aligned, X, atol=1e-10)
 
+def test_float64_coords_with_float32_weights():
+    """float64 coords + explicit float32 w_L: output is float64, alignment is correct.
+
+    w_L is cast inside the function (currently to float32, potentially to X_L.dtype
+    in future). Either way the weighted products promote to float64, so the output
+    dtype must follow the coordinate dtype, not the weight dtype.
+    """
+    torch.manual_seed(0)
+    X = torch.randn(1, 16, 3, dtype=torch.float64)
+    R = _rotation_about_z(1.0, dtype=torch.float64)
+    t = torch.tensor([3.0, -2.0, 5.0], dtype=torch.float64)
+    X_gt = X @ R.T + t
+
+    w = torch.ones(1, 16, dtype=torch.float32)  # deliberately mismatched dtype
+    aligned = weighted_rigid_align(X, X_gt, w_L=w)
+
+    assert aligned.dtype == torch.float64
+    assert torch.allclose(aligned, X, atol=1e-10)
 
 def test_output_is_detached_and_canonicalized():
     """Output is detached and a bare [L, 3] input is promoted to [1, L, 3]."""
