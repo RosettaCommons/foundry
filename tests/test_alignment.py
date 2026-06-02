@@ -65,6 +65,7 @@ def test_float64_inputs_supported():
     assert aligned.dtype == torch.float64
     assert torch.allclose(aligned, X, atol=1e-10)
 
+
 def test_float64_coords_with_float32_weights():
     """float64 coords + explicit float32 w_L: output is float64, alignment is correct.
 
@@ -83,6 +84,7 @@ def test_float64_coords_with_float32_weights():
 
     assert aligned.dtype == torch.float64
     assert torch.allclose(aligned, X, atol=1e-10)
+
 
 def test_output_is_detached_and_canonicalized():
     """Output is detached and a bare [L, 3] input is promoted to [1, L, 3]."""
