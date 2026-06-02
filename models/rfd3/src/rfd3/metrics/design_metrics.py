@@ -135,14 +135,13 @@ def get_all_backbone_metrics(
     )
 
     if verbose:
+        
         if compute_non_clash_metrics_for_diffused_region_only:
             # Subset to diffused region only
             atom_array = atom_array[~atom_array.is_motif_atom_with_fixed_coord]
 
-        # ... Add additional metrics
-        o |= get_ss_metrics_and_rg(
-            atom_array[~atom_array.is_motif_atom_with_fixed_coord]
-        )
+        # SS and Rg metrics
+        o |= get_ss_metrics_and_rg(atom_array)
 
         # Basic compositional statistics
         starts = get_token_starts(atom_array)
