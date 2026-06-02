@@ -215,15 +215,6 @@ warn_redundant_casts = true
 disallow_untyped_defs = false
 check_untyped_defs = false
 
-# Modules with pre-existing type errors at bootstrap time. These are the track-1
-# ratchet list — fix the errors and remove the entry to enable type-checking for
-# that module. Do NOT add modules to this list; only remove from it.
-[[tool.mypy.overrides]]
-module = [
-    "foundry.trainers.fabric",
-]
-ignore_errors = true
-
 # Testing ----------------------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]

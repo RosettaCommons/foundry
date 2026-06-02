@@ -21,7 +21,6 @@ from lightning.fabric.accelerators import Accelerator
 from lightning.fabric.loggers import Logger
 from lightning.fabric.strategies import DDPStrategy, Strategy
 from lightning.fabric.wrappers import (
-    _FabricDataLoader,
     _FabricModule,
     _FabricOptimizer,
 )
@@ -55,6 +54,13 @@ def is_interactive_environment() -> bool:
 
 
 class FabricTrainer(ABC):
+    # Heterogeneous, dynamically-keyed training state: model / optimizer / scheduler_cfg
+    # plus step & epoch counters and the train config, and extended with arbitrary
+    # checkpoint keys on load. A loose bag by design, not a fixed-shape struct.
+    state: dict[str, Any]
+    # Set by subclass training_step() implementations before on_train_batch_end fires.
+    _current_train_return: Any
+
     def __init__(
         self,
         *,
@@ -62,7 +68,7 @@ class FabricTrainer(ABC):
         strategy: str | Strategy = "ddp",
         devices_per_node: list[int] | int | str = "auto",
         num_nodes: int = 1,
-        precision: str | int = "bf16-mixed",
+        precision: str | int | None = "bf16-mixed",
         callbacks: BaseCallback | list[BaseCallback] | None = None,
         loggers: Logger | list[Logger] | None = None,
         max_epochs: int = 1000,
@@ -135,7 +141,9 @@ class FabricTrainer(ABC):
             accelerator = XPUAccelerator()
             precision_plugin = None
             if precision in ("16-mixed", "bf16-mixed"):
-                precision_plugin = XPUMixedPrecision(precision=precision)
+                precision_plugin = XPUMixedPrecision(
+                    precision=cast(Literal["16-mixed", "bf16-mixed"], precision)
+                )
                 precision = None  # Handled by plugin
             strategy = SingleXPUStrategy(precision_plugin=precision_plugin)
             ranked_logger.info("Using Intel XPU with SingleXPUStrategy")
@@ -149,7 +157,7 @@ class FabricTrainer(ABC):
                 find_unused_parameters=find_unused_parameters,
             )
         else:
-            strategy = "auto"  # type: ignore
+            strategy = "auto"
 
         # See (1) for initialization arguments for Fabric()
         self.fabric = L.Fabric(
@@ -157,7 +165,8 @@ class FabricTrainer(ABC):
             strategy=strategy,
             devices=devices_per_node,
             num_nodes=num_nodes,
-            precision=precision,
+            # Our public str | int API is wider than Fabric's precision Literal union.
+            precision=precision,  # type: ignore[arg-type]
             callbacks=callbacks,
             loggers=loggers,
         )
@@ -201,7 +210,7 @@ class FabricTrainer(ABC):
                 (for training or for inference). Default is an empty dictionary.
         """
         # Default values for the state
-        default_state = {
+        default_state: dict[str, Any] = {
             "model": None,
             "optimizer": None,
             "scheduler_cfg": None,
@@ -354,16 +363,22 @@ class FabricTrainer(ABC):
         )
 
         # ... setup training and validation dataloaders with Fabric
-        train_loader = self.fabric.setup_dataloaders(
-            # Our sampler is already distributed, so we don't need to wrap with a DistributedSampler
-            train_loader,
-            use_distributed_sampler=False,
+        train_loader = cast(
+            torch.utils.data.DataLoader,
+            self.fabric.setup_dataloaders(
+                # Our sampler is already distributed, so we don't need to wrap with a DistributedSampler
+                train_loader,
+                use_distributed_sampler=False,
+            ),
         )
 
         if val_loaders is not None:
             for key, loader in val_loaders.items():
-                val_loaders[key] = self.fabric.setup_dataloaders(
-                    loader, use_distributed_sampler=False
+                val_loaders[key] = cast(
+                    torch.utils.data.DataLoader,
+                    self.fabric.setup_dataloaders(
+                        loader, use_distributed_sampler=False
+                    ),
                 )
 
         self.setup_model_optimizers_and_schedulers()
@@ -384,8 +399,10 @@ class FabricTrainer(ABC):
                 ranked_logger.info(
                     f"Loading latest checkpoint within the directory {ckpt_path}..."
                 )
+                # We are resuming from a directory that should contain checkpoints;
+                # get_latest_checkpoint returns None only if it is empty (latent edge).
                 self.load_checkpoint(
-                    self.get_latest_checkpoint(ckpt_path),
+                    cast(Path, self.get_latest_checkpoint(ckpt_path)),
                     weight_loading_config=ckpt_config.weight_loading_config,
                     reset_optimizer=reset_optimizer,
                 )
@@ -398,7 +415,7 @@ class FabricTrainer(ABC):
                 )
 
             # Apply parameter freezing if a freezing config is provided
-            if getattr(ckpt_config, "parameter_freezing_config", None) is not None:
+            if ckpt_config.parameter_freezing_config is not None:
                 ranked_logger.info(
                     "Applying parameter freezing according to CheckpointConfig..."
                 )
@@ -493,7 +510,7 @@ class FabricTrainer(ABC):
     def train_loop(
         self,
         *,
-        train_loader: _FabricDataLoader,
+        train_loader: torch.utils.data.DataLoader,
         limit_batches: int | float = float("inf"),
     ):
         """Train model for a single epoch.
@@ -581,7 +598,7 @@ class FabricTrainer(ABC):
     def validation_loop(
         self,
         *,
-        val_loaders: dict[str, _FabricDataLoader],
+        val_loaders: dict[str, torch.utils.data.DataLoader],
         limit_batches: int | float = float("inf"),
     ):
         """Run validation loop for a single validation epoch.
@@ -911,7 +928,7 @@ class FabricTrainer(ABC):
             raise
 
     @staticmethod
-    def get_latest_checkpoint(ckpt_load_dir: Path) -> Path:
+    def get_latest_checkpoint(ckpt_load_dir: Path) -> Path | None:
         """Returns the latest checkpoint file from the given directory.
 
         Assumes that checkpoints are stored with filenames such that a standard string-based
