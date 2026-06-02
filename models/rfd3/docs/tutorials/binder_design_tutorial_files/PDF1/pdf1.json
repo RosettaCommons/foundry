@@ -1,0 +1,26 @@
+{
+        "test": {
+        "input": "./pdf1_sm.pdb",
+        "contig": "55-88,/0,B1-167,C1-1",
+        "length": "222-255",
+        "redesign_motif_sidechains": false,
+        "infer_ori_strategy": "hotspots",
+        "is_non_loopy": true,
+        "select_hotspots":
+                {"B64": "OE1,OE2,CD,CB,CG",
+		"B126": "CB,CD1,CD2,CG",
+		"B87": "CD1,CD2,CE1,CE2,CB,CZ,OH",
+		"B98": "CD1,CD2,CE1,CE2,CB,CZ,OH",
+		"B88": "CB,CG,OE1,NE2",
+		"B42": "CB,CD,CG,N",
+		"B44": "CB,CD1,CG1,CG2",
+		"C1": "C15,C16,C17,C18,O20,N21,C22,C23,C24,C25,O27"},
+        "select_hbond_donor":
+                {"B87": "OH",
+		"B98": "OH",
+		"B64": "OE1,OE2",
+		"B42": "N",
+		"C1": "O20,N21,O27"}
+        }
+}
+
