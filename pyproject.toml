@@ -220,7 +220,6 @@ check_untyped_defs = false
 # that module. Do NOT add modules to this list; only remove from it.
 [[tool.mypy.overrides]]
 module = [
-    "foundry.callbacks.health_logging",
     "foundry.trainers.fabric",
 ]
 ignore_errors = true
