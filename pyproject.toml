@@ -255,8 +255,6 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = [
     "rf3.callbacks.dump_validation_structures",
-    "rf3.callbacks.metrics_logging",
-    "rf3.data.extra_xforms",
     "rf3.data.ground_truth_template",
     "rf3.data.paired_msa",
     "rf3.data.pipeline_utils",
@@ -278,7 +276,6 @@ module = [
     "rf3.utils.inference",
     "rf3.utils.io",
     "rf3.utils.loss",
-    "rf3.utils.predict_and_score",
     "rf3.utils.predicted_error",
 ]
 ignore_errors = true

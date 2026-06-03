@@ -52,7 +52,7 @@ def patch_conformer_fallback_to_input_coords() -> None:
                 mol.AddConformer(conf, assignId=True)
         return result
 
-    _patched._input_coord_fallback_patched = True
+    setattr(_patched, "_input_coord_fallback_patched", True)
     _rdkit_utils.sample_rdkit_conformer_for_atom_array = _patched
     # af3_reference_molecule imports the function directly, so patch that reference too
     _af3_ref.sample_rdkit_conformer_for_atom_array = _patched

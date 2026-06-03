@@ -140,7 +140,9 @@ def predict_and_score_with_rf3(
                 annotate_b_factor_with_plddt=annotate_b_factor_with_plddt,
             )
 
-            # Extract results for this example
+            # Extract results for this example. run() returns a dict (never None)
+            # when out_dir is None, per its documented contract.
+            assert inference_results is not None
             result = inference_results[example_id]
 
             # Check for early stopping
