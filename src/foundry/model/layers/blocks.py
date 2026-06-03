@@ -5,6 +5,11 @@ pi = torch.acos(torch.zeros(1)).item() * 2
 
 
 class FourierEmbedding(nn.Module):
+    # Declared so type checkers see the registered buffers as Tensors rather
+    # than nn.Module's Tensor | Module attribute fallback.
+    w: torch.Tensor
+    b: torch.Tensor
+
     def __init__(self, c):
         super().__init__()
         self.c = c

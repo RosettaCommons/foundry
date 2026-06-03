@@ -6,7 +6,6 @@ import numpy as np
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from biotite.structure import AtomArray
 
-from foundry.common import exists
 from foundry.constants import (
     TIP_BY_RESTYPE,
 )
@@ -278,17 +277,18 @@ def get_name_mask(
         elif query_names.upper() == "BKBN":
             names = ["N", "CA", "C", "O"]
         elif query_names.upper() == "TIP":
-            if not exists(source_resname):
+            if source_resname is None:
                 raise ComponentValidationError(
                     "TIP selection requires a residue name.",
                     component=str(source_resname),
                 )
-            names = TIP_BY_RESTYPE[source_resname]
-            if not exists(names):
+            tip_names = TIP_BY_RESTYPE[source_resname]
+            if tip_names is None:
                 raise ComponentValidationError(
                     "Residue does not define TIP atoms; use ALL, BKBN, or explicit names.",
                     component=str(source_resname),
                 )
+            names = tip_names
         elif query_names == "":
             names = []
         else:

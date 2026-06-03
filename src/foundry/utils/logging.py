@@ -143,7 +143,7 @@ def print_config_tree(
 
     # Generate config tree in natural order
     for field in cfg:
-        branch = tree.add(field, style=style, guide_style=style)
+        branch = tree.add(str(field), style=style, guide_style=style)
 
         config_group = cfg[field]
         if isinstance(config_group, DictConfig):
@@ -188,7 +188,9 @@ def log_hyperparameters_with_all_loggers(
     """
     # If given a DictConfig, convert it to a dictionary
     if isinstance(cfg, DictConfig):
-        cfg = OmegaConf.to_container(cfg, resolve=True)
+        hparams = OmegaConf.to_container(cfg, resolve=True)
+    else:
+        hparams = cfg
 
     for logger in trainer.fabric.loggers:
         # ...log hyperparameters to each Fabric logger
@@ -197,7 +199,7 @@ def log_hyperparameters_with_all_loggers(
             logger, "log_hyperparams"
         ), f"Logger {logger} does not have a `log_hyperparams` method. Ensure that the logger is a subclass of Fabric's ABC `Logger`."
         try:
-            logger.log_hyperparams(cfg)
+            logger.log_hyperparams(hparams)
         except NotImplementedError:
             pass
 

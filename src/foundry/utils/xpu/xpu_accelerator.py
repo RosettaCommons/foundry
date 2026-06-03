@@ -13,8 +13,8 @@ class XPUAccelerator(Accelerator):
     PyTorch's native XPU support (torch.xpu).
     """
 
-    @property
-    def name(self) -> str:
+    @staticmethod
+    def name() -> str:
         """Return the name of this accelerator."""
         return "xpu"
 
