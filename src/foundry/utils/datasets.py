@@ -62,10 +62,14 @@ def wrap_dataset_and_sampler_with_fallbacks(
         tuple[Dataset, Sampler]: The wrapped dataset and sampler with fallbacks.
     """
     # Instantiate a new fallback sampler to avoid scaling issues
+    if "weights" in sampler_to_fallback_to:
+        # `.weights` lives on weighted samplers only; the base `Sampler` type doesn't expose it.
+        fallback_weights = sampler_to_fallback_to.weights  # type: ignore[attr-defined]
+    else:
+        # torch types `Dataset` without `__len__`, but map-style datasets provide it.
+        fallback_weights = torch.ones(len(dataset_to_fallback_to))  # type: ignore[arg-type]
     fallback_sampler = LazyWeightedRandomSampler(
-        weights=sampler_to_fallback_to.weights
-        if "weights" in sampler_to_fallback_to
-        else torch.ones(len(dataset_to_fallback_to)),
+        weights=fallback_weights,
         num_samples=int(1e9),
         replacement=True,  # replacement for fallback dataloading, so we can draw a huge number of samples
         generator=None,
@@ -85,7 +89,7 @@ def wrap_dataset_and_sampler_with_fallbacks(
     return wrapped_dataset, wrapped_sampler
 
 
-def instantiate_single_dataset_and_sampler(cfg: DictConfig | dict) -> dict[str, Any]:
+def instantiate_single_dataset_and_sampler(cfg: DictConfig) -> dict[str, Any]:
     """Instantiate a dataset and its corresponding sampler from a configuration dictionary.
 
     Args:
@@ -117,7 +121,8 @@ def instantiate_single_dataset_and_sampler(cfg: DictConfig | dict) -> dict[str, 
             f"No weights or sampler provided for dataset: {dataset_name}, using uniform weights with replacement."
         )
         sampler = WeightedRandomSampler(
-            weights=torch.ones(len(dataset)),
+            # torch types `weights` as `Sequence[float]`; a Tensor is accepted at runtime.
+            weights=torch.ones(len(dataset)),  # type: ignore[arg-type]
             num_samples=len(dataset),
             replacement=True,
         )
@@ -126,7 +131,7 @@ def instantiate_single_dataset_and_sampler(cfg: DictConfig | dict) -> dict[str, 
 
 
 def recursively_instantiate_datasets_and_samplers(
-    cfg: DictConfig | dict, name: str | None = None
+    cfg: DictConfig, name: str | None = None
 ) -> dict[str, Any]:
     """Recursively instantiate datasets and samplers from a configuration dictionary.
 
@@ -171,7 +176,8 @@ def recursively_instantiate_datasets_and_samplers(
             [info["sampler"].weights for info in datasets_info]
         )
         sampler = WeightedRandomSampler(
-            weights=concatenated_weights,
+            # torch types `weights` as `Sequence[float]`; a Tensor is accepted at runtime.
+            weights=concatenated_weights,  # type: ignore[arg-type]
             num_samples=len(concatenated_dataset),
             replacement=True,
         )
@@ -193,7 +199,7 @@ def recursively_instantiate_datasets_and_samplers(
             datasets_info.append(
                 {
                     **recursively_instantiate_datasets_and_samplers(
-                        nested_dataset_cfg, name=nested_dataset_name
+                        nested_dataset_cfg, name=str(nested_dataset_name)
                     ),
                     "probability": nested_dataset_cfg["probability"],
                 }
@@ -299,18 +305,18 @@ def assemble_distributed_loader(
     # ... wrap the composed dataset and sampler with a fallback mechanism, if needed
     if (
         "n_fallback_retries" in loader_cfg
-        and loader_cfg.n_fallback_retries > 0
+        and loader_cfg["n_fallback_retries"] > 0
         and sampler is not None
     ):
         ranked_logger.info(
-            f"Wrapping train dataset and sampler with {loader_cfg.n_fallback_retries} fallbacks..."
+            f"Wrapping train dataset and sampler with {loader_cfg['n_fallback_retries']} fallbacks..."
         )
         dataset, sampler = wrap_dataset_and_sampler_with_fallbacks(
             dataset_to_be_wrapped=dataset,
             sampler_to_be_wrapped=sampler,
             dataset_to_fallback_to=dataset,
             sampler_to_fallback_to=sampler,
-            n_fallback_retries=loader_cfg.n_fallback_retries,
+            n_fallback_retries=loader_cfg["n_fallback_retries"],
         )
 
     # ... assemble the final loader
@@ -318,7 +324,7 @@ def assemble_distributed_loader(
         dataset=dataset,
         sampler=sampler,
         collate_fn=lambda x: x,  # No collation
-        **loader_cfg.dataloader_params if "dataloader_params" in loader_cfg else {},
+        **loader_cfg["dataloader_params"] if "dataloader_params" in loader_cfg else {},
     )
 
     return loader
@@ -331,7 +337,8 @@ def subset_dataset_to_example_ids(
     """Subset a dataset to a specific set of example IDs."""
     indices = []
     for example_id in example_ids:
-        index = get_row_and_index_by_example_id(dataset, example_id)["index"]
+        # atomworks types the dataset arg as `ExampleIDMixin`; the datasets passed here mix it in.
+        index = get_row_and_index_by_example_id(dataset, example_id)["index"]  # type: ignore[arg-type]
         indices.append(index)
 
     return Subset(dataset, indices)
@@ -361,6 +368,8 @@ def assemble_val_loader_dict(
         if not val_dataset:
             # (Skip any None validation datasets; e.g., those overrode by the experiment config)
             continue
+        # DictConfig keys are typed as a broad union; coerce to the str they always are.
+        val_dataset_name = str(val_dataset_name)
 
         assert (
             "dataset" in val_dataset
@@ -378,7 +387,7 @@ def assemble_val_loader_dict(
                 key_to_balance in dataset.data.columns
             ), f"Key {key_to_balance} not found in dataset columns!"
 
-            sampler = LoadBalancedDistributedSampler(
+            sampler: Sampler = LoadBalancedDistributedSampler(
                 dataset=dataset,
                 num_replicas=world_size,
                 rank=rank,

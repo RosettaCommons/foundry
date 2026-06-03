@@ -9,8 +9,8 @@ from omegaconf import DictConfig
 logger = logging.getLogger(__name__)
 
 
-def get_current_rank() -> int:
-    """Returns the rank of the current process."""
+def get_current_rank() -> int | None:
+    """Returns the rank of the current process, or None if it is not yet set."""
     return getattr(rank_zero_only, "rank", None)
 
 
@@ -19,14 +19,14 @@ def is_rank_zero() -> bool:
     return get_current_rank() == 0
 
 
-def set_accelerator_based_on_availability(cfg: dict | DictConfig):
+def set_accelerator_based_on_availability(cfg: DictConfig) -> DictConfig:
     """Set training accelerator based on available hardware.
 
     Args:
         cfg: Hydra object with trainer settings "accelerator", "devices_per_node", and "num_nodes".
 
     Returns:
-        None; modifies the input `cfg` object in place.
+        The same `cfg` object, modified in place.
     """
     assert "trainer" in cfg, "Configuration object must have a 'trainer' key."
     for key in ["accelerator", "devices_per_node", "num_nodes"]:
@@ -78,7 +78,7 @@ class RankedLogger(logging.LoggerAdapter):
         super().__init__(logger=logger, extra=extra)
         self.rank_zero_only = rank_zero_only
 
-    def log(
+    def log(  # type: ignore[override]  # deliberately extends LoggerAdapter.log with a `rank` parameter
         self, level: int, msg: str, rank: int | None = None, *args, **kwargs
     ) -> None:
         """
@@ -94,7 +94,7 @@ class RankedLogger(logging.LoggerAdapter):
             kwargs: Any additional keyword args to pass to the underlying logging function.
         """
         if self.isEnabledFor(level):
-            msg, kwargs = self.process(msg, kwargs)
+            msg, log_kwargs = self.process(msg, kwargs)
             current_rank = getattr(rank_zero_only, "rank", None)
             if current_rank is None:
                 raise RuntimeError(
@@ -103,9 +103,9 @@ class RankedLogger(logging.LoggerAdapter):
             msg = rank_prefixed_message(msg, current_rank)
             if self.rank_zero_only:
                 if current_rank == 0:
-                    self.logger.log(level, msg, *args, **kwargs)
+                    self.logger.log(level, msg, *args, **log_kwargs)
             else:
                 if rank is None:
-                    self.logger.log(level, msg, *args, **kwargs)
+                    self.logger.log(level, msg, *args, **log_kwargs)
                 elif current_rank == rank:
-                    self.logger.log(level, msg, *args, **kwargs)
+                    self.logger.log(level, msg, *args, **log_kwargs)
