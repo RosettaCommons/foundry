@@ -208,12 +208,53 @@ typeCheckingMode = "off"
 # Per-module strictness is ratcheted up via [tool.mypy.overrides] as annotations land.
 [tool.mypy]
 python_version = "3.12"
-files = ["src/foundry", "src/foundry_cli"]
+files = ["src/foundry", "src/foundry_cli", "models/rfd3/src/rfd3"]
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 disallow_untyped_defs = false
 check_untyped_defs = false
+
+# rfd3 enablement ratchet. `models/rfd3` was brought into mypy's scope in 0010;
+# these modules had pre-existing type errors at that point and are exempted until
+# annotated. Fix the errors and remove the entry to enable type-checking for that
+# module (same playbook as the now-cleared src/foundry ratchet). Do NOT add modules.
+[[tool.mypy.overrides]]
+module = [
+    "rfd3.engine",
+    "rfd3.inference.datasets",
+    "rfd3.inference.input_parsing",
+    "rfd3.inference.legacy_input_parsing",
+    "rfd3.inference.parsing",
+    "rfd3.inference.symmetry.symmetry_utils",
+    "rfd3.metrics.design_metrics",
+    "rfd3.model.RFD3",
+    "rfd3.model.inference_sampler",
+    "rfd3.model.layers.block_utils",
+    "rfd3.model.layers.chunked_pairwise",
+    "rfd3.run_inference",
+    "rfd3.testing.testing_utils",
+    "rfd3.trainer.dump_validation_structures",
+    "rfd3.trainer.fabric_trainer",
+    "rfd3.trainer.rfd3",
+    "rfd3.trainer.trainer_utils",
+    "rfd3.transforms.conditioning_base",
+    "rfd3.transforms.design_transforms",
+    "rfd3.transforms.dna_crop",
+    "rfd3.transforms.hbonds",
+    "rfd3.transforms.hbonds_hbplus",
+    "rfd3.transforms.ncaa_transforms",
+    "rfd3.transforms.pipelines",
+    "rfd3.transforms.ppi_transforms",
+    "rfd3.transforms.rasa",
+    "rfd3.transforms.training_conditions",
+    "rfd3.transforms.util_transforms",
+    "rfd3.transforms.virtual_atoms",
+    "rfd3.utils.inference",
+    "rfd3.utils.io",
+    "rfd3.utils.vizualize",
+]
+ignore_errors = true
 
 # Testing ----------------------------------------------------------------------------
 [tool.pytest.ini_options]
