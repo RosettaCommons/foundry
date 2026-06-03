@@ -221,7 +221,6 @@ check_untyped_defs = false
 [[tool.mypy.overrides]]
 module = [
     "foundry.callbacks.health_logging",
-    "foundry.metrics.metric",
     "foundry.trainers.fabric",
     "foundry.utils.datasets",
     "foundry.utils.ddp",
