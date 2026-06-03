@@ -275,7 +275,6 @@ module = [
     "rf3.trainers.rf3",
     "rf3.utils.inference",
     "rf3.utils.io",
-    "rf3.utils.loss",
     "rf3.utils.predicted_error",
 ]
 ignore_errors = true

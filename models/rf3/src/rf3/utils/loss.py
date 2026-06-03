@@ -1,7 +1,9 @@
 import torch
 
 
-def convert_batched_losses_to_list_of_dicts(loss_dict: dict[str, torch.Tensor]):
+def convert_batched_losses_to_list_of_dicts(
+    loss_dict: dict[str, torch.Tensor],
+) -> list[dict[str, int | float]]:
     """Converts a dictionary of batched and non-batched loss tensors into a list of dictionaries.
 
     Args:
@@ -26,12 +28,12 @@ def convert_batched_losses_to_list_of_dicts(loss_dict: dict[str, torch.Tensor]):
          {'batch_idx': 1, 'diffusion_loss': 0.0062, 'smoothed_lddt_loss': 0.2797, 't': 9.3498},
          {'distogram_loss': 1.7663, 'total_loss': 1.2281}]
     """
-    result = []
+    result: list[dict[str, int | float]] = []
     batch_size = next((v.size(0) for v in loss_dict.values() if v.dim() == 1), 1)
 
     # Create a dictionary for each batch index
     for batch_idx in range(batch_size):
-        batch_dict = {"batch_idx": batch_idx}
+        batch_dict: dict[str, int | float] = {"batch_idx": batch_idx}
 
         for key, value in loss_dict.items():
             if value.dim() == 1:  # Check if the tensor is batched
@@ -40,7 +42,7 @@ def convert_batched_losses_to_list_of_dicts(loss_dict: dict[str, torch.Tensor]):
         result.append(batch_dict)
 
     # Create a dictionary for non-batched losses
-    non_batched_dict = {}
+    non_batched_dict: dict[str, int | float] = {}
     for key, value in loss_dict.items():
         if value.dim() == 0:  # Check if the tensor is not batched
             non_batched_dict[key] = value.item()
