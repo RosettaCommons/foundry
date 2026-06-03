@@ -208,7 +208,7 @@ typeCheckingMode = "off"
 # Per-module strictness is ratcheted up via [tool.mypy.overrides] as annotations land.
 [tool.mypy]
 python_version = "3.12"
-files = ["src/foundry", "src/foundry_cli", "models/rfd3/src/rfd3"]
+files = ["src/foundry", "src/foundry_cli", "models/rfd3/src/rfd3", "models/rf3/src/rf3"]
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
@@ -245,6 +245,41 @@ module = [
     "rfd3.utils.inference",
     "rfd3.utils.io",
     "rfd3.utils.vizualize",
+]
+ignore_errors = true
+
+# rf3 enablement ratchet. `models/rf3` was brought into mypy's scope in 0014;
+# these modules had pre-existing type errors at that point and are exempted until
+# annotated. Fix the errors and remove the entry to enable type-checking for that
+# module (same playbook as the rfd3 ratchet above). Do NOT add modules.
+[[tool.mypy.overrides]]
+module = [
+    "rf3.callbacks.dump_validation_structures",
+    "rf3.callbacks.metrics_logging",
+    "rf3.data.extra_xforms",
+    "rf3.data.ground_truth_template",
+    "rf3.data.paired_msa",
+    "rf3.data.pipeline_utils",
+    "rf3.data.pipelines",
+    "rf3.inference",
+    "rf3.inference_engines.rf3",
+    "rf3.metrics.chiral",
+    "rf3.metrics.clashing_chains",
+    "rf3.metrics.distogram",
+    "rf3.metrics.lddt",
+    "rf3.metrics.metadata",
+    "rf3.metrics.predicted_error",
+    "rf3.metrics.rasa",
+    "rf3.metrics.selected_distances",
+    "rf3.model.RF3",
+    "rf3.model.layers.af3_diffusion_transformer",
+    "rf3.symmetry.resolve",
+    "rf3.trainers.rf3",
+    "rf3.utils.inference",
+    "rf3.utils.io",
+    "rf3.utils.loss",
+    "rf3.utils.predict_and_score",
+    "rf3.utils.predicted_error",
 ]
 ignore_errors = true
 
