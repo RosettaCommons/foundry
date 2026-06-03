@@ -485,7 +485,7 @@ A hotspot is a residue that is part of the interface between the given and desig
 
 (binder_design_motif_def)=
 ### Motif
-A 'motif' in the context of protein design is 
+A 'motif' in the context of protein design is a defined structural or functional unit that we want to preserve in our designs. For RFD3, specifically, a motif is the input structure (or a portion of the input structure) that we specify in our contig string so that RFD3 can design around it. 
 
 (binder_design_ori_def)=
 ### ORI token 
