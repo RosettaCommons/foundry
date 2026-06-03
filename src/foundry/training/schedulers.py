@@ -74,7 +74,7 @@ class SchedulerConfig:
         frequency (int): The frequency of applying the scheduler. For example, a frequency of 1 means the scheduler is applied every epoch. Defaults to 1.
     """
 
-    scheduler: LRScheduler = None
+    scheduler: LRScheduler
     interval: str = "step"
     frequency: int = 1
 
