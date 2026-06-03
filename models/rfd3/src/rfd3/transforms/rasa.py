@@ -63,7 +63,8 @@ class SetZeroOccOnDeltaRASA(Transform):
     Used to measure if the atomwise RASA changed during cropping
     """
 
-    requires_previous_transforms = [CalculateRASA]
+    # atomworks Transform types this list[str]; class refs are also accepted.
+    requires_previous_transforms = [CalculateRASA]  # type: ignore[list-item]
     incompatible_previous_transforms = [
         "PadWithVirtualAtoms",  # must have the same atom names
         "CreateDesignReferenceFeatures",

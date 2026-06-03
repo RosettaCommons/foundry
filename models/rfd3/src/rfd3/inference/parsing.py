@@ -33,7 +33,7 @@ class InputSelection(BaseModel):
         ..., description="Validated selection dictionary", exclude=True
     )
     raw: Any = Field(..., description="Original input value")
-    mask: np.ndarray[np.bool_] = Field(
+    mask: np.ndarray[Any, np.dtype[np.bool_]] = Field(
         ..., description="Boolean mask over atom array", exclude=True
     )
     tokens: Optional[Dict[ComponentStr | str, AtomArray]] = Field(

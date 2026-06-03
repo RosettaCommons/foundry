@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import hydra
@@ -206,7 +207,7 @@ def build_pipelines(
     standardize_crop_size: bool = True,
     **transform_kwargs,
 ):
-    pipes = {}
+    pipes: dict[bool, Any] = {}
     for is_validation in [True, False]:
         if composed_config is None:
             config = load_train_or_val_cfg(name=cfg_name, is_val_cfg=is_validation)
