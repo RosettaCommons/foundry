@@ -320,6 +320,8 @@ class ChunkedPairwiseEmbedder:
         # 3. Single embedding terms
         if self._sl_cached is not None:
             # Fast path: MLP already run at tokenisation — just index into the result.
+            # _sl_cached and _sm_cached are populated together (see process_single_*).
+            assert self._sm_cached is not None
             # sl_cached [L, c_atompair]: query atom l always maps to row l.
             single_l = self._sl_cached.unsqueeze(0).unsqueeze(2).expand(B, -1, k, -1)
             # sm_cached [L, c_atompair]: key atoms are given by valid_indices [B, L, k].

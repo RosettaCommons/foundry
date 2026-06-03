@@ -402,7 +402,7 @@ def build_index_mask(
 
 def extend_index_mask_with_neighbours(
     mask: torch.Tensor, D_LL: torch.Tensor, k: int
-) -> torch.LongTensor:
+) -> torch.Tensor:
     """
     Parameters
     ----------
