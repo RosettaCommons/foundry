@@ -15,23 +15,31 @@ class SelectedAtomByAtomDistances(Metric):
 
     def compute_from_kwargs(self, **kwargs: Any) -> dict[str, Any]:
         """Override parent class to handle optional selection_strings parameter"""
+        # atomworks annotates nested_dict.getitem's dict param as dict[tuple[str, ...], Any]
+        # but it navigates a nested dict[str, Any] by a tuple-path key — the annotation is
+        # wrong upstream, so the dict argument takes an arg-type ignore at each call.
         compute_inputs = {
             "atom_array_stack": nested_dict.getitem(
-                kwargs, key="predicted_atom_array_stack"
+                kwargs,  # type: ignore[arg-type]
+                key=("predicted_atom_array_stack",),
             )
         }
 
         # Add selection_strings only if it exists
         try:
             compute_inputs["selection_strings"] = nested_dict.getitem(
-                kwargs, key=("extra_info", "selection_strings")
+                kwargs,  # type: ignore[arg-type]
+                key=("extra_info", "selection_strings"),
             )
         except (KeyError, IndexError, TypeError):
             pass
 
         return self.compute(**compute_inputs)
 
-    def compute(
+    # Metric.compute is declared `(self, **kwargs)` and always invoked by keyword via
+    # compute_from_kwargs; subclasses refine it with explicit keyword params by design
+    # (see the base docstring), which mypy reports as an LSP override violation.
+    def compute(  # type: ignore[override]
         self,
         atom_array_stack: AtomArrayStack,
         selection_strings: list[str] | None = None,
