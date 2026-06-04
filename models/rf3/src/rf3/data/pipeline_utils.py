@@ -75,20 +75,23 @@ def build_ground_truth_distogram_transform(
     """
     mask_and_sampling_fns = []
     if is_inference:
-        # Use constant noise scales for inference, rather than sampling (no stochasticity)
-        if template_noise_scales["atomized"] is not None:
+        # Use constant noise scales for inference, rather than sampling (no stochasticity).
+        # The scales are bound as lambda defaults so the `is not None` narrowing reaches the
+        # closure body (mypy does not narrow values re-indexed inside the lambda).
+        atomized_scale = template_noise_scales["atomized"]
+        if atomized_scale is not None:
             mask_and_sampling_fns.append(
                 (
                     lambda arr: arr.atomize,
-                    lambda size: torch.ones(size) * template_noise_scales["atomized"],
+                    lambda size, scale=atomized_scale: torch.ones(size) * scale,
                 )
             )
-        if template_noise_scales["not_atomized"] is not None:
+        not_atomized_scale = template_noise_scales["not_atomized"]
+        if not_atomized_scale is not None:
             mask_and_sampling_fns.append(
                 (
                     lambda arr: ~arr.atomize,
-                    lambda size: torch.ones(size)
-                    * template_noise_scales["not_atomized"],
+                    lambda size, scale=not_atomized_scale: torch.ones(size) * scale,
                 )
             )
     else:

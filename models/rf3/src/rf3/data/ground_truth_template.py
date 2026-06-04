@@ -217,7 +217,7 @@ def featurize_noised_ground_truth_as_template_distogram(
     *,
     noise_scale: Float[Tensor, "n_token"] | float,
     distogram_bins: Float[Tensor, "n_bin_edges"],
-    allowed_chain_types: list[ChainType],
+    allowed_chain_types: list[ChainType] | None,
     is_unconditional: bool = True,
     p_condition_per_token: float = 0.0,
     p_provide_inter_molecule_distances: float = 0.0,
@@ -233,8 +233,9 @@ def featurize_noised_ground_truth_as_template_distogram(
             Different tokens may have different noise scales (e.g. one noise scale for
             side-chains, one for ligand atoms and one for backbone atoms).
             Units are in Angstrom. If given as tensor, must be of shape [n_token] (float).
-        allowed_chain_types (list): List of allowed chain types. Only token pairs where BOTH
-            tokens have a chain type in this list will have a distogram condition.
+        allowed_chain_types (list | None): List of allowed chain types. Only token pairs where BOTH
+            tokens have a chain type in this list will have a distogram condition. ``None`` matches
+            no chain type, disabling conditioning.
         distogram_bins (Tensor): Bins for discretizing distances in the distogram (in Angstrom).
             Shape: [n_bin].
         is_unconditional (bool): Whether we are sampling unconditionally.
@@ -392,7 +393,8 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
             af3_noise_scale_distribution.
         distogram_bins (Tensor): Bin boundaries for discretizing distances in
             the distogram. Shape [n_bins-1].
-        allowed_chain_types (list): List of allowed chain types. Default is all chain types.
+        allowed_chain_types (list | None): List of allowed chain types. Default is all chain types;
+            ``None`` disables conditioning.
         p_condition_per_token (float): Per-token probability of conditioning, for those tokens that satisfy all other conditions.
             Default is 0.0 (no conditioning).
         p_provide_inter_molecule_distances (float): Probability of providing inter-molecule (inter-chain) distances.
@@ -417,7 +419,7 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
         noise_scale_distribution: NoiseScaleSampler
         | TokenGroupNoiseScaleSampler = af3_noise_scale_distribution,
         distogram_bins: torch.Tensor = DEFAULT_DISTOGRAM_BINS,
-        allowed_chain_types: list[ChainType] = ChainType.get_all_types(),
+        allowed_chain_types: list[ChainType] | None = ChainType.get_all_types(),
         p_condition_per_token: float = 0.0,
         p_provide_inter_molecule_distances: float = 0.0,
         existing_annotation_to_check: str = "is_input_file_templated",
