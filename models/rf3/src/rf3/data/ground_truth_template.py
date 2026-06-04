@@ -15,16 +15,16 @@ from atomworks.ml.utils.token import (
     get_af3_token_center_masks,
     get_token_starts,
 )
-from beartype.typing import Any, Callable, Final, Sequence
+from beartype.typing import Any, Callable, Final, Sequence, cast
 from biotite.structure import AtomArray
-from jaxtyping import Bool, Float, Shaped
+from jaxtyping import Bool, Float
 from torch import Tensor
 
 from foundry.utils.torch import assert_no_nans
 
 logger = logging.getLogger(__name__)
 
-MaskingFunction = Callable[[AtomArray], Bool[Shaped, "n"]]
+MaskingFunction = Callable[[AtomArray], Bool[np.ndarray, "n"]]
 """A function that takes in an AtomArray and returns a boolean mask."""
 
 NoiseScaleSampler = Callable[[Sequence[int]], Float[Tensor, "..."] | float]
@@ -122,7 +122,7 @@ def wrapped_normal(
 
 
 def af3_noise_scale_to_noise_level(
-    noise_scale: Tensor | float, eps: int = 1e-8
+    noise_scale: Tensor | float, eps: float = 1e-8
 ) -> Tensor:
     """Converts AlphaFold3 noise scale (t^) in Angstroms to noise level (t).
 
@@ -272,9 +272,12 @@ def featurize_noised_ground_truth_as_template_distogram(
     # Sample Gaussian noise according to the noise scale for each token
     # NOTE: If a scalar noise scale is provided, it will be broadcasted to all tokens
     # NOTE: We sample noise independently for each token; no two tokens will have the exact same noise
-    noise = torch.normal(mean=0.0, std=1.0, size=(_n_token, 3)) * noise_scale.unsqueeze(
-        -1
-    )
+    # The built-in samplers return a per-token Tensor; cast narrows away the `float`
+    # branch of the union (a real scalar would not support `.unsqueeze`).
+    noise_scale_t = cast(Tensor, noise_scale)
+    noise = torch.normal(
+        mean=0.0, std=1.0, size=(_n_token, 3)
+    ) * noise_scale_t.unsqueeze(-1)
 
     # Get the center coordinates of the tokens (CA for proteins, C1' for nucleic acids), and add noise
     center_token_mask = get_af3_token_center_masks(atom_array)  # [n_atom] (bool)
@@ -283,8 +286,10 @@ def featurize_noised_ground_truth_as_template_distogram(
     )  # [n_token, 3] (float)
 
     # Create a mask of supported chain types...
+    # `allowed_chain_types=None` disables conditioning; np.isin against an empty list
+    # yields the same all-False mask as the historical `np.isin(..., None)`.
     tokens_with_supported_chain_types_mask = np.isin(
-        atom_array.chain_type[center_token_mask], allowed_chain_types
+        atom_array.chain_type[center_token_mask], allowed_chain_types or []
     )  # [n_token] (bool)
 
     # ... and mask of tokens with resolved center atoms
@@ -412,7 +417,8 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
             [n_token, n_token, n_bins] (float)
     """
 
-    requires_previous_transforms = [AtomizeByCCDName]
+    # atomworks Transform types this list[str]; class refs are also accepted.
+    requires_previous_transforms = [AtomizeByCCDName]  # type: ignore[list-item]
 
     def __init__(
         self,
@@ -439,12 +445,15 @@ class FeaturizeNoisedGroundTruthAsTemplateDistogram(Transform):
     def forward(self, data: dict[str, Any]) -> dict[str, Any]:
         atom_array = data["atom_array"]
 
+        noise_scale: Tensor | float
         if isinstance(self.noise_scale_distribution, TokenGroupNoiseScaleSampler):
             # ... different noise scale for each token group
             noise_scale = self.noise_scale_distribution(atom_array)  # [n_token] (float)
         else:
             # ... same noise scale for all tokens
-            noise_scale = self.noise_scale_distribution(size=(1,))  # [1] (float)
+            # Samplers take the shape via a `size=` keyword (see the NoiseScaleSampler
+            # examples); the Callable alias can't name the parameter, so mypy flags it.
+            noise_scale = self.noise_scale_distribution(size=(1,))  # type: ignore[call-arg]
 
         template_features = featurize_noised_ground_truth_as_template_distogram(
             atom_array=atom_array,

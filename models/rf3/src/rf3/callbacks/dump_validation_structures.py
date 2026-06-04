@@ -2,7 +2,7 @@ from os import PathLike
 from pathlib import Path
 
 from atomworks.ml.example_id import parse_example_id
-from beartype.typing import Any, cast
+from beartype.typing import Any, Literal, cast
 from rf3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
     dump_structures,
@@ -76,7 +76,9 @@ class DumpValidationStructuresCallback(BaseCallback):
             return path / f"{identifier}{extra}"
 
         # Determine file type based on compression setting
-        file_type = "cif.gz" if self.compress_outputs else "cif"
+        file_type: Literal["cif", "cif.gz"] = (
+            "cif.gz" if self.compress_outputs else "cif"
+        )
 
         if self.dump_predictions:
             atom_array_stack = build_stack_from_atom_array_and_batched_coords(

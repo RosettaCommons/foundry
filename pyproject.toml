@@ -254,7 +254,6 @@ ignore_errors = true
 # module (same playbook as the rfd3 ratchet above). Do NOT add modules.
 [[tool.mypy.overrides]]
 module = [
-    "rf3.data.ground_truth_template",
     "rf3.data.paired_msa",
     "rf3.data.pipelines",
     "rf3.inference_engines.rf3",
@@ -265,7 +264,6 @@ module = [
     "rf3.model.RF3",
     "rf3.trainers.rf3",
     "rf3.utils.inference",
-    "rf3.utils.io",
     "rf3.utils.predicted_error",
 ]
 ignore_errors = true
