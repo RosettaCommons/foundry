@@ -2210,6 +2210,8 @@ class MPNNInferenceOutput:
             - 'batch_idx'
             - 'design_idx'
             - 'designed_sequence'
+            - 'overall_confidence'
+            - 'ligand_confidence'
             - 'sequence_recovery'
             - 'ligand_interface_sequence_recovery'
             - 'model_type'
@@ -2366,6 +2368,15 @@ class MPNNInferenceOutput:
         if name_fields:
             decorated_name = "_".join(name_fields)
             header_fields.append(decorated_name)
+
+        # Construct the confidence fields for the header (exp(-NLL) of the
+        # sampled sequence; mirrors LigandMPNN's overall/ligand confidence).
+        overall_confidence = self.output_dict.get("overall_confidence")
+        ligand_confidence = self.output_dict.get("ligand_confidence")
+        if overall_confidence is not None:
+            header_fields.append(f"overall_confidence={float(overall_confidence):.4f}")
+        if ligand_confidence is not None:
+            header_fields.append(f"ligand_confidence={float(ligand_confidence):.4f}")
 
         # Construct the recovery fields for the header.
         if sequence_recovery is not None:

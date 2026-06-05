@@ -236,7 +236,13 @@ class FeaturizeUserSettings(Transform):
                     "input_features": [
                         "mask_for_loss",
                     ],
-                    "decoder_features": ["log_probs", "S_sampled", "S_argmax"],
+                    # 'logits' are needed to compute un-temperatured confidence.
+                    "decoder_features": [
+                        "log_probs",
+                        "S_sampled",
+                        "S_argmax",
+                        "logits",
+                    ],
                 }
 
         # Save the scalar settings.

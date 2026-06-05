@@ -367,3 +367,55 @@ class InterfaceNLL(NLL):
             interface_metrics[f"interface_{key}"] = value
 
         return interface_metrics
+
+
+class SampledNLL(NLL):
+    """NLL / confidence of the *sampled* (designed) sequence.
+
+    Unlike :class:`NLL` (which scores the native sequence as a training
+    metric), this scores the sampled sequence under the model's
+    un-temperatured, un-biased log-probabilities (``log_softmax`` of the raw
+    logits). This matches the "overall_confidence" reported by the original
+    LigandMPNN, where ``confidence = exp(-mean_nll)``.
+    """
+
+    @property
+    def kwargs_to_compute_args(self):
+        mapping = super().kwargs_to_compute_args
+        mapping["S"] = ("network_output", "decoder_features", "S_sampled")
+        mapping["log_probs"] = ("network_output", "decoder_features", "logits")
+        return mapping
+
+    def compute(self, log_probs, S, mask_for_loss, **kwargs):
+        # 'log_probs' is actually the raw logits; convert to true log-probs at
+        # temperature 1.0 (no bias) to match LigandMPNN's confidence definition.
+        log_probs = torch.log_softmax(log_probs, dim=-1)
+        return super().compute(
+            log_probs=log_probs, S=S, mask_for_loss=mask_for_loss, **kwargs
+        )
+
+
+class SampledInterfaceNLL(InterfaceNLL):
+    """Interface NLL / confidence of the *sampled* (designed) sequence.
+
+    Mirrors LigandMPNN's "ligand_confidence" (polymer-ligand interface
+    residues only), computed on the un-temperatured logits of the sampled
+    sequence.
+    """
+
+    @property
+    def kwargs_to_compute_args(self):
+        mapping = super().kwargs_to_compute_args
+        mapping["S"] = ("network_output", "decoder_features", "S_sampled")
+        mapping["log_probs"] = ("network_output", "decoder_features", "logits")
+        return mapping
+
+    def compute(self, log_probs, S, mask_for_loss, atom_array, **kwargs):
+        log_probs = torch.log_softmax(log_probs, dim=-1)
+        return super().compute(
+            log_probs=log_probs,
+            S=S,
+            mask_for_loss=mask_for_loss,
+            atom_array=atom_array,
+            **kwargs,
+        )
