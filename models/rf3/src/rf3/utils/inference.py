@@ -5,7 +5,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, cast
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,7 @@ from atomworks.enums import GroundTruthConformerPolicy
 from atomworks.io import parse
 from atomworks.io.parser import parse_atom_array
 from atomworks.io.tools.inference import (
+    ChemicalComponent,
     build_msa_paths_by_chain_id_from_component_list,
     components_to_atom_array,
 )
@@ -64,8 +65,8 @@ class InferenceInput:
     atom_array: AtomArray
     chain_info: dict
     example_id: str
-    template_selection: list[str] | None = None
-    ground_truth_conformer_selection: list[str] | None = None
+    template_selection: list[str] | str | None = None
+    ground_truth_conformer_selection: list[str] | str | None = None
     cyclic_chains: list[str] | None = None
 
     @classmethod
@@ -160,16 +161,21 @@ class InferenceInput:
         Returns:
           InferenceInput object.
         """
-        # Build atom_array from components
-        atom_array, component_list = components_to_atom_array(
-            data["components"],
-            bonds=data.get("bonds"),
-            return_components=True,
+        # Build atom_array from components. With return_components=True the call returns a
+        # (AtomArray, components) tuple, but its annotated return type drops the tuple form,
+        # so cast to recover the unpacked element types.
+        atom_array, component_list = cast(
+            "tuple[AtomArray, list[ChemicalComponent]]",
+            components_to_atom_array(
+                data["components"],
+                bonds=data.get("bonds"),
+                return_components=True,
+            ),
         )
 
         parsed = parse_atom_array(
             atom_array,
-            build_assembly="_spoof",
+            build_assembly="_spoof",  # type: ignore[arg-type]  # recognized (deprecated) atomworks sentinel, absent from the public Literal
             hydrogen_policy="keep",
         )
 
@@ -184,8 +190,9 @@ class InferenceInput:
         msa_paths_by_chain_id = build_msa_paths_by_chain_id_from_component_list(
             component_list
         )
-        if data.get("msa_paths") and isinstance(data.get("msa_paths"), dict):
-            msa_paths_by_chain_id.update(data.get("msa_paths"))
+        msa_paths = data.get("msa_paths")
+        if msa_paths and isinstance(msa_paths, dict):
+            msa_paths_by_chain_id.update(msa_paths)
 
         for chain_id, msa_path in msa_paths_by_chain_id.items():
             if chain_id in chain_info:
@@ -237,7 +244,7 @@ class InferenceInput:
         # Use parse_atom_array
         parsed = parse_atom_array(
             atom_array,
-            build_assembly="_spoof",
+            build_assembly="_spoof",  # type: ignore[arg-type]  # recognized (deprecated) atomworks sentinel, absent from the public Literal
             hydrogen_policy="keep",
             extra_fields="all",
         )
@@ -395,7 +402,7 @@ def prepare_inference_inputs_from_paths(
     input_paths = as_list(inputs)
 
     # Collect all raw input files (reusing logic from build_file_paths_for_prediction)
-    paths_to_raw_input_files = []
+    paths_to_raw_input_files: list[Path] = []
     for _path in input_paths:
         if Path(_path).is_dir():
             # Scan directory for supported file types (JSON + CIF-like)
