@@ -381,17 +381,19 @@ class SampledNLL(NLL):
 
     @property
     def kwargs_to_compute_args(self):
+        # Score the *sampled* sequence using the raw logits (the parent's
+        # 'log_probs' kwarg is dropped in favour of 'logits').
         mapping = super().kwargs_to_compute_args
+        del mapping["log_probs"]
         mapping["S"] = ("network_output", "decoder_features", "S_sampled")
-        mapping["log_probs"] = ("network_output", "decoder_features", "logits")
+        mapping["logits"] = ("network_output", "decoder_features", "logits")
         return mapping
 
-    def compute(self, log_probs, S, mask_for_loss, **kwargs):
+    def compute(self, logits, S, mask_for_loss, **kwargs):
         """Convert raw logits to log-probabilities and delegate to ``NLL``.
 
         Args:
-            log_probs (torch.Tensor): [B, L, vocab_size] - raw model logits
-                (mapped from ``decoder_features.logits``), not log-probs.
+            logits (torch.Tensor): [B, L, vocab_size] - raw model logits.
             S (torch.Tensor): [B, L] - the sampled (designed) sequence.
             mask_for_loss (torch.Tensor): [B, L] - mask for loss.
             **kwargs: Additional arguments forwarded to ``NLL.compute``.
@@ -401,7 +403,7 @@ class SampledNLL(NLL):
         """
         # Raw logits -> true log-probs at temperature 1.0 (no bias), matching
         # LigandMPNN's confidence definition.
-        log_probs = torch.log_softmax(log_probs, dim=-1)
+        log_probs = torch.log_softmax(logits, dim=-1)
         return super().compute(
             log_probs=log_probs, S=S, mask_for_loss=mask_for_loss, **kwargs
         )
@@ -417,17 +419,19 @@ class SampledInterfaceNLL(InterfaceNLL):
 
     @property
     def kwargs_to_compute_args(self):
+        # Score the *sampled* sequence using the raw logits (the parent's
+        # 'log_probs' kwarg is dropped in favour of 'logits').
         mapping = super().kwargs_to_compute_args
+        del mapping["log_probs"]
         mapping["S"] = ("network_output", "decoder_features", "S_sampled")
-        mapping["log_probs"] = ("network_output", "decoder_features", "logits")
+        mapping["logits"] = ("network_output", "decoder_features", "logits")
         return mapping
 
-    def compute(self, log_probs, S, mask_for_loss, atom_array, **kwargs):
+    def compute(self, logits, S, mask_for_loss, atom_array, **kwargs):
         """Convert raw logits to log-probabilities and delegate to ``InterfaceNLL``.
 
         Args:
-            log_probs (torch.Tensor): [B, L, vocab_size] - raw model logits
-                (mapped from ``decoder_features.logits``), not log-probs.
+            logits (torch.Tensor): [B, L, vocab_size] - raw model logits.
             S (torch.Tensor): [B, L] - the sampled (designed) sequence.
             mask_for_loss (torch.Tensor): [B, L] - mask for loss.
             atom_array: Atom array(s) used to derive the polymer-ligand
@@ -439,7 +443,7 @@ class SampledInterfaceNLL(InterfaceNLL):
         """
         # Raw logits -> true log-probs at temperature 1.0 (no bias), matching
         # LigandMPNN's confidence definition.
-        log_probs = torch.log_softmax(log_probs, dim=-1)
+        log_probs = torch.log_softmax(logits, dim=-1)
         return super().compute(
             log_probs=log_probs,
             S=S,
