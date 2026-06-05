@@ -387,8 +387,20 @@ class SampledNLL(NLL):
         return mapping
 
     def compute(self, log_probs, S, mask_for_loss, **kwargs):
-        # 'log_probs' is actually the raw logits; convert to true log-probs at
-        # temperature 1.0 (no bias) to match LigandMPNN's confidence definition.
+        """Convert raw logits to log-probabilities and delegate to ``NLL``.
+
+        Args:
+            log_probs (torch.Tensor): [B, L, vocab_size] - raw model logits
+                (mapped from ``decoder_features.logits``), not log-probs.
+            S (torch.Tensor): [B, L] - the sampled (designed) sequence.
+            mask_for_loss (torch.Tensor): [B, L] - mask for loss.
+            **kwargs: Additional arguments forwarded to ``NLL.compute``.
+
+        Returns:
+            dict: The NLL / confidence metrics from ``NLL.compute``.
+        """
+        # Raw logits -> true log-probs at temperature 1.0 (no bias), matching
+        # LigandMPNN's confidence definition.
         log_probs = torch.log_softmax(log_probs, dim=-1)
         return super().compute(
             log_probs=log_probs, S=S, mask_for_loss=mask_for_loss, **kwargs
@@ -411,6 +423,22 @@ class SampledInterfaceNLL(InterfaceNLL):
         return mapping
 
     def compute(self, log_probs, S, mask_for_loss, atom_array, **kwargs):
+        """Convert raw logits to log-probabilities and delegate to ``InterfaceNLL``.
+
+        Args:
+            log_probs (torch.Tensor): [B, L, vocab_size] - raw model logits
+                (mapped from ``decoder_features.logits``), not log-probs.
+            S (torch.Tensor): [B, L] - the sampled (designed) sequence.
+            mask_for_loss (torch.Tensor): [B, L] - mask for loss.
+            atom_array: Atom array(s) used to derive the polymer-ligand
+                interface mask.
+            **kwargs: Additional arguments forwarded to ``InterfaceNLL.compute``.
+
+        Returns:
+            dict: The interface NLL / confidence metrics (``interface_`` prefix).
+        """
+        # Raw logits -> true log-probs at temperature 1.0 (no bias), matching
+        # LigandMPNN's confidence definition.
         log_probs = torch.log_softmax(log_probs, dim=-1)
         return super().compute(
             log_probs=log_probs,
