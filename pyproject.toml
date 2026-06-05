@@ -129,6 +129,16 @@ packages = [
 "models/rfd3/configs" = "rfd3/configs"
 "models/rf3/configs" = "rf3/configs"
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "models/*/tests/",
+  "models/*/docs/.assets/",
+  "docs/source/models/*/.assets/",
+  "**/*.pse",
+  "**/*.mp4",
+  "**/*.gif",
+]
+
 # Formatting & linting settings -------------------------------------------------------
 [tool.ruff]
 line-length = 88
