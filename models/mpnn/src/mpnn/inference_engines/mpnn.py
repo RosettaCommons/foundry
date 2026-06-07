@@ -12,7 +12,7 @@ from atomworks.constants import (
 from atomworks.ml.utils.token import get_token_starts, spread_token_wise
 from biotite.structure import AtomArray
 from mpnn.collate.feature_collator import FeatureCollator
-from mpnn.metrics.nll import SampledInterfaceNLL, SampledNLL
+from mpnn.metrics.nll import MPNNConfidence, MPNNInterfaceConfidence
 from mpnn.metrics.sequence_recovery import (
     InterfaceSequenceRecovery,
     SequenceRecovery,
@@ -194,7 +194,7 @@ class MPNNInferenceEngine:
         # Construct metrics dict.
         metrics: dict[str, Any] = {
             "sequence_recovery": SequenceRecovery(return_per_example_metrics=True),
-            "overall_confidence": SampledNLL(
+            "overall_confidence": MPNNConfidence(
                 return_per_example_metrics=True,
                 return_per_residue_metrics=True,
             ),
@@ -203,7 +203,7 @@ class MPNNInferenceEngine:
             metrics["interface_sequence_recovery"] = InterfaceSequenceRecovery(
                 return_per_example_metrics=True
             )
-            metrics["ligand_confidence"] = SampledInterfaceNLL(
+            metrics["ligand_confidence"] = MPNNInterfaceConfidence(
                 return_per_example_metrics=True
             )
 
@@ -395,25 +395,26 @@ class MPNNInferenceEngine:
         else:
             interface_sequence_recovery_per_design = None
 
-        # Per-design overall confidence = exp(-NLL) of the *sampled* sequence
-        # under the model's un-temperatured logits, mirroring LigandMPNN's
-        # overall/ligand confidence. Per-residue confidence (exp(-NLL) per
-        # position, zeroed at non-designed positions) is written into the
-        # output structure below.
-        overall_confidence_per_design = np.exp(
-            -metrics_output["overall_confidence.nll_per_example"].detach().cpu().numpy()
+        # Per-design confidence (= exp(-NLL) of the *sampled* sequence), computed
+        # by the MPNNConfidence metrics so the NLL-to-confidence transform lives
+        # in the metric layer. Per-residue confidence is zeroed at non-designed
+        # positions and written into the output structure below.
+        overall_confidence_per_design = (
+            metrics_output["overall_confidence.confidence_per_example"]
+            .detach()
+            .cpu()
+            .numpy()
         )
-        nll_per_residue = (
-            metrics_output["overall_confidence.nll_per_residue"].detach().cpu().numpy()
+        confidence_per_residue = (
+            metrics_output["overall_confidence.confidence_per_residue"]
+            .detach()
+            .cpu()
+            .numpy()
         )
-        confidence_per_residue_mask = (
-            metrics_output["overall_confidence.per_residue_mask"].detach().cpu().numpy()
-        )
-        confidence_per_residue = np.exp(-nll_per_residue) * confidence_per_residue_mask
 
         if self.model_type == "ligand_mpnn":
-            ligand_confidence_per_design = np.exp(
-                -metrics_output["ligand_confidence.interface_nll_per_example"]
+            ligand_confidence_per_design = (
+                metrics_output["ligand_confidence.interface_confidence_per_example"]
                 .detach()
                 .cpu()
                 .numpy()
@@ -471,17 +472,16 @@ class MPNNInferenceEngine:
             design_atom_array.set_annotation("res_name", full_resnames)
 
             # Spread per-residue confidence (token-level) to atom level over the
-            # non-atomized subset and overwrite the b-factor with it, so it is
-            # written to the standard CIF '_atom_site.B_iso_or_equiv' column and
-            # picked up by viewers (analogous to LigandMPNN's per-residue
-            # confidence b-factors). Non-designed positions are set to 0.
+            # non-atomized subset and store it in a dedicated 'mpnn_confidence'
+            # annotation (so the original b-factor is preserved). Non-designed
+            # positions are set to 0.
             design_confidence_atom = spread_token_wise(
                 design_non_atomized_array,
                 confidence_per_residue[design_idx],
             )
             full_confidence = np.zeros(len(design_atom_array), dtype=np.float32)
             full_confidence[~design_atom_array.atomize] = design_confidence_atom
-            design_atom_array.set_annotation("b_factor", full_confidence)
+            design_atom_array.set_annotation("mpnn_confidence", full_confidence)
 
             # We need to remove any non-atomized residue atoms that no
             # longer belong (i.e. old side chain atoms). We want to keep any

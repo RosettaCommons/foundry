@@ -2294,6 +2294,7 @@ class MPNNInferenceOutput:
             "mpnn_temperature",
             "mpnn_symmetry_equivalence_group",
             "mpnn_symmetry_weight",
+            "mpnn_confidence",
         ]
 
         # Limit to fields actually present in the atom array.

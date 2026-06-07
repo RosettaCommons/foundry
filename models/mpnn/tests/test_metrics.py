@@ -8,7 +8,14 @@ classes including InterfaceSequenceRecovery and InterfaceNLL.
 import pytest
 import torch
 from atomworks.ml.utils.testing import cached_parse
-from mpnn.metrics.nll import NLL, InterfaceNLL, SampledInterfaceNLL, SampledNLL
+from mpnn.metrics.nll import (
+    NLL,
+    InterfaceNLL,
+    MPNNConfidence,
+    MPNNInterfaceConfidence,
+    SampledInterfaceNLL,
+    SampledNLL,
+)
 from mpnn.metrics.sequence_recovery import InterfaceSequenceRecovery, SequenceRecovery
 from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from test_utils import (
@@ -197,4 +204,73 @@ class TestMetrics:
         native_expected = (native_res[1] + native_res[2]) / 2.0
         assert not torch.allclose(
             out["interface_nll_per_example"][0], native_expected, atol=1e-4
+        )
+
+    def test_mpnn_confidence_exposes_exp_neg_nll(self):
+        """MPNNConfidence must expose confidence = exp(-NLL) directly, so the
+        engine no longer needs to apply the transform itself."""
+        batch, length, vocab = 1, 4, 21
+        torch.manual_seed(2)
+        logits = torch.randn(batch, length, vocab)
+        sampled = torch.tensor([[3, 1, 8, 4]])
+        mask = torch.tensor([[True, True, False, True]])
+
+        network_output = {
+            "decoder_features": {"logits": logits, "S_sampled": sampled},
+            "input_features": {
+                "mask_for_loss": mask,
+                "S": torch.zeros_like(sampled),
+            },
+        }
+        metric = MPNNConfidence(
+            return_per_example_metrics=True, return_per_residue_metrics=True
+        )
+        out = metric.compute_from_kwargs(network_output=network_output)
+
+        # confidence_per_example is exactly exp(-nll_per_example).
+        assert torch.allclose(
+            out["confidence_per_example"],
+            torch.exp(-out["nll_per_example"]),
+            atol=1e-6,
+        )
+        # Per-residue confidence is in (0, 1] on designed positions and 0 on the
+        # masked-out position.
+        conf_res = out["confidence_per_residue"][0]
+        assert conf_res[2] == 0.0
+        designed = torch.tensor([0, 1, 3])
+        assert torch.all(conf_res[designed] > 0.0)
+        assert torch.all(conf_res[designed] <= 1.0)
+
+    def test_mpnn_interface_confidence_exposes_exp_neg_nll(self, monkeypatch):
+        """MPNNInterfaceConfidence must expose interface confidence = exp(-NLL)
+        over the interface residues only."""
+        batch, length, vocab = 1, 4, 21
+        torch.manual_seed(3)
+        logits = torch.randn(batch, length, vocab)
+        sampled = torch.tensor([[2, 7, 3, 9]])
+        mask_for_loss = torch.ones(batch, length, dtype=torch.bool)
+        interface_mask = torch.tensor([[False, True, True, False]])
+
+        metric = MPNNInterfaceConfidence(
+            return_per_example_metrics=True, return_per_residue_metrics=True
+        )
+        monkeypatch.setattr(
+            metric, "get_per_residue_mask", lambda mask_for_loss, **kw: interface_mask
+        )
+
+        network_output = {
+            "decoder_features": {"logits": logits, "S_sampled": sampled},
+            "input_features": {
+                "mask_for_loss": mask_for_loss,
+                "S": torch.zeros_like(sampled),
+            },
+        }
+        out = metric.compute_from_kwargs(
+            network_input={"atom_array": None}, network_output=network_output
+        )
+
+        assert torch.allclose(
+            out["interface_confidence_per_example"],
+            torch.exp(-out["interface_nll_per_example"]),
+            atol=1e-6,
         )

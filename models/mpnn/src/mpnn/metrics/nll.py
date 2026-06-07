@@ -370,21 +370,21 @@ class InterfaceNLL(NLL):
 
 
 class SampledNLL(NLL):
-    """NLL / confidence of the *sampled* (designed) sequence.
+    """NLL of the *sampled* (designed) sequence.
 
-    Unlike :class:`NLL` (which scores the native sequence as a training
-    metric), this scores the sampled sequence under the model's
-    un-temperatured, un-biased log-probabilities (``log_softmax`` of the raw
-    logits). This matches the "overall_confidence" reported by the original
-    LigandMPNN, where ``confidence = exp(-mean_nll)``.
+    Unlike :class:`NLL`, which scores the native sequence as a training metric,
+    this scores the sampled sequence under the model's un-temperatured,
+    un-biased log-probabilities (``log_softmax`` of the raw logits). See
+    :class:`MPNNConfidence` for the derived ``exp(-NLL)`` confidence.
     """
 
     @property
     def kwargs_to_compute_args(self):
         # Score the *sampled* sequence using the raw logits (the parent's
-        # 'log_probs' kwarg is dropped in favour of 'logits').
-        mapping = super().kwargs_to_compute_args
-        del mapping["log_probs"]
+        # 'log_probs' kwarg is replaced with 'logits'). Copy first so the
+        # parent's mapping is never mutated.
+        mapping = dict(super().kwargs_to_compute_args)
+        mapping.pop("log_probs", None)
         mapping["S"] = ("network_output", "decoder_features", "S_sampled")
         mapping["logits"] = ("network_output", "decoder_features", "logits")
         return mapping
@@ -410,19 +410,20 @@ class SampledNLL(NLL):
 
 
 class SampledInterfaceNLL(InterfaceNLL):
-    """Interface NLL / confidence of the *sampled* (designed) sequence.
+    """Interface NLL of the *sampled* (designed) sequence.
 
-    Mirrors LigandMPNN's "ligand_confidence" (polymer-ligand interface
-    residues only), computed on the un-temperatured logits of the sampled
-    sequence.
+    Like :class:`SampledNLL` but restricted to polymer-ligand interface
+    residues. See :class:`MPNNInterfaceConfidence` for the derived
+    ``exp(-NLL)`` confidence.
     """
 
     @property
     def kwargs_to_compute_args(self):
         # Score the *sampled* sequence using the raw logits (the parent's
-        # 'log_probs' kwarg is dropped in favour of 'logits').
-        mapping = super().kwargs_to_compute_args
-        del mapping["log_probs"]
+        # 'log_probs' kwarg is replaced with 'logits'). Copy first so the
+        # parent's mapping is never mutated.
+        mapping = dict(super().kwargs_to_compute_args)
+        mapping.pop("log_probs", None)
         mapping["S"] = ("network_output", "decoder_features", "S_sampled")
         mapping["logits"] = ("network_output", "decoder_features", "logits")
         return mapping
@@ -451,3 +452,85 @@ class SampledInterfaceNLL(InterfaceNLL):
             atom_array=atom_array,
             **kwargs,
         )
+
+
+class MPNNConfidence(SampledNLL):
+    """Per-design confidence of the sampled (designed) sequence.
+
+    Thin wrapper around :class:`SampledNLL` that additionally exposes the
+    LigandMPNN-style confidence (``confidence = exp(-NLL)``) so callers do not
+    need to apply the NLL-to-confidence transform themselves. Confidence lies
+    in ``(0, 1]``; higher means the model is more confident in the sequence.
+    """
+
+    def compute(self, logits, S, mask_for_loss, **kwargs):
+        """Compute the sampled-sequence NLL and derived confidence.
+
+        Args:
+            logits (torch.Tensor): [B, L, vocab_size] - raw model logits.
+            S (torch.Tensor): [B, L] - the sampled (designed) sequence.
+            mask_for_loss (torch.Tensor): [B, L] - mask for loss.
+            **kwargs: Additional arguments forwarded to ``SampledNLL.compute``.
+
+        Returns:
+            dict: The ``SampledNLL`` metrics plus, when the corresponding NLL
+            outputs are present, ``confidence_per_example`` (= exp(-NLL)) and
+            ``confidence_per_residue`` (= exp(-NLL) per position, 0 at
+            non-designed positions).
+        """
+        metrics = super().compute(
+            logits=logits, S=S, mask_for_loss=mask_for_loss, **kwargs
+        )
+        if "nll_per_example" in metrics:
+            metrics["confidence_per_example"] = torch.exp(-metrics["nll_per_example"])
+        if "nll_per_residue" in metrics:
+            confidence = torch.exp(-metrics["nll_per_residue"])
+            mask = metrics["per_residue_mask"].bool()
+            metrics["confidence_per_residue"] = torch.where(
+                mask, confidence, torch.zeros_like(confidence)
+            )
+        return metrics
+
+
+class MPNNInterfaceConfidence(SampledInterfaceNLL):
+    """Per-design confidence over polymer-ligand interface residues.
+
+    Interface counterpart of :class:`MPNNConfidence`; wraps
+    :class:`SampledInterfaceNLL` and exposes ``exp(-NLL)`` confidence computed
+    over the interface residues only (``interface_`` prefixed keys).
+    """
+
+    def compute(self, logits, S, mask_for_loss, atom_array, **kwargs):
+        """Compute the interface NLL and derived interface confidence.
+
+        Args:
+            logits (torch.Tensor): [B, L, vocab_size] - raw model logits.
+            S (torch.Tensor): [B, L] - the sampled (designed) sequence.
+            mask_for_loss (torch.Tensor): [B, L] - mask for loss.
+            atom_array: Atom array(s) used to derive the interface mask.
+            **kwargs: Additional arguments forwarded to
+                ``SampledInterfaceNLL.compute``.
+
+        Returns:
+            dict: The ``SampledInterfaceNLL`` metrics plus, when present,
+            ``interface_confidence_per_example`` and
+            ``interface_confidence_per_residue``.
+        """
+        metrics = super().compute(
+            logits=logits,
+            S=S,
+            mask_for_loss=mask_for_loss,
+            atom_array=atom_array,
+            **kwargs,
+        )
+        if "interface_nll_per_example" in metrics:
+            metrics["interface_confidence_per_example"] = torch.exp(
+                -metrics["interface_nll_per_example"]
+            )
+        if "interface_nll_per_residue" in metrics:
+            confidence = torch.exp(-metrics["interface_nll_per_residue"])
+            mask = metrics["interface_per_residue_mask"].bool()
+            metrics["interface_confidence_per_residue"] = torch.where(
+                mask, confidence, torch.zeros_like(confidence)
+            )
+        return metrics
