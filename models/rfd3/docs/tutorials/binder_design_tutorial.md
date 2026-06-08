@@ -140,7 +140,7 @@ alter (sele), chain='B'
 alter (sele), segi='B'
 ```
 
-Save your cropped PDB file using the command `save /your/path/pld1_cropped.pdb`, but don't close your PyMOL session. Note the new positions of your [hotspots](#binder_design_hotspots_def) after renumbering, these will be necessary to set up our RFD3 calculation. In this example, our [hotspots](#binder_design_hotspots_def) are now B37, B39, B51, B52, B98, and B100. 
+Save your cropped PDB file using the command `save /your/path/pdl1_cropped.pdb`, but don't close your PyMOL session. Note the new positions of your [hotspots](#binder_design_hotspots_def) after renumbering, these will be necessary to set up our RFD3 calculation. In this example, our [hotspots](#binder_design_hotspots_def) are now B37, B39, B51, B52, B98, and B100. 
 
 In this tutorial, we will be specifying the specific atoms we want to use in our [hotspot](#binder_design_hotspots_def) residues. You can view the atom labels in PyMOL as shown below: 
 

@@ -10,7 +10,7 @@
 
 # Run RFdiffusion3
 rfd3 design \
-  out_dir= "./pdl1_binder_outputs" \
+  out_dir="./pdl1_binder_outputs" \
   inputs="./pdl1.yaml" \
   n_batches=1 \
   diffusion_batch_size=8 \
