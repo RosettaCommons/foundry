@@ -1,6 +1,6 @@
 import hydra
 import torch
-from beartype.typing import Any
+from beartype.typing import Any, cast
 from einops import repeat
 from jaxtyping import Float, Int
 from lightning_utilities import apply_to_collection
@@ -13,7 +13,6 @@ from rf3.model.RF3 import ShouldEarlyStopFn
 from rf3.utils.io import build_stack_from_atom_array_and_batched_coords
 from rf3.utils.recycling import get_recycle_schedule
 
-from foundry.common import exists
 from foundry.metrics.losses import Loss
 from foundry.metrics.metric import MetricManager
 from foundry.trainers.fabric import FabricTrainer
@@ -61,14 +60,17 @@ class RF3Trainer(FabricTrainer):
 
         # (Initialize recycle schedule upfront so all GPU's can sample the same number of recycles within a batch)
         self.n_recycles_train = n_recycles_train
+        # get_recycle_schedule does `randint(1, max_cycle + 1)`, so it needs a real int;
+        # the `int | None` default is never None for a training run (configs set it).
         self.recycle_schedule = get_recycle_schedule(
-            max_cycle=n_recycles_train,
+            max_cycle=cast(int, n_recycles_train),
             n_epochs=self.max_epochs,  # Set by FabricTrainer
             n_train=self.n_examples_per_epoch,  # Set by FabricTrainer
             world_size=self.fabric.world_size,
         )  # [n_epochs, n_examples_per_epoch // world_size]
 
         # Metrics
+        self.metrics: MetricManager | None
         if isinstance(metrics, MetricManager):
             # Already instantiated
             self.metrics = metrics
@@ -80,7 +82,9 @@ class RF3Trainer(FabricTrainer):
             self.metrics = None
 
         # Loss
-        self.loss = Loss(**loss) if loss else None
+        # `**(DictConfig | dict)`: DictConfig is a runtime mapping but omegaconf's stubs
+        # don't satisfy SupportsKeysAndGetItem, so mypy rejects the unpack.
+        self.loss = Loss(**loss) if loss else None  # type: ignore[arg-type]
 
         # (Symmetry resolution)
         self.subunit_symm_resolve = SubunitSymmetryResolution()
@@ -238,6 +242,9 @@ class RF3Trainer(FabricTrainer):
 
             loss_extra_info = self._assemble_loss_extra_info(example)
 
+            assert (
+                self.loss is not None
+            ), "RF3Trainer requires a loss config for training"
             total_loss, loss_dict_batched = self.loss(
                 network_input=network_input,
                 network_output=network_output,
@@ -255,7 +262,10 @@ class RF3Trainer(FabricTrainer):
                 function=lambda x: x.detach(),
             )
 
-    def validation_step(
+    # FabricTrainer.validation_step is `(batch, batch_idx, val_loader_name=None)` and the
+    # base validation loop only ever calls it as `validation_step(batch=, batch_idx=)`,
+    # never passing the 3rd arg; subclasses are free to refine that optional parameter.
+    def validation_step(  # type: ignore[override]
         self,
         batch: Any,
         batch_idx: int,
@@ -301,7 +311,7 @@ class RF3Trainer(FabricTrainer):
         )
 
         metrics_output = {}
-        if compute_metrics and exists(self.metrics):
+        if compute_metrics and self.metrics is not None:
             metrics_extra_info = self._assemble_metrics_extra_info(
                 example, network_output
             )
@@ -462,6 +472,9 @@ class RF3TrainerWithConfidence(RF3Trainer):
             )
 
             # We only assess the confidence loss
+            assert (
+                self.loss is not None
+            ), "RF3Trainer requires a loss config for training"
             total_loss, loss_dict_batched = self.loss(
                 network_input=network_input,
                 network_output=network_output,
@@ -479,7 +492,7 @@ class RF3TrainerWithConfidence(RF3Trainer):
                 function=lambda x: x.detach(),
             )
 
-    def validation_step(
+    def validation_step(  # type: ignore[override]  # see RF3Trainer.validation_step
         self,
         batch: Any,
         batch_idx: int,
@@ -521,7 +534,7 @@ class RF3TrainerWithConfidence(RF3Trainer):
         metrics_output = {}
         if (
             compute_metrics
-            and exists(self.metrics)
+            and self.metrics is not None
             and not network_output.get("early_stopped", False)
         ):
             # Assemble the base metrics extra info and add confidence-specific inputs

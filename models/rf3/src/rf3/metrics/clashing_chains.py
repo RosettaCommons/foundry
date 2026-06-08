@@ -15,11 +15,14 @@ class CountClashingChains(Metric):
             "predicted_atom_array_stack": ("predicted_atom_array_stack",),
         }
 
-    def compute(
+    # Metric.compute is declared `(self, **kwargs)` and always invoked by keyword via
+    # compute_from_kwargs; subclasses refine it with explicit keyword params by design
+    # (see the base docstring), which mypy reports as an LSP override violation.
+    def compute(  # type: ignore[override]
         self,
         X_L: torch.Tensor,
         predicted_atom_array_stack: AtomArrayStack,
-    ) -> dict[str, float]:
+    ) -> dict[str, int]:
         """Compute the predicted interface TM-score (IPTM) from the predicted aligned error (PAE).
         Args:
             X_L: Predicted aligned error tensor.

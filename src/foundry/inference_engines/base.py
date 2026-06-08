@@ -64,8 +64,11 @@ class BaseInferenceEngine:
 
         # Set attrs
         self.initialized_ = False
-        self.trainer = None
-        self.pipeline = None
+        # Both are populated by initialize() via hydra.utils.instantiate (statically Any);
+        # None until then. Annotated Any so subclasses can use the concrete trainer/pipeline
+        # API after initialize() without per-attribute narrowing.
+        self.trainer: Any = None
+        self.pipeline: Any = None
         self.verbose = verbose
 
         # Resolve checkpoint path

@@ -255,13 +255,8 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = [
     "rf3.data.paired_msa",
-    "rf3.inference_engines.rf3",
-    "rf3.metrics.clashing_chains",
     "rf3.metrics.distogram",
     "rf3.metrics.lddt",
-    "rf3.metrics.predicted_error",
-    "rf3.model.RF3",
-    "rf3.trainers.rf3",
     "rf3.utils.predicted_error",
 ]
 ignore_errors = true
