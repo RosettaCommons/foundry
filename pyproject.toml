@@ -1,9 +1,9 @@
-k su[project]
+[project]
 name = "rc-foundry"
 dynamic = ["version"]
 description = "Shared utilities and training infrastructure for biomolecular structure prediction models."
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12"
 authors = [
     { name = "Institute for Protein Design", email = "contact@ipd.uw.edu" },
 ]
@@ -43,7 +43,6 @@ dependencies = [
     "dm-tree>=0.1.6",
     "zstandard",
     "pandas",
-    # "biotite",
     "atomworks[ml]>=2.1.1",
     "ipykernel>=6.31.0",
     "assertpy",
