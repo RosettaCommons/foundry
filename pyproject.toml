@@ -268,7 +268,11 @@ ignore_errors = true
 
 # Testing ----------------------------------------------------------------------------
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Shared-layer tests live in the top-level `tests/`; model-specific tests live in each
+# model's own `models/<MODEL>/tests/` (see AGENTS.PROJECT.md "Test Layout"). The pre-existing
+# cluster-coupled per-model suites are kept out of the gate via `collect_ignore` in each
+# model's tests/conftest.py. Add a model's tests dir here once it has CPU-portable tests.
+testpaths = ["tests", "models/rf3/tests", "models/rfd3/tests"]
 addopts = "-ra --strict-markers --strict-config"
 
 [tool.coverage.run]

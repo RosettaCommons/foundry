@@ -32,7 +32,7 @@ jobs:
         run: mypy
 
   pytest:
-    name: pytest (top-level tests/)
+    name: pytest (shared + CPU model tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +44,9 @@ jobs:
       - name: Install package + dev extras
         run: pip install -e ".[dev]"
       - name: pytest
-        # Top-level tests/ only. Per-model tests under models/*/tests/ may require
-        # GPU and downloaded checkpoints and are not yet wired into CI.
+        # Runs the shared-layer tests/ plus the CPU-portable per-model tests under
+        # models/*/tests/ (collected via `testpaths`; the model packages are importable
+        # because `pip install -e .` exposes them). Each model's tests/conftest.py uses
+        # `collect_ignore` to hold its cluster-coupled suite (GPU / downloaded checkpoints
+        # / IPD data) out of CI — those run locally on the cluster.
         run: pytest
