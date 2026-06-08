@@ -215,18 +215,6 @@ warn_redundant_casts = true
 disallow_untyped_defs = false
 check_untyped_defs = false
 
-# rdkit ships its own type stubs (`rdkit-stubs`, pulled in transitively via atomworks).
-# rdkit 2026.3.3's `Chem/rdchem.pyi` has a syntax error (a non-default parameter following
-# a default one) that mypy refuses to parse, which aborts the whole run ("errors prevented
-# further checking"). The dev/test deps float to the latest release, so CI hit it while the
-# pinned local env did not. We don't control that stub, so skip reading it: `follow_imports`
-# applies to stub files only when `follow_imports_for_stubs` is also set. rdkit is used through
-# atomworks, not annotated against directly here, so treating it as untyped costs us nothing.
-[[tool.mypy.overrides]]
-module = ["rdkit", "rdkit.*"]
-follow_imports = "skip"
-follow_imports_for_stubs = true
-
 # rfd3 enablement ratchet. `models/rfd3` was brought into mypy's scope in 0010;
 # these modules had pre-existing type errors at that point and are exempted until
 # annotated. Fix the errors and remove the entry to enable type-checking for that

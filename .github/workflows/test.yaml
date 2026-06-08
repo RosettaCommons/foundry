@@ -23,11 +23,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: 'pip'
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            ci-constraints.txt
       - name: Install package + dev extras
         # `[dev]` pulls in mypy and the dev tooling. The package itself is needed
         # so mypy can resolve `import foundry.*` against the installed source.
-        run: pip install -e ".[dev]"
+        # `-c ci-constraints.txt` pins the type-stub-sensitive packages to the
+        # validated versions so the gate is reproducible (see that file).
+        run: pip install -e ".[dev]" -c ci-constraints.txt
       - name: mypy
         run: mypy
 
@@ -40,9 +44,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: 'pip'
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            ci-constraints.txt
       - name: Install package + dev extras
-        run: pip install -e ".[dev]"
+        # `-c ci-constraints.txt` pins the type-stub-sensitive packages to the
+        # validated versions so the gate is reproducible (see that file).
+        run: pip install -e ".[dev]" -c ci-constraints.txt
       - name: pytest
         # Runs the shared-layer tests/ plus the CPU-portable per-model tests under
         # models/*/tests/ (collected via `testpaths`; the model packages are importable
