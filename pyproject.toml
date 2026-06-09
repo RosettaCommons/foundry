@@ -252,12 +252,16 @@ ignore_errors = true
 # these modules had pre-existing type errors at that point and are exempted until
 # annotated. Fix the errors and remove the entry to enable type-checking for that
 # module (same playbook as the rfd3 ratchet above). Do NOT add modules.
+#
+# `rf3.data.paired_msa` is NOT a type-only clear: it subclasses the atomworks
+# `StructuralDatasetWrapper`, which the installed atomworks turned into a deprecated
+# factory *function*, so the module fails to import (subclassing a function), and it
+# also calls an unimported `save_failed_example_to_disk`. Clearing it needs a real
+# refactor to the `PandasDataset` API (cluster-data-validated), not annotations.
+# Tracked in `.ai/roadmap.md`.
 [[tool.mypy.overrides]]
 module = [
     "rf3.data.paired_msa",
-    "rf3.metrics.distogram",
-    "rf3.metrics.lddt",
-    "rf3.utils.predicted_error",
 ]
 ignore_errors = true
 

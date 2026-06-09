@@ -158,10 +158,11 @@ def extract_lddt_features_from_atom_arrays(
     ground_truth_atom_array = ground_truth_atom_array_stack[0]
 
     # Create coordinate mask using occupancy if available, fallback to coordinate validity
+    crd_mask_L: Bool[torch.Tensor, "D L"]
     if "occupancy" in ground_truth_atom_array.get_annotation_categories():
         # Use occupancy annotation (broadcast to all models in stack)if present (occupancy > 0 means atom is present)
         occupancy_mask = ground_truth_atom_array.occupancy > 0
-        crd_mask_L: Bool[torch.Tensor, "D L"] = (
+        crd_mask_L = (
             torch.from_numpy(occupancy_mask)
             .bool()
             .unsqueeze(0)
@@ -169,7 +170,7 @@ def extract_lddt_features_from_atom_arrays(
         )
     else:
         # Fallback to coordinate validity (not NaN)
-        crd_mask_L: Bool[torch.Tensor, "D L"] = ~torch.isnan(X_gt_L).any(dim=-1)
+        crd_mask_L = ~torch.isnan(X_gt_L).any(dim=-1)
 
     # Get token indices using the same logic as ComputeAtomToTokenMap
     if "token_id" in ground_truth_atom_array.get_annotation_categories():
@@ -215,7 +216,10 @@ class AllAtomLDDT(Metric):
             "ground_truth_atom_array_stack": "ground_truth_atom_array_stack",
         }
 
-    def compute(
+    # Metric.compute is declared `(self, **kwargs)` and always invoked by keyword via
+    # compute_from_kwargs; subclasses refine it with explicit keyword params by design
+    # (see the base docstring), which mypy reports as an LSP override violation.
+    def compute(  # type: ignore[override]
         self,
         predicted_atom_array_stack: AtomArrayStack | AtomArray,
         ground_truth_atom_array_stack: AtomArrayStack | AtomArray,
@@ -276,11 +280,11 @@ class InterfaceLDDTByType(Metric):
             "interfaces_to_score": ("extra_info", "interfaces_to_score"),
         }
 
-    def compute(
+    def compute(  # type: ignore[override]  # see AllAtomLDDT.compute above
         self,
         predicted_atom_array_stack: AtomArrayStack | AtomArray,
         ground_truth_atom_array_stack: AtomArrayStack | AtomArray,
-        interfaces_to_score: list = None,
+        interfaces_to_score: list | None = None,
         **kwargs,
     ) -> list[dict[str, Any]]:
         """Calculates interface LDDT between specific pairs of chains/units, grouped by interface type.
@@ -379,11 +383,11 @@ class ChainLDDTByType(Metric):
             "pn_units_to_score": ("extra_info", "pn_units_to_score"),
         }
 
-    def compute(
+    def compute(  # type: ignore[override]  # see AllAtomLDDT.compute above
         self,
         predicted_atom_array_stack: AtomArrayStack | AtomArray,
         ground_truth_atom_array_stack: AtomArrayStack | AtomArray,
-        pn_units_to_score: list = None,
+        pn_units_to_score: list | None = None,
         **kwargs,
     ) -> list[dict[str, Any]]:
         """Calculates intra-chain LDDT for specific chains/units.
@@ -477,11 +481,11 @@ class ByTypeLDDT(Metric):
         }
 
     @property
-    def optional_kwargs(self) -> set[str]:
+    def optional_kwargs(self) -> frozenset[str]:
         """Mark interfaces_to_score and pn_units_to_score as optional."""
-        return {"interfaces_to_score", "pn_units_to_score"}
+        return frozenset({"interfaces_to_score", "pn_units_to_score"})
 
-    def compute(
+    def compute(  # type: ignore[override]  # see AllAtomLDDT.compute above
         self,
         predicted_atom_array_stack: AtomArrayStack | AtomArray,
         ground_truth_atom_array_stack: AtomArrayStack | AtomArray,
