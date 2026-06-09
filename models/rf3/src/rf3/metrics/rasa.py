@@ -34,7 +34,10 @@ class UnresolvedRegionRASA(Metric):
             "ground_truth_atom_array_stack": ("ground_truth_atom_array_stack",),
         }
 
-    def compute(
+    # Metric.compute is declared `(self, **kwargs)` and always invoked by keyword via
+    # compute_from_kwargs; subclasses refine it with explicit keyword params by design
+    # (see the base docstring), which mypy reports as an LSP override violation.
+    def compute(  # type: ignore[override]
         self,
         predicted_atom_array_stack: AtomArrayStack,
         ground_truth_atom_array_stack: AtomArrayStack,

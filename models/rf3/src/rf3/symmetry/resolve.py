@@ -8,7 +8,7 @@ import torch
 from atomworks.io.transforms.atom_array import ensure_atom_array_stack
 from atomworks.ml.transforms.atom_array import AddGlobalTokenIdAnnotation
 from atomworks.ml.transforms.atomize import AtomizeByCCDName
-from atomworks.ml.transforms.base import Compose, convert_to_torch
+from atomworks.ml.transforms.base import Compose, Transform, convert_to_torch
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
 from biotite.structure import AtomArray, AtomArrayStack
 from jaxtyping import Bool, Float, Int
@@ -139,7 +139,7 @@ def generate_symmetry_resolution_inputs_from_atom_array(
     atom_array = atom_array.copy()
 
     # Prepare transform pipeline to generate features
-    transforms = [AtomizeByCCDName(atomize_by_default=True)]
+    transforms: list[Transform] = [AtomizeByCCDName(atomize_by_default=True)]
 
     if "token_id" not in atom_array.get_annotation_categories():
         transforms.append(AddGlobalTokenIdAnnotation())
@@ -274,8 +274,8 @@ def apply_symmetry_resolution(
         logger.info("Applying residue symmetry resolution")
         residue_resolver = ResidueSymmetryResolution()
 
-        # Create network output dict
-        network_output: Dict[str, torch.Tensor] = {"X_L": X_pred}
+        # Create network output dict (network_output already typed above)
+        network_output = {"X_L": X_pred}
 
         # Apply residue resolution
         loss_input = residue_resolver(network_output, loss_input, automorphisms)

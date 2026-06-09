@@ -44,6 +44,7 @@ from atomworks.ml.transforms.base import (
     Identity,
     RandomRoute,
     SubsetToKeys,
+    Transform,
 )
 from atomworks.ml.transforms.bfactor_conditioned_transforms import SetOccToZeroOnBfactor
 from atomworks.ml.transforms.bonds import (
@@ -171,7 +172,7 @@ def build_af3_transform_pipeline(
         "atomized": 1e-5,  # No noise (for atomized tokens)
         "not_atomized": 0.2,  # Up to 0.2A of noise (for non-atomized tokens)
     },
-    allowed_chain_types_for_conditioning: list[int | str | ChainType]
+    allowed_chain_types_for_conditioning: list[ChainType]
     | None = ChainType.get_all_types(),  # All chain types (None = no conditioning)
     p_condition_per_token: float = 0.0,  # When sampling with conditions, X% of tokens are conditioned (e.g., X^2% of pairs have conditions)
     p_provide_inter_molecule_distances: float = 0.0,  # When sampling with conditions, X% of the time, show any inter-molecule distances
@@ -333,7 +334,7 @@ def build_af3_transform_pipeline(
         AddGlobalAtomIdAnnotation(),
         AtomizeByCCDName(
             atomize_by_default=True,
-            res_names_to_ignore=STANDARD_AA + STANDARD_RNA + STANDARD_DNA,
+            res_names_to_ignore=list(STANDARD_AA + STANDARD_RNA + STANDARD_DNA),
             move_atomized_part_to_end=False,
             validate_atomize=False,
         ),
@@ -345,7 +346,7 @@ def build_af3_transform_pipeline(
     # Crop
 
     # ... crop around our query pn_unit(s) early, since we don't need the full structure moving forward
-    cropping_transform = Identity()
+    cropping_transform: Transform = Identity()
     if crop_size is not None:
         cropping_transform = RandomRoute(
             transforms=[
@@ -415,7 +416,9 @@ def build_af3_transform_pipeline(
         AddGlobalTokenIdAnnotation(),  # required for reference molecule features and TokenToAtomMap
         AddGlobalResIdAnnotation(),
         LoadCachedResidueLevelData(
-            dir=Path(residue_cache_dir) if exists(residue_cache_dir) else None,
+            # atomworks types `dir` as `str | Path`, but `load_cached_residue_level_data`
+            # treats a None dir as "no cache" (it early-returns empty), so None disables caching.
+            dir=Path(residue_cache_dir) if residue_cache_dir is not None else None,  # type: ignore[arg-type]
             sharding_depth=1,
         ),
         RandomSubsampleCachedConformers(n_conformers=n_conformers),
@@ -444,7 +447,7 @@ def build_af3_transform_pipeline(
             protein_msa_dirs=protein_msa_dirs,
             rna_msa_dirs=rna_msa_dirs,
             max_msa_sequences=max_msa_sequences,  # maximum number of sequences to load (we later subsample further)
-            msa_cache_dir=Path(msa_cache_dir) if exists(msa_cache_dir) else None,
+            msa_cache_dir=Path(msa_cache_dir) if msa_cache_dir is not None else None,
             use_paths_in_chain_info=True,  # if there are paths specified in the `chain_info` for a given chain, use them
             raise_if_missing_msa_for_protein_of_length_n=raise_if_missing_msa_for_protein_of_length_n,
         ),
@@ -461,7 +464,9 @@ def build_af3_transform_pipeline(
         ),
         # ... fill MSA, indexing into only the portions of the polymers that are present in the cropped structure
         FillFullMSAFromEncoded(
-            pad_token=af3_sequence_encoding.token_to_idx["<G>"],
+            # `pad_token` is an integer token index (atomworks annotates it `str`, but it is
+            # stored verbatim and used numerically, like the `EncodeMSA` gap token above).
+            pad_token=af3_sequence_encoding.token_to_idx["<G>"],  # type: ignore[arg-type]
             add_residue_is_paired_feature=add_residue_is_paired_feature,
         ),
         ConditionalRoute(

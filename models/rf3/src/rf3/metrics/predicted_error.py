@@ -48,7 +48,10 @@ class ComputePTM(Metric):
             "asym_id": ("network_input", "f", "asym_id"),
         }
 
-    def compute(
+    # Metric.compute is declared `(self, **kwargs)` and always invoked by keyword via
+    # compute_from_kwargs; subclasses refine it with explicit keyword params by design
+    # (see the base docstring), which mypy reports as an LSP override violation.
+    def compute(  # type: ignore[override]
         self,
         pae: torch.Tensor,
         asym_id: torch.Tensor,
@@ -76,7 +79,7 @@ class ComputeIPTM(Metric):
             "is_ligand": ("network_input", "f", "is_ligand"),
         }
 
-    def compute(
+    def compute(  # type: ignore[override]  # see ComputePTM.compute above
         self,
         pae: torch.Tensor,
         asym_id: torch.Tensor,

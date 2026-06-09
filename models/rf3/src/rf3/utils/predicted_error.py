@@ -76,10 +76,10 @@ def compile_af3_confidence_outputs(
     plddt_logits: torch.Tensor,
     pae_logits: torch.Tensor,
     pde_logits: torch.Tensor,
-    chain_iid_token_lvl: torch.Tensor,
+    chain_iid_token_lvl: np.ndarray,
     is_real_atom: torch.Tensor,
     example_id: str,
-    confidence_loss_cfg: DictConfig | dict,
+    confidence_loss_cfg: DictConfig,
 ) -> dict[str, Any]:
     # TODO: Refactor to accept an AtomArray
     # TODO: Taking the confidence_loss_cfg does not align with functional programming best-practices; we should instead take  the max_value and n_bins as arguments
@@ -164,7 +164,7 @@ def compile_af3_confidence_outputs(
     }
 
     # Aggregate confidence data
-    confidence_data = {
+    confidence_data: dict[str, Any] = {
         "example_id": example_id,
         "mean_plddt": spread_batch_into_dictionary(
             compute_mean_over_subsampled_pairs(plddt, is_real_atom[..., :NHEAVY])
@@ -245,7 +245,7 @@ def compile_af3_style_confidence_outputs(
     chain_iid_token_lvl: torch.Tensor | np.ndarray,
     is_real_atom: torch.Tensor,
     atom_array: AtomArray,
-    confidence_loss_cfg: DictConfig | dict,
+    confidence_loss_cfg: DictConfig,
     batch_idx: int = 0,
 ) -> dict[str, Any]:
     """Compile confidence outputs in AlphaFold3-compatible format.
@@ -334,10 +334,18 @@ def compile_af3_style_confidence_outputs(
     overall_pde = pde[batch_idx].mean().item()
 
     # Build chain_pair matrices (NxN)
-    chain_pair_pae_matrix = [[None] * n_chains for _ in range(n_chains)]
-    chain_pair_pae_min_matrix = [[None] * n_chains for _ in range(n_chains)]
-    chain_pair_pde_matrix = [[None] * n_chains for _ in range(n_chains)]
-    chain_pair_pde_min_matrix = [[None] * n_chains for _ in range(n_chains)]
+    chain_pair_pae_matrix: list[list[float | None]] = [
+        [None] * n_chains for _ in range(n_chains)
+    ]
+    chain_pair_pae_min_matrix: list[list[float | None]] = [
+        [None] * n_chains for _ in range(n_chains)
+    ]
+    chain_pair_pde_matrix: list[list[float | None]] = [
+        [None] * n_chains for _ in range(n_chains)
+    ]
+    chain_pair_pde_min_matrix: list[list[float | None]] = [
+        [None] * n_chains for _ in range(n_chains)
+    ]
     for i, chain_i in enumerate(chains):
         for j, chain_j in enumerate(chains):
             if i != j and (chain_i, chain_j) in chain_pair_pae:
@@ -402,7 +410,7 @@ def compute_batch_indices_with_lowest_predicted_error(
     plddt: torch.Tensor,
     is_real_atom: torch.Tensor,
     pae: torch.Tensor,
-    confidence_loss_cfg: dict | DictConfig,
+    confidence_loss_cfg: DictConfig,
     chain_iid_token_lvl: torch.Tensor,
     is_ligand: torch.Tensor,
     interfaces_to_score: list[tuple],

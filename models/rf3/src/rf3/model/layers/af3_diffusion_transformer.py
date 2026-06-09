@@ -261,7 +261,8 @@ class AtomTransformer(nn.Module):
         diffusion_transformer,
         n_queries,
         n_keys,
-        l_max: int = None,  # HACK: Unused, kept for backwards compatibility with 9/21 checkpoint
+        # HACK: Unused, kept for backwards compatibility with 9/21 checkpoint
+        l_max: int | None = None,
     ):
         super().__init__()
 

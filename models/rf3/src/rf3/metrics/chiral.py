@@ -164,12 +164,15 @@ class ChiralLoss(Metric):
             "chiral_feats": ("network_input", "f", "chiral_feats"),
         }
 
-    def compute(
+    # Metric.compute is declared `(self, **kwargs)` and always invoked by keyword via
+    # compute_from_kwargs; subclasses refine it with explicit keyword params by design
+    # (see the base docstring), which mypy reports as an LSP override violation.
+    def compute(  # type: ignore[override]
         self,
         predicted_atom_array_stack: AtomArrayStack | AtomArray,
         ground_truth_atom_array_stack: AtomArrayStack | AtomArray,
-        chiral_feats: Float[torch.Tensor, "n_chiral 5"] = None,
-    ):
+        chiral_feats: Float[torch.Tensor, "n_chiral 5"] | None = None,
+    ) -> dict[str, Any]:
         chiral_metrics = compute_chiral_metrics(
             predicted_atom_array_stack,
             ground_truth_atom_array_stack,

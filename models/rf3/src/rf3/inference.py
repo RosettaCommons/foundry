@@ -55,6 +55,9 @@ def run_inference(cfg: DictConfig) -> None:
 
     # Create init config with only __init__ params
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+    # cfg is a DictConfig, so to_container returns a dict; its annotated return type
+    # is a broad union (list / str / None) covering non-mapping OmegaConf nodes.
+    assert isinstance(cfg_dict, dict)
     run_param_keys = set(run_params.keys())
     init_cfg_dict = {k: v for k, v in cfg_dict.items() if k not in run_param_keys}
     init_cfg = OmegaConf.create(init_cfg_dict)

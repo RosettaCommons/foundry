@@ -3,7 +3,7 @@ from contextlib import ExitStack
 
 import torch
 import torch.utils.checkpoint as checkpoint
-from beartype.typing import Any, Generator, Protocol
+from beartype.typing import Any, Generator, Protocol, cast
 from omegaconf import DictConfig
 from rf3.diffusion_samplers.inference_sampler import (
     SampleDiffusion,
@@ -94,8 +94,11 @@ class RF3(nn.Module):
         """
         super().__init__()
 
+        # `**cfg` unpacking below: omegaconf's DictConfig supports the mapping protocol
+        # at runtime but its stubs don't satisfy SupportsKeysAndGetItem, so mypy rejects
+        # `**(DictConfig | dict)`. These are always Hydra sub-configs.
         # ... initialize the FeatureInitializer, which creates the initial token-level representations and conditioning
-        self.feature_initializer = FeatureInitializer(
+        self.feature_initializer = FeatureInitializer(  # type: ignore[arg-type]
             c_s=c_s,
             c_z=c_z,
             c_atom=c_atom,
@@ -105,28 +108,28 @@ class RF3(nn.Module):
         )
 
         # ... initialize the Recycler, which runs the trunk repeatedly with shared weights
-        self.recycler = Recycler(c_s=c_s, c_z=c_z, **recycler)
-        self.diffusion_module = DiffusionModule(
+        self.recycler = Recycler(c_s=c_s, c_z=c_z, **recycler)  # type: ignore[arg-type]
+        self.diffusion_module = DiffusionModule(  # type: ignore[arg-type]
             c_atom=c_atom,
             c_atompair=c_atompair,
             c_s=c_s,
             c_z=c_z,
             **diffusion_module,
         )
-        self.distogram_head = DistogramHead(c_z=c_z, **distogram_head)
+        self.distogram_head = DistogramHead(c_z=c_z, **distogram_head)  # type: ignore[arg-type]
 
         # ... initialize the inference sampler, which performs a full diffusion rollout during inference
         self.inference_sampler = (
-            SampleDiffusion(**inference_sampler)
+            SampleDiffusion(**inference_sampler)  # type: ignore[arg-type]
             if not inference_sampler.get("partial_t", False)
-            else SamplePartialDiffusion(**inference_sampler)
+            else SamplePartialDiffusion(**inference_sampler)  # type: ignore[arg-type]
         )
 
     def forward(
         self,
         input: dict,
         n_cycle: int,
-        coord_atom_lvl_to_be_noised: torch.Tensor = None,
+        coord_atom_lvl_to_be_noised: torch.Tensor | None = None,
     ) -> dict:
         """Complete forward pass of the model.
 
@@ -192,6 +195,9 @@ class RF3(nn.Module):
             )
         else:
             # Full diffusion rollout (no gradients, or will OOM)
+            # The sampler does `noise + coord_atom_lvl_to_be_noised`, so it requires a real
+            # tensor; the `None` default only ever survives the training branch above (which
+            # ignores it). Inference callers always pass coords, hence the cast.
             sample_diffusion_outs = self.inference_sampler.sample_diffusion_like_af3(
                 f=input["f"],
                 S_inputs_I=recycling_outputs["S_inputs_I"],
@@ -199,7 +205,9 @@ class RF3(nn.Module):
                 Z_trunk_II=recycling_outputs["Z_II"],
                 diffusion_module=self.diffusion_module,
                 diffusion_batch_size=input["t"].shape[0],
-                coord_atom_lvl_to_be_noised=coord_atom_lvl_to_be_noised,
+                coord_atom_lvl_to_be_noised=cast(
+                    torch.Tensor, coord_atom_lvl_to_be_noised
+                ),
             )
             return dict(
                 X_L=sample_diffusion_outs["X_L"],
@@ -345,8 +353,9 @@ class RF3WithConfidence(RF3):
 
         super().__init__(**kwargs)
 
-        self.confidence_head = ConfidenceHead(**confidence_head)
-        self.mini_rollout_sampler = SampleDiffusion(**mini_rollout_sampler)
+        # `**(DictConfig | dict)`: see the stub-gap note in RF3.__init__.
+        self.confidence_head = ConfidenceHead(**confidence_head)  # type: ignore[arg-type]
+        self.mini_rollout_sampler = SampleDiffusion(**mini_rollout_sampler)  # type: ignore[arg-type]
 
     def forward(
         self,
@@ -451,7 +460,10 @@ class RF3WithConfidence(RF3):
                         Z_trunk_II=recycling_outputs["Z_II"],
                         diffusion_module=self.diffusion_module,
                         diffusion_batch_size=diffusion_batch_size,
-                        coord_atom_lvl_to_be_noised=coord_atom_lvl_to_be_noised,
+                        # see the cast note in RF3.forward; always a real tensor here
+                        coord_atom_lvl_to_be_noised=cast(
+                            torch.Tensor, coord_atom_lvl_to_be_noised
+                        ),
                     )
                 )
             else:
@@ -464,7 +476,10 @@ class RF3WithConfidence(RF3):
                         Z_trunk_II=recycling_outputs["Z_II"],
                         diffusion_module=self.diffusion_module,
                         diffusion_batch_size=diffusion_batch_size,
-                        coord_atom_lvl_to_be_noised=coord_atom_lvl_to_be_noised,
+                        # see the cast note in RF3.forward; always a real tensor here
+                        coord_atom_lvl_to_be_noised=cast(
+                            torch.Tensor, coord_atom_lvl_to_be_noised
+                        ),
                     )
                 )
 
@@ -472,7 +487,7 @@ class RF3WithConfidence(RF3):
         # TODO: Write a version of the confidence head that splits into batches based on memory available
         # (Currently, we OOM with the full batch size, so we loop, which is slow)
         D = sample_diffusion_outs["X_L"].shape[0]
-        confidence_stack = {}
+        confidence_stack: dict[str, torch.Tensor] = {}
         for i in range(D):
             confidence = checkpoint.checkpoint(
                 create_custom_forward(

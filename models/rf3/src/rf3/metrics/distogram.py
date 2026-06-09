@@ -95,7 +95,10 @@ class DistogramLoss(Metric):
         super().__init__(**kwargs)
         self.cce_loss = nn.CrossEntropyLoss(reduction="none")
 
-    def compute(
+    # Metric.compute is declared `(self, **kwargs)` and always invoked by keyword via
+    # compute_from_kwargs; subclasses refine it with explicit keyword params by design
+    # (see the base docstring), which mypy reports as an LSP override violation.
+    def compute(  # type: ignore[override]
         self,
         pred_distogram: Float[torch.Tensor, "I I n_bins"],
         X_rep_atoms_I: Float[torch.Tensor, "I 3"],
@@ -141,8 +144,10 @@ def bin_distances(
     distance_map = torch.nan_to_num(distance_map, nan=9999.0)
 
     # ... bin the distances
-    n_bins = torch.linspace(min_distance, max_distance, n_bins).to(coords.device)
-    binned_distances = torch.bucketize(distance_map, n_bins)
+    bin_boundaries = torch.linspace(min_distance, max_distance, n_bins).to(
+        coords.device
+    )
+    binned_distances = torch.bucketize(distance_map, bin_boundaries)
 
     return binned_distances
 
@@ -150,7 +155,7 @@ def bin_distances(
 def masked_distogram_cross_entropy_loss(
     input: Float[torch.Tensor, "D I I n_bins"],
     target: Float[torch.Tensor, "D I I"],
-    mask: Float[torch.Tensor, "I I"] = None,
+    mask: Float[torch.Tensor, "I I"],
 ) -> Float[torch.Tensor, "D"]:
     # TODO: Refactor loss to use this function instead (more re-usable)
     """Computes the masked cross-entropy between two distograms.
@@ -164,7 +169,7 @@ def masked_distogram_cross_entropy_loss(
     loss = F.cross_entropy(input, target, reduction="none")
 
     # Apply mask and normalize
-    masked_loss = loss * mask if mask is not None else loss
+    masked_loss = loss * mask
     normalized_loss = masked_loss.sum(dim=(-1, -2)) / mask.sum() + 1e-4  # [D]
 
     return normalized_loss
@@ -214,7 +219,7 @@ class DistogramComparisons(Metric):
         # Deduplicate (handle symmetries in token_a/token_b)
         self.comparison_configs = list(set(comparison_configs))
 
-    def compute(
+    def compute(  # type: ignore[override]  # see DistogramLoss.compute above
         self,
         X_L: Float[torch.Tensor, "D L 3"],
         trunk_pred_distogram: Float[torch.Tensor, "I I n_bins"],
@@ -353,7 +358,7 @@ class DistogramEntropy(Metric):
             # Use provided comparison configurations
             self.comparison_configs = comparison_configs
 
-    def compute(
+    def compute(  # type: ignore[override]  # see DistogramLoss.compute above
         self,
         trunk_pred_distogram: Float[torch.Tensor, "I I n_bins"],
         ground_truth_atom_array_stack: AtomArrayStack,

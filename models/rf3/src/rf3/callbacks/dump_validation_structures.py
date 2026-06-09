@@ -2,7 +2,7 @@ from os import PathLike
 from pathlib import Path
 
 from atomworks.ml.example_id import parse_example_id
-from beartype.typing import Any
+from beartype.typing import Any, Literal, cast
 from rf3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
     dump_structures,
@@ -43,8 +43,9 @@ class DumpValidationStructuresCallback(BaseCallback):
         trainer,
         outputs: dict,
         batch: Any,
-        dataset_name: str | None,
-        **_,
+        batch_idx: int,
+        num_batches: int,
+        dataset_name: str | None = None,
     ):
         if (not self.dump_predictions) and (not self.dump_trajectories):
             return  # Nothing to do
@@ -68,12 +69,16 @@ class DumpValidationStructuresCallback(BaseCallback):
             """Helper function to build a path from a training or validation example_id."""
             path = self.save_dir / dir / f"epoch_{trainer.state['current_epoch']}"
 
-            path = path / dataset_name
+            # The fabric trainer always passes the validation-loader name (a dict key),
+            # so dataset_name is never None when this callback runs.
+            path = path / cast(str, dataset_name)
 
             return path / f"{identifier}{extra}"
 
         # Determine file type based on compression setting
-        file_type = "cif.gz" if self.compress_outputs else "cif"
+        file_type: Literal["cif", "cif.gz"] = (
+            "cif.gz" if self.compress_outputs else "cif"
+        )
 
         if self.dump_predictions:
             atom_array_stack = build_stack_from_atom_array_and_batched_coords(

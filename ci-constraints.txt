@@ -1,0 +1,17 @@
+# CI-only version constraints for the type-check / test gate.
+#
+# These pin the few upstream packages whose *type stubs* the gate is sensitive to,
+# to the versions Foundry is developed and validated against. They are pip
+# *constraints* (`pip install -c`), not dependencies: they cap what gets resolved
+# during install without adding anything, so pyproject.toml's version ranges remain
+# the single source of truth. Applied only by .github/workflows/test.yaml.
+#
+# Why this exists: the gate previously floated to whatever was latest on PyPI, so an
+# upstream release could turn CI red with no change to our code. atomworks 2.2.0 caps
+# `torch<2.8` and `rdkit<2025.9`, which kept the env good; atomworks 2.2.1 lifted both
+# caps, letting CI pull torch 2.12 (whose stubs widened LRScheduler.get_lr's return
+# type, breaking our override) and rdkit 2026.3.3 (whose Chem/rdchem.pyi has a syntax
+# error mypy refuses to parse). Pinning here restores the validated, reproducible env.
+# Revisit deliberately (and re-run the gate) when intentionally upgrading either package.
+torch==2.7.1
+rdkit==2025.3.6
