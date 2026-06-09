@@ -20,7 +20,7 @@ Here is an overview of how this system is structured:
 ### Installing Foundry in Editable Mode
 Install both foundry and models in editable mode for development:
 ```bash
-uv pip install -e '.[all,dev]'
+uv sync --all-extras --group dev
 ```
 This approach allows you to:
 - Modify foundry shared utilities and see changes immediately
@@ -41,10 +41,9 @@ This approach allows you to:
     ```
 
 ### As You Commit
-Foundry comes with a `.pre-commit-config.yaml` that runs `make format` (via `ruff format`) before each commit, enable it once per clone: 
+Foundry comes with a `.pre-commit-config.yaml` that runs `make format` (via `ruff format`) before each commit, enable it once per clone:
 ```bash
-pip install pre-commit # if not already installed
-pre-commit install
+uv run pre-commit install  # pre-commit is installed via the dev dependency group
 ```
 Once it is successfully installed, it will automatically format the repo whenever you run `git commit`, but you can apply it manually via `pre-commit run --all-files`.
 
@@ -59,9 +58,9 @@ Even with this, there are a few things to keep in mind to make sure your commits
 
 
 ## Adding a Model
-To be able to add new models as independent packages, make sure to install foundry and its models in 'editable' mode: 
+To be able to add new models as independent packages, make sure to install foundry and its models in 'editable' mode:
 ```bash
-uv pip install -e '.[all,dev]'
+uv sync --all-extras --group dev
 ```
 Once you have done this you can follow these steps to incorporate your model into the repository: 
 1. Create a `models/<model_name>` directory with its own `pyproject.toml`

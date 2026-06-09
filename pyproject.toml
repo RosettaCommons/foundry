@@ -68,26 +68,6 @@ all = [
     "rc-foundry[rfd3]",
     "rc-foundry[rf3]",
 ]
-dev = [
-    # Linters & formatters
-    "assertpy",
-    "ruff==0.8.3",
-    "ipdb",
-    # Type checking
-    "mypy>=1.13,<2",
-    # Debugger/interactive
-    "debugpy>=1.8.5,<2",
-    "ipykernel>=6.29.4,<7",
-    # Testing tools
-    "pytest>=8.2.0,<9", # testing framework
-    "pytest-testmon>=2.1.1,<3", # run only tests related to changed code
-    "pytest-xdist>=3.6.1,<4", # run tests in parallel
-    "pytest-dotenv>=0.5.2,<1", # load environment variables from .env file
-    "pytest-cov>=4.1.0,<5", # generate coverage report
-    "pytest-benchmark>=5.0.0,<6", # benchmark tests for speed
-    "atomworks[ml,dev,openbabel]>=2.1.1",
-    "pre-commit"
-]
 [project.scripts]
 rf3 = "rf3.cli:app"
 rfd3 = "rfd3.cli:app"
@@ -284,6 +264,25 @@ skip_covered = false
 
 [dependency-groups]
 dev = [
+    # Build tools
     "build>=1.3.0",
     "hatchling>=1.28.0",
+    # Linters & formatters
+    "assertpy",
+    "ruff==0.8.3",
+    "ipdb",
+    # Type checking
+    "mypy>=1.13,<2",
+    # Debugger/interactive
+    "debugpy>=1.8.5,<2",
+    "ipykernel>=6.29.4,<7",
+    # Testing tools
+    "pytest>=8.2.0,<9", # testing framework
+    "pytest-testmon>=2.1.1,<3", # run only tests related to changed code
+    "pytest-xdist>=3.6.1,<4", # run tests in parallel
+    "pytest-dotenv>=0.5.2,<1", # load environment variables from .env file
+    "pytest-cov>=4.1.0,<5", # generate coverage report
+    "pytest-benchmark>=5.0.0,<6", # benchmark tests for speed
+    "atomworks[ml,dev,openbabel]>=2.1.1",
+    "pre-commit"
 ]
