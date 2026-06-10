@@ -5,7 +5,7 @@ import torch
 from foundry.utils.rigid import rot_vec_mul
 
 
-def centre(X_L, X_exists_L):
+def centre(X_L: torch.Tensor, X_exists_L: torch.Tensor) -> torch.Tensor:
     X_L = X_L.clone()
     X_L[X_exists_L] = X_L[X_exists_L] - torch.mean(
         X_L[X_exists_L], dim=-2, keepdim=True
@@ -14,7 +14,7 @@ def centre(X_L, X_exists_L):
     return X_L
 
 
-def get_random_augmentation(X_L, s_trans):
+def get_random_augmentation(X_L: torch.Tensor, s_trans: float) -> torch.Tensor:
     """
     Inputs:
         X_L [D, L, 3]: Batched atom coordinates
@@ -27,12 +27,14 @@ def get_random_augmentation(X_L, s_trans):
     return rot_vec_mul(R[:, None], X_L) + noise
 
 
-def centre_random_augmentation(X_L, X_exists_L, s_trans):
+def centre_random_augmentation(
+    X_L: torch.Tensor, X_exists_L: torch.Tensor, s_trans: float
+) -> torch.Tensor:
     X_L = centre(X_L, X_exists_L)
     return get_random_augmentation(X_L, s_trans)
 
 
-def uniform_random_rotation(size):
+def uniform_random_rotation(size: tuple[int, ...]) -> torch.Tensor:
     # Sample random angles for rotations around X, Y, and Z axes
     theta_x = torch.rand(size) * 2 * math.pi
     theta_y = torch.rand(size) * 2 * math.pi

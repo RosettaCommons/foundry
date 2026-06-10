@@ -264,6 +264,7 @@ module = [
     "foundry.utils.torch",
     "foundry.utils.alignment",
     "foundry.utils.weights",
+    "foundry.utils.rotation_augmentation",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
