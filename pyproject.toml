@@ -274,6 +274,7 @@ module = [
     "foundry.utils.alignment",
     "foundry.utils.weights",
     "foundry.utils.rotation_augmentation",
+    "foundry.utils.instantiators",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
