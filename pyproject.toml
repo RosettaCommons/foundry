@@ -258,7 +258,7 @@ ignore_errors = true
 # disallow_untyped_defs / check_untyped_defs off; fully-annotated modules opt into strict
 # checking here one at a time, so any new untyped def in them fails the gate.
 [[tool.mypy.overrides]]
-module = ["foundry.utils.rigid"]
+module = ["foundry.utils.rigid", "foundry.utils.components"]
 disallow_untyped_defs = true
 check_untyped_defs = true
 

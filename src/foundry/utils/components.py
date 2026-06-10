@@ -41,15 +41,14 @@ class ComponentValidationError(ValueError):
 class ComponentStr(str):
     """Component identifier, e.g. "A1" for residues, "B12", etc. Previously named `contig_string`"""
 
-    def split_component(v):
+    def split_component(v) -> list:
         return split_contig(v)
 
 
-def split_contig(x):
+def split_contig(x: str) -> list:
     try:
         chain = str(x[0])
-        idx = x[1:]
-        idx = int(idx)
+        idx = int(x[1:])
         if idx < 0:
             raise ComponentValidationError(
                 "Residue index must be a non-negative integer.", component=str(x)
@@ -62,7 +61,7 @@ def split_contig(x):
     return [chain, idx]
 
 
-def extract_pn_unit_info(contig):
+def extract_pn_unit_info(contig: str) -> tuple[str, int, int]:
     """
     Convert substring like A20-21 or A20 to separate terms: A, 20, 21.
     """
@@ -81,7 +80,9 @@ def extract_pn_unit_info(contig):
     )
 
 
-def get_design_pattern_with_constraints(contig, length=None):
+def get_design_pattern_with_constraints(
+    contig: str, length: str | None = None
+) -> list[str]:
     """
     Convert the contig string to separate modules.
     e.g. '1-5,A20-21,1-5,A25-25,1-5,A30-30,/0,1-5' with length = 10-10 may be converted to [2, A20, A21, 2, A25, 3, A30, /0, 3]
@@ -91,8 +92,8 @@ def get_design_pattern_with_constraints(contig, length=None):
     contig_parts = contig.split(",")
 
     # Separate fixed segments (e.g., "A1051-1051") and variable ranges (e.g., "0-40")
-    variable_ranges = []
-    fixed_parts = []
+    variable_ranges: list[list[int]] = []
+    fixed_parts: list[tuple[str, int, int]] = []
     pos_to_put_motif = []
 
     suff = []  # suffixes for diffused regions P(optional),R,D
@@ -111,7 +112,7 @@ def get_design_pattern_with_constraints(contig, length=None):
 
         elif any(c.isalpha() for c in part):  # Detect parts containing letters as fixed
             pn_unit_id, pn_unit_start, pn_unit_end = extract_pn_unit_info(part)
-            fixed_parts.append([pn_unit_id, pn_unit_start, pn_unit_end])
+            fixed_parts.append((pn_unit_id, pn_unit_start, pn_unit_end))
             pos_to_put_motif.append(1)
         elif part == "/0":
             pos_to_put_motif.append(2)
@@ -141,7 +142,7 @@ def get_design_pattern_with_constraints(contig, length=None):
     remaining_length_min = length_min
     remaining_length_max = length_max
 
-    num_free_atoms = []
+    num_free_atoms: list[int] = []
     for range_limits in variable_ranges:
         min_value = range_limits[0]
         max_value = range_limits[1]
@@ -187,7 +188,9 @@ def get_design_pattern_with_constraints(contig, length=None):
     return atoms_with_motif
 
 
-def get_motif_components_and_breaks(unindexed_contig, index_all=False):
+def get_motif_components_and_breaks(
+    unindexed_contig: str, index_all: bool = False
+) -> tuple[list[str], list[bool | None]]:
     """
     Convert a contig string into its components and breaks in motif
     This way you can specify in your contigs where the breaks in the motif should be, so that,
@@ -203,8 +206,8 @@ def get_motif_components_and_breaks(unindexed_contig, index_all=False):
         index_all: No breaks are used, allows for full indexing of concatenated tokens
             Can use cleanup if this is the desired way to provide motif tokens.
     """
-    components = []
-    breaks = []
+    components: list[str] = []
+    breaks: list[bool | None] = []
 
     contig_parts = unindexed_contig.split(",")
     for part in contig_parts:
@@ -249,8 +252,10 @@ def get_motif_components_and_breaks(unindexed_contig, index_all=False):
 
 
 def get_name_mask(
-    source_names: np.ndarray, query_names: str, source_resname: str | None = None
-):
+    source_names: np.ndarray,
+    query_names: str | list[str],
+    source_resname: str | None = None,
+) -> np.ndarray:
     """
     Args:
         source_names: list of all names to match in current token
@@ -344,7 +349,7 @@ def get_name_mask(
     return mask
 
 
-def fetch_mask_from_idx(contig_str, *, atom_array):
+def fetch_mask_from_idx(contig_str: str, *, atom_array: AtomArray) -> np.ndarray:
     """
     contig_str: A11
     returns:
@@ -360,7 +365,7 @@ def fetch_mask_from_idx(contig_str, *, atom_array):
     return mask
 
 
-def fetch_mask_from_name(name, *, atom_array):
+def fetch_mask_from_name(name: str, *, atom_array: AtomArray) -> np.ndarray:
     """
     name: LIG_NAME
     returns:
@@ -379,7 +384,7 @@ def fetch_mask_from_name(name, *, atom_array):
     return mask
 
 
-def fetch_mask_from_component(component, *, atom_array):
+def fetch_mask_from_component(component: str, *, atom_array: AtomArray) -> np.ndarray:
     """
     Catch-all function for fetching a component by non-protein name or contig
     component: A11 or LIG_NAME
