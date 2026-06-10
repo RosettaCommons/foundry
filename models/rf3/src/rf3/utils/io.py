@@ -6,7 +6,7 @@ import torch
 from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.ml.utils.io import apply_sharding_pattern
 from atomworks.ml.utils.misc import hash_sequence
-from beartype.typing import Literal
+from beartype.typing import Literal, cast
 from biotite.structure import AtomArray, AtomArrayStack, stack
 
 from foundry.utils.alignment import weighted_rigid_align
@@ -165,9 +165,12 @@ def dump_trajectories(
             trajectory_list[0].device
         )
         for step in range(n_steps - 1):
+            # `trajectory_list` is typed `Tensor | np.ndarray`, but every path here
+            # (alignment + the `torch.stack` below) is tensor-only, so the diffusion
+            # trajectories are always tensors when alignment runs.
             trajectory_list[step] = weighted_rigid_align(
-                X_L=trajectory_list[-1],
-                X_gt_L=trajectory_list[step],
+                X_L=cast(torch.Tensor, trajectory_list[-1]),
+                X_gt_L=cast(torch.Tensor, trajectory_list[step]),
                 X_exists_L=X_exists_L,
                 w_L=w_L,
             )

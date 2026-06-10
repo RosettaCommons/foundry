@@ -147,6 +147,61 @@ def test_mixed_policies_and_fallbacks(simple_model):
     assert torch.allclose(updated_state["2.bias"], checkpoint["2.bias"])
 
 
+def test_single_char_wildcard_and_literal_dot():
+    """'?' matches exactly one character and '.' is escaped to a literal dot.
+
+    Pins the glob grammar documented on `_PatternPolicyMixin` beyond the '*' case
+    the other tests exercise: the pattern `encoder?.weight` compiles to the regex
+    `^encoder.\\.weight$`.
+    """
+    config = WeightLoadingConfig(
+        param_policies={"encoder?.weight": WeightLoadingPolicy.ZERO_INIT}
+    )
+    assert config.get_policy("encoder1.weight") == WeightLoadingPolicy.ZERO_INIT
+    assert config.get_policy("encoder2.weight") == WeightLoadingPolicy.ZERO_INIT
+    # '?' is a single character, so a two-character run does not match.
+    assert config.get_policy("encoder12.weight") == WeightLoadingPolicy.COPY
+    # '.' is a literal dot, so it does not match an arbitrary character.
+    assert config.get_policy("encoder1Xweight") == WeightLoadingPolicy.COPY
+
+
+def test_char_class_wildcard():
+    """'[...]' matches any single character inside the brackets (glob grammar)."""
+    config = WeightLoadingConfig(
+        param_policies={"encoder[12].weight": WeightLoadingPolicy.REINIT}
+    )
+    assert config.get_policy("encoder1.weight") == WeightLoadingPolicy.REINIT
+    assert config.get_policy("encoder2.weight") == WeightLoadingPolicy.REINIT
+    assert config.get_policy("encoder3.weight") == WeightLoadingPolicy.COPY  # default
+
+
+def test_copy_missing_param_falls_back_to_fallback_policy(simple_model):
+    """A parameter absent from the checkpoint under COPY falls back to the fallback policy.
+
+    Exercises the WeightLoadingError raise -> catch -> fallback chain directly:
+    `test_mixed_policies_and_fallbacks` only triggers fallback via a shape/dimension
+    mismatch, never via a missing parameter under the COPY policy.
+    """
+    # Checkpoint matches everything except "0.bias", which is missing entirely.
+    ckpt = {
+        k: v.clone() + 1.0
+        for k, v in simple_model.state_dict().items()
+        if k != "0.bias"
+    }
+    config = WeightLoadingConfig(
+        default_policy=WeightLoadingPolicy.COPY,
+        fallback_policy=WeightLoadingPolicy.ZERO_INIT,
+    )
+    updated_state = load_weights_with_policies(simple_model, ckpt, config)
+
+    # Present parameters are copied from the checkpoint.
+    assert torch.allclose(updated_state["0.weight"], ckpt["0.weight"])
+    # The missing one falls back to ZERO_INIT.
+    assert torch.allclose(
+        updated_state["0.bias"], torch.zeros_like(updated_state["0.bias"])
+    )
+
+
 def test_freeze_parameters_by_name_and_pattern(simple_model):
     """Test freezing parameters by exact name and pattern."""
     # Get parameter names
