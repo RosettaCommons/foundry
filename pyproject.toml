@@ -275,6 +275,9 @@ module = [
     "foundry.utils.weights",
     "foundry.utils.rotation_augmentation",
     "foundry.utils.instantiators",
+    "foundry.utils.ddp",
+    "foundry.utils.squashfs",
+    "foundry.utils.logging",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
