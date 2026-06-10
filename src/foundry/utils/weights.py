@@ -97,7 +97,7 @@ class WeightLoadingConfig(_PatternPolicyMixin):
         default_factory=dict, repr=False
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if isinstance(self.default_policy, str):
             self.default_policy = WeightLoadingPolicy(self.default_policy)
         if isinstance(self.fallback_policy, str):
@@ -131,7 +131,7 @@ class ParameterFreezingConfig(_PatternPolicyMixin):
     freeze_by_default: bool = False
     _compiled_patterns: dict[Pattern, bool] = field(default_factory=dict, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self._compiled_patterns = self._compile_patterns(self.param_policies)
 
     def is_frozen(self, param_name: str) -> bool:

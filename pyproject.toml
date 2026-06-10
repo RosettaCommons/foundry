@@ -257,22 +257,26 @@ module = [
 ]
 ignore_errors = true
 
-# rf3 enablement ratchet. `models/rf3` was brought into mypy's scope in 0014;
-# these modules had pre-existing type errors at that point and are exempted until
-# annotated. Fix the errors and remove the entry to enable type-checking for that
-# module (same playbook as the rfd3 ratchet above). Do NOT add modules.
-#
-# `rf3.data.paired_msa` is NOT a type-only clear: it subclasses the atomworks
-# `StructuralDatasetWrapper`, which the installed atomworks turned into a deprecated
-# factory *function*, so the module fails to import (subclassing a function), and it
-# also calls an unimported `save_failed_example_to_disk`. Clearing it needs a real
-# refactor to the `PandasDataset` API (cluster-data-validated), not annotations.
-# Tracked in `.ai/roadmap.md`.
+# NOTE: the rf3 enablement ratchet (0014) is fully cleared — there is no rf3 module-level
+# mypy exemption here. The one module that cannot type-check, `rf3.data.paired_msa`
+# (broken against the installed atomworks; needs a `PandasDataset`-API refactor), carries
+# a file-level `# mypy: ignore-errors` directive in the module itself, so the suppression
+# is visible where the code is and the module stays inside mypy's `files` scope.
+
+# Per-module strictness ratchet (direction (b)). The global baseline above leaves
+# disallow_untyped_defs / check_untyped_defs off; fully-annotated modules opt into strict
+# checking here one at a time, so any new untyped def in them fails the gate.
 [[tool.mypy.overrides]]
 module = [
-    "rf3.data.paired_msa",
+    "foundry.utils.rigid",
+    "foundry.utils.components",
+    "foundry.utils.torch",
+    "foundry.utils.alignment",
+    "foundry.utils.weights",
+    "foundry.utils.rotation_augmentation",
 ]
-ignore_errors = true
+disallow_untyped_defs = true
+check_untyped_defs = true
 
 # Testing ----------------------------------------------------------------------------
 [tool.pytest.ini_options]

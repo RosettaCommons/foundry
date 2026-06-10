@@ -14,7 +14,7 @@ from contextlib import contextmanager
 
 import numpy as np
 import torch
-from beartype.typing import Any, Sequence
+from beartype.typing import Any, Iterator, Sequence
 from toolz import valmap
 from torch import Tensor
 from torch._prims_common import DeviceLikeType
@@ -30,7 +30,7 @@ def map_to(
     device: DeviceLikeType | None = None,
     dtype: _dtype | None = None,
     non_blocking: bool = False,
-    **to_kwargs,
+    **to_kwargs: Any,
 ) -> Any:
     """
     Recursively applies the `.to()` method to all tensors in a nested structure.
@@ -135,7 +135,7 @@ assert_no_nans = _assert_no_nans if should_check_nans else do_nothing
 
 
 @contextmanager
-def _suppress_tracer_warnings():
+def _suppress_tracer_warnings() -> Iterator[None]:
     """
     Context manager to temporarily suppress known warnings in torch.jit.trace().
     Note: Cannot use catch_warnings because of https://bugs.python.org/issue29672
@@ -144,12 +144,14 @@ def _suppress_tracer_warnings():
         - https://github.com/NVlabs/edm2/blob/main/torch_utils/misc.py
     """
     tracer_warning_filter = ("ignore", None, torch.jit.TracerWarning, None, 0)
-    warnings.filters.insert(0, tracer_warning_filter)
+    # warnings.filters is typed as an immutable Sequence in typeshed but is a mutable
+    # list at runtime, so insert/remove are valid.
+    warnings.filters.insert(0, tracer_warning_filter)  # type: ignore[attr-defined]
     yield
-    warnings.filters.remove(tracer_warning_filter)
+    warnings.filters.remove(tracer_warning_filter)  # type: ignore[attr-defined]
 
 
-def assert_shape(tensor: Tensor, ref_shape: Sequence[int | None]):
+def assert_shape(tensor: Tensor, ref_shape: Sequence[int | None]) -> None:
     """
     Assert that the shape of a tensor matches the given list of integers.
     None indicates that the size of a dimension is allowed to vary.
@@ -276,7 +278,7 @@ class Timer:
         use_barrier (bool, optional): Whether to use synchronization barriers. Defaults to True.
     """
 
-    def __init__(self, name, use_barrier: bool = True):
+    def __init__(self, name: str, use_barrier: bool = True):
         self.name_ = name
         self.elapsed_ = 0.0
         self.started_ = False
@@ -336,30 +338,30 @@ class Timers:
         timers (dict): A dictionary of Timer objects, keyed by their names.
     """
 
-    def __init__(self):
-        self.timers = {}
+    def __init__(self) -> None:
+        self.timers: dict[str, Timer] = {}
 
-    def __call__(self, name, use_barrier: bool = True) -> Timer:
+    def __call__(self, name: str, use_barrier: bool = True) -> Timer:
         """Get or create a Timer object."""
         if name not in self.timers:
             self.timers[name] = Timer(name, use_barrier=use_barrier)
         return self.timers[name]
 
-    def start(self, *names) -> None:
+    def start(self, *names: str) -> None:
         """Start the specified timers."""
         for name in names:
             self(name).start()
 
-    def stop(self, *names) -> None:
+    def stop(self, *names: str) -> None:
         """Stop the specified timers."""
         for name in names:
             self.timers[name].stop()
 
-    def reset(self, *names) -> None:
+    def reset(self, *names: str) -> None:
         """Reset the specified timers."""
         for name in names:
             self.timers[name].reset()
 
-    def elapsed(self, *names, reset: bool = True) -> dict[str, float]:
+    def elapsed(self, *names: str, reset: bool = True) -> dict[str, float]:
         """Get the elapsed time for the specified timers."""
         return {name: self.timers[name].elapsed(reset=reset) for name in names}

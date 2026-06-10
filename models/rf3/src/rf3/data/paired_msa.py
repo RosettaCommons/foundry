@@ -1,3 +1,14 @@
+# mypy: ignore-errors
+#
+# This module does not type-check (and does not even import) against the installed
+# atomworks: `MultiInputDatasetWrapper` below subclasses
+# `atomworks.ml.datasets.StructuralDatasetWrapper`, which atomworks turned into a
+# deprecated factory *function* — subclassing it raises `TypeError` at import time.
+# Making it type-check requires a real refactor onto the `PandasDataset` API, validated
+# on cluster data (see `.ai/roadmap.md`), not type annotations. The suppression lives
+# here, in the file, rather than in `pyproject.toml` so it is visible to anyone reviving
+# the module: when this file imports and type-checks cleanly again, delete this directive
+# to restore mypy coverage (the module stays inside mypy's `files` scope).
 import os
 import socket
 import time
