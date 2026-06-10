@@ -254,6 +254,14 @@ ignore_errors = true
 # a file-level `# mypy: ignore-errors` directive in the module itself, so the suppression
 # is visible where the code is and the module stays inside mypy's `files` scope.
 
+# Per-module strictness ratchet (direction (b)). The global baseline above leaves
+# disallow_untyped_defs / check_untyped_defs off; fully-annotated modules opt into strict
+# checking here one at a time, so any new untyped def in them fails the gate.
+[[tool.mypy.overrides]]
+module = ["foundry.utils.rigid"]
+disallow_untyped_defs = true
+check_untyped_defs = true
+
 # Testing ----------------------------------------------------------------------------
 [tool.pytest.ini_options]
 # Shared-layer tests live in the top-level `tests/`; model-specific tests live in each
