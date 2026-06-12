@@ -258,10 +258,7 @@ module = [
 ignore_errors = true
 
 # NOTE: the rf3 enablement ratchet (0014) is fully cleared — there is no rf3 module-level
-# mypy exemption here. The one module that cannot type-check, `rf3.data.paired_msa`
-# (broken against the installed atomworks; needs a `PandasDataset`-API refactor), carries
-# a file-level `# mypy: ignore-errors` directive in the module itself, so the suppression
-# is visible where the code is and the module stays inside mypy's `files` scope.
+# mypy exemption here, and every rf3 module type-checks with no in-file suppressions.
 
 # Per-module strictness ratchet (direction (b)). The global baseline above leaves
 # disallow_untyped_defs / check_untyped_defs off; fully-annotated modules opt into strict

@@ -9,7 +9,6 @@ defaults:
     - monomer_distillation
     - na_complex_distillation
     - disorder_distillation
-    # - domain_distillation
     # - rna_monomer_distillation
   - val/af3_validation@val.af3_validation
   - val/af3_validation@val.quick_af3_validation_with_templating
@@ -28,8 +27,6 @@ train:
     probability: 0.02
   disorder_distillation:
     probability: 0.02
-  # multidomain_distillation:
-  #   probability: 0.06
   # rna_monomer_distillation:
   #   probability: 0.04
 
