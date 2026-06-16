@@ -578,16 +578,12 @@ class RF3InferenceEngine(BaseInferenceEngine):
                 )
 
                 if out_dir:
-                    # Save early stop info to disk
-                    dict_to_save = {
-                        k: v for k, v in network_output.items() if v is not None
-                    }
-                    df_to_save = pd.DataFrame([dict_to_save])
-                    df_to_save.to_csv(example_out_dir / "score.csv", index=False)
-
-                    df_to_save = pd.DataFrame([metrics_output])
-                    df_to_save.to_csv(
-                        example_out_dir / f"{input_spec.example_id}_metrics.csv",
+                    # Write a ranking_scores.csv that records the early-stop outcome so
+                    # downstream tooling (and skip_existing) always finds a consistent file.
+                    pd.DataFrame(
+                        [{"early_stopped": True, "mean_plddt": network_output.get("mean_plddt")}]
+                    ).to_csv(
+                        example_out_dir / f"{input_spec.example_id}_ranking_scores.csv",
                         index=False,
                     )
                 else:

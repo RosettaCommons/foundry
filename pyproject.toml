@@ -252,6 +252,10 @@ ignore_errors = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "gpu: requires CUDA or MPS GPU — skipped in CPU CI",
+    "integration: end-to-end CLI tests that require a downloaded model checkpoint",
+]
 
 [tool.coverage.run]
 source = ["src/foundry", "src/foundry_cli"]

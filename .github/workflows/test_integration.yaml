@@ -1,0 +1,59 @@
+name: integration-tests
+
+on:
+  # Run manually from the Actions tab — useful for one-off validation.
+  workflow_dispatch:
+  # Also run on pushes to the mainline branches so regressions are caught
+  # before they reach production. PRs are excluded to avoid consuming compute
+  # and downloading large checkpoints on every review cycle.
+  push:
+    branches: [main, production]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rf3-integration:
+    name: pytest (rf3 integration tests — CPU)
+    runs-on: ubuntu-latest
+    # Hard wall-clock cap: the full suite must finish in under 20 minutes
+    # (15-minute test budget + headroom for install and checkpoint download).
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package + dev extras
+        run: pip install -e ".[dev]"
+
+      # Cache the checkpoint so subsequent runs skip the multi-GB download.
+      - name: Cache RF3 checkpoint
+        id: cache-ckpt
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/rf3_checkpoints
+          key: rf3-ckpt-rf3_foundry_01_24_latest_remapped
+
+      - name: Download RF3 checkpoint
+        if: steps.cache-ckpt.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/rf3_checkpoints
+          wget -q \
+            -O ~/.cache/rf3_checkpoints/rf3_foundry_01_24_latest_remapped.ckpt \
+            http://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_latest_remapped.ckpt
+
+      - name: Run RF3 integration tests
+        env:
+          RF3_CKPT_PATH: ${{ env.HOME }}/.cache/rf3_checkpoints/rf3_foundry_01_24_latest_remapped.ckpt
+        run: |
+          pytest models/rf3/tests/integration/ \
+            -m integration \
+            -v \
+            --tb=short

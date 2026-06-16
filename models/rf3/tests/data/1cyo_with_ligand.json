@@ -1,0 +1,14 @@
+[
+    {
+        "name": "1cyo_with_ligand",
+        "components": [
+            {
+                "seq": "SKAVKYYTLEEIQKHNNSKSTWLILHYKVYDLTKFLEEHPGGEEVLREQAGGDATENFEDVGHSTDARELSKTFIIGELHPDDRSKITKPSES",
+                "chain_id": "A"
+            },
+            {
+                "ccd_code": "HEM"
+            }
+        ]
+    }
+]

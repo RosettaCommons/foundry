@@ -430,10 +430,14 @@ class RF3WithConfidence(RF3):
                     return result | early_stop_data
 
             # (We use `deque` with maxlen=1 to ensure that we only keep the last output in memory)
-            try:
-                recycling_outputs = deque(recycling_output_generator, maxlen=1).pop()
-            except IndexError:
-                # Handle the case where the generator is empty
+            remaining = deque(recycling_output_generator, maxlen=1)
+            if remaining:
+                recycling_outputs = remaining.pop()
+            elif should_early_stop_fn:
+                # n_recycles=1: the single recycle was already consumed by next() for
+                # the early-stop check; reuse it as the final recycling output.
+                recycling_outputs = first_recycle_outputs
+            else:
                 raise RuntimeError("Recycling generator produced no outputs")
 
             # Predict the distogram from the pair representation
