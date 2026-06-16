@@ -572,16 +572,22 @@ class RF3InferenceEngine(BaseInferenceEngine):
             # Handle early stopping
             if network_output.get("early_stopped", False):
                 ranked_logger.warning(
-                    f"Early stopping triggered for {input_spec.example_id} "
-                    f"with mean pLDDT {network_output['mean_plddt']:.2f} < "
-                    f"{self.early_stopping_plddt_threshold:.2f}!"
+                    f"Early stopping triggered for {input_spec.example_id}: "
+                    f"mean pLDDT {network_output['mean_plddt']:.2f} is below threshold "
+                    f"{self.early_stopping_plddt_threshold:.2f}. "
+                    f"No structure will be written for this input."
                 )
 
                 if out_dir:
                     # Write a ranking_scores.csv that records the early-stop outcome so
                     # downstream tooling (and skip_existing) always finds a consistent file.
                     pd.DataFrame(
-                        [{"early_stopped": True, "mean_plddt": network_output.get("mean_plddt")}]
+                        [
+                            {
+                                "early_stopped": True,
+                                "mean_plddt": network_output.get("mean_plddt"),
+                            }
+                        ]
                     ).to_csv(
                         example_out_dir / f"{input_spec.example_id}_ranking_scores.csv",
                         index=False,

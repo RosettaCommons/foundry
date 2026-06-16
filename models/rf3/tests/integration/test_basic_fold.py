@@ -15,7 +15,6 @@ No MSA is provided; the protein is short enough to fold without one.
 """
 
 import pytest
-
 from conftest import assert_standard_outputs, load_summary
 
 
