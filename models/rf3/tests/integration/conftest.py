@@ -20,7 +20,7 @@ All ``rf3 fold`` calls in these tests use reduced parameters to keep the total
 wall-clock time under 15 minutes on a GitHub Actions CPU runner::
 
     n_recycles=1          (default 10)
-    num_steps=20          (default 200)
+    num_steps=20          (default 50)
     diffusion_batch_size=1  (default 5)
     seed=1
 
@@ -32,6 +32,7 @@ functions share that result.
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -43,24 +44,35 @@ import pytest
 DATA_DIR = Path(__file__).parent.parent / "data"
 GPU_BASELINE_DIR = DATA_DIR / "integration_baselines"
 
+# Resolve the rf3 executable from the same venv that is running pytest so the
+# subprocess inherits the correct installation without relying on PATH.
+_RF3_BIN = Path(sys.executable).parent / "rf3"
+
 _env_ckpt = os.environ.get("RF3_CKPT_PATH")
 CKPT_PATH = (
     Path(_env_ckpt)
     if _env_ckpt
-    else Path.home() / ".foundry" / "checkpoints" / "rf3_foundry_01_24_latest_remapped.ckpt"
+    else Path.home()
+    / ".foundry"
+    / "checkpoints"
+    / "rf3_foundry_01_24_latest_remapped.ckpt"
 )
 
 # Reduce compute so the full suite finishes within the CI time budget.
+# early_stopping_plddt_threshold=0.0 disables the default threshold (0.5) so
+# that no fixture unexpectedly early-stops on a future low-pLDDT test input.
 SPEED_FLAGS = [
     "n_recycles=1",
     "num_steps=20",
     "diffusion_batch_size=1",
     "seed=1",
+    "early_stopping_plddt_threshold=0.0",
 ]
 
-# Per-fold subprocess timeout (seconds). Keeps individual hangs from blocking
-# the entire session.
-_FOLD_TIMEOUT = 600
+# Per-fold subprocess timeout (seconds).  Set high enough to cover the
+# worst-case fixture (basic_folds_dir batches three inputs in one call).
+# Individual hangs are still caught; CI runners finish well within this limit.
+_FOLD_TIMEOUT = 1800
 
 
 # ---------------------------------------------------------------------------
@@ -83,8 +95,8 @@ def run_rf3_fold(inputs, out_dir, extra_flags=None):
 
     Returns
     -------
-    Path
-        ``out_dir`` cast to ``Path``.
+    tuple[Path, str]
+        ``(out_dir, stderr)`` — the output directory and the captured stderr text.
 
     Raises
     ------
@@ -100,7 +112,7 @@ def run_rf3_fold(inputs, out_dir, extra_flags=None):
         inputs_arg = f"inputs=[{joined}]"
 
     cmd = (
-        ["rf3", "fold"]
+        [str(_RF3_BIN), "fold"]
         + SPEED_FLAGS
         + [f"ckpt_path={CKPT_PATH}", inputs_arg, f"out_dir={out_dir}"]
         + (extra_flags or [])
@@ -112,7 +124,7 @@ def run_rf3_fold(inputs, out_dir, extra_flags=None):
             f"STDOUT:\n{result.stdout}\n"
             f"STDERR:\n{result.stderr}"
         )
-    return Path(out_dir)
+    return Path(out_dir), result.stderr
 
 
 def load_summary(out_dir, name):
@@ -160,7 +172,7 @@ def basic_folds_dir(require_ckpt, tmp_path_factory):
         1cyo.cif              — CIF file containing protein + HEM
     """
     out_dir = tmp_path_factory.mktemp("rf3_basic")
-    run_rf3_fold(
+    out_dir, _ = run_rf3_fold(
         inputs=[
             DATA_DIR / "1cyo_from_json.json",
             DATA_DIR / "1cyo_with_ligand.json",
@@ -174,7 +186,7 @@ def basic_folds_dir(require_ckpt, tmp_path_factory):
 @pytest.fixture(scope="session")
 def annotate_b_factor_dir(require_ckpt, tmp_path_factory):
     out_dir = tmp_path_factory.mktemp("rf3_annotate_b")
-    run_rf3_fold(
+    out_dir, _ = run_rf3_fold(
         DATA_DIR / "1cyo_from_json.json",
         out_dir,
         extra_flags=["annotate_b_factor_with_plddt=true"],
@@ -186,18 +198,18 @@ def annotate_b_factor_dir(require_ckpt, tmp_path_factory):
 def early_stopping_dir(require_ckpt, tmp_path_factory):
     """Fold with threshold=1.0, which pLDDT can never reach → always exits early."""
     out_dir = tmp_path_factory.mktemp("rf3_early_stop")
-    run_rf3_fold(
+    out_dir, stderr = run_rf3_fold(
         DATA_DIR / "1cyo_from_json.json",
         out_dir,
         extra_flags=["early_stopping_plddt_threshold=1.0"],
     )
-    return out_dir
+    return out_dir, stderr
 
 
 @pytest.fixture(scope="session")
 def one_model_per_file_dir(require_ckpt, tmp_path_factory):
     out_dir = tmp_path_factory.mktemp("rf3_one_model")
-    run_rf3_fold(
+    out_dir, _ = run_rf3_fold(
         DATA_DIR / "1cyo_from_json.json",
         out_dir,
         extra_flags=["one_model_per_file=true"],
@@ -211,7 +223,7 @@ def seed_dirs(require_ckpt, tmp_path_factory):
     dirs = []
     for _ in range(2):
         d = tmp_path_factory.mktemp("rf3_seed")
-        run_rf3_fold(DATA_DIR / "1cyo_from_json.json", d)
+        d, _ = run_rf3_fold(DATA_DIR / "1cyo_from_json.json", d)
         dirs.append(d)
     return dirs[0], dirs[1]
 
@@ -219,7 +231,7 @@ def seed_dirs(require_ckpt, tmp_path_factory):
 @pytest.fixture(scope="session")
 def template_selection_dir(require_ckpt, tmp_path_factory):
     out_dir = tmp_path_factory.mktemp("rf3_template")
-    run_rf3_fold(
+    out_dir, _ = run_rf3_fold(
         DATA_DIR / "1cyo.cif",
         out_dir,
         extra_flags=["template_selection=[A]"],
@@ -231,7 +243,7 @@ def template_selection_dir(require_ckpt, tmp_path_factory):
 def ground_truth_conformer_dir(require_ckpt, tmp_path_factory):
     """1cyo chain B is HEM — use it as the ground-truth conformer."""
     out_dir = tmp_path_factory.mktemp("rf3_gt_conformer")
-    run_rf3_fold(
+    out_dir, _ = run_rf3_fold(
         DATA_DIR / "1cyo.cif",
         out_dir,
         extra_flags=["ground_truth_conformer_selection=[B]"],

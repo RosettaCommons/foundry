@@ -23,17 +23,15 @@ Run on a machine with a GPU, then commit the output::
         inputs='models/rf3/tests/data/1cyo_from_json.json' \\
         ckpt_path='<path_to_checkpoint>' \\
         n_recycles=1 num_steps=20 diffusion_batch_size=1 seed=1 \\
-        out_dir='models/rf3/tests/data/integration_baselines/1cyo_from_json'
+        out_dir='models/rf3/tests/data/integration_baselines'
 
 Commit the ``summary_confidences.json`` (and optionally the model CIF) from
 that directory.  Once committed, this test will run automatically.
 """
 
 import json
-from pathlib import Path
 
 import pytest
-
 from conftest import GPU_BASELINE_DIR, load_summary
 
 _BASELINE_DIR = GPU_BASELINE_DIR / "1cyo_from_json"
@@ -47,8 +45,8 @@ _METRICS = ("overall_plddt", "ptm", "iptm", "ranking_score")
 @pytest.mark.skipif(
     not _BASELINE_SUMMARY.exists(),
     reason=(
-        "GPU baseline not yet committed for 1cyo_from_json. "
-        "See module docstring for generation instructions."
+        "GPU baseline missing at integration_baselines/1cyo_from_json/. "
+        "See module docstring to regenerate."
     ),
 )
 def test_confidence_metrics_match_gpu_baseline(basic_folds_dir):
@@ -60,8 +58,8 @@ def test_confidence_metrics_match_gpu_baseline(basic_folds_dir):
     for key in _METRICS:
         cpu_val = cpu_summary.get(key)
         gpu_val = gpu_summary.get(key)
-        if cpu_val is None or gpu_val is None:
-            continue
+        assert cpu_val is not None, f"CPU summary missing expected metric: {key!r}"
+        assert gpu_val is not None, f"GPU baseline missing expected metric: {key!r}"
         diff = abs(cpu_val - gpu_val)
         if diff > _TOLERANCE:
             mismatches.append(

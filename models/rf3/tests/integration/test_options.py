@@ -9,7 +9,6 @@ only inspect the resulting files and metrics.
 """
 
 import pytest
-
 from conftest import assert_standard_outputs, load_summary
 
 
@@ -35,24 +34,25 @@ def test_early_stopping_suppresses_model_output(early_stopping_dir):
     without writing a structure file.  The ranking CSV is still produced and
     records the early-stop event.
     """
-    result_dir = early_stopping_dir / "1cyo_from_json"
+    out_dir, _stderr = early_stopping_dir
+    result_dir = out_dir / "1cyo_from_json"
     assert result_dir.is_dir(), "output directory should still be created on early stop"
-    assert not (result_dir / "1cyo_from_json_model.cif").exists(), (
-        "early stopping should suppress model output"
-    )
+    assert not (
+        result_dir / "1cyo_from_json_model.cif"
+    ).exists(), "early stopping should suppress model output"
     scores_text = (result_dir / "1cyo_from_json_ranking_scores.csv").read_text()
-    assert "early_stopped" in scores_text.lower(), (
-        "ranking_scores.csv should record the early_stopped field"
-    )
+    assert (
+        "early_stopped" in scores_text.lower()
+    ), "ranking_scores.csv should record the early_stopped field"
 
 
 @pytest.mark.integration
 @pytest.mark.integration_slow
 def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
-    """annotate_b_factor_with_plddt=true forces one_model_per_file=true.
+    """annotate_b_factor_with_plddt=true writes pLDDT into the B-factor column.
 
-    pLDDT values annotated on B-factors should be in (0, 1) rather than the
-    large values (> 1) typical of crystallographic B-factors.
+    pLDDT values should be in (0, 1) rather than the large values (> 1)
+    typical of crystallographic B-factors.
     """
     result_dir = annotate_b_factor_dir / "1cyo_from_json"
     assert result_dir.is_dir()
@@ -67,7 +67,7 @@ def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
     content = sample_cif.read_text()
     b_factor_values = _parse_b_factors_from_cif(content)
     assert len(b_factor_values) > 0, "no B-factor values found in CIF"
-    assert all(0.0 <= v <= 1.0 for v in b_factor_values), (
+    assert all(0.0 < v < 1.0 for v in b_factor_values), (
         f"B-factors should be pLDDT values in [0, 1]; got range "
         f"[{min(b_factor_values):.3f}, {max(b_factor_values):.3f}]"
     )
@@ -76,7 +76,7 @@ def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
 @pytest.mark.integration
 @pytest.mark.integration_slow
 def test_one_model_per_file(one_model_per_file_dir):
-    """one_model_per_file=true writes individual CIF files per sample."""
+    """Per-sample CIF files are written to seed-N_sample-N subdirectories."""
     result_dir = one_model_per_file_dir / "1cyo_from_json"
     assert result_dir.is_dir()
     cif_files = list(result_dir.rglob("*.cif"))
@@ -94,9 +94,9 @@ def test_seed_reproducibility(seed_dirs):
     for key in ("ranking_score", "overall_plddt", "ptm"):
         val_a = summary_a.get(key)
         val_b = summary_b.get(key)
-        assert val_a == val_b, (
-            f"seed=1 produced different {key}: run_a={val_a}, run_b={val_b}"
-        )
+        assert (
+            val_a == val_b
+        ), f"seed=1 produced different {key}: run_a={val_a}, run_b={val_b}"
 
 
 @pytest.mark.integration
@@ -114,9 +114,9 @@ def test_ground_truth_conformer_selection(ground_truth_conformer_dir):
     """ground_truth_conformer_selection=[B] keeps HEM in the predicted structure."""
     assert_standard_outputs(ground_truth_conformer_dir, "1cyo")
     model_cif = ground_truth_conformer_dir / "1cyo" / "1cyo_model.cif"
-    assert "HEM" in model_cif.read_text(), (
-        "HEM should remain in the output when used as a ground-truth conformer"
-    )
+    assert (
+        "HEM" in model_cif.read_text()
+    ), "HEM should remain in the output when used as a ground-truth conformer"
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +152,13 @@ def _parse_b_factors_from_cif(content):
             in_atom_loop = True
             continue
 
-        if in_atom_loop and b_col is not None and stripped and not stripped.startswith("_") and stripped != "#":
+        if (
+            in_atom_loop
+            and b_col is not None
+            and stripped
+            and not stripped.startswith("_")
+            and stripped != "#"
+        ):
             parts = stripped.split()
             if len(parts) > b_col:
                 try:
