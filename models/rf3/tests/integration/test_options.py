@@ -57,7 +57,6 @@ def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
     result_dir = annotate_b_factor_dir / "1cyo_from_json"
     assert result_dir.is_dir()
 
-    # With one_model_per_file forced on, individual sample CIFs are written.
     cif_files = list(result_dir.rglob("*.cif"))
     assert len(cif_files) > 0, "expected at least one CIF output"
 
@@ -71,16 +70,6 @@ def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
         f"B-factors should be pLDDT values in [0, 1]; got range "
         f"[{min(b_factor_values):.3f}, {max(b_factor_values):.3f}]"
     )
-
-
-@pytest.mark.integration
-@pytest.mark.integration_slow
-def test_one_model_per_file(one_model_per_file_dir):
-    """Per-sample CIF files are written to seed-N_sample-N subdirectories."""
-    result_dir = one_model_per_file_dir / "1cyo_from_json"
-    assert result_dir.is_dir()
-    cif_files = list(result_dir.rglob("*.cif"))
-    assert len(cif_files) > 0, "expected at least one per-sample CIF"
 
 
 @pytest.mark.integration

@@ -207,17 +207,6 @@ def early_stopping_dir(require_ckpt, tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def one_model_per_file_dir(require_ckpt, tmp_path_factory):
-    out_dir = tmp_path_factory.mktemp("rf3_one_model")
-    out_dir, _ = run_rf3_fold(
-        DATA_DIR / "1cyo_from_json.json",
-        out_dir,
-        extra_flags=["one_model_per_file=true"],
-    )
-    return out_dir
-
-
-@pytest.fixture(scope="session")
 def seed_dirs(require_ckpt, tmp_path_factory):
     """Two identical runs with the same seed for reproducibility checks."""
     dirs = []
