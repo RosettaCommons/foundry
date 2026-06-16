@@ -15,6 +15,31 @@ Tolerance: ±0.05 per metric.  Raw coordinates and PAE matrices are NOT
 compared — floating-point non-determinism between CPU and GPU makes
 exact agreement impossible.
 
+Known limitations
+-----------------
+1. **Stale baselines.** The GPU baseline is a committed JSON file generated
+   once.  If the inference code changes (even as a bug fix), the test may
+   pass against an outdated baseline or begin failing spuriously.  Regenerate
+   and commit a fresh baseline whenever the inference engine output changes.
+   See ``integration_baselines/README.md`` for the regeneration command.
+
+2. **``iptm=0.0`` bug for single-chain inputs.** ``ComputeIPTM`` returns
+   ``0.0`` instead of ``None`` when there are no interfaces, causing
+   ``compute_ranking_score`` to weight iptm in when it should not.  Both the
+   CPU run and the committed GPU baseline contain this wrong value, so the
+   parity check passes — but it is validating a shared bug, not correct
+   behaviour.  Once the bug is fixed the baseline must be regenerated.
+
+3. **Narrow input coverage.** Only the protein-only input (``1cyo_from_json``)
+   has a committed GPU baseline.  Ligand inputs (``1cyo_with_ligand``,
+   ``1cyo.cif``) exercise different code paths but are only range-checked by
+   other tests.  Add baselines for those inputs to extend parity coverage.
+
+4. **Low-quality speed-flag outputs.** The baseline was generated with
+   ``n_recycles=1 num_steps=20`` — the same flags used to keep CI fast.
+   These produce valid but low-quality predictions, so the ±0.05 tolerance
+   is relative to an already-noisy reference point.
+
 Generating the GPU baseline
 ---------------------------
 Run on a machine with a GPU, then commit the output::

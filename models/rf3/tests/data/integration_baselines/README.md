@@ -14,6 +14,16 @@ integration_baselines/
     1cyo_from_json_summary_confidences.json
 ```
 
+## Known limitations
+
+See the module docstring in `models/rf3/tests/integration/test_cpu_gpu_parity.py`
+for a full list of known limitations, including:
+
+- Baselines go stale silently if the inference engine output changes.
+- The committed protein-only baseline contains the known `iptm=0.0` bug for
+  single-chain inputs; regenerate it once that bug is fixed.
+- Ligand inputs have no committed baseline yet.
+
 ## Generating a baseline
 
 Run on a machine with a GPU using the same speed flags as the integration
