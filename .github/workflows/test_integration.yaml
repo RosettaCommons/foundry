@@ -1,13 +1,10 @@
 name: integration-tests
 
 on:
-  # Run manually from the Actions tab — useful for one-off validation.
-  workflow_dispatch:
-  # Also run on pushes to the mainline branches so regressions are caught
-  # before they reach production. PRs are excluded to avoid consuming compute
-  # and downloading large checkpoints on every review cycle.
   push:
     branches: [main, production]
+  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
