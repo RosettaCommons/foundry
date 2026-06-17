@@ -43,9 +43,8 @@ jobs:
             http://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_latest_remapped.ckpt
 
       - name: Run integration tests
-        env:
-          RF3_CKPT_PATH: ${{ env.HOME }}/.cache/rf3_checkpoints/rf3_foundry_01_24_latest_remapped.ckpt
         run: |
+          RF3_CKPT_PATH="$HOME/.cache/rf3_checkpoints/rf3_foundry_01_24_latest_remapped.ckpt" \
           pytest models/rf3/tests/integration/ \
             -m integration \
             -v \
