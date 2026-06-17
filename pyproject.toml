@@ -283,6 +283,11 @@ module = [
     "foundry.constants",
     "foundry.metrics.metric",
     "foundry.metrics.losses",
+    "foundry.callbacks.callback",
+    "foundry.callbacks.timing_logging",
+    "foundry.callbacks.metrics_logging",
+    "foundry.callbacks.train_logging",
+    "foundry.callbacks.health_logging",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
