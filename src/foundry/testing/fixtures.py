@@ -7,7 +7,7 @@ import torch
 
 
 @pytest.fixture(scope="session")
-def gpu():
+def gpu() -> bool:
     """Fixture to check GPU availability for tests that require CUDA or MPS."""
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():
         pytest.skip("GPU not available")

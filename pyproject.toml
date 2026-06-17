@@ -292,6 +292,11 @@ module = [
     "foundry.inference_engines.checkpoint_registry",
     "foundry.hydra.resolvers",
     "foundry.model.layers.blocks",
+    "foundry.utils.xpu.single_xpu_strategy",
+    "foundry.utils.xpu.xpu_accelerator",
+    "foundry.utils.xpu.xpu_precision",
+    "foundry.testing.fixtures",
+    "foundry.testing.pytest_hooks",
     "foundry_cli.download_checkpoints",
 ]
 disallow_untyped_defs = true

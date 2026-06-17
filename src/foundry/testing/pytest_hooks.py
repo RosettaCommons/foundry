@@ -1,10 +1,11 @@
 """Shared pytest configuration hooks for foundry tests."""
 
+import pytest
 import rootutils
 from dotenv import load_dotenv
 
 
-def configure_pytest(config, conftest_file: str) -> None:
+def configure_pytest(config: pytest.Config, conftest_file: str) -> None:
     """Configure pytest for foundry tests.
     Sets up project root and environment variables.
     """
