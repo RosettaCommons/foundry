@@ -61,10 +61,12 @@ def wrap_dataset_and_sampler_with_fallbacks(
     Returns:
         tuple[Dataset, Sampler]: The wrapped dataset and sampler with fallbacks.
     """
-    # Instantiate a new fallback sampler to avoid scaling issues
-    if "weights" in sampler_to_fallback_to:
-        # `.weights` lives on weighted samplers only; the base `Sampler` type doesn't expose it.
-        fallback_weights = sampler_to_fallback_to.weights  # type: ignore[attr-defined]
+    # Instantiate a new fallback sampler to avoid scaling issues.
+    # `hasattr`, not `"weights" in sampler`: `in` on a Sampler has no `__contains__`, so it
+    # iterates the sampler's indices (ints) and never matches the string "weights" — the
+    # weighted branch was dead and the membership test needlessly drew samples.
+    if hasattr(sampler_to_fallback_to, "weights"):
+        fallback_weights = sampler_to_fallback_to.weights
     else:
         # torch types `Dataset` without `__len__`, but map-style datasets provide it.
         fallback_weights = torch.ones(len(dataset_to_fallback_to))  # type: ignore[arg-type]
