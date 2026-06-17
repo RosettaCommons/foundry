@@ -292,6 +292,7 @@ module = [
     "foundry.inference_engines.checkpoint_registry",
     "foundry.hydra.resolvers",
     "foundry.model.layers.blocks",
+    "foundry_cli.download_checkpoints",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true

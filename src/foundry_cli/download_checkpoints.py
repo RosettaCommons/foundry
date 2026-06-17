@@ -156,7 +156,7 @@ def install(
     force: bool = typer.Option(
         False, "--force", "-f", help="Overwrite existing checkpoints"
     ),
-):
+) -> None:
     """Install model checkpoints for foundry.
     Examples:
         foundry install all
@@ -186,7 +186,7 @@ def install(
 
 
 @app.command(name="list-available")
-def list_available():
+def list_available() -> None:
     """List available model checkpoints."""
     console.print("[bold]Available models:[/bold]\n")
     for name, info in REGISTERED_CHECKPOINTS.items():
@@ -194,7 +194,7 @@ def list_available():
 
 
 @app.command(name="list-installed")
-def list_installed():
+def list_installed() -> None:
     """List installed checkpoints and their sizes."""
     checkpoint_dirs = _resolve_checkpoint_dirs(None)
 
@@ -214,7 +214,7 @@ def list_installed():
         raise typer.Exit(0)
 
     console.print("[bold]Installed checkpoints:[/bold]\n")
-    total_size = 0
+    total_size = 0.0
     for ckpt, size in sorted(checkpoint_files, key=lambda item: str(item[0])):
         total_size += size
         console.print(f"  {ckpt} {size:8.2f} GB")
@@ -227,7 +227,7 @@ def clean(
     confirm: bool = typer.Option(
         True, "--confirm/--no-confirm", help="Ask for confirmation before deleting"
     ),
-):
+) -> None:
     """Remove all downloaded checkpoints."""
     checkpoint_dirs = _resolve_checkpoint_dirs(None)
 
