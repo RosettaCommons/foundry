@@ -14,15 +14,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ------------------------------------------------------------------
-  # Quick job — runs on every push to main/production and on
-  # workflow_dispatch.  Covers the three core input-mode tests that
-  # share a single rf3 fold call (~5-10 min on a GitHub runner).
-  # ------------------------------------------------------------------
-  rf3-integration-quick:
-    name: pytest (rf3 integration — quick)
+  rf3-integration:
+    name: pytest (rf3 integration)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -51,54 +45,7 @@ jobs:
             -O ~/.cache/rf3_checkpoints/rf3_foundry_01_24_latest_remapped.ckpt \
             http://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_latest_remapped.ckpt
 
-      - name: Run quick integration tests
-        env:
-          RF3_CKPT_PATH: ${{ env.HOME }}/.cache/rf3_checkpoints/rf3_foundry_01_24_latest_remapped.ckpt
-        run: |
-          pytest models/rf3/tests/integration/ \
-            -m "integration and not integration_slow" \
-            -v \
-            --tb=short
-
-  # ------------------------------------------------------------------
-  # Full job — runs only on push to production.  Adds the seven
-  # flag-coverage tests (integration_slow) on top of the quick set.
-  # (~40-60 min on a GitHub runner).
-  # ------------------------------------------------------------------
-  rf3-integration-full:
-    name: pytest (rf3 integration — full)
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/production'
-    timeout-minutes: 60
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Install package + dev extras
-        run: pip install -e ".[dev]"
-
-      - name: Cache RF3 checkpoint
-        id: cache-ckpt
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/rf3_checkpoints
-          key: rf3-ckpt-rf3_foundry_01_24_latest_remapped
-
-      - name: Download RF3 checkpoint
-        if: steps.cache-ckpt.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/.cache/rf3_checkpoints
-          wget -q \
-            -O ~/.cache/rf3_checkpoints/rf3_foundry_01_24_latest_remapped.ckpt \
-            http://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_latest_remapped.ckpt
-
-      - name: Run full integration tests
+      - name: Run integration tests
         env:
           RF3_CKPT_PATH: ${{ env.HOME }}/.cache/rf3_checkpoints/rf3_foundry_01_24_latest_remapped.ckpt
         run: |
