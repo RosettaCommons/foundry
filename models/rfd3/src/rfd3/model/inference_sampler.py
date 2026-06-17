@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 import torch
 from jaxtyping import Float
+from rfd3.inference.symmetry.atom_array import FIXED_ENTITY_ID
 from rfd3.inference.symmetry.symmetry_utils import apply_symmetry_to_xyz_atomwise
 from rfd3.model.cfg_utils import strip_X
 
@@ -375,9 +376,16 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
         # update symmetric frames to correct for change in global frame
         symmetry_feats = {k: v for k, v in f.items() if "sym" in k}
 
+        # a contiguous motif anchors the frame, so skip the COM recenter (avoids drift)
+        fixed = f.get("is_motif_atom_with_fixed_coord")
+        asu, ent = symmetry_feats["is_sym_asu"], symmetry_feats["sym_entity_id"]
+        held_motif = not self.allow_realignment and fixed is not None and bool(
+            (fixed & asu & (ent != FIXED_ENTITY_ID)).any()
+        )
+
         # apply symmetry frame shift to X_L
         X_L = apply_symmetry_to_xyz_atomwise(
-            X_L, symmetry_feats, partial_diffusion=("partial_t" in f)
+            X_L, symmetry_feats, partial_diffusion=("partial_t" in f) or held_motif
         )
 
         return X_L
