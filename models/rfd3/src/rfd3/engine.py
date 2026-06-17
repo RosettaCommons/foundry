@@ -95,6 +95,15 @@ class RFD3Output:
     denoised_trajectory_stack: Optional[AtomArrayStack] = None
     noisy_trajectory_stack: Optional[AtomArrayStack] = None
 
+    @staticmethod
+    def _strip_atom_id(atoms):
+        """Strip ``atom_id`` so the CIF writer auto-generates unique
+        sequential IDs instead of using the duplicated values left by
+        virtual-atom padding."""
+        if "atom_id" in atoms.get_annotation_categories():
+            atoms.del_annotation("atom_id")
+        return atoms
+
     def dump(
         self,
         out_dir,
@@ -103,7 +112,7 @@ class RFD3Output:
         base_path = os.path.join(out_dir, self.example_id)
         base_path = Path(base_path).absolute()
         to_cif_file(
-            self.atom_array,
+            self._strip_atom_id(self.atom_array),
             base_path,
             file_type="cif.gz",
             include_entity_poly=False,
@@ -118,7 +127,7 @@ class RFD3Output:
         suffix = str(base_path)[-1]
         if self.denoised_trajectory_stack is not None:
             to_cif_file(
-                self.denoised_trajectory_stack,
+                self._strip_atom_id(self.denoised_trajectory_stack),
                 "_denoised_model_".join([prefix, suffix]),
                 file_type="cif.gz",
                 include_entity_poly=False,
@@ -126,7 +135,7 @@ class RFD3Output:
 
         if self.noisy_trajectory_stack is not None:
             to_cif_file(
-                self.noisy_trajectory_stack,
+                self._strip_atom_id(self.noisy_trajectory_stack),
                 "_noisy_model_".join([prefix, suffix]),
                 file_type="cif.gz",
                 include_entity_poly=False,
