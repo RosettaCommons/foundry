@@ -276,6 +276,9 @@ module = [
     "foundry.utils.squashfs",
     "foundry.utils.logging",
     "foundry.utils.datasets",
+    "foundry.training.schedulers",
+    "foundry.training.EMA",
+    "foundry.training.checkpoint",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
