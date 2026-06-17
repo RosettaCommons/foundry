@@ -288,6 +288,10 @@ module = [
     "foundry.callbacks.metrics_logging",
     "foundry.callbacks.train_logging",
     "foundry.callbacks.health_logging",
+    "foundry.inference_engines.base",
+    "foundry.inference_engines.checkpoint_registry",
+    "foundry.hydra.resolvers",
+    "foundry.model.layers.blocks",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true

@@ -7,7 +7,7 @@ Documentation on custom resolvers:
 import importlib
 
 from atomworks.enums import ChainType, ChainTypeInfo
-from beartype.typing import Any
+from beartype.typing import Any, Callable
 from omegaconf import OmegaConf
 
 from ..common import run_once
@@ -15,8 +15,8 @@ from ..common import run_once
 
 #  (Custom resolvers)
 @run_once
-def register_resolvers():
-    resolvers = {
+def register_resolvers() -> None:
+    resolvers: dict[str, Callable[..., Any]] = {
         "resolve_import": resolve_import,
         "chain_type_info_to_regex": chain_type_info_to_regex,
     }
@@ -48,7 +48,7 @@ def resolve_import(module_path: str, attribute_path: str | None = None) -> Any:
         return module
 
 
-def chain_type_info_to_regex(*args) -> Any:
+def chain_type_info_to_regex(*args: str) -> Any:
     """Convert a combination of ChainType or ChainTypeInfo attributes to a regex string.
 
     Primarily used for filtering a dataset by chain type prior to training/validation.

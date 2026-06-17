@@ -68,7 +68,7 @@ class RegisteredCheckpoint:
     description: str
     sha256: None = None  # Optional: add checksum for verification
 
-    def get_default_path(self):
+    def get_default_path(self) -> Path:
         checkpoint_dirs = get_default_checkpoint_dirs()
         for checkpoint_dir in checkpoint_dirs:
             candidate = checkpoint_dir / self.filename

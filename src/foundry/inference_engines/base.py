@@ -2,6 +2,7 @@ import logging
 import os
 from os import PathLike
 from pathlib import Path
+from types import TracebackType
 from typing import Any, Dict
 
 import hydra
@@ -25,7 +26,7 @@ logging.basicConfig(
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 
-def merge(cfg, overrides: dict):
+def merge(cfg: Any, overrides: dict) -> Any:
     return OmegaConf.merge(cfg, OmegaConf.create(overrides))
 
 
@@ -41,9 +42,9 @@ class BaseInferenceEngine:
         num_nodes: int = 1,
         devices_per_node: int = 1,
         # Config overrides
-        transform_overrides={},
-        inference_sampler_overrides={},
-        trainer_overrides={},
+        transform_overrides: dict[str, Any] = {},
+        inference_sampler_overrides: dict[str, Any] = {},
+        trainer_overrides: dict[str, Any] = {},
         # Debug
         verbose: bool = False,
         seed: int | None = None,
@@ -125,7 +126,7 @@ class BaseInferenceEngine:
     # Required subclasss methods
     ###################################################################################
 
-    def initialize(self):
+    def initialize(self) -> Any:
         if self.initialized_:
             return getattr(self, "cfg", None)
 
@@ -149,7 +150,7 @@ class BaseInferenceEngine:
         inputs: (
             Dict[str, dict] | AtomArray | list[AtomArray] | PathLike | list[PathLike]
         ),
-        *_,
+        *_: Any,
     ) -> dict[str, dict] | None:
         self.initialize()
         raise NotImplementedError(
@@ -160,12 +161,12 @@ class BaseInferenceEngine:
     # Util methods
     ###################################################################################
 
-    def _override_checkpoint_config(self, cfg):
+    def _override_checkpoint_config(self, cfg: Any) -> Any:
         cfg = merge(cfg, self.overrides)
         cfg = set_accelerator_based_on_availability(cfg)
         return cfg
 
-    def _construct_trainer(self, cfg, checkpoint=None):
+    def _construct_trainer(self, cfg: Any, checkpoint: Any = None) -> None:
         """
         Sets attr self.trainer
         """
@@ -209,7 +210,7 @@ class BaseInferenceEngine:
             target = target[key]
         target[keys[-1]] = value
 
-    def _construct_pipeline(self, cfg):
+    def _construct_pipeline(self, cfg: Any) -> None:
         """
         Sets attr self.pipeline
         """
@@ -232,17 +233,22 @@ class BaseInferenceEngine:
         self.pipeline = hydra.utils.instantiate(transform)
 
     # aliases for run
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> dict[str, dict] | None:
         return self.run(*args, **kwargs)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> dict[str, dict] | None:
         return self.run(*args, **kwargs)
 
     # for use as a context manager: e.g. `with BaseInferenceEngine(...) as engine:` to automatically cleanup
-    def __enter__(self):
+    def __enter__(self) -> "BaseInferenceEngine":
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self.trainer = None
         self.pipeline = None
         self.initialized_ = False
