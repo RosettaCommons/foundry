@@ -279,6 +279,8 @@ module = [
     "foundry.training.schedulers",
     "foundry.training.EMA",
     "foundry.training.checkpoint",
+    "foundry.common",
+    "foundry.constants",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
