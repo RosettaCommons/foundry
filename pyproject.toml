@@ -281,6 +281,8 @@ module = [
     "foundry.training.checkpoint",
     "foundry.common",
     "foundry.constants",
+    "foundry.metrics.metric",
+    "foundry.metrics.losses",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
