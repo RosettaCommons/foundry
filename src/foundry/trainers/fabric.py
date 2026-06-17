@@ -197,7 +197,7 @@ class FabricTrainer(ABC):
     def initialize_or_update_trainer_state(
         self,
         updates: dict,
-    ):
+    ) -> None:
         """Initialize or update the state dictionary for the trainer.
 
         State keys:
@@ -277,7 +277,7 @@ class FabricTrainer(ABC):
             )
             self.initialize_or_update_trainer_state({"scheduler_cfg": scheduler_cfg})
 
-    def construct_model(self):
+    def construct_model(self) -> None:
         """Instantiate the model, updating the trainer state in-place.
 
         This method must set the "model" key in the state dictionary using `self.initialize_or_update_trainer_state()`.
@@ -512,7 +512,7 @@ class FabricTrainer(ABC):
         *,
         train_loader: torch.utils.data.DataLoader,
         limit_batches: int | float = float("inf"),
-    ):
+    ) -> None:
         """Train model for a single epoch.
 
         Args:
@@ -600,7 +600,7 @@ class FabricTrainer(ABC):
         *,
         val_loaders: dict[str, torch.utils.data.DataLoader],
         limit_batches: int | float = float("inf"),
-    ):
+    ) -> None:
         """Run validation loop for a single validation epoch.
 
         Args:
@@ -727,7 +727,7 @@ class FabricTrainer(ABC):
             val_loaders=val_loaders, limit_batches=self.limit_val_batches
         )
 
-    def step_optimizer(self):
+    def step_optimizer(self) -> None:
         """Step the optimizer.
 
         This method must be called only when the optimizer is stepped (i.e., after accumulating the desired number of gradients).
@@ -788,7 +788,7 @@ class FabricTrainer(ABC):
         self,
         level: Literal["epoch", "step"],
         current_value: int,
-    ):
+    ) -> None:
         """Step the learning rate scheduler.
 
         Args:

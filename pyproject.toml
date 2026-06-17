@@ -297,6 +297,7 @@ module = [
     "foundry.utils.xpu.xpu_precision",
     "foundry.testing.fixtures",
     "foundry.testing.pytest_hooks",
+    "foundry.trainers.fabric",
     "foundry_cli.download_checkpoints",
 ]
 disallow_untyped_defs = true
