@@ -58,7 +58,7 @@ class DumpValidationStructuresCallback(BaseCallback):
         example_id,
         dir: str,
         extra: str = "",
-        epoch: str = None,
+        epoch: str | None = None,
         dataset_name: str = "",
     ) -> Path:
         """Helper function to build a path from a training or validation example_id."""
@@ -76,7 +76,7 @@ class DumpValidationStructuresCallback(BaseCallback):
             self.save_dir / dir / f"{epoch_str}" / dataset_name / f"{identifier}{extra}"
         )
 
-    def on_validation_batch_end(
+    def on_validation_batch_end(  # type: ignore[override]
         self,
         *,
         trainer,
@@ -85,6 +85,11 @@ class DumpValidationStructuresCallback(BaseCallback):
         dataset_name: str,
         **_,
     ):
+        # Narrows the base BaseCallback.on_validation_batch_end to keyword-only and
+        # absorbs the base's batch_idx/num_batches via **_, because Fabric dispatches
+        # hooks by keyword (fabric.call(name, trainer=..., outputs=..., ...)). mypy flags
+        # the narrower signature as an incompatible override; the ignore documents that
+        # this is intentional.
         if (not self.dump_predictions) and (not self.dump_trajectories):
             return  # Nothing to do
         current_epoch = trainer.state["current_epoch"]
