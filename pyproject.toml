@@ -260,45 +260,17 @@ ignore_errors = true
 # NOTE: the rf3 enablement ratchet (0014) is fully cleared — there is no rf3 module-level
 # mypy exemption here, and every rf3 module type-checks with no in-file suppressions.
 
-# Per-module strictness ratchet (direction (b)). The global baseline above leaves
-# disallow_untyped_defs / check_untyped_defs off; fully-annotated modules opt into strict
-# checking here one at a time, so any new untyped def in them fails the gate.
+# Per-module strictness (direction (b)). The global baseline above leaves
+# disallow_untyped_defs / check_untyped_defs off; the whole shared layer
+# (`src/foundry` + `src/foundry_cli`) now opts into strict checking, so any untyped
+# def in it fails the gate and new modules are strict by default. Scoped to these two
+# packages via wildcards rather than the global [tool.mypy] switch, because `files`
+# above also includes `models/rfd3`/`models/rf3`, which are not strict-ready (rfd3 still
+# carries an ignore_errors ratchet).
 [[tool.mypy.overrides]]
 module = [
-    "foundry.utils.rigid",
-    "foundry.utils.components",
-    "foundry.utils.torch",
-    "foundry.utils.alignment",
-    "foundry.utils.weights",
-    "foundry.utils.rotation_augmentation",
-    "foundry.utils.instantiators",
-    "foundry.utils.ddp",
-    "foundry.utils.squashfs",
-    "foundry.utils.logging",
-    "foundry.utils.datasets",
-    "foundry.training.schedulers",
-    "foundry.training.EMA",
-    "foundry.training.checkpoint",
-    "foundry.common",
-    "foundry.constants",
-    "foundry.metrics.metric",
-    "foundry.metrics.losses",
-    "foundry.callbacks.callback",
-    "foundry.callbacks.timing_logging",
-    "foundry.callbacks.metrics_logging",
-    "foundry.callbacks.train_logging",
-    "foundry.callbacks.health_logging",
-    "foundry.inference_engines.base",
-    "foundry.inference_engines.checkpoint_registry",
-    "foundry.hydra.resolvers",
-    "foundry.model.layers.blocks",
-    "foundry.utils.xpu.single_xpu_strategy",
-    "foundry.utils.xpu.xpu_accelerator",
-    "foundry.utils.xpu.xpu_precision",
-    "foundry.testing.fixtures",
-    "foundry.testing.pytest_hooks",
-    "foundry.trainers.fabric",
-    "foundry_cli.download_checkpoints",
+    "foundry.*",
+    "foundry_cli.*",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
