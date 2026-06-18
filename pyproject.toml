@@ -241,7 +241,6 @@ module = [
     "rfd3.trainer.dump_validation_structures",
     "rfd3.trainer.fabric_trainer",
     "rfd3.trainer.rfd3",
-    "rfd3.trainer.trainer_utils",
     "rfd3.transforms.conditioning_base",
     "rfd3.transforms.design_transforms",
     "rfd3.transforms.dna_crop",
