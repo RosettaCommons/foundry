@@ -103,8 +103,6 @@ from rfd3.transforms.util_transforms import (
 )
 from rfd3.transforms.virtual_atoms import PadTokensWithVirtualAtoms
 
-from foundry.common import exists
-
 ######################################################################################
 # Common transforms
 ######################################################################################
@@ -173,7 +171,7 @@ def get_pre_crop_transforms(
         AddGlobalAtomIdAnnotation(),
         AtomizeByCCDName(
             atomize_by_default=True,
-            res_names_to_ignore=STANDARD_AA + STANDARD_RNA + STANDARD_DNA,
+            res_names_to_ignore=list(STANDARD_AA + STANDARD_RNA + STANDARD_DNA),
             move_atomized_part_to_end=False,
             validate_atomize=False,
         ),
@@ -337,7 +335,7 @@ def build_atom14_base_pipeline_(
     ground_truth_conformer_policy: str,
     provide_elements_for_unindexed_components: bool,
     use_element_for_atom_names_of_atomized_tokens: bool,
-    residue_cache_dir: bool,
+    residue_cache_dir: str | Path | None,
     # Conditioning
     train_conditions: dict,
     meta_conditioning_probabilities: dict,
@@ -438,7 +436,12 @@ def build_atom14_base_pipeline_(
     # Design Transforms
     transforms += [
         LoadCachedResidueLevelData(
-            dir=Path(residue_cache_dir) if exists(residue_cache_dir) else None,
+            # atomworks annotates `dir` as str | Path, but load_cached_residue_level_data
+            # treats a missing dir as "no cache" (returns defaults), so passing None when
+            # residue_cache_dir is unset is intended.
+            dir=Path(residue_cache_dir)  # type: ignore[arg-type]
+            if residue_cache_dir is not None
+            else None,
             sharding_depth=1,
         ),
         # ... Fuse inference and training conditioning assignments

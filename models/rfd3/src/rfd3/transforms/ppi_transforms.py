@@ -366,7 +366,9 @@ class PPIFullBinderCropSpatial(Transform):
         crop_info = resize_crop_info_if_too_many_atoms(
             crop_info=crop_info,
             atom_array=atom_array,
-            max_atoms=self.max_atoms_in_crop,
+            # atomworks annotates max_atoms as int, but its own docstring documents
+            # None as "no resizing" — so passing int | None is intended.
+            max_atoms=self.max_atoms_in_crop,  # type: ignore[arg-type]
         )
 
         data["crop_info"] = {"type": self.__class__.__name__} | crop_info
@@ -437,6 +439,8 @@ def crop_spatial_keep_full_binder(
     binder_atom_mask = atom_array.pn_unit_iid == binder_pn_unit_iid
     n_binder_tokens = get_token_count(atom_array[binder_atom_mask])
 
+    crop_center_atom_idx: int | float
+    crop_center_token_idx: int | float
     if force_crop or requires_crop:
         # Get possible crop centers
         can_be_crop_center = get_spatial_crop_center(
