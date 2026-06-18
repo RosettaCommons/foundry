@@ -2,11 +2,11 @@ import json
 import re
 from os import PathLike
 from pathlib import Path
-from typing import Literal
 
 import numpy as np
 import torch
 from atomworks.io.utils.io_utils import to_cif_file
+from beartype.typing import Callable, Literal, cast
 from biotite.structure import AtomArray, AtomArrayStack, stack
 
 from foundry.utils.alignment import weighted_rigid_align
@@ -39,7 +39,7 @@ def dump_structures(
         ), "AtomArrayStack or list of AtomArray required when one_model_per_file is True"
         # One model per file —> loop over the diffusion batch
         for i in range(len(atom_arrays)):
-            path = f"{base_path}_model_{i}"
+            path = Path(f"{base_path}_model_{i}")
             to_cif_file(
                 atom_arrays[i],
                 path,
@@ -114,9 +114,12 @@ def dump_trajectories(
             trajectory_list[0].device
         )
         for step in range(n_steps - 1):
+            # `trajectory_list` is typed `Tensor | np.ndarray`, but every path here
+            # (alignment + the `torch.stack` below) is tensor-only, so the diffusion
+            # trajectories are always tensors when alignment runs.
             trajectory_list[step] = weighted_rigid_align(
-                X_L=trajectory_list[-1],
-                X_gt_L=trajectory_list[step],
+                X_L=cast(torch.Tensor, trajectory_list[-1]),
+                X_gt_L=cast(torch.Tensor, trajectory_list[step]),
                 X_exists_L=X_exists_L,
                 w_L=w_L,
             )
@@ -141,13 +144,16 @@ def dump_trajectories(
 
     #  ... write the trajectories to CIF files, named by epoch, dataset, example_id, and model index (within the diffusion batch)
     for i, trajectory in enumerate(trajectories_split_by_model):
-        if isinstance(trajectory, torch.Tensor):
-            trajectory = trajectory.cpu().numpy()
+        coords = (
+            trajectory.cpu().numpy()
+            if isinstance(trajectory, torch.Tensor)
+            else trajectory
+        )
         atom_array_stack = build_stack_from_atom_array_and_batched_coords(
-            trajectory, atom_array
+            coords, atom_array
         )
 
-        path = f"{base_path}_model_{i}"
+        path = Path(f"{base_path}_model_{i}")
         to_cif_file(
             atom_array_stack, path, file_type="cif.gz", include_entity_poly=False
         )
@@ -203,7 +209,7 @@ def find_files_with_extension(path: PathLike, supported_file_types: list) -> lis
     Returns:
         list[Path]: List of files with the given extensions.
     """
-    files_with_supported_types = []
+    files_with_supported_types: list[Path] = []
     path = Path(path)
 
     # Check if the path is a directory
@@ -218,7 +224,9 @@ def find_files_with_extension(path: PathLike, supported_file_types: list) -> lis
     return files_with_supported_types
 
 
-def create_example_id_extractor(extensions: set | list = CIF_LIKE_EXTENSIONS) -> str:
+def create_example_id_extractor(
+    extensions: set | list = CIF_LIKE_EXTENSIONS,
+) -> Callable[[PathLike], str]:
     """Create a function with closure that extracts example_ids from file paths with specified extensions.
 
     Example:

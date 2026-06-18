@@ -252,7 +252,6 @@ module = [
     "rfd3.transforms.util_transforms",
     "rfd3.transforms.virtual_atoms",
     "rfd3.utils.inference",
-    "rfd3.utils.io",
     "rfd3.utils.vizualize",
 ]
 ignore_errors = true
