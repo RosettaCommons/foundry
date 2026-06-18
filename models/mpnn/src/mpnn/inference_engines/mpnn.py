@@ -12,7 +12,7 @@ from atomworks.constants import (
 from atomworks.ml.utils.token import get_token_starts, spread_token_wise
 from biotite.structure import AtomArray
 from mpnn.collate.feature_collator import FeatureCollator
-from mpnn.metrics.nll import MPNNConfidence, MPNNInterfaceConfidence
+from mpnn.metrics.nll import MPNNConfidence, MPNNLigandInterfaceConfidence
 from mpnn.metrics.sequence_recovery import (
     InterfaceSequenceRecovery,
     SequenceRecovery,
@@ -194,7 +194,7 @@ class MPNNInferenceEngine:
         # Construct metrics dict.
         metrics: dict[str, Any] = {
             "sequence_recovery": SequenceRecovery(return_per_example_metrics=True),
-            "overall_confidence": MPNNConfidence(
+            "confidence": MPNNConfidence(
                 return_per_example_metrics=True,
                 return_per_residue_metrics=True,
             ),
@@ -203,7 +203,7 @@ class MPNNInferenceEngine:
             metrics["interface_sequence_recovery"] = InterfaceSequenceRecovery(
                 return_per_example_metrics=True
             )
-            metrics["ligand_confidence"] = MPNNInterfaceConfidence(
+            metrics["ligand_interface_confidence"] = MPNNLigandInterfaceConfidence(
                 return_per_example_metrics=True
             )
 
@@ -399,28 +399,28 @@ class MPNNInferenceEngine:
         # by the MPNNConfidence metrics so the NLL-to-confidence transform lives
         # in the metric layer. Per-residue confidence is zeroed at non-designed
         # positions and written into the output structure below.
-        overall_confidence_per_design = (
-            metrics_output["overall_confidence.confidence_per_example"]
-            .detach()
-            .cpu()
-            .numpy()
+        confidence_per_design = (
+            metrics_output["confidence.confidence_per_example"].detach().cpu().numpy()
         )
         confidence_per_residue = (
-            metrics_output["overall_confidence.confidence_per_residue"]
-            .detach()
-            .cpu()
-            .numpy()
+            metrics_output["confidence.confidence_per_residue"].detach().cpu().numpy()
         )
 
+        # Ligand-interface confidence is undefined (NaN) when there are no
+        # interface residues (e.g. ligand_mpnn run on a ligand-free input); such
+        # values are converted to None per design below so they are omitted from
+        # the outputs rather than written as NaN.
         if self.model_type == "ligand_mpnn":
-            ligand_confidence_per_design = (
-                metrics_output["ligand_confidence.interface_confidence_per_example"]
+            ligand_interface_confidence_per_design = (
+                metrics_output[
+                    "ligand_interface_confidence.interface_confidence_per_example"
+                ]
                 .detach()
                 .cpu()
                 .numpy()
             )
         else:
-            ligand_confidence_per_design = None
+            ligand_interface_confidence_per_design = None
 
         # Grab the index to token mapping from the model.
         idx_to_token = MPNN_TOKEN_ENCODING.idx_to_token
@@ -525,10 +525,11 @@ class MPNNInferenceEngine:
                 "batch_idx": batch_idx,
                 "design_idx": design_idx,
                 "designed_sequence": one_letter_seq,
-                "overall_confidence": float(overall_confidence_per_design[design_idx]),
-                "ligand_confidence": (
-                    float(ligand_confidence_per_design[design_idx])
-                    if ligand_confidence_per_design is not None
+                "confidence": float(confidence_per_design[design_idx]),
+                "ligand_interface_confidence": (
+                    float(ligand_interface_confidence_per_design[design_idx])
+                    if ligand_interface_confidence_per_design is not None
+                    and not np.isnan(ligand_interface_confidence_per_design[design_idx])
                     else None
                 ),
                 "sequence_recovery": sequence_recovery,

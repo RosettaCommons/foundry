@@ -380,14 +380,13 @@ class SampledNLL(NLL):
 
     @property
     def kwargs_to_compute_args(self):
-        # Score the *sampled* sequence using the raw logits (the parent's
-        # 'log_probs' kwarg is replaced with 'logits'). Copy first so the
-        # parent's mapping is never mutated.
-        mapping = dict(super().kwargs_to_compute_args)
-        mapping.pop("log_probs", None)
-        mapping["S"] = ("network_output", "decoder_features", "S_sampled")
-        mapping["logits"] = ("network_output", "decoder_features", "logits")
-        return mapping
+        # Build the mapping explicitly: score the *sampled* sequence
+        # (`S_sampled`) using the raw `logits`.
+        return {
+            "logits": ("network_output", "decoder_features", "logits"),
+            "S": ("network_output", "decoder_features", "S_sampled"),
+            "mask_for_loss": ("network_output", "input_features", "mask_for_loss"),
+        }
 
     def compute(self, logits, S, mask_for_loss, **kwargs):
         """Convert raw logits to log-probabilities and delegate to ``NLL``.
@@ -409,24 +408,25 @@ class SampledNLL(NLL):
         )
 
 
-class SampledInterfaceNLL(InterfaceNLL):
+class SampledLigandInterfaceNLL(InterfaceNLL):
     """Interface NLL of the *sampled* (designed) sequence.
 
     Like :class:`SampledNLL` but restricted to polymer-ligand interface
-    residues. See :class:`MPNNInterfaceConfidence` for the derived
+    residues. See :class:`MPNNLigandInterfaceConfidence` for the derived
     ``exp(-NLL)`` confidence.
     """
 
     @property
     def kwargs_to_compute_args(self):
-        # Score the *sampled* sequence using the raw logits (the parent's
-        # 'log_probs' kwarg is replaced with 'logits'). Copy first so the
-        # parent's mapping is never mutated.
-        mapping = dict(super().kwargs_to_compute_args)
-        mapping.pop("log_probs", None)
-        mapping["S"] = ("network_output", "decoder_features", "S_sampled")
-        mapping["logits"] = ("network_output", "decoder_features", "logits")
-        return mapping
+        # Build the mapping explicitly: score the *sampled* sequence
+        # (`S_sampled`) using the raw `logits`; `atom_array` derives the
+        # polymer-ligand interface mask.
+        return {
+            "logits": ("network_output", "decoder_features", "logits"),
+            "S": ("network_output", "decoder_features", "S_sampled"),
+            "mask_for_loss": ("network_output", "input_features", "mask_for_loss"),
+            "atom_array": ("network_input", "atom_array"),
+        }
 
     def compute(self, logits, S, mask_for_loss, atom_array, **kwargs):
         """Convert raw logits to log-probabilities and delegate to ``InterfaceNLL``.
@@ -492,12 +492,13 @@ class MPNNConfidence(SampledNLL):
         return metrics
 
 
-class MPNNInterfaceConfidence(SampledInterfaceNLL):
+class MPNNLigandInterfaceConfidence(SampledLigandInterfaceNLL):
     """Per-design confidence over polymer-ligand interface residues.
 
-    Interface counterpart of :class:`MPNNConfidence`; wraps
-    :class:`SampledInterfaceNLL` and exposes ``exp(-NLL)`` confidence computed
-    over the interface residues only (``interface_`` prefixed keys).
+    Ligand-interface counterpart of :class:`MPNNConfidence`; wraps
+    :class:`SampledLigandInterfaceNLL` and exposes ``exp(-NLL)`` confidence
+    computed over the polymer-ligand interface residues only (``interface_``
+    prefixed keys).
     """
 
     def compute(self, logits, S, mask_for_loss, atom_array, **kwargs):
@@ -509,10 +510,10 @@ class MPNNInterfaceConfidence(SampledInterfaceNLL):
             mask_for_loss (torch.Tensor): [B, L] - mask for loss.
             atom_array: Atom array(s) used to derive the interface mask.
             **kwargs: Additional arguments forwarded to
-                ``SampledInterfaceNLL.compute``.
+                ``SampledLigandInterfaceNLL.compute``.
 
         Returns:
-            dict: The ``SampledInterfaceNLL`` metrics plus, when present,
+            dict: The ``SampledLigandInterfaceNLL`` metrics plus, when present,
             ``interface_confidence_per_example`` and
             ``interface_confidence_per_residue``.
         """
