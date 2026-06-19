@@ -50,6 +50,8 @@ from rfd3.transforms.conditioning_base import (
 )
 from rfd3.transforms.util_transforms import assign_types_
 from rfd3.utils.inference import (
+    create_cb_atoms,
+    create_o_atoms,
     extract_ligand_array,
     inference_load_,
     set_com,
@@ -940,7 +942,7 @@ def create_atom_array_from_design_specification(
 
 
 @contextmanager
-def validator_context(validator_name: str, data: dict = None):
+def validator_context(validator_name: str, data: dict | None = None):
     """Context manager for validator execution with logging."""
     logger.debug(f"Starting validator: {validator_name}")
     try:
@@ -996,7 +998,7 @@ def create_motif_residue(
         diffuse_oxygen = False
         if n_atoms < 3:
             raise ValueError(
-                f"Not enough data for {src_chain}{src_resid} in input atom array."
+                f"Not enough data for {token.chain_id[0]}{token.res_id[0]} in input atom array."
             )
         if n_atoms == 3:
             # Handle cases with N, CA, C only;
@@ -1283,7 +1285,7 @@ def _sort_bonds(atom_array_accum: struc.AtomArray) -> struc.AtomArray:
 
 
 def accumulate_components(
-    components_to_accumulate: List[Union[str, int]],
+    components_to_accumulate: List[str],
     *,
     # Tokens from input
     indexed_tokens: Dict[str, AtomArray],
@@ -1292,7 +1294,7 @@ def accumulate_components(
     atom_array_accum=[],
     start_chain: str = "A",
     start_resid: int = 1,
-    unindexed_breaks: Optional[List[bool]] = [],
+    unindexed_breaks: Optional[List[Optional[bool]]] = [],
     src_atom_array: Optional[AtomArray] = None,
     strip_sidechains_by_default: bool = False,
     **kwargs,
@@ -1306,12 +1308,9 @@ def accumulate_components(
         x, y
     )
     all_tokens = indexed_tokens | unindexed_tokens
-    all_annots = []
-    [
-        all_annots.extend(list(tok.get_annotation_categories()))
-        for tok in all_tokens.values()
-    ]
-    all_annots = set(all_annots)
+    all_annots: set = set()
+    for tok in all_tokens.values():
+        all_annots.update(tok.get_annotation_categories())
     atom_array_accum = [] if atom_array_accum is None else atom_array_accum
     unindexed_breaks = (
         [None] * len(components_to_accumulate)
