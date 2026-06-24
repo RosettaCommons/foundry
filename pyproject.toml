@@ -255,7 +255,6 @@ addopts = "-ra --strict-markers --strict-config"
 markers = [
     "gpu: requires CUDA or MPS GPU — skipped in CPU CI",
     "integration: end-to-end CLI tests that require a downloaded model checkpoint",
-    "integration_slow: integration tests excluded from per-PR CI; run only on pushes to production",
 ]
 
 [tool.coverage.run]

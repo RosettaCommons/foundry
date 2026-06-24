@@ -13,7 +13,6 @@ from conftest import assert_standard_outputs, load_summary
 
 
 @pytest.mark.integration
-@pytest.mark.integration_slow
 def test_skip_existing_does_not_overwrite(skip_existing_dirs):
     """Second fold with skip_existing=true leaves existing outputs untouched."""
     _, mtime_after_first, mtime_after_second = skip_existing_dirs
@@ -26,7 +25,6 @@ def test_skip_existing_does_not_overwrite(skip_existing_dirs):
 
 
 @pytest.mark.integration
-@pytest.mark.integration_slow
 def test_early_stopping_suppresses_model_output(early_stopping_dir):
     """early_stopping_plddt_threshold=1.0 always triggers early exit.
 
@@ -47,7 +45,6 @@ def test_early_stopping_suppresses_model_output(early_stopping_dir):
 
 
 @pytest.mark.integration
-@pytest.mark.integration_slow
 def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
     """annotate_b_factor_with_plddt=true writes pLDDT into the B-factor column.
 
@@ -73,7 +70,6 @@ def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
 
 
 @pytest.mark.integration
-@pytest.mark.integration_slow
 def test_seed_reproducibility(seed_dirs):
     """Two runs with identical flags (including seed=1) produce identical scores."""
     dir_a, dir_b = seed_dirs
@@ -89,7 +85,6 @@ def test_seed_reproducibility(seed_dirs):
 
 
 @pytest.mark.integration
-@pytest.mark.integration_slow
 def test_template_selection(template_selection_dir):
     """template_selection=[A] completes without error and produces valid output."""
     assert_standard_outputs(template_selection_dir, "1cyo")
@@ -98,7 +93,6 @@ def test_template_selection(template_selection_dir):
 
 
 @pytest.mark.integration
-@pytest.mark.integration_slow
 def test_ground_truth_conformer_selection(ground_truth_conformer_dir):
     """ground_truth_conformer_selection=[B] keeps HEM in the predicted structure."""
     assert_standard_outputs(ground_truth_conformer_dir, "1cyo")
