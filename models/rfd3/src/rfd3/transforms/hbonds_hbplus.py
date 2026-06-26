@@ -2,6 +2,7 @@ import os
 import string
 import subprocess
 import tempfile
+import tempfile
 from datetime import datetime
 from typing import Any, Tuple
 
@@ -75,11 +76,13 @@ def calculate_hbonds(
             "Please set it to the path of the hbplus executable in order to calculate hydrogen bonds."
         )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # Explicitly use /tmp to avoid writing temp files to the working directory
+    temp_base_dir = os.environ.get("TMPDIR", "/tmp")
+    with tempfile.TemporaryDirectory(dir=temp_base_dir) as tmpdir:
         dtstr = datetime.now().strftime("%Y%m%d%H%M%S")
         pdb_filename = f"{dtstr}_{np.random.randint(10000)}.pdb"
         pdb_path = os.path.join(tmpdir, pdb_filename)
-        atom_array, _, chain_map = save_atomarray_to_pdb(atom_array, pdb_path)
+        atom_array, nan_mask, chain_map = save_atomarray_to_pdb(atom_array, pdb_path)
 
         subprocess.call(
             [
@@ -93,12 +96,10 @@ def calculate_hbonds(
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            cwd=tmpdir,
         )
 
         hb2_path = pdb_path.replace(".pdb", ".hb2")
-        with open(hb2_path, "r") as hb_file:
-            HB = hb_file.readlines()
+        HB = open(hb2_path, "r").readlines()
         hbonds = []
         for i in range(8, len(HB)):
             d_chain = HB[i][0]
@@ -113,6 +114,20 @@ def calculate_hbonds(
             a_atom = HB[i][23:27].strip()
             dist = float(HB[i][27:32].strip())
 
+            items = {
+                "d_chain": chain_map[d_chain],
+                "d_resi": d_resi,
+                "d_resn": d_resn,
+                "d_ins": d_ins,
+                "d_atom": d_atom,
+                "a_chain": chain_map[a_chain],
+                "a_resi": a_resi,
+                "a_resn": a_resn,
+                "a_ins": a_ins,
+                "a_atom": a_atom,
+                "dist": dist,
+            }
+            hbonds.append(items)
             items = {
                 "d_chain": chain_map[d_chain],
                 "d_resi": d_resi,

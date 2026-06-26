@@ -475,6 +475,10 @@ class AddIsXFeats(Transform):
                 mask = token_level_array.get_annotation(x).copy().astype(bool)
             data["feats"][x] = mask
 
+        # Atom-level ligand mask for partial-ligand-fix handling in the sampler
+        if "is_ligand_atom" in self.X:
+            data["feats"]["is_ligand_atom"] = atom_array.is_ligand.copy().astype(bool)
+
         if "is_motif_token_with_fully_fixed_coord" in self.X:
             mask = apply_token_wise(
                 atom_array,

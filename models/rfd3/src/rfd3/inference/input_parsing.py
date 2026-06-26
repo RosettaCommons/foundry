@@ -667,10 +667,16 @@ class DesignInputSpecification(BaseModel):
     def _append_ligand(self, atom_array, atom_array_input_annotated):
         """Append ligand if specified."""
         if exists(self.ligand):
+            fixed_atoms = {}
+            if exists(self.select_fixed_atoms):
+                fixed_atoms = {
+                    component: atoms
+                    for component, atoms in self.select_fixed_atoms.data.items()
+                }
             ligand_array = extract_ligand_array(
                 atom_array_input_annotated,
                 self.ligand,
-                fixed_atoms={},
+                fixed_atoms=fixed_atoms,
                 set_defaults=False,
                 additional_annotations=set(
                     list(atom_array.get_annotation_categories())
@@ -795,9 +801,15 @@ class DesignInputSpecification(BaseModel):
                 infer_ori_strategy=self.infer_ori_strategy,
             )
             # Diffused atoms are always initialized at origin during regular diffusion (all information removed)
-            atom_array.coord[
-                ~atom_array.is_motif_atom_with_fixed_coord.astype(bool)
-            ] = 0.0
+            unfixed_mask = ~atom_array.is_motif_atom_with_fixed_coord.astype(bool)
+            # Don't zero out unfixed ligand atoms - they must keep their original
+            # coordinates to maintain molecular connectivity with fixed ligand atoms.
+            # They will still receive noise during diffusion (since is_motif_atom_with_fixed_coord=False)
+            # but start near their true position rather than at the origin.
+            if exists(self.ligand):
+                is_ligand = atom_array.hetero.astype(bool)
+                unfixed_mask = unfixed_mask & ~is_ligand
+            atom_array.coord[unfixed_mask] = 0.0
         return atom_array
 
     def _apply_globals(self, atom_array):
