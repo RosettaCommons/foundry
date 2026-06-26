@@ -339,7 +339,8 @@ def subset_dataset_to_example_ids(
     """Subset a dataset to a specific set of example IDs."""
     indices = []
     for example_id in example_ids:
-        index = get_row_and_index_by_example_id(dataset, example_id)["index"]
+        # atomworks types the dataset arg as `ExampleIDMixin`; the datasets passed here mix it in.
+        index = get_row_and_index_by_example_id(dataset, example_id)["index"]  # type: ignore[arg-type]
         indices.append(index)
 
     return Subset(dataset, indices)
