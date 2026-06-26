@@ -286,6 +286,10 @@ check_untyped_defs = true
 # model's tests/conftest.py. Add a model's tests dir here once it has CPU-portable tests.
 testpaths = ["tests", "models/rf3/tests", "models/rfd3/tests"]
 addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "gpu: requires CUDA or MPS GPU — skipped in CPU CI",
+    "integration: end-to-end CLI tests that require a downloaded model checkpoint",
+]
 
 [tool.coverage.run]
 source = ["src/foundry", "src/foundry_cli"]

@@ -329,7 +329,7 @@ def _process_single_path(
         example_dir = get_sharded_output_path(
             example_id, existing_outputs_dir, sharding_pattern
         )
-        return (example_dir / f"{example_id}_metrics.csv").exists()
+        return (example_dir / f"{example_id}_ranking_scores.csv").exists()
 
     inference_inputs = []
 
