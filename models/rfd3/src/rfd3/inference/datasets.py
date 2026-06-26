@@ -8,7 +8,7 @@ import textwrap
 from os import PathLike
 from typing import Any, Dict, List
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from atomworks.ml.datasets import MolecularDataset
 from atomworks.ml.transforms.base import Compose, Transform
 from omegaconf import DictConfig, OmegaConf
