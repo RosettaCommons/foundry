@@ -126,9 +126,7 @@ class MetricManager:
 
         # Extract example_id if it exists
         example_id = nested_dict.get(
-            # atomworks annotates `d` as dict[tuple[str, ...], Any] but navigates a
-            # nested dict[str, Any] by string keys — the annotation is wrong upstream.
-            kwargs,  # type: ignore[arg-type]
+            kwargs,
             key=("extra_info", "example_id"),
             default=None,
         )
@@ -262,9 +260,8 @@ class Metric(ABC):
                 if compute_arg in self.optional_kwargs:
                     # Optional parameter - only add if present
                     try:
-                        # nested_dict arg-type ignores: see note in MetricManager.__call__
                         compute_inputs[compute_arg] = nested_dict.getitem(
-                            kwargs,  # type: ignore[arg-type]
+                            kwargs,
                             key=kwargs_key,
                         )
                     except KeyError:
@@ -272,7 +269,7 @@ class Metric(ABC):
                 else:
                     # Required parameter - use getitem (will raise if missing)
                     compute_inputs[compute_arg] = nested_dict.getitem(
-                        kwargs,  # type: ignore[arg-type]
+                        kwargs,
                         key=kwargs_key,
                     )
         else:
