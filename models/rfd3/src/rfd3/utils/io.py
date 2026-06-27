@@ -200,7 +200,7 @@ def build_stack_from_atom_array_and_batched_coords(
 
 
 def find_files_with_extension(path: PathLike, supported_file_types: list) -> list[Path]:
-    """Recursively find all files with the given extensions in the specified path.
+    """Find files with the given extensions at the top level of the path (non-recursive).
 
     Args:
         path (PathLike): Path to the directory containing the files.
