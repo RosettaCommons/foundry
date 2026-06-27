@@ -13,5 +13,11 @@
 # type, breaking our override) and rdkit 2026.3.3 (whose Chem/rdchem.pyi has a syntax
 # error mypy refuses to parse). Pinning here restores the validated, reproducible env.
 # Revisit deliberately (and re-run the gate) when intentionally upgrading either package.
+#
+# mypy is pinned for the same reason: CI floated to mypy 2.1.0 while local dev was on an
+# older release, so a `# type: ignore` needed by the older checker was flagged as unused by
+# the newer one (and vice-versa). Pinning the checker to the validated version keeps the
+# `warn_unused_ignores` gate reproducible across local and CI. Bump deliberately + re-verify.
 torch==2.7.1
 rdkit==2025.3.6
+mypy==2.1.0
