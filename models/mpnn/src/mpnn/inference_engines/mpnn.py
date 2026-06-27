@@ -12,6 +12,7 @@ from atomworks.constants import (
 from atomworks.ml.utils.token import get_token_starts, spread_token_wise
 from biotite.structure import AtomArray
 from mpnn.collate.feature_collator import FeatureCollator
+from mpnn.metrics.nll import MPNNConfidence, MPNNLigandInterfaceConfidence
 from mpnn.metrics.sequence_recovery import (
     InterfaceSequenceRecovery,
     SequenceRecovery,
@@ -193,9 +194,16 @@ class MPNNInferenceEngine:
         # Construct metrics dict.
         metrics: dict[str, Any] = {
             "sequence_recovery": SequenceRecovery(return_per_example_metrics=True),
+            "confidence": MPNNConfidence(
+                return_per_example_metrics=True,
+                return_per_residue_metrics=True,
+            ),
         }
         if self.model_type == "ligand_mpnn":
             metrics["interface_sequence_recovery"] = InterfaceSequenceRecovery(
+                return_per_example_metrics=True
+            )
+            metrics["ligand_interface_confidence"] = MPNNLigandInterfaceConfidence(
                 return_per_example_metrics=True
             )
 
@@ -387,6 +395,33 @@ class MPNNInferenceEngine:
         else:
             interface_sequence_recovery_per_design = None
 
+        # Per-design confidence (= exp(-NLL) of the *sampled* sequence), computed
+        # by the MPNNConfidence metrics so the NLL-to-confidence transform lives
+        # in the metric layer. Per-residue confidence is zeroed at non-designed
+        # positions and written into the output structure below.
+        confidence_per_design = (
+            metrics_output["confidence.confidence_per_example"].detach().cpu().numpy()
+        )
+        confidence_per_residue = (
+            metrics_output["confidence.confidence_per_residue"].detach().cpu().numpy()
+        )
+
+        # Ligand-interface confidence is undefined (NaN) when there are no
+        # interface residues (e.g. ligand_mpnn run on a ligand-free input); such
+        # values are converted to None per design below so they are omitted from
+        # the outputs rather than written as NaN.
+        if self.model_type == "ligand_mpnn":
+            ligand_interface_confidence_per_design = (
+                metrics_output[
+                    "ligand_interface_confidence.interface_confidence_per_example"
+                ]
+                .detach()
+                .cpu()
+                .numpy()
+            )
+        else:
+            ligand_interface_confidence_per_design = None
+
         # Grab the index to token mapping from the model.
         idx_to_token = MPNN_TOKEN_ENCODING.idx_to_token
 
@@ -436,6 +471,18 @@ class MPNNInferenceEngine:
             # Overwrite with designed residue names.
             design_atom_array.set_annotation("res_name", full_resnames)
 
+            # Spread per-residue confidence (token-level) to atom level over the
+            # non-atomized subset and store it in a dedicated 'mpnn_confidence'
+            # annotation (so the original b-factor is preserved). Non-designed
+            # positions are set to 0.
+            design_confidence_atom = spread_token_wise(
+                design_non_atomized_array,
+                confidence_per_residue[design_idx],
+            )
+            full_confidence = np.zeros(len(design_atom_array), dtype=np.float32)
+            full_confidence[~design_atom_array.atomize] = design_confidence_atom
+            design_atom_array.set_annotation("mpnn_confidence", full_confidence)
+
             # We need to remove any non-atomized residue atoms that no
             # longer belong (i.e. old side chain atoms). We want to keep any
             # atom that is atomized, any atom that is a backbone atom, and
@@ -478,6 +525,13 @@ class MPNNInferenceEngine:
                 "batch_idx": batch_idx,
                 "design_idx": design_idx,
                 "designed_sequence": one_letter_seq,
+                "confidence": float(confidence_per_design[design_idx]),
+                "ligand_interface_confidence": (
+                    float(ligand_interface_confidence_per_design[design_idx])
+                    if ligand_interface_confidence_per_design is not None
+                    and not np.isnan(ligand_interface_confidence_per_design[design_idx])
+                    else None
+                ),
                 "sequence_recovery": sequence_recovery,
                 "ligand_interface_sequence_recovery": (
                     ligand_interface_sequence_recovery

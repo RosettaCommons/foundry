@@ -6,8 +6,16 @@ classes including InterfaceSequenceRecovery and InterfaceNLL.
 """
 
 import pytest
+import torch
 from atomworks.ml.utils.testing import cached_parse
-from mpnn.metrics.nll import NLL, InterfaceNLL
+from mpnn.metrics.nll import (
+    NLL,
+    InterfaceNLL,
+    MPNNConfidence,
+    MPNNLigandInterfaceConfidence,
+    SampledLigandInterfaceNLL,
+    SampledNLL,
+)
 from mpnn.metrics.sequence_recovery import InterfaceSequenceRecovery, SequenceRecovery
 from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from test_utils import (
@@ -90,3 +98,217 @@ class TestMetrics:
             return_per_example=True,
             return_per_residue=True,
         )
+
+    def test_sampled_confidence_metrics_read_sampled_logits(self):
+        """SampledNLL/SampledLigandInterfaceNLL must score the *sampled* sequence
+        using the raw model logits (not the native sequence or the
+        temperature-scaled log_probs)."""
+        for metric in (SampledNLL(), SampledLigandInterfaceNLL()):
+            mapping = metric.kwargs_to_compute_args
+            assert mapping["S"] == ("network_output", "decoder_features", "S_sampled")
+            assert mapping["logits"] == (
+                "network_output",
+                "decoder_features",
+                "logits",
+            )
+            # The parent's native-sequence log_probs input must not leak through.
+            assert "log_probs" not in mapping
+        # The interface variant additionally needs the atom array for masking.
+        assert SampledLigandInterfaceNLL().kwargs_to_compute_args["atom_array"] == (
+            "network_input",
+            "atom_array",
+        )
+
+    def test_sampled_nll_equals_log_softmax_of_logits_on_sampled_sequence(self):
+        """SampledNLL.compute must equal the hand-computed NLL of the sampled
+        sequence under log_softmax(logits), and must ignore the native
+        sequence."""
+        batch, length, vocab = 1, 4, 21
+        torch.manual_seed(0)
+        logits = torch.randn(batch, length, vocab)
+        sampled = torch.tensor([[1, 5, 5, 10]])
+        native = torch.tensor([[0, 0, 0, 0]])  # deliberately != sampled
+        mask = torch.tensor([[True, True, True, False]])
+
+        network_output = {
+            "decoder_features": {"logits": logits, "S_sampled": sampled},
+            "input_features": {"mask_for_loss": mask, "S": native},
+        }
+
+        metric = SampledNLL(
+            return_per_example_metrics=True, return_per_residue_metrics=True
+        )
+        out = metric.compute_from_kwargs(network_output=network_output)
+
+        # Expected: mean over the (3) masked-in positions of -log_softmax(logits).
+        log_probs = torch.log_softmax(logits, dim=-1)
+        per_res = -log_probs[0, torch.arange(length), sampled[0]]
+        expected_nll = per_res[:3].sum() / 3.0
+
+        assert torch.allclose(out["nll_per_example"][0], expected_nll, atol=1e-6)
+        # Per-residue NLL is zeroed at the masked-out position.
+        assert torch.allclose(
+            out["nll_per_residue"][0],
+            torch.tensor([per_res[0], per_res[1], per_res[2], 0.0]),
+            atol=1e-6,
+        )
+        # Must NOT coincide with the NLL of the (different) native sequence.
+        native_nll = (-log_probs[0, torch.arange(length), native[0]])[:3].sum() / 3.0
+        assert not torch.allclose(out["nll_per_example"][0], native_nll, atol=1e-4)
+
+    def test_sampled_interface_nll_restricts_to_interface_and_uses_sampled(
+        self, monkeypatch
+    ):
+        """SampledLigandInterfaceNLL must restrict the NLL to the interface mask and
+        score the sampled sequence under log_softmax(logits). The interface-mask
+        derivation itself is inherited from InterfaceNLL (covered by the
+        integration test); here the structure-derived mask is injected so the
+        new sampled+logits+masking contract can be checked numerically."""
+        batch, length, vocab = 1, 4, 21
+        torch.manual_seed(1)
+        logits = torch.randn(batch, length, vocab)
+        sampled = torch.tensor([[2, 7, 3, 9]])
+        native = torch.tensor([[0, 0, 0, 0]])  # deliberately != sampled
+        mask_for_loss = torch.ones(batch, length, dtype=torch.bool)
+        # Pretend only positions 1 and 2 are at the polymer-ligand interface.
+        interface_mask = torch.tensor([[False, True, True, False]])
+
+        metric = SampledLigandInterfaceNLL(
+            return_per_example_metrics=True, return_per_residue_metrics=True
+        )
+        # Bypass the structure-derived interface mask with a known one.
+        monkeypatch.setattr(
+            metric, "get_per_residue_mask", lambda mask_for_loss, **kw: interface_mask
+        )
+
+        network_output = {
+            "decoder_features": {"logits": logits, "S_sampled": sampled},
+            "input_features": {"mask_for_loss": mask_for_loss, "S": native},
+        }
+        network_input = {"atom_array": None}  # unused; mask is injected
+
+        out = metric.compute_from_kwargs(
+            network_input=network_input, network_output=network_output
+        )
+
+        log_probs = torch.log_softmax(logits, dim=-1)
+        per_res = -log_probs[0, torch.arange(length), sampled[0]]
+        # Only the two interface positions contribute.
+        expected = (per_res[1] + per_res[2]) / 2.0
+        assert torch.allclose(out["interface_nll_per_example"][0], expected, atol=1e-6)
+        # Non-interface positions are excluded from the per-residue NLL.
+        assert out["interface_nll_per_residue"][0, 0] == 0.0
+        assert out["interface_nll_per_residue"][0, 3] == 0.0
+        # Must NOT coincide with the native sequence over the same mask.
+        native_res = -log_probs[0, torch.arange(length), native[0]]
+        native_expected = (native_res[1] + native_res[2]) / 2.0
+        assert not torch.allclose(
+            out["interface_nll_per_example"][0], native_expected, atol=1e-4
+        )
+
+    def test_mpnn_confidence_exposes_exp_neg_nll(self):
+        """MPNNConfidence must expose confidence = exp(-NLL) directly, so the
+        engine no longer needs to apply the transform itself."""
+        batch, length, vocab = 1, 4, 21
+        torch.manual_seed(2)
+        logits = torch.randn(batch, length, vocab)
+        sampled = torch.tensor([[3, 1, 8, 4]])
+        mask = torch.tensor([[True, True, False, True]])
+
+        network_output = {
+            "decoder_features": {"logits": logits, "S_sampled": sampled},
+            "input_features": {
+                "mask_for_loss": mask,
+                "S": torch.zeros_like(sampled),
+            },
+        }
+        metric = MPNNConfidence(
+            return_per_example_metrics=True, return_per_residue_metrics=True
+        )
+        out = metric.compute_from_kwargs(network_output=network_output)
+
+        # confidence_per_example is exactly exp(-nll_per_example).
+        assert torch.allclose(
+            out["confidence_per_example"],
+            torch.exp(-out["nll_per_example"]),
+            atol=1e-6,
+        )
+        # Per-residue confidence is in (0, 1] on designed positions and 0 on the
+        # masked-out position.
+        conf_res = out["confidence_per_residue"][0]
+        assert conf_res[2] == 0.0
+        designed = torch.tensor([0, 1, 3])
+        assert torch.all(conf_res[designed] > 0.0)
+        assert torch.all(conf_res[designed] <= 1.0)
+
+    def test_mpnn_interface_confidence_exposes_exp_neg_nll(self, monkeypatch):
+        """MPNNLigandInterfaceConfidence must expose interface confidence = exp(-NLL)
+        over the interface residues only."""
+        batch, length, vocab = 1, 4, 21
+        torch.manual_seed(3)
+        logits = torch.randn(batch, length, vocab)
+        sampled = torch.tensor([[2, 7, 3, 9]])
+        mask_for_loss = torch.ones(batch, length, dtype=torch.bool)
+        interface_mask = torch.tensor([[False, True, True, False]])
+
+        metric = MPNNLigandInterfaceConfidence(
+            return_per_example_metrics=True, return_per_residue_metrics=True
+        )
+        monkeypatch.setattr(
+            metric, "get_per_residue_mask", lambda mask_for_loss, **kw: interface_mask
+        )
+
+        network_output = {
+            "decoder_features": {"logits": logits, "S_sampled": sampled},
+            "input_features": {
+                "mask_for_loss": mask_for_loss,
+                "S": torch.zeros_like(sampled),
+            },
+        }
+        out = metric.compute_from_kwargs(
+            network_input={"atom_array": None}, network_output=network_output
+        )
+
+        assert torch.allclose(
+            out["interface_confidence_per_example"],
+            torch.exp(-out["interface_nll_per_example"]),
+            atol=1e-6,
+        )
+
+    def test_mpnn_ligand_interface_confidence_no_interface_residues(self, monkeypatch):
+        """With no polymer-ligand interface residues (e.g. ligand_mpnn run on a
+        ligand-free input), the interface confidence must be cleanly undefined
+        (NaN, flagged by valid_examples_mask) rather than crashing. The
+        inference engine converts this NaN to None so it is omitted from the
+        outputs."""
+        batch, length, vocab = 1, 4, 21
+        torch.manual_seed(4)
+        logits = torch.randn(batch, length, vocab)
+        sampled = torch.tensor([[2, 7, 3, 9]])
+        mask_for_loss = torch.ones(batch, length, dtype=torch.bool)
+        # No residues at the interface (empty mask).
+        empty_interface = torch.zeros(batch, length, dtype=torch.bool)
+
+        metric = MPNNLigandInterfaceConfidence(
+            return_per_example_metrics=True, return_per_residue_metrics=True
+        )
+        monkeypatch.setattr(
+            metric, "get_per_residue_mask", lambda mask_for_loss, **kw: empty_interface
+        )
+
+        network_output = {
+            "decoder_features": {"logits": logits, "S_sampled": sampled},
+            "input_features": {
+                "mask_for_loss": mask_for_loss,
+                "S": torch.zeros_like(sampled),
+            },
+        }
+        # Must not raise.
+        out = metric.compute_from_kwargs(
+            network_input={"atom_array": None}, network_output=network_output
+        )
+
+        assert bool(out["interface_valid_examples_mask"][0]) is False
+        assert torch.isnan(out["interface_confidence_per_example"][0])
+        # Per-residue confidence is all zero (no interface positions).
+        assert torch.all(out["interface_confidence_per_residue"] == 0.0)
