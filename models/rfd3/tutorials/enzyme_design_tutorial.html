@@ -1,0 +1,557 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html"><link rel="next" title="Nuclei Acid Binder Design in RFdiffusion3" href="na_binder_tutorial.html"><link rel="prev" title="Protein-Protein Interface Design in RFdiffusion3" href="ppi_design_tutorial.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Enzyme Design in RFdiffusion3 - foundry 0.1.7 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=acfd86a5" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #F68A33;
+  --color-brand-content: #37939B;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-background-hover: #DCE8E8ff;
+  --color-announcement-background: #F68A33dd;
+  --color-announcement-text: #070707;
+  --color-brand-visited: #37939B;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">foundry 0.1.7 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">foundry 0.1.7 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">General</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../license_link.html">LICENSE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation_faq.html">Common Installation Issues</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributing_link.html">CONTRIBUTING</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Models</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../index.html">RFdiffusion3 Documentation</a><input aria-label="Toggle navigation of RFdiffusion3 Documentation" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="RFdiffusion3_installation_tutorial.html">Installation of RFdiffusion3 on Unix Systems</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro_inference_calculations.html">Inference Calculation Basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../input.html">RFdiffusion3 — Input Specification &amp; Command-line arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../designability_vs_diversity.html">Designability vs. Diversity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ppi_design_tutorial.html">Protein-Protein Interface Design in RFdiffusion3</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Enzyme Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="na_binder_tutorial.html">Nuclei Acid Binder Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate_enzyme_design_tutorial.html">Intermediate Enzyme Design Tutorial</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/na_binder_design.html">RFdiffusion3 — Nucleic acid binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/sm_binder_design.html">RFdiffusion3 — Small molecule binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/protein_binder_design.html">RFdiffusion3 — Protein binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/symmetry.html">Overview of Symmetry in RFD3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/enzyme_design.html">RFdiffusion3 — Enzyme design examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../rf3/index.html">RF3 Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../mpnn/index.html">MPNN Documentation</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../../../_sources/models/rfd3/tutorials/enzyme_design_tutorial.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="enzyme-design-in-rfdiffusion3">
+<h1>Enzyme Design in RFdiffusion3<a class="headerlink" href="#enzyme-design-in-rfdiffusion3" title="Link to this heading">¶</a></h1>
+<section id="before-we-get-started">
+<h2>Before We Get Started…<a class="headerlink" href="#before-we-get-started" title="Link to this heading">¶</a></h2>
+<p>This tutorial does not cover installing RFD3. If you need to install this model, see the <a class="reference external" href="https://github.com/RosettaCommons/foundry/tree/production/models/rfd3">README</a> for installation instructions. You will need to remember the path to the directory where you stored your checkpoint files, if you did not store them in the default location.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>You will need to clone the repository to access the tutorial files. Using the <code class="docutils literal notranslate"><span class="pre">pip</span></code> commands to install the model does not automatically download the files in the repository to your system.</p>
+</div>
+<p>Make sure you have activated any environment(s) you used to install RFD3.</p>
+<p>RFD3 runs best on GPUs. It is suggested to follow this tutorial on an interactive GPU node if you have access to one.</p>
+<p>You will need the file <code class="docutils literal notranslate"><span class="pre">1euv_lig.pdb</span></code>. This is provided in <a class="reference download internal" download="" href="../../../_downloads/27f4ec1ffa121b56b49c66fd0ff5be9d/1euv_lig.pdb"><span class="xref download myst"><code class="docutils literal notranslate"><span class="pre">foundry/models/rfd3/docs/tutorials/enzyme_tutorial_files/</span></code></span></a>. You can clone the <a class="reference external" href="https://github.com/RosettaCommons/foundry"><code class="docutils literal notranslate"><span class="pre">foundry</span></code></a> repository to easily access files related to this tutorial.</p>
+<!-- Lastly, we will be visualizing the outputs of the calculations presented in the tutorial using [PyMOL](https://pymol.org/). The visualization steps are completely optional, but if you would like to follow along you will need to have PyMOL installed.--> 
+</section>
+<section id="learning-objectives">
+<span id="enzyme-learning-objectives"></span><h2>Learning Objectives<a class="headerlink" href="#learning-objectives" title="Link to this heading">¶</a></h2>
+<p>In this tutorial, we will use RFdiffusion3 to design cysteine hydrolases, similar to what is described in <a class="reference external" href="https://www.biorxiv.org/content/10.1101/2025.09.18.676967v2"><em>De novo</em> design of All-atom Biomolecular Interactions with RFdiffusion3</a>. This will allow us to explore the constraint options useful in enzyme design tasks.</p>
+</section>
+<section id="setup">
+<span id="enzyme-setup"></span><h2>Setup<a class="headerlink" href="#setup" title="Link to this heading">¶</a></h2>
+<p>Create a directory named <code class="docutils literal notranslate"><span class="pre">rfd3_enzyme_tutorial</span></code> and <code class="docutils literal notranslate"><span class="pre">cd</span></code> into it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>rfd3_enzyme_tutorial<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>rfd3_enzyme_tutorial
+</pre></div>
+</div>
+<p>This is where you will be storing the files related to this tutorial.</p>
+<p>If you would like to compare your outputs against those generated by the authors of this tutorial, you can find pre-generated output files in <code class="docutils literal notranslate"><span class="pre">foundry/models/rfd3/docs/tutorials/enzyme_tutorial_files/outputs.zip</span></code>.</p>
+<p>There is also a pre-made JSON file available in <code class="docutils literal notranslate"><span class="pre">foundry/models/rfd3/docs/enzyme_tutorial_files</span></code>. We recommend following the tutorial to create this file yourself to better understand the RFD3 options that are relevant to enzyme design.</p>
+</section>
+<section id="creating-the-json-file">
+<span id="enzyme-creating-the-json-file"></span><h2>Creating the JSON file<a class="headerlink" href="#creating-the-json-file" title="Link to this heading">¶</a></h2>
+<p>In the next few sections we will be briefly describing the settings we will be using for this example enzyme design project. If you would like more information about the options discussed here or information about the other options that are available, see the <span class="xref myst">input specification</span> documentation.</p>
+<ol class="arabic">
+<li><p>Using your editor of choice, open a new file called <code class="docutils literal notranslate"><span class="pre">rfd3_enzyme_tutorial.json</span></code>. This is where we will be storing the options we will use to constrain our enzyme design.</p></li>
+<li><p>This is a JSON file, so all of the options contained in it need to be encapsulated in curly braces ({}). Go ahead and add a pair of these to your file.</p></li>
+<li><p>Like all designs you will create using RFD3, we need to start by giving our calculation a name. It should be short, but descriptive, so let’s call it <code class="docutils literal notranslate"><span class="pre">cys_1euv_lig</span></code>. Add this name in quotes to your file and place a colon and another pair of curly brackets after this. Your file should now look like:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;cys_1euv_lig&quot;</span><span class="p">:{</span>
+
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>All of the other settings discussed here will go inside the inner curly brackets.</p>
+</li>
+<li><p>Next we need to specify the structure file (PDB, CIF, etc.) that contains information about any input structures related to our calculation:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;input&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;path/to/1euv_lig.pdb&quot;</span><span class="p">,</span>
+</pre></div>
+</div>
+</li>
+<li><p>The identifier representing the ligand in our PDB file needs to be listed so that RFD3 knows to treat this molecule differently:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;ligand&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;l:g&quot;</span><span class="p">,</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The ligand in this tutorial is a real molecule, but not one listed in the <a class="reference external" href="https://www.wwpdb.org/data/ccd">Chemical Component Database</a> or the <a class="reference external" href="https://www.rcsb.org/">RCSB Protein Data Bank</a>. Placing a colon (:) in your ligand name ensures that it does not match a molecule in the Chemical Component Database. If you are running a calculation that uses a real ligand, feel free to use its actual chemical identifier.</p>
+</div>
+</li>
+<li><p>Add an option to <code class="docutils literal notranslate"><span class="pre">unindex</span></code> the residues in the input file. These residues were determined to be important for the enzymatic activity we are trying to create and design a protein around. However, we don’t know where in our designed structure we want these enzymes to be, making this option incredibly useful for enzyme design:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;unindex&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A514,A531,A574,A579-581&quot;</span><span class="p">,</span>
+</pre></div>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Choosing the residues to use in your enzyme design comes from knowledge of your system, literature searches, etc. The only guidance we will give on this topic is to try several combinations of the residues you think are important for your enzyme design. Too many and you might overconstrain your system, too few and you are less likely to obtain useful designs.</p>
+</div>
+</li>
+<li><p>We will use the <code class="docutils literal notranslate"><span class="pre">length</span></code> option to tell RFD3 how long we want our designed proteins to be:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;length&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;100-200&quot;</span><span class="p">,</span>
+</pre></div>
+</div>
+</li>
+<li><p>To define where our protein should be centered, we will give RFD3 an ‘ori token’. This specifies the <em>ori</em>gin (center of mass) of the designed portion of our output structure:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;ori_token&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span>
+</pre></div>
+</div>
+<figure class="align-default" id="id1">
+<a class="reference internal image-reference" href="../../../_images/enzyme_ori_token.png"><img alt="../../../_images/enzyme_ori_token.png" src="../../../_images/enzyme_ori_token.png" style="width: 60%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Image of the input structure with the ORI token in the center, visualized as a white sphere.</span><a class="headerlink" href="#id1" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>In this example the ori token is placed close to the center of our input structure. When designing your own enzyme scaffolds, this may not be the best placement depending on your design goals. See the <a class="reference external" href="https://www.nature.com/articles/s41592-025-02975-x">RFdiffusion2 paper</a> for more information about how ORI tokens impact the results of diffusion calculations.</p>
+</div>
+</li>
+<li><p>Even though we do not care where our residues end up in our final protein sequence, we want their geometries (or at least some of their atoms) to remain in the same place spatially so that their relationships to the ligand stay the same. For this we use <code class="docutils literal notranslate"><span class="pre">select_fixed_atoms</span></code>:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;select_fixed_atoms&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;A514&quot;</span><span class="p">:</span><span class="s2">&quot;NE2,CE1,ND1,CD2,CG,CB&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">    </span><span class="nt">&quot;A531&quot;</span><span class="p">:</span><span class="s2">&quot;OD1,CG,OD2,CB&quot;</span><span class="p">,</span><span class="w"> </span>
+<span class="w">    </span><span class="nt">&quot;A574&quot;</span><span class="p">:</span><span class="s2">&quot;NE2,CD,OE1,CG&quot;</span><span class="p">,</span><span class="w"> </span>
+<span class="w">    </span><span class="nt">&quot;A579&quot;</span><span class="p">:</span><span class="s2">&quot;C,O,CA,N&quot;</span><span class="p">,</span><span class="w"> </span>
+<span class="w">    </span><span class="nt">&quot;A580&quot;</span><span class="p">:</span><span class="s2">&quot;SG,CB,CA,N,C,O&quot;</span><span class="p">,</span><span class="w"> </span>
+<span class="w">    </span><span class="nt">&quot;A581&quot;</span><span class="p">:</span><span class="s2">&quot;C,O,CA,N&quot;</span>
+<span class="p">},</span>
+</pre></div>
+</div>
+<p>For residue A514 (histidine), A531 (aspartic acid), and A574 (glutamine) the side chain is fixed, for residue 580 (cysteine) the entire residue is fixed, and for A579 (aspartic acid) and A581 (glycine) the backbones are fixed. The ligand is automatically held in place.</p>
+<figure class="align-default" id="id2">
+<a class="reference internal image-reference" href="../../../_images/select_fixed_atoms.png"><img alt="../../../_images/select_fixed_atoms.png" src="../../../_images/select_fixed_atoms.png" style="width: 60%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Image of the starting structure where the fixed atoms have been highlighted in purple.</span><a class="headerlink" href="#id2" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+</li>
+<li><p>RFD3 allows for RASA conditioning to control how exposed or buried different portions of your input are relative to the designed protein.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;select_buried&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;l:g&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;O1,C8,O3,C4,C5,C23,C24,C25,C26,C27&quot;</span>
+<span class="p">},</span>
+<span class="nt">&quot;select_exposed&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;l:g&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C2,C22,C19,C18,C17,C20,C16,C15,O21,O14,C13,C12&quot;</span>
+<span class="p">},</span>
+</pre></div>
+</div>
+<p>As the names of the options suggest, RFD3 will do its best to bury atoms that were passed to the <code class="docutils literal notranslate"><span class="pre">select_buried</span></code> option and expose the atoms passed to the <code class="docutils literal notranslate"><span class="pre">select_exposed</span></code> option.</p>
+<figure class="align-default" id="id3">
+<a class="reference internal image-reference" href="../../../_images/RASA_ligand.png"><img alt="../../../_images/RASA_ligand.png" src="../../../_images/RASA_ligand.png" style="width: 60%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Image of the ligand where the exposed portion is colored blue and the buried portion is colored red.</span><a class="headerlink" href="#id3" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>There is a third option for RASA conditioning which was not used here,<code class="docutils literal notranslate"><span class="pre">select_partially_buried</span></code>, that you might find useful for your protein design tasks.</p>
+</li>
+<li><p>Next we’re also going to unfix the <em>sequence</em> for residues A579 and A581. For this design, we know where we want the backbones for the residues next to A580 (the cysteine), but their exact identity and index does not matter. This is where the option <code class="docutils literal notranslate"><span class="pre">select_unfixed_sequence</span></code> becomes useful.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;select_unfixed_sequence&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A579,A581&quot;</span><span class="p">,</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>These residues have fixed portions in the <code class="docutils literal notranslate"><span class="pre">select_fixed_atoms</span></code> setting, but the atoms chosen are <strong>only the backbone atoms</strong>. If you are using both of these settings in your designs it is important to not fix any of the side chain atoms to allow for the identity of the residue to actually change.</p>
+</div>
+</li>
+<li><p>Save your file and close it. Your files should be similar to what is stored in <code class="docutils literal notranslate"><span class="pre">outputs.zip</span></code>.</p></li>
+</ol>
+</section>
+<section id="running-rfd3">
+<span id="enzyme-running-rfd3"></span><h2>Running RFD3<a class="headerlink" href="#running-rfd3" title="Link to this heading">¶</a></h2>
+<p>To actually run RFD3 you need to know:</p>
+<ul class="simple">
+<li><p>the directory you want the outputs to be stored in</p></li>
+<li><p>the path to the JSON (or YAML) file that stores the specific settings for the calculation</p></li>
+<li><p>the location of your checkpoint files</p></li>
+</ul>
+<p>Once you have these three things you can run something like this from the command line:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>rfd3<span class="w"> </span>design<span class="w"> </span><span class="nv">out_dir</span><span class="o">=</span>enzyme_tutorial_outputs/0<span class="w"> </span><span class="nv">inputs</span><span class="o">=</span>rfd3_enzyme_tutorial.json<span class="w"> </span><span class="nv">ckpt_path</span><span class="o">=</span>/path/to/your/checkpoint/files/rfd3_latest.ckpt<span class="w"> </span>
+</pre></div>
+</div>
+<p>Your output files will be placed in a new directory <code class="docutils literal notranslate"><span class="pre">enzyme_tutorial_outputs/0</span></code>.  Your output files will be named <code class="docutils literal notranslate"><span class="pre">enzyme_tutorial_cys_1euv_lig_0_model_n.cif.gz</span></code> where <code class="docutils literal notranslate"><span class="pre">n</span></code> is the number of the design. <code class="docutils literal notranslate"><span class="pre">enzyme_tutorial</span></code> comes from the name of the JSON file and <code class="docutils literal notranslate"><span class="pre">cys_1euv_lig</span></code> comes from the name you gave your calculation in the JSON file.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>You may see several warning messages when you run RFD3, these should not interfere with the calculation.</p>
+</div>
+</section>
+<section id="analyzing-the-outputs">
+<span id="enzyme-analyzing-the-outputs"></span><h2>Analyzing the Outputs<a class="headerlink" href="#analyzing-the-outputs" title="Link to this heading">¶</a></h2>
+<p>You should end up with 8 designs, numbered 0-7, each with its own <code class="docutils literal notranslate"><span class="pre">.cif.gz</span></code> and <code class="docutils literal notranslate"><span class="pre">.json</span></code> file. If you want to adjust the number, add the configuration option <code class="docutils literal notranslate"><span class="pre">diffusion_batch_size</span></code> to your <code class="docutils literal notranslate"><span class="pre">rfd3</span> <span class="pre">design</span></code> command.</p>
+<p>The JSON file has many details about your diffusion run, including the options in the YAML file you created. The compressed CIF file contains information about the final diffused structure that you can easily visualize with tools like PyMOL.</p>
+<p>Your results should look something like this:</p>
+<figure class="align-default" id="id4">
+<a class="reference internal image-reference" href="../../../_images/example_output_fixed_ori.png"><img alt="../../../_images/example_output_fixed_ori.png" src="../../../_images/example_output_fixed_ori.png" style="width: 60%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Example output for the enzyme scaffold design. The input structure is in green and the output structure is light pink. The residues that had some of their atoms fixed are highlighted in purple. The ORI token is shown as a white sphere.</span><a class="headerlink" href="#id4" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>You’ll notice:</p>
+<ul class="simple">
+<li><p>The fixed atoms have stayed in place, once the structures have been aligned to the ligand</p></li>
+<li><p>The index of the original residues has changed (easy to tell in this example because we have held their coordinates fixed, you can see the mapping in the output JSON file.)</p></li>
+<li><p>The structures are all the same length, which is between 100 and 200 residues long. (All designs in the same batch will have the same length. Set the batch size to 1 if you want to design proteins with all different lengths.)</p></li>
+</ul>
+<p>Changing the view slightly lets us see that our RASA conditioning was also followed:</p>
+<figure class="align-default" id="id5">
+<a class="reference internal image-reference" href="../../../_images/RASA_output.png"><img alt="../../../_images/RASA_output.png" src="../../../_images/RASA_output.png" style="width: 60%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">You can see that the portion of the ligand that was specified as exposed (blue) is much less buried in the designed protein than the portion of the ligand that was specified as buried (red).</span><a class="headerlink" href="#id5" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="conclusion">
+<h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading">¶</a></h2>
+<p>You have now set up an RFD3 calculation and successfully ran the inference code for an enzyme design problem. While the options discussed here are particularly useful in enzyme design projects, RFD3 has many more that you can explore by looking at <a class="reference internal" href="../input.html"><span class="doc">RFdiffusion3 — Input Specification &amp; Command-line arguments</span></a>.</p>
+</section>
+<section id="references-and-further-reading">
+<span id="enzyme-references"></span><h2>References and Further Reading<a class="headerlink" href="#references-and-further-reading" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>For more information on the different inference settings in RFD3, see <a class="reference internal" href="../input.html"><span class="doc">RFdiffusion3 — Input Specification &amp; Command-line arguments</span></a></p></li>
+<li><p>The calculation presented here was used to benchmark RFdiffusion2, for more information see <a class="reference external" href="https://www.nature.com/articles/s41592-025-02975-x">Atom-level enzyme active site scaffolding using RFdiffusion2</a></p></li>
+<li><p>A more thorough discussion of the settings and configuration options in RFD3 can be found <a class="reference internal" href="../intro_inference_calculations.html"><span class="doc">here</span></a></p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="na_binder_tutorial.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Nuclei Acid Binder Design in RFdiffusion3</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="ppi_design_tutorial.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Protein-Protein Interface Design in RFdiffusion3</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Institute for Protein Design, University of Washington
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Enzyme Design in RFdiffusion3</a><ul>
+<li><a class="reference internal" href="#before-we-get-started">Before We Get Started…</a></li>
+<li><a class="reference internal" href="#learning-objectives">Learning Objectives</a></li>
+<li><a class="reference internal" href="#setup">Setup</a></li>
+<li><a class="reference internal" href="#creating-the-json-file">Creating the JSON file</a></li>
+<li><a class="reference internal" href="#running-rfd3">Running RFD3</a></li>
+<li><a class="reference internal" href="#analyzing-the-outputs">Analyzing the Outputs</a></li>
+<li><a class="reference internal" href="#conclusion">Conclusion</a></li>
+<li><a class="reference internal" href="#references-and-further-reading">References and Further Reading</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=ca7ad2ea"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script async="async" defer="defer" src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
+    </body>
+</html>

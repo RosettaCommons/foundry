@@ -1,0 +1,599 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html"><link rel="next" title="Intermediate Enzyme Design Tutorial" href="intermediate_enzyme_design_tutorial.html"><link rel="prev" title="Enzyme Design in RFdiffusion3" href="enzyme_design_tutorial.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Nuclei Acid Binder Design in RFdiffusion3 - foundry 0.1.7 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=acfd86a5" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #F68A33;
+  --color-brand-content: #37939B;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-background-hover: #DCE8E8ff;
+  --color-announcement-background: #F68A33dd;
+  --color-announcement-text: #070707;
+  --color-brand-visited: #37939B;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">foundry 0.1.7 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">foundry 0.1.7 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">General</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../license_link.html">LICENSE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation_faq.html">Common Installation Issues</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributing_link.html">CONTRIBUTING</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Models</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../index.html">RFdiffusion3 Documentation</a><input aria-label="Toggle navigation of RFdiffusion3 Documentation" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="RFdiffusion3_installation_tutorial.html">Installation of RFdiffusion3 on Unix Systems</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro_inference_calculations.html">Inference Calculation Basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../input.html">RFdiffusion3 — Input Specification &amp; Command-line arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../designability_vs_diversity.html">Designability vs. Diversity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ppi_design_tutorial.html">Protein-Protein Interface Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enzyme_design_tutorial.html">Enzyme Design in RFdiffusion3</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Nuclei Acid Binder Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate_enzyme_design_tutorial.html">Intermediate Enzyme Design Tutorial</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/na_binder_design.html">RFdiffusion3 — Nucleic acid binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/sm_binder_design.html">RFdiffusion3 — Small molecule binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/protein_binder_design.html">RFdiffusion3 — Protein binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/symmetry.html">Overview of Symmetry in RFD3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/enzyme_design.html">RFdiffusion3 — Enzyme design examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../rf3/index.html">RF3 Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../mpnn/index.html">MPNN Documentation</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../../../_sources/models/rfd3/tutorials/na_binder_tutorial.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="nuclei-acid-binder-design-in-rfdiffusion3">
+<h1>Nuclei Acid Binder Design in RFdiffusion3<a class="headerlink" href="#nuclei-acid-binder-design-in-rfdiffusion3" title="Link to this heading">¶</a></h1>
+<section id="before-we-get-started">
+<h2>Before We Get Started…<a class="headerlink" href="#before-we-get-started" title="Link to this heading">¶</a></h2>
+<p>This tutorial does not cover installing RFD3. Before continuing, you should make sure that RFdiffusion3 (RFD3) is installed and runnable on your system. See the <a class="reference external" href="https://github.com/RosettaCommons/foundry/tree/production/models/rfd3">README</a> for installation instructions.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>You will need to clone the repository to access the tutorial files. Using the <code class="docutils literal notranslate"><span class="pre">pip</span></code> commands to install the model does not automatically download the files required to complete this tutorial.</p>
+</div>
+<p>RFD3 runs best on GPUs. It is suggested to follow this tutorial on an interactive GPU node if you have access to one.</p>
+<p>You will need the file <code class="docutils literal notranslate"><span class="pre">2r5z.pdb</span></code>. This is provided in <a class="reference download internal" download="" href="../../../_downloads/d75aeb1cb0cfa6169b50cc036069e6da/2r5z.pdb"><span class="xref download myst"><code class="docutils literal notranslate"><span class="pre">foundry/models/rfd3/docs/input_pdbs</span></code></span></a>. You can clone the <a class="reference external" href="https://github.com/RosettaCommons/foundry"><code class="docutils literal notranslate"><span class="pre">foundry</span></code></a> repository to easily access files related to this tutorial.</p>
+</section>
+<section id="learning-objectives">
+<span id="na-learning-objectives"></span><h2>Learning Objectives<a class="headerlink" href="#learning-objectives" title="Link to this heading">¶</a></h2>
+<p>In this tutorial, we will design a DNA-protein complex to explore the settings available in RFD3 that are useful for nucleic acid binder design.</p>
+</section>
+<section id="setup">
+<span id="na-setup"></span><h2>Setup<a class="headerlink" href="#setup" title="Link to this heading">¶</a></h2>
+<p>Create a directory named <code class="docutils literal notranslate"><span class="pre">rfd3_na_tutorial</span></code> and <code class="docutils literal notranslate"><span class="pre">cd</span></code> into it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>rfd3_na_tutorial<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>rfd3_na_tutorial
+</pre></div>
+</div>
+<p>This is where you will be storing the files related to this tutorial.</p>
+<p>If you would like to compare your outputs against those generated by the authors of this tutorial, you can find pre-generated output files in <code class="docutils literal notranslate"><span class="pre">foundry/models/rfd3/docs/tutorials/na_tutorial_files</span></code>.
+The ‘basic’ zip file contains outputs that did not use the setting discussed in the <a class="reference internal" href="#na-additional-constraints">Additional Constraints</a> section. The ‘hbond’ zip file has the outputs resulting from adding <a class="reference internal" href="#na-hydrogen-bond-conditioning">hydrogen bond conditioning constraints</a> and the ‘unfix’ zip file has the outputs resulting from adding a <a class="reference internal" href="#na-unfix-sequence">constraint that allows the input sequence to be modified</a>.</p>
+<p>There is also a pre-made JSON file available in <code class="docutils literal notranslate"><span class="pre">foundry/models/rfd3/docs/na_tutorial_files</span></code>. We recommend following the tutorial to create this file yourself to better understand the RFD3 options that are relevant to nucleic acid binder design.</p>
+</section>
+<section id="creating-the-json-file">
+<span id="na-creating-the-yaml-file"></span><h2>Creating the JSON file<a class="headerlink" href="#creating-the-json-file" title="Link to this heading">¶</a></h2>
+<p>In this tutorial, we will be briefly describing each of the settings we will be using for this example.</p>
+<ol class="arabic">
+<li><p>Using your editor of choice, open a new file called <code class="docutils literal notranslate"><span class="pre">rfd3_na_tutorial.json</span></code>. This is where we will be storing the options we will use to constrain our enzyme design.</p></li>
+<li><p>This is a JSON file, so all of the options contained in it need to be encapsulated in curly braces ({}). Go ahead and add a pair of these to your file.</p></li>
+<li><p>Like all designs you will create using RFD3, we need to start by giving our calculation a name. It should be short, but descriptive, so let’s call it <code class="docutils literal notranslate"><span class="pre">dsDNA_complex</span></code>. Add this name in quotes to your file and place a colon and another pair of curly brackets after this. Your file should now look like:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;dsDNA_complex&quot;</span><span class="p">:{</span>
+
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</li>
+<li><p>Next we need to specify the structure file (PDB, CIF, etc.) that contains information about any input structures related to our calculation:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;input&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;path/to/2r5z.pdb&quot;</span><span class="p">,</span>
+</pre></div>
+</div>
+</li>
+<li><p>To define the portions of our final structure that will be defined vs. taken from our input structure file we will use the <code class="docutils literal notranslate"><span class="pre">contig</span></code> option:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;contig&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C5-18,/0,D24-37,/0,40-50,A146-154,80-90&quot;</span><span class="p">,</span>
+</pre></div>
+</div>
+<p>Let’s break down what’s going on here a bit further:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">C5-18</span></code>: Our final design will start with residues C5-C18 from our input PDB</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">/0</span></code>: This indicates a chain break, the C5-18 residues will not be connected to anything coming next in our <code class="docutils literal notranslate"><span class="pre">contig</span></code> string.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">D24-27</span></code>: After the chain break we have residues D24-37 from the input structure file.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">/0,40-50</span></code>: After another chain break RFD3 will design a segment with 40-50 residues.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">A146-154</span></code>: residues A146-154 from the input structure will be connected to the C-terminus of the designed residues</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">80-90</span></code>: RFD3 will design 80-90 residues connected to the C-terminus of A154 from the input structure</p></li>
+</ul>
+</li>
+<li><p>Since there are two portions of the designed structure with random lengths, it is useful to specify the overall <code class="docutils literal notranslate"><span class="pre">length</span></code> of our design:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;length&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;157-177&quot;</span><span class="p">,</span>
+</pre></div>
+</div>
+</li>
+<li><p>For the purposes of this design, we happen to know that residues B251-B255 are important to include in our design, but it does not matter where they end up in our final structure. This is referred to as an ‘unindexed motif’ in the documentation. To include them, we will add the <code class="docutils literal notranslate"><span class="pre">undindex</span></code> option:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;unindex&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/0,/0,B251-B255&quot;</span><span class="p">,</span>
+</pre></div>
+</div>
+<p>Here we have two chain breaks before our unindexed motif to correspond to the contig string, these residues will go in the third chain of the output structure.</p>
+</li>
+<li><p>Next, the portions of our input structure we specified in the <code class="docutils literal notranslate"><span class="pre">contig</span></code> string are automatically held fixed, however it is useful to let some of these residues move in response to the the designed portions of our structure. Here we want certain portions of our DNA strands to be stationary (the middle sections) while the portions towards either end of the double helix can relax:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;select_fixed_atoms&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;C9-14&quot;</span><span class="p">:</span><span class="s2">&quot;ALL&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;D28-33&quot;</span><span class="p">:</span><span class="s2">&quot;ALL&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;C5-8,C15-18&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;D24-27,D34-37&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span>
+<span class="p">},</span>
+</pre></div>
+</div>
+<figure class="align-default" id="id1">
+<a class="reference internal image-reference" href="../../../_images/fixed_and_unfixed_residues.png"><img alt="../../../_images/fixed_and_unfixed_residues.png" src="../../../_images/fixed_and_unfixed_residues.png" style="width: 60%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Image of the input structure with the fixed residues highlighted in cyan and the residues allowed to move highlighted in red.</span><a class="headerlink" href="#id1" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Holding residues C9-14 and D28-33 is not necessary here and was included for the sake of clarity.</p>
+</div>
+</li>
+<li><p>To define where the center of mass of our designed structure should go, we will use an ORI (origin) token:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;ori_token&quot;</span><span class="p">:[</span><span class="mi">25</span><span class="p">,</span><span class="mi">35</span><span class="p">,</span><span class="mi">20</span><span class="p">],</span>
+</pre></div>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>In this example the ori token is placed close to the center of our input structure. When designing your own enzyme scaffolds, you should try many ORI token placements. See the <a class="reference external" href="https://www.nature.com/articles/s41592-025-02975-x">RFdiffusion2 paper</a> for more information about how ORI tokens impact the results of diffusion calculations.</p>
+</div>
+<figure class="align-default" id="id2">
+<a class="reference internal image-reference" href="../../../_images/ori_token_input_structure.png"><img alt="../../../_images/ori_token_input_structure.png" src="../../../_images/ori_token_input_structure.png" style="width: 80%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">The input structure with the addition of a white sphere to represent the location of the ORI token.</span><a class="headerlink" href="#id2" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+</li>
+<li><p>Last, but not least, we want our design to have minimal loops. We will use the <code class="docutils literal notranslate"><span class="pre">is_non_loopy</span></code> option for this. As of the creation of this tutorial, there are no other parameters to control the secondary structure of the designs from RFD3.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;is_non_loopy&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+</pre></div>
+</div>
+</li>
+<li><p>Save your file and close it. If you run the file now, your files should be similar to what is stored in <code class="docutils literal notranslate"><span class="pre">foundry/models/rfd3/docs/tutorials/na_tutorial_files/outputs.zip</span></code>.</p></li>
+</ol>
+<section id="additional-constraints">
+<span id="na-additional-constraints"></span><h3>Additional Constraints<a class="headerlink" href="#additional-constraints" title="Link to this heading">¶</a></h3>
+<p>The steps in this section are optional, skip to <a class="reference internal" href="#na-running-rfd3">Running RFD3</a>. If you would like to include them, reopen your JSON file and append to what you added in the previous section.</p>
+<section id="hydrogen-bond-conditioning">
+<span id="na-hydrogen-bond-conditioning"></span><h4>Hydrogen Bond Conditioning<a class="headerlink" href="#hydrogen-bond-conditioning" title="Link to this heading">¶</a></h4>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Using hydrogen bond conditioning with RFdiffusion3 requires having HBPLUS installed. See the <a class="reference external" href="https://github.com/RosettaCommons/foundry/tree/production/models/rfd3">RFdiffusion3 README</a> for more information.</p>
+</div>
+<p>Hydrogen bond conditioning can be useful in the design of nucleic acid binders. Here we will apply it  to some backbone and base atoms for a few of the DNA bases:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;select_hbond_acceptor&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;C16&quot;</span><span class="p">:</span><span class="s2">&quot;N7,O6&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;D31-32&quot;</span><span class="p">:</span><span class="s2">&quot;N7&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;D28-30&quot;</span><span class="p">:</span><span class="s2">&quot;OP1,OP2,O3&#39;,O5&#39;&quot;</span><span class="p">},</span>
+<span class="nt">&quot;select_hbond_donor&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;D31-32&quot;</span><span class="p">:</span><span class="s2">&quot;N6&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="unfix-sequence">
+<span id="na-unfix-sequence"></span><h4>Unfix Sequence<a class="headerlink" href="#unfix-sequence" title="Link to this heading">¶</a></h4>
+<p>The steps in this section are optional, skip to <a class="reference internal" href="#na-running-rfd3">Running RFD3</a>. If you would like to include them, reopen your JSON file and add the following:</p>
+<ol class="arabic">
+<li><p>Add the backbone of the unindexed motif (B251-255) to the list of atoms being fixed:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;select_fixed_atoms&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;C9-14&quot;</span><span class="p">:</span><span class="s2">&quot;ALL&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;D28-33&quot;</span><span class="p">:</span><span class="s2">&quot;ALL&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;C5-8,C15-18&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;D24-27,D34-37&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;B251-255&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;BKBN&quot;</span>
+<span class="p">},</span>
+</pre></div>
+</div>
+</li>
+<li><p>Unfix the sequence for the unindexed motif:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;select_unfixed_sequence&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;B251-255&quot;</span>
+</pre></div>
+</div>
+</li>
+</ol>
+<p>These constraints will keep this portion of the protein backbone in place while allowing the side chains to change.</p>
+</section>
+</section>
+</section>
+<section id="running-rfd3">
+<span id="na-running-rfd3"></span><h2>Running RFD3<a class="headerlink" href="#running-rfd3" title="Link to this heading">¶</a></h2>
+<p>To actually run RFD3 you need to know:</p>
+<ul class="simple">
+<li><p>the directory you want the outputs to be stored in</p></li>
+<li><p>the path to the JSON (or YAML) file that stores the specific settings for the calculation</p></li>
+<li><p>the location of your checkpoint files</p></li>
+</ul>
+<p>Once you have these three things you can run something like this from the command line:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>rfd3<span class="w"> </span>design<span class="w"> </span><span class="nv">out_dir</span><span class="o">=</span>na_tutorial_outputs/0<span class="w"> </span><span class="nv">inputs</span><span class="o">=</span>rfd3_na_tutorial.json<span class="w"> </span><span class="nv">ckpt_path</span><span class="o">=</span>/path/to/your/checkpoint/files/rfd3_latest.ckpt<span class="w"> </span>
+</pre></div>
+</div>
+<p>Your output files will be placed in a new directory <code class="docutils literal notranslate"><span class="pre">na_tutorial_outputs/0</span></code>. Your output files will be named <code class="docutils literal notranslate"><span class="pre">rfd3_na_tutorial_dsDNA_complex_0_model_n.cif.gz</span></code> where <code class="docutils literal notranslate"><span class="pre">n</span></code> is the number of the design. <code class="docutils literal notranslate"><span class="pre">rfd3_na_tutorial</span></code> comes from the name of the JSON file and <code class="docutils literal notranslate"><span class="pre">dsDNA_complex</span></code> comes from the name you gave your calculation in the JSON file.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>You may see several warning messages when you run RFD3, these should not interfere with the calculation.</p>
+</div>
+</section>
+<section id="analyzing-the-outputs">
+<span id="na-analyzing-the-outputs"></span><h2>Analyzing the Outputs<a class="headerlink" href="#analyzing-the-outputs" title="Link to this heading">¶</a></h2>
+<p>You should end up with 8 designs, numbered 0-7, each with its own <code class="docutils literal notranslate"><span class="pre">.cif.gz</span></code> and <code class="docutils literal notranslate"><span class="pre">.json</span></code> file. If you want to adjust the number of output designs, add the configuration option <code class="docutils literal notranslate"><span class="pre">diffusion_batch_size</span></code> to your <code class="docutils literal notranslate"><span class="pre">rfd3</span> <span class="pre">design</span></code> command.</p>
+<p>The JSON file has many details about your diffusion run, including the options in the JSON file you created. The compressed CIF file contains information about the final diffused structure that you can easily visualize with tools like PyMOL.</p>
+<p>Your results should look something like this:</p>
+<figure class="align-default" id="id3">
+<a class="reference internal image-reference" href="../../../_images/possible_output_structure_0.png"><img alt="../../../_images/possible_output_structure_0.png" src="../../../_images/possible_output_structure_0.png" style="width: 60%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Image of a possible output for this calculation visualized in PyMOL.</span><a class="headerlink" href="#id3" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>However, if we visualize the location of our original ORI token it is no where near the center of our output structure! This is because RFD3 has completely moved our structure in coordinate space, and has moved the ORI token with it. In the output JSON files for your designs, the new location of the ORI token can be found by looking at the <code class="docutils literal notranslate"><span class="pre">diffused_com</span></code>.</p>
+<figure class="align-default" id="id4">
+<a class="reference internal image-reference" href="../../../_images/compare_ori_tokens.png"><img alt="../../../_images/compare_ori_tokens.png" src="../../../_images/compare_ori_tokens.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">The input structure (right) with its ORI token represented as a white sphere. An example output (left) is shown with the location of the <code class="docutils literal notranslate"><span class="pre">diffused_com</span></code> represented as a red sphere.</span><a class="headerlink" href="#id4" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>You can also align the 2R5Z structure with any of the outputs to see that the atoms selected in <code class="docutils literal notranslate"><span class="pre">select_fixed_atoms</span></code> have stayed in the same physical locations.</p>
+<figure class="align-default" id="id5">
+<a class="reference internal image-reference" href="../../../_images/aligning_dna_strands.png"><img alt="../../../_images/aligning_dna_strands.png" src="../../../_images/aligning_dna_strands.png" style="width: 60%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">The DNA strands from the input (lavender, light green, light blue) and a possible output structure (dark green, dark blue). The portions held fixed are in blue and the portions allowed to move are in green.</span><a class="headerlink" href="#id5" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Checking that our unindexed motif is present in our designs is a bit more difficult, but the information we need is provided in the JSON file that is created with each design. If you open one of these JSON files, the first piece of information you see is a <code class="docutils literal notranslate"><span class="pre">diffused_index_map</span></code> that connects the residues from the input to residues in the output design. You should see that residues B251-255 have been mapped to residues in your output structure.</p>
+<figure class="align-default" id="id6">
+<a class="reference internal image-reference" href="../../../_images/unindexed_motif.png"><img alt="../../../_images/unindexed_motif.png" src="../../../_images/unindexed_motif.png" style="width: 80%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Input structure (green) and model_0 (cyan) from the basic.zip outputs with the unindexed motif highlighted in magenta. For this output (model_0 in outputs.zip), the unindexed motif is found in residues C130-134.</span><a class="headerlink" href="#id6" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>If you added the additional hydrogen bonding constraints, the outputs should look very similar to those shown from the ‘basic’ calculation. The hydrogen bond conditioning is a statistical effect and difficult to visualize when so many other constraints have been applied.</p>
+<p>If you added the <code class="docutils literal notranslate"><span class="pre">select_unfixed_sequence</span></code> constraint, you will see that your output JSON files still have a mapping between residues B251-255 in the input to the output structure and that the backbones have remained the same but the side chains have changed. For example:</p>
+<figure class="align-default" id="id7">
+<a class="reference internal image-reference" href="../../../_images/unfix_ligands.png"><img alt="../../../_images/unfix_ligands.png" src="../../../_images/unfix_ligands.png" style="width: 80%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">The input structure (green) and output structure (cyan) with the unindexed motif colored pink. Note how the backbone structures have remained the same, but the side chains have changed.</span><a class="headerlink" href="#id7" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="what-s-next">
+<h2>What’s Next?<a class="headerlink" href="#what-s-next" title="Link to this heading">¶</a></h2>
+<p>For your actual projects, you would want to filter the designed structures based on metrics relevant to your design task. Then, even though RFD3 outputs come with a sequence, it is recommended to still use sequence design tools (<a class="reference external" href="https://rosettacommons.github.io/foundry/models/mpnn/index.html">MPNN</a>) to redesign the sequence. Finally you will want to see if the sequence refolds into a similar structure as was predicted by RFD3 using tools like <a class="reference external" href="https://www.biorxiv.org/content/10.1101/2025.08.14.670328v2">RosettaFold3</a>.</p>
+</section>
+<section id="references-and-further-reading">
+<span id="na-references-and-further-reading"></span><h2>References and Further Reading<a class="headerlink" href="#references-and-further-reading" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>For more information on the different inference settings in RFD3, see <a class="reference internal" href="../input.html"><span class="doc">input.md</span></a></p></li>
+<li><p>A more thorough discussion of the settings and configuration options in RFD3 can be found <a class="reference internal" href="../intro_inference_calculations.html"><span class="doc">here</span></a></p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="intermediate_enzyme_design_tutorial.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Intermediate Enzyme Design Tutorial</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="enzyme_design_tutorial.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Enzyme Design in RFdiffusion3</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Institute for Protein Design, University of Washington
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Nuclei Acid Binder Design in RFdiffusion3</a><ul>
+<li><a class="reference internal" href="#before-we-get-started">Before We Get Started…</a></li>
+<li><a class="reference internal" href="#learning-objectives">Learning Objectives</a></li>
+<li><a class="reference internal" href="#setup">Setup</a></li>
+<li><a class="reference internal" href="#creating-the-json-file">Creating the JSON file</a><ul>
+<li><a class="reference internal" href="#additional-constraints">Additional Constraints</a><ul>
+<li><a class="reference internal" href="#hydrogen-bond-conditioning">Hydrogen Bond Conditioning</a></li>
+<li><a class="reference internal" href="#unfix-sequence">Unfix Sequence</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#running-rfd3">Running RFD3</a></li>
+<li><a class="reference internal" href="#analyzing-the-outputs">Analyzing the Outputs</a></li>
+<li><a class="reference internal" href="#what-s-next">What’s Next?</a></li>
+<li><a class="reference internal" href="#references-and-further-reading">References and Further Reading</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=ca7ad2ea"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script async="async" defer="defer" src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
+    </body>
+</html>

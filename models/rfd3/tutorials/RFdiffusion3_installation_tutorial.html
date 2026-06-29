@@ -1,0 +1,666 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html"><link rel="next" title="Inference Calculation Basics" href="../intro_inference_calculations.html"><link rel="prev" title="RFdiffusion3 Documentation" href="../index.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Installation of RFdiffusion3 on Unix Systems - foundry 0.1.7 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=acfd86a5" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #F68A33;
+  --color-brand-content: #37939B;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-background-hover: #DCE8E8ff;
+  --color-announcement-background: #F68A33dd;
+  --color-announcement-text: #070707;
+  --color-brand-visited: #37939B;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">foundry 0.1.7 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">foundry 0.1.7 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">General</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../license_link.html">LICENSE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation_faq.html">Common Installation Issues</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributing_link.html">CONTRIBUTING</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Models</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../index.html">RFdiffusion3 Documentation</a><input aria-label="Toggle navigation of RFdiffusion3 Documentation" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Installation of RFdiffusion3 on Unix Systems</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro_inference_calculations.html">Inference Calculation Basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../input.html">RFdiffusion3 — Input Specification &amp; Command-line arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../designability_vs_diversity.html">Designability vs. Diversity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ppi_design_tutorial.html">Protein-Protein Interface Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enzyme_design_tutorial.html">Enzyme Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="na_binder_tutorial.html">Nuclei Acid Binder Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate_enzyme_design_tutorial.html">Intermediate Enzyme Design Tutorial</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/na_binder_design.html">RFdiffusion3 — Nucleic acid binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/sm_binder_design.html">RFdiffusion3 — Small molecule binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/protein_binder_design.html">RFdiffusion3 — Protein binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/symmetry.html">Overview of Symmetry in RFD3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/enzyme_design.html">RFdiffusion3 — Enzyme design examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../rf3/index.html">RF3 Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../mpnn/index.html">MPNN Documentation</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../../../_sources/models/rfd3/tutorials/RFdiffusion3_installation_tutorial.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="installation-of-rfdiffusion3-on-unix-systems">
+<h1>Installation of RFdiffusion3 on Unix Systems<a class="headerlink" href="#installation-of-rfdiffusion3-on-unix-systems" title="Link to this heading">¶</a></h1>
+<section id="table-of-contents">
+<h2>Table of Contents<a class="headerlink" href="#table-of-contents" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="#install-tutorial-learning-objective">Learning Objective</a></p></li>
+<li><p><a class="reference internal" href="#install-tutorial-prereqs">Prerequisites</a></p></li>
+<li><p><a class="reference internal" href="#install-tutorial-tutorial">Tutorial</a></p>
+<ul>
+<li><p><a class="reference internal" href="#install-tutorial-step-1">Step 1: Creating a conda environment</a></p></li>
+<li><p><a class="reference internal" href="#install-tutorial-step-2">Step 2: Installing RFdiffusion3</a></p></li>
+<li><p><a class="reference internal" href="#install-tutorial-step-3">Step 3: Verify the installation</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#install-tutorial-gpu-v-cpu">GPU vs. CPU Execution</a></p>
+<ul>
+<li><p><a class="reference internal" href="#install-tutorial-detecting-gpu">How RFdiffusion3 detects and uses your GPU</a></p></li>
+<li><p><a class="reference internal" href="#install-tutorial-blackwell">Running on latest GPU architectures (e.g. Blackwell)</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#install-tutorial-glossary">Glossary</a></p></li>
+<li><p><a class="reference internal" href="#install-tutorial-resources-references">Resources &amp; References</a></p></li>
+</ul>
+</section>
+<section id="learning-objective">
+<span id="install-tutorial-learning-objective"></span><h2>Learning Objective<a class="headerlink" href="#learning-objective" title="Link to this heading">¶</a></h2>
+<p>By the end of this tutorial, you will be able to install RFdiffusion3 (RFD3) on a Unix-based system using <code class="docutils literal notranslate"><span class="pre">pip</span></code> and verify that the installation was successful by running a minimal test example. After completing this tutorial, you will have a working RFdiffusion3 environment capable of running basic design tasks and ready for use in downstream protein design workflows.</p>
+</section>
+<section id="prerequisites">
+<span id="install-tutorial-prereqs"></span><h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">¶</a></h2>
+<p>RFdiffusion3 is supported on Unix-based systems (Linux or MacOS). Windows is not officially supported unless used through a Linux subsystem (e.g., <a class="reference external" href="https://learn.microsoft.com/en-us/windows/wsl/install">WSL2</a>). While not strictly required, using an environment manager such as <a class="reference external" href="https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html">conda</a>, <a class="reference external" href="https://pixi.prefix.dev/latest/">pixi</a>, <a class="reference external" href="https://github.com/mamba-org/mamba">mamba</a>, or <a class="reference external" href="https://docs.astral.sh/uv/">uv</a> can be helpful to manage the dependencies that RFD3 relies on. For practical protein design workloads, a machine equipped with an NVIDIA GPU with ~3 GB of memory is highly recommended, as GPU acceleration substantially reduces inference time. This requires a recent NVIDIA driver installation. RFdiffusion3 can also run on CPU-only systems, however, runtime may increase significantly depending on the design task.</p>
+<p>List of requirements:</p>
+<ul class="simple">
+<li><p>Unix-based system</p></li>
+<li><p>Python 3.9-3.12</p></li>
+<li><p>Package manager (optional, but highly suggested)</p></li>
+<li><p>A working internet connection</p></li>
+<li><p>Sufficient disk space for the <a class="reference internal" href="#install-tutorial-checkpoint">model checkpoints</a> (~3 GB)</p></li>
+<li><p>A downloading tool such as <code class="docutils literal notranslate"><span class="pre">wget</span></code> or <code class="docutils literal notranslate"><span class="pre">curl</span></code></p></li>
+<li><p>Optional but recommended: An NVIDIA GPU with a recent driver installation and at least ~16GB of RAM</p></li>
+</ul>
+</section>
+<section id="tutorial">
+<span id="install-tutorial-tutorial"></span><h2>Tutorial<a class="headerlink" href="#tutorial" title="Link to this heading">¶</a></h2>
+<details>
+<summary><strong>Mini Tutorial: Requesting an Interactive GPU Node on SLURM systems</strong></summary>
+<p>If you are installing any of the models in Foundry on a high performance computing (HPC) cluster, you should install them from a compute node – specifically a GPU node is possible – not the login node. For those new to using these types of resources, we will go through how to request an interactive GPU node to use for installing RFD3 here. You can also run RFD3 by requesting an interactive GPU node.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>This “Mini Tutorial” shows how to request an interactive GPU node for systems using <a class="reference external" href="https://slurm.schedmd.com/overview.html">SLURM</a>. This is a common workload manager that helps allocate resources and schedule jobs that various users want to run on the cluster. If your HPC system uses a different workload manager or you are using cloud computing, you will need to go to your cluster’s documentation to learn how to do this.</p>
+</div>
+<p>Once you are logged into your HPC system, the command to request an interactive node will have the following structure:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>salloc<span class="w"> </span>--gres<span class="o">=</span>gpu:1<span class="w"> </span>--account<span class="o">=</span>&lt;account-name&gt;<span class="w"> </span>--partition<span class="o">=</span>&lt;partition-name&gt;
+</pre></div>
+</div>
+<p>This requests:</p>
+<ul class="simple">
+<li><p>1 GPU</p></li>
+<li><p>access under the specified account</p></li>
+<li><p>resources from the specified partition</p></li>
+</ul>
+<p>The partition and account names are going to be specific to your cluster and lab, respectively. Look through the documentation for your HPC resources or ask your lab members if you do not know what to put for these.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Typically your interactive session will not start right away, you will need to wait until resources become available. How long you need to wait depends on your system. Once it is ready you should see the command prompt reappear in your terminal window, perhaps slightly changed to reflect that you are now on a specific node. This means the allocation was “granted.”</p>
+</div>
+<p>You can directly run the commands to install and run tools like RFD3 from this command prompt, however it’s good practice to open an interactive shell. This will be configured better for running commands on the interactive node:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>srun<span class="w"> </span>--pty<span class="w"> </span><span class="nv">$SHELL</span>
+</pre></div>
+</div>
+<p>Doing this likely won’t change anything that you can see, but if you run the command <code class="docutils literal notranslate"><span class="pre">hostname</span></code> before and after you run this command, you will see different results.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Some systems will automatically put you on an interactive shell on the allocated compute node after running salloc. In this case running the command to create an interactive shell will do nothing – running <code class="docutils literal notranslate"><span class="pre">hostname</span></code> before and after will result in the same information printed to screen.</p>
+</div>
+<p>You can often add other information to your resource allocation request. For example:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>salloc<span class="w"> </span>--gres<span class="o">=</span>gpu:1<span class="w"> </span>--cpus-per-task<span class="o">=</span><span class="m">4</span><span class="w"> </span>--mem<span class="o">=</span>16G<span class="w"> </span>--time<span class="o">=</span><span class="m">01</span>:00:00<span class="w"> </span>--account<span class="o">=</span>&lt;account-name&gt;<span class="w"> </span>--partition<span class="o">=</span>&lt;partition-name&gt;
+</pre></div>
+</div>
+<p>This command includes:</p>
+<ul class="simple">
+<li><p>Information about the number of CPU nodes you want (CPUs are needed to launch programs, feed data to GPUs, etc. GPU nodes are almost never run in complete isolation from CPU nodes.)</p></li>
+<li><p>The amount of memory for your GPU node</p></li>
+<li><p>The time limit for your interactive node</p></li>
+</ul>
+<p>Your cluster will have limits on the number of CPUs, memory, and time that you can request. Refer to the documentation specific for your cluster if you need these pieces of information.</p>
+<p>Now that you have your interactive GPU session running, continue to installing RFD3 on your system.</p>
+<hr>
+</details>
+<!-- 
+If you want to run RFdiffusion3 on a GPU and are working on a shared scientific cluster, a GPU is usually not available by default. In that case, you must first request one through the cluster's job scheduler (e.g., [SLURM](#SLURM)). If you are installing RFdiffusion3 on your local machine, or if you plan to run it only on CPU, you can [skip](#step-1-creating-a-conda-environment) this step.
+
+On many [SLURM](#SLURM) clusters, the exact command for allocating a GPU depends  on the local configuration. A general pattern is:
+```
+salloc --gres=gpu:1 --account=<account-name> --partition=<partition-name>
+```
+This requests:
+- 1 GPU
+- access under the specified account
+- resources from the specified partition
+
+After the allocation is granted, start an interactive shell with:
+```
+srun --pty $SHELL
+```
+
+If you cluster requires explicit CPU cores, system memory and a time limit, a more complete request may look like:
+```
+salloc --gres=gpu:1 --cpus-per-task=4 --mem=16G --time=01:00:00 --account=<account-name> --partition=<partition-name>
+```
+
+Once the session has started, verify that a GPU was allocated by running:
+```
+nvidia-smi
+```
+
+If the allocation was successful, this command will display information such as the GPU model, the NVIDIA driver version and the current GPU memory usage. If you see <code>command not found</code>, or if no GPU is listed, then no GPU is available in your current session.
+-->
+<section id="step-1-creating-a-conda-environment">
+<span id="install-tutorial-step-1"></span><h3>Step 1: Creating a conda environment<a class="headerlink" href="#step-1-creating-a-conda-environment" title="Link to this heading">¶</a></h3>
+<p>Next, create an isolated <a class="reference internal" href="#environment-def">environment</a>. Here we will specifically create a conda environment, which requires <a class="reference external" href="https://www.anaconda.com/download">Anaconda</a> or its lightweight variants, <a class="reference external" href="https://www.anaconda.com/docs/getting-started/miniconda/main">Miniconda</a> and Miniforge[https://conda-forge.org/download/]. These are often already installed on HPC clusters.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The rest of the tutorial assumes that you are working in a conda environment, but the commands can work with other package managers (uv, pixi, etc.) with only minor changes required. Using conda is not required for this installation or for running RFD3.</p>
+</div>
+<p>Environments allow you to isolate the all the packages you need to install and any associated libraries from your system-wide installation. This prevents dependency conflicts when different tools need different dependency versions (e.g. your backbone design tool needs NumPy v.2.4.0 but your sequence generation tool needs v.2.3.5) and ensures that your global environment remains unaffected. If any issues occur during installation, the environment can simply be removed without impacting the rest of your system.</p>
+<p>In the terminal input the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>RFD3_env<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.12<span class="w"> </span>-y
+</pre></div>
+</div>
+<p>Here:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">-n</span> <span class="pre">RFD3_env</span></code> specifies the name of the environment.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">python=3.12</span></code> defines the Python version (a version between 3.9 and 3.12 is recommended).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">-y</span></code> automatically confirms installation prompts</p></li>
+</ul>
+<p>Once the creation is completed, activate the environment with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>activate<span class="w"> </span>RFD3_env
+</pre></div>
+</div>
+<p>You should now see <code class="docutils literal notranslate"><span class="pre">(RFD3_env)</span></code> prefixed in your terminal prompt, indicating that the environment is active.
+To verify that the correct Python interpreter is being used, run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>which<span class="w"> </span>python
+</pre></div>
+</div>
+<p>The displayed path should point to the newly created <a class="reference internal" href="#environment-def">environment</a>, for example:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>/home/username/miniconda3/envs/RFD3_env/bin/python<span class="sb">`</span>
+</pre></div>
+</div>
+</section>
+<section id="step-2-installing-rfdiffusion3">
+<span id="install-tutorial-step-2"></span><h3>Step 2: Installing RFdiffusion3<a class="headerlink" href="#step-2-installing-rfdiffusion3" title="Link to this heading">¶</a></h3>
+<p>RFdiffusion3 is distributed as part of the <a class="reference external" href="https://github.com/RosettaCommons/foundry/tree/production">Foundry</a> (<a class="reference external" href="https://pypi.org/project/rc-foundry/"><code class="docutils literal notranslate"><span class="pre">rc-foundry</span></code></a> on PyPI) Python package. Foundry is the RosettaCommons framework that provides a unified <a class="reference internal" href="#cli-def">command-line interface</a> for running multiple protein modeling and design deep learning models. In machine learning disciplines, this type of resource is often referred to as a <a class="reference internal" href="#model-zoo-def">‘model zoo’</a>. As of the last update of this tutorial, it includes <a class="reference external" href="https://github.com/RosettaCommons/foundry/tree/production/models/rf3">RosettaFold3 (RF3)</a> for structure prediction, <a class="reference external" href="https://github.com/RosettaCommons/foundry/tree/production/models/mpnn">MPNN</a> for inverse folding, and <a class="reference external" href="https://github.com/RosettaCommons/foundry/tree/production/models/rfd3">RFdiffusion3</a> for generative protein design. While this tutorial focuses on RFdiffusion3, RosettaFold3 and MPNN can be installed in a similar manner.</p>
+<p>Install RFdiffusion3 using:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;rc-foundry[rfd3]&quot;</span>
+</pre></div>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The quotation marks around <code class="docutils literal notranslate"><span class="pre">rc-foundry[rfd3]</span></code> are important in shells such as <code class="docutils literal notranslate"><span class="pre">zsh</span></code>, where square brackets have special meaning. Without quotes, the command may fail.</p>
+</div>
+<section id="dowloading-the-model-checkpoint">
+<span id="install-tutorial-checkpoint"></span><h4>Dowloading the model checkpoint<a class="headerlink" href="#dowloading-the-model-checkpoint" title="Link to this heading">¶</a></h4>
+<p>RFdiffusion3 requires a trained model file (a <a class="reference internal" href="#checkpoint-def">checkpoint</a>) file containing the learned neural network weights (~3 GB).<br />
+Download the checkpoint file using:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>foundry<span class="w"> </span>install<span class="w"> </span>rfd3
+</pre></div>
+</div>
+<p>By default, this command will download the <a class="reference internal" href="#checkpoint-def">checkpoint</a> file to <code class="docutils literal notranslate"><span class="pre">~/.foundry/checkpoints</span></code>.</p>
+<p>If you prefer to store the <a class="reference internal" href="#checkpoint-def">checkpoint</a> files in a custom location (for example, on a cluster with limited home directory space), you can specify a custom checkpoint directory using the <code class="docutils literal notranslate"><span class="pre">--checkpoint-dir</span></code>flag:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>foundry<span class="w"> </span>install<span class="w"> </span>rfd3<span class="w"> </span>--checkpoint-dir<span class="w"> </span>&lt;path/to/checkpoint_dir&gt;<span class="sb">`</span>
+</pre></div>
+</div>
+<p>This will download the <a class="reference internal" href="#checkpoint-def">checkpoint</a> file to the specified directory and register that directory via the <code class="docutils literal notranslate"><span class="pre">FOUNDRY_CHECKPOINT_DIRS</span></code> <a class="reference internal" href="#env-var-def">environment variable</a>, so that RFdiffusion3 automatically searches for it there in future runs (in addition to the default <code class="docutils literal notranslate"><span class="pre">~/.foundry/checkpoints</span></code> location).</p>
+</section>
+</section>
+<section id="step-3-verify-the-installation">
+<span id="install-tutorial-step-3"></span><h3>Step 3: Verify the installation<a class="headerlink" href="#step-3-verify-the-installation" title="Link to this heading">¶</a></h3>
+<p>To verify that RFdiffusion3 was installed correctly, we will download and run a minimal demonstration example from the official RFdiffusion3 repository. First, create a working directory and a directory for the example input files, then download the required files:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mkdir</span> <span class="o">-</span><span class="n">p</span> <span class="n">input_pdbs</span>  
+<span class="n">mkdir</span> <span class="o">-</span><span class="n">p</span> <span class="n">verify_installation</span>
+<span class="n">wget</span> <span class="o">-</span><span class="n">P</span> <span class="n">verify_installation</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">raw</span><span class="o">.</span><span class="n">githubusercontent</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">RosettaCommons</span><span class="o">/</span><span class="n">foundry</span><span class="o">/</span><span class="n">refs</span><span class="o">/</span><span class="n">heads</span><span class="o">/</span><span class="n">production</span><span class="o">/</span><span class="n">models</span><span class="o">/</span><span class="n">rfd3</span><span class="o">/</span><span class="n">docs</span><span class="o">/</span><span class="n">examples</span><span class="o">/</span><span class="n">demo</span><span class="o">.</span><span class="n">json</span>
+<span class="n">wget</span> <span class="o">-</span><span class="n">P</span> <span class="n">input_pdbs</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">raw</span><span class="o">.</span><span class="n">githubusercontent</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">RosettaCommons</span><span class="o">/</span><span class="n">foundry</span><span class="o">/</span><span class="n">production</span><span class="o">/</span><span class="n">models</span><span class="o">/</span><span class="n">rfd3</span><span class="o">/</span><span class="n">docs</span><span class="o">/</span><span class="n">input_pdbs</span><span class="o">/</span><span class="n">M0255_1mg5</span><span class="o">.</span><span class="n">pdb</span>  
+<span class="n">wget</span> <span class="o">-</span><span class="n">P</span> <span class="n">input_pdbs</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">raw</span><span class="o">.</span><span class="n">githubusercontent</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">RosettaCommons</span><span class="o">/</span><span class="n">foundry</span><span class="o">/</span><span class="n">production</span><span class="o">/</span><span class="n">models</span><span class="o">/</span><span class="n">rfd3</span><span class="o">/</span><span class="n">docs</span><span class="o">/</span><span class="n">input_pdbs</span><span class="o">/</span><span class="mi">7</span><span class="n">v11</span><span class="o">.</span><span class="n">pdb</span>  
+<span class="n">wget</span> <span class="o">-</span><span class="n">P</span> <span class="n">input_pdbs</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">raw</span><span class="o">.</span><span class="n">githubusercontent</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">RosettaCommons</span><span class="o">/</span><span class="n">foundry</span><span class="o">/</span><span class="n">production</span><span class="o">/</span><span class="n">models</span><span class="o">/</span><span class="n">rfd3</span><span class="o">/</span><span class="n">docs</span><span class="o">/</span><span class="n">input_pdbs</span><span class="o">/</span><span class="mi">1</span><span class="n">bna</span><span class="o">.</span><span class="n">pdb</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you have trouble accessing the files via <code class="docutils literal notranslate"><span class="pre">wget</span></code>, you can also place them on your cluster via <a class="reference external" href="https://snapshooter.com/learn/linux/copy-files-scp#scp-from-local-to-remote"><code class="docutils literal notranslate"><span class="pre">scp</span></code></a>. A zip file has been created with just these JSON and PDB files and can be found <a class="reference external" href="https://github.com/RosettaCommons/foundry/tree/production/models/rfd3/docs/tutorials/installation_tutorial">here</a>.</p>
+</div>
+<p>After downloading the files, enter the working directory and run the demo using:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>verify_installation
+rfd3<span class="w"> </span>design<span class="w"> </span><span class="nv">out_dir</span><span class="o">=</span>demo_output<span class="w"> </span><span class="nv">inputs</span><span class="o">=</span>demo.json
+</pre></div>
+</div>
+<p>The output directory (<code class="docutils literal notranslate"><span class="pre">demo_output</span></code>) will be created automatically if it does not exist already. On a modern GPU, this example typically completes within a few minutes. On a CPU, runtime may increase substantially depending on the hardware. Some warning messages during execution are normal and can be ignored.</p>
+<p>Expected output:<br />
+Inside <code class="docutils literal notranslate"><span class="pre">demo_output/</span></code>, you should find structure files (.cif.gz) for each demo example and summary score files (.json). If these were generated without errors, the installation was successful. You can expect the generated structures using a molecular visualization tool such as <a class="reference external" href="https://www.pymol.org/">PyMOL</a>, or examine the score files in a text editor.</p>
+</section>
+</section>
+<section id="gpu-vs-cpu-execution">
+<span id="install-tutorial-gpu-v-cpu"></span><h2>GPU vs CPU Execution<a class="headerlink" href="#gpu-vs-cpu-execution" title="Link to this heading">¶</a></h2>
+<p>RFdiffusion3 can run on both CPUs and GPUs, but the performance difference is very large:</p>
+<ul class="simple">
+<li><p>CPU only: Suitable for small tests and learning. Inference will run, but it can be very slow — often tens of minutes per example or longer depending on your CPU.</p></li>
+<li><p>GPU: Strongly recommended for real use, especially with multiple targets. A modern NVIDIA GPU can reduce runtime from minutes to seconds per design.</p></li>
+</ul>
+<section id="how-rfdiffusion3-detects-and-uses-your-gpu">
+<span id="install-tutorial-detecting-gpu"></span><h3>How RFdiffusion3 detects and uses your GPU<a class="headerlink" href="#how-rfdiffusion3-detects-and-uses-your-gpu" title="Link to this heading">¶</a></h3>
+<p>To run RFdiffusion3 on a GPU no additional setup steps are required. It will automatically try to use a GPU if:</p>
+<ol class="arabic simple">
+<li><p>A compatible NVIDIA GPU is present</p></li>
+<li><p>A matching CUDA toolkit is installed</p></li>
+<li><p><a class="reference external" href="https://pytorch.org/">PyTorch</a> (an open-source machine learning library) can communicate with the GPU</p></li>
+</ol>
+<p>You can verify your GPU availability inside your <a class="reference internal" href="#environment-def">environment</a> using:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">-</span> <span class="o">&lt;&lt;</span> <span class="s1">&#39;EOF&#39;</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">(),</span> <span class="s2">&quot;GPUs detected&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">get_device_name</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;No GPU&quot;</span><span class="p">)</span>
+<span class="n">EOF</span>
+</pre></div>
+</div>
+<p>Make sure your environment is activated before running this check.
+If <code class="docutils literal notranslate"><span class="pre">CUDA</span> <span class="pre">available:</span> <span class="pre">True</span></code> is printed and a GPU name appears, PyTorch can access your GPU.</p>
+</section>
+<section id="running-on-latest-gpu-architectures-e-g-blackwell">
+<span id="install-tutorial-blackwell"></span><h3>Running on latest GPU architectures (e.g. Blackwell)<a class="headerlink" href="#running-on-latest-gpu-architectures-e-g-blackwell" title="Link to this heading">¶</a></h3>
+<p>Very recent NVIDIA GPU architectures (such as Lovelace or Blackwell) may require:</p>
+<ul class="simple">
+<li><p>A sufficiently new NVIDIA driver</p></li>
+<li><p>A compatible CUDA runtime</p></li>
+<li><p>A recent PyTorch build that supports the architecture</p></li>
+</ul>
+<p>In most cases, installing RFD3 as described above is sufficient. However, for very new GPUs, you may need to upgrade PyTorch to a more recent (or nightly) build that includes support for the latest CUDA versions.</p>
+<p>Installation example:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Install rfd3 and its required dependencies</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;rc-foundry[rfd3]&quot;</span>
+
+<span class="c1"># 2. Upgrade to PyTorch nightly (cu128) to add Blackwell GPU support</span>
+pip<span class="w"> </span>install<span class="w"> </span>--pre<span class="w"> </span>torch<span class="w"> </span>torchvision<span class="w"> </span>torchaudio<span class="w"> </span><span class="se">\</span>
+--index-url<span class="w"> </span>https://download.pytorch.org/whl/nightly/cu128<span class="w"> </span><span class="se">\</span>
+--upgrade<span class="w"> </span>--force-reinstall
+</pre></div>
+</div>
+<p>Important notes:</p>
+<ul class="simple">
+<li><p>Replace cu128 with the CUDA version supported by your driver (check via <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code>, if your system uses NVIDIA GPUs).</p></li>
+<li><p>Installing a nightly PyTorch build overrides the version originally installed with <code class="docutils literal notranslate"><span class="pre">rc-foundry</span></code>.</p></li>
+<li><p>After upgrading PyTorch, verify GPU detection again using the <a class="reference internal" href="#install-tutorial-detecting-gpu">Python check</a> from above.</p></li>
+</ul>
+</section>
+</section>
+<section id="glossary">
+<span id="install-tutorial-glossary"></span><h2>Glossary<a class="headerlink" href="#glossary" title="Link to this heading">¶</a></h2>
+<section id="checkpoint">
+<span id="checkpoint-def"></span><h3>Checkpoint<a class="headerlink" href="#checkpoint" title="Link to this heading">¶</a></h3>
+<p>A binary file that contains the trained model weights of a neural network model. For RFdiffusion3, this file stores the learned parameters the model needs for inference. Without a checkpoint, the model cannot run.</p>
+</section>
+<section id="cli-command-line-interface">
+<span id="cli-def"></span><h3>CLI (Command-Line Interface)<a class="headerlink" href="#cli-command-line-interface" title="Link to this heading">¶</a></h3>
+<p>A way to interact with software by typing commands in a terminal. Foundry and RFdiffusion3 provide CLI commands like <code class="docutils literal notranslate"><span class="pre">foundry</span> <span class="pre">install</span> <span class="pre">rfd3</span></code> and <code class="docutils literal notranslate"><span class="pre">rfd3</span></code>.</p>
+</section>
+<section id="environment">
+<span id="environment-def"></span><h3>Environment<a class="headerlink" href="#environment" title="Link to this heading">¶</a></h3>
+<p>An isolated Python environment created using a package manager. It keeps project dependencies separate from your system Python to prevent version conflicts.</p>
+</section>
+<section id="environment-variable">
+<span id="env-var-def"></span><h3>Environment Variable<a class="headerlink" href="#environment-variable" title="Link to this heading">¶</a></h3>
+<p>A value stored in the shell session that software can read to determine paths or settings (e.g., <code class="docutils literal notranslate"><span class="pre">FOUNDRY_CHECKPOINT_DIRS</span></code>).</p>
+</section>
+<section id="model-zoo">
+<span id="model-zoo-def"></span><h3>Model Zoo<a class="headerlink" href="#model-zoo" title="Link to this heading">¶</a></h3>
+<p>A curated repository of model architectures that typically also includes pre-trained model weights that are available for download. <a class="reference external" href="https://github.com/RosettaCommons/foundry/tree/production">Foundry</a> is an example of a model zoo.</p>
+</section>
+</section>
+<section id="resources-references">
+<span id="install-tutorial-resources-references"></span><h2>Resources &amp; References<a class="headerlink" href="#resources-references" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>RosettaCommons Foundry (GitHub Repository) https://github.com/RosettaCommons/foundry</p></li>
+<li><p>RFdiffusion Documentation https://github.com/RosettaCommons/foundry/tree/production/models/rfd3</p></li>
+<li><p>RFdiffusion3 publication https://www.science.org/doi/10.1126/science.ade2574</p></li>
+<li><p>PyMOL visualization software https://pymol.org/</p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="../intro_inference_calculations.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Inference Calculation Basics</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="../index.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">RFdiffusion3 Documentation</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Institute for Protein Design, University of Washington
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Installation of RFdiffusion3 on Unix Systems</a><ul>
+<li><a class="reference internal" href="#table-of-contents">Table of Contents</a></li>
+<li><a class="reference internal" href="#learning-objective">Learning Objective</a></li>
+<li><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li><a class="reference internal" href="#tutorial">Tutorial</a><ul>
+<li><a class="reference internal" href="#step-1-creating-a-conda-environment">Step 1: Creating a conda environment</a></li>
+<li><a class="reference internal" href="#step-2-installing-rfdiffusion3">Step 2: Installing RFdiffusion3</a><ul>
+<li><a class="reference internal" href="#dowloading-the-model-checkpoint">Dowloading the model checkpoint</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#step-3-verify-the-installation">Step 3: Verify the installation</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#gpu-vs-cpu-execution">GPU vs CPU Execution</a><ul>
+<li><a class="reference internal" href="#how-rfdiffusion3-detects-and-uses-your-gpu">How RFdiffusion3 detects and uses your GPU</a></li>
+<li><a class="reference internal" href="#running-on-latest-gpu-architectures-e-g-blackwell">Running on latest GPU architectures (e.g. Blackwell)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#glossary">Glossary</a><ul>
+<li><a class="reference internal" href="#checkpoint">Checkpoint</a></li>
+<li><a class="reference internal" href="#cli-command-line-interface">CLI (Command-Line Interface)</a></li>
+<li><a class="reference internal" href="#environment">Environment</a></li>
+<li><a class="reference internal" href="#environment-variable">Environment Variable</a></li>
+<li><a class="reference internal" href="#model-zoo">Model Zoo</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#resources-references">Resources &amp; References</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=ca7ad2ea"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script async="async" defer="defer" src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
+    </body>
+</html>

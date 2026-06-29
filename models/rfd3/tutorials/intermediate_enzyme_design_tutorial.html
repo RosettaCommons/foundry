@@ -1,0 +1,709 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html"><link rel="next" title="RFdiffusion3 — Nucleic acid binder design examples" href="../examples/na_binder_design.html"><link rel="prev" title="Nuclei Acid Binder Design in RFdiffusion3" href="na_binder_tutorial.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>Intermediate Enzyme Design Tutorial - foundry 0.1.7 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=acfd86a5" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #F68A33;
+  --color-brand-content: #37939B;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-background-hover: #DCE8E8ff;
+  --color-announcement-background: #F68A33dd;
+  --color-announcement-text: #070707;
+  --color-brand-visited: #37939B;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">foundry 0.1.7 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">foundry 0.1.7 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">General</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../license_link.html">LICENSE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation_faq.html">Common Installation Issues</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributing_link.html">CONTRIBUTING</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Models</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../index.html">RFdiffusion3 Documentation</a><input aria-label="Toggle navigation of RFdiffusion3 Documentation" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="RFdiffusion3_installation_tutorial.html">Installation of RFdiffusion3 on Unix Systems</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro_inference_calculations.html">Inference Calculation Basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../input.html">RFdiffusion3 — Input Specification &amp; Command-line arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../designability_vs_diversity.html">Designability vs. Diversity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ppi_design_tutorial.html">Protein-Protein Interface Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enzyme_design_tutorial.html">Enzyme Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="na_binder_tutorial.html">Nuclei Acid Binder Design in RFdiffusion3</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Intermediate Enzyme Design Tutorial</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/na_binder_design.html">RFdiffusion3 — Nucleic acid binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/sm_binder_design.html">RFdiffusion3 — Small molecule binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/protein_binder_design.html">RFdiffusion3 — Protein binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/symmetry.html">Overview of Symmetry in RFD3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/enzyme_design.html">RFdiffusion3 — Enzyme design examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../rf3/index.html">RF3 Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../mpnn/index.html">MPNN Documentation</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../../../_sources/models/rfd3/tutorials/intermediate_enzyme_design_tutorial.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="intermediate-enzyme-design-tutorial">
+<h1>Intermediate Enzyme Design Tutorial<a class="headerlink" href="#intermediate-enzyme-design-tutorial" title="Link to this heading">¶</a></h1>
+<section id="table-of-contents">
+<h2>Table of Contents<a class="headerlink" href="#table-of-contents" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="#intermediate-enzyme-intro">Introduction</a></p></li>
+<li><p><a class="reference internal" href="#intermediate-enzyme-prereq">Prerequisites</a></p></li>
+<li><p><a class="reference internal" href="#intermediate-enzyme-motif-prep">Motif Preparation</a></p></li>
+<li><p><a class="reference internal" href="#intermediate-enzyme-constraints">Inference Constraints</a></p></li>
+<li><p><a class="reference internal" href="#intermediate-enzyme-inference">Run Inference</a></p></li>
+<li><p><a class="reference internal" href="#intermediate-enzyme-outputs">Analyzing the Outputs</a></p></li>
+<li><p><a class="reference internal" href="#intermediate-enzyme-errors">Common Errors</a></p></li>
+<li><p><a class="reference internal" href="#intermediate-enzyme-refs">Resources &amp; References</a></p></li>
+</ul>
+</section>
+<section id="introduction">
+<span id="intermediate-enzyme-intro"></span><h2>Introduction<a class="headerlink" href="#introduction" title="Link to this heading">¶</a></h2>
+<p>In this tutorial, you will generate protein designs to a fixed catalytic motif using RFdiffusion3 (RFD3).</p>
+<p>You will learn how to extract a scaffold motif using <a class="reference external" href="https://www.pymol.org/">PyMOL</a>, configure inference constraints, run RFD3, and inspect the generated designs.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>PyMOL is not necessary to complete this tutorial, the steps shown here can be replicated using other protein visualization tools.</p>
+</div>
+<p>By the end, you will have a set of newly generated protein structures that preserve your catalytic motif while redesigning the surrounding scaffold.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>If you have never run an RFD3 calculation before, we recommend
+going through the <a class="reference internal" href="enzyme_design_tutorial.html"><span class="doc">Enzyme Design in RFdiffusion3</span></a> tutorial first.
+This tutorial provides more introductory information on running RFD3
+than the current document.</p>
+</div>
+<hr class="docutils" />
+</section>
+<section id="prerequisites">
+<span id="intermediate-enzyme-prereq"></span><h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>RFdiffusion3 installed and working <!-- TODO: Link to installation tutorial --></p></li>
+<li><p>Familiarity with <a class="reference external" href="https://www.freecodecamp.org/news/command-line-for-beginners/">command line</a></p></li>
+<li><p>Protein visualization software, here we will use <a class="reference external" href="https://www.pymol.org/">PyMOL</a></p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="set-up">
+<h2>Set-up<a class="headerlink" href="#set-up" title="Link to this heading">¶</a></h2>
+<p>No input files are required for this tutorial as this tutorial walks you through how to create your input PDB. However, example input files and output files are provided at <code class="docutils literal notranslate"><span class="pre">foundry/models/rfd3/docs/tutorials/intermediate_enzyme_tutorial_files</span></code>.</p>
+<hr class="docutils" />
+</section>
+<section id="motif-preparation">
+<span id="intermediate-enzyme-motif-prep"></span><h2>Motif Preparation<a class="headerlink" href="#motif-preparation" title="Link to this heading">¶</a></h2>
+<section id="reference-structure">
+<span id="intermediate-enzyme-ref-structure"></span><h3>Reference Structure<a class="headerlink" href="#reference-structure" title="Link to this heading">¶</a></h3>
+<p>We use the Protein Data Bank structure <a class="reference external" href="https://www.rcsb.org/structure/1MG5"><strong>1MG5</strong></a>, corresponding to alcohol dehydrogenase, as a reference for motif extraction. The goal is to isolate the catalytic residues together with their associated ligands (cofactor and acetate).</p>
+</section>
+<section id="example-structure">
+<span id="intermediate-enzyme-example-structure"></span><h3>Example Structure<a class="headerlink" href="#example-structure" title="Link to this heading">¶</a></h3>
+<p>Alcohol dehydrogenase (ADH) from <em>Drosophila</em> catalyzes the oxidation of alcohols. However, the reaction does not necessarily stop at the aldehyde stage – it has been demonstrated in <a class="reference external" href="https://doi.org/10.1016/j.jmb.2004.10.028">this paper</a> that <em>Drosophila</em> ADH can further oxidize acetaldehyde to acetate.</p>
+<p>In the 1MG5 structure, the relevant ligands are:</p>
+<ul class="simple">
+<li><p><strong>NAI</strong> – nicotinamide cofactor</p></li>
+<li><p><strong>ACT</strong> – acetate</p></li>
+</ul>
+<p>The catalytic triad is composed of <strong>Ser139, Tyr152, and Lys156</strong>. In addition, <strong>Asn108</strong> is also crucial for catalysis, so we will focus on these residues for our design. You can find more information about the structure of the catalytic site in these two papers:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://doi.org/10.1016/j.jmb.2004.10.028">Drosophila Alcohol Dehydrogenase: Acetate–Enzyme Interactions and Novel Insights into the Effects of Electrostatics on Catalysis</a></p></li>
+<li><p><a class="reference external" href="https://www.sciencedirect.com/science/article/pii/S0021925819665348">Critical Residues for Structure and Catalysis in Short-chain Dehydrogenases/Reductases</a></p></li>
+</ul>
+<p>We have highlighted these important structural components below:</p>
+<figure class="align-default" id="id1">
+<a class="reference internal image-reference" href="../../../_images/1mg5_final.png"><img alt="../../../_images/1mg5_final.png" src="../../../_images/1mg5_final.png" style="width: 80%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">The alcohol dehydrogenase 1MG5 structure is displayed, with the relevant catalytic residues and ligands highlighted.</span><a class="headerlink" href="#id1" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="preparing-the-input-pdb">
+<span id="intermediate-enzyme-prep-pdb"></span><h3>Preparing the Input PDB<a class="headerlink" href="#preparing-the-input-pdb" title="Link to this heading">¶</a></h3>
+<p>In this section we will use PyMOL to manipulate our the PDB file we retrieved to isolate the portion of the structure we want to use as the input to RFD3.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The use of PyMOL is not required for this tutorial. Other visualization tools can be used and a prepared input PDB is available <a class="reference download internal" download="" href="../../../_downloads/116890bff444a89b246022948903f366/1mg5_motif.pdb"><span class="xref download myst">here</span></a>.</p>
+</div>
+<ol class="arabic">
+<li><p>Using the PDB identifier, one can fetch the structure in PyMOL using a single command.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">fetch</span> <span class="mi">1</span><span class="n">mg5</span>
+</pre></div>
+</div>
+</li>
+<li><p>Create a new object containing the motif (chain A, catalytic residues, and ligands):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">create</span> <span class="n">motif</span><span class="p">,</span> <span class="n">chain</span> <span class="n">A</span> <span class="ow">and</span> <span class="p">(</span><span class="n">resi</span> <span class="mi">108</span><span class="o">+</span><span class="mi">139</span><span class="o">+</span><span class="mi">152</span><span class="o">+</span><span class="mi">156</span> <span class="ow">or</span> <span class="n">resn</span> <span class="n">ACT</span><span class="o">+</span><span class="n">NAI</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>To learn more about PyMOL’s <code class="docutils literal notranslate"><span class="pre">create</span></code> functionality, see the <a class="reference external" href="https://pymolwiki.org/Create">PyMOL wiki</a>.</p>
+</div>
+<p>Verify that your selection matches the image below. Note that your selection will still have the backbone for residues 108, 139, 152, and 156. They have been removed from the image below for the sake of clarity.</p>
+<p>You may have to unselect the original 1mg5 structure to see only the ‘motif’.</p>
+<figure class="align-default">
+<a class="reference internal image-reference" href="../../../_images/1mg5_theozyme_final.png"><img alt="../../../_images/1mg5_theozyme_final.png" src="../../../_images/1mg5_theozyme_final.png" style="width: 80%;" />
+</a>
+</figure>
+</li>
+</ol>
+<!-- 
+(intermediate_enzyme_selection_cmd)=
+### Explanation of the Selection Command
+
+|                        | Description                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `chain A`              | Restricts the selection to chain A.                                            |
+| `resi 108+139+152+156` | Selects the catalytic residues by residue number.                              |
+| `resn ACT+NAI`         | Selects acetate and the nicotinamide cofactor.                                 |
+| `create motif`         | Generates a new object called `motif` containing the currently selected atoms. |
+This isolates the catalytic motif including protein residues and functional ligands. -->
+<ol class="arabic simple" start="3">
+<li><p>Go to <strong>File → Export Molecule</strong> in PyMOL. You can use the default settings if a window appears.</p></li>
+<li><p>Save the structure as a PDB file named “1mg5_motif.pdb”. The resulting file contains the extracted catalytic motif and is ready for diffusion inference.</p></li>
+</ol>
+<hr class="docutils" />
+</section>
+</section>
+<section id="inference-constraints">
+<span id="intermediate-enzyme-constraints"></span><h2>Inference Constraints<a class="headerlink" href="#inference-constraints" title="Link to this heading">¶</a></h2>
+<p>RFdiffusion3 uses <strong>inference settings files</strong> to define how a design calculation should be executed. These settings constrain the diffusion process and specify what structural elements must be preserved, what regions can be generated, and whether symmetry or other structural constraints are applied.
+The configuration is provided in either <strong>JSON</strong> or <strong>YAML</strong> format.
+Detailed information on constraints can be found in <a class="reference internal" href="../intro_inference_calculations.html"><span class="doc">Inference Calculation Basics</span></a>.</p>
+<p>We will create a constraints file that tells RFD3 to:</p>
+<ul class="simple">
+<li><p>Use the extracted 1MG5 catalytic motif</p></li>
+<li><p>Preserve key catalytic residues</p></li>
+<li><p>Retain bound ligands (NAI and ACT)</p></li>
+<li><p>Generate a 180–200 residue scaffold around the motif</p></li>
+<li><p>Constrain selected atoms to maintain geometry</p></li>
+</ul>
+<p>Create a file named <code class="docutils literal notranslate"><span class="pre">1mg5_motif.json</span></code> and open it in your favorite <a class="reference external" href="https://xkcd.com/378/">text editor</a>:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>1mg5_motif.json
+</pre></div>
+</div>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w">  </span>
+<span class="nt">&quot;enzyme_design_intro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">  </span>
+<span class="w">	</span><span class="nt">&quot;input&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;./input_path/1mg5_motif.pdb&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">    </span><span class="nt">&quot;ligand&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;NAI,ACT&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">    </span><span class="nt">&quot;unindex&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A108,A139,A152,A156&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">    </span><span class="nt">&quot;length&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;180-200&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">    </span><span class="nt">&quot;select_fixed_atoms&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">  </span>
+<span class="w">        </span><span class="nt">&quot;A108&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ND2,CG&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">        </span><span class="nt">&quot;A139&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OG,CB,CA&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">        </span><span class="nt">&quot;A152&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OH,CZ&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">        </span><span class="nt">&quot;A156&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;NZ,CE,CD&quot;</span><span class="w"> </span>
+<span class="w">        </span><span class="p">}</span><span class="w">  </span>
+<span class="w">    </span><span class="p">}</span><span class="w">  </span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>You will need to change the path to the input structure based on where you placed it in your file system.</p>
+</div>
+<p>This configuration instructs RFdiffusion3 to <strong>generate a protein scaffold around a catalytic motif while maintaining key structural constraints</strong>.
+The top-level key defines a <strong>named inference configuration</strong>.</p>
+<p>Here’s a brief description of the options used in the JSON file:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Key</p></th>
+<th class="head"><p>Value</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">input</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/path/to/1mg5_motif.pdb&quot;</span></code></p></td>
+<td><p>Supply the path and name of the input PDB file you created in the previous section.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ligand</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;NAI,ACT&quot;</span></code></p></td>
+<td><p>Including ligands allows RFdiffusion3 to maintain their spatial relationship to the motif during scaffold generation.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">unindex</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;A108,A139,A152,A156&quot;</span></code></p></td>
+<td><p>Specifies motif residues whose positions are (partially) structurally fixed but whose sequence placement is not predefined.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">length</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;180-200&quot;</span></code></p></td>
+<td><p>Defines the allowed total length of the generated protein scaffold. In this example RFdiffusion3 generates proteins between <strong>180 and 200 residues</strong>, embedding the motif residues specified in <code class="docutils literal notranslate"><span class="pre">unindex</span></code> within that range.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">select_fixed_atoms</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;A108&quot;:</span> <span class="pre">&quot;ND2,CG&quot;</span></code><br><code class="docutils literal notranslate"><span class="pre">&quot;A139&quot;:</span> <span class="pre">&quot;OG,CB,CA&quot;</span></code><br><code class="docutils literal notranslate"><span class="pre">&quot;A152&quot;:</span> <span class="pre">&quot;OH,CZ&quot;</span></code><br><code class="docutils literal notranslate"><span class="pre">&quot;A156&quot;:</span> <span class="pre">&quot;NZ,CE,CD&quot;</span></code></p></td>
+<td><p>Specifies which atoms remain fixed during diffusion. Example: only atoms <strong>ND2</strong> and <strong>CG</strong> of residue A108 remain constrained.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>For more information about the options used in this JSON file, see the <a class="reference internal" href="enzyme_design_tutorial.html"><span class="doc">introductory enzyme design tutorial</span></a> or <a class="reference internal" href="../input.html#inputspecification-fields"><span class="std std-ref">InputSpecification fields</span></a></p>
+</div>
+<section id="fixing-the-atoms">
+<h3>Fixing the Atoms<a class="headerlink" href="#fixing-the-atoms" title="Link to this heading">¶</a></h3>
+<p>The choice of the fixed atoms will vary by project and requires knowledge of the reactivity of your structure. Let’s go through an example of how some of the fixed atoms where chosen for this tutorial:</p>
+<p>For Lys156, it is know that NZ is the “reactive atom” so it needs to be fixed to maintain its precise placement relative to the ligand/substrate. The carbons near it, the delta and epsilon carbons, are also held fixed to ensure the orientation of the tip of the side chain is correct relative to the ligand/substrate. The rest of the side chain and backbone is allowed to adapt to the designed backbone structure.</p>
+</section>
+<section id="unindexing-the-motif">
+<h3>Unindexing the Motif<a class="headerlink" href="#unindexing-the-motif" title="Link to this heading">¶</a></h3>
+<p>We have listed the catalytic residues as ‘unindexed’ so that RFdiffusion can fully design a new protein backbone around these residues. This will not limit how many residues need to come before, between, or after each residue. This flexibility is also why none of the backbone atoms are included in the <code class="docutils literal notranslate"><span class="pre">select_fixed_atoms</span></code> constraint – including them would likely over constrain the backbone and produce strained designs.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="run-inference">
+<span id="intermediate-enzyme-inference"></span><h2>Run Inference<a class="headerlink" href="#run-inference" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">rfd3</span> <span class="pre">design</span> <span class="pre">inputs=/path/to/1mg5_motif.json</span> <span class="pre">out_dir=/path/to/output</span></code><br />
+Adjust the paths according to your local setup.</p>
+<p>The <strong>inputs</strong> file (JSON/YAML) defines the inference setup and constraints, while <strong>out_dir</strong> specifies where generated designs and logs will be written. If the directory does not exist, it will be created automatically.</p>
+<p>Additional runtime and job configuration options (e.g. number of designs, trajectory saving, validation) can be found <a class="reference external" href="https://rosettacommons.github.io/foundry/models/rfd3/intro_inference_calculations.html#job-configurations">here</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>During execution, the terminal prints initialization messages, hardware allocation (e.g., GPU detection), runtime logs, and the sampling progress of the diffusion process. Warnings may appear about PDB and CCD clones, you can ignore them.</p>
+</div>
+<p>The total runtime depends primarily on the selected sequence length range, the number of generated designs, and the available compute hardware.</p>
+<hr class="docutils" />
+</section>
+<section id="analyzing-the-outputs">
+<span id="intermediate-enzyme-outputs"></span><h2>Analyzing the Outputs<a class="headerlink" href="#analyzing-the-outputs" title="Link to this heading">¶</a></h2>
+<p>Navigate to where your output files have been saved. In the next few sections we will look at some simple ways to analyze the quality of structures produced by RFD3.</p>
+<section id="inspect-the-metrics-text-based-analysis">
+<span id="intermediate-enzyme-metrics"></span><h3>Inspect the Metrics - Text-Based Analysis<a class="headerlink" href="#inspect-the-metrics-text-based-analysis" title="Link to this heading">¶</a></h3>
+<p>Open the output files in your favorite text editor.</p>
+<p>Locate the metrics file (JSON file) for one of your designs, for example <!-- TODO: put example output file name here! --> and examine key values such as <code class="docutils literal notranslate"><span class="pre">join_point_rmsd</span></code>, <code class="docutils literal notranslate"><span class="pre">loop</span> <span class="pre">fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">helix_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">sheet_fraction</span></code>. A straightforward evaluation focuses on:</p>
+<ul class="simple">
+<li><p>a low <code class="docutils literal notranslate"><span class="pre">join_point_rmsd</span></code></p>
+<ul>
+<li><p>For this example below ~0.5 Å is considered good, but a different threshold may be needed for your own projects</p></li>
+</ul>
+</li>
+<li><p>the absence of chain breaks (<code class="docutils literal notranslate"><span class="pre">n_chainbreaks</span></code>)</p></li>
+<li><p>a reasonable secondary structure composition</p>
+<ul>
+<li><p>Look at <code class="docutils literal notranslate"><span class="pre">loop_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">helix_fraction</span></code>, and <code class="docutils literal notranslate"><span class="pre">sheet_fraction</span></code></p></li>
+<li><p>For most design problems, you’ll want the helix and loop fractions to be higher and the sheet fractions to be lower</p></li>
+</ul>
+</li>
+</ul>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;metrics&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;join_point_rmsd_by_token&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;A108&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.16884943842887878</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;A152&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.21462973952293396</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;A156&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0839585065841675</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">&quot;insertion.mae&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.49845656007528305</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;insertion.rmcd&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.35271910205483437</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;insertion_rmsd&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.36135003715753555</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;join_point_rmsd&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.4891458948453267</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;n_conjoined_residues&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;max_ca_deviation&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.17333555221557617</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;n_chainbreaks&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;n_clashing.interresidue_clashes_w_sidechain&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;n_clashing.interresidue_clashes_w_backbone&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;n_clashing.ligand_clashes&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;n_clashing.ligand_min_distance&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">2.814537525177002</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;non_loop_fraction&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.6041666666666667</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;loop_fraction&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.3958333333333333</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;helix_fraction&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.4635416666666667</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;sheet_fraction&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.140625</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;num_ss_elements&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;radius_of_gyration&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">15.200447511975698</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;alanine_content&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.3160621761658031</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;glycine_content&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.07772020725388601</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;num_residues&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">193</span>
+</pre></div>
+</div>
+<p>Above is an example metrics section for a design. This example is provided for illustration, your data will be different.</p>
+<hr class="docutils" />
+</section>
+<section id="inspect-the-structure-structural-analysis">
+<span id="intermediate-enzyme-structure"></span><h3>Inspect the Structure - Structural Analysis<a class="headerlink" href="#inspect-the-structure-structural-analysis" title="Link to this heading">¶</a></h3>
+<p>Open the selected PDB file in a molecular visualization tool such as PyMOL and assess whether the motif geometry is preserved, whether the overall fold appears plausible, and whether the catalytic residues are properly integrated into the scaffold. The <code class="docutils literal notranslate"><span class="pre">diffused</span> <span class="pre">index</span> <span class="pre">map</span></code> in the output JSON file for a given design shows where the original motif residues appear in the generated protein. For example:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;diffused_index_map&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">  </span>
+<span class="w">    </span><span class="nt">&quot;A108&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A3&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">    </span><span class="nt">&quot;A139&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A80&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">    </span><span class="nt">&quot;A152&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A49&quot;</span><span class="p">,</span><span class="w">  </span>
+<span class="w">    </span><span class="nt">&quot;A156&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A53&quot;</span><span class="w">  </span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The identifiers on the left correspond to residues from the input motif structure, while the identifiers on the right indicate their positions in the generated design. For example, <code class="docutils literal notranslate"><span class="pre">&quot;A108&quot;:</span> <span class="pre">&quot;A3&quot;</span></code> means that the motif asparagine appears at <strong>position 3 in chain A</strong> of the generated protein.</p>
+<figure class="align-default" id="id2">
+<a class="reference internal image-reference" href="../../../_images/1mg5_redesign_final.png"><img alt="../../../_images/1mg5_redesign_final.png" src="../../../_images/1mg5_redesign_final.png" style="width: 80%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">This image shows one of the generated protein designs. The catalytic motif is highlighted, illustrating how it has been embedded within the newly generated scaffold while maintaining its structural arrangement.</span><a class="headerlink" href="#id2" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<hr class="docutils" />
+</section>
+</section>
+<section id="common-errors">
+<span id="intermediate-enzyme-errors"></span><h2>Common Errors<a class="headerlink" href="#common-errors" title="Link to this heading">¶</a></h2>
+<section id="motif-related-errors">
+<span id="intermediate-enzyme-motif-errors"></span><h3>Motif-Related Errors<a class="headerlink" href="#motif-related-errors" title="Link to this heading">¶</a></h3>
+<p><strong>Incorrect residue numbering</strong><br />
+Residue numbering in the configuration must match exactly the numbering used in the PDB file. Always verify both the chain identifier and residue indices directly in the structure file before defining motif residues.</p>
+<hr class="docutils" />
+</section>
+<section id="json-configuration-errors">
+<span id="intermediate-enzyme-config-errors"></span><h3>JSON Configuration Errors<a class="headerlink" href="#json-configuration-errors" title="Link to this heading">¶</a></h3>
+<p><strong>Ligand name mismatch</strong><br />
+Ligand names must exactly match the residue names defined in the PDB file.</p>
+<p><strong>Syntax issues</strong><br />
+Formatting errors such as missing brackets, misplaced commas, or incorrect quotation marks will invalidate the JSON file. Ensure that the file is properly structured and syntactically correct.</p>
+<hr class="docutils" />
+</section>
+<section id="command-line-errors">
+<span id="intermediate-enzyme-cli-errors"></span><h3>Command-Line Errors<a class="headerlink" href="#command-line-errors" title="Link to this heading">¶</a></h3>
+<p>If command-line arguments are incorrect, incomplete, or missing, the CLI typically returns descriptive error messages. These messages indicate which parameter is invalid or absent and should be reviewed carefully to identify and correct the issue.</p>
+<hr class="docutils" />
+</section>
+</section>
+<section id="resources-references">
+<span id="intermediate-enzyme-refs"></span><h2>Resources &amp; References<a class="headerlink" href="#resources-references" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>RFdiffusion3 https://doi.org/10.1101/2025.09.18.676967</p></li>
+<li><p>RFdiffusion3 documentation and GitHub https://github.com/RosettaCommons/foundry/tree/production</p></li>
+<li><p>PDB: <a class="reference external" href="https://doi.org/10.2210/pdb1MG5/pdb">https://doi.org/10.2210/pdb1MG5/pdb</a></p></li>
+<li><p>Structure: https://doi.org/10.1016/j.jmb.2004.10.028</p></li>
+<li><p>Visualization tools: <a class="reference external" href="https://www.pymol.org/">PyMOL</a></p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="../examples/na_binder_design.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">RFdiffusion3 — Nucleic acid binder design examples</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="na_binder_tutorial.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Nuclei Acid Binder Design in RFdiffusion3</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Institute for Protein Design, University of Washington
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Intermediate Enzyme Design Tutorial</a><ul>
+<li><a class="reference internal" href="#table-of-contents">Table of Contents</a></li>
+<li><a class="reference internal" href="#introduction">Introduction</a></li>
+<li><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li><a class="reference internal" href="#set-up">Set-up</a></li>
+<li><a class="reference internal" href="#motif-preparation">Motif Preparation</a><ul>
+<li><a class="reference internal" href="#reference-structure">Reference Structure</a></li>
+<li><a class="reference internal" href="#example-structure">Example Structure</a></li>
+<li><a class="reference internal" href="#preparing-the-input-pdb">Preparing the Input PDB</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#inference-constraints">Inference Constraints</a><ul>
+<li><a class="reference internal" href="#fixing-the-atoms">Fixing the Atoms</a></li>
+<li><a class="reference internal" href="#unindexing-the-motif">Unindexing the Motif</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#run-inference">Run Inference</a></li>
+<li><a class="reference internal" href="#analyzing-the-outputs">Analyzing the Outputs</a><ul>
+<li><a class="reference internal" href="#inspect-the-metrics-text-based-analysis">Inspect the Metrics - Text-Based Analysis</a></li>
+<li><a class="reference internal" href="#inspect-the-structure-structural-analysis">Inspect the Structure - Structural Analysis</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#common-errors">Common Errors</a><ul>
+<li><a class="reference internal" href="#motif-related-errors">Motif-Related Errors</a></li>
+<li><a class="reference internal" href="#json-configuration-errors">JSON Configuration Errors</a></li>
+<li><a class="reference internal" href="#command-line-errors">Command-Line Errors</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#resources-references">Resources &amp; References</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=ca7ad2ea"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script async="async" defer="defer" src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
+    </body>
+</html>
