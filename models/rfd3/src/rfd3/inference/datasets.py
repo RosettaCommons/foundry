@@ -54,6 +54,7 @@ class ContigJsonDataset(MolecularDataset):
             - evaluate_every_n: how many times should this dataset be evaluated?
         """
 
+        self.json_path: str | PathLike | None
         if isinstance(data, (PathLike, str)):
             self.json_path = data
             original_data = self._load_from_path(data)
@@ -168,6 +169,7 @@ class ContigJsonDataset(MolecularDataset):
         data = spec.to_pipeline_input(example_id=example_id)
 
         # Apply transforms and return
+        assert self.transform is not None
         data = self.transform(data)
         return data
 

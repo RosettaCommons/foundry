@@ -6,11 +6,15 @@ References:
   .. _PyTorch Checkpoint Documentation: https://pytorch.org/docs/stable/checkpoint.html
 """
 
+from typing import Any, Callable
+
 import torch
 from torch.utils.checkpoint import checkpoint
 
 
-def create_custom_forward(module, **kwargs):
+def create_custom_forward(
+    module: Callable[..., Any], **kwargs: Any
+) -> Callable[..., Any]:
     """Create a custom forward function for gradient checkpointing with fixed kwargs.
 
     Enables passing keyword arguments to a module when using PyTorch's checkpoint function,
@@ -25,13 +29,13 @@ def create_custom_forward(module, **kwargs):
       with the fixed kwargs to the original module.
     """
 
-    def custom_forward(*inputs):
+    def custom_forward(*inputs: Any) -> Any:
         return module(*inputs, **kwargs)
 
     return custom_forward
 
 
-def activation_checkpointing(function):
+def activation_checkpointing(function: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator to enable gradient checkpointing for a function during training.
 
     Args:
@@ -51,7 +55,7 @@ def activation_checkpointing(function):
       Uses ``use_reentrant=False`` for compatibility with recent PyTorch versions.
     """
 
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         if torch.is_grad_enabled():
             return checkpoint(
                 create_custom_forward(function, **kwargs), *args, use_reentrant=False

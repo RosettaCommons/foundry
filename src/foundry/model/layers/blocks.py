@@ -10,7 +10,7 @@ class FourierEmbedding(nn.Module):
     w: torch.Tensor
     b: torch.Tensor
 
-    def __init__(self, c):
+    def __init__(self, c: int) -> None:
         super().__init__()
         self.c = c
         self.register_buffer("w", torch.zeros(c, dtype=torch.float32))
@@ -24,14 +24,14 @@ class FourierEmbedding(nn.Module):
 
     def forward(
         self,
-        t,  # [D]
-    ):
+        t: torch.Tensor,  # [D]
+    ) -> torch.Tensor:
         return torch.cos(2 * pi * (t[..., None] * self.w + self.b))
 
 
 class Dropout(nn.Module):
     # Dropout entire row or column
-    def __init__(self, broadcast_dim=None, p_drop=0.15):
+    def __init__(self, broadcast_dim: int | None = None, p_drop: float = 0.15) -> None:
         super(Dropout, self).__init__()
         # give ones with probability of 1-p_drop / zeros with p_drop
         self.sampler = torch.distributions.bernoulli.Bernoulli(
@@ -40,7 +40,7 @@ class Dropout(nn.Module):
         self.broadcast_dim = broadcast_dim
         self.p_drop = p_drop
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if not self.training:  # no drophead during evaluation mode
             return x
         shape = list(x.shape)

@@ -245,7 +245,7 @@ def _readout_seq_from_struc(
             for restype, atom_names in association_schemes_stripped[
                 association_scheme
             ].items():
-                atom_names = np.array(atom_names)
+                atom_names_arr = np.array(atom_names)
 
                 # Shouldn't match these two
                 if restype in ["UNK", "MSK"]:
@@ -263,9 +263,9 @@ def _readout_seq_from_struc(
 
                 # ... Find the matched restype by checking if all the non-None posititons and None positions match
                 # This is designed to keep virtual atoms and doesn't assign the atom names for now, which will be handled later.
-                if all(x is not None for x in atom_names[atom14_scheme_mask]) and all(
-                    x is None for x in atom_names[~atom14_scheme_mask]
-                ):
+                if all(
+                    x is not None for x in atom_names_arr[atom14_scheme_mask]
+                ) and all(x is None for x in atom_names_arr[~atom14_scheme_mask]):
                     cur_res_atom_array.res_name = np.array(
                         [restype] * len(cur_res_atom_array)
                     )

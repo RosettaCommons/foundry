@@ -72,7 +72,7 @@ def set_default_conditioning_annotations(
     unindexed=False,
     mask=None,
     dtype=bool,
-    additional: set | list = None,
+    additional: set | list | None = None,
 ):
     """
     Adds default annotations to the atom array

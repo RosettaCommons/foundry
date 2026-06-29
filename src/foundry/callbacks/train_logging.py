@@ -26,7 +26,7 @@ from foundry.utils.logging import (
 class LogModelParametersCallback(BaseCallback):
     """Print a table of the total and trainable parameters of the model at the start of training."""
 
-    def on_fit_start(self, trainer):
+    def on_fit_start(self, trainer: Any) -> None:
         print_model_parameters(trainer.state["model"])
 
 
@@ -39,7 +39,7 @@ class PrintExampleIDBeforeForwardPassCallback(BaseCallback):
     def __init__(self, rank_zero_only: bool = True):
         self.logger = RankedLogger(__name__, rank_zero_only=rank_zero_only)
 
-    def on_train_batch_start(self, trainer, batch: Any, batch_idx: int):
+    def on_train_batch_start(self, trainer: Any, batch: Any, batch_idx: int) -> None:
         example_id = batch[0]["example_id"]
 
         # Prepare the formatted strings with colors
@@ -58,17 +58,17 @@ class PrintExampleIDBeforeForwardPassCallback(BaseCallback):
 class LogDatasetSamplingRatiosCallback(BaseCallback):
     """Monitor the sampling ratios of the datasets and log after each epoch."""
 
-    def on_fit_start(self, trainer):
-        self.dataset_sampling_counts = defaultdict(int)
+    def on_fit_start(self, trainer: Any) -> None:
+        self.dataset_sampling_counts: defaultdict[str, int] = defaultdict(int)
 
-    def on_train_batch_start(self, trainer, batch, batch_idx):
+    def on_train_batch_start(self, trainer: Any, batch: Any, batch_idx: int) -> None:
         example_id = batch[0]["example_id"]
 
         if trainer.fabric.is_global_zero:
             dataset_string = "/".join(parse_example_id(example_id)["datasets"])
             self.dataset_sampling_counts[dataset_string] += 1
 
-    def on_train_epoch_end(self, trainer):
+    def on_train_epoch_end(self, trainer: Any) -> None:
         if trainer.fabric.is_global_zero:
             total_samples = sum(self.dataset_sampling_counts.values())
 
@@ -100,7 +100,7 @@ class LogLearningRateCallback(BaseCallback):
     def __init__(self, log_every_n: int):
         self.log_every_n = log_every_n
 
-    def optimizer_step(self, trainer, optimizer: _FabricOptimizer):
+    def optimizer_step(self, trainer: Any, optimizer: _FabricOptimizer) -> None:
         # Get the current global step
         current_step = trainer.state["global_step"]
 
@@ -140,17 +140,19 @@ class LogAF3TrainingLossesCallback(BaseCallback):
         self.log_every_n = log_every_n
         self.log_full_batch_losses = log_full_batch_losses
 
-        self.start_time = None
+        self.start_time: float | None = None
         self.logger = RankedLogger(__name__, rank_zero_only=True)
 
         # This dict will store key -> MeanMetric() for each loss
         self.loss_trackers: dict[str, MeanMetric] = {}
 
-    def on_train_epoch_start(self, trainer):
+    def on_train_epoch_start(self, trainer: Any) -> None:
         # Record the start time of the epoch
         self.start_time = time.time()
 
-    def on_train_batch_end(self, trainer, outputs: Any, batch: Any, batch_idx: int):
+    def on_train_batch_end(
+        self, trainer: Any, outputs: Any, batch: Any, batch_idx: int
+    ) -> None:
         mean_loss_dict = {}
         if "loss_dict" in outputs:
             mean_loss_dict.update(mean_losses(outputs["loss_dict"]))
@@ -230,11 +232,14 @@ class LogAF3TrainingLossesCallback(BaseCallback):
 
             safe_print(combined_content)
 
-    def on_train_epoch_end(self, trainer):
+    def on_train_epoch_end(self, trainer: Any) -> None:
         # Gather final epoch means (must be run on all ranks)
         final_means = {
             k: tracker.compute().item() for k, tracker in self.loss_trackers.items()
         }
+
+        # on_train_epoch_start always runs first in the training loop, so start_time is set.
+        assert self.start_time is not None
 
         # Calculate elapsed time and number of batches (from the total_loss tracker, if available)
         elapsed_time = time.time() - self.start_time

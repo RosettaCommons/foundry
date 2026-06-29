@@ -219,11 +219,18 @@ class ProteinDNAContactContiguousCrop(Transform):
         protein_contact_atom_dict=None,
         dna_contact_atom_dict=None,
     ):
+        self.protein_contact_atoms: str | list[str]
         if protein_contact_type == "backbone":
             self.protein_contact_atoms = ["N", "CA", "C"]
         elif protein_contact_type == "all":
             self.protein_contact_atoms = "all"
+        else:
+            raise ValueError(
+                f"Unknown protein_contact_type {protein_contact_type!r}. "
+                "Expected 'backbone' or 'all'."
+            )
 
+        self.dna_contact_atoms: str | list[str] | dict[str, list[str]]
         if dna_contact_type == "backbone":
             self.dna_contact_atoms = ["P", "OP1", "OP2"]
         elif dna_contact_type == "base":

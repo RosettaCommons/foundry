@@ -43,8 +43,11 @@ class RFD3(nn.Module):
         use_chunked_pll = os.environ.get("RFD3_LOW_MEMORY_MODE", None) == "1"
         ranked_logger.info(f"RFD3 initialized with chunked_pll={use_chunked_pll}")
 
-        # Simple constant-feature initializer
-        self.token_initializer = TokenInitializer(
+        # Simple constant-feature initializer.
+        # `**token_initializer` / `**inference_sampler` below: omegaconf's DictConfig
+        # supports the mapping protocol at runtime but its stubs don't satisfy
+        # SupportsKeysAndGetItem, so mypy rejects `**(DictConfig | dict)`. Hydra sub-configs.
+        self.token_initializer = TokenInitializer(  # type: ignore[arg-type]
             c_s=c_s,
             c_z=c_z,
             c_atom=c_atom,
@@ -65,12 +68,12 @@ class RFD3(nn.Module):
         self.cfg_features = inference_sampler.pop("cfg_features", [])
 
         # ... initialize the inference sampler, which performs a full diffusion rollout during inference
-        self.inference_sampler = ConditionalDiffusionSampler(**inference_sampler)
+        self.inference_sampler = ConditionalDiffusionSampler(**inference_sampler)  # type: ignore[arg-type]
 
     def forward(
         self,
         input: dict,
-        coord_atom_lvl_to_be_noised: torch.Tensor = None,
+        coord_atom_lvl_to_be_noised: torch.Tensor | None = None,
         n_cycle=None,
         **_,
     ) -> dict:
@@ -86,6 +89,8 @@ class RFD3(nn.Module):
                 **initializer_outputs,
             )  # [D, L, 3]
         else:
+            # Inference always provides the coordinates to be noised.
+            assert coord_atom_lvl_to_be_noised is not None
             if self.use_classifier_free_guidance:
                 f_ref = strip_f(input["f"], self.cfg_features)
                 ref_initializer_outputs = self.token_initializer(f_ref)

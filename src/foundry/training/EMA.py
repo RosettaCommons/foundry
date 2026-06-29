@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from copy import deepcopy
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -28,7 +29,7 @@ class EMA(nn.Module):
             param.detach_()
 
     @torch.no_grad()
-    def update(self):
+    def update(self) -> None:
         """Update the shadow model using the weight of the original model and the decay rate."""
         if not self.training:
             raise RuntimeError("EMA update should only be called during training")
@@ -59,7 +60,7 @@ class EMA(nn.Module):
             #  ... copy the buffers from the model to the shadow
             shadow_buffers[name].copy_(buffer)
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         """Dynamic dispatch to the correct model (model or shadow)."""
         if self.training:
             return self.model(*args, **kwargs)

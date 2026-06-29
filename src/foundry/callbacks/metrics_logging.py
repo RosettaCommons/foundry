@@ -24,7 +24,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         self.save_dir = Path(save_dir)
         self.metrics_to_save = metrics_to_save
 
-    def _save_dataframe_for_rank(self, rank: int, epoch: int):
+    def _save_dataframe_for_rank(self, rank: int, epoch: int) -> None:
         """Saves per-GPU output dataframe of metrics to a rank-specific CSV."""
         self.save_dir.mkdir(parents=True, exist_ok=True)
         file_path = self.save_dir / f"validation_output_rank_{rank}_epoch_{epoch}.csv"
@@ -39,18 +39,18 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
             f"Saved validation outputs to {file_path} for rank {rank}, epoch {epoch}"
         )
 
-    def on_validation_epoch_start(self, trainer):
+    def on_validation_epoch_start(self, trainer: Any) -> None:
         self.per_gpu_outputs_df = pd.DataFrame()
 
     def on_validation_batch_end(
         self,
-        trainer,
+        trainer: Any,
         outputs: dict,
         batch: Any,
         batch_idx: int,
         num_batches: int,
         dataset_name: str | None = None,
-    ):
+    ) -> None:
         """Build a flattened DataFrame from the metrics output and accumulate with the prior batches"""
         assert "metrics_output" in outputs, "Validation outputs must contain metrics."
         metrics_output = deepcopy(outputs["metrics_output"])
@@ -71,7 +71,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
 
         def _build_row_from_flattened_dict(
             dict_to_flatten: dict, prefix: str, example_id: str
-        ):
+        ) -> dict[str, Any]:
             """Helper function to build a DataFrame row"""
             flattened_dict = nested_dict.flatten(dict_to_flatten, fuse_keys=".")
             row_data = {"example_id": example_id}
@@ -121,7 +121,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
             f"Validation Progress: {100 * (batch_idx + 1) / num_batches:.0f}% for {dataset_name}"
         )
 
-    def on_validation_epoch_end(self, trainer):
+    def on_validation_epoch_end(self, trainer: Any) -> None:
         """Aggregate and log the validation metrics at the end of the epoch.
 
         Each rank writes out its partial CSV. Then rank 0 aggregates them, logs grouped metrics by dataset,
@@ -201,7 +201,7 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         # Concatenate dataframes, filling missing columns with NaN
         return pd.concat(final_dataframes, axis=0, ignore_index=True, sort=False)
 
-    def _cleanup_temp_files(self):
+    def _cleanup_temp_files(self) -> None:
         """Remove temporary files used to store individual rank outputs."""
         all_files = list(self.save_dir.rglob("validation_output_rank_*_epoch_*.csv"))
         for file in all_files:

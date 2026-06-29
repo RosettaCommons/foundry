@@ -117,8 +117,8 @@ def generate_atom_mappings_(scheme="atom14"):
 
 
 def permute_symmetric_atom_names_(
-    atom_names: list, res_name: str, association_map: dict, symmetry_map: dict
-) -> list:
+    atom_names: np.ndarray, res_name: str, association_map: dict, symmetry_map: dict
+) -> np.ndarray:
     # NB: Can leak GT sequence if the model receives the canconical ordering of atoms as input
     # With the structure-local atom attention it will not unless N_keys(n_attn_seq_neighbours) > n_atom_attn_queries.
     if res_name in association_map:
@@ -144,7 +144,7 @@ class PadTokensWithVirtualAtoms(Transform):
     Applies association schema during training and to tokens with sequence.
     """
 
-    requires_previous_transforms = [UnindexFlaggedTokens]
+    requires_previous_transforms = [UnindexFlaggedTokens]  # type: ignore[list-item]
 
     def __init__(
         self,

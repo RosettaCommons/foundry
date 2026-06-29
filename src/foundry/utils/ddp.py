@@ -79,7 +79,7 @@ class RankedLogger(logging.LoggerAdapter):
         self.rank_zero_only = rank_zero_only
 
     def log(  # type: ignore[override]  # deliberately extends LoggerAdapter.log with a `rank` parameter
-        self, level: int, msg: str, rank: int | None = None, *args, **kwargs
+        self, level: int, msg: str, rank: int | None = None, *args: Any, **kwargs: Any
     ) -> None:
         """
         Delegate a log call to the underlying logger, after prefixing its message with the rank

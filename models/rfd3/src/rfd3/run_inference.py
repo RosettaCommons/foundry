@@ -1,6 +1,7 @@
 #!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../../../.ipd/shebang/foundry_exec.sh" "$0" "$@"'
 
 import os
+from typing import Any, cast
 
 import hydra
 from dotenv import load_dotenv
@@ -29,7 +30,9 @@ def run_inference(cfg: DictConfig) -> None:
     run_params = {k: v for k, v in cfg.items() if k in run_params_set}
 
     # Create __init__ args by filtering for all configs not in run_params
-    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+    # cfg is a DictConfig, so to_container returns a dict with string keys; its annotated
+    # return type is a broad union (non-mapping nodes + non-str key types), so cast.
+    cfg_dict = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
     init_cfg_dict = {
         k: v for k, v in cfg_dict.items() if k not in run_params_set | {"_target_"}
     }

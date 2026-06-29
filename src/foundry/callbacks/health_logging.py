@@ -93,7 +93,7 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
             self.log_histograms = {}
 
     @rank_zero_only
-    def on_fit_start(self, trainer):
+    def on_fit_start(self, trainer: Any) -> None:
         """Initialize the callback and register activation hooks."""
         # Check that we either have loggers attached or keep_cache is True, otherwise the
         #  data will be computed but not logged.
@@ -104,7 +104,7 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
             )
 
     @rank_zero_only
-    def on_train_batch_start(self, trainer, batch: Any, batch_idx: int):
+    def on_train_batch_start(self, trainer: Any, batch: Any, batch_idx: int) -> None:
         step = trainer.state["global_step"]
         model = trainer.state["model"]
         if (self.log_activations or "activations" in self.log_histograms) and (
@@ -113,7 +113,9 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
             self._register_activation_hooks(model, step)
 
     @rank_zero_only
-    def on_before_optimizer_step(self, trainer, optimizer: _FabricOptimizer, **kwargs):
+    def on_before_optimizer_step(
+        self, trainer: Any, optimizer: _FabricOptimizer, **kwargs: Any
+    ) -> None:
         """Log gradients, weights, and activations before optimizer step."""
         step = trainer.state["global_step"]
 
@@ -143,25 +145,27 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
                     if key.endswith("hist"):
                         self._cache[key].append(value)
 
-    def on_train_batch_end(self, trainer, **kwargs):
+    # Fabric dispatches hooks by keyword, so absorbing the base's positional
+    # outputs/batch/batch_idx via **kwargs is intentional; see TimingCallback.
+    def on_train_batch_end(self, trainer: Any, **kwargs: Any) -> None:  # type: ignore[override]
         """Called at the end of a training batch - clear temporary cache."""
         self._temp_cache["scalars"].clear()
         self._temp_cache["histograms"].clear()
         self._remove_activation_hooks()
 
-    def on_fit_end(self, trainer, **kwargs):
+    def on_fit_end(self, trainer: Any, **kwargs: Any) -> None:
         """Clean up activation hooks at the end of training."""
         self._remove_activation_hooks()
 
-    def on_validation_epoch_start(self, trainer):
+    def on_validation_epoch_start(self, trainer: Any) -> None:
         # Temporarily remove any hooks for validation
         self._remove_activation_hooks()
 
     @rank_zero_only
-    def on_save_checkpoint(self, trainer, state: dict[str, Any]):
+    def on_save_checkpoint(self, trainer: Any, state: dict[str, Any]) -> None:
         self._remove_activation_hooks()
 
-    def _collect_parameter_stats(self, model, step: int):
+    def _collect_parameter_stats(self, model: nn.Module, step: int) -> None:
         """Collect gradient and weight statistics in a single parameter iteration."""
         cache = self._temp_cache  # alias
 
@@ -213,12 +217,12 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
             return True
         return self.filter_activations(name, module_type)
 
-    def _register_activation_hooks(self, model, step: int):
+    def _register_activation_hooks(self, model: nn.Module, step: int) -> None:
         """Register forward hooks to accumulate activations."""
         cache = self._temp_cache  # alias
 
-        def create_activation_hook(name):
-            def hook(module, input, output):
+        def create_activation_hook(name: str) -> Callable[..., None]:
+            def hook(module: nn.Module, input: Any, output: Any) -> None:
                 if isinstance(output, torch.Tensor) and (step % self.log_freq == 0):
                     output = output.detach()
                     for stat_name, stat_fn in self.log_activations.items():
@@ -238,13 +242,13 @@ class ActivationsGradientsWeightsTracker(BaseCallback):
                 hook = module.register_forward_hook(create_activation_hook(name))
                 self._hooks.append(hook)
 
-    def _remove_activation_hooks(self):
+    def _remove_activation_hooks(self) -> None:
         """Remove activation hooks."""
         for hook in self._hooks:
             hook.remove()
         self._hooks.clear()
 
-    def __del__(self):
+    def __del__(self) -> None:
         self._remove_activation_hooks()
         del self._temp_cache
         del self._cache
@@ -326,7 +330,7 @@ def plot_tensor_stats(
     norm: Float[Tensor, "N"] | None = None,
     name: str = "",
     height_ratios: tuple[float, float] = (5, 1),
-):
+) -> plt.Figure:
     """
     Plot comprehensive statistics with mean/std/min/max in top panel and norm in bottom panel.
 
