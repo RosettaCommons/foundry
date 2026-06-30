@@ -224,20 +224,10 @@ warn_redundant_casts = true
 disallow_untyped_defs = false
 check_untyped_defs = false
 
-# rfd3 enablement ratchet. `models/rfd3` was brought into mypy's scope in 0010;
-# these modules had pre-existing type errors at that point and are exempted until
-# annotated. Fix the errors and remove the entry to enable type-checking for that
-# module (same playbook as the now-cleared src/foundry ratchet). Do NOT add modules.
-[[tool.mypy.overrides]]
-module = [
-    # Held back: `process_input`/`normalize_inputs` have confused pre-existing logic
-    # (a `.split(",")` on a value that is already a list — dead but type-incorrect). See roadmap.
-    "rfd3.engine",
-    # Held back: imports `rfd3.utils.inference._add_design_annotations_from_cif_block_metadata`,
-    # which does not exist (broken import — would ImportError on the .cif-load path). See roadmap.
-    "rfd3.utils.vizualize",
-]
-ignore_errors = true
+# NOTE: the rfd3 enablement ratchet (0010) is fully cleared — there is no rfd3 module-level
+# mypy exemption here. `models/rfd3` was brought into mypy's scope in 0010 behind an
+# `ignore_errors` ratchet; every exempted module has since been annotated and removed (same
+# playbook as the now-cleared src/foundry and rf3 ratchets).
 
 # NOTE: the rf3 enablement ratchet (0014) is fully cleared — there is no rf3 module-level
 # mypy exemption here, and every rf3 module type-checks with no in-file suppressions.
