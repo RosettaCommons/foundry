@@ -110,7 +110,9 @@ def get_atom_array_style_cmd(
     if hasattr(atom_array, "_annot_2d"):
         distance_commands = []
         if C_DIS.full_name in atom_array._annot_2d:
-            constraint_data = C_DIS.annotation(atom_array).as_array()
+            # atomworks types `annotation()` as `-> np.ndarray`, but the runtime
+            # 2-body annotation object exposes `.as_array()` to materialise the ndarray.
+            constraint_data = C_DIS.annotation(atom_array).as_array()  # type: ignore[attr-defined]
             if len(constraint_data) > 0:
                 _atom_idxs = np.unique(constraint_data[:, :2].flatten()).astype(int)
                 _atom_ids = atom_ids[_atom_idxs]
@@ -257,15 +259,11 @@ def _viz_from_file(
             atom_array = pickle.load(f)
     elif file_path.endswith((".cif", ".cif.gz", ".bcif", ".bcif.gz")):
         from atomworks.io.utils.io_utils import get_structure, read_any
-        from rfd3.utils.inference import (
-            _add_design_annotations_from_cif_block_metadata,
-        )
 
-        cif_file = read_any(file_path)
+        # NOTE: design-annotation restore from CIF block metadata was removed in the
+        # open-sourcing refactor (the helper no longer exists), so load the plain structure.
+        cif_file = read_any(pathlib.Path(file_path))
         atom_array = get_structure(cif_file, include_bonds=True, extra_fields="all")
-        atom_array = _add_design_annotations_from_cif_block_metadata(
-            atom_array, cif_file.block
-        )
     viz(atom_array, id=id, clear=clear, label=label, max_distances=max_distances)
 
 
