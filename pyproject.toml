@@ -217,7 +217,13 @@ typeCheckingMode = "off"
 # Per-module strictness is ratcheted up via [tool.mypy.overrides] as annotations land.
 [tool.mypy]
 python_version = "3.12"
-files = ["src/foundry", "src/foundry_cli", "models/rfd3/src/rfd3", "models/rf3/src/rf3"]
+files = [
+    "src/foundry",
+    "src/foundry_cli",
+    "models/rfd3/src/rfd3",
+    "models/rf3/src/rf3",
+    "models/mpnn/src/mpnn",
+]
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
@@ -231,6 +237,25 @@ check_untyped_defs = false
 
 # NOTE: the rf3 enablement ratchet (0014) is fully cleared — there is no rf3 module-level
 # mypy exemption here, and every rf3 module type-checks with no in-file suppressions.
+
+# mpnn enablement ratchet (0063): `models/mpnn/src/mpnn` was brought into mypy's scope behind
+# this `ignore_errors` ratchet (same playbook as the now-cleared src/foundry, rf3, and rfd3
+# ratchets). The listed modules still have errors; they are cleared one slice per task and
+# removed from this list, after which the block is deleted entirely.
+[[tool.mypy.overrides]]
+module = [
+    "mpnn.collate.feature_collator",
+    "mpnn.inference_engines.mpnn",
+    "mpnn.pipelines.mpnn",
+    "mpnn.samplers.samplers",
+    "mpnn.train",
+    "mpnn.trainers.mpnn",
+    "mpnn.transforms.feature_aggregation.token_encodings",
+    "mpnn.transforms.feature_aggregation.user_settings",
+    "mpnn.utils.inference",
+    "mpnn.utils.weights",
+]
+ignore_errors = true
 
 # Per-module strictness (direction (b)). The global baseline above leaves
 # disallow_untyped_defs / check_untyped_defs off; the whole shared layer
