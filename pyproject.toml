@@ -278,7 +278,7 @@ check_untyped_defs = true
 # model's own `models/<MODEL>/tests/` (see AGENTS.PROJECT.md "Test Layout"). The pre-existing
 # cluster-coupled per-model suites are kept out of the gate via `collect_ignore` in each
 # model's tests/conftest.py. Add a model's tests dir here once it has CPU-portable tests.
-testpaths = ["tests", "models/rf3/tests", "models/rfd3/tests"]
+testpaths = ["tests", "models/rf3/tests", "models/rfd3/tests", "models/mpnn/tests"]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
     "gpu: requires CUDA or MPS GPU — skipped in CPU CI",
