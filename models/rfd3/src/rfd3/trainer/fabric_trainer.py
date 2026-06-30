@@ -23,7 +23,6 @@ from lightning.fabric.accelerators import Accelerator
 from lightning.fabric.loggers import Logger
 from lightning.fabric.strategies import DDPStrategy, Strategy
 from lightning.fabric.wrappers import (
-    _FabricDataLoader,
     _FabricModule,
     _FabricOptimizer,
 )
@@ -38,6 +37,13 @@ logger = RankedLogger(__name__, rank_zero_only=False)
 
 
 class FabricTrainer(ABC):
+    # Heterogeneous, dynamically-keyed training state: model / optimizer / scheduler_cfg
+    # plus step & epoch counters and the train config, and extended with arbitrary
+    # checkpoint keys on load. A loose bag by design, not a fixed-shape struct.
+    state: dict[str, Any]
+    # Set by subclass training_step() implementations before on_train_batch_end fires.
+    _current_train_return: Any
+
     def __init__(
         self,
         *,
@@ -110,7 +116,8 @@ class FabricTrainer(ABC):
             strategy=strategy,
             devices=devices_per_node,
             num_nodes=num_nodes,
-            precision=precision,
+            # Our public str | int API is wider than Fabric's precision Literal union.
+            precision=precision,  # type: ignore[arg-type]
             callbacks=callbacks,
             loggers=loggers,
         )
@@ -152,7 +159,7 @@ class FabricTrainer(ABC):
                 (for training or for inference). Default is an empty dictionary.
         """
         # Default values for the state
-        default_state = {
+        default_state: dict[str, Any] = {
             "model": None,
             "optimizer": None,
             "scheduler_cfg": None,
@@ -286,16 +293,22 @@ class FabricTrainer(ABC):
         )
 
         # ... setup training and validation dataloaders with Fabric
-        train_loader = self.fabric.setup_dataloaders(
-            # Our sampler is already distributed, so we don't need to wrap with a DistributedSampler
-            train_loader,
-            use_distributed_sampler=False,
+        train_loader = cast(
+            torch.utils.data.DataLoader,
+            self.fabric.setup_dataloaders(
+                # Our sampler is already distributed, so we don't need to wrap with a DistributedSampler
+                train_loader,
+                use_distributed_sampler=False,
+            ),
         )
 
         if val_loaders is not None:
             for key, loader in val_loaders.items():
-                val_loaders[key] = self.fabric.setup_dataloaders(
-                    loader, use_distributed_sampler=False
+                val_loaders[key] = cast(
+                    torch.utils.data.DataLoader,
+                    self.fabric.setup_dataloaders(
+                        loader, use_distributed_sampler=False
+                    ),
                 )
 
         self.setup_model_optimizers_and_schedulers()
@@ -307,7 +320,9 @@ class FabricTrainer(ABC):
                 ranked_logger.info(
                     f"Loading latest checkpoint within the directory {ckpt_path}..."
                 )
-                self.load_checkpoint(self.get_latest_checkpoint(ckpt_path))
+                # We are resuming from a directory that should contain checkpoints;
+                # get_latest_checkpoint returns None only if it is empty (latent edge).
+                self.load_checkpoint(cast(Path, self.get_latest_checkpoint(ckpt_path)))
             else:
                 # If given a specific checkpoint file, load that checkpoint
                 self.load_checkpoint(ckpt_path)
@@ -397,7 +412,7 @@ class FabricTrainer(ABC):
     def train_loop(
         self,
         *,
-        train_loader: _FabricDataLoader,
+        train_loader: torch.utils.data.DataLoader,
         limit_batches: int | float = float("inf"),
     ):
         """Train model for a single epoch.
@@ -503,7 +518,7 @@ class FabricTrainer(ABC):
     def validation_loop(
         self,
         *,
-        val_loaders: dict[str, _FabricDataLoader],
+        val_loaders: dict[str, torch.utils.data.DataLoader],
         limit_batches: int | float = float("inf"),
     ):
         """Run validation loop for a single validation epoch.
@@ -832,7 +847,7 @@ class FabricTrainer(ABC):
             )
             self.load_legacy_checkpoint(ckpt)
 
-    def load_legacy_checkpoint(self, ckpt: dict) -> dict:
+    def load_legacy_checkpoint(self, ckpt: dict) -> None:
         # TODO: Remove when no longer needed
         """Backwards-compatibility function to checkpoints with legacy state formats"""
         new_model_state = {}
@@ -895,7 +910,7 @@ class FabricTrainer(ABC):
         )
 
     @staticmethod
-    def get_latest_checkpoint(ckpt_load_dir: Path) -> Path:
+    def get_latest_checkpoint(ckpt_load_dir: Path) -> Path | None:
         """Returns the latest checkpoint file from the given directory.
 
         Assumes that checkpoints are stored with filenames such that a standard string-based
