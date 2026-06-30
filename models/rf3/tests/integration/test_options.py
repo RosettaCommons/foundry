@@ -33,12 +33,12 @@ def test_early_stopping_suppresses_model_output(early_stopping_dir):
     records the early-stop event.
     """
     out_dir, _stderr = early_stopping_dir
-    result_dir = out_dir / "1cyo_from_json"
+    result_dir = out_dir / "agag_from_json"
     assert result_dir.is_dir(), "output directory should still be created on early stop"
     assert not (
-        result_dir / "1cyo_from_json_model.cif"
+        result_dir / "agag_from_json_model.cif"
     ).exists(), "early stopping should suppress model output"
-    scores_text = (result_dir / "1cyo_from_json_ranking_scores.csv").read_text()
+    scores_text = (result_dir / "agag_from_json_ranking_scores.csv").read_text()
     assert (
         "early_stopped" in scores_text.lower()
     ), "ranking_scores.csv should record the early_stopped field"
@@ -51,7 +51,7 @@ def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
     pLDDT values should be in (0, 1) rather than the large values (> 1)
     typical of crystallographic B-factors.
     """
-    result_dir = annotate_b_factor_dir / "1cyo_from_json"
+    result_dir = annotate_b_factor_dir / "agag_from_json"
     assert result_dir.is_dir()
 
     cif_files = list(result_dir.rglob("*.cif"))
@@ -73,8 +73,8 @@ def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
 def test_seed_reproducibility(seed_dirs):
     """Two runs with identical flags (including seed=1) produce identical scores."""
     dir_a, dir_b = seed_dirs
-    summary_a = load_summary(dir_a, "1cyo_from_json")
-    summary_b = load_summary(dir_b, "1cyo_from_json")
+    summary_a = load_summary(dir_a, "agag_from_json")
+    summary_b = load_summary(dir_b, "agag_from_json")
 
     for key in ("ranking_score", "overall_plddt", "ptm"):
         val_a = summary_a.get(key)
@@ -87,8 +87,8 @@ def test_seed_reproducibility(seed_dirs):
 @pytest.mark.integration
 def test_template_selection(template_selection_dir):
     """template_selection=[A] completes without error and produces valid output."""
-    assert_standard_outputs(template_selection_dir, "1cyo")
-    summary = load_summary(template_selection_dir, "1cyo")
+    assert_standard_outputs(template_selection_dir, "agag")
+    summary = load_summary(template_selection_dir, "agag")
     assert 0 < summary["overall_plddt"] < 1
 
 

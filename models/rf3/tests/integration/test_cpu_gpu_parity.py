@@ -30,7 +30,7 @@ Known limitations
    parity check passes — but it is validating a shared bug, not correct
    behaviour.  Once the bug is fixed the baseline must be regenerated.
 
-3. **Narrow input coverage.** Only the protein-only input (``1cyo_from_json``)
+3. **Narrow input coverage.** Only the protein-only input (``agag_from_json``)
    has a committed GPU baseline.  Ligand inputs (``1cyo_with_ligand``,
    ``1cyo.cif``) exercise different code paths but are only range-checked by
    other tests.  Add baselines for those inputs to extend parity coverage.
@@ -45,7 +45,7 @@ Generating the GPU baseline
 Run on a machine with a GPU, then commit the output::
 
     rf3 fold \\
-        inputs='models/rf3/tests/data/1cyo_from_json.json' \\
+        inputs='models/rf3/tests/data/agag_from_json.json' \\
         ckpt_path='<path_to_checkpoint>' \\
         n_recycles=1 num_steps=20 diffusion_batch_size=1 seed=1 \\
         out_dir='models/rf3/tests/data/integration_baselines'
@@ -59,8 +59,8 @@ import json
 import pytest
 from conftest import GPU_BASELINE_DIR, load_summary
 
-_BASELINE_DIR = GPU_BASELINE_DIR / "1cyo_from_json"
-_BASELINE_SUMMARY = _BASELINE_DIR / "1cyo_from_json_summary_confidences.json"
+_BASELINE_DIR = GPU_BASELINE_DIR / "agag_from_json"
+_BASELINE_SUMMARY = _BASELINE_DIR / "agag_from_json_summary_confidences.json"
 
 _TOLERANCE = 0.05
 _METRICS = ("overall_plddt", "ptm", "iptm", "ranking_score")
@@ -70,13 +70,13 @@ _METRICS = ("overall_plddt", "ptm", "iptm", "ranking_score")
 @pytest.mark.skipif(
     not _BASELINE_SUMMARY.exists(),
     reason=(
-        "GPU baseline missing at integration_baselines/1cyo_from_json/. "
+        "GPU baseline missing at integration_baselines/agag_from_json/. "
         "See module docstring to regenerate."
     ),
 )
 def test_confidence_metrics_match_gpu_baseline(basic_folds_dir):
     """CPU scalar metrics agree with the GPU baseline within ±0.05."""
-    cpu_summary = load_summary(basic_folds_dir, "1cyo_from_json")
+    cpu_summary = load_summary(basic_folds_dir, "agag_from_json")
     gpu_summary = json.loads(_BASELINE_SUMMARY.read_text())
 
     mismatches = []

@@ -1,0 +1,11 @@
+[
+    {
+        "name": "agag_from_json",
+        "components": [
+            {
+                "seq": "AGAG",
+                "chain_id": "A"
+            }
+        ]
+    }
+]

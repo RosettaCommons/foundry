@@ -167,14 +167,14 @@ def basic_folds_dir(require_ckpt, tmp_path_factory):
 
     Batching the three inputs amortises the model-loading overhead::
 
-        1cyo_from_json.json   — protein-only JSON
+        agag_from_json.json   — protein-only JSON (AGAG, 4 residues)
         1cyo_with_ligand.json — protein + HEM via CCD code
         1cyo.cif              — CIF file containing protein + HEM
     """
     out_dir = tmp_path_factory.mktemp("rf3_basic")
     out_dir, _ = run_rf3_fold(
         inputs=[
-            DATA_DIR / "1cyo_from_json.json",
+            DATA_DIR / "agag_from_json.json",
             DATA_DIR / "1cyo_with_ligand.json",
             DATA_DIR / "1cyo.cif",
         ],
@@ -187,7 +187,7 @@ def basic_folds_dir(require_ckpt, tmp_path_factory):
 def annotate_b_factor_dir(require_ckpt, tmp_path_factory):
     out_dir = tmp_path_factory.mktemp("rf3_annotate_b")
     out_dir, _ = run_rf3_fold(
-        DATA_DIR / "1cyo_from_json.json",
+        DATA_DIR / "agag_from_json.json",
         out_dir,
         extra_flags=["annotate_b_factor_with_plddt=true"],
     )
@@ -199,7 +199,7 @@ def early_stopping_dir(require_ckpt, tmp_path_factory):
     """Fold with threshold=1.0, which pLDDT can never reach → always exits early."""
     out_dir = tmp_path_factory.mktemp("rf3_early_stop")
     out_dir, stderr = run_rf3_fold(
-        DATA_DIR / "1cyo_from_json.json",
+        DATA_DIR / "agag_from_json.json",
         out_dir,
         extra_flags=["early_stopping_plddt_threshold=1.0"],
     )
@@ -212,7 +212,7 @@ def seed_dirs(require_ckpt, tmp_path_factory):
     dirs = []
     for _ in range(2):
         d = tmp_path_factory.mktemp("rf3_seed")
-        d, _ = run_rf3_fold(DATA_DIR / "1cyo_from_json.json", d)
+        d, _ = run_rf3_fold(DATA_DIR / "agag_from_json.json", d)
         dirs.append(d)
     return dirs[0], dirs[1]
 
@@ -221,7 +221,7 @@ def seed_dirs(require_ckpt, tmp_path_factory):
 def template_selection_dir(require_ckpt, tmp_path_factory):
     out_dir = tmp_path_factory.mktemp("rf3_template")
     out_dir, _ = run_rf3_fold(
-        DATA_DIR / "1cyo.cif",
+        DATA_DIR / "agag.cif",
         out_dir,
         extra_flags=["template_selection=[A]"],
     )
@@ -244,13 +244,13 @@ def ground_truth_conformer_dir(require_ckpt, tmp_path_factory):
 def skip_existing_dirs(require_ckpt, tmp_path_factory):
     """Run fold twice into the same out_dir; second run uses skip_existing=true."""
     out_dir = tmp_path_factory.mktemp("rf3_skip_existing")
-    run_rf3_fold(DATA_DIR / "1cyo_from_json.json", out_dir)
+    run_rf3_fold(DATA_DIR / "agag_from_json.json", out_dir)
 
-    model_cif = out_dir / "1cyo_from_json" / "1cyo_from_json_model.cif"
+    model_cif = out_dir / "agag_from_json" / "agag_from_json_model.cif"
     mtime_after_first = model_cif.stat().st_mtime if model_cif.exists() else None
 
     run_rf3_fold(
-        DATA_DIR / "1cyo_from_json.json",
+        DATA_DIR / "agag_from_json.json",
         out_dir,
         extra_flags=["skip_existing=true"],
     )

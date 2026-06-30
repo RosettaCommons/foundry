@@ -6,12 +6,13 @@ model-loading cost.
 
 Input files used (all in ``models/rf3/tests/data/``):
 
-    1cyo_from_json.json   Protein-only JSON  → output name ``1cyo_from_json``
+    agag_from_json.json   Protein-only JSON (AGAG, 4 residues)  → output name ``agag_from_json``
     1cyo_with_ligand.json Protein + HEM JSON → output name ``1cyo_with_ligand``
     1cyo.cif              CIF with protein + HEM → output name ``1cyo``
 
-1CYO is Cytochrome B5 (91-residue protein) with a heme (HEM) ligand.
-No MSA is provided; the protein is short enough to fold without one.
+AGAG is a minimal 4-residue peptide used for fast CPU testing.
+1CYO (Cytochrome B5, 91 residues + HEM ligand) is retained for ligand tests
+because a plain peptide cannot exercise ligand-handling code paths.
 """
 
 import pytest
@@ -21,9 +22,9 @@ from conftest import assert_standard_outputs, load_summary
 @pytest.mark.integration
 def test_fold_from_json_protein_only(basic_folds_dir):
     """Protein-only JSON input produces all expected output files."""
-    assert_standard_outputs(basic_folds_dir, "1cyo_from_json")
+    assert_standard_outputs(basic_folds_dir, "agag_from_json")
 
-    summary = load_summary(basic_folds_dir, "1cyo_from_json")
+    summary = load_summary(basic_folds_dir, "agag_from_json")
     assert 0 < summary["overall_plddt"] < 1
     assert not summary["has_clash"]
 
