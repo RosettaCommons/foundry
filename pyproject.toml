@@ -247,11 +247,8 @@ module = [
     "mpnn.collate.feature_collator",
     "mpnn.inference_engines.mpnn",
     "mpnn.pipelines.mpnn",
-    "mpnn.samplers.samplers",
     "mpnn.train",
-    "mpnn.trainers.mpnn",
     "mpnn.transforms.feature_aggregation.token_encodings",
-    "mpnn.transforms.feature_aggregation.user_settings",
     "mpnn.utils.inference",
     "mpnn.utils.weights",
 ]
