@@ -58,7 +58,7 @@ class DumpValidationStructuresCallback(BaseCallback):
         example_id,
         dir: str,
         extra: str = "",
-        epoch: str = None,
+        epoch: str | None = None,
         dataset_name: str = "",
     ) -> Path:
         """Helper function to build a path from a training or validation example_id."""
@@ -76,7 +76,9 @@ class DumpValidationStructuresCallback(BaseCallback):
             self.save_dir / dir / f"{epoch_str}" / dataset_name / f"{identifier}{extra}"
         )
 
-    def on_validation_batch_end(
+    # Fabric dispatches this hook by keyword; the base BaseCallback declares positional
+    # params, so the keyword-only override is intentional (same as the foundry callbacks).
+    def on_validation_batch_end(  # type: ignore[override]
         self,
         *,
         trainer,

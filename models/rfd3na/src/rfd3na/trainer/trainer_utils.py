@@ -1,4 +1,5 @@
 from collections import Counter, OrderedDict
+from typing import cast
 
 import numpy as np
 import torch
@@ -162,7 +163,10 @@ def _cleanup_virtual_atoms_and_assign_atom_name_elements(
 
         # ... If sequence is unknown for the original atom array, use the predicted / inferred sequence
         res_name = res_array[0].res_name
-        if res_name not in association_schemes[association_scheme]:
+        # association_schemes has heterogeneous values (mypy infers `object`); each scheme
+        # maps res_name -> atom tuple, so treat the selected scheme as a dict.
+        scheme_map = cast(dict, association_schemes[association_scheme])
+        if res_name not in scheme_map:
             global_logger.warning(
                 "Model predicted non-protein sequence for diffused residue. Cannot clean up outputs. Assigning unknown residue token."
             )
@@ -172,7 +176,7 @@ def _cleanup_virtual_atoms_and_assign_atom_name_elements(
             atom_names += res_array.atom_name.tolist()
             continue
 
-        scheme = association_schemes[association_scheme][res_name]
+        scheme = scheme_map[res_name]
         ret_mask += [True if item is not None else False for item in scheme]
         atom_names += [item.strip() if item is not None else "VX" for item in scheme]
         invalid_mask += [False] * len(scheme)
@@ -251,7 +255,9 @@ def _readout_seq_from_struc(
             for restype, atom_names in association_schemes_stripped[
                 association_scheme
             ].items():
-                atom_names = np.array(atom_names)
+                # Bind to a distinct name: reassigning the `atom_names` loop var to an
+                # ndarray confuses its inferred (list) type.
+                atom_names_arr = np.array(atom_names)
 
                 # Shouldn't match these two
                 if restype in ["UNK", "MSK"]:
@@ -282,9 +288,9 @@ def _readout_seq_from_struc(
                 atom14_scheme_mask[atom_name_idx_in_atom14_scheme] = True
                 # ... Find the matched restype by checking if all the non-None posititons and None positions match
                 # This is designed to keep virtual atoms and doesn't assign the atom names for now, which will be handled later.
-                if all(x is not None for x in atom_names[atom14_scheme_mask]) and all(
-                    x is None for x in atom_names[~atom14_scheme_mask]
-                ):
+                if all(
+                    x is not None for x in atom_names_arr[atom14_scheme_mask]
+                ) and all(x is None for x in atom_names_arr[~atom14_scheme_mask]):
                     cur_res_atom_array.res_name = np.array(
                         [restype] * len(cur_res_atom_array)
                     )
