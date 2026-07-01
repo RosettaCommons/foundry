@@ -58,7 +58,7 @@ def ModelTypeRoute(transform, model_type: str):
 
 def build_mpnn_transform_pipeline(
     *,
-    model_type: str = None,
+    model_type: str | None = None,
     occupancy_threshold_sidechain: float = 0.5,
     occupancy_threshold_backbone: float = 0.8,
     is_inference: bool = False,
@@ -88,7 +88,9 @@ def build_mpnn_transform_pipeline(
         device (str | torch.device, optional): Device to move tensors to.
             Defaults to None, which leads to default ConvertToTorch behavior.
     """
-    if model_type not in ("protein_mpnn", "ligand_mpnn"):
+    # The explicit `is None` check is redundant at runtime (None is not in the tuple) but
+    # lets mypy narrow model_type to `str` for the rest of the function.
+    if model_type is None or model_type not in ("protein_mpnn", "ligand_mpnn"):
         raise ValueError(f"Unsupported model_type: {model_type}")
 
     transforms = [
@@ -118,7 +120,7 @@ def build_mpnn_transform_pipeline(
         FlagNonPolymersForAtomization(),
         AtomizeByCCDName(
             atomize_by_default=True,
-            res_names_to_ignore=STANDARD_AA + (UNKNOWN_AA,),
+            res_names_to_ignore=list(STANDARD_AA + (UNKNOWN_AA,)),
             move_atomized_part_to_end=False,
             validate_atomize=False,
         ),
