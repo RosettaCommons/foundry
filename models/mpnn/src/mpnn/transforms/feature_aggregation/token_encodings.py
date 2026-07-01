@@ -1,3 +1,4 @@
+import numpy as np
 from atomworks.constants import AA_LIKE_CHEM_TYPES, STANDARD_AA, UNKNOWN_AA
 from atomworks.ml.encoding_definitions import TokenEncoding
 
@@ -111,22 +112,23 @@ legacy_atom_order = (
     "OXT",
 )
 
-# Token encoding for MPNN.
+# Token encoding for MPNN. TokenEncoding stores atom names as np.ndarray (its
+# __post_init__ runs np.asarray on the values), so pass arrays rather than tuples.
 MPNN_TOKEN_ENCODING = TokenEncoding(
-    token_atoms={token: atom_order for token in token_order},
+    token_atoms={token: np.asarray(atom_order) for token in token_order},
     chemcomp_type_to_unknown={chem_type: "UNK" for chem_type in AA_LIKE_CHEM_TYPES},
 )
 
 # Token encoding for versions of MPNN using the legacy token order and
 # new atom order.
 MPNN_LEGACY_TOKEN_ENCODING = TokenEncoding(
-    token_atoms={token: atom_order for token in legacy_token_order},
+    token_atoms={token: np.asarray(atom_order) for token in legacy_token_order},
     chemcomp_type_to_unknown={chem_type: "UNK" for chem_type in AA_LIKE_CHEM_TYPES},
 )
 
 # Token encoding for versions of MPNN using the legacy token order and
 # legacy atom order.
 MPNN_LEGACY_TOKEN_LEGACY_ATOM_ENCODING = TokenEncoding(
-    token_atoms={token: legacy_atom_order for token in legacy_token_order},
+    token_atoms={token: np.asarray(legacy_atom_order) for token in legacy_token_order},
     chemcomp_type_to_unknown={chem_type: "UNK" for chem_type in AA_LIKE_CHEM_TYPES},
 )

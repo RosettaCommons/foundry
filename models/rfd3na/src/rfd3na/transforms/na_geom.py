@@ -126,7 +126,7 @@ class CalculateNucleicAcidGeomFeats(Transform):
         self,
         is_inference,
         # Conditional sampling parameters all stored in this dict:
-        meta_conditioning_probabilities: dict[str, float] = None,
+        meta_conditioning_probabilities: dict[str, float] | None = None,
         # Mask control paramerers:
         nucleic_ss_min_shown: float = 0.2,
         nucleic_ss_max_shown: float = 1.0,
@@ -263,7 +263,7 @@ class CalculateNucleicAcidGeomFeats(Transform):
         n_tokens: int,
         is_nucleic_ss_example: bool = True,
         give_partial_feats: bool = True,
-        partner_sym_map: dict[int, list[int]] = None,
+        partner_sym_map: dict[int, list[int]] | None = None,
     ) -> np.ndarray:
         """Sample token-level islands indicating which SS rows/cols to reveal.
         This custom function allows for enforcing symmetry in the shown features according
@@ -313,6 +313,7 @@ class CalculateNucleicAcidGeomFeats(Transform):
             # `partner_mask_to_show` at partner positions to match `token_mask_to_show`
             # initialize as all shown so effect comes from hiding + logical AND condition
             partner_mask_to_show = np.ones_like(token_mask_to_show)
+            assert partner_sym_map is not None  # provided whenever symmetry is handled
             for token_i, partner_ind_list in partner_sym_map.items():
                 for partner_ind in partner_ind_list:
                     partner_mask_to_show[partner_ind] = token_mask_to_show[token_i]

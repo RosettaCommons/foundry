@@ -141,13 +141,13 @@ def check_atom_array_has_hydrogen(data: dict[str, Any]):
 
 def calculate_hbonds(
     atom_array: AtomArray,
-    selection1: np.ndarray = None,
-    selection2: np.ndarray = None,
+    selection1: np.ndarray | None = None,
+    selection2: np.ndarray | None = None,
     selection1_type: Literal["acceptor", "donor", "both"] = "both",
     cutoff_dist: float = 3,
     cutoff_angle: float = 120,
-    donor_elements: Tuple[str] = ("O", "N", "S", "F"),
-    acceptor_elements: Tuple[str] = ("O", "N", "S", "F"),
+    donor_elements: Tuple[str, ...] = ("O", "N", "S", "F"),
+    acceptor_elements: Tuple[str, ...] = ("O", "N", "S", "F"),
     periodic: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, AtomArray]:
     """
@@ -183,7 +183,9 @@ def calculate_hbonds(
         counter: i for counter, i in enumerate(has_resolved_coordinates.nonzero()[0])
     }
 
-    if selection1.sum() == 0 or selection2.sum() == 0:
+    if (selection1 is not None and selection1.sum() == 0) or (
+        selection2 is not None and selection2.sum() == 0
+    ):
         # no ligand, or ligand is of same type as selection1 (e.g. 6) (peptide)
         triplets = np.array([])
     else:
@@ -227,8 +229,8 @@ class CalculateHbonds(Transform):
         selection1_type: Literal["acceptor", "donor", "both"] = "both",
         cutoff_dist: float = 3,
         cutoff_angle: float = 120,
-        donor_elements: Tuple[str] = ("O", "N", "S", "F"),
-        acceptor_elements: Tuple[str] = ("O", "N", "S", "F"),
+        donor_elements: Tuple[str, ...] = ("O", "N", "S", "F"),
+        acceptor_elements: Tuple[str, ...] = ("O", "N", "S", "F"),
         periodic: bool = False,
         make2d: bool = False,
     ):
