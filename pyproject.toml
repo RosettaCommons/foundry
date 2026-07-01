@@ -254,15 +254,11 @@ module = [
     "rfd3na.engine",
     "rfd3na.inference.input_parsing",
     "rfd3na.inference.legacy_input_parsing",
-    "rfd3na.model.RFD3",
     "rfd3na.model.inference_sampler",
     "rfd3na.trainer.fabric_trainer",
     "rfd3na.trainer.rfd3na",
-    "rfd3na.transforms.design_transforms",
     "rfd3na.transforms.hbonds",
-    "rfd3na.transforms.na_geom",
     "rfd3na.transforms.na_geom_utils",
-    "rfd3na.transforms.pipelines",
     "rfd3na.utils.inference",
 ]
 ignore_errors = true
