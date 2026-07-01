@@ -220,7 +220,7 @@ def _restore_bonds_for_nonstandard_residues(
                     np.array(bonds_to_add, dtype=np.int64),
                 )
                 atom_array_accum.bonds = atom_array_accum.bonds.merge(new_bonds)
-                logger.info(
+                ranked_logger.info(
                     f"Preserved {len(bonds_to_add)} inter-residue bonds involving non-standard residues from source structure"
                 )
 
@@ -261,7 +261,7 @@ def _restore_bonds_for_nonstandard_residues(
             # This is expected for some atomized residues or ligands at chain termini
             if curr_is_nonstandard and next_is_nonstandard:
                 # Both are non-standard but no C in current - might be an atomized region without proper termini
-                logger.debug(
+                ranked_logger.debug(
                     f"Non-standard residue {curr_residue.res_name[0]} (res_id {curr_residue.res_id[0]}) "
                     f"has no C atom - cannot form backbone bond to next residue"
                 )
@@ -275,7 +275,7 @@ def _restore_bonds_for_nonstandard_residues(
             # This is expected for some atomized residues or ligands at chain termini
             if curr_is_nonstandard and next_is_nonstandard:
                 # Both are non-standard but no N in next - might be an atomized region without proper termini
-                logger.debug(
+                ranked_logger.debug(
                     f"Non-standard residue {next_residue.res_name[0]} (res_id {next_residue.res_id[0]}) "
                     f"has no N atom - cannot form backbone bond from previous residue"
                 )
@@ -301,7 +301,7 @@ def _restore_bonds_for_nonstandard_residues(
             atom_array_accum.array_length(), np.array(bonds_to_add, dtype=np.int64)
         )
         atom_array_accum.bonds = atom_array_accum.bonds.merge(new_bonds)
-        logger.info(
+        ranked_logger.info(
             f"Added {len(bonds_to_add)} backbone bonds involving non-standard residues"
         )
 
@@ -462,7 +462,7 @@ def set_com(
     infer_ori_strategy: str | None = None,
     ori_jitter: float | None = None,
 ):
-    if exists(ori_token):
+    if ori_token is not None:
         center = np.array([float(x) for x in ori_token], dtype=atom_array.coord.dtype)
         atom_array.coord = atom_array.coord - center
         ranked_logger.info(f"Received ori_token argument. Setting origin as {center}.")
@@ -519,7 +519,7 @@ def set_com(
         direction /= np.linalg.norm(direction)
 
         # Random length (mean ~ scale)
-        length = np.random.exponential(scale=scale)
+        length = np.random.exponential(scale=ori_jitter)
         jittered_offset = direction * length
 
         atom_array.coord -= jittered_offset
@@ -580,7 +580,9 @@ def spoof_helical_bundle_ss_conditioning_fn(atom_array: struc.AtomArray):
 #################################################################################
 
 
-def generate_idealized_cb_position(N: np.array, Ca: np.array, C: np.array) -> np.array:
+def generate_idealized_cb_position(
+    N: np.ndarray, Ca: np.ndarray, C: np.ndarray
+) -> np.ndarray:
     """
     Generate Cb coordiantes given (N, CA, C) as if the given coordinates were from an idealized Alanine.
 
