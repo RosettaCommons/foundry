@@ -243,16 +243,9 @@ check_untyped_defs = false
 # mypy exemption here, and every mpnn module type-checks with no in-file suppressions (same
 # playbook as the now-cleared src/foundry, rf3, and rfd3 ratchets).
 
-# rfd3na enablement ratchet (0070): `models/rfd3na/src/rfd3na` was brought into mypy's scope
-# behind this `ignore_errors` ratchet (same playbook as the now-cleared src/foundry, rf3, rfd3,
-# and mpnn ratchets). The listed modules still have errors; they are cleared one slice per task
-# and removed from this list, after which the block is deleted entirely. rfd3na is a near-copy
-# of rfd3, so several of these carry the same defects rfd3 fixed (see .ai/roadmap.md findings).
-[[tool.mypy.overrides]]
-module = [
-    "rfd3na.trainer.fabric_trainer",
-]
-ignore_errors = true
+# NOTE: the rfd3na enablement ratchet (0070) is fully cleared — there is no rfd3na module-level
+# mypy exemption here, and every rfd3na module type-checks with no in-file suppressions (same
+# playbook as the now-cleared src/foundry, rf3, rfd3, and mpnn ratchets).
 
 # Per-module strictness (direction (b)). The global baseline above leaves
 # disallow_untyped_defs / check_untyped_defs off; the whole shared layer
