@@ -108,7 +108,11 @@ class MPNNInferenceEngine:
             raise TypeError("checkpoint_path must be a string path.")
 
         # Check that the checkpoint path exists.
-        ckpt_path = Path(_absolute_path_or_none(self.checkpoint_path))
+        abs_checkpoint_path = _absolute_path_or_none(self.checkpoint_path)
+        # checkpoint_path is a non-empty str here (set in __init__), so the absolute
+        # form is never None.
+        assert abs_checkpoint_path is not None
+        ckpt_path = Path(abs_checkpoint_path)
         if not ckpt_path.is_file():
             raise FileNotFoundError(
                 f"checkpoint_path does not exist: {self.checkpoint_path}"
@@ -146,8 +150,11 @@ class MPNNInferenceEngine:
 
     def _post_process_engine_config(self) -> None:
         """Normalize paths into absolute paths."""
-        # Make checkpoint path absolute.
-        self.checkpoint_path = _absolute_path_or_none(self.checkpoint_path)
+        # Make checkpoint path absolute. checkpoint_path is a non-empty str (set in
+        # __init__), so the absolute form is never None and the attribute stays `str`.
+        abs_checkpoint_path = _absolute_path_or_none(self.checkpoint_path)
+        assert abs_checkpoint_path is not None
+        self.checkpoint_path = abs_checkpoint_path
 
         # Make output directory absolute.
         if self.out_directory is not None:
@@ -242,8 +249,13 @@ class MPNNInferenceEngine:
                     "'atom_arrays' and 'input_dicts' must have the same length."
                 )
 
-        # Determine the number of inputs.
-        num_inputs = len(input_dicts) if input_dicts is not None else len(atom_arrays)
+        # Determine the number of inputs. The guard above ensures at least one of
+        # input_dicts / atom_arrays is non-None; prefer input_dicts when present.
+        if input_dicts is not None:
+            num_inputs = len(input_dicts)
+        else:
+            assert atom_arrays is not None
+            num_inputs = len(atom_arrays)
         results: list[MPNNInferenceOutput] = []
         for input_idx in range(num_inputs):
             # Construct the per-input MPNNInferenceInput.
