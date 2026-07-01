@@ -56,7 +56,7 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
     """Diffusion sampler that supports optional motif alignment."""
 
     def _construct_inference_noise_schedule(
-        self, device: torch.device, partial_t: float = None
+        self, device: torch.device, partial_t: torch.Tensor | None = None
     ) -> torch.Tensor:
         """Constructs a noise schedule for use during inference.
 
@@ -85,16 +85,18 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
 
         if partial_t is not None:
             # For now, partial t is a global parameter
-            partial_t = float(partial_t.mean())
+            partial_t_scalar = float(partial_t.mean())
             noise_schedule = t_hat
-            ranked_logger.info("Using partial diffusion with t={}".format(partial_t))
+            ranked_logger.info(
+                "Using partial diffusion with t={}".format(partial_t_scalar)
+            )
 
             # Debug the noise schedule filtering
             original_schedule_len = len(noise_schedule)
             original_max = noise_schedule.max().item()
             original_min = noise_schedule.min().item()
 
-            noise_schedule = noise_schedule[noise_schedule <= partial_t]
+            noise_schedule = noise_schedule[noise_schedule <= partial_t_scalar]
 
             new_schedule_len = len(noise_schedule)
             if new_schedule_len > 0:
@@ -274,6 +276,8 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
                 X_noisy_L_stripped = strip_X(X_noisy_L, f_ref)
 
                 # unconditional forward pass
+                # CFG is only enabled when the ref initializer outputs are provided.
+                assert ref_initializer_outputs is not None
                 outs_ref = diffusion_module(
                     X_noisy_L=X_noisy_L_stripped,  # modify X
                     t=t_hat.tile(D),
@@ -356,7 +360,7 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
 
     def __init__(self, sym_step_frac: float = 0.9, **kwargs):
         assert (
-            kwargs.get("gamma_0") > 0.5
+            kwargs.get("gamma_0", 0) > 0.5
         ), "gamma_0 must be greater than 0.5 for symmetry sampling"
         self.sym_step_frac = sym_step_frac
         super().__init__(**kwargs)

@@ -196,7 +196,9 @@ def build_stack_from_atom_array_and_batched_coords(
     return atom_array_stack
 
 
-def find_files_with_extension(path: PathLike, supported_file_types: list) -> list[Path]:
+def find_files_with_extension(
+    path: PathLike, supported_file_types: set | list
+) -> list[Path]:
     """Recursively find all files with the given extensions in the specified path.
 
     Args:
