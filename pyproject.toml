@@ -251,7 +251,6 @@ check_untyped_defs = false
 [[tool.mypy.overrides]]
 module = [
     "rfd3na.inference.input_parsing",
-    "rfd3na.inference.legacy_input_parsing",
     "rfd3na.trainer.fabric_trainer",
 ]
 ignore_errors = true
