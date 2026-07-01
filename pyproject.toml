@@ -217,32 +217,37 @@ typeCheckingMode = "off"
 # Per-module strictness is ratcheted up via [tool.mypy.overrides] as annotations land.
 [tool.mypy]
 python_version = "3.12"
-files = ["src/foundry", "src/foundry_cli", "models/rfd3/src/rfd3", "models/rf3/src/rf3"]
+files = [
+    "src/foundry",
+    "src/foundry_cli",
+    "models/rfd3/src/rfd3",
+    "models/rf3/src/rf3",
+    "models/mpnn/src/mpnn",
+]
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 disallow_untyped_defs = false
 check_untyped_defs = false
 
-# rfd3 enablement ratchet. `models/rfd3` was brought into mypy's scope in 0010;
-# these modules had pre-existing type errors at that point and are exempted until
-# annotated. Fix the errors and remove the entry to enable type-checking for that
-# module (same playbook as the now-cleared src/foundry ratchet). Do NOT add modules.
-[[tool.mypy.overrides]]
-module = [
-    # Held back: `process_input`/`normalize_inputs` have confused pre-existing logic
-    # (a `.split(",")` on a value that is already a list — dead but type-incorrect). See roadmap.
-    "rfd3.engine",
-    "rfd3.inference.legacy_input_parsing",
-    "rfd3.trainer.fabric_trainer",
-    # Held back: imports `rfd3.utils.inference._add_design_annotations_from_cif_block_metadata`,
-    # which does not exist (broken import — would ImportError on the .cif-load path). See roadmap.
-    "rfd3.utils.vizualize",
-]
-ignore_errors = true
+# NOTE: the rfd3 enablement ratchet (0010) is fully cleared — there is no rfd3 module-level
+# mypy exemption here. `models/rfd3` was brought into mypy's scope in 0010 behind an
+# `ignore_errors` ratchet; every exempted module has since been annotated and removed (same
+# playbook as the now-cleared src/foundry and rf3 ratchets).
 
 # NOTE: the rf3 enablement ratchet (0014) is fully cleared — there is no rf3 module-level
 # mypy exemption here, and every rf3 module type-checks with no in-file suppressions.
+
+# mpnn enablement ratchet (0063): `models/mpnn/src/mpnn` was brought into mypy's scope behind
+# this `ignore_errors` ratchet (same playbook as the now-cleared src/foundry, rf3, and rfd3
+# ratchets). The listed modules still have errors; they are cleared one slice per task and
+# removed from this list, after which the block is deleted entirely.
+[[tool.mypy.overrides]]
+module = [
+    "mpnn.utils.inference",
+    "mpnn.utils.weights",
+]
+ignore_errors = true
 
 # Per-module strictness (direction (b)). The global baseline above leaves
 # disallow_untyped_defs / check_untyped_defs off; the whole shared layer
@@ -265,7 +270,7 @@ check_untyped_defs = true
 # model's own `models/<MODEL>/tests/` (see AGENTS.PROJECT.md "Test Layout"). The pre-existing
 # cluster-coupled per-model suites are kept out of the gate via `collect_ignore` in each
 # model's tests/conftest.py. Add a model's tests dir here once it has CPU-portable tests.
-testpaths = ["tests", "models/rf3/tests", "models/rfd3/tests"]
+testpaths = ["tests", "models/rf3/tests", "models/rfd3/tests", "models/mpnn/tests"]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
     "gpu: requires CUDA or MPS GPU — skipped in CPU CI",
