@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+import numpy.typing as npt
 from biotite.structure import AtomArray, get_residue_starts
 from pydantic import (
     BaseModel,
@@ -33,7 +34,7 @@ class InputSelection(BaseModel):
         ..., description="Validated selection dictionary", exclude=True
     )
     raw: Any = Field(..., description="Original input value")
-    mask: np.ndarray[np.bool_] = Field(
+    mask: npt.NDArray[np.bool_] = Field(
         ..., description="Boolean mask over atom array", exclude=True
     )
     tokens: Optional[Dict[ComponentStr | str, AtomArray]] = Field(
