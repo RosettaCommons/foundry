@@ -238,15 +238,9 @@ check_untyped_defs = false
 # NOTE: the rf3 enablement ratchet (0014) is fully cleared — there is no rf3 module-level
 # mypy exemption here, and every rf3 module type-checks with no in-file suppressions.
 
-# mpnn enablement ratchet (0063): `models/mpnn/src/mpnn` was brought into mypy's scope behind
-# this `ignore_errors` ratchet (same playbook as the now-cleared src/foundry, rf3, and rfd3
-# ratchets). The listed modules still have errors; they are cleared one slice per task and
-# removed from this list, after which the block is deleted entirely.
-[[tool.mypy.overrides]]
-module = [
-    "mpnn.utils.inference",
-]
-ignore_errors = true
+# NOTE: the mpnn enablement ratchet (0063) is fully cleared — there is no mpnn module-level
+# mypy exemption here, and every mpnn module type-checks with no in-file suppressions (same
+# playbook as the now-cleared src/foundry, rf3, and rfd3 ratchets).
 
 # Per-module strictness (direction (b)). The global baseline above leaves
 # disallow_untyped_defs / check_untyped_defs off; the whole shared layer
