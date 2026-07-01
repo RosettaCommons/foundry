@@ -208,6 +208,12 @@ def basic_folds_dir(require_ckpt, tmp_path_factory):
         glke_with_ligands.json       — GLKE + MG (ccd_code) + HEM (sdf path)
                                        + imidazole (smiles)
         glke_with_ligands_from_cif.cif — CIF containing GLKE + the same ligands
+
+    NOTE: the batched examples share a single seeded RNG stream, so each
+    example's stochastic outputs depend on what was folded *before* it in this
+    list. Reordering (or adding/removing) inputs changes those draws — most
+    visibly ``has_clash``, which tests here assert on. If you change the batch,
+    re-run the suite and update any ``has_clash`` assertions that flip.
     """
     out_dir = tmp_path_factory.mktemp("rf3_basic")
     out_dir, _ = run_rf3_fold(
@@ -289,6 +295,13 @@ def complex_folds_dir(require_ckpt, tmp_path_factory):
         peptide_glycan_bond.json    — peptide + NAG with an explicit covalent bond
         two_examples_from_json.json — two examples defined in one JSON file
                                       (→ two_examples_first, two_examples_second)
+
+    NOTE: the batched examples share a single seeded RNG stream, so each
+    example's stochastic outputs depend on what was folded *before* it in this
+    list. Reordering (or adding/removing) inputs changes those draws — most
+    visibly ``has_clash`` (which is why ``test_fold_with_covalent_bond``
+    deliberately does not assert on it). If you change the batch, re-run the
+    suite and update any ``has_clash`` assertions that flip.
     """
     out_dir = tmp_path_factory.mktemp("rf3_complex")
     out_dir, _ = run_rf3_fold(
