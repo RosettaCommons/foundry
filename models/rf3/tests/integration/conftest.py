@@ -146,6 +146,43 @@ def assert_standard_outputs(out_dir, name):
         assert (base / filename).exists(), f"missing output file: {base / filename}"
 
 
+def residue_names_in_cif(cif_path):
+    """Return the set of ``label_comp_id`` (residue name) values in a model CIF.
+
+    Parses the ``_atom_site`` loop header to locate the residue-name column,
+    then collects it from each atom row.  More robust than a substring search
+    for asserting that a specific residue (a nucleotide, a ligand, ...) is
+    present in a predicted structure.
+    """
+    names = set()
+    col_names = []
+    comp_col = None
+    in_atom_loop = False
+
+    for line in Path(cif_path).read_text().splitlines():
+        stripped = line.strip()
+        if stripped == "loop_":
+            in_atom_loop = False
+            col_names = []
+            comp_col = None
+        elif stripped.startswith("_atom_site."):
+            col_names.append(stripped)
+            if stripped == "_atom_site.label_comp_id":
+                comp_col = len(col_names) - 1
+            in_atom_loop = True
+        elif (
+            in_atom_loop
+            and comp_col is not None
+            and stripped
+            and not stripped.startswith("_")
+            and stripped != "#"
+        ):
+            parts = stripped.split()
+            if len(parts) > comp_col:
+                names.add(parts[comp_col])
+    return names
+
+
 # ---------------------------------------------------------------------------
 # Session-scoped fixtures
 # ---------------------------------------------------------------------------
@@ -238,6 +275,49 @@ def ground_truth_conformer_dir(require_ckpt, tmp_path_factory):
         out_dir,
         extra_flags=["ground_truth_conformer_selection=[C]"],
     )
+    return out_dir
+
+
+@pytest.fixture(scope="session")
+def complex_folds_dir(require_ckpt, tmp_path_factory):
+    """Single ``rf3 fold`` call covering multi-entity and multi-example inputs.
+
+    Batching amortises the model-loading overhead across five predictions::
+
+        two_protein_chains.json     — two protein chains (interface metrics)
+        protein_dna_complex.json    — protein + DNA duplex-strand complex
+        peptide_glycan_bond.json    — peptide + NAG with an explicit covalent bond
+        two_examples_from_json.json — two examples defined in one JSON file
+                                      (→ two_examples_first, two_examples_second)
+    """
+    out_dir = tmp_path_factory.mktemp("rf3_complex")
+    out_dir, _ = run_rf3_fold(
+        inputs=[
+            DATA_DIR / "two_protein_chains.json",
+            DATA_DIR / "protein_dna_complex.json",
+            DATA_DIR / "peptide_glycan_bond.json",
+            DATA_DIR / "two_examples_from_json.json",
+        ],
+        out_dir=out_dir,
+    )
+    return out_dir
+
+
+@pytest.fixture(scope="session")
+def dir_input_dir(require_ckpt, tmp_path_factory):
+    """Fold a *directory* of inputs, exercising directory-globbing resolution.
+
+    Two minimal single-chain JSON inputs are written into a directory, which is
+    then passed as ``inputs=<dir>``; ``rf3 fold`` should discover and fold both.
+    """
+    input_dir = tmp_path_factory.mktemp("rf3_dir_inputs")
+    for name, seq in [("dir_pep_a", "GLKE"), ("dir_pep_b", "AGLK")]:
+        (input_dir / f"{name}.json").write_text(
+            json.dumps([{"name": name, "components": [{"seq": seq, "chain_id": "A"}]}])
+        )
+
+    out_dir = tmp_path_factory.mktemp("rf3_dir_out")
+    out_dir, _ = run_rf3_fold(input_dir, out_dir)
     return out_dir
 
 
