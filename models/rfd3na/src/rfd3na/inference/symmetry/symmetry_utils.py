@@ -86,6 +86,10 @@ def make_symmetric_atom_array(
     sym_conf = check_symmetry_config(
         asu_atom_array, sym_conf, sm, has_dist_cond, src_atom_array=src_atom_array
     )
+    # `check_symmetry_config` is untyped (annotating its SymmetryConfig param/return
+    # would be a circular import via checks.py), so mypy widens sym_conf back to the
+    # `SymmetryConfig | dict` union; re-narrow it here.
+    assert isinstance(sym_conf, SymmetryConfig)
     # Adding utility annotations to the asu atom array
     asu_atom_array = _add_util_annotations(asu_atom_array, sym_conf, sm)
 
