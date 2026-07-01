@@ -323,6 +323,8 @@ class ChunkedPairwiseEmbedder:
             # sl_cached [L, c_atompair]: query atom l always maps to row l.
             single_l = self._sl_cached.unsqueeze(0).unsqueeze(2).expand(B, -1, k, -1)
             # sm_cached [L, c_atompair]: key atoms are given by valid_indices [B, L, k].
+            # _sm_cached is populated alongside _sl_cached, so it is non-None here.
+            assert self._sm_cached is not None
             single_m = self._sm_cached[valid_indices]  # [B, L, k, c_atompair]
         else:
             # Slow path (no cache): run the MLPs over the raw atom features.
