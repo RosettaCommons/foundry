@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from foundry.callbacks.metrics_logging import StoreValidationMetricsInDFCallback
 from foundry.utils.datasets import wrap_dataset_and_sampler_with_fallbacks
+from foundry.utils.weights import CheckpointConfig
 from mpnn.collate.feature_collator import TokenBudgetAwareFeatureCollator
 from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from mpnn.samplers.samplers import PaddedTokenBudgetBatchSampler
@@ -123,7 +124,7 @@ train_structural_dataset = StructuralDatasetWrapper(
         name="pn_units_df_train",
         filters=MPNN_TRAIN_FILTERS,
     ),
-    dataset_parser=GenericDFParser(
+    dataset_parser=GenericDFParser(  # type: ignore[arg-type]  # parser object; atomworks stub types this param Callable
         example_id_colname="example_id",
         path_colname="path",
         assembly_id_colname="assembly_id",
@@ -144,7 +145,7 @@ train_fallback_dataset = StructuralDatasetWrapper(
         name="pn_units_df_train",
         filters=MPNN_TRAIN_FILTERS,
     ),
-    dataset_parser=GenericDFParser(
+    dataset_parser=GenericDFParser(  # type: ignore[arg-type]  # parser object; atomworks stub types this param Callable
         example_id_colname="example_id",
         path_colname="path",
         assembly_id_colname="assembly_id",
@@ -170,7 +171,9 @@ train_sampler = DistributedMixedSampler(
     datasets_info=[
         {
             "sampler": WeightedRandomSampler(
-                train_weights, len(train_structural_dataset)
+                # torch types weights as Sequence[float]; a Tensor is accepted at runtime.
+                train_weights,  # type: ignore[arg-type]
+                len(train_structural_dataset),
             ),
             "dataset": train_structural_dataset,
             "probability": 1.0,
@@ -182,7 +185,9 @@ train_sampler = DistributedMixedSampler(
 )
 
 train_fallback_sampler = WeightedRandomSampler(
-    train_weights, len(train_structural_dataset)
+    # torch types weights as Sequence[float]; a Tensor is accepted at runtime.
+    train_weights,  # type: ignore[arg-type]
+    len(train_structural_dataset),
 )
 
 train_dataset_with_fallback, train_sampler_with_fallback = (
@@ -210,7 +215,7 @@ val_structural_dataset = StructuralDatasetWrapper(
         name="pn_units_df_val",
         filters=MPNN_FILTERS,
     ),
-    dataset_parser=GenericDFParser(
+    dataset_parser=GenericDFParser(  # type: ignore[arg-type]  # parser object; atomworks stub types this param Callable
         example_id_colname="example_id",
         path_colname="path",
         assembly_id_colname="assembly_id",
@@ -234,7 +239,7 @@ val_weights = calculate_weights_for_pdb_dataset_df(
 val_sampler = DistributedMixedSampler(
     datasets_info=[
         {
-            "sampler": WeightedRandomSampler(val_weights, len(val_structural_dataset)),
+            "sampler": WeightedRandomSampler(val_weights, len(val_structural_dataset)),  # type: ignore[arg-type]
             "dataset": val_structural_dataset,
             "probability": 1.0,
         }
@@ -320,16 +325,10 @@ trainer.construct_optimizer()
 trainer.construct_scheduler()
 
 
-class CkptConfig:
-    def __init__(self, path, weight_loading_config=None, reset_optimizer=False):
-        self.path = path
-        self.weight_loading_config = weight_loading_config
-        self.reset_optimizer = reset_optimizer
-
-
 ckpt_dir = output_dir / "ckpt"
+ckpt_config: CheckpointConfig | None
 if ckpt_dir.exists():
-    ckpt_config = CkptConfig(
+    ckpt_config = CheckpointConfig(
         path=ckpt_dir, weight_loading_config=None, reset_optimizer=False
     )
 else:
