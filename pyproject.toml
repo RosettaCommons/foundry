@@ -250,7 +250,6 @@ check_untyped_defs = false
 # of rfd3, so several of these carry the same defects rfd3 fixed (see .ai/roadmap.md findings).
 [[tool.mypy.overrides]]
 module = [
-    "rfd3na.inference.input_parsing",
     "rfd3na.trainer.fabric_trainer",
 ]
 ignore_errors = true

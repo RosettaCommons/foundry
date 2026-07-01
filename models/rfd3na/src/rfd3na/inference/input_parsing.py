@@ -34,6 +34,7 @@ from rfd3na.constants import (
     backbone_atoms_RNA,
 )
 from rfd3na.inference.legacy_input_parsing import (
+    _check_has_backbone_connections_to_nonstandard_residues,
     create_atom_array_from_design_specification_legacy,
     reorder_atoms_per_residue,
 )
@@ -52,6 +53,8 @@ from rfd3na.transforms.conditioning_base import (
 from rfd3na.transforms.util_transforms import assign_types_
 from rfd3na.utils.inference import (
     _restore_bonds_for_nonstandard_residues,
+    create_cb_atoms,
+    create_o_atoms,
     extract_ligand_array,
     inference_load_,
     set_com,
@@ -61,6 +64,7 @@ from rfd3na.utils.inference import (
 
 from foundry.common import exists
 from foundry.utils.components import (
+    fetch_mask_from_idx,
     get_design_pattern_with_constraints,
     get_motif_components_and_breaks,
 )
@@ -925,7 +929,7 @@ def create_atom_array_from_design_specification(
 
 
 @contextmanager
-def validator_context(validator_name: str, data: dict = None):
+def validator_context(validator_name: str, data: dict | None = None):
     """Context manager for validator execution with logging."""
     logger.debug(f"Starting validator: {validator_name}")
     try:
@@ -1003,7 +1007,8 @@ def create_motif_residue(
         diffuse_oxygen = False
         if n_atoms < 3:
             raise ValueError(
-                f"Not enough data for {src_chain}{src_resid} in input atom array."
+                f"Not enough data for {token.chain_id[0]}{token.res_id[0]} "
+                "in input atom array."
             )
         if n_atoms == 3:
             # Handle cases with N, CA, C only;
@@ -1037,7 +1042,7 @@ def create_motif_residue(
 
 
 def accumulate_components(
-    components_to_accumulate: List[Union[str, int]],
+    components_to_accumulate: List[str],
     *,
     # Tokens from input
     indexed_tokens: Dict[str, AtomArray],
@@ -1046,7 +1051,7 @@ def accumulate_components(
     atom_array_accum=[],
     start_chain: str = "A",
     start_resid: int = 1,
-    unindexed_breaks: Optional[List[bool]] = [],
+    unindexed_breaks: Optional[List[bool | None]] = [],
     src_atom_array: Optional[AtomArray] = None,
     strip_sidechains_by_default: bool = False,
     **kwargs,
@@ -1060,12 +1065,9 @@ def accumulate_components(
         x, y
     )
     all_tokens = indexed_tokens | unindexed_tokens
-    all_annots = []
-    [
-        all_annots.extend(list(tok.get_annotation_categories()))
-        for tok in all_tokens.values()
-    ]
-    all_annots = set(all_annots)
+    all_annots: set = set()
+    for tok in all_tokens.values():
+        all_annots.update(tok.get_annotation_categories())
     atom_array_accum = [] if atom_array_accum is None else atom_array_accum
     unindexed_breaks = (
         [None] * len(components_to_accumulate)
@@ -1138,7 +1140,7 @@ def accumulate_components(
                 n = int(component[:-1])
             else:
                 polymer_type = "P"
-                n = int(components)
+                n = int(component)
 
             # ... Skip if none or unindexed
             if n == 0 or unindexed_components_started:
