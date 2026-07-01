@@ -245,10 +245,7 @@ check_untyped_defs = false
 [[tool.mypy.overrides]]
 module = [
     "mpnn.collate.feature_collator",
-    "mpnn.inference_engines.mpnn",
-    "mpnn.pipelines.mpnn",
     "mpnn.train",
-    "mpnn.transforms.feature_aggregation.token_encodings",
     "mpnn.utils.inference",
     "mpnn.utils.weights",
 ]
