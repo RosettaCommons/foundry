@@ -223,6 +223,7 @@ files = [
     "models/rfd3/src/rfd3",
     "models/rf3/src/rf3",
     "models/mpnn/src/mpnn",
+    "models/rfd3na/src/rfd3na",
 ]
 ignore_missing_imports = true
 warn_unused_ignores = true
@@ -241,6 +242,52 @@ check_untyped_defs = false
 # NOTE: the mpnn enablement ratchet (0063) is fully cleared — there is no mpnn module-level
 # mypy exemption here, and every mpnn module type-checks with no in-file suppressions (same
 # playbook as the now-cleared src/foundry, rf3, and rfd3 ratchets).
+
+# rfd3na enablement ratchet (0070): `models/rfd3na/src/rfd3na` was brought into mypy's scope
+# behind this `ignore_errors` ratchet (same playbook as the now-cleared src/foundry, rf3, rfd3,
+# and mpnn ratchets). The listed modules still have errors; they are cleared one slice per task
+# and removed from this list, after which the block is deleted entirely. rfd3na is a near-copy
+# of rfd3, so several of these carry the same defects rfd3 fixed (see .ai/roadmap.md findings).
+[[tool.mypy.overrides]]
+module = [
+    "rfd3na.constants",
+    "rfd3na.engine",
+    "rfd3na.inference.datasets",
+    "rfd3na.inference.input_parsing",
+    "rfd3na.inference.legacy_input_parsing",
+    "rfd3na.inference.parsing",
+    "rfd3na.inference.symmetry.symmetry_utils",
+    "rfd3na.metrics.design_metrics",
+    "rfd3na.metrics.nucleic_ss_metrics",
+    "rfd3na.model.RFD3",
+    "rfd3na.model.inference_sampler",
+    "rfd3na.model.layers.block_utils",
+    "rfd3na.model.layers.chunked_pairwise",
+    "rfd3na.run_inference",
+    "rfd3na.testing.testing_utils",
+    "rfd3na.trainer.dump_validation_structures",
+    "rfd3na.trainer.fabric_trainer",
+    "rfd3na.trainer.rfd3na",
+    "rfd3na.trainer.trainer_utils",
+    "rfd3na.transforms.conditioning_base",
+    "rfd3na.transforms.design_transforms",
+    "rfd3na.transforms.dna_crop",
+    "rfd3na.transforms.hbonds",
+    "rfd3na.transforms.hbonds_hbplus",
+    "rfd3na.transforms.na_geom",
+    "rfd3na.transforms.na_geom_utils",
+    "rfd3na.transforms.ncaa_transforms",
+    "rfd3na.transforms.pipelines",
+    "rfd3na.transforms.ppi_transforms",
+    "rfd3na.transforms.rasa",
+    "rfd3na.transforms.training_conditions",
+    "rfd3na.transforms.util_transforms",
+    "rfd3na.transforms.virtual_atoms",
+    "rfd3na.utils.inference",
+    "rfd3na.utils.io",
+    "rfd3na.utils.vizualize",
+]
+ignore_errors = true
 
 # Per-module strictness (direction (b)). The global baseline above leaves
 # disallow_untyped_defs / check_untyped_defs off; the whole shared layer
