@@ -43,7 +43,7 @@ class FeatureCollator:
     scalar values (requiring consistency checks across the batch).
     """
 
-    def __init__(self, default_padding: Dict[str, Any] = None):
+    def __init__(self, default_padding: Dict[str, Any] | None = None):
         """
         Initialize the FeatureCollator.
 
@@ -200,7 +200,9 @@ class TokenBudgetAwareFeatureCollator(FeatureCollator):
     """
 
     def __init__(
-        self, max_tokens_with_padding: int, default_padding: Dict[str, Any] = None
+        self,
+        max_tokens_with_padding: int,
+        default_padding: Dict[str, Any] | None = None,
     ):
         super().__init__(default_padding)
         self.max_tokens_with_padding = max_tokens_with_padding
@@ -237,7 +239,7 @@ class TokenBudgetAwareFeatureCollator(FeatureCollator):
         examples_with_L.sort(key=lambda x: x[0])
 
         # Apply token budget constraint by removing largest examples first.
-        filtered_examples = []
+        filtered_examples: List[tuple[int, Dict[str, Any]]] = []
         max_length = 0
         for L, example in examples_with_L:
             new_batch_size = len(filtered_examples) + 1

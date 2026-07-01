@@ -244,8 +244,6 @@ check_untyped_defs = false
 # removed from this list, after which the block is deleted entirely.
 [[tool.mypy.overrides]]
 module = [
-    "mpnn.collate.feature_collator",
-    "mpnn.train",
     "mpnn.utils.inference",
     "mpnn.utils.weights",
 ]
