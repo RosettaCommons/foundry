@@ -3,7 +3,7 @@ import os
 import subprocess
 import tempfile
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 
 import biotite.structure as struc
 import numpy as np
@@ -281,8 +281,10 @@ def calculate_hb_counts(
 
                 # Handle standard polymer residues for donor atom:
                 if d_resn in ATOM_REGION_BY_RESI.keys():
-                    d_is_sc = d_atom_name in ATOM_REGION_BY_RESI[d_resn]["sc"]
-                    d_is_bb = d_atom_name in ATOM_REGION_BY_RESI[d_resn]["bb"]
+                    # ATOM_REGION_BY_RESI has heterogeneous values (mypy infers `object`).
+                    d_region = cast(dict, ATOM_REGION_BY_RESI[d_resn])
+                    d_is_sc = d_atom_name in d_region["sc"]
+                    d_is_bb = d_atom_name in d_region["bb"]
                 else:
                     # If non-polymer, define any ligand HBonding atom as backbone:
                     if d_mask.sum() > 0:
@@ -307,8 +309,9 @@ def calculate_hb_counts(
 
                 # Handle standard polymer residues for acceptor atom:
                 if a_resn in ATOM_REGION_BY_RESI.keys():
-                    a_is_sc = a_atom_name in ATOM_REGION_BY_RESI[a_resn]["sc"]
-                    a_is_bb = a_atom_name in ATOM_REGION_BY_RESI[a_resn]["bb"]
+                    a_region = cast(dict, ATOM_REGION_BY_RESI[a_resn])
+                    a_is_sc = a_atom_name in a_region["sc"]
+                    a_is_bb = a_atom_name in a_region["bb"]
                 else:
                     # If non-polymer, define any ligand HBonding atom as backbone:
                     if a_mask.sum() > 0:
@@ -464,10 +467,10 @@ def find_planar_positions(
 
 def make_coord_list(
     atom_array: AtomArray,
-    residue_list: list[str],
+    residue_list: list[int],
     chain_list: list[str],
-    atom_list: list[str],
-) -> list[list[str]]:
+    atom_list: list[str | None],
+) -> list[list[float]]:
     """Extract per-residue representative coordinates from an AtomArray.
 
     All three input lists must have the same length. Missing atoms are
@@ -1301,7 +1304,7 @@ def compute_nucleic_ss(
     # --- Assemble output dict ------------------------------------
     assert isinstance(bp_result, dict)
 
-    pair_params: dict[str, np.ndarray] = {
+    pair_params = {
         "H_ij": pw_geom["H_ij"],
         "B_ij": pw_geom["B_ij"],
         "P_ij": pw_geom["P_ij"],
@@ -1319,7 +1322,7 @@ def compute_nucleic_ss(
         pair_params["Y_ij"] = pw_geom["Y_ij"]
         pair_params["Z_ij"] = pw_geom["Z_ij"]
 
-    nucleic_ss_data: dict = {"pair_params": pair_params}
+    nucleic_ss_data = {"pair_params": pair_params}
     if return_local_params and "Y_i" in local_frames:
         nucleic_ss_data["local_params"] = {
             "X_i": local_frames["X_i"],

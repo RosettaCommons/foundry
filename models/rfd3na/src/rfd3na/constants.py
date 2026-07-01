@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 
 from foundry.constants import TIP_BY_RESTYPE
@@ -116,7 +118,7 @@ symmetric_atomchar = {
 }
 """Maps residues to their pairs of aton names corresponding to symmetric atoms."""
 
-association_schemes = {
+association_schemes: dict[str, Any] = {
     'atom14': {
         #      |         Backbone atoms           |sp2-L1|sp2-R1|sp2-L2|sp2-R2|sp2-CZ|O-/S-|beta-OH|sp3-CG|sp2-CG|
         #         0       1      2      3      4     V0     V1     V2     V3      V4    V5     V6     V7     V8
