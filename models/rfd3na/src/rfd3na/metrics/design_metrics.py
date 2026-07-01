@@ -139,7 +139,7 @@ def get_all_backbone_metrics(
     The atom array coming in will be a cleaned atom array (no virtual atoms and corrected atom names)
     without guideposts
     """
-    o = {}
+    o: dict[str, Any] = {}
 
     # ... Clash metrics
     o = o | get_clash_metrics(

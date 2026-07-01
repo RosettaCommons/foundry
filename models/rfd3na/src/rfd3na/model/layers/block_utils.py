@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple
+from typing import Tuple, cast
 
 import torch
 import torch.nn.functional as F
@@ -426,7 +426,8 @@ def extend_index_mask_with_neighbours(
     indices = indices.expand_as(filler_idx)
     indices = torch.where(to_fill, filler_idx, indices)
 
-    return indices.long()  # (B, L, k)
+    # .long() is typed -> Tensor by torch; the value is an int64 (Long) tensor.
+    return cast(torch.LongTensor, indices.long())  # (B, L, k)
 
 
 def get_sparse_attention_indices(
