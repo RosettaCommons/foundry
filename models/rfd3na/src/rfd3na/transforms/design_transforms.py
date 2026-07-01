@@ -66,7 +66,7 @@ class SubsampleToTypes(Transform):
         - is_rna
     """
 
-    requires_previous_transforms = [AssignTypes]
+    requires_previous_transforms = [AssignTypes]  # type: ignore[list-item]
 
     def __init__(
         self,
@@ -128,7 +128,7 @@ class CreateDesignReferenceFeatures(Transform):
     Reduces time to process from ~0.5 to ~0.1 s on avg.
     """
 
-    requires_previous_transforms = [UnindexFlaggedTokens, AssignTypes]
+    requires_previous_transforms = [UnindexFlaggedTokens, AssignTypes]  # type: ignore[list-item]
 
     def __init__(
         self,
@@ -416,8 +416,8 @@ class AddIsXFeats(Transform):
     """
 
     requires_previous_transforms = [
-        AssignTypes,
-        PadTokensWithVirtualAtoms,
+        AssignTypes,  # type: ignore[list-item]
+        PadTokensWithVirtualAtoms,  # type: ignore[list-item]
         "UnindexFlaggedTokens",
     ]
 

@@ -1220,7 +1220,7 @@ def accumulate_components(
     return atom_array_accum
 
 
-def ensure_input_is_abspath(args: Dict[str, Any], path: PathLike | None):
+def ensure_input_is_abspath(args: Dict[str, Any], path: str | PathLike | None):
     """
     Ensures the input source is an absolute path if exists, if not it will convert
 

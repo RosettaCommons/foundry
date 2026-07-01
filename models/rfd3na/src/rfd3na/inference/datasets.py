@@ -55,7 +55,7 @@ class ContigJsonDataset(MolecularDataset):
         """
 
         if isinstance(data, (PathLike, str)):
-            self.json_path = data
+            self.json_path: PathLike | None = data
             original_data = self._load_from_path(data)
         elif isinstance(data, DictConfig):
             self.json_path = None
@@ -168,6 +168,7 @@ class ContigJsonDataset(MolecularDataset):
         data = spec.to_pipeline_input(example_id=example_id)
 
         # Apply transforms and return
+        assert self.transform is not None
         data = self.transform(data)
         return data
 
