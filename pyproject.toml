@@ -252,11 +252,8 @@ check_untyped_defs = false
 module = [
     "rfd3na.constants",
     "rfd3na.engine",
-    "rfd3na.inference.datasets",
     "rfd3na.inference.input_parsing",
     "rfd3na.inference.legacy_input_parsing",
-    "rfd3na.inference.symmetry.symmetry_utils",
-    "rfd3na.metrics.nucleic_ss_metrics",
     "rfd3na.model.RFD3",
     "rfd3na.model.inference_sampler",
     "rfd3na.run_inference",
@@ -264,20 +261,13 @@ module = [
     "rfd3na.trainer.fabric_trainer",
     "rfd3na.trainer.rfd3na",
     "rfd3na.trainer.trainer_utils",
-    "rfd3na.transforms.conditioning_base",
     "rfd3na.transforms.design_transforms",
-    "rfd3na.transforms.dna_crop",
     "rfd3na.transforms.hbonds",
     "rfd3na.transforms.na_geom",
     "rfd3na.transforms.na_geom_utils",
     "rfd3na.transforms.pipelines",
-    "rfd3na.transforms.ppi_transforms",
-    "rfd3na.transforms.training_conditions",
-    "rfd3na.transforms.util_transforms",
-    "rfd3na.transforms.virtual_atoms",
     "rfd3na.utils.inference",
     "rfd3na.utils.io",
-    "rfd3na.utils.vizualize",
 ]
 ignore_errors = true
 
