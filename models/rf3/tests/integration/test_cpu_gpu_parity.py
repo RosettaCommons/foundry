@@ -31,9 +31,10 @@ Known limitations
    behaviour.  Once the bug is fixed the baseline must be regenerated.
 
 3. **Narrow input coverage.** Only the protein-only input (``agag_from_json``)
-   has a committed GPU baseline.  Ligand inputs (``1cyo_with_ligand``,
-   ``1cyo.cif``) exercise different code paths but are only range-checked by
-   other tests.  Add baselines for those inputs to extend parity coverage.
+   has a committed GPU baseline.  The ligand inputs (``agag_with_ligands`` and
+   ``agag_with_ligands_from_cif``) exercise different code paths but are only
+   range-checked by other tests.  Add baselines for those inputs to extend
+   parity coverage.
 
 4. **Low-quality speed-flag outputs.** The baseline was generated with
    ``n_recycles=1 num_steps=20`` — the same flags used to keep CI fast.

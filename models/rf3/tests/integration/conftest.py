@@ -167,16 +167,17 @@ def basic_folds_dir(require_ckpt, tmp_path_factory):
 
     Batching the three inputs amortises the model-loading overhead::
 
-        agag_from_json.json   — protein-only JSON (AGAG, 4 residues)
-        1cyo_with_ligand.json — protein + HEM via CCD code
-        1cyo.cif              — CIF file containing protein + HEM
+        agag_from_json.json          — protein-only JSON (AGAG, 4 residues)
+        agag_with_ligands.json       — AGAG + MG (ccd_code) + HEM (sdf path)
+                                       + imidazole (smiles)
+        agag_with_ligands_from_cif.cif — CIF containing AGAG + the same ligands
     """
     out_dir = tmp_path_factory.mktemp("rf3_basic")
     out_dir, _ = run_rf3_fold(
         inputs=[
             DATA_DIR / "agag_from_json.json",
-            DATA_DIR / "1cyo_with_ligand.json",
-            DATA_DIR / "1cyo.cif",
+            DATA_DIR / "agag_with_ligands.json",
+            DATA_DIR / "agag_with_ligands_from_cif.cif",
         ],
         out_dir=out_dir,
     )
@@ -230,12 +231,12 @@ def template_selection_dir(require_ckpt, tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def ground_truth_conformer_dir(require_ckpt, tmp_path_factory):
-    """1cyo chain B is HEM — use it as the ground-truth conformer."""
+    """Chain C of the ligand CIF is HEM — use it as the ground-truth conformer."""
     out_dir = tmp_path_factory.mktemp("rf3_gt_conformer")
     out_dir, _ = run_rf3_fold(
-        DATA_DIR / "1cyo.cif",
+        DATA_DIR / "agag_with_ligands_from_cif.cif",
         out_dir,
-        extra_flags=["ground_truth_conformer_selection=[B]"],
+        extra_flags=["ground_truth_conformer_selection=[C]"],
     )
     return out_dir
 

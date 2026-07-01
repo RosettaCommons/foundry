@@ -94,12 +94,26 @@ def test_template_selection(template_selection_dir):
 
 @pytest.mark.integration
 def test_ground_truth_conformer_selection(ground_truth_conformer_dir):
-    """ground_truth_conformer_selection=[B] keeps HEM in the predicted structure."""
-    assert_standard_outputs(ground_truth_conformer_dir, "1cyo")
-    model_cif = ground_truth_conformer_dir / "1cyo" / "1cyo_model.cif"
+    """ground_truth_conformer_selection=[C] keeps the HEM ligand in the output.
+
+    Chain C of ``agag_with_ligands_from_cif.cif`` is HEM (loaded from an SDF
+    file, so its residue name is the generated ``L:0`` rather than ``HEM``).
+    Selecting it as the ground-truth conformer must not drop it from the
+    predicted structure.
+    """
+    name = "agag_with_ligands_from_cif"
+    assert_standard_outputs(ground_truth_conformer_dir, name)
+
+    summary = load_summary(ground_truth_conformer_dir, name)
+    assert len(summary["chain_ptm"]) == 4, (
+        "expected 4 chains (AGAG + MG + HEM + imidazole); "
+        f"got {len(summary['chain_ptm'])}"
+    )
+
+    model_cif = (ground_truth_conformer_dir / name / f"{name}_model.cif").read_text()
     assert (
-        "HEM" in model_cif.read_text()
-    ), "HEM should remain in the output when used as a ground-truth conformer"
+        "L:0" in model_cif
+    ), "HEM (chain C, 'L:0') should remain when used as a ground-truth conformer"
 
 
 # ---------------------------------------------------------------------------
