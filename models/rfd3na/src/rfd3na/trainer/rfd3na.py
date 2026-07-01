@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from beartype.typing import Any, List, Union
+from beartype.typing import Any, List, Union, cast
 from biotite.structure import AtomArray, AtomArrayStack
 from biotite.structure.residues import get_residue_starts
 from einops import repeat
@@ -76,7 +76,8 @@ class AADesignTrainer(FabricTrainer):
         # (Initialize recycle schedule upfront so all GPU's can sample the same number of recycles within a batch)
         self.n_recycles_train = n_recycles_train
         self.recycle_schedule = get_recycle_schedule(
-            max_cycle=n_recycles_train,
+            # n_recycles_train is always set for a real training run.
+            max_cycle=cast(int, n_recycles_train),
             n_epochs=self.max_epochs,  # Set by FabricTrainer
             n_train=self.n_examples_per_epoch,  # Set by FabricTrainer
             world_size=self.fabric.world_size,
@@ -91,7 +92,7 @@ class AADesignTrainer(FabricTrainer):
         )
         # Loss (full precision)
         with torch.autocast(device_type=self.fabric.device.type, enabled=False):
-            self.loss = Loss(**loss) if loss else None
+            self.loss = Loss(**loss) if loss else None  # type: ignore[arg-type]
 
     def _assemble_network_inputs(self, example: dict) -> dict:
         """Assemble and validate the network inputs."""
@@ -169,6 +170,7 @@ class AADesignTrainer(FabricTrainer):
 
             loss_extra_info = self._assemble_loss_extra_info(example)
 
+            assert self.loss is not None  # loss is configured for training
             total_loss, loss_dict_batched = self.loss(
                 network_input=network_input,
                 network_output=network_output,
@@ -186,7 +188,9 @@ class AADesignTrainer(FabricTrainer):
                 function=lambda x: x.detach(),
             )
 
-    def validation_step(
+    # FabricTrainer.validation_step's 3rd optional param is val_loader_name; the base loop
+    # only ever calls validation_step(batch=, batch_idx=), so refining it is safe.
+    def validation_step(  # type: ignore[override]
         self,
         batch: Any,
         batch_idx: int,
@@ -359,7 +363,9 @@ class AADesignTrainer(FabricTrainer):
         )  # NB: Will be either list (when sequences are saved) or stack
 
         arrays = atom_array_stack
-        metadata_dict = {i: {"metrics": {}} for i in range(len(arrays))}
+        metadata_dict: dict[int, dict[str, Any]] = {
+            i: {"metrics": {}} for i in range(len(arrays))
+        }
 
         # Add the seed to the metadata dictionary if provided
         if self.seed is not None:

@@ -34,7 +34,7 @@ class TrainingCondition(ABC):
     Base class for applying conditioning during training
     """
 
-    name = None
+    name: str | None = None
 
     def __init__(self, frequency):
         self.frequency = frequency
