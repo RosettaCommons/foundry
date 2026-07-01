@@ -1,9 +1,9 @@
 [
     {
-        "name": "agag_with_ligands",
+        "name": "glke_with_ligands",
         "components": [
             {
-                "seq": "AGAG",
+                "seq": "GLKE",
                 "chain_id": "A"
             },
             {

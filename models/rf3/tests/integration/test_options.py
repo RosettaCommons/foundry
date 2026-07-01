@@ -33,12 +33,12 @@ def test_early_stopping_suppresses_model_output(early_stopping_dir):
     records the early-stop event.
     """
     out_dir, _stderr = early_stopping_dir
-    result_dir = out_dir / "agag_from_json"
+    result_dir = out_dir / "glke_from_json"
     assert result_dir.is_dir(), "output directory should still be created on early stop"
     assert not (
-        result_dir / "agag_from_json_model.cif"
+        result_dir / "glke_from_json_model.cif"
     ).exists(), "early stopping should suppress model output"
-    scores_text = (result_dir / "agag_from_json_ranking_scores.csv").read_text()
+    scores_text = (result_dir / "glke_from_json_ranking_scores.csv").read_text()
     assert (
         "early_stopped" in scores_text.lower()
     ), "ranking_scores.csv should record the early_stopped field"
@@ -51,7 +51,7 @@ def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
     pLDDT values should be in (0, 1) rather than the large values (> 1)
     typical of crystallographic B-factors.
     """
-    result_dir = annotate_b_factor_dir / "agag_from_json"
+    result_dir = annotate_b_factor_dir / "glke_from_json"
     assert result_dir.is_dir()
 
     cif_files = list(result_dir.rglob("*.cif"))
@@ -73,8 +73,8 @@ def test_annotate_b_factor_with_plddt(annotate_b_factor_dir):
 def test_seed_reproducibility(seed_dirs):
     """Two runs with identical flags (including seed=1) produce identical scores."""
     dir_a, dir_b = seed_dirs
-    summary_a = load_summary(dir_a, "agag_from_json")
-    summary_b = load_summary(dir_b, "agag_from_json")
+    summary_a = load_summary(dir_a, "glke_from_json")
+    summary_b = load_summary(dir_b, "glke_from_json")
 
     for key in ("ranking_score", "overall_plddt", "ptm"):
         val_a = summary_a.get(key)
@@ -87,8 +87,8 @@ def test_seed_reproducibility(seed_dirs):
 @pytest.mark.integration
 def test_template_selection(template_selection_dir):
     """template_selection=[A] completes without error and produces valid output."""
-    assert_standard_outputs(template_selection_dir, "agag")
-    summary = load_summary(template_selection_dir, "agag")
+    assert_standard_outputs(template_selection_dir, "glke")
+    summary = load_summary(template_selection_dir, "glke")
     assert 0 < summary["overall_plddt"] < 1
 
 
@@ -96,17 +96,17 @@ def test_template_selection(template_selection_dir):
 def test_ground_truth_conformer_selection(ground_truth_conformer_dir):
     """ground_truth_conformer_selection=[C] keeps the HEM ligand in the output.
 
-    Chain C of ``agag_with_ligands_from_cif.cif`` is HEM (loaded from an SDF
+    Chain C of ``glke_with_ligands_from_cif.cif`` is HEM (loaded from an SDF
     file, so its residue name is the generated ``L:0`` rather than ``HEM``).
     Selecting it as the ground-truth conformer must not drop it from the
     predicted structure.
     """
-    name = "agag_with_ligands_from_cif"
+    name = "glke_with_ligands_from_cif"
     assert_standard_outputs(ground_truth_conformer_dir, name)
 
     summary = load_summary(ground_truth_conformer_dir, name)
     assert len(summary["chain_ptm"]) == 4, (
-        "expected 4 chains (AGAG + MG + HEM + imidazole); "
+        "expected 4 chains (GLKE + MG + HEM + imidazole); "
         f"got {len(summary['chain_ptm'])}"
     )
 

@@ -1,9 +1,9 @@
 [
     {
-        "name": "agag_from_json",
+        "name": "glke_from_json",
         "components": [
             {
-                "seq": "AGAG",
+                "seq": "GLKE",
                 "chain_id": "A"
             }
         ]
