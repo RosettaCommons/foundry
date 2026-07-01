@@ -199,12 +199,14 @@ def build_stack_from_atom_array_and_batched_coords(
     return atom_array_stack
 
 
-def find_files_with_extension(path: PathLike, supported_file_types: list) -> list[Path]:
+def find_files_with_extension(
+    path: PathLike, supported_file_types: set | list
+) -> list[Path]:
     """Find files with the given extensions at the top level of the path (non-recursive).
 
     Args:
         path (PathLike): Path to the directory containing the files.
-        supported_file_types (list): List of supported file extensions.
+        supported_file_types (set | list): Supported file extensions.
 
     Returns:
         list[Path]: List of files with the given extensions.
