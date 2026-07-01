@@ -9,7 +9,13 @@ only inspect the resulting files and metrics.
 """
 
 import pytest
-from conftest import assert_standard_outputs, load_summary
+from conftest import (
+    assert_chain_count,
+    assert_standard_outputs,
+    assert_valid_plddt,
+    load_summary,
+    residue_names_in_cif,
+)
 
 
 @pytest.mark.integration
@@ -35,13 +41,13 @@ def test_early_stopping_suppresses_model_output(early_stopping_dir):
     out_dir, _stderr = early_stopping_dir
     result_dir = out_dir / "glke_from_json"
     assert result_dir.is_dir(), "output directory should still be created on early stop"
-    assert not (
-        result_dir / "glke_from_json_model.cif"
-    ).exists(), "early stopping should suppress model output"
+    assert not (result_dir / "glke_from_json_model.cif").exists(), (
+        "early stopping should suppress model output"
+    )
     scores_text = (result_dir / "glke_from_json_ranking_scores.csv").read_text()
-    assert (
-        "early_stopped" in scores_text.lower()
-    ), "ranking_scores.csv should record the early_stopped field"
+    assert "early_stopped" in scores_text.lower(), (
+        "ranking_scores.csv should record the early_stopped field"
+    )
 
 
 @pytest.mark.integration
@@ -79,9 +85,9 @@ def test_seed_reproducibility(seed_dirs):
     for key in ("ranking_score", "overall_plddt", "ptm"):
         val_a = summary_a.get(key)
         val_b = summary_b.get(key)
-        assert (
-            val_a == val_b
-        ), f"seed=1 produced different {key}: run_a={val_a}, run_b={val_b}"
+        assert val_a == val_b, (
+            f"seed=1 produced different {key}: run_a={val_a}, run_b={val_b}"
+        )
 
 
 @pytest.mark.integration
@@ -89,7 +95,7 @@ def test_template_selection(template_selection_dir):
     """template_selection=[A] completes without error and produces valid output."""
     assert_standard_outputs(template_selection_dir, "glke")
     summary = load_summary(template_selection_dir, "glke")
-    assert 0 < summary["overall_plddt"] < 1
+    assert_valid_plddt(summary)
 
 
 @pytest.mark.integration
@@ -105,15 +111,12 @@ def test_ground_truth_conformer_selection(ground_truth_conformer_dir):
     assert_standard_outputs(ground_truth_conformer_dir, name)
 
     summary = load_summary(ground_truth_conformer_dir, name)
-    assert len(summary["chain_ptm"]) == 4, (
-        "expected 4 chains (GLKE + MG + HEM + imidazole); "
-        f"got {len(summary['chain_ptm'])}"
-    )
+    assert_chain_count(summary, 4, "GLKE + MG + HEM + imidazole")
 
-    model_cif = (ground_truth_conformer_dir / name / f"{name}_model.cif").read_text()
-    assert (
-        "L:0" in model_cif
-    ), "HEM (chain C, 'L:0') should remain when used as a ground-truth conformer"
+    model_cif = ground_truth_conformer_dir / name / f"{name}_model.cif"
+    assert "L:0" in residue_names_in_cif(model_cif), (
+        "HEM (chain C, 'L:0') should remain when used as a ground-truth conformer"
+    )
 
 
 # ---------------------------------------------------------------------------

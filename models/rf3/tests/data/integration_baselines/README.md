@@ -36,10 +36,17 @@ rf3 fold \
     inputs='models/rf3/tests/data/glke_from_json.json' \
     ckpt_path='<path_to_rf3_foundry_01_24_latest_remapped.ckpt>' \
     n_recycles=1 num_steps=20 diffusion_batch_size=1 seed=1 \
+    early_stopping_plddt_threshold=0.0 \
     out_dir='models/rf3/tests/data/integration_baselines'
 ```
 
-`rf3 fold` automatically creates an `glke_from_json/` subdirectory inside `out_dir`, so
+The flags must match the `SPEED_FLAGS` used by the `basic_folds_dir` fixture in
+`conftest.py` exactly — in particular `early_stopping_plddt_threshold=0.0`, which
+disables the default 0.5 threshold. Otherwise the CPU run and the GPU baseline are
+not compared apples-to-apples (a low-pLDDT peptide could early-stop under the
+default and shift the metrics).
+
+`rf3 fold` automatically creates a `glke_from_json/` subdirectory inside `out_dir`, so
 the output lands at `integration_baselines/glke_from_json/glke_from_json_summary_confidences.json`
 — exactly where the parity test looks for it.
 

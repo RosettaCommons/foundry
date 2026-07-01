@@ -49,7 +49,13 @@ Run on a machine with a GPU, then commit the output::
         inputs='models/rf3/tests/data/glke_from_json.json' \\
         ckpt_path='<path_to_checkpoint>' \\
         n_recycles=1 num_steps=20 diffusion_batch_size=1 seed=1 \\
+        early_stopping_plddt_threshold=0.0 \\
         out_dir='models/rf3/tests/data/integration_baselines'
+
+The flags must match the ``SPEED_FLAGS`` used by the ``basic_folds_dir``
+fixture exactly (including ``early_stopping_plddt_threshold=0.0``, which
+disables the default 0.5 threshold) so the CPU run and GPU baseline are
+compared apples-to-apples.
 
 Commit the ``summary_confidences.json`` (and optionally the model CIF) from
 that directory.  Once committed, this test will run automatically.

@@ -20,7 +20,7 @@ from conftest import run_rf3_fold
 def test_nonexistent_input_raises(require_ckpt, tmp_path):
     """Pointing ``inputs`` at a missing file fails cleanly."""
     missing = tmp_path / "does_not_exist.json"
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="rf3 fold failed"):
         run_rf3_fold(missing, tmp_path / "out")
 
 
@@ -29,5 +29,5 @@ def test_malformed_json_raises(require_ckpt, tmp_path):
     """A syntactically invalid JSON input fails cleanly."""
     bad = tmp_path / "malformed.json"
     bad.write_text('[{"name": "malformed" "components": broken')
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="rf3 fold failed"):
         run_rf3_fold(bad, tmp_path / "out")

@@ -21,7 +21,13 @@ distinct input modes — CCD code (MG), SDF file path (HEM) and SMILES
 """
 
 import pytest
-from conftest import assert_standard_outputs, load_summary
+from conftest import (
+    assert_chain_count,
+    assert_standard_outputs,
+    assert_valid_plddt,
+    load_summary,
+    residue_names_in_cif,
+)
 
 
 @pytest.mark.integration
@@ -30,7 +36,9 @@ def test_fold_from_json_protein_only(basic_folds_dir):
     assert_standard_outputs(basic_folds_dir, "glke_from_json")
 
     summary = load_summary(basic_folds_dir, "glke_from_json")
-    assert 0 < summary["overall_plddt"] < 1
+    assert_valid_plddt(summary)
+    # Single polymer chain → no polymer-polymer pair, so has_clash is always
+    # False here (see clashing_chains.py); this only checks the field is present.
     assert not summary["has_clash"]
 
 
@@ -48,17 +56,14 @@ def test_fold_from_json_with_ligand(basic_folds_dir):
     assert_standard_outputs(basic_folds_dir, "glke_with_ligands")
 
     summary = load_summary(basic_folds_dir, "glke_with_ligands")
-    assert 0 < summary["overall_plddt"] < 1
+    assert_valid_plddt(summary)
     assert not summary["has_clash"]
-    assert len(summary["chain_ptm"]) == 4, (
-        "expected 4 chains (GLKE + MG + HEM + imidazole); "
-        f"got {len(summary['chain_ptm'])}"
-    )
+    assert_chain_count(summary, 4, "GLKE + MG + HEM + imidazole")
 
-    model_cif = (
-        basic_folds_dir / "glke_with_ligands" / "glke_with_ligands_model.cif"
-    ).read_text()
-    assert "MG" in model_cif, "MG ligand missing from predicted structure"
+    model_cif = basic_folds_dir / "glke_with_ligands" / "glke_with_ligands_model.cif"
+    assert "MG" in residue_names_in_cif(model_cif), (
+        "MG ligand missing from predicted structure"
+    )
 
 
 @pytest.mark.integration
@@ -71,16 +76,15 @@ def test_fold_from_cif_with_ligand(basic_folds_dir):
     assert_standard_outputs(basic_folds_dir, "glke_with_ligands_from_cif")
 
     summary = load_summary(basic_folds_dir, "glke_with_ligands_from_cif")
-    assert 0 < summary["overall_plddt"] < 1
+    assert_valid_plddt(summary)
     assert not summary["has_clash"]
-    assert len(summary["chain_ptm"]) == 4, (
-        "expected 4 chains (GLKE + MG + HEM + imidazole); "
-        f"got {len(summary['chain_ptm'])}"
-    )
+    assert_chain_count(summary, 4, "GLKE + MG + HEM + imidazole")
 
     model_cif = (
         basic_folds_dir
         / "glke_with_ligands_from_cif"
         / "glke_with_ligands_from_cif_model.cif"
-    ).read_text()
-    assert "MG" in model_cif, "MG ligand missing from predicted structure"
+    )
+    assert "MG" in residue_names_in_cif(model_cif), (
+        "MG ligand missing from predicted structure"
+    )

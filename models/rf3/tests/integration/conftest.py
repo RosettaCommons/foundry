@@ -43,6 +43,9 @@ import pytest
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 GPU_BASELINE_DIR = DATA_DIR / "integration_baselines"
+# Repo root (…/foundry): the CWD that repo-relative paths inside input JSONs
+# (e.g. an SDF ligand's ``path``) are written against.
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
 # Resolve the rf3 executable from the same venv that is running pytest so the
 # subprocess inherits the correct installation without relying on PATH.
@@ -133,6 +136,22 @@ def load_summary(out_dir, name):
     return json.loads(path.read_text())
 
 
+def assert_valid_plddt(summary):
+    """Assert ``overall_plddt`` is a sane confidence value in the open (0, 1)."""
+    plddt = summary["overall_plddt"]
+    assert 0 < plddt < 1, f"overall_plddt outside expected (0, 1) range: {plddt}"
+
+
+def assert_chain_count(summary, expected, detail=""):
+    """Assert the fold produced *expected* chains (one ``chain_ptm`` entry each).
+
+    *detail* optionally names the expected composition for the failure message.
+    """
+    actual = len(summary["chain_ptm"])
+    suffix = f" ({detail})" if detail else ""
+    assert actual == expected, f"expected {expected} chains{suffix}; got {actual}"
+
+
 def assert_standard_outputs(out_dir, name):
     """Assert that all four standard output files exist for *name*."""
     base = out_dir / name
@@ -183,6 +202,31 @@ def residue_names_in_cif(cif_path):
     return names
 
 
+def materialize_json_with_abs_paths(json_path, dest_dir):
+    """Copy a components JSON into *dest_dir*, resolving relative component paths.
+
+    A component may reference an external file (e.g. an SDF ligand) via a
+    ``path`` field. rf3 resolves that path relative to the *process* CWD, not to
+    the JSON file's location, and ``run_rf3_fold`` sets no ``cwd``. Such paths are
+    written repo-root-relative, so the checked-in JSON only loads when pytest is
+    launched from the repo root. Rewriting each relative path to an absolute path
+    (anchored at ``REPO_ROOT``, the CWD it was written against) makes the fixture
+    CWD-independent. The path cannot simply be committed as absolute because it
+    is machine-specific.
+
+    Returns the path to the rewritten JSON in *dest_dir*.
+    """
+    data = json.loads(Path(json_path).read_text())
+    for entry in data if isinstance(data, list) else [data]:
+        for component in entry.get("components", []):
+            raw = component.get("path")
+            if raw and not Path(raw).is_absolute():
+                component["path"] = str((REPO_ROOT / raw).resolve())
+    out_path = dest_dir / Path(json_path).name
+    out_path.write_text(json.dumps(data))
+    return out_path
+
+
 # ---------------------------------------------------------------------------
 # Session-scoped fixtures
 # ---------------------------------------------------------------------------
@@ -216,10 +260,15 @@ def basic_folds_dir(require_ckpt, tmp_path_factory):
     re-run the suite and update any ``has_clash`` assertions that flip.
     """
     out_dir = tmp_path_factory.mktemp("rf3_basic")
+    # glke_with_ligands.json references HEM.sdf by a repo-relative path; rewrite
+    # it to an absolute path so the fold does not depend on the pytest CWD.
+    ligands_json = materialize_json_with_abs_paths(
+        DATA_DIR / "glke_with_ligands.json", out_dir
+    )
     out_dir, _ = run_rf3_fold(
         inputs=[
             DATA_DIR / "glke_from_json.json",
-            DATA_DIR / "glke_with_ligands.json",
+            ligands_json,
             DATA_DIR / "glke_with_ligands_from_cif.cif",
         ],
         out_dir=out_dir,
@@ -291,7 +340,7 @@ def complex_folds_dir(require_ckpt, tmp_path_factory):
     Batching amortises the model-loading overhead across five predictions::
 
         two_protein_chains.json     — two protein chains (interface metrics)
-        protein_dna_complex.json    — protein + DNA duplex-strand complex
+        protein_dna_complex.json    — protein + single-stranded DNA complex
         peptide_glycan_bond.json    — peptide + NAG with an explicit covalent bond
         two_examples_from_json.json — two examples defined in one JSON file
                                       (→ two_examples_first, two_examples_second)
@@ -317,7 +366,7 @@ def complex_folds_dir(require_ckpt, tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def dir_input_dir(require_ckpt, tmp_path_factory):
+def directory_input_dir(require_ckpt, tmp_path_factory):
     """Fold a *directory* of inputs, exercising directory-globbing resolution.
 
     Two minimal single-chain JSON inputs are written into a directory, which is
