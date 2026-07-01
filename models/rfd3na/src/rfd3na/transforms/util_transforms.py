@@ -367,7 +367,7 @@ class EncodeAF3TokenLevelFeatures(Transform):
     def __init__(
         self,
         sequence_encoding: AF3SequenceEncoding,
-        encode_residues_to: int | None = None,
+        encode_residues_to: str | None = None,
     ):
         self.sequence_encoding = sequence_encoding
         self.encode_residues_to = encode_residues_to  # for spoofing the restype
