@@ -9,15 +9,12 @@ TEST_DATA_DIR = get_test_data_dir(__file__)
 
 # Most of the pre-existing mpnn suite loads structures via atomworks `cached_parse`, which
 # needs a DIGS PDB mirror (`/projects/...`) absent in the generic gate — those files fail at
-# collection/setup and are run locally on the cluster, not in CI. `test_inference_utils.py`
-# additionally has 5 non-data failures (stale shape/value expectations) pending investigation
-# (see .ai/roadmap.md). Keep all of these out of the gate; the CPU-portable files
-# (`test_samplers`, `test_feature_collator`, `test_polymer_ligand_interface`) and any fresh
-# fixture-backed CPU tests added here are collected normally. Drop a file from this list once
-# it is made CPU-portable.
+# collection/setup and are run locally on the cluster, not in CI. Keep those out of the gate;
+# the CPU-portable files (`test_samplers`, `test_feature_collator`,
+# `test_polymer_ligand_interface`, `test_inference_utils`) and any fresh fixture-backed CPU
+# tests added here are collected normally. Drop a file from this list once it is CPU-portable.
 collect_ignore = [
     "test_inference_engine.py",
-    "test_inference_utils.py",
     "test_integration.py",
     "test_loss.py",
     "test_metrics.py",
