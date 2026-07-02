@@ -39,7 +39,12 @@ else:
     raise ValueError(f"Unknown model_type: {model_type}")
 
 
-def create_noam_scheduler(optimizer, d_model, warmup_steps=4000, factor=2):
+def create_noam_scheduler(
+    optimizer: torch.optim.Optimizer,
+    d_model: int,
+    warmup_steps: int = 4000,
+    factor: float = 2,
+) -> torch.optim.lr_scheduler.LambdaLR:
     """
     Create a NoamOpt-style scheduler using standard PyTorch components.
 
@@ -53,7 +58,7 @@ def create_noam_scheduler(optimizer, d_model, warmup_steps=4000, factor=2):
         LambdaLR scheduler that implements NoamOpt schedule
     """
 
-    def noam_lambda(step):
+    def noam_lambda(step: int) -> float:
         # NoamOpt formula: factor * (d_model ** (-0.5)) * min(step ** (-0.5), step * warmup ** (-1.5))
         base_lr = factor * (d_model ** (-0.5))
         if step == 0:
@@ -66,7 +71,7 @@ def create_noam_scheduler(optimizer, d_model, warmup_steps=4000, factor=2):
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=noam_lambda)
 
 
-def get_num_tokens(df, idx):
+def get_num_tokens(df: pd.DataFrame, idx: int | list[int] | tuple[int, ...]) -> int:
     """
     Extract the number of non-atomized tokens for a given index.
 

@@ -27,8 +27,8 @@ class MPNNTrainer(FabricTrainer):
         model_type: str,
         loss: DictConfig | dict | None = None,
         metrics: DictConfig | dict | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         See `FabricTrainer` for the additional initialization arguments.
 
@@ -60,7 +60,7 @@ class MPNNTrainer(FabricTrainer):
         # (same precedent as RF3Trainer / RFD3 `Loss(**loss)`).
         self.loss = LabelSmoothedNLLLoss(**loss_params)  # type: ignore[arg-type]
 
-    def construct_model(self):
+    def construct_model(self) -> None:
         """Construct the model with hard-coded parameters."""
         with self.fabric.init_module():
             ranked_logger.info(f"Instantiating {self.model_type} model...")

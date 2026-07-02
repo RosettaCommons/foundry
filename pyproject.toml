@@ -271,6 +271,9 @@ module = [
     "mpnn.loss.nll_loss",
     "mpnn.model.layers.position_wise_feed_forward",
     "mpnn.model.layers.positional_encoding",
+    "mpnn.train",
+    "mpnn.trainers.mpnn",
+    "mpnn.utils.inference",
     "mpnn.utils.probability",
 ]
 disallow_untyped_defs = true

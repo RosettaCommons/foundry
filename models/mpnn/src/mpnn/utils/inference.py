@@ -13,10 +13,11 @@ import copy
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TextIO
 
 import numpy as np
 from atomworks.io import parse
@@ -105,7 +106,7 @@ def str2bool(v: str) -> bool:
         raise argparse.ArgumentTypeError(f"Boolean value expected, got {v!r}")
 
 
-def none_or_type(v: Any, specified_type) -> Any | None:
+def none_or_type(v: Any, specified_type: Callable[[Any], Any]) -> Any | None:
     """
     CLI type parser that turns 'None' into None. Otherwise, returns the value
     cast to the given type. This function is useful for the parser/pipeline
@@ -2272,7 +2273,7 @@ class MPNNInferenceOutput:
         *,
         base_path: PathLike | None = None,
         file_type: Literal["cif", "bcif", "cif.gz"] = "cif",
-    ):
+    ) -> None:
         """
         Write this design as a CIF file.
 
@@ -2321,7 +2322,7 @@ class MPNNInferenceOutput:
         self,
         *,
         base_path: PathLike | None = None,
-        handle=None,
+        handle: TextIO | None = None,
     ) -> None:
         """
         Write a single FASTA record for this design.
