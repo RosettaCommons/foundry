@@ -269,6 +269,8 @@ check_untyped_defs = true
 module = [
     "mpnn.collate.feature_collator",
     "mpnn.loss.nll_loss",
+    "mpnn.metrics.nll",
+    "mpnn.metrics.sequence_recovery",
     "mpnn.model.layers.message_passing",
     "mpnn.model.layers.position_wise_feed_forward",
     "mpnn.model.layers.positional_encoding",
