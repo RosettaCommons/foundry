@@ -170,7 +170,7 @@ class FeatureCollator:
 
         return network_inputs
 
-    def _deep_equal(self, a, b):
+    def _deep_equal(self, a: Any, b: Any) -> bool:
         if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
             return torch.equal(a, b)
         if isinstance(a, dict) and isinstance(b, dict):

@@ -262,6 +262,20 @@ module = [
 disallow_untyped_defs = true
 check_untyped_defs = true
 
+# mpnn direction (b): the mpnn ratchet is fully cleared (0069), so mpnn modules opt into
+# strict checking one slice per task (same playbook as the shared layer), smallest first.
+# Collapse this list to `mpnn.*` once every mpnn module is covered.
+[[tool.mypy.overrides]]
+module = [
+    "mpnn.collate.feature_collator",
+    "mpnn.loss.nll_loss",
+    "mpnn.model.layers.position_wise_feed_forward",
+    "mpnn.model.layers.positional_encoding",
+    "mpnn.utils.probability",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
+
 # Testing ----------------------------------------------------------------------------
 [tool.pytest.ini_options]
 # Shared-layer tests live in the top-level `tests/`; model-specific tests live in each

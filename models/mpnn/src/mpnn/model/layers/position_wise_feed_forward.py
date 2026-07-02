@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class PositionWiseFeedForward(nn.Module):
-    def __init__(self, num_hidden, num_ff):
+    def __init__(self, num_hidden: int, num_ff: int) -> None:
         """
         Position-wise feed-forward layer.
 
@@ -20,7 +20,7 @@ class PositionWiseFeedForward(nn.Module):
 
         self.act = torch.nn.GELU()
 
-    def forward(self, h_V):
+    def forward(self, h_V: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the position-wise feed-forward layer.
 
