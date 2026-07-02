@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 import torch.nn as nn
 from atomworks.constants import ELEMENT_NAME_TO_ATOMIC_NUMBER
@@ -25,14 +27,14 @@ class ProteinFeatures(nn.Module):
 
     def __init__(
         self,
-        num_edge_output_features=128,
-        num_node_output_features=128,
-        num_positional_embeddings=16,
-        min_rbf_mean=2.0,
-        max_rbf_mean=22.0,
-        num_rbf=16,
-        num_neighbors=48,
-    ):
+        num_edge_output_features: int = 128,
+        num_node_output_features: int = 128,
+        num_positional_embeddings: int = 16,
+        min_rbf_mean: float = 2.0,
+        max_rbf_mean: float = 22.0,
+        num_rbf: int = 16,
+        num_neighbors: int = 48,
+    ) -> None:
         """
         Given a protein structure, extract the features for the graph
         representation of the protein.
@@ -76,7 +78,13 @@ class ProteinFeatures(nn.Module):
         )
         self.edge_norm = nn.LayerNorm(self.num_edge_output_features)
 
-    def construct_X_atoms(self, X, X_m, S, atom_names):
+    def construct_X_atoms(
+        self,
+        X: torch.Tensor,
+        X_m: torch.Tensor,
+        S: torch.Tensor,
+        atom_names: list[str],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Given an array of 3D coordinates and the corresponding atom mask, use
         the sequence and the atom names to construct a subset of X and X_m that
@@ -132,7 +140,9 @@ class ProteinFeatures(nn.Module):
 
         return X_atoms, X_m_atoms
 
-    def construct_X_rep_atoms(self, X, X_m, S):
+    def construct_X_rep_atoms(
+        self, X: torch.Tensor, X_m: torch.Tensor, S: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Given an array of 3D coordinates, construct a subset of X that
         contains only the representative atom for each residue.
@@ -162,7 +172,9 @@ class ProteinFeatures(nn.Module):
 
         return X_rep_atoms, X_m_rep_atoms
 
-    def construct_X_backbone(self, X, X_m, S):
+    def construct_X_backbone(
+        self, X: torch.Tensor, X_m: torch.Tensor, S: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Given an array of 3D coordinates, construct a subset of X that
         contains only the backbone atoms for each residue.
@@ -187,13 +199,13 @@ class ProteinFeatures(nn.Module):
 
     def construct_X_virtual_atom(
         self,
-        X_center_atom,
-        X_atom_1,
-        X_atom_2,
-        weight_normal,
-        weight_bond_1,
-        weight_bond_2,
-    ):
+        X_center_atom: torch.Tensor,
+        X_atom_1: torch.Tensor,
+        X_atom_2: torch.Tensor,
+        weight_normal: float,
+        weight_bond_1: float,
+        weight_bond_2: float,
+    ) -> torch.Tensor:
         """
         Predict the virtual atom coordinates based on the coordinates of the
         center atom and the two other atoms.
@@ -230,7 +242,9 @@ class ProteinFeatures(nn.Module):
 
         return X_virtual_atom
 
-    def construct_X_virtual_atoms(self, X, X_m, S):
+    def construct_X_virtual_atoms(
+        self, X: torch.Tensor, X_m: torch.Tensor, S: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Given an array of 3D coordinates, construct a the virtual atoms.
 
@@ -248,8 +262,8 @@ class ProteinFeatures(nn.Module):
                 [B, L, len(self.DATA_TO_CALCULATE_VIRTUAL_ATOMS)] - Mask
                 indicating which virtual atoms are valid.
         """
-        X_virtual_atoms = []
-        X_m_virtual_atoms = []
+        X_virtual_atoms_list: list[torch.Tensor] = []
+        X_m_virtual_atoms_list: list[torch.Tensor] = []
         for virtual_atom_data in self.DATA_TO_CALCULATE_VIRTUAL_ATOMS:
             virtual_atom_info, weights = virtual_atom_data
             center_atom = virtual_atom_info["center_atom"]
@@ -285,20 +299,20 @@ class ProteinFeatures(nn.Module):
                 weight_bond_1=weights["weight_bond_1"],
                 weight_bond_2=weights["weight_bond_2"],
             )
-            X_virtual_atoms.append(X_virtual_atom)
+            X_virtual_atoms_list.append(X_virtual_atom)
 
             # X_m_virtual_atom [B, L] - mask indicating if the virtual atom
             # is valid for each residue.
             X_m_virtual_atom = X_m_center_atom * X_m_atom_1 * X_m_atom_2
-            X_m_virtual_atoms.append(X_m_virtual_atom)
+            X_m_virtual_atoms_list.append(X_m_virtual_atom)
 
         # X_virtual_atoms [B, L, len(self.DATA_TO_CALCULATE_VIRTUAL_ATOMS), 3] -
         # coordinates of the virtual atoms for each residue.
-        X_virtual_atoms = torch.stack(X_virtual_atoms, dim=2)
+        X_virtual_atoms = torch.stack(X_virtual_atoms_list, dim=2)
 
         # X_m_virtual_atoms [B, L, len(self.DATA_TO_CALCULATE_VIRTUAL_ATOMS)] -
         # mask indicating which virtual atoms are valid for each residue.
-        X_m_virtual_atoms = torch.stack(X_m_virtual_atoms, dim=2)
+        X_m_virtual_atoms = torch.stack(X_m_virtual_atoms_list, dim=2)
 
         # Check that the virtual atoms are disjoint (only one per residue).
         if torch.any(torch.sum(X_m_virtual_atoms, dim=-1) > 1):
@@ -307,8 +321,12 @@ class ProteinFeatures(nn.Module):
         return X_virtual_atoms, X_m_virtual_atoms
 
     def compute_representative_atom_pairwise_distances(
-        self, X_rep_atoms, X_m_rep_atoms, residue_mask, eps=1e-6
-    ):
+        self,
+        X_rep_atoms: torch.Tensor,
+        X_m_rep_atoms: torch.Tensor,
+        residue_mask: torch.Tensor,
+        eps: float = 1e-6,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Given an array of 3D coordinates, compute the pairwise distances
         between all pairs of atoms. The masked distances are set to the
@@ -378,7 +396,7 @@ class ProteinFeatures(nn.Module):
 
         return D_rep_neighbors, E_idx
 
-    def compute_rbf_embedding_from_distances(self, D):
+    def compute_rbf_embedding_from_distances(self, D: torch.Tensor) -> torch.Tensor:
         """
         Given a tensor of pairwise distances, compute the radial basis
         embedding of the distances.
@@ -410,7 +428,13 @@ class ProteinFeatures(nn.Module):
 
         return rbf_embedding
 
-    def compute_pairwise_residue_rbf_encoding(self, X, E_idx, X_m, eps=1e-6):
+    def compute_pairwise_residue_rbf_encoding(
+        self,
+        X: torch.Tensor,
+        E_idx: torch.Tensor,
+        X_m: torch.Tensor,
+        eps: float = 1e-6,
+    ) -> torch.Tensor:
         """
         Given an array of 3D coordinates, compute the atom by atom pairwise
         distances between each pair of neighbors. Mask the RBF features using
@@ -478,7 +502,9 @@ class ProteinFeatures(nn.Module):
 
         return RBF_all
 
-    def compute_pairwise_positional_encoding(self, R_idx, E_idx, chain_labels):
+    def compute_pairwise_positional_encoding(
+        self, R_idx: torch.Tensor, E_idx: torch.Tensor, chain_labels: torch.Tensor
+    ) -> torch.Tensor:
         """
         Given the indices of the residues and the indices of the top K
         neighbors, compute the positional encoding of the top K neighbors
@@ -521,7 +547,7 @@ class ProteinFeatures(nn.Module):
 
         return positional_encoding
 
-    def featurize_edges(self, input_features):
+    def featurize_edges(self, input_features: dict[str, Any]) -> dict[str, Any]:
         """
         Given input features, construct the edge features for the protein.
 
@@ -636,7 +662,9 @@ class ProteinFeatures(nn.Module):
 
         return edge_features
 
-    def featurize_nodes(self, input_features, edge_features):
+    def featurize_nodes(
+        self, input_features: dict[str, Any], edge_features: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         The default ProteinMPNN does not have any node features.
 
@@ -646,10 +674,10 @@ class ProteinFeatures(nn.Module):
         Returns:
             node_features (dict): Dictionary containing the node features.
         """
-        node_features = {}
+        node_features: dict[str, Any] = {}
         return node_features
 
-    def noise_structure(self, input_features):
+    def noise_structure(self, input_features: dict[str, Any]) -> None:
         """
         Given input features containing 3D coordinates of atoms, add Gaussian
         noise to the coordinates.
@@ -687,7 +715,7 @@ class ProteinFeatures(nn.Module):
         else:
             input_features["X_pre_noise"] = input_features["X"].clone()
 
-    def forward(self, input_features):
+    def forward(self, input_features: dict[str, Any]) -> dict[str, Any]:
         """
         Given input features, construct the graph features for the protein.
 
@@ -761,7 +789,7 @@ class ProteinFeatures(nn.Module):
 
 
 class ProteinFeaturesMembrane(ProteinFeatures):
-    def __init__(self, num_membrane_classes=3, **kwargs):
+    def __init__(self, num_membrane_classes: int = 3, **kwargs: Any) -> None:
         """
         Given a protein structure, extract the features for the graph
         representation of the protein. This class is aware of membrane labels.
@@ -774,11 +802,13 @@ class ProteinFeaturesMembrane(ProteinFeatures):
         self.num_membrane_classes = num_membrane_classes
 
         self.node_embedding = nn.Linear(
-            self.num_classes, self.num_node_output_features, bias=False
+            self.num_membrane_classes, self.num_node_output_features, bias=False
         )
         self.node_norm = nn.LayerNorm(self.num_node_output_features)
 
-    def featurize_nodes(self, input_features, edge_features):
+    def featurize_nodes(
+        self, input_features: dict[str, Any], edge_features: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Given input features, construct the node features for the protein.
 
@@ -817,7 +847,7 @@ class ProteinFeaturesMembrane(ProteinFeatures):
 
 
 class ProteinFeaturesPSSM(ProteinFeatures):
-    def __init__(self, num_pssm_features=20, **kwargs):
+    def __init__(self, num_pssm_features: int = 20, **kwargs: Any) -> None:
         """
         Given a protein structure, extract the features for the graph
         representation of the protein. This class is aware of PSSM features.
@@ -834,7 +864,9 @@ class ProteinFeaturesPSSM(ProteinFeatures):
         )
         self.node_norm = nn.LayerNorm(self.num_node_output_features)
 
-    def featurize_nodes(self, input_features, edge_features):
+    def featurize_nodes(
+        self, input_features: dict[str, Any], edge_features: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Given input features, construct the node features for the protein.
 
@@ -936,7 +968,15 @@ class ProteinFeaturesLigand(ProteinFeatures):
         "OXT": "O",
     }
 
-    def __init__(self, num_neighbors=32, num_context_atoms=25, **kwargs):
+    # Registered as buffers in __init__; declared here so that accesses resolve
+    # as tensors rather than nn.Module.__getattr__'s Tensor | Module union.
+    side_chain_atom_types: torch.Tensor
+    periodic_table_groups: torch.Tensor
+    periodic_table_periods: torch.Tensor
+
+    def __init__(
+        self, num_neighbors: int = 32, num_context_atoms: int = 25, **kwargs: Any
+    ) -> None:
         """
         Given a protein structure and ligand structure, extract the features for
         the graph representation of the protein and ligand. This class is aware
@@ -1282,7 +1322,9 @@ class ProteinFeaturesLigand(ProteinFeatures):
             ),
         )
 
-    def construct_X_side_chain(self, X, X_m, S):
+    def construct_X_side_chain(
+        self, X: torch.Tensor, X_m: torch.Tensor, S: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Given the 3D coordinates of the atoms and the mask, construct the
         side chain atoms and their mask.
@@ -1308,8 +1350,13 @@ class ProteinFeaturesLigand(ProteinFeatures):
         return X_side_chain, X_m_side_chain
 
     def construct_angle_features(
-        self, center_atom, atom_1, atom_2, ligand_subgraph_Y, eps=1e-8
-    ):
+        self,
+        center_atom: torch.Tensor,
+        atom_1: torch.Tensor,
+        atom_2: torch.Tensor,
+        ligand_subgraph_Y: torch.Tensor,
+        eps: float = 1e-8,
+    ) -> torch.Tensor:
         """
         Given the 3D coordinates of the center atom, the first atom, the second
         atom, and the ligand atoms, compute the angle features for the ligand
@@ -1453,13 +1500,13 @@ class ProteinFeaturesLigand(ProteinFeatures):
 
     def gather_nearest_per_residue_atoms(
         self,
-        per_residue_ligand_coords,
-        per_residue_ligand_mask,
-        per_residue_ligand_types,
-        X_virtual_atoms,
-        X_m_virtual_atoms,
-        residue_mask,
-    ):
+        per_residue_ligand_coords: torch.Tensor,
+        per_residue_ligand_mask: torch.Tensor,
+        per_residue_ligand_types: torch.Tensor,
+        X_virtual_atoms: torch.Tensor,
+        X_m_virtual_atoms: torch.Tensor,
+        residue_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Given the 3D coordinates of the ligand atoms, their mask, and the
         virtual atoms, gather the nearest ligand atoms to the virtual atoms for
@@ -1567,8 +1614,14 @@ class ProteinFeaturesLigand(ProteinFeatures):
         return ligand_subgraph_Y, ligand_subgraph_Y_m, ligand_subgraph_Y_t
 
     def gather_nearest_ligand_atoms(
-        self, Y, Y_m, Y_t, X_virtual_atoms, X_m_virtual_atoms, residue_mask
-    ):
+        self,
+        Y: torch.Tensor,
+        Y_m: torch.Tensor,
+        Y_t: torch.Tensor,
+        X_virtual_atoms: torch.Tensor,
+        X_m_virtual_atoms: torch.Tensor,
+        residue_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Given the 3D coordinates of the ligand atoms, their mask, and the
         virtual atoms, gather the nearest ligand atoms to the virtual atoms for
@@ -1624,8 +1677,13 @@ class ProteinFeaturesLigand(ProteinFeatures):
         return ligand_subgraph_Y, ligand_subgraph_Y_m, ligand_subgraph_Y_t
 
     def gather_nearest_atomized_side_chain_atoms(
-        self, X, X_m, S, E_idx, hide_side_chain_mask
-    ):
+        self,
+        X: torch.Tensor,
+        X_m: torch.Tensor,
+        S: torch.Tensor,
+        E_idx: torch.Tensor,
+        hide_side_chain_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Given the 3D coordinates of the polymer atoms, their mask, the indices
         of the top K nearest neighbors for each residue, and a mask indicating
@@ -1712,16 +1770,16 @@ class ProteinFeaturesLigand(ProteinFeatures):
 
     def combine_ligand_and_atomized_side_chain_atoms(
         self,
-        ligand_subgraph_Y,
-        ligand_subgraph_Y_m,
-        ligand_subgraph_Y_t,
-        ligand_subgraph_R,
-        ligand_subgraph_R_m,
-        ligand_subgraph_R_t,
-        X_virtual_atoms,
-        X_m_virtual_atoms,
-        residue_mask,
-    ):
+        ligand_subgraph_Y: torch.Tensor,
+        ligand_subgraph_Y_m: torch.Tensor,
+        ligand_subgraph_Y_t: torch.Tensor,
+        ligand_subgraph_R: torch.Tensor,
+        ligand_subgraph_R_m: torch.Tensor,
+        ligand_subgraph_R_t: torch.Tensor,
+        X_virtual_atoms: torch.Tensor,
+        X_m_virtual_atoms: torch.Tensor,
+        residue_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Given the 3D coordinates of the nearest ligand atoms to the virtual
         atoms, their mask, the element types of the nearest ligand atoms, the
@@ -1821,7 +1879,9 @@ class ProteinFeaturesLigand(ProteinFeatures):
             ligand_subgraph_Y_t_and_R_t,
         )
 
-    def featurize_ligand_atom_type_information(self, ligand_subgraph_Y_t):
+    def featurize_ligand_atom_type_information(
+        self, ligand_subgraph_Y_t: torch.Tensor
+    ) -> torch.Tensor:
         """
         Given the element types of the ligand atoms, compute the periodic table
         group, period, and atomic number for each ligand atom.
@@ -1889,15 +1949,15 @@ class ProteinFeaturesLigand(ProteinFeatures):
 
     def featurize_protein_to_ligand_subgraph_edges(
         self,
-        ligand_subgraph_Y_t_concat_one_hot,
-        X_backbone,
-        X_m_backbone,
-        X_virtual_atoms,
-        X_m_virtual_atoms,
-        ligand_subgraph_Y,
-        ligand_subgraph_Y_m,
-        eps=1e-6,
-    ):
+        ligand_subgraph_Y_t_concat_one_hot: torch.Tensor,
+        X_backbone: torch.Tensor,
+        X_m_backbone: torch.Tensor,
+        X_virtual_atoms: torch.Tensor,
+        X_m_virtual_atoms: torch.Tensor,
+        ligand_subgraph_Y: torch.Tensor,
+        ligand_subgraph_Y_m: torch.Tensor,
+        eps: float = 1e-6,
+    ) -> torch.Tensor:
         """
         Given the 3D coordinates of the backbone atoms, the virtual atoms,
         the ligand atoms, and the mask indicating which atoms are valid,
@@ -2031,7 +2091,9 @@ class ProteinFeaturesLigand(ProteinFeatures):
 
         return E_protein_to_ligand
 
-    def featurize_ligand_subgraph_nodes(self, ligand_subgraph_Y_t_concat_one_hot):
+    def featurize_ligand_subgraph_nodes(
+        self, ligand_subgraph_Y_t_concat_one_hot: torch.Tensor
+    ) -> torch.Tensor:
         """
         Given the atomic number, periodic group, and periodic period of the
         ligand atoms, compute the ligand subgraph node features.
@@ -2062,8 +2124,11 @@ class ProteinFeaturesLigand(ProteinFeatures):
         return ligand_subgraph_nodes
 
     def featurize_ligand_subgraph_edges(
-        self, ligand_subgraph_Y, ligand_subgraph_Y_m, eps=1e-6
-    ):
+        self,
+        ligand_subgraph_Y: torch.Tensor,
+        ligand_subgraph_Y_m: torch.Tensor,
+        eps: float = 1e-6,
+    ) -> torch.Tensor:
         """
         Given the 3D coordinates of the ligand atoms and the mask indicating
         which atoms are valid, compute the ligand subgraph edges.
@@ -2121,7 +2186,9 @@ class ProteinFeaturesLigand(ProteinFeatures):
 
         return ligand_subgraph_edges
 
-    def featurize_nodes(self, input_features, edge_features):
+    def featurize_nodes(
+        self, input_features: dict[str, Any], edge_features: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Given the input features and edge features, compute the node features
         for the ligand atoms and the protein to ligand subgraph edges.
@@ -2320,7 +2387,7 @@ class ProteinFeaturesLigand(ProteinFeatures):
 
         return node_features
 
-    def noise_structure(self, input_features):
+    def noise_structure(self, input_features: dict[str, Any]) -> None:
         """
         Given input features containing 3D coordinates of atoms, add Gaussian
         noise to the coordinates.

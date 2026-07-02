@@ -262,24 +262,12 @@ module = [
 disallow_untyped_defs = true
 check_untyped_defs = true
 
-# mpnn direction (b): the mpnn ratchet is fully cleared (0069), so mpnn modules opt into
-# strict checking one slice per task (same playbook as the shared layer), smallest first.
-# Collapse this list to `mpnn.*` once every mpnn module is covered.
+# mpnn direction (b): every mpnn module is now under strict checking (the per-module
+# ratchet was cleared 0088–0093), so this is collapsed to the whole package, mirroring
+# the shared-layer `foundry.*` override above.
 [[tool.mypy.overrides]]
 module = [
-    "mpnn.collate.feature_collator",
-    "mpnn.loss.nll_loss",
-    "mpnn.metrics.nll",
-    "mpnn.metrics.sequence_recovery",
-    "mpnn.model.layers.message_passing",
-    "mpnn.model.layers.position_wise_feed_forward",
-    "mpnn.model.mpnn",
-    "mpnn.model.layers.positional_encoding",
-    "mpnn.pipelines.mpnn",
-    "mpnn.train",
-    "mpnn.trainers.mpnn",
-    "mpnn.utils.inference",
-    "mpnn.utils.probability",
+    "mpnn.*",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
