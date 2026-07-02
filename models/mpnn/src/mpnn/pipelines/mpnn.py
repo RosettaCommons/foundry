@@ -1,3 +1,4 @@
+import torch
 from atomworks.constants import AF3_EXCLUDED_LIGANDS, STANDARD_AA, UNKNOWN_AA
 from atomworks.enums import ChainTypeInfo
 from atomworks.ml.transforms.atom_array import AddWithinChainInstanceResIdx
@@ -12,6 +13,7 @@ from atomworks.ml.transforms.base import (
     ConvertToTorch,
     Identity,
     SubsetToKeys,
+    Transform,
 )
 from atomworks.ml.transforms.covalent_modifications import (
     FlagAndReassignCovalentModifications,
@@ -35,21 +37,21 @@ from mpnn.transforms.feature_aggregation.user_settings import (
 )
 
 
-def TrainingRoute(transform):
+def TrainingRoute(transform: Transform) -> ConditionalRoute:
     return ConditionalRoute(
         condition_func=lambda data: data["is_inference"],
         transform_map={True: Identity(), False: transform},
     )
 
 
-def InferenceRoute(transform):
+def InferenceRoute(transform: Transform) -> ConditionalRoute:
     return ConditionalRoute(
         condition_func=lambda data: data["is_inference"],
         transform_map={False: Identity(), True: transform},
     )
 
 
-def ModelTypeRoute(transform, model_type: str):
+def ModelTypeRoute(transform: Transform, model_type: str) -> ConditionalRoute:
     return ConditionalRoute(
         condition_func=lambda data: data["model_type"] == model_type,
         transform_map={True: transform, False: Identity()},
@@ -65,7 +67,7 @@ def build_mpnn_transform_pipeline(
     minimal_return: bool = False,
     train_structure_noise_default: float = 0.1,
     undesired_res_names: list[str] = AF3_EXCLUDED_LIGANDS,
-    device=None,
+    device: str | torch.device | None = None,
 ) -> Compose:
     """Build the MPNN transform pipeline.
     Args:
@@ -156,7 +158,10 @@ def build_mpnn_transform_pipeline(
         # Convert to torch and subset keys
         ConvertToTorch(
             keys=["input_features"],
-            **({"device": device} if device is not None else {}),
+            # atomworks types ConvertToTorch's `device` as `str`, but the MPNN inference
+            # engine forwards a `torch.device` (inference_engines/mpnn.py:333); preserve
+            # that pass-through rather than stringifying it here.
+            **({"device": device} if device is not None else {}),  # type: ignore[arg-type]
         ),
         SubsetToKeys(keys=["input_features", "atom_array"]),
     ]
