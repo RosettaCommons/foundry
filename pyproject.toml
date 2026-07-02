@@ -273,6 +273,7 @@ module = [
     "mpnn.metrics.sequence_recovery",
     "mpnn.model.layers.message_passing",
     "mpnn.model.layers.position_wise_feed_forward",
+    "mpnn.model.mpnn",
     "mpnn.model.layers.positional_encoding",
     "mpnn.pipelines.mpnn",
     "mpnn.train",
