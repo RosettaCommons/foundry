@@ -367,3 +367,171 @@ class InterfaceNLL(NLL):
             interface_metrics[f"interface_{key}"] = value
 
         return interface_metrics
+
+
+class SampledNLL(NLL):
+    """NLL of the *sampled* (designed) sequence.
+
+    Unlike :class:`NLL`, which scores the native sequence as a training metric,
+    this scores the sampled sequence under the model's un-temperatured,
+    un-biased log-probabilities (``log_softmax`` of the raw logits). See
+    :class:`MPNNConfidence` for the derived ``exp(-NLL)`` confidence.
+    """
+
+    @property
+    def kwargs_to_compute_args(self):
+        # Build the mapping explicitly: score the *sampled* sequence
+        # (`S_sampled`) using the raw `logits`.
+        return {
+            "logits": ("network_output", "decoder_features", "logits"),
+            "S": ("network_output", "decoder_features", "S_sampled"),
+            "mask_for_loss": ("network_output", "input_features", "mask_for_loss"),
+        }
+
+    def compute(self, logits, S, mask_for_loss, **kwargs):
+        """Convert raw logits to log-probabilities and delegate to ``NLL``.
+
+        Args:
+            logits (torch.Tensor): [B, L, vocab_size] - raw model logits.
+            S (torch.Tensor): [B, L] - the sampled (designed) sequence.
+            mask_for_loss (torch.Tensor): [B, L] - mask for loss.
+            **kwargs: Additional arguments forwarded to ``NLL.compute``.
+
+        Returns:
+            dict: The NLL / confidence metrics from ``NLL.compute``.
+        """
+        # Raw logits -> true log-probs at temperature 1.0 (no bias), matching
+        # LigandMPNN's confidence definition.
+        log_probs = torch.log_softmax(logits, dim=-1)
+        return super().compute(
+            log_probs=log_probs, S=S, mask_for_loss=mask_for_loss, **kwargs
+        )
+
+
+class SampledLigandInterfaceNLL(InterfaceNLL):
+    """Interface NLL of the *sampled* (designed) sequence.
+
+    Like :class:`SampledNLL` but restricted to polymer-ligand interface
+    residues. See :class:`MPNNLigandInterfaceConfidence` for the derived
+    ``exp(-NLL)`` confidence.
+    """
+
+    @property
+    def kwargs_to_compute_args(self):
+        # Build the mapping explicitly: score the *sampled* sequence
+        # (`S_sampled`) using the raw `logits`; `atom_array` derives the
+        # polymer-ligand interface mask.
+        return {
+            "logits": ("network_output", "decoder_features", "logits"),
+            "S": ("network_output", "decoder_features", "S_sampled"),
+            "mask_for_loss": ("network_output", "input_features", "mask_for_loss"),
+            "atom_array": ("network_input", "atom_array"),
+        }
+
+    def compute(self, logits, S, mask_for_loss, atom_array, **kwargs):
+        """Convert raw logits to log-probabilities and delegate to ``InterfaceNLL``.
+
+        Args:
+            logits (torch.Tensor): [B, L, vocab_size] - raw model logits.
+            S (torch.Tensor): [B, L] - the sampled (designed) sequence.
+            mask_for_loss (torch.Tensor): [B, L] - mask for loss.
+            atom_array: Atom array(s) used to derive the polymer-ligand
+                interface mask.
+            **kwargs: Additional arguments forwarded to ``InterfaceNLL.compute``.
+
+        Returns:
+            dict: The interface NLL / confidence metrics (``interface_`` prefix).
+        """
+        # Raw logits -> true log-probs at temperature 1.0 (no bias), matching
+        # LigandMPNN's confidence definition.
+        log_probs = torch.log_softmax(logits, dim=-1)
+        return super().compute(
+            log_probs=log_probs,
+            S=S,
+            mask_for_loss=mask_for_loss,
+            atom_array=atom_array,
+            **kwargs,
+        )
+
+
+class MPNNConfidence(SampledNLL):
+    """Per-design confidence of the sampled (designed) sequence.
+
+    Thin wrapper around :class:`SampledNLL` that additionally exposes the
+    LigandMPNN-style confidence (``confidence = exp(-NLL)``) so callers do not
+    need to apply the NLL-to-confidence transform themselves. Confidence lies
+    in ``(0, 1]``; higher means the model is more confident in the sequence.
+    """
+
+    def compute(self, logits, S, mask_for_loss, **kwargs):
+        """Compute the sampled-sequence NLL and derived confidence.
+
+        Args:
+            logits (torch.Tensor): [B, L, vocab_size] - raw model logits.
+            S (torch.Tensor): [B, L] - the sampled (designed) sequence.
+            mask_for_loss (torch.Tensor): [B, L] - mask for loss.
+            **kwargs: Additional arguments forwarded to ``SampledNLL.compute``.
+
+        Returns:
+            dict: The ``SampledNLL`` metrics plus, when the corresponding NLL
+            outputs are present, ``confidence_per_example`` (= exp(-NLL)) and
+            ``confidence_per_residue`` (= exp(-NLL) per position, 0 at
+            non-designed positions).
+        """
+        metrics = super().compute(
+            logits=logits, S=S, mask_for_loss=mask_for_loss, **kwargs
+        )
+        if "nll_per_example" in metrics:
+            metrics["confidence_per_example"] = torch.exp(-metrics["nll_per_example"])
+        if "nll_per_residue" in metrics:
+            confidence = torch.exp(-metrics["nll_per_residue"])
+            mask = metrics["per_residue_mask"].bool()
+            metrics["confidence_per_residue"] = torch.where(
+                mask, confidence, torch.zeros_like(confidence)
+            )
+        return metrics
+
+
+class MPNNLigandInterfaceConfidence(SampledLigandInterfaceNLL):
+    """Per-design confidence over polymer-ligand interface residues.
+
+    Ligand-interface counterpart of :class:`MPNNConfidence`; wraps
+    :class:`SampledLigandInterfaceNLL` and exposes ``exp(-NLL)`` confidence
+    computed over the polymer-ligand interface residues only (``interface_``
+    prefixed keys).
+    """
+
+    def compute(self, logits, S, mask_for_loss, atom_array, **kwargs):
+        """Compute the interface NLL and derived interface confidence.
+
+        Args:
+            logits (torch.Tensor): [B, L, vocab_size] - raw model logits.
+            S (torch.Tensor): [B, L] - the sampled (designed) sequence.
+            mask_for_loss (torch.Tensor): [B, L] - mask for loss.
+            atom_array: Atom array(s) used to derive the interface mask.
+            **kwargs: Additional arguments forwarded to
+                ``SampledLigandInterfaceNLL.compute``.
+
+        Returns:
+            dict: The ``SampledLigandInterfaceNLL`` metrics plus, when present,
+            ``interface_confidence_per_example`` and
+            ``interface_confidence_per_residue``.
+        """
+        metrics = super().compute(
+            logits=logits,
+            S=S,
+            mask_for_loss=mask_for_loss,
+            atom_array=atom_array,
+            **kwargs,
+        )
+        if "interface_nll_per_example" in metrics:
+            metrics["interface_confidence_per_example"] = torch.exp(
+                -metrics["interface_nll_per_example"]
+            )
+        if "interface_nll_per_residue" in metrics:
+            confidence = torch.exp(-metrics["interface_nll_per_residue"])
+            mask = metrics["interface_per_residue_mask"].bool()
+            metrics["interface_confidence_per_residue"] = torch.where(
+                mask, confidence, torch.zeros_like(confidence)
+            )
+        return metrics
