@@ -272,6 +272,20 @@ module = [
 disallow_untyped_defs = true
 check_untyped_defs = true
 
+# rfd3 direction (b), in progress: strict checking is opted into module-by-module as the
+# annotation fallout is cleared (same ratchet as mpnn 0088–0093). Modules not yet listed
+# stay at the lenient baseline. Collapse to `rfd3.*` once every module is covered.
+[[tool.mypy.overrides]]
+module = [
+    "rfd3.callbacks",
+    "rfd3.cli",
+    "rfd3.model.layers.chunked_pairwise",
+    "rfd3.trainer.rfd3",
+    "rfd3.utils.vizualize",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
+
 # Testing ----------------------------------------------------------------------------
 [tool.pytest.ini_options]
 # Shared-layer tests live in the top-level `tests/`; model-specific tests live in each

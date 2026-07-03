@@ -9,7 +9,7 @@ app = typer.Typer()
 @app.command(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
 )
-def design(ctx: typer.Context):
+def design(ctx: typer.Context) -> None:
     """Run design using hydra config overrides and input files."""
     # Find the RFD3 configs directory relative to this file
     # Development: models/rfd3/src/rfd3/cli.py -> models/rfd3/configs/

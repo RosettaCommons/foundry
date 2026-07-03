@@ -245,7 +245,7 @@ def _viz_from_file(
     clear: bool = True,
     label: bool = True,
     max_distances: int = 100,
-):
+) -> None:
     if file_path.endswith(".pkl.gz"):
         import gzip
         import pickle
