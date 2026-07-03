@@ -282,6 +282,11 @@ module = [
     "rfd3.model.layers.chunked_pairwise",
     "rfd3.trainer.rfd3",
     "rfd3.utils.vizualize",
+    "rfd3.model.RFD3",
+    "rfd3.model.cfg_utils",
+    "rfd3.transforms.ncaa_transforms",
+    "rfd3.transforms.ppi_transforms",
+    "rfd3.utils.io",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true

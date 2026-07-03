@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from atomworks.io.utils.io_utils import to_cif_file
-from beartype.typing import Callable, Literal, cast
+from beartype.typing import Any, Callable, Literal, cast
 from biotite.structure import AtomArray, AtomArrayStack, stack
 
 from foundry.utils.alignment import weighted_rigid_align
@@ -20,7 +20,7 @@ def dump_structures(
     base_path: PathLike,
     one_model_per_file: bool,
     extra_fields: list[str] | Literal["all"] = [],
-    **kwargs,
+    **kwargs: Any,
 ) -> None:
     """Dump structures to CIF files, given the coordinates and input AtomArray.
 
@@ -64,7 +64,7 @@ def dump_metadata(
     prediction_metadata: dict,
     base_path: PathLike,
     one_model_per_file: bool,
-):
+) -> None:
     """
     Dump JSONs of prediction metadata to disk.
 

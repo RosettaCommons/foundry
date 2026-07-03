@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import hydra
 import torch
@@ -36,7 +37,7 @@ class RFD3(nn.Module):
         token_initializer: DictConfig | dict,
         diffusion_module: DictConfig | dict,
         inference_sampler: DictConfig | dict,
-        **_,
+        **_: Any,
     ):
         super().__init__()
         # Check for chunked P_LL mode via environment variable
@@ -74,8 +75,8 @@ class RFD3(nn.Module):
         self,
         input: dict,
         coord_atom_lvl_to_be_noised: torch.Tensor | None = None,
-        n_cycle=None,
-        **_,
+        n_cycle: int | None = None,
+        **_: Any,
     ) -> dict:
         initializer_outputs = self.token_initializer(input["f"])
 
