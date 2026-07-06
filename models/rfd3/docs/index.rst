@@ -38,6 +38,7 @@ RFD3, we recommend starting with the introductory tutorials before moving on to 
    :maxdepth: 1
 
    tutorials/intermediate_enzyme_design_tutorial.md
+   tutorials/binder_design_tutorial.md
 
 Examples
 --------
