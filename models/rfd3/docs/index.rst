@@ -39,6 +39,15 @@ RFD3, we recommend starting with the introductory tutorials before moving on to 
 
    tutorials/intermediate_enzyme_design_tutorial.md
 
+Advanced Tutorials
+------------------
+The advanced RFdiffusion3 tutorials focus on more complex design tasks and provide in-depth explanations of the underlying principles and techniques used in RFD3. These tutorials assume some knowledge of the use of PyMOL (or other visualization software) and basic RFdiffusion3 concepts that are described in the introductory and intermediate tutorials.
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/advanced_enzyme_design_tutorial.md
+
 Examples
 --------
 The following examples demonstrate how to use RFD3 for various design
