@@ -9,7 +9,7 @@ ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 
 class LogDesignValidationMetricsCallback(BaseCallback):
-    def on_validation_epoch_end(self, trainer: Any):
+    def on_validation_epoch_end(self, trainer: Any) -> None:
         # Only log metrics to disk if this is the global zero rank
         if not trainer.fabric.is_global_zero:
             return

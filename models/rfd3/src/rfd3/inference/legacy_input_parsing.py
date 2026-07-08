@@ -2,7 +2,7 @@ import copy
 import functools
 import logging
 from os import PathLike
-from typing import Dict
+from typing import Dict, cast
 
 import biotite.structure as struc
 import numpy as np
@@ -36,6 +36,7 @@ from rfd3.utils.inference import (
     set_com,
     set_common_annotations,
     set_indices,
+    spoof_helical_bundle_ss_conditioning_fn,
 )
 
 from foundry.common import exists
@@ -636,22 +637,22 @@ def accumulate_components(
 def create_atom_array_from_design_specification_legacy(
     *,
     # Specification args:
-    input: PathLike = None,
+    input: PathLike | None = None,
     length: str = "100-300",
-    contig: str = None,
-    fixed_atoms: dict = None,
-    unindex: str = None,
-    unfix_sequence: str = None,
+    contig: str | None = None,
+    fixed_atoms: dict | None = None,
+    unindex: str | None = None,
+    unfix_sequence: str | None = None,
     redesign_motif_sidechains: bool = False,
     unfix_all=False,
-    unfix_specific: str = None,
+    unfix_specific: str | list | None = None,
     flexible_backbone: bool = False,
     # Args for biomolecular design (Enzymes, DNA/PNA):
-    ligand: str = None,
-    ori_token: list[float] = None,
+    ligand: str | None = None,
+    ori_token: list[float] | None = None,
     infer_ori_strategy: str | None = None,
-    atomwise_rasa: dict = None,
-    atomwise_hbond: dict = None,
+    atomwise_rasa: dict | None = None,
+    atomwise_hbond: dict | None = None,
     # Additional args:
     out_path=None,
     cif_parser_args=None,
@@ -662,7 +663,7 @@ def create_atom_array_from_design_specification_legacy(
     is_sheet: dict | None = None,
     is_loop: dict | None = None,
     spoof_helical_bundle_ss_conditioning: bool = False,
-    symmetry: dict = None,
+    symmetry: dict | None = None,
     # Low-temperature global conditioning args
     plddt_enhanced: bool = True,
     is_non_loopy: bool | None = None,
@@ -694,12 +695,12 @@ def create_atom_array_from_design_specification_legacy(
     ###########################################################################################################################
 
     # 1) Load input data if provided
-    if exists(input):
+    if input is not None:
         atom_array_input = inference_load_(input, cif_parser_args=cif_parser_args)[
             "atom_array"
         ]
         # If we are doing symmetric design, we need to center the full input atom array at the origin (for getting symmetry frames)
-        if exists(symmetry) and symmetry.get("id"):
+        if symmetry is not None and symmetry.get("id"):
             atom_array_input = center_symmetric_src_atom_array(atom_array_input)
     elif exists(contig) or exists(length):
         atom_array_input = None
@@ -710,12 +711,10 @@ def create_atom_array_from_design_specification_legacy(
     if exists(length) and not exists(contig):
         # Handle cases where contigs aren't specified
         if not exists(unindex) and not exists(flexible_backbone):
-            if exists(fixed_atoms):
+            if fixed_atoms is not None:
                 # ensure that fixed atoms are in the input, else raise error
-                _ = [
+                for key in fixed_atoms.keys():
                     fetch_mask_from_component(key, atom_array=atom_array_input)
-                    for key in fixed_atoms.keys()
-                ]
             ranked_logger.warning(
                 "No input contig specified and no motif, running unconditional generation"
             )
@@ -723,14 +722,14 @@ def create_atom_array_from_design_specification_legacy(
         contig = length
     else:
         indexed_components_provided = True
-    if not exists(fixed_atoms):
+    if fixed_atoms is None:
         fixed_atoms = {}
 
     optional_conditions = []
     if exists(atomwise_rasa):
         set_atom_level_argument(atom_array_input, atomwise_rasa, "rasa_bin")
         optional_conditions.append("rasa_bin")
-    if exists(atomwise_hbond):
+    if atomwise_hbond is not None:
         for key, value in atomwise_hbond.items():
             set_atom_level_argument(atom_array_input, value, key)
             optional_conditions.append(key)
@@ -741,8 +740,10 @@ def create_atom_array_from_design_specification_legacy(
         optional_conditions.append("is_atom_level_hotspot")
 
     # 2) Parse contigs into components
+    # contig is always set by here: it is either provided or defaulted to `length`
+    # above (length is non-optional), so the cast documents that invariant for mypy.
     indexed_components = get_design_pattern_with_constraints(
-        contig, length
+        cast(str, contig), length
     )  # e.g. [2, A20, A21, 2, A25, 3, A30, /0, 3]
 
     # Parse redesign_motif_sidechains if necessary
@@ -754,7 +755,7 @@ def create_atom_array_from_design_specification_legacy(
 
     # ... Add unindexed components
     unindexed_components, unindexed_breaks = (
-        get_motif_components_and_breaks(unindex) if exists(unindex) else ([], [])
+        get_motif_components_and_breaks(unindex) if unindex is not None else ([], [])
     )
     breaks = [None] * len(indexed_components) + unindexed_breaks
     assert_non_intersecting_contigs(indexed_components, unindexed_components)
@@ -765,16 +766,16 @@ def create_atom_array_from_design_specification_legacy(
     )
 
     # Determine which residues to unfix
-    unfix_residues = []
+    unfix_residues: list[str] = []
     if isinstance(unfix_specific, list):
         unfix_residues = [str(u) for u in unfix_specific]
     elif isinstance(unfix_specific, str):
         if unfix_specific.upper() == "ALL":
             unfix_all = True
         elif unfix_specific:
-            unfix_residues, _ = get_motif_components_and_breaks(
+            unfix_residues = get_motif_components_and_breaks(
                 unfix_specific, index_all=True
-            )
+            )[0]
 
     # 3) Create atom array from components
     if exists(partial_t):
@@ -884,7 +885,7 @@ def create_atom_array_from_design_specification_legacy(
         atom_array = atom_array + ligand_array
 
     # ... Apply symmetry if it exists ahead of any other processing
-    if exists(symmetry) and symmetry.get("id"):
+    if symmetry is not None and symmetry.get("id"):
         atom_array = make_symmetric_atom_array(
             atom_array, symmetry, sm=ligand, src_atom_array=atom_array_input
         )
@@ -892,7 +893,7 @@ def create_atom_array_from_design_specification_legacy(
     # ... Input frame and ORI token handling
     if exists(partial_t):
         # For symmetric structures, avoid COM centering that would collapse chains
-        if exists(symmetry) and symmetry.get("id"):
+        if symmetry is not None and symmetry.get("id"):
             ranked_logger.info(
                 "Partial diffusion with symmetry: skipping COM centering to preserve chain spacing"
             )

@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 from atomworks.ml.transforms.base import ConvertToTorch
 from mpnn.collate.feature_collator import FeatureCollator
@@ -22,10 +24,10 @@ class NLL(Metric):
 
     def __init__(
         self,
-        return_per_example_metrics=False,
-        return_per_residue_metrics=False,
-        **kwargs,
-    ):
+        return_per_example_metrics: bool = False,
+        return_per_residue_metrics: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize the NLL metric.
 
@@ -42,7 +44,7 @@ class NLL(Metric):
         self.return_per_residue_metrics = return_per_residue_metrics
 
     @property
-    def kwargs_to_compute_args(self):
+    def kwargs_to_compute_args(self) -> dict[str, Any]:
         """
         Map input keys to the compute method arguments.
 
@@ -56,7 +58,9 @@ class NLL(Metric):
             "mask_for_loss": ("network_output", "input_features", "mask_for_loss"),
         }
 
-    def get_per_residue_mask(self, mask_for_loss, **kwargs):
+    def get_per_residue_mask(
+        self, mask_for_loss: torch.Tensor, **kwargs: Any
+    ) -> torch.Tensor:
         """
         Get the per-residue mask for computing NLL.
 
@@ -73,7 +77,9 @@ class NLL(Metric):
         per_residue_mask = mask_for_loss
         return per_residue_mask
 
-    def compute_nll_metrics(self, S, log_probs, per_residue_mask):
+    def compute_nll_metrics(
+        self, S: torch.Tensor, log_probs: torch.Tensor, per_residue_mask: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
         """
         Compute NLL and perplexity metrics using the provided per-residue mask.
         Args:
@@ -143,7 +149,15 @@ class NLL(Metric):
         }
         return nll_dict
 
-    def compute(self, log_probs, S, mask_for_loss, **kwargs):
+    # MetricManager introspects the base ``Metric.compute(**kwargs)`` and dispatches by the
+    # names in ``kwargs_to_compute_args``, so declaring explicit params here is by design.
+    def compute(  # type: ignore[override]
+        self,
+        log_probs: torch.Tensor,
+        S: torch.Tensor,
+        mask_for_loss: torch.Tensor,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """
         Compute the negative log likelihood (NLL) and perplexity, meaned
         across all residues that are included in the loss calculation.
@@ -182,7 +196,7 @@ class NLL(Metric):
         nll_metrics = self.compute_nll_metrics(S, log_probs, per_residue_mask)
 
         # Prepare the metric dictionary.
-        metric_dict = {
+        metric_dict: dict[str, Any] = {
             "mean_nll": nll_metrics["mean_nll"].detach().item(),
             "mean_perplexity": nll_metrics["mean_perplexity"].detach().item(),
         }
@@ -220,8 +234,8 @@ class InterfaceNLL(NLL):
         interface_distance_threshold: float = 5.0,
         return_per_example_metrics: bool = False,
         return_per_residue_metrics: bool = False,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize the InterfaceNLL metric.
 
@@ -244,7 +258,7 @@ class InterfaceNLL(NLL):
         self.interface_distance_threshold = interface_distance_threshold
 
     @property
-    def kwargs_to_compute_args(self):
+    def kwargs_to_compute_args(self) -> dict[str, Any]:
         """
         Map input keys to the compute method arguments.
 
@@ -257,7 +271,9 @@ class InterfaceNLL(NLL):
         args_mapping["atom_array"] = ("network_input", "atom_array")
         return args_mapping
 
-    def get_per_residue_mask(self, mask_for_loss, **kwargs):
+    def get_per_residue_mask(
+        self, mask_for_loss: torch.Tensor, **kwargs: Any
+    ) -> torch.Tensor:
         """
         Get the per-residue mask for computing interface NLL.
 
@@ -334,7 +350,16 @@ class InterfaceNLL(NLL):
 
         return combined_mask
 
-    def compute(self, log_probs, S, mask_for_loss, atom_array, **kwargs):
+    # MetricManager introspects the base ``Metric.compute(**kwargs)`` and dispatches by the
+    # names in ``kwargs_to_compute_args``, so declaring explicit params here is by design.
+    def compute(  # type: ignore[override]
+        self,
+        log_probs: torch.Tensor,
+        S: torch.Tensor,
+        mask_for_loss: torch.Tensor,
+        atom_array: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """
         Compute the interface negative log likelihood (NLL) and perplexity,
         averaged across interface residues only.
@@ -379,7 +404,7 @@ class SampledNLL(NLL):
     """
 
     @property
-    def kwargs_to_compute_args(self):
+    def kwargs_to_compute_args(self) -> dict[str, Any]:
         # Build the mapping explicitly: score the *sampled* sequence
         # (`S_sampled`) using the raw `logits`.
         return {
@@ -388,7 +413,13 @@ class SampledNLL(NLL):
             "mask_for_loss": ("network_output", "input_features", "mask_for_loss"),
         }
 
-    def compute(self, logits, S, mask_for_loss, **kwargs):
+    def compute(  # type: ignore[override]
+        self,
+        logits: torch.Tensor,
+        S: torch.Tensor,
+        mask_for_loss: torch.Tensor,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """Convert raw logits to log-probabilities and delegate to ``NLL``.
 
         Args:
@@ -417,7 +448,7 @@ class SampledLigandInterfaceNLL(InterfaceNLL):
     """
 
     @property
-    def kwargs_to_compute_args(self):
+    def kwargs_to_compute_args(self) -> dict[str, Any]:
         # Build the mapping explicitly: score the *sampled* sequence
         # (`S_sampled`) using the raw `logits`; `atom_array` derives the
         # polymer-ligand interface mask.
@@ -428,7 +459,14 @@ class SampledLigandInterfaceNLL(InterfaceNLL):
             "atom_array": ("network_input", "atom_array"),
         }
 
-    def compute(self, logits, S, mask_for_loss, atom_array, **kwargs):
+    def compute(  # type: ignore[override]
+        self,
+        logits: torch.Tensor,
+        S: torch.Tensor,
+        mask_for_loss: torch.Tensor,
+        atom_array: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """Convert raw logits to log-probabilities and delegate to ``InterfaceNLL``.
 
         Args:
@@ -463,7 +501,13 @@ class MPNNConfidence(SampledNLL):
     in ``(0, 1]``; higher means the model is more confident in the sequence.
     """
 
-    def compute(self, logits, S, mask_for_loss, **kwargs):
+    def compute(  # type: ignore[override]
+        self,
+        logits: torch.Tensor,
+        S: torch.Tensor,
+        mask_for_loss: torch.Tensor,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """Compute the sampled-sequence NLL and derived confidence.
 
         Args:
@@ -501,7 +545,14 @@ class MPNNLigandInterfaceConfidence(SampledLigandInterfaceNLL):
     prefixed keys).
     """
 
-    def compute(self, logits, S, mask_for_loss, atom_array, **kwargs):
+    def compute(  # type: ignore[override]
+        self,
+        logits: torch.Tensor,
+        S: torch.Tensor,
+        mask_for_loss: torch.Tensor,
+        atom_array: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """Compute the interface NLL and derived interface confidence.
 
         Args:

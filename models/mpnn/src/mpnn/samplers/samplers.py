@@ -34,7 +34,9 @@ class PaddedTokenBudgetBatchSampler(BatchSampler):
         # Initialize BatchSampler with a dummy batch_size (we don't use it).
         super().__init__(sampler, batch_size=1, drop_last=False)
 
-        self.sampler = sampler
+        # Narrow the inherited BatchSampler.sampler (typed `Sampler | Iterable[int]`)
+        # back to the `Sampler` this class requires (it is passed to set_sampler_epoch).
+        self.sampler: Sampler = sampler
         self.get_num_tokens = get_num_tokens
         self.max_tokens_with_padding = max_tokens_with_padding
         self.shuffle_batches = shuffle_batches
@@ -99,7 +101,7 @@ class PaddedTokenBudgetBatchSampler(BatchSampler):
 
         # Batch by length
         batches = []
-        current_batch = []
+        current_batch: List[Any] = []
         current_max_length = 0
         for idx, length in sample_indices_and_lengths:
             # Check if adding this sample would violate max_tokens_with_padding

@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 import torch.nn as nn
 from atomworks.constants import UNKNOWN_AA
@@ -24,7 +26,7 @@ class ProteinMPNN(nn.Module):
     HAS_NODE_FEATURES = False
 
     @staticmethod
-    def init_weights(module):
+    def init_weights(module: nn.Module) -> None:
         """
         Initialize the weights of the module.
 
@@ -42,19 +44,19 @@ class ProteinMPNN(nn.Module):
 
     def __init__(
         self,
-        num_node_features=128,
-        num_edge_features=128,
-        hidden_dim=128,
-        num_encoder_layers=3,
-        num_decoder_layers=3,
-        num_neighbors=48,
-        dropout_rate=0.1,
-        num_positional_embeddings=16,
-        min_rbf_mean=2.0,
-        max_rbf_mean=22.0,
-        num_rbf=16,
-        graph_featurization_module=None,
-    ):
+        num_node_features: int = 128,
+        num_edge_features: int = 128,
+        hidden_dim: int = 128,
+        num_encoder_layers: int = 3,
+        num_decoder_layers: int = 3,
+        num_neighbors: int = 48,
+        dropout_rate: float = 0.1,
+        num_positional_embeddings: int = 16,
+        min_rbf_mean: float = 2.0,
+        max_rbf_mean: float = 22.0,
+        num_rbf: int = 16,
+        graph_featurization_module: ProteinFeatures | None = None,
+    ) -> None:
         """
         Setup the ProteinMPNN model.
 
@@ -149,7 +151,7 @@ class ProteinMPNN(nn.Module):
         # Linear layer for the output
         self.W_out = nn.Linear(hidden_dim, self.vocab_size, bias=True)
 
-    def construct_known_residue_mask(self, S):
+    def construct_known_residue_mask(self, S: torch.Tensor) -> torch.Tensor:
         """
         Construct a mask for the known residues based on the sequence S.
 
@@ -169,7 +171,7 @@ class ProteinMPNN(nn.Module):
 
         return known_residue_mask
 
-    def sample_and_construct_masks(self, input_features):
+    def sample_and_construct_masks(self, input_features: dict[str, Any]) -> None:
         """
         Sample and construct masks for the input features.
 
@@ -235,7 +237,7 @@ class ProteinMPNN(nn.Module):
             & input_features["designed_residue_mask"]
         )
 
-    def graph_featurization(self, input_features):
+    def graph_featurization(self, input_features: dict[str, Any]) -> dict[str, Any]:
         """
         Apply the graph featurization to the input features.
 
@@ -249,7 +251,9 @@ class ProteinMPNN(nn.Module):
 
         return graph_features
 
-    def encode(self, input_features, graph_features):
+    def encode(
+        self, input_features: dict[str, Any], graph_features: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Encode the protein features with message passing.
 
@@ -331,7 +335,12 @@ class ProteinMPNN(nn.Module):
 
         return encoder_features
 
-    def setup_causality_masks(self, input_features, graph_features, decoding_eps=1e-4):
+    def setup_causality_masks(
+        self,
+        input_features: dict[str, Any],
+        graph_features: dict[str, Any],
+        decoding_eps: float = 1e-4,
+    ) -> dict[str, Any]:
         """
         Setup the causality masks for the decoder. This can involve sampling
         the decoding order.
@@ -550,7 +559,12 @@ class ProteinMPNN(nn.Module):
 
         return decoder_features
 
-    def repeat_along_batch(self, input_features, graph_features, encoder_features):
+    def repeat_along_batch(
+        self,
+        input_features: dict[str, Any],
+        graph_features: dict[str, Any],
+        encoder_features: dict[str, Any],
+    ) -> None:
         """
         Given the input features, graph features, and encoder features,
         repeat the samples along the batch dimension. This is useful during
@@ -751,8 +765,12 @@ class ProteinMPNN(nn.Module):
             )
 
     def decode_setup(
-        self, input_features, graph_features, encoder_features, decoder_features
-    ):
+        self,
+        input_features: dict[str, Any],
+        graph_features: dict[str, Any],
+        encoder_features: dict[str, Any],
+        decoder_features: dict[str, Any],
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Given the input features, graph features, encoder features, and initial
         decoder features, set up the decoder for the autoregressive decoding.
@@ -851,7 +869,14 @@ class ProteinMPNN(nn.Module):
 
         return h_EXV_encoder_anti_causal, mask_E, h_S
 
-    def logits_to_sample(self, logits, bias, pair_bias, S_for_pair_bias, temperature):
+    def logits_to_sample(
+        self,
+        logits: torch.Tensor,
+        bias: torch.Tensor | None,
+        pair_bias: torch.Tensor | None,
+        S_for_pair_bias: torch.Tensor | None,
+        temperature: torch.Tensor | None,
+    ) -> dict[str, Any]:
         """
         Convert the logits to log probabilities, probabilities, sampled
         probabilities, predicted sequence, and argmax sequence.
@@ -894,6 +919,9 @@ class ProteinMPNN(nn.Module):
         B, L, vocab_size = logits.shape
 
         if pair_bias is not None:
+            # Per the signature contract, S_for_pair_bias is non-None whenever
+            # pair_bias is provided; narrow it for the indexing below.
+            assert S_for_pair_bias is not None
             # pair_bias_total [B, L, self.vocab_size] - the total pair bias to
             # add to the sequence logits, computed for every residue by
             # indexing the pair bias with the sequence (S_for_pair_bias) and
@@ -956,8 +984,12 @@ class ProteinMPNN(nn.Module):
         return sample_dict
 
     def decode_teacher_forcing(
-        self, input_features, graph_features, encoder_features, decoder_features
-    ):
+        self,
+        input_features: dict[str, Any],
+        graph_features: dict[str, Any],
+        encoder_features: dict[str, Any],
+        decoder_features: dict[str, Any],
+    ) -> None:
         """
         Given the input features, graph features, encoder features, and
         decoder features, perform the decoding with teacher forcing.
@@ -1225,8 +1257,12 @@ class ProteinMPNN(nn.Module):
         decoder_features["S_argmax"] = sample_dict["S_argmax"]
 
     def decode_auto_regressive(
-        self, input_features, graph_features, encoder_features, decoder_features
-    ):
+        self,
+        input_features: dict[str, Any],
+        graph_features: dict[str, Any],
+        encoder_features: dict[str, Any],
+        decoder_features: dict[str, Any],
+    ) -> None:
         """
         Given the input features, graph features, encoder features, and
         decoder features, perform the autoregressive decoding.
@@ -1808,8 +1844,12 @@ class ProteinMPNN(nn.Module):
         decoder_features["S_argmax"] = S_argmax
 
     def construct_output_dictionary(
-        self, input_features, graph_features, encoder_features, decoder_features
-    ):
+        self,
+        input_features: dict[str, Any],
+        graph_features: dict[str, Any],
+        encoder_features: dict[str, Any],
+        decoder_features: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Constructs the output dictionary based on the requested features.
 
@@ -1879,7 +1919,7 @@ class ProteinMPNN(nn.Module):
 
         return output_dict
 
-    def forward(self, network_input):
+    def forward(self, network_input: dict[str, Any]) -> dict[str, Any]:
         """
         Forward pass of the ProteinMPNN model.
 
@@ -2155,19 +2195,19 @@ class MembraneMPNN(ProteinMPNN):
 
     def __init__(
         self,
-        num_node_features=128,
-        num_edge_features=128,
-        hidden_dim=128,
-        num_encoder_layers=3,
-        num_decoder_layers=3,
-        num_neighbors=48,
-        dropout_rate=0.1,
-        num_positional_embeddings=16,
-        min_rbf_mean=2.0,
-        max_rbf_mean=22.0,
-        num_rbf=16,
-        num_membrane_classes=3,
-    ):
+        num_node_features: int = 128,
+        num_edge_features: int = 128,
+        hidden_dim: int = 128,
+        num_encoder_layers: int = 3,
+        num_decoder_layers: int = 3,
+        num_neighbors: int = 48,
+        dropout_rate: float = 0.1,
+        num_positional_embeddings: int = 16,
+        min_rbf_mean: float = 2.0,
+        max_rbf_mean: float = 22.0,
+        num_rbf: int = 16,
+        num_membrane_classes: int = 3,
+    ) -> None:
         """
         Setup the MembraneMPNN model.
 
@@ -2212,19 +2252,19 @@ class PSSMMPNN(ProteinMPNN):
 
     def __init__(
         self,
-        num_node_features=128,
-        num_edge_features=128,
-        hidden_dim=128,
-        num_encoder_layers=3,
-        num_decoder_layers=3,
-        num_neighbors=48,
-        dropout_rate=0.1,
-        num_positional_embeddings=16,
-        min_rbf_mean=2.0,
-        max_rbf_mean=22.0,
-        num_rbf=16,
-        num_pssm_features=20,
-    ):
+        num_node_features: int = 128,
+        num_edge_features: int = 128,
+        hidden_dim: int = 128,
+        num_encoder_layers: int = 3,
+        num_decoder_layers: int = 3,
+        num_neighbors: int = 48,
+        dropout_rate: float = 0.1,
+        num_positional_embeddings: int = 16,
+        min_rbf_mean: float = 2.0,
+        max_rbf_mean: float = 22.0,
+        num_rbf: int = 16,
+        num_pssm_features: int = 20,
+    ) -> None:
         """
         Setup the PSSMMPNN model.
 
@@ -2272,22 +2312,22 @@ class LigandMPNN(ProteinMPNN):
 
     def __init__(
         self,
-        num_node_features=128,
-        num_edge_features=128,
-        hidden_dim=128,
-        num_encoder_layers=3,
-        num_decoder_layers=3,
-        num_neighbors=32,
-        dropout_rate=0.1,
-        num_positional_embeddings=16,
-        min_rbf_mean=2.0,
-        max_rbf_mean=22.0,
-        num_rbf=16,
-        num_context_atoms=25,
-        num_context_encoding_layers=2,
-        overall_atomize_side_chain_probability=0.5,
-        per_residue_atomize_side_chain_probability=0.02,
-    ):
+        num_node_features: int = 128,
+        num_edge_features: int = 128,
+        hidden_dim: int = 128,
+        num_encoder_layers: int = 3,
+        num_decoder_layers: int = 3,
+        num_neighbors: int = 32,
+        dropout_rate: float = 0.1,
+        num_positional_embeddings: int = 16,
+        min_rbf_mean: float = 2.0,
+        max_rbf_mean: float = 22.0,
+        num_rbf: int = 16,
+        num_context_atoms: int = 25,
+        num_context_encoding_layers: int = 2,
+        overall_atomize_side_chain_probability: float = 0.5,
+        per_residue_atomize_side_chain_probability: float = 0.02,
+    ) -> None:
         # Pass the num_context_atoms to the graph featurization module.
         graph_featurization_module = ProteinFeaturesLigand(
             num_edge_output_features=num_edge_features,
@@ -2356,7 +2396,7 @@ class LigandMPNN(ProteinMPNN):
             ]
         )
 
-    def sample_and_construct_masks(self, input_features):
+    def sample_and_construct_masks(self, input_features: dict[str, Any]) -> None:
         """
         Sample and construct masks for the input features.
 
@@ -2433,7 +2473,9 @@ class LigandMPNN(ProteinMPNN):
             input_features["mask_for_loss"] & input_features["hide_side_chain_mask"]
         )
 
-    def encode(self, input_features, graph_features):
+    def encode(
+        self, input_features: dict[str, Any], graph_features: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Encode the protein features with ligand context.
 
@@ -2564,7 +2606,7 @@ class LigandMPNN(ProteinMPNN):
 
         return encoder_features
 
-    def forward(self, network_input):
+    def forward(self, network_input: dict[str, Any]) -> dict[str, Any]:
         """
         Forward pass for the LigandMPNN model, which uses the same forward
         function and is repeated here for documentation purposes.

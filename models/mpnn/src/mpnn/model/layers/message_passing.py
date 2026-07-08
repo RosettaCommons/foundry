@@ -6,7 +6,9 @@ from mpnn.model.layers.position_wise_feed_forward import PositionWiseFeedForward
 # Gather functions borrowed from ProteinMPNN;
 # originally from:
 # https://github.com/jingraham/neurips19-graph-protein-design/tree/master
-def gather_edges(edge_features, neighbor_idx):
+def gather_edges(
+    edge_features: torch.Tensor, neighbor_idx: torch.Tensor
+) -> torch.Tensor:
     """
     Gather edge features for the neighbors of each node.
     Args:
@@ -29,7 +31,9 @@ def gather_edges(edge_features, neighbor_idx):
     return edge_features_at_neighbors
 
 
-def gather_nodes(node_features, neighbor_idx):
+def gather_nodes(
+    node_features: torch.Tensor, neighbor_idx: torch.Tensor
+) -> torch.Tensor:
     """
     Gather node features for the neighbors of each node.
 
@@ -70,7 +74,11 @@ def gather_nodes(node_features, neighbor_idx):
     return node_features_at_neighbors
 
 
-def cat_neighbors_nodes(node_features, edge_features_at_neighbors, neighbor_idx):
+def cat_neighbors_nodes(
+    node_features: torch.Tensor,
+    edge_features_at_neighbors: torch.Tensor,
+    neighbor_idx: torch.Tensor,
+) -> torch.Tensor:
     """
     Gather node features for the neighbors of each node and concatenate them
     with the edge features.
@@ -104,7 +112,9 @@ def cat_neighbors_nodes(node_features, edge_features_at_neighbors, neighbor_idx)
 
 
 class EncLayer(nn.Module):
-    def __init__(self, num_hidden, num_in, dropout=0.1, scale=30):
+    def __init__(
+        self, num_hidden: int, num_in: int, dropout: float = 0.1, scale: float = 30
+    ) -> None:
         super(EncLayer, self).__init__()
 
         self.num_hidden = num_hidden
@@ -131,7 +141,14 @@ class EncLayer(nn.Module):
 
         self.dense = PositionWiseFeedForward(num_hidden, num_hidden * 4)
 
-    def forward(self, h_V, h_E, E_idx, mask_V=None, mask_E=None):
+    def forward(
+        self,
+        h_V: torch.Tensor,
+        h_E: torch.Tensor,
+        E_idx: torch.Tensor,
+        mask_V: torch.Tensor | None = None,
+        mask_E: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Encoder message passing step; updates both the node and edge hidden
         states.
@@ -208,7 +225,9 @@ class EncLayer(nn.Module):
 
 
 class DecLayer(nn.Module):
-    def __init__(self, num_hidden, num_in, dropout=0.1, scale=30):
+    def __init__(
+        self, num_hidden: int, num_in: int, dropout: float = 0.1, scale: float = 30
+    ) -> None:
         super(DecLayer, self).__init__()
 
         self.num_hidden = num_hidden
@@ -229,7 +248,13 @@ class DecLayer(nn.Module):
 
         self.dense = PositionWiseFeedForward(num_hidden, num_hidden * 4)
 
-    def forward(self, h_V, h_E, mask_V=None, mask_E=None):
+    def forward(
+        self,
+        h_V: torch.Tensor,
+        h_E: torch.Tensor,
+        mask_V: torch.Tensor | None = None,
+        mask_E: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """
         Decoder message passing step; updates only the node hidden states.
         NOTE: this function is used for both the protein decoder and the ligand

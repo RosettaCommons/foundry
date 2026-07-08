@@ -27,8 +27,8 @@ class MPNNTrainer(FabricTrainer):
         model_type: str,
         loss: DictConfig | dict | None = None,
         metrics: DictConfig | dict | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         See `FabricTrainer` for the additional initialization arguments.
 
@@ -56,9 +56,11 @@ class MPNNTrainer(FabricTrainer):
 
         # Loss
         loss_params = loss if loss else {}
-        self.loss = LabelSmoothedNLLLoss(**loss_params)
+        # DictConfig is a runtime Mapping but mypy doesn't treat it as one for **-unpacking
+        # (same precedent as RF3Trainer / RFD3 `Loss(**loss)`).
+        self.loss = LabelSmoothedNLLLoss(**loss_params)  # type: ignore[arg-type]
 
-    def construct_model(self):
+    def construct_model(self) -> None:
         """Construct the model with hard-coded parameters."""
         with self.fabric.init_module():
             ranked_logger.info(f"Instantiating {self.model_type} model...")
@@ -130,7 +132,10 @@ class MPNNTrainer(FabricTrainer):
                 function=lambda x: x.detach(),
             )
 
-    def validation_step(
+    # FabricTrainer.validation_step is `(batch, batch_idx, val_loader_name=None)` and the
+    # base validation loop only ever calls it as `validation_step(batch=, batch_idx=)`,
+    # never passing the 3rd arg; subclasses are free to refine that optional parameter.
+    def validation_step(  # type: ignore[override]
         self,
         batch: Any,
         batch_idx: int,

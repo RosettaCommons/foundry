@@ -1,3 +1,6 @@
+from typing import Any
+
+import torch
 from atomworks.ml.transforms.base import ConvertToTorch
 from mpnn.collate.feature_collator import FeatureCollator
 from mpnn.transforms.feature_aggregation.polymer_ligand_interface import (
@@ -19,10 +22,10 @@ class SequenceRecovery(Metric):
 
     def __init__(
         self,
-        return_per_example_metrics=False,
-        return_per_residue_metrics=False,
-        **kwargs,
-    ):
+        return_per_example_metrics: bool = False,
+        return_per_residue_metrics: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize the SequenceRecovery metric.
 
@@ -39,7 +42,7 @@ class SequenceRecovery(Metric):
         self.return_per_residue_metrics = return_per_residue_metrics
 
     @property
-    def kwargs_to_compute_args(self):
+    def kwargs_to_compute_args(self) -> dict[str, Any]:
         """Map input keys to the compute method arguments.
 
         Returns:
@@ -53,7 +56,9 @@ class SequenceRecovery(Metric):
             "mask_for_loss": ("network_output", "input_features", "mask_for_loss"),
         }
 
-    def get_per_residue_mask(self, mask_for_loss, **kwargs):
+    def get_per_residue_mask(
+        self, mask_for_loss: torch.Tensor, **kwargs: Any
+    ) -> torch.Tensor:
         """
         Get the per-residue mask for computing sequence recovery.
 
@@ -71,7 +76,9 @@ class SequenceRecovery(Metric):
         per_residue_mask = mask_for_loss
         return per_residue_mask
 
-    def compute_sequence_recovery_metrics(self, S, S_pred, per_residue_mask):
+    def compute_sequence_recovery_metrics(
+        self, S: torch.Tensor, S_pred: torch.Tensor, per_residue_mask: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
         """
         Compute sequence recovery metrics using the ground truth sequence,
         the predicted sequence, and the per-residue mask.
@@ -144,7 +151,16 @@ class SequenceRecovery(Metric):
 
         return sequence_recovery_dict
 
-    def compute(self, S, S_sampled, S_argmax, mask_for_loss, **kwargs):
+    # MetricManager introspects the base ``Metric.compute(**kwargs)`` and dispatches by the
+    # names in ``kwargs_to_compute_args``, so declaring explicit params here is by design.
+    def compute(  # type: ignore[override]
+        self,
+        S: torch.Tensor,
+        S_sampled: torch.Tensor,
+        S_argmax: torch.Tensor,
+        mask_for_loss: torch.Tensor,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """
         Compute sequence recovery accuracy for both sampled and argmax
         sequences.
@@ -222,7 +238,7 @@ class SequenceRecovery(Metric):
         )
 
         # Prepare the metric dictionary.
-        metric_dict = {
+        metric_dict: dict[str, Any] = {
             "mean_sequence_recovery_sampled": sequence_recovery_metrics_sampled[
                 "mean_sequence_recovery"
             ]
@@ -290,8 +306,8 @@ class InterfaceSequenceRecovery(SequenceRecovery):
         interface_distance_threshold: float = 5.0,
         return_per_example_metrics: bool = False,
         return_per_residue_metrics: bool = False,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize the InterfaceSequenceRecovery metric.
 
@@ -314,7 +330,7 @@ class InterfaceSequenceRecovery(SequenceRecovery):
         self.interface_distance_threshold = interface_distance_threshold
 
     @property
-    def kwargs_to_compute_args(self):
+    def kwargs_to_compute_args(self) -> dict[str, Any]:
         """Map input keys to the compute method arguments.
 
         Returns:
@@ -326,7 +342,9 @@ class InterfaceSequenceRecovery(SequenceRecovery):
         args_mapping["atom_array"] = ("network_input", "atom_array")
         return args_mapping
 
-    def get_per_residue_mask(self, mask_for_loss, **kwargs):
+    def get_per_residue_mask(
+        self, mask_for_loss: torch.Tensor, **kwargs: Any
+    ) -> torch.Tensor:
         """
         Get the per-residue mask for computing interface sequence recovery.
 
@@ -405,7 +423,17 @@ class InterfaceSequenceRecovery(SequenceRecovery):
 
         return combined_mask
 
-    def compute(self, S, S_sampled, S_argmax, mask_for_loss, atom_array, **kwargs):
+    # MetricManager introspects the base ``Metric.compute(**kwargs)`` and dispatches by the
+    # names in ``kwargs_to_compute_args``, so declaring explicit params here is by design.
+    def compute(  # type: ignore[override]
+        self,
+        S: torch.Tensor,
+        S_sampled: torch.Tensor,
+        S_argmax: torch.Tensor,
+        mask_for_loss: torch.Tensor,
+        atom_array: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """
         Compute interface sequence recovery accuracy for both sampled and
         argmax sequences.

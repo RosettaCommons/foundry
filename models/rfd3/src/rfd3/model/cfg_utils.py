@@ -2,9 +2,9 @@ import torch
 
 
 def strip_f(
-    f,
-    cfg_features,
-):
+    f: dict[str, torch.Tensor],
+    cfg_features: list[str],
+) -> dict[str, torch.Tensor]:
     """
     Strips conditioning features from 'f' for classifier-free guidance.
 
@@ -67,7 +67,7 @@ def strip_f(
     return f_stripped
 
 
-def strip_X(X_L, f_stripped):
+def strip_X(X_L: torch.Tensor, f_stripped: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Strips X_L unindexed atoms from X_L
 

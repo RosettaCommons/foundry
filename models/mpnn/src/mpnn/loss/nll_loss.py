@@ -1,9 +1,15 @@
+from typing import Any
+
 import torch
 import torch.nn as nn
 
 
 class LabelSmoothedNLLLoss(nn.Module):
-    def __init__(self, label_smoothing_eps=0.1, normalization_constant=6000.0):
+    def __init__(
+        self,
+        label_smoothing_eps: float = 0.1,
+        normalization_constant: float = 6000.0,
+    ) -> None:
         """
         Label smoothed negative log likelihood loss for Protein/Ligand MPNN.
 
@@ -20,7 +26,12 @@ class LabelSmoothedNLLLoss(nn.Module):
         self.label_smoothing_eps = label_smoothing_eps
         self.normalization_constant = normalization_constant
 
-    def forward(self, network_input, network_output, loss_input):
+    def forward(
+        self,
+        network_input: dict[str, Any],
+        network_output: dict[str, Any],
+        loss_input: dict[str, Any],
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """
         Given the network_input (same as input_features to the model), network
         output, and loss input, compute the loss.

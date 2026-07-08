@@ -13,10 +13,11 @@ import copy
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TextIO
 
 import numpy as np
 from atomworks.io import parse
@@ -105,7 +106,7 @@ def str2bool(v: str) -> bool:
         raise argparse.ArgumentTypeError(f"Boolean value expected, got {v!r}")
 
 
-def none_or_type(v: Any, specified_type) -> Any | None:
+def none_or_type(v: Any, specified_type: Callable[[Any], Any]) -> Any | None:
     """
     CLI type parser that turns 'None' into None. Otherwise, returns the value
     cast to the given type. This function is useful for the parser/pipeline
@@ -584,6 +585,8 @@ def cli_to_json(args: argparse.Namespace) -> dict[str, Any]:
     # other CLI args.
     if args.config_json:
         config_path = _absolute_path_or_none(args.config_json)
+        # args.config_json is truthy here, so the absolute path is never None.
+        assert config_path is not None
         with open(config_path, "r") as f:
             return json.load(f)
 
@@ -1554,11 +1557,13 @@ class MPNNInferenceInput:
         if input_dict["remove_waters"] is not None:
             parser_args["remove_waters"] = input_dict["remove_waters"]
 
-        # Parse structure file.
+        # Parse structure file. parser_args is a heterogeneous dict[str, object]
+        # (STANDARD_PARSER_ARGS + overrides); atomworks parse() types each kwarg
+        # specifically, so **-unpacking it doesn't type-check.
         data = parse(
             filename=input_dict["structure_path"],
             keep_cif_block=True,
-            **parser_args,
+            **parser_args,  # type: ignore[arg-type]
         )
 
         # Use assembly 1 if present, otherwise use asymmetric unit.
@@ -2109,8 +2114,8 @@ class MPNNInferenceInput:
             axis=0,
         ).astype(np.float32)
 
-        # Annotate.
-        atom_array.set_annotation_2d("mpnn_pair_bias", pairs_arr, values_arr)
+        # Annotate. atomworks types the value args as Sequence but accepts ndarrays.
+        atom_array.set_annotation_2d("mpnn_pair_bias", pairs_arr, values_arr)  # type: ignore[arg-type]
 
     @staticmethod
     def annotate_atom_array(
@@ -2238,7 +2243,7 @@ class MPNNInferenceOutput:
 
         Nested structures and non-scalar values are converted to strings.
         """
-        categories = dict()
+        categories: dict[str, dict[str, list[Any]]] = dict()
 
         # For both inputs and outputs:
         for category_name, category_dict in [
@@ -2267,8 +2272,8 @@ class MPNNInferenceOutput:
         self,
         *,
         base_path: PathLike | None = None,
-        file_type: str = "cif",
-    ):
+        file_type: Literal["cif", "bcif", "cif.gz"] = "cif",
+    ) -> None:
         """
         Write this design as a CIF file.
 
@@ -2317,7 +2322,7 @@ class MPNNInferenceOutput:
         self,
         *,
         base_path: PathLike | None = None,
-        handle=None,
+        handle: TextIO | None = None,
     ) -> None:
         """
         Write a single FASTA record for this design.
@@ -2404,6 +2409,8 @@ class MPNNInferenceOutput:
             handle.write(f"{seq}\n")
         # Otherwise, open the file at base_path and write to it.
         else:
+            # base_path is non-None here (the mutual-exclusivity guard above).
+            assert base_path is not None
             fasta_path = Path(base_path).with_suffix(".fa")
             with open(fasta_path, "w") as handle:
                 # Write the header.

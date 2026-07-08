@@ -111,7 +111,7 @@ class AddIsDAminoAcidFeat(Transform):
     Adds an annotation to the atom array indicating whether each residue is a D-amino acid.
     """
 
-    def check_input(self, data) -> None:
+    def check_input(self, data: dict) -> None:
         check_contains_keys(data, ["atom_array", "feats"])
 
     def forward(self, data: dict) -> dict:
@@ -144,7 +144,7 @@ class AddIsDAminoAcidFeat(Transform):
 
 
 class StrtoBoolforIsDAminoAcidFeature(Transform):
-    def forward(self, data):
+    def forward(self, data: dict) -> dict:
         atom_array = data["atom_array"]
         convert_existing_annotations_to_bool(
             atom_array, annotations=["is_d_amino_acid"]

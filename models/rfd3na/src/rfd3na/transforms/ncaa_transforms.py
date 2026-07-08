@@ -60,7 +60,7 @@ class RandomlyMirrorInputs(Transform):
         if not mirror_input:
             return data
 
-        renamed_map = {}
+        renamed_map: dict[str, str] = {}
         res_starts = struct.get_residue_starts(atom_array)
         for i, r_i in enumerate(res_starts):
             if i == len(res_starts) - 1:

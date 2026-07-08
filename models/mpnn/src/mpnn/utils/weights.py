@@ -1,8 +1,20 @@
+from typing import cast
+
 import torch
 from mpnn.transforms.feature_aggregation.token_encodings import (
     legacy_token_order,
     token_order,
 )
+
+
+def _int_config_attr(module: object, name: str) -> int:
+    """Read an int config dimension (e.g. ``num_rbf``) off a submodule.
+
+    ``model.<submodule>`` is typed as ``torch.Tensor | nn.Module`` by
+    ``nn.Module.__getattr__``, so these model-specific int attributes are not
+    visible to the type checker; fetch them dynamically and assert the int type.
+    """
+    return cast(int, getattr(module, name))
 
 
 def load_legacy_weights(model: torch.nn.Module, weights_path: str) -> None:
@@ -37,7 +49,7 @@ def load_legacy_weights(model: torch.nn.Module, weights_path: str) -> None:
     for value_name in values_to_copy:
         # Walk the attribute chain.
         attr_list = value_name.split(".")
-        sub_module = model
+        sub_module: torch.nn.Module | None = model
         while len(attr_list) > 1 and sub_module is not None:
             attr = attr_list.pop(0)
             if hasattr(sub_module, attr):
@@ -158,7 +170,9 @@ def load_legacy_weights(model: torch.nn.Module, weights_path: str) -> None:
     for key in atom_type_embedding_keys:
         if key in checkpoint_state_dict:
             legacy_weight = checkpoint_state_dict[key]
-            num_atomic_numbers = model.graph_featurization_module.num_atomic_numbers
+            num_atomic_numbers = _int_config_attr(
+                model.graph_featurization_module, "num_atomic_numbers"
+            )
             checkpoint_state_dict[key] = torch.cat(
                 [
                     legacy_weight[:, :num_atomic_numbers],
@@ -235,14 +249,14 @@ def load_legacy_weights(model: torch.nn.Module, weights_path: str) -> None:
             out_dim, _ = legacy_weight.shape
 
             # Grab the necessary dimensions from the model.
-            num_positional_embeddings = (
-                model.graph_featurization_module.num_positional_embeddings
+            gfm = model.graph_featurization_module
+            num_positional_embeddings = _int_config_attr(
+                gfm, "num_positional_embeddings"
             )
-            num_atoms = (
-                model.graph_featurization_module.num_backbone_atoms
-                + model.graph_featurization_module.num_virtual_atoms
+            num_atoms = _int_config_attr(gfm, "num_backbone_atoms") + _int_config_attr(
+                gfm, "num_virtual_atoms"
             )
-            num_rbf = model.graph_featurization_module.num_rbf
+            num_rbf = _int_config_attr(gfm, "num_rbf")
 
             # Split positional and RBF embedding weights.
             legacy_weight_positional_embeddings = legacy_weight[
