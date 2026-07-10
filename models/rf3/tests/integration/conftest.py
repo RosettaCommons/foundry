@@ -146,6 +146,12 @@ def assert_standard_outputs(out_dir, name):
         assert (base / filename).exists(), f"missing output file: {base / filename}"
 
 
+def assert_valid_plddt(summary):
+    """Assert ``overall_plddt`` is a sane confidence value in the open (0, 1)."""
+    plddt = summary["overall_plddt"]
+    assert 0 < plddt < 1, f"overall_plddt outside expected (0, 1) range: {plddt}"
+
+
 # ---------------------------------------------------------------------------
 # Session-scoped fixtures
 # ---------------------------------------------------------------------------
@@ -257,3 +263,65 @@ def skip_existing_dirs(require_ckpt, tmp_path_factory):
     mtime_after_second = model_cif.stat().st_mtime if model_cif.exists() else None
 
     return out_dir, mtime_after_first, mtime_after_second
+
+
+@pytest.fixture(scope="session")
+def msa_fold_dir(require_ckpt, tmp_path_factory):
+    """Single ``rf3 fold`` call covering MSA inputs across chain counts and modes.
+
+    Batching amortises the model-loading overhead across four folds that each
+    supply pre-computed MSAs. The set spans both chain count (monomer /
+    homodimer / heteromer) and both ways rf3 accepts an MSA path (JSON
+    per-component ``msa_path`` vs CIF ``_msa_paths_by_chain_id`` header)::
+
+        monomer_msa.json          — monomer;   JSON ``msa_path`` (1 chain)
+        monomer_msa_from_cif.cif  — monomer;   CIF ``_msa_paths_by_chain_id``
+                                    (same sequence, MSA declared in the CIF)
+        homodimer_msa.json        — homodimer; two identical chains sharing one
+                                    a3m via JSON ``msa_path``
+        heteromer_paired_msa.json — heteromer; two distinct chains, each with its
+                                    own a3m (a shared TaxID makes it a genuine
+                                    paired MSA)
+
+    All inputs use short synthetic sequences (~12 residues) with hand-built a3m
+    files so the whole fixture folds quickly on CPU — these tests exercise MSA
+    format/plumbing, not structure quality, so a real complex (much slower on
+    CPU) is unnecessary. The MSA paths inside the inputs are written relative to
+    the repo root, so (as documented for the integration suite) ``rf3 fold``
+    must be launched from the repo root for them to resolve.
+
+    NOTE: the batched examples share a single seeded RNG stream, so each
+    example's stochastic outputs depend on what was folded *before* it. The
+    assertions in ``test_msa_fold.py`` (chain count, ``iptm > 0``, pLDDT range)
+    are order-insensitive; if you add order-sensitive checks, re-run after any
+    reordering.
+    """
+    out_dir = tmp_path_factory.mktemp("rf3_msa")
+    out_dir, _ = run_rf3_fold(
+        inputs=[
+            DATA_DIR / "monomer_msa.json",
+            DATA_DIR / "monomer_msa_from_cif.cif",
+            DATA_DIR / "homodimer_msa.json",
+            DATA_DIR / "heteromer_paired_msa.json",
+        ],
+        out_dir=out_dir,
+    )
+    return out_dir
+
+
+@pytest.fixture(scope="session")
+def msa_present_flag_dir(require_ckpt, tmp_path_factory):
+    """Fold an input that *has* MSAs with ``raise_if_missing_msa_...`` enabled.
+
+    ``monomer_msa.json`` is a 12-residue protein (above the length-10 threshold)
+    with an MSA supplied, so the missing-MSA guard must not trip and the fold
+    should complete normally. This is the success counterpart to
+    ``test_raise_if_missing_msa_errors_when_absent``.
+    """
+    out_dir = tmp_path_factory.mktemp("rf3_msa_flag")
+    out_dir, _ = run_rf3_fold(
+        DATA_DIR / "monomer_msa.json",
+        out_dir,
+        extra_flags=["raise_if_missing_msa_for_protein_of_length_n=10"],
+    )
+    return out_dir

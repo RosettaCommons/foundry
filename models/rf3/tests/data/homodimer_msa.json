@@ -1,0 +1,17 @@
+[
+    {
+        "name": "homodimer_msa",
+        "components": [
+            {
+                "seq": "WFKDLEQNGYRA",
+                "chain_id": "A",
+                "msa_path": "models/rf3/tests/data/msas/homodimer_A.a3m"
+            },
+            {
+                "seq": "WFKDLEQNGYRA",
+                "chain_id": "B",
+                "msa_path": "models/rf3/tests/data/msas/homodimer_A.a3m"
+            }
+        ]
+    }
+]
