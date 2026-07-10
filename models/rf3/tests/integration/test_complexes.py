@@ -42,12 +42,12 @@ def test_fold_two_protein_chains(complex_folds_dir):
     # checks below distinguish a real two-chain fold from that degenerate case.
     assert_chain_count(summary, 2)
     chain_pair_pae = summary["chain_pair_pae"]
-    assert len(chain_pair_pae) == 2 and len(chain_pair_pae[0]) == 2, (
-        f"expected a 2x2 chain-pair PAE matrix; got {chain_pair_pae}"
-    )
-    assert chain_pair_pae[0][1] is not None, (
-        "cross-chain PAE was not scored for a two-chain input"
-    )
+    assert (
+        len(chain_pair_pae) == 2 and len(chain_pair_pae[0]) == 2
+    ), f"expected a 2x2 chain-pair PAE matrix; got {chain_pair_pae}"
+    assert (
+        chain_pair_pae[0][1] is not None
+    ), "cross-chain PAE was not scored for a two-chain input"
     assert summary["iptm"] > 0
 
 
@@ -64,9 +64,9 @@ def test_fold_protein_dna_complex(complex_folds_dir):
     assert_chain_count(summary, 2)
 
     resnames = residue_names_in_cif(complex_folds_dir / name / f"{name}_model.cif")
-    assert {"DA", "DT", "DG", "DC"} <= resnames, (
-        f"expected all four DNA nucleotides in the output; got {sorted(resnames)}"
-    )
+    assert (
+        {"DA", "DT", "DG", "DC"} <= resnames
+    ), f"expected all four DNA nucleotides in the output; got {sorted(resnames)}"
 
 
 @pytest.mark.integration

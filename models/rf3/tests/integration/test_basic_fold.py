@@ -61,9 +61,9 @@ def test_fold_from_json_with_ligand(basic_folds_dir):
     assert_chain_count(summary, 4, "GLKE + MG + HEM + imidazole")
 
     model_cif = basic_folds_dir / "glke_with_ligands" / "glke_with_ligands_model.cif"
-    assert "MG" in residue_names_in_cif(model_cif), (
-        "MG ligand missing from predicted structure"
-    )
+    assert "MG" in residue_names_in_cif(
+        model_cif
+    ), "MG ligand missing from predicted structure"
 
 
 @pytest.mark.integration
@@ -85,6 +85,6 @@ def test_fold_from_cif_with_ligand(basic_folds_dir):
         / "glke_with_ligands_from_cif"
         / "glke_with_ligands_from_cif_model.cif"
     )
-    assert "MG" in residue_names_in_cif(model_cif), (
-        "MG ligand missing from predicted structure"
-    )
+    assert "MG" in residue_names_in_cif(
+        model_cif
+    ), "MG ligand missing from predicted structure"
