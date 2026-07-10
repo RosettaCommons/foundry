@@ -10,8 +10,8 @@ Each subdirectory corresponds to one test input and contains the
 
 ```
 integration_baselines/
-  glke_from_json/
-    glke_from_json_summary_confidences.json
+  two_protein_chains/
+    two_protein_chains_summary_confidences.json
 ```
 
 ## Known limitations
@@ -20,9 +20,10 @@ See the module docstring in `models/rf3/tests/integration/test_cpu_gpu_parity.py
 for a full list of known limitations, including:
 
 - Baselines go stale silently if the inference engine output changes.
-- The committed protein-only baseline contains the known `iptm=0.0` bug for
-  single-chain inputs; regenerate it once that bug is fixed.
-- Ligand inputs have no committed baseline yet.
+- The parity input (`two_protein_chains`) has a real interface, so iptm and
+  ranking_score are genuine computed values — but at speed-flag quality they are
+  small, so the absolute ±0.02 tolerance is loose relative to those two metrics.
+- The protein-only and ligand inputs have no committed baseline yet.
 
 ## Generating a baseline
 
@@ -33,21 +34,24 @@ tests (so the comparison is apples-to-apples):
 cd /path/to/foundry
 
 rf3 fold \
-    inputs='models/rf3/tests/data/glke_from_json.json' \
+    inputs='models/rf3/tests/data/two_protein_chains.json' \
     ckpt_path='<path_to_rf3_foundry_01_24_latest_remapped.ckpt>' \
     n_recycles=1 num_steps=20 diffusion_batch_size=1 seed=1 \
     early_stopping_plddt_threshold=0.0 \
     out_dir='models/rf3/tests/data/integration_baselines'
 ```
 
-The flags must match the `SPEED_FLAGS` used by the `basic_folds_dir` fixture in
+The flags must match the `SPEED_FLAGS` used by the `complex_folds_dir` fixture in
 `conftest.py` exactly — in particular `early_stopping_plddt_threshold=0.0`, which
 disables the default 0.5 threshold. Otherwise the CPU run and the GPU baseline are
-not compared apples-to-apples (a low-pLDDT peptide could early-stop under the
-default and shift the metrics).
+not compared apples-to-apples (a low-pLDDT input could early-stop under the
+default and shift the metrics). `two_protein_chains` is folded first in that
+fixture's batch, so its draws from the shared seeded RNG stream match this
+standalone fold.
 
-`rf3 fold` automatically creates a `glke_from_json/` subdirectory inside `out_dir`, so
-the output lands at `integration_baselines/glke_from_json/glke_from_json_summary_confidences.json`
+`rf3 fold` automatically creates a `two_protein_chains/` subdirectory inside `out_dir`,
+so the output lands at
+`integration_baselines/two_protein_chains/two_protein_chains_summary_confidences.json`
 — exactly where the parity test looks for it.
 
 Commit at minimum the `summary_confidences.json` from the output.
