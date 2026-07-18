@@ -380,8 +380,8 @@ class SampleDiffusionWithSymmetry(SampleDiffusionWithMotif):
         fixed = f.get("is_motif_atom_with_fixed_coord")
         asu, ent = symmetry_feats["is_sym_asu"], symmetry_feats["sym_entity_id"]
         held_motif = (
-            not self.allow_realignment 
-            and fixed is not None 
+            not self.allow_realignment
+            and fixed is not None
             and bool((fixed & asu & (ent != FIXED_ENTITY_ID)).any())
         )
 
