@@ -1,0 +1,17 @@
+[
+    {
+        "name": "heteromer_paired_msa",
+        "components": [
+            {
+                "seq": "GLKEIWQYVRND",
+                "chain_id": "A",
+                "msa_path": "models/rf3/tests/data/msas/heteromer_A.a3m"
+            },
+            {
+                "seq": "MRHDTFKNPGSA",
+                "chain_id": "B",
+                "msa_path": "models/rf3/tests/data/msas/heteromer_B.a3m"
+            }
+        ]
+    }
+]

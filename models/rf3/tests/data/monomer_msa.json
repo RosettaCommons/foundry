@@ -1,0 +1,12 @@
+[
+    {
+        "name": "monomer_msa",
+        "components": [
+            {
+                "seq": "SKADEIYLNRQV",
+                "chain_id": "A",
+                "msa_path": "models/rf3/tests/data/msas/monomer_A.a3m"
+            }
+        ]
+    }
+]
