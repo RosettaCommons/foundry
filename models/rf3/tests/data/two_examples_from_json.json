@@ -1,0 +1,20 @@
+[
+    {
+        "name": "two_examples_first",
+        "components": [
+            {
+                "seq": "GLKE",
+                "chain_id": "A"
+            }
+        ]
+    },
+    {
+        "name": "two_examples_second",
+        "components": [
+            {
+                "seq": "GLKE",
+                "chain_id": "A"
+            }
+        ]
+    }
+]

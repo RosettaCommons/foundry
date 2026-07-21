@@ -1,0 +1,16 @@
+[
+    {
+        "name": "protein_dna_complex",
+        "components": [
+            {
+                "seq": "GLKE",
+                "chain_id": "A"
+            },
+            {
+                "seq": "GATC",
+                "chain_type": "POLYDEOXYRIBONUCLEOTIDE",
+                "chain_id": "B"
+            }
+        ]
+    }
+]

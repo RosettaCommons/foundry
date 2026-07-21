@@ -1,0 +1,15 @@
+[
+    {
+        "name": "two_protein_chains",
+        "components": [
+            {
+                "seq": "GLKE",
+                "chain_id": "A"
+            },
+            {
+                "seq": "GLKE",
+                "chain_id": "B"
+            }
+        ]
+    }
+]

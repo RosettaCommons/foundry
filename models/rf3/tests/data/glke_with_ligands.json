@@ -1,0 +1,20 @@
+[
+    {
+        "name": "glke_with_ligands",
+        "components": [
+            {
+                "seq": "GLKE",
+                "chain_id": "A"
+            },
+            {
+                "ccd_code": "MG"
+            },
+            {
+                "path": "models/rf3/tests/data/ligands/HEM.sdf"
+            },
+            {
+                "smiles": "[nH]1cc[nH+]c1"
+            }
+        ]
+    }
+]
