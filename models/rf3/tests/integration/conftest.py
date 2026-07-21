@@ -165,10 +165,6 @@ def assert_standard_outputs(out_dir, name):
         assert (base / filename).exists(), f"missing output file: {base / filename}"
 
 
-def assert_valid_plddt(summary):
-    """Assert ``overall_plddt`` is a sane confidence value in the open (0, 1)."""
-    plddt = summary["overall_plddt"]
-    assert 0 < plddt < 1, f"overall_plddt outside expected (0, 1) range: {plddt}"
 def residue_names_in_cif(cif_path):
     """Return the set of ``label_comp_id`` (residue name) values in a model CIF.
 
