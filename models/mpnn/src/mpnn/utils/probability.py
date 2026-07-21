@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def sample_bernoulli_rv(p):
+def sample_bernoulli_rv(p: float) -> int:
     """
     Given a probability p, representing the success probability of a Bernoulli
     distribution, sample X ~ Bernoulli(p).

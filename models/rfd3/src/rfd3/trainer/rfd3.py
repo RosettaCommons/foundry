@@ -46,18 +46,18 @@ class AADesignTrainer(FabricTrainer):
 
     def __init__(
         self,
-        allow_sequence_outputs,
-        cleanup_guideposts,
-        cleanup_virtual_atoms,
-        read_sequence_from_sequence_head,
-        output_full_json,
-        association_scheme,
-        compute_non_clash_metrics_for_diffused_region_only=False,
-        seed=None,  # Deprecated
+        allow_sequence_outputs: bool,
+        cleanup_guideposts: bool,
+        cleanup_virtual_atoms: bool,
+        read_sequence_from_sequence_head: bool,
+        output_full_json: bool,
+        association_scheme: str,
+        compute_non_clash_metrics_for_diffused_region_only: bool = False,
+        seed: int | None = None,  # Deprecated
         n_recycles_train: int | None = None,
         loss: DictConfig | dict | None = None,
         metrics: DictConfig | dict | None = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         super().__init__(**kwargs)
 

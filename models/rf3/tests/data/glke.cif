@@ -1,0 +1,95 @@
+data_glke_from_json_model
+#
+_entry.id       glke_from_json_model
+_entry.author   root
+_entry.date     2026-07-01
+_entry.time     18:42:10
+#
+loop_
+_chem_comp_bond.pdbx_ordinal 
+_chem_comp_bond.comp_id 
+_chem_comp_bond.atom_id_1 
+_chem_comp_bond.atom_id_2 
+_chem_comp_bond.value_order 
+_chem_comp_bond.pdbx_aromatic_flag 
+_chem_comp_bond.pdbx_stereo_config 
+1  GLY N  CA  SING N ?
+2  GLY CA C   SING N ?
+3  GLY C  O   DOUB N ?
+4  LEU N  CA  SING N ?
+5  LEU CA C   SING N ?
+6  LEU CA CB  SING N ?
+7  LEU C  O   DOUB N ?
+8  LEU CB CG  SING N ?
+9  LEU CG CD1 SING N ?
+10 LEU CG CD2 SING N ?
+11 LYS N  CA  SING N ?
+12 LYS CA C   SING N ?
+13 LYS CA CB  SING N ?
+14 LYS C  O   DOUB N ?
+15 LYS CB CG  SING N ?
+16 LYS CG CD  SING N ?
+17 LYS CD CE  SING N ?
+18 LYS CE NZ  SING N ?
+19 GLU N  CA  SING N ?
+20 GLU CA C   SING N ?
+21 GLU CA CB  SING N ?
+22 GLU C  O   DOUB N ?
+23 GLU CB CG  SING N ?
+24 GLU CG CD  SING N ?
+25 GLU CD OE1 DOUB N ?
+26 GLU CD OE2 SING N ?
+#
+loop_
+_atom_site.group_PDB 
+_atom_site.type_symbol 
+_atom_site.label_atom_id 
+_atom_site.label_alt_id 
+_atom_site.label_comp_id 
+_atom_site.label_asym_id 
+_atom_site.label_entity_id 
+_atom_site.label_seq_id 
+_atom_site.pdbx_PDB_ins_code 
+_atom_site.auth_seq_id 
+_atom_site.auth_comp_id 
+_atom_site.auth_asym_id 
+_atom_site.auth_atom_id 
+_atom_site.id 
+_atom_site.B_iso_or_equiv 
+_atom_site.occupancy 
+_atom_site.pdbx_formal_charge 
+_atom_site.Cartn_x 
+_atom_site.Cartn_y 
+_atom_site.Cartn_z 
+_atom_site.pdbx_PDB_model_num 
+ATOM N N   . GLY A 0 1 . 1 GLY A N   0  0.7846934795379639 1.0 ?  0.23200545  -1.5764706   -2.5108588  1
+ATOM C CA  . GLY A 0 1 . 1 GLY A CA  1  0.8026573657989502 1.0 ?  1.1805      -1.8896924   -1.4427557  1
+ATOM C C   . GLY A 0 1 . 1 GLY A C   2  0.8059266805648804 1.0 ?  0.95293885  -1.0749295   -0.17043106 1
+ATOM O O   . GLY A 0 1 . 1 GLY A O   3  0.7785671949386597 1.0 ?  1.5017799   -1.3415039   0.88799286  1
+ATOM N N   . LEU A 0 2 . 2 LEU A N   4  0.7971900701522827 1.0 ?  0.112503976 -0.024939328 -0.24444523 1
+ATOM C CA  . LEU A 0 2 . 2 LEU A CA  5  0.8110577464103699 1.0 ?  -0.09851444 0.82314247   0.893465    1
+ATOM C C   . LEU A 0 2 . 2 LEU A C   6  0.8107521533966064 1.0 ?  -0.91967106 0.16313806   2.0030508   1
+ATOM O O   . LEU A 0 2 . 2 LEU A O   7  0.79047691822052   1.0 ?  -0.81380093 0.49398062   3.1830752   1
+ATOM C CB  . LEU A 0 2 . 2 LEU A CB  8  0.7971574664115906 1.0 ?  -0.8169162  2.096591     0.47903883  1
+ATOM C CG  . LEU A 0 2 . 2 LEU A CG  9  0.7716990113258362 1.0 ?  0.003865242 3.1305325    -0.2762596  1
+ATOM C CD1 . LEU A 0 2 . 2 LEU A CD1 10 0.7745047807693481 1.0 ?  -0.873884   4.2537565    -0.766102   1
+ATOM C CD2 . LEU A 0 2 . 2 LEU A CD2 11 0.7434941530227661 1.0 ?  1.1321589   3.6607928    0.5575665   1
+ATOM N N   . LYS A 0 3 . 3 LYS A N   12 0.801485538482666  1.0 ?  -1.6621141  -0.8985826   1.6427761   1
+ATOM C CA  . LYS A 0 3 . 3 LYS A CA  13 0.8162703514099121 1.0 ?  -2.4564202  -1.5904413   2.6492763   1
+ATOM C C   . LYS A 0 3 . 3 LYS A C   14 0.817223310470581  1.0 ?  -1.6968545  -2.7270594   3.2459805   1
+ATOM O O   . LYS A 0 3 . 3 LYS A O   15 0.7945605516433716 1.0 ?  -2.27853    -3.4659822   4.040672    1
+ATOM C CB  . LYS A 0 3 . 3 LYS A CB  16 0.8025190830230713 1.0 ?  -3.7335203  -2.0544355   2.0129125   1
+ATOM C CG  . LYS A 0 3 . 3 LYS A CG  17 0.7576725482940674 1.0 ?  -4.7595716  -1.0016918   1.832272    1
+ATOM C CD  . LYS A 0 3 . 3 LYS A CD  18 0.7609374523162842 1.0 ?  -6.0882583  -1.6312631   1.410757    1
+ATOM C CE  . LYS A 0 3 . 3 LYS A CE  19 0.7041828632354736 1.0 ?  -7.129744   -0.53598773  1.2705888   1
+ATOM N NZ  . LYS A 0 3 . 3 LYS A NZ  20 0.7032796144485474 1.0 +1 -8.471402   -1.0801767   0.9475966   1
+ATOM N N   . GLU A 0 4 . 4 GLU A N   21 0.7971808910369873 1.0 ?  -0.4436257  -2.8661916   2.834409    1
+ATOM C CA  . GLU A 0 4 . 4 GLU A CA  22 0.8149055242538452 1.0 ?  0.26330608  -3.9715796   3.490139    1
+ATOM C C   . GLU A 0 4 . 4 GLU A C   23 0.8132607936859131 1.0 ?  0.3028847   -3.776016    4.956547    1
+ATOM O O   . GLU A 0 4 . 4 GLU A O   24 0.7830318212509155 1.0 ?  0.20062959  -4.716693    5.750304    1
+ATOM C CB  . GLU A 0 4 . 4 GLU A CB  25 0.797244131565094  1.0 ?  1.6815462   -4.0896206   2.8999493   1
+ATOM C CG  . GLU A 0 4 . 4 GLU A CG  26 0.7528165578842163 1.0 ?  1.7301116   -4.7500415   1.6195797   1
+ATOM C CD  . GLU A 0 4 . 4 GLU A CD  27 0.7537751793861389 1.0 ?  3.090384    -4.8567276   1.0567855   1
+ATOM O OE1 . GLU A 0 4 . 4 GLU A OE1 28 0.7021001577377319 1.0 ?  4.1145816   -4.966126    1.8684716   1
+ATOM O OE2 . GLU A 0 4 . 4 GLU A OE2 29 0.7077101469039917 1.0 ?  3.294843    -4.7844033   -0.1054786  1
+#

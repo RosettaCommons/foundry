@@ -60,9 +60,9 @@ In this tutorial, we will be briefly describing each of the settings we will be 
     ```json
     "length": "157-177",
     ```
-1. For the purposes of this design, we happen to know that residues B251-B255 are important to include in our design, but it does not matter where they end up in our final structure. This is referred to as an 'unindexed motif' in the documentation. To include them, we will add the `undindex` option: 
+1. For the purposes of this design, we happen to know that residues B251-255 are important to include in our design, but it does not matter where they end up in our final structure. This is referred to as an 'unindexed motif' in the documentation. To include them, we will add the `undindex` option: 
     ```json
-    "unindex": "/0,/0,B251-B255",
+    "unindex": "/0,/0,B251-255",
     ```
     Here we have two chain breaks before our unindexed motif to correspond to the contig string, these residues will go in the third chain of the output structure. 
 1. Next, the portions of our input structure we specified in the `contig` string are automatically held fixed, however it is useful to let some of these residues move in response to the the designed portions of our structure. Here we want certain portions of our DNA strands to be stationary (the middle sections) while the portions towards either end of the double helix can relax:

@@ -66,7 +66,7 @@ def calculate_hbonds(
     atom_array: AtomArray,
     cutoff_HA_dist: float = 3,
     cutoff_DA_distance: float = 3.5,
-) -> Tuple[np.ndarray, np.ndarray, AtomArray]:
+) -> Tuple[AtomArray, list[dict[str, Any]], int]:
     hbplus_exe = os.environ.get("HBPLUS_PATH")
 
     if hbplus_exe is None or hbplus_exe == "":

@@ -3,7 +3,9 @@ import torch.nn as nn
 
 
 class PositionalEncodings(nn.Module):
-    def __init__(self, num_positional_embeddings, max_relative_feature=32):
+    def __init__(
+        self, num_positional_embeddings: int, max_relative_feature: int = 32
+    ) -> None:
         """
         Positional encodings for the MPNN model.
 
@@ -31,7 +33,9 @@ class PositionalEncodings(nn.Module):
             self.num_positional_features, num_positional_embeddings
         )
 
-    def forward(self, positional_offset, same_chain_mask):
+    def forward(
+        self, positional_offset: torch.Tensor, same_chain_mask: torch.Tensor
+    ) -> torch.Tensor:
         """
         Forward pass of the positional encodings.
 

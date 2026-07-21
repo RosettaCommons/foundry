@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from atomworks.io.utils.io_utils import to_cif_file
-from beartype.typing import Callable, Literal, cast
+from beartype.typing import Any, Callable, Literal, cast
 from biotite.structure import AtomArray, AtomArrayStack, stack
 
 from foundry.utils.alignment import weighted_rigid_align
@@ -20,7 +20,7 @@ def dump_structures(
     base_path: PathLike,
     one_model_per_file: bool,
     extra_fields: list[str] | Literal["all"] = [],
-    **kwargs,
+    **kwargs: Any,
 ) -> None:
     """Dump structures to CIF files, given the coordinates and input AtomArray.
 
@@ -64,7 +64,7 @@ def dump_metadata(
     prediction_metadata: dict,
     base_path: PathLike,
     one_model_per_file: bool,
-):
+) -> None:
     """
     Dump JSONs of prediction metadata to disk.
 
@@ -199,12 +199,14 @@ def build_stack_from_atom_array_and_batched_coords(
     return atom_array_stack
 
 
-def find_files_with_extension(path: PathLike, supported_file_types: list) -> list[Path]:
+def find_files_with_extension(
+    path: PathLike, supported_file_types: set | list
+) -> list[Path]:
     """Find files with the given extensions at the top level of the path (non-recursive).
 
     Args:
         path (PathLike): Path to the directory containing the files.
-        supported_file_types (list): List of supported file extensions.
+        supported_file_types (set | list): Supported file extensions.
 
     Returns:
         list[Path]: List of files with the given extensions.

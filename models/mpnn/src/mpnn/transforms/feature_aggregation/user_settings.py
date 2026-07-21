@@ -236,7 +236,13 @@ class FeaturizeUserSettings(Transform):
                     "input_features": [
                         "mask_for_loss",
                     ],
-                    "decoder_features": ["log_probs", "S_sampled", "S_argmax"],
+                    # 'logits' are needed to compute un-temperatured confidence.
+                    "decoder_features": [
+                        "log_probs",
+                        "S_sampled",
+                        "S_argmax",
+                        "logits",
+                    ],
                 }
 
         # Save the scalar settings.
@@ -324,7 +330,9 @@ class FeaturizeUserSettings(Transform):
                 dtype=np.float32,
             )
             for idx in range(pair_bias_sparse.values.shape[0]):
-                i, j, pair_bias_ij = pair_bias_sparse[idx]
+                # atomworks AnnotationList2D indexing returns an unpackable (i, j, value)
+                # row at runtime; its type stub doesn't express that.
+                i, j, pair_bias_ij = pair_bias_sparse[idx]  # type: ignore[misc]
                 token_idx_i = non_atomized_token_idx[i]
                 token_idx_j = non_atomized_token_idx[j]
                 pair_bias[token_idx_i, :, token_idx_j, :] = pair_bias_ij

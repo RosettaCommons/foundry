@@ -41,7 +41,9 @@ ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 # Future hotspot subsampling schemes might want to avoid giving redundant information via (say) bonded atoms
 
 
-def get_hotspot_atoms(atom_array, binder_pn_unit_iid, distance_cutoff=4.5):
+def get_hotspot_atoms(
+    atom_array: AtomArray, binder_pn_unit_iid: str, distance_cutoff: float = 4.5
+) -> np.ndarray:
     """Get hotspot atoms for a given distance cutoff.
 
     Args:
@@ -335,7 +337,7 @@ class PPIFullBinderCropSpatial(Transform):
         self.force_crop = force_crop
         self.max_atoms_in_crop = max_atoms_in_crop
 
-    def check_input(self, data: dict):
+    def check_input(self, data: dict) -> None:
         check_contains_keys(data, ["atom_array"])
         check_is_instance(data, "atom_array", AtomArray)
         check_atom_array_annotation(data, ["pn_unit_iid", "atomize", "atom_id"])

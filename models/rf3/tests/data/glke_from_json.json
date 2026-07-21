@@ -1,0 +1,11 @@
+[
+    {
+        "name": "glke_from_json",
+        "components": [
+            {
+                "seq": "GLKE",
+                "chain_id": "A"
+            }
+        ]
+    }
+]

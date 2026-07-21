@@ -278,8 +278,10 @@ class SampleDiffusionWithMotif(SampleDiffusionConfig):
             if self.use_classifier_free_guidance and (
                 self.cfg_t_max is None or c_t > self.cfg_t_max
             ):
-                # CFG mode requires the reference (unconditional) initializer outputs.
+                # CFG mode requires the reference (unconditional) features and
+                # initializer outputs; RFD3.forward provides both only when CFG is on.
                 assert ref_initializer_outputs is not None
+                assert f_ref is not None
                 X_noisy_L_stripped = strip_X(X_noisy_L, f_ref)
 
                 # unconditional forward pass

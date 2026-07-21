@@ -6,7 +6,7 @@ only the pairs needed for sparse attention, reducing memory usage from O(L²) to
 """
 
 import math
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
@@ -159,7 +159,7 @@ class ChunkedPairwiseEmbedder:
         process_single_m: Optional[nn.Module] = None,
         process_z: Optional[nn.Module] = None,
         pair_mlp: Optional[nn.Module] = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         self.c_atompair = c_atompair
         self.motif_pos_embedder = motif_pos_embedder
