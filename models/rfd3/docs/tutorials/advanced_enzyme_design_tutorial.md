@@ -178,9 +178,68 @@ Never specify hydrogen atoms in your constraints for RFdiffusion3. RFD3 strips a
 
 <!-- TODO: add image of the atoms that need to be held fixed. -->
 
-Last, but not least, we specify the ORI token we discussed at the end of the last section. Feel free to try various ORI locations and see how they impact your results. 
+Last, but not least, we specify the ORI token we discussed at the end of the last section. Feel free to try various ORI token locations and see how they impact your results. 
 
+### Running RFdiffusion3
 
+Once the input structure and JSON/YAML file have been prepared we can run RFD3. The simplest possible command to do so is
+```bash
+rfd3 design out_dir=</path/to/outputs/> inputs=</path/to/inputs/>metalloprotease_rfd3_input.json
+```
+This will generate 8 designs. If the output directory that you specify does not exist, RFD3 will create it.
+
+However, for this tutorial we recommend changing some of the default settings for how RFD3 runs: 
+```bash
+rfd3 design \
+    out_dir=<path/to/outputs/> \
+    inputs=<path/to/inputs/>metalloprotease_rfd3_input.json \
+    skip_existing=False \
+    dump_trajectories=True \
+    prevalidate_inputs=True \
+    diffusion_batch_size=4 \
+    n_batches=6 \
+    inference_sampler.use_classifier_free_guidance=True \
+    inference_sampler.s_jitter_origin=1.5 \
+    seed=42
+```
+Here is a brief description of what each of these additional settings are changing: 
+- `skip_existing=False` tells RFD3 to overwrite any existing files in the output directory that would have the same name as those that would be created. This is `True` by default to avoid re-running a calculation you already have results for. 
+- `dump_trajectories=True` will generate two trajectory files (`noisy` and `denoised`) that will show different aspects of the diffusion process. See the [small molecule binder design tutorial](binder_design_tutorial.html#step-3-running-rfd3) for a discussion of these files. Note that these files can take up a bit of space on your machine.
+- `prevalidate_inputs=True` will check your JSON/YAML file for any formatting issues.
+- `diffusion_batch_size=4` changes the diffusion batch size from 8 to 4, lowering the default batch size can help if you run into GPU memory errors. 
+- `n_batches=6` run 6 batches of RFD3 instead of 1, for a total of 24 designs. The total number of designs you want to generate will depend on your design needs.
+- `inference_sampler.use_classifier_free_guidance=True` turns on classifier free guidance so that the model learns to predict the denoised structure with and without some of the conditioning features. It results in better adherence to your input constraints at the cost of lower diversity in the designed structures. 
+- `inference_sampler.s_jitter_origin=1.5` adds a small amount of positional noise to the 'motif', the fixed portions of the structure that were given to RFD3 as input. Useful for exploring how the protein scaffold can orient around the active site. 
+- `seed=42` sets the seed to increase the reproducibility of results between RFD3 calculations. As of the publication of this tutorial, setting the seed **does not** result in fully deterministic results – they will still be slightly different between runs. 
+
+Feel free to reduce the number of batches or batch size if you have limited GPU resources.
+
+You can learn more about these settings and other possible options [here](../input.md#cli-arguments). 
+
+### Analyzing the Outputs
+You can find a set of example outputs <!-- TODO --> with the tutorial files. These files will not completely match what you produce. 
+
+You should see 4 types of files for each design (96 files total) in your output directory. Each design should have:
+- `<prefix>_model_<N>.cif.gz`: The final structure of the given design. 
+- `<prefix>_model_<N>.json`: A JSON file containing quality metrics, index mapping, the full input specification, and sampler parameters for the design. 
+- `<prefix>_denoised_model_<N>.cif.gz`: This trajectory files shows what the diffusion network thinks the final clean structure will be at each timestep. The input motif is not held fixed in this view. Can be used to see what the model ‘learned’ at each step as it is easier to watch the secondary structure emerge during the diffusion process.
+- `<prefix>_noisy_model_<N>.cif.gz`: A trajectory that shows how the diffusion process actually progressed while the input motifs are held fixed. Can be used to verify motif integrity.
+
+Let's go through the outputs associated with one of the designs (all files can be found here <!-- TODO: link files -->) to show some of the ways one might analyze the outputs from RFD3. First, let's open the `.cif.gz` file in PyMOL. If you are using the provided tutorial files your structure should look like this: 
+<!-- TODO: insert figure -->
+
+Here is what we are looking for: 
+1. **Overall fold.** Does the protein form a compact, well-folded structure? Is the active site located in a cleft or pocket, as you would expect for an enzyme?
+1. **Catalytic geometry.** Are the fixed atoms (H92/E93/H96/H102/Y149/M147) in their expected positions relative to the Zn(II) ion and the astacin ligand? Do the key interactions look reasonable? (You can find the new residue numbers for the catalytic residues in the `diffused_index_map` section of the design's JSON output file.)
+1. **Backbone connectivity.** Does the backbone trace smoothly through the structure without obvious clashes or unnatural loops?
+1. **Active site accessibility.** Is the ligand reasonably accessible from the protein surface? A completely buried ligand may be problematic depending on the application.
+
+Next let's take a look at the metrics in the output JSON file by opening it in any text editor: 
+- `diffused_index_map` tells us where the unindexed residues from our input are located in our final design
+- `metrics` contains several numerical scores that can be used to evaluate the design. These include: 
+    - 
+
+<!-- TODO: moves Seth's list of metrics to the docs -->
 
 
 (adv_enzyme_tutorial_glossary)=
