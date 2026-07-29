@@ -414,8 +414,8 @@ def test_cli_to_json_with_both_config_json_and_cmdline(tmp_path: Path) -> None:
     config = cli_to_json(args)
 
     assert config["model_type"] == "ligand_mpnn"
-    assert config["write_fasta"] == False
-    assert config["is_legacy_weights"] == False  # From config.json, not overridden
+    assert not config["write_fasta"]
+    assert not config["is_legacy_weights"]  # From config.json, not overridden
     assert config["out_directory"] == "out/"  # Picked up from options
 
     inputs = config["inputs"]
