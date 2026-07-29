@@ -139,7 +139,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model_type",
         type=str,
-        choices=["protein_mpnn", "ligand_mpnn"],
+        choices=["protein_mpnn", "ligand_mpnn", "soluble_mpnn"],
         help="Model type to use.",
         default=MPNN_GLOBAL_INFERENCE_DEFAULTS["model_type"],
     )
@@ -593,15 +593,11 @@ def cli_to_json(args: argparse.Namespace) -> dict[str, Any]:
     # Build a single-input JSON object from CLI
     if (
         args.model_type is None
-        or args.checkpoint_path is None
-        or args.is_legacy_weights is None
         or args.structure_path is None
     ):
         raise ValueError(
             "When --config_json is not provided, "
             "--model_type, "
-            "--checkpoint_path, "
-            "--is_legacy_weights, "
             "--structure_path "
             "must all be specified."
         )
