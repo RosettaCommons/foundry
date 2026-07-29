@@ -97,10 +97,13 @@ MPNN_PER_INPUT_INFERENCE_DEFAULTS: dict[str, Any] = {
 
 
 def str2bool(v: str) -> bool:
-    """Helper function to parse boolean CLI args."""
-    if v in ("True", "1"):
+    """Helper function to parse boolean CLI args.
+
+    Accept Python, JSON or C++ style values
+    """
+    if v in ("True", "true", "1"):
         return True
-    elif v in ("False", "0"):
+    elif v in ("False", "false", "0"):
         return False
     else:
         raise argparse.ArgumentTypeError(f"Boolean value expected, got {v!r}")
@@ -111,11 +114,20 @@ def none_or_type(v: Any, specified_type: Callable[[Any], Any]) -> Any | None:
     CLI type parser that turns 'None' into None. Otherwise, returns the value
     cast to the given type. This function is useful for the parser/pipeline
     override arguments where None has a special meaning (use default behavior).
+
+    Accept both Python like 'None' and JSON-like 'null'.
     """
-    if v == "None":
+    if v == "None" or v == "null": # Python-like or JSON like None/null value.
         return None
     return specified_type(v)
 
+class TrackUserSetting(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
+
+        if not hasattr(namespace, 'user_set'):
+            setattr(namespace, "user_set", {})
+        namespace.user_set[self.dest] = True
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build the MPNN inference arg parser."""
@@ -133,6 +145,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "flags are parsed but ignored."
         ),
         default=MPNN_GLOBAL_INFERENCE_DEFAULTS["config_json"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Model Type and Weights ---------------- #
@@ -142,12 +155,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=["protein_mpnn", "ligand_mpnn"],
         help="Model type to use.",
         default=MPNN_GLOBAL_INFERENCE_DEFAULTS["model_type"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--checkpoint_path",
         type=str,
         help="Path to model checkpoint.",
         default=MPNN_GLOBAL_INFERENCE_DEFAULTS["checkpoint_path"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--is_legacy_weights",
@@ -155,6 +170,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=[True, False],
         help="Whether to interpret checkpoint as legacy-weight ordering.",
         default=MPNN_GLOBAL_INFERENCE_DEFAULTS["is_legacy_weights"],
+        action=TrackUserSetting,
     )
 
     # --------------- Output controls ---------------- #
@@ -163,6 +179,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         help="Output directory for CIF/FASTA.",
         default=MPNN_GLOBAL_INFERENCE_DEFAULTS["out_directory"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--write_fasta",
@@ -170,6 +187,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=[True, False],
         help="Whether to write FASTA outputs.",
         default=MPNN_GLOBAL_INFERENCE_DEFAULTS["write_fasta"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--write_structures",
@@ -177,6 +195,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=[True, False],
         help="Whether to write designed structures (CIF).",
         default=MPNN_GLOBAL_INFERENCE_DEFAULTS["write_structures"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Structure Path and Name ---------------- #
@@ -184,13 +203,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--structure_path",
         type=str,
         help="Path to structure file (CIF or PDB).",
+        nargs="+",
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["structure_path"],
+        action="extend", # Don't need to track usage
     )
     parser.add_argument(
         "--name",
         type=str,
         help="Optional name / label for the input.",
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["name"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Sampling Parameters ---------------- #
@@ -199,6 +221,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         help="Random seed for sampling.",
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["seed"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--batch_size",
@@ -208,12 +231,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "the effective repeat_sample_num passed to the pipeline."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["batch_size"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--number_of_batches",
         type=int,
         help="Number of batches of size batch_size to draw.",
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["number_of_batches"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Parser overrides ---------------- #
@@ -227,6 +252,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "use the parser default behavior."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["remove_ccds"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--remove_waters",
@@ -238,6 +264,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "has special behavior: use the parser default behavior."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["remove_waters"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Pipeline Setup Overrides ---------------- #
@@ -249,6 +276,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "has special behavior: use the pipeline default behavior."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["occupancy_threshold_sidechain"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--occupancy_threshold_backbone",
@@ -258,6 +286,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "has special behavior: use the pipeline default behavior."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["occupancy_threshold_backbone"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--undesired_res_names",
@@ -268,6 +297,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "pipeline default behavior."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["undesired_res_names"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Scalar User Settings ---------------- #
@@ -276,6 +306,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         help=("Structure noise (Angstroms) used in user settings."),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["structure_noise"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--decode_type",
@@ -290,6 +321,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "for all previous positions when predicting each residue."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["decode_type"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--causality_pattern",
@@ -315,6 +347,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "itself (as a destination node)."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["causality_pattern"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--initialize_sequence_embedding_with_ground_truth",
@@ -334,6 +367,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS[
             "initialize_sequence_embedding_with_ground_truth"
         ],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--features_to_return",
@@ -344,6 +378,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             '["mask_for_loss"], "decoder_features": ["log_probs"]}\''
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["features_to_return"],
+        action=TrackUserSetting,
     )
     # Only applicable for LigandMPNN.
     parser.add_argument(
@@ -355,6 +390,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "for LigandMPNN."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["atomize_side_chains"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Design scope (mutually exclusive) ---------------- #
@@ -366,6 +402,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             'List of residue IDs to fix: e.g. \'["A35","B40","C52"]\' or "A35,B40,C52"'
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["fixed_residues"],
+        action=TrackUserSetting,
     )
     design_group.add_argument(
         "--designed_residues",
@@ -375,18 +412,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
             'e.g. \'["A35","B40","C52"]\' or "A35,B40,C52"'
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["designed_residues"],
+        action=TrackUserSetting,
     )
     design_group.add_argument(
         "--fixed_chains",
         type=str,
         help=('List of chain IDs to fix: e.g. \'["A","B"]\' or "A,B"'),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["fixed_chains"],
+        action=TrackUserSetting,
     )
     design_group.add_argument(
         "--designed_chains",
         type=str,
         help=('List of chain IDs to design: e.g. \'["A","B"]\' or "A,B"'),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["designed_chains"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Bias, Omission, and Pair Bias ---------------- #
@@ -395,6 +435,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         help='Bias dict: e.g. \'{"ALA": -1.0, "GLY": 0.5}\'',
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["bias"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--bias_per_residue",
@@ -403,12 +444,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
             'Per-residue bias dict: e.g. \'{"A35": {"ALA": -2.0}}\'. Overwrites --bias.'
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["bias_per_residue"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--omit",
         type=str,
         help=('List of residue types to omit: e.g. \'["ALA","GLY","UNK"]\'.'),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["omit"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--omit_per_residue",
@@ -418,6 +461,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             'e.g. \'{"A35": ["ALA","GLY","UNK"]}\'. Overwrites --omit.'
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["omit_per_residue"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--pair_bias",
@@ -428,6 +472,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             '\'{"ALA": {"GLY": -0.5}, "GLY": {"ALA": -0.5}}\''
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["pair_bias"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--pair_bias_per_residue_pair",
@@ -445,6 +490,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             'is the innermost dict (e.g. {"GLY": -1.0} ).'
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["pair_bias_per_residue_pair"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Temperature ---------------- #
@@ -453,6 +499,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         help=("Temperature for sampling."),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["temperature"],
+        action=TrackUserSetting,
     )
     parser.add_argument(
         "--temperature_per_residue",
@@ -462,6 +509,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "--temperature."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["temperature_per_residue"],
+        action=TrackUserSetting,
     )
 
     # ---------------- Symmetry ---------------- #
@@ -475,6 +523,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             '\'[["A35","B35"],["A40","B40","C40"]]\''
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["symmetry_residues"],
+        action=TrackUserSetting,
     )
     sym_group.add_argument(
         "--homo_oligomer_chains",
@@ -487,6 +536,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             '\'[["A","B","C"]]\''
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["homo_oligomer_chains"],
+        action=TrackUserSetting,
     )
 
     # Symmetry weights
@@ -500,6 +550,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "Ignored if homo_oligomer_chains is used."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["symmetry_residues_weights"],
+        action=TrackUserSetting,
     )
 
     return parser
@@ -578,96 +629,135 @@ def _absolute_path_or_none(path_str: str | None) -> str | None:
         return None
     return str(Path(path_str).expanduser().resolve())
 
+def safe_set_in_config(
+    config: dict[str, Any],
+    args: argparse.Namespace,
+    name: str,
+    param: str | None = None,
+    format: str | None = None,
+) -> None:
+    """
+    If the given entry of name isn't already set in the top-level of the config dictionary,
+    set it from the parameter in args, but only if it's been annotated as user-set.
+
+    Note that every option used with this function must be annotated with `action=TrackUserSetting`
+    """
+    if name in config:
+        return
+    if param is None:
+        param = name
+    if param in args.user_set and args.user_set[param]:
+        if format is None:
+            config[name] = getattr(args, param)
+        elif format == "json":
+            config[name] = parse_json_like(getattr(args, param))
+        elif format == "list":
+            config[name] = parse_list_like(getattr(args, param))
 
 def cli_to_json(args: argparse.Namespace) -> dict[str, Any]:
     """Convert CLI args into the top-level JSON config dict."""
-    # If a config JSON is provided, load and return it directly. Ignore the
-    # other CLI args.
+
+    # In case we haven't provided any of the user-set options, make sure we have a dictionary
+    if not hasattr(args, "user_set"):
+       setattr( args, "user_set", {} )
+
+    # If set, use the config_json as the template
     if args.config_json:
         config_path = _absolute_path_or_none(args.config_json)
         # args.config_json is truthy here, so the absolute path is never None.
         assert config_path is not None
         with open(config_path, "r") as f:
-            return json.load(f)
+            config = json.load(f)
+        if not isinstance(config, dict):
+            raise TypeError("The top level of config_json must be a JSON object (dictionary).")
+    else:
+        # Bare-bones config -- we'll populate it from options/defaults
+        config = {}
 
-    # Build a single-input JSON object from CLI
-    if (
-        args.model_type is None
-        or args.checkpoint_path is None
-        or args.is_legacy_weights is None
-        or args.structure_path is None
-    ):
-        raise ValueError(
-            "When --config_json is not provided, "
-            "--model_type, "
-            "--checkpoint_path, "
-            "--is_legacy_weights, "
-            "--structure_path "
-            "must all be specified."
-        )
+    # Global settings
+    # Model Type and Weights
+    safe_set_in_config(config, args, "model_type")
+    safe_set_in_config(config, args, "checkpoint_path")
+    safe_set_in_config(config, args, "is_legacy_weights")
+    # Output controls
+    safe_set_in_config(config, args, "out_directory")
+    safe_set_in_config(config, args, "write_fasta")
+    safe_set_in_config(config, args, "write_structures")
 
-    config: dict[str, Any] = {
-        # Model Type and Weights
-        "model_type": args.model_type,
-        "checkpoint_path": args.checkpoint_path,
-        "is_legacy_weights": args.is_legacy_weights,
-        # Output controls
-        "out_directory": args.out_directory,
-        "write_fasta": args.write_fasta,
-        "write_structures": args.write_structures,
-        # Singleton inputs list (CLI only supports single input at a time).
-        "inputs": [
-            {
-                # Structure Path and Name
-                "structure_path": args.structure_path,
-                "name": args.name,
-                # Sampling Parameters
-                "seed": args.seed,
-                "batch_size": args.batch_size,
-                "number_of_batches": args.number_of_batches,
-                # Parser Overrides
-                "remove_ccds": parse_list_like(args.remove_ccds),
-                "remove_waters": args.remove_waters,
-                # Pipeline Setup Overrides
-                "occupancy_threshold_sidechain": args.occupancy_threshold_sidechain,
-                "occupancy_threshold_backbone": args.occupancy_threshold_backbone,
-                "undesired_res_names": parse_list_like(args.undesired_res_names),
-                # Scalar User Settings
-                "structure_noise": args.structure_noise,
-                "decode_type": args.decode_type,
-                "causality_pattern": args.causality_pattern,
-                "initialize_sequence_embedding_with_ground_truth": args.initialize_sequence_embedding_with_ground_truth,
-                "features_to_return": parse_json_like(args.features_to_return),
-                # Only applicable for LigandMPNN
-                "atomize_side_chains": args.atomize_side_chains,
-                # Design scope - if all None, design all residues
-                "fixed_residues": parse_list_like(args.fixed_residues),
-                "designed_residues": parse_list_like(args.designed_residues),
-                "fixed_chains": parse_list_like(args.fixed_chains),
-                "designed_chains": parse_list_like(args.designed_chains),
-                # Bias, Omission, and Pair Bias
-                "bias": parse_json_like(args.bias),
-                "bias_per_residue": parse_json_like(args.bias_per_residue),
-                "omit": parse_json_like(args.omit),
-                "omit_per_residue": parse_json_like(args.omit_per_residue),
-                "pair_bias": parse_json_like(args.pair_bias),
-                "pair_bias_per_residue_pair": parse_json_like(
-                    args.pair_bias_per_residue_pair
-                ),
-                # Temperature
-                "temperature": args.temperature,
-                "temperature_per_residue": parse_json_like(
-                    args.temperature_per_residue
-                ),
-                # Symmetry
-                "symmetry_residues": parse_json_like(args.symmetry_residues),
-                "symmetry_residues_weights": parse_json_like(
-                    args.symmetry_residues_weights
-                ),
-                "homo_oligomer_chains": parse_json_like(args.homo_oligomer_chains),
-            }
-        ],
-    }
+    if "model_type" not in config or config["model_type"] is None:
+        raise ValueError("model_type must be specified.")
+
+    # Provide a skeleton input list, to (hopefully) be populated from --structure_path
+    if "inputs" in config and not isinstance(config["inputs"], list):
+        raise TypeError("The inputs entry of config_json must be a list.")
+    if "inputs" not in config or len(config["inputs"]) == 0:
+        config["inputs"] = [{}]
+
+    for entry in config["inputs"]:
+        if not isinstance(entry, dict):
+            raise TypeError("Each entry in the inputs list of config_json must be a JSON object (dictionary)")
+
+    # Find the template input dicts in the config (either from config_json, or the stub config) and populate them with --structure_path values
+    structure_free = [ d for d in config["inputs"] if "structure_path" not in d ]
+    if len(structure_free) != 0:
+        if len(args.structure_path) == 0:
+            raise ValueError("structure_path must be specified, either in the config_json or the command line")
+
+        # combinitorial assortment
+        new_inputs = []
+        for entry in structure_free:
+            for structure in args.structure_path:
+                new_input = copy.deepcopy( entry )
+                new_input["structure_path"] = structure
+                new_inputs.append( new_input )
+
+        # TODO: Add some sort of check/validation/adjustment for output naming in the combinitorial case
+        already_has_structure = [ d for d in config["inputs"] if "structure_path" in d ]
+        config["inputs"] = already_has_structure + new_inputs
+    elif args.structure_path and len(args.structure_path) != 0:
+        raise ValueError("Command line structure specified with --structure_path, but all provided input entries already have structures specified.")
+
+    for entry in config["inputs"]:
+        # Name
+        safe_set_in_config(entry, args, "name")
+        # Sampling Parameters
+        safe_set_in_config(entry, args, "seed")
+        safe_set_in_config(entry, args, "batch_size")
+        safe_set_in_config(entry, args, "number_of_batches")
+        # Parser Overrides
+        safe_set_in_config(entry, args, "remove_ccds", format="list")
+        safe_set_in_config(entry, args, "remove_waters")
+        # Pipeline Setup Overrides
+        safe_set_in_config(entry, args, "occupancy_threshold_sidechain")
+        safe_set_in_config(entry, args, "occupancy_threshold_backbone")
+        safe_set_in_config(entry, args, "undesired_res_names", format="list")
+        # Scalar User Settings
+        safe_set_in_config(entry, args, "structure_noise")
+        safe_set_in_config(entry, args, "decode_type")
+        safe_set_in_config(entry, args, "causality_pattern")
+        safe_set_in_config(entry, args, "initialize_sequence_embedding_with_ground_truth")
+        safe_set_in_config(entry, args, "features_to_return", format="json")
+        # Only applicable for LigandMPNN
+        safe_set_in_config(entry, args, "atomize_side_chains")
+        # Design scope - if all None, design all residues
+        safe_set_in_config(entry, args, "fixed_residues", format="list")
+        safe_set_in_config(entry, args, "designed_residues", format="list")
+        safe_set_in_config(entry, args, "fixed_chains", format="list")
+        safe_set_in_config(entry, args, "designed_chains", format="list")
+        # Bias, Omission, and Pair Bias
+        safe_set_in_config(entry, args, "bias", format="json")
+        safe_set_in_config(entry, args, "bias_per_residue", format="json")
+        safe_set_in_config(entry, args, "omit", format="json")
+        safe_set_in_config(entry, args, "omit_per_residue", format="json")
+        safe_set_in_config(entry, args, "pair_bias", format="json")
+        safe_set_in_config(entry, args, "pair_bias_per_residue_pair", format="json")
+        # Temperature
+        safe_set_in_config(entry, args, "temperature")
+        safe_set_in_config(entry, args, "temperature_per_residue", format="json")
+        # Symmetry
+        safe_set_in_config(entry, args, "symmetry_residues", format="json")
+        safe_set_in_config(entry, args, "symmetry_residues_weights", format="json")
+        safe_set_in_config(entry, args, "homo_oligomer_chains", format="json")
 
     return config
 
