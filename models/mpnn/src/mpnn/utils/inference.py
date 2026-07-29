@@ -591,10 +591,7 @@ def cli_to_json(args: argparse.Namespace) -> dict[str, Any]:
             return json.load(f)
 
     # Build a single-input JSON object from CLI
-    if (
-        args.model_type is None
-        or args.structure_path is None
-    ):
+    if args.model_type is None or args.structure_path is None:
         raise ValueError(
             "When --config_json is not provided, "
             "--model_type, "
