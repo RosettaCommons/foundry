@@ -117,17 +117,19 @@ def none_or_type(v: Any, specified_type: Callable[[Any], Any]) -> Any | None:
 
     Accept both Python like 'None' and JSON-like 'null'.
     """
-    if v == "None" or v == "null": # Python-like or JSON like None/null value.
+    if v == "None" or v == "null":  # Python-like or JSON like None/null value.
         return None
     return specified_type(v)
+
 
 class TrackUserSetting(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest, values)
 
-        if not hasattr(namespace, 'user_set'):
+        if not hasattr(namespace, "user_set"):
             setattr(namespace, "user_set", {})
         namespace.user_set[self.dest] = True
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build the MPNN inference arg parser."""
@@ -205,7 +207,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Path to structure file (CIF or PDB).",
         nargs="+",
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["structure_path"],
-        action="extend", # Don't need to track usage
+        action="extend",  # Don't need to track usage
     )
     parser.add_argument(
         "--name",
@@ -629,6 +631,7 @@ def _absolute_path_or_none(path_str: str | None) -> str | None:
         return None
     return str(Path(path_str).expanduser().resolve())
 
+
 def safe_set_in_config(
     config: dict[str, Any],
     args: argparse.Namespace,
@@ -654,12 +657,13 @@ def safe_set_in_config(
         elif format == "list":
             config[name] = parse_list_like(getattr(args, param))
 
+
 def cli_to_json(args: argparse.Namespace) -> dict[str, Any]:
     """Convert CLI args into the top-level JSON config dict."""
 
     # In case we haven't provided any of the user-set options, make sure we have a dictionary
     if not hasattr(args, "user_set"):
-       setattr( args, "user_set", {} )
+        setattr(args, "user_set", {})
 
     # If set, use the config_json as the template
     if args.config_json:
@@ -669,7 +673,9 @@ def cli_to_json(args: argparse.Namespace) -> dict[str, Any]:
         with open(config_path, "r") as f:
             config = json.load(f)
         if not isinstance(config, dict):
-            raise TypeError("The top level of config_json must be a JSON object (dictionary).")
+            raise TypeError(
+                "The top level of config_json must be a JSON object (dictionary)."
+            )
     else:
         # Bare-bones config -- we'll populate it from options/defaults
         config = {}
@@ -695,27 +701,33 @@ def cli_to_json(args: argparse.Namespace) -> dict[str, Any]:
 
     for entry in config["inputs"]:
         if not isinstance(entry, dict):
-            raise TypeError("Each entry in the inputs list of config_json must be a JSON object (dictionary)")
+            raise TypeError(
+                "Each entry in the inputs list of config_json must be a JSON object (dictionary)"
+            )
 
     # Find the template input dicts in the config (either from config_json, or the stub config) and populate them with --structure_path values
-    structure_free = [ d for d in config["inputs"] if "structure_path" not in d ]
+    structure_free = [d for d in config["inputs"] if "structure_path" not in d]
     if len(structure_free) != 0:
         if len(args.structure_path) == 0:
-            raise ValueError("structure_path must be specified, either in the config_json or the command line")
+            raise ValueError(
+                "structure_path must be specified, either in the config_json or the command line"
+            )
 
         # combinitorial assortment
         new_inputs = []
         for entry in structure_free:
             for structure in args.structure_path:
-                new_input = copy.deepcopy( entry )
+                new_input = copy.deepcopy(entry)
                 new_input["structure_path"] = structure
-                new_inputs.append( new_input )
+                new_inputs.append(new_input)
 
         # TODO: Add some sort of check/validation/adjustment for output naming in the combinitorial case
-        already_has_structure = [ d for d in config["inputs"] if "structure_path" in d ]
+        already_has_structure = [d for d in config["inputs"] if "structure_path" in d]
         config["inputs"] = already_has_structure + new_inputs
     elif args.structure_path and len(args.structure_path) != 0:
-        raise ValueError("Command line structure specified with --structure_path, but all provided input entries already have structures specified.")
+        raise ValueError(
+            "Command line structure specified with --structure_path, but all provided input entries already have structures specified."
+        )
 
     for entry in config["inputs"]:
         # Name
@@ -735,7 +747,9 @@ def cli_to_json(args: argparse.Namespace) -> dict[str, Any]:
         safe_set_in_config(entry, args, "structure_noise")
         safe_set_in_config(entry, args, "decode_type")
         safe_set_in_config(entry, args, "causality_pattern")
-        safe_set_in_config(entry, args, "initialize_sequence_embedding_with_ground_truth")
+        safe_set_in_config(
+            entry, args, "initialize_sequence_embedding_with_ground_truth"
+        )
         safe_set_in_config(entry, args, "features_to_return", format="json")
         # Only applicable for LigandMPNN
         safe_set_in_config(entry, args, "atomize_side_chains")
