@@ -123,7 +123,13 @@ def none_or_type(v: Any, specified_type: Callable[[Any], Any]) -> Any | None:
 
 
 class TrackUserSetting(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: str | None = None,
+    ) -> None:
         setattr(namespace, self.dest, values)
 
         if not hasattr(namespace, "user_set"):
