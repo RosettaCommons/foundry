@@ -18,6 +18,11 @@ extensions = ["myst_parser",
               "sphinx_copybutton"
               ]
 
+myst_enable_extensions = [
+    "alert",
+    "dollarmath",
+]
+
 templates_path = ['_templates']
 exclude_patterns = ["readme.md", "readmelink.md", "readme_link.rst"]
 
