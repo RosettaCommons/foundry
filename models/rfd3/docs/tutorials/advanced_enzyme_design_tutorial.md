@@ -298,8 +298,6 @@ for path in jsons:
 
 It is still **highly recommended** that you look at any of your passing designs in PyMOL after a quantitative filter. Some will still have issues that will not be captured by the metrics. For example, for this type of enzyme design problem, we will want relatively compact structures. 
 
-### Common Issues
-
 
 (adv_enzyme_tutorial_glossary)=
 ## Glossary
