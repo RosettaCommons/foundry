@@ -225,7 +225,10 @@ You should see 4 types of files for each design (96 files total) in your output 
 - `<prefix>_denoised_model_<N>.cif.gz`: This trajectory files shows what the diffusion network thinks the final clean structure will be at each timestep. The input motif is not held fixed in this view. Can be used to see what the model ‘learned’ at each step as it is easier to watch the secondary structure emerge during the diffusion process.
 - `<prefix>_noisy_model_<N>.cif.gz`: A trajectory that shows how the diffusion process actually progressed while the input motifs are held fixed. Can be used to verify motif integrity.
 
-Let's go through the outputs associated with one of the designs (all files can be found here <!-- TODO: link files -->) to show some of the ways one might analyze the outputs from RFD3. First, let's open the `.cif.gz` file in PyMOL. If you are using the provided tutorial files your structure should look like this: 
+Let's go through the outputs associated with one of the designs (all files can be found here <!-- TODO: link files -->) to show some of the ways one might analyze the outputs from RFD3. 
+
+#### Final structure
+First, let's open the `.cif.gz` file in PyMOL. If you are using the provided tutorial files your structure should look like this: 
 <!-- TODO: insert figure -->
 
 Here is what we are looking for: 
@@ -234,12 +237,68 @@ Here is what we are looking for:
 1. **Backbone connectivity.** Does the backbone trace smoothly through the structure without obvious clashes or unnatural loops?
 1. **Active site accessibility.** Is the ligand reasonably accessible from the protein surface? A completely buried ligand may be problematic depending on the application.
 
-Next let's take a look at the metrics in the output JSON file by opening it in any text editor: 
-- `diffused_index_map` tells us where the unindexed residues from our input are located in our final design
-- `metrics` contains several numerical scores that can be used to evaluate the design. These include: 
-    - 
+```{tip}
+When viewing multiple designs in PyMOL, you can use the `alignto` to roughly align all of the structures. Keep in mind that the residue numbers will vary between each design.
+```
 
-<!-- TODO: moves Seth's list of metrics to the docs -->
+#### Output JSON
+Next let's inspect the JSON files. The first section of the JSON file includes the `diffused_index_map` which shows where any input residues have ended up in your design. The indices on the left of the colon are from your input structure, the right are where these residues are in your final design. 
+
+The next section is the `metrics` section that includes many values that are automatically calculated by RFD3, only a few of which we will discuss here. You can see more details about all of these values in the [Output Metrics documentation](../output.md).
+
+For this type of enzyme design problem, you will likely care about:
+- `insertion.rmsd`: measures how well the unindexed motif was placed into the generated backbone.
+- `n_chainbreaks`: the number of chainbreaks in your system, here we want none. 
+- `n_clashing.interrresidue_clashes_w_sidechains`: the number of clashes between sidechains.
+- `n_clashing.ligand_clashes`: number of clashses between the design and the ligand
+- `non_loop_fraction`: fraction of residues in a recognizable secondary structure rather than in a loop.
+
+#### Specification and Inference Sampler
+These two sections will allow you to recreate this inference calculation. `specification` is a copy of your input JSON/YAML settings with some extra settings that are inherent to your input.`inference_sampler` is a record of all of the sampler hyperparameters that were set during the diffusion process.
+
+### Filtering Script
+While looking at these files is instructive, it is impossible to do for the tens, hundreds, or even thousands of designs you might generate for your research projects. You can instead write a simple python script to filter these designs based on the various metrics that you care about. 
+
+Here's an example of a simple filtering script: 
+```python
+
+import json, glob
+
+# sort the files by name and print a header
+jsons = sorted(glob.glob("outputs/*_model_*.json"))
+   print(f"{'File':<45} {'RMSD':>6} {'Join':>6} {'Breaks':>6} {'Clashes':>7} {'SS%':>5} {'Nres':>5}")
+   print("-" * 85)
+
+# print the below metrics for each file
+for path in jsons:
+    with open(path) as f:
+       d = json.load(f)
+    m = d["metrics"]
+    name = path.split("/")[-1].replace("rfd3__1qji__ZnProtease_HEHHMY_", "")
+    print(f"{name:<45} "
+        f"{m['insertion_rmsd']:6.3f} "
+        f"{m['join_point_rmsd']:6.3f} "
+        f"{m['n_chainbreaks']:6d} "
+        f"{m['n_clashing.interresidue_clashes_w_sidechain']:7d} "
+        f"{m['non_loop_fraction']:5.2f} "
+        f"{m['num_residues']:5d}")
+
+# filter based on hard-coded cutoffs and values
+for path in jsons:
+    with open(path) as f:
+        d = json.load(f)
+    m = d["metrics"]
+    if (m["insertion_rmsd"] < 0.5
+        and m["n_chainbreaks"] == 0
+        and m["n_clashing.interresidue_clashes_w_sidechain"] == 0
+        and m["n_clashing.ligand_clashes"] == 0
+        and m["non_loop_fraction"] > 0.6):
+        print(f"PASS: {path}")  
+```
+
+It is still **highly recommended** that you look at any of your passing designs in PyMOL after a quantitative filter. Some will still have issues that will not be captured by the metrics. For example, for this type of enzyme design problem, we will want relatively compact structures. 
+
+### Common Issues
 
 
 (adv_enzyme_tutorial_glossary)=
