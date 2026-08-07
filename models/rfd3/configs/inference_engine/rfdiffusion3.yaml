@@ -66,3 +66,6 @@ dump_trajectories: False
 align_trajectory_structures: False
 prevalidate_inputs: False
 low_memory_mode: False # False for standard mode, True for memory efficient tokenization mode
+
+# torch.compile the hot diffusion submodules. Cuts steady-state rollout time by ~1.6x.
+compile_model: False
