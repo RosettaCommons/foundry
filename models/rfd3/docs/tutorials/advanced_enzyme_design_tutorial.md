@@ -5,7 +5,7 @@
 
 (adv_enzyme_tutorial_intro)=
 ## Introduction
-In this tutorial, you will learn how to design a *de novo* enzyme by generating novel protein backbones that scaffold a pre-defined active site using [RFdiffusion3 (RFD3)](https://www.biorxiv.org/content/10.1101/2025.09.18.676967v2). More specifically, you will design a *de novo* metalloprotease for a system comprised of a phosphonamidate transition-state analog, zinc cofactor, and six catalytic residues shown below.
+In this tutorial, you will learn how to design a *de novo* enzyme by generating novel protein backbones that scaffold a pre-defined active site using [RFdiffusion3 (RFD3)](https://www.biorxiv.org/content/10.1101/2025.09.18.676967v2). More specifically, you will design a *de novo* metalloprotease for a system comprised of a phosphonamidate [transition-state analog](#adv_enzyme_tutorial_transition_state_analog_def), zinc [cofactor](#adv_enzyme_tutorial_cofactor_def), and six [catalytic residues](#adv_enzyme_tutorial_catalytic_residue_def) shown below.
 
 ```{figure}
 <!-- TODO insert image of initial/final (?) system here -->
@@ -47,11 +47,11 @@ PyMOL is not necessary to complete this tutorial, the steps shown here can be re
 ### Creating a Theozyme
 Structural inputs to RFdiffusion3 typically either come from a structure-prediction model (e.g. [AlfaFold3](https://www.nature.com/articles/s41586-024-07487-w)) or from an experimental structure reported in resources like the [RCSB Protein Data Bank (PDB)](https://www.rcsb.org/)
 
-However, for enzyme design our goal is to stabilize the **transition state** of the reaction involving our ligand and the key catalytic residues it interacts with. If the PDB contains a structure with a bound transition-state analog (a mimic of the transition state), this structure will be most useful for your enzyme design projects.
+However, for enzyme design our goal is to stabilize the **transition state** of the reaction involving our ligand and the key [catalytic residues](#adv_enzyme_tutorial_catalytic_residue_def) it interacts with. If the PDB contains a structure with a bound transition-state analog (a mimic of the transition state), this structure will be most useful for your enzyme design projects.
 
 For the metallohydrolase we are designing in this tutorial, we will start with a phosphoester. These are known for being a transition state analog for ester- and amide-cleaving metallohydrolases due to their tetrahedral geometry and localized negative charge. A careful search of the [RCSB Protein Data Bank (RSCB PDB)](https://www.rcsb.org/) leads us to [astacin (1QJI)](https://www.rcsb.org/structure/1QJI), a phosphonamidate transition-state analog. <!-- Not sure if this line is actually relevant, it is the only time zinc is mentioned in the introduction:  In the specific case of a zinc protease, peptide substrates bearing a **phosphonamidate** at the cleavage site are especially effective transition-state analogs.--> <!-- TODO: figure out if it is appropriate to include figure1 here, it's for a zinc reaction mechanism, and I'm not sure if it's actually necessary/relevant for what we are trying to accomplish here. -->
 
-Now we need to determine which residues in this protein are important for stabilizing the transition state. For this type of catalytic reaction, it is known that the three histidine residues (H92, H96, and H102 in 1QJI) that surround the zinc ion are crucial for chelation. The glutamic acid residue whose side chain interacts with the zinc ion (E93) is also known to serve as the general base for this hydrolysis reaction. The [article](https://www.nature.com/articles/nsb0896-671) that published the 1QJI structure also reveals that Y149 and M147 may ne necessary for this reaction: Y149 stabilizes the oxyanion that is formed during the reaction and M147 maybe important for conserving the motif that sits below the active site.
+Now we need to determine which residues in this protein are important for stabilizing the transition state. For this type of catalytic reaction, it is known that the three histidine residues (H92, H96, and H102 in 1QJI) that surround the zinc ion are crucial for [chelation](#adv_enzyme_tutorial_chelation_def). The glutamic acid residue whose side chain interacts with the zinc ion (E93) is also known to serve as the general base for this hydrolysis reaction. The [article](https://www.nature.com/articles/nsb0896-671) that published the 1QJI structure also reveals that Y149 and M147 may ne necessary for this reaction: Y149 stabilizes the oxyanion that is formed during the reaction and M147 maybe important for conserving the motif that sits below the active site.
 
 So for this example, we will be using 6 catalytic residues to create our theozyme along with the ligand and the zinc ion: H92, E93, H96, H102, M147, and Y149. You can see these residues highlighted in the structure below: 
 
@@ -74,7 +74,7 @@ For how to crop and save structures in PyMOL, see the 'Motif Preparation' sectio
 Make sure to save this structure as a CIF or PDB for for use in the next section.
 
 ### Adding an ORI token
-ORI (origin) tokens allow you to specify where the center of mass of the *designed* portion of your protein should approximately be. It can be used to have greater control over the interactions between the designed and input portions of your final structure. It can be particularly important for enzyme design as it can be used to guide the approximate orientation of how the generated protein should bind the ligand. <!-- TODO: add image here if Seth gives you the files you need. -->
+[ORI (origin) tokens](#adv_enzyme_tutorial_ori_token_def) allow you to specify where the center of mass of the *designed* portion of your protein should approximately be. It can be used to have greater control over the interactions between the designed and input portions of your final structure. It can be particularly important for enzyme design as it can be used to guide the approximate orientation of how the generated protein should bind the ligand. <!-- TODO: add image here if Seth gives you the files you need. -->
 
 For our metalloprotease designs, we can start by assuming that the ORI token should be placed near the zinc atom since it should be relatively buried in the enzyme structure. You could just determine the coordinates of the zinc atom and use these for the ORI token input. However, for this tutorial let's say that we know we want the ORI token to actually sit slightly below the zinc atom. We could determine the coordinates of this ourselves, but often times it is helpful to determine the placement of our ORI token visually. 
 
@@ -168,7 +168,7 @@ Here we specify both the zinc atom (ZN) and the astacin molecule (PKF) as ligand
 
 The length setting is telling RFdiffusion3 to design a protein that is between 120 and 150 amino acids in length, inclusive of the input residues. We are not using a `contig` setting here because we are using other ways to specify the designed or input portions of our structure. 
 
-We are `unindex`-ing all of the input residues here because their index in the final protein structure is not important, only their orientation with respect to each other, the ligand, and the zinc cofactor matters. 
+We are `unindex`-ing all of the input residues here because their index in the final protein structure is not important, only their orientation with respect to each other, the ligand, and the zinc [cofactor](#adv_enzyme_tutorial_cofactor_def) matters. 
 
 Which brings us to the `select_fixed_atoms` setting. You can see the atom names for each residue in the PDB/CIF file for the input structure and/or view them on PyMOL using its labeling functionality. You'll notice that all of the atoms specified here are from the side chains of the residues. For this design problem, we want to keep the backbone position flexible to avoid overconstraining the designed protein. Any atoms not listed are free to be moved by default. Only the positions of the side chain atoms relative to the ligand and cofactor are important for enzymatic activity. 
 
@@ -209,7 +209,7 @@ Here is a brief description of what each of these additional settings are changi
 - `diffusion_batch_size=4` changes the diffusion batch size from 8 to 4, lowering the default batch size can help if you run into GPU memory errors. 
 - `n_batches=6` run 6 batches of RFD3 instead of 1, for a total of 24 designs. The total number of designs you want to generate will depend on your design needs.
 - `inference_sampler.use_classifier_free_guidance=True` turns on classifier free guidance so that the model learns to predict the denoised structure with and without some of the conditioning features. It results in better adherence to your input constraints at the cost of lower diversity in the designed structures. 
-- `inference_sampler.s_jitter_origin=1.5` adds a small amount of positional noise to the 'motif', the fixed portions of the structure that were given to RFD3 as input. Useful for exploring how the protein scaffold can orient around the active site. 
+- `inference_sampler.s_jitter_origin=1.5` adds a small amount of positional noise to the ['motif'](#adv_enzyme_tutorial_motif_def), the fixed portions of the structure that were given to RFD3 as input. Useful for exploring how the protein scaffold can orient around the active site. 
 - `seed=42` sets the seed to increase the reproducibility of results between RFD3 calculations. As of the publication of this tutorial, setting the seed **does not** result in fully deterministic results – they will still be slightly different between runs. 
 
 Feel free to reduce the number of batches or batch size if you have limited GPU resources.
@@ -233,7 +233,7 @@ First, let's open the `.cif.gz` file in PyMOL. If you are using the provided tut
 
 Here is what we are looking for: 
 1. **Overall fold.** Does the protein form a compact, well-folded structure? Is the active site located in a cleft or pocket, as you would expect for an enzyme?
-1. **Catalytic geometry.** Are the fixed atoms (H92/E93/H96/H102/Y149/M147) in their expected positions relative to the Zn(II) ion and the astacin ligand? Do the key interactions look reasonable? (You can find the new residue numbers for the catalytic residues in the `diffused_index_map` section of the design's JSON output file.)
+1. **Catalytic geometry.** Are the fixed atoms (H92/E93/H96/H102/Y149/M147) in their expected positions relative to the Zn(II) ion and the astacin ligand? Do the key interactions look reasonable? (You can find the new residue numbers for the [catalytic residues](#adv_enzyme_tutorial_catalytic_residue_def) in the `diffused_index_map` section of the design's JSON output file.)
 1. **Backbone connectivity.** Does the backbone trace smoothly through the structure without obvious clashes or unnatural loops?
 1. **Active site accessibility.** Is the ligand reasonably accessible from the protein surface? A completely buried ligand may be problematic depending on the application.
 
@@ -311,27 +311,77 @@ You specify the atoms to use for the hydrogen bond donor/acceptor via a dictiona
 ```json
 "select_hbond_acceptor": {
     "PKF": "O4,O6,O7"
-    },
+},
 "select_hbond_donor": {
     "PKF": "N2,N4,N20"
-    }
+}
 ```
 
+You can find an example output from the addition of these diffusion constarints here. <!-- TODO: add link to files -->
 
+### RASA Conditioning
+Relative accesible surface area (RASA) conditioning allows you to tell RFD3 how exposed to the solvent or buried in the designed structure you want portions of your input structure to be in your final design. This is particularly useful in enzyme design as you will want certain parts of the subtrate to be enclused by the protein while others should extend outside of the active site cleft.
+
+There are three input parameters that are used to control RASA conditioning in your design: 
+- `select_buried` — atoms that should be **surrounded by protein** (low solvent accessibility)
+- `select_exposed` — atoms that should be **accessible to solvent** (high solvent accessibility)
+- `select_partially_buried` — atoms with **intermediate** solvent accessibility (less commonly used)
+
+The specific atoms you want buried, exposed, or partially buried are specified in the same format as for `select_fixed_atoms`. Here is an example of what these settings could look like for the design example discussed in this tutorial: 
+```json
+"select_buried": {
+    "ZN": "ZN",
+    "PKF": "O5,P1,O6,C28,C29,C33,C36"
+},
+"select_exposed": {
+    "PKF": "N5,C19,O2,C2,O8,C23,C24,C31,O3"
+}
+``` 
+The buried were chosen because we want to bury the zinc ions and the atoms near the reactive center of PKF. These are direvely involved in the catalytic mechanism so they should be enclosed by the protein. The atoms on the peptide tail of PKF, meanwhile, should be exposed as they would naturally protrude from the binding cleft in a real enzyme-subtrate complex.
+
+You can find an example output from the addition of these diffusion constarints here. <!-- TODO: add link to files -->
+
+You can find an example output from a design that uses both hydrogen bonding and RASA conditioning here. <!--TODO: add link to files-->
+
+(adv_enzyme_tutorial_conclusion)
+## Conclusion
+You have now set up an RFD3 calculation and successfully designed enzymes based around a theozyme created from a known structure. While the options discussed here are particularly useful in enzyme design projects, RFD3 has many more that you can explore by looking at {doc}`../input`.
 
 (adv_enzyme_tutorial_glossary)=
 ## Glossary
 
+(adv_enzyme_tutorial_catalytic_residue_def)=
+### Catalytic Residue
+Catalytic residues are amino acids known to be cruicial for the enzymatic activity of a given reaction. They can either directly interact with the molecule the enzyme interacts with, or indirectly support the stability of the transition state of the ligand. 
+
+(adv_enzyme_tutorial_chelation_def)=
+### Chelation
+Chelation describes a type of interaction between ligands and metal atoms that form a ring structure. 
+
+(adv_enzyme_tutorial_cofactor_def)=
+### Cofactor
+A cofactor is a non-protein molecule that binds to an enzyme to help it function.
+
+(adv_enzyme_tutorial_motif_def)=
+### Motif
+The input structure to RFD3 that designs are generated around. 
+
+(adv_enzyme_tutorial_ori_token_def)=
+### ORI Token
+The ORI token is the user-specified center of mass of the struture designed by RFD3. It gives the user some control over the interactions between the designed and input portions of the final structure.
+
 (adv_enzyme_tutorial_theozyme_def)=
 ### Theozyme
-<!-- TODO: Add definition -->
-### ORI Token
-<!-- TODO: Add definition-->
+A theozyme is a small structure formed from the transition state structure of a ligand and any catalytically important residues, atoms, etc. that are necessary to achieve a given catalytic reaction. It is the input structure for enzyme design calculations and can be created from known enzyme structures or via quantum mechanical methods. 
+
+(adv_enzyme_tutorial_transition_state_analog_def)=
+### Transition State Analog
+A transition state analog is a compound that resembles the transition state of a substrate molecule in an enzyme-catalyzed reaction
+
 
 (adv_enzyme_tutorial_refs)=
 ## Resources and References
 - [RFdiffusion3 preprint](https://www.biorxiv.org/content/10.1101/2025.09.18.676967v2)
 - The procedure described here follows the approach discussed in [Kim, D. et al. (2025)](https://www.nature.com/articles/s41586-025-09746-w) and [Chen, A. et al. (2025)](https://www.nature.com/articles/s41586-025-09746-w)
-- Astacin structure: Grams, F. et al. (1996). Structure of astacin with a transition-state analogueinhibitor. *Nature Structural Biology* **3**, 671-675. DOI: https://doi.org/10.1038/nsb0896-671
-- 
+- [Astacin structure](https://doi.org/10.1038/nsb0896-671)
 
