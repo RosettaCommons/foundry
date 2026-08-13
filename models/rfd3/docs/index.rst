@@ -6,6 +6,12 @@ study ligand-protein interactions, create nucleic acid-protein interfaces, and
 design *de novo* enzymes. It is designed to be highly flexible and 
 user-friendly, making it suitable for a wide range of applications in computational biology and biochemistry.
 
+New to RFD3?
+------------
+If you haven't installed RFD3 yet, take a look at the `RFD3 README <https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/README.md#getting-started>`_ or, if you are on a UNIX system, see the :doc:`tutorials/RFdiffusion3_installation_tutorial` .
+
+Once you have everything installed, check out one of our Introductory Tutorials, listed below. 
+
 General
 -------
 .. toctree::
@@ -15,8 +21,15 @@ General
    intro_inference_calculations.md
    input.md
    output.md
-   designability_vs_diversity.md
    common_issues.md
+
+RFD3 Design Tips
+----------------
+.. toctree::
+   :maxdepth: 1
+
+   designability_vs_diversity.md
+   design_areas/enzyme_design_tips.md
 
 Introductory Tutorials
 ----------------------

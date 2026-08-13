@@ -114,7 +114,7 @@ Right-hand panel in PyMOL with the action menu for the ORI object open. The 'dra
 You should now be able to move your pseudoatom by holding shift while clicking on then dragging the pseudoatom with the middle button on your mouse. This may vary depending on your PyMOL version and OS. Your final ORI location should lead to a structure that looks approximately like: 
 
 ```{figure} ../.assets/adv_enzyme_design_tutorial/ori_2.png
-:width:100%
+:width: 100%
 :alt: Final location of ORI token with theozyme structure. 
 
 Final location of the ORI token relative to the theozyme structure. The ORI token is shown in white, the catalytic residues in pink, the zinc ion in gray, and the ligand in orange. 
@@ -343,7 +343,7 @@ You can find an example output from the addition of these diffusion constarints 
 
 You can find an example output from a design that uses both hydrogen bonding and RASA conditioning here. <!--TODO: add link to files-->
 
-(adv_enzyme_tutorial_conclusion)
+(adv_enzyme_tutorial_conclusion)=
 ## Conclusion
 You have now set up an RFD3 calculation and successfully designed enzymes based around a theozyme created from a known structure. While the options discussed here are particularly useful in enzyme design projects, RFD3 has many more that you can explore by looking at {doc}`../input`.
 
