@@ -14,6 +14,7 @@ General
    tutorials/RFdiffusion3_installation_tutorial.md
    intro_inference_calculations.md
    input.md
+   output.md
    designability_vs_diversity.md
    common_issues.md
 

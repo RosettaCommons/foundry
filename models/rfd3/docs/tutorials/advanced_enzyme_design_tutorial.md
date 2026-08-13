@@ -298,6 +298,26 @@ for path in jsons:
 
 It is still **highly recommended** that you look at any of your passing designs in PyMOL after a quantitative filter. Some will still have issues that will not be captured by the metrics. For example, for this type of enzyme design problem, we will want relatively compact structures. 
 
+## Advanced Input Specifications
+The process discussed thus far in the tutorial shows the input specifications that will be generally useful for any enzyme design task. Here we will look at the addition of two more categories of input specification: hydrogen bond conditioning and relative accssible surface area (RASA) conditioning.
+
+### Hydrogen Bond Conditioning
+```{important}
+You must have [HBPLUS](https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/) installed on your system as described in the [RFD3 README](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/README.md#install-hbplus-for-training-with-hydrogen-bond-conditioning) to run RFD3 with hydrogen bond conditioning.
+```
+The `select_hbond_donor` and `select_hbond_acceptor` inut specification options allow you to tell RFD3 which specific atoms in your input structure should form be used as hydrogen bond donors and acceptors, respectively, in your final design. The addition of these parameters can help with the binding specificity of your designed enzyme structures. 
+
+You specify the atoms to use for the hydrogen bond donor/acceptor via a dictionary. If you would like to see the impacts of adding hydrogen bond conditioning to the design task described in this tutorial add the following to your JSON file: 
+```json
+"select_hbond_acceptor": {
+    "PKF": "O4,O6,O7"
+    },
+"select_hbond_donor": {
+    "PKF": "N2,N4,N20"
+    }
+```
+
+
 
 (adv_enzyme_tutorial_glossary)=
 ## Glossary
