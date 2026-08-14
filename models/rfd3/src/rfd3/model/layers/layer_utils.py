@@ -80,7 +80,11 @@ def collapse(x, L):
 class MultiDimLinear(nn.Linear):
     def __init__(self, in_features, out_shape, norm=False, **kwargs):
         self.out_shape = out_shape
-        out_features = np.prod(out_shape)
+        # int(): np.prod returns np.int64, which torch.compile cannot treat as a
+        # static shape. It gets lifted into the graph, so RMSNorm's
+        # normalized_shape becomes a data-dependent value and inductor fails the
+        # subgraph with `aten._local_scalar_dense` under dynamic=False.
+        out_features = int(np.prod(out_shape))
         super().__init__(in_features, out_features, **kwargs)
         if norm:
             self.ln = RMSNorm((out_features,))
