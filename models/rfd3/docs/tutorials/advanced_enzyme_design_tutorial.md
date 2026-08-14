@@ -71,7 +71,7 @@ The structure we will use as input to RFD3. The catalytic residues are pink, the
 
 For how to crop and save structures in PyMOL, see the 'Motif Preparation' section [Intermediate Enzyme Design Tutorial](./intermediate_enzyme_design_tutorial.md#intermediate_enzyme_motif_prep). You can compare your result to the [`theozyme.pdb`](./advanced_enzyme_tutorial_files/theozyme.pdb) file provided in the RFD3 documentation. 
 
-Make sure to save this structure as a CIF or PDB for for use in the next section.
+Make sure to save this structure as a **PDB** for for use in the next section.
 
 ### Adding an ORI token
 [ORI (origin) tokens](#adv_enzyme_tutorial_ori_token_def) allow you to specify where the center of mass of the *designed* portion of your protein should approximately be. It can be used to have greater control over the interactions between the designed and input portions of your final structure. It can be particularly important for enzyme design as it can be used to guide the approximate orientation of how the generated protein should bind the ligand. <!-- TODO: add image here if Seth gives you the files you need. -->
