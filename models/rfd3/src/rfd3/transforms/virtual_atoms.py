@@ -221,6 +221,12 @@ class PadTokensWithVirtualAtoms(Transform):
                     # ... Even if the input pad_atoms are all motif, we don't ever want padded atoms to be motif
                     pad_array.is_motif_atom = np.zeros(n_pad, dtype=bool)
 
+                    #... Pad_atoms should never inherit fixed state
+                    if data["is_inference"]:
+                        pad_array.is_motif_atom_with_fixed_coord = np.zeros(
+                            n_pad, dtype=token.is_motif_atom_with_fixed_coord.dtype
+                        )
+                        
                     # Handle multidimensional annotations
                     def _fix_multidimensional_annotations_in_pad_array(
                         atomarray, padarray
