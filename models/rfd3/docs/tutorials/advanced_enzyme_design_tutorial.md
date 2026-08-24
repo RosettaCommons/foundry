@@ -143,13 +143,14 @@ Open a new file called `metalloprotease_rfd3_input.json` in a text editor of you
             "A96": "NE2,CD2,CG,CB,ND1,CE1",
             "A102": "NE2,CD2,CG,CB,ND1,CE1",
             "A147": "SD,CE,CG",
-            "A149": "OH,CZ,CE1,CD1,CE2,CG,CB"
+            "A149": "OH,CZ,CE1,CD1,CE2,CG,CB,CD2"
         },
         "ori_token": [
             17.349,
             23.971,
             19.174
-        ]
+        ],
+        "allow_ligand_on_existing_chain": true
     }
 }
 ```
@@ -228,7 +229,7 @@ You should see 4 types of files for each design (96 files total) in your output 
 Let's go through the outputs associated with one of the designs (all files can be found here <!-- TODO: link files -->) to show some of the ways one might analyze the outputs from RFD3. 
 
 #### Final structure
-First, let's open the `.cif.gz` file in PyMOL. If you are using the provided tutorial files your structure should look like this: 
+First, open the `.cif.gz` file in PyMOL. If you are using the provided tutorial files your structure should look like this: 
 <!-- TODO: insert figure -->
 
 Here is what we are looking for: 
@@ -248,13 +249,25 @@ The next section is the `metrics` section that includes many values that are aut
 
 For this type of enzyme design problem, you will likely care about:
 - `insertion.rmsd`: measures how well the unindexed motif was placed into the generated backbone.
+- `join_point_rmsd`: 
+- `n_conjoined_residues`: the number of motif residues whose atoms could not be confidently matched to a single diffused residue. 
 - `n_chainbreaks`: the number of chainbreaks in your system, here we want none. 
+- `n_clashing_interresidue_clashes_w_backbone`: number of inter-residue atom pairs closer than 1.5 Å.
 - `n_clashing.interrresidue_clashes_w_sidechains`: the number of clashes between sidechains.
 - `n_clashing.ligand_clashes`: number of clashses between the design and the ligand
 - `non_loop_fraction`: fraction of residues in a recognizable secondary structure rather than in a loop.
 
-#### Specification and Inference Sampler
-These two sections will allow you to recreate this inference calculation. `specification` is a copy of your input JSON/YAML settings with some extra settings that are inherent to your input.`inference_sampler` is a record of all of the sampler hyperparameters that were set during the diffusion process.
+The JSON output file then ends with `specification`, `ckpt_path` and `seed` sections that will help you recreate this inference run. 
+
+#### Trajectory Files
+<!-- TODO: Include GIFs? -->
+
+Trajectory files are typically not necessary for filtering your designs and creating them roughly doubles the size of your output. However, they can be useful for diagnosing:
+- a batch that is failing consistently:
+    - If it fails at the end, something is off in teh final refinement of the structure. 
+    - If it never converges, the constraints need to be changed. 
+- a suspiciously good design where the scaffold collapsed onto the motif late in the diffusion process.
+- a fun video/GIF to use in a talk or demonstration.
 
 ### Filtering Script
 While looking at these files is instructive, it is impossible to do for the tens, hundreds, or even thousands of designs you might generate for your research projects. You can instead write a simple python script to filter these designs based on the various metrics that you care about. 

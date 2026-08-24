@@ -22,6 +22,7 @@ This document outlines the various input settings and configurations you can use
   - [Partial Diffusion](#partial-diffusion)
   - [CIF Parser Options](#cif-parser-options)
   - [Select Fixed Atoms](#select-fixed-atoms)
+  - [Ligand Chain Assignment](#ligand-chain-assignment)
 - [Debugging recommendations](#debugging-recommendations)
 - [FAQ / Gotchas](#faq--gotchas)
 
@@ -126,6 +127,7 @@ Below is a table of all of the inputs that the `InputSpecification` accepts. Use
 | `unindex`                                                      | `InputSelection`  | (Can only pass a contig string or dictionary.) Unindexed motif components, the specified residues can be anywhere in the final sequence. See [Unindexing Specifics](#unindexing-specifics) for more information. |
 | `length`                                                       | `str`             | Total design length constraint; `"min-max"` or int for specified length.                   |
 | `ligand`                                                       | `str`             | Ligand(s) by chemical component name (from [RSCB PDB](https://www.rcsb.org/)) or index. |
+| `allow_ligand_on_existing_chain`                                | `bool`            | Default `False`. If `True`, suppresses the error raised when a `ligand` shares a chain ID with a chain already present in the built structure (and permits multiple ligand residues to sit on the same chain). See [Ligand Chain Assignment](#ligand-chain-assignment) for more information. Use with caution — chain ID is leaked to the model, so collisions are a meaningful deviation from convention. |
 | `cif_parser_args`                                              | `dict`            | Optional args to CIF loader. See [CIF parser options](#cif-parser-options) for more information. |
 | `extra`                                                        | `dict`            | Extra metadata (e.g., logs). Current options include `sampled_contig`. |
 | `dialect`                                                      | `int`             | `2`=new (default), `1`=legacy, Learn more about the legacy parsing system by looking at [input_parsing.py](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/src/rfd3/inference/input_parsing.py).|
@@ -283,6 +285,13 @@ The `select_fixed_atoms` input setting can take a boolean, dictionary or contig 
 - `False`: All the atoms pulled from the input file are unfixed in 3D space
 - Contig string: See the [Contig Strings](#contig-strings) section for formatting. Specifying a contig string for this setting allows for the specification of several components to fix in 3D space. This string should only reference residues from the input. Chain breaks are irrelevant for this setting. 
 - Dictionary: Allows for the specification of specific atoms within the residue to be fixed in 3D space. For example, `{"A1": "N,CA,C,O,CB,CG", "A2-10": "BKBN"}` fixes backbone and CB for residues 1 and 2, and all atoms for residues 3-10 in chain A.
+
+(ligand-chain-assignment)=
+### Ligand Chain Assignment
+By default (`allow_ligand_on_existing_chain: false`), RFD3 validates the chain ID(s) assigned to any `ligand` you request against the chains already present in the built structure (i.e. those coming from `contig`/`unindex`/designed regions). This matters because chain ID is leaked to the model, so an unexpected chain collision is a meaningful deviation from convention and often indicates a misconfigured `ligand` or `contig` string. With the default behavior:
+- An error is raised if a requested ligand's chain ID overlaps with a chain ID already used in the built structure.
+- An error is raised if multiple ligand residues are placed on the same chain — each ligand residue must occupy its own chain.
+- Ligand `res_id` values are reset to start from `1` per chain, matching the convention used in AlphaFold3 output CIF files.
 
 (debugging-recommendations)=
 ## Debugging recommendations

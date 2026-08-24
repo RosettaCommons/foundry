@@ -10,7 +10,7 @@
             "A96": "NE2,CD2,CG,CB,ND1,CE1",
             "A102": "NE2,CD2,CG,CB,ND1,CE1",
             "A147": "SD,CE,CG",
-            "A149": "OH,CZ,CE1,CD1,CE2,CG,CB"
+            "A149": "OH,CZ,CE1,CD1,CE2,CG,CB,CD2"
         },
         "ori_token": [
             17.349,
