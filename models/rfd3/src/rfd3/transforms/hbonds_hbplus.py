@@ -14,7 +14,6 @@ from atomworks.ml.transforms._checks import (
 from atomworks.ml.transforms.base import Transform
 from biotite.structure import AtomArray
 from biotite.structure.io.pdb import PDBFile
-
 from rfd3.transforms.conditioning_base import get_motif_features
 
 
