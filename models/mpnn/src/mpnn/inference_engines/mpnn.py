@@ -50,8 +50,6 @@ class MPNNInferenceEngine:
         device: str | torch.device | None = None,
     ):
         # Store raw configuration
-        self.model_type = model_type
-        self.is_legacy_weights = is_legacy_weights
         self.out_directory = out_directory
         self.write_fasta = write_fasta
         self.write_structures = write_structures
@@ -59,14 +57,17 @@ class MPNNInferenceEngine:
         # allow null for checkpoint path when foundry-installed
         # TODO: Currently this assumes the model type is the key in the registered path. Rework needed
         self.checkpoint_path = (
-            str(
-                REGISTERED_CHECKPOINTS[
-                    self.model_type.replace("_", "")
-                ].get_default_path()
-            )
+            str(REGISTERED_CHECKPOINTS[model_type.replace("_", "")].get_default_path())
             if not checkpoint_path
             else checkpoint_path
         )
+        # The default weights sets are all legacy types
+        self.is_legacy_weights = True if not checkpoint_path else is_legacy_weights
+        # the soluble_mpnn type just changes the default weights -- otherwise it behaves like regular protein_mpnn
+        if model_type == "soluble_mpnn":
+            self.model_type = "protein_mpnn"
+        else:
+            self.model_type = model_type
 
         # Determine the device (supports XPU, CUDA, and CPU).
         if device is not None:
