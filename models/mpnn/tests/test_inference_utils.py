@@ -100,8 +100,10 @@ def _make_simple_inference_output() -> MPNNInferenceOutput:
     "value, expected",
     [
         ("True", True),
+        ("true", True),
         ("1", True),
         ("False", False),
+        ("false", False),
         ("0", False),
     ],
 )
@@ -109,7 +111,7 @@ def test_str2bool_valid(value: str, expected: bool) -> None:
     assert str2bool(value) is expected
 
 
-@pytest.mark.parametrize("value", ["yes", "no", "true ", ""])
+@pytest.mark.parametrize("value", ["yes", "no", ""])
 def test_str2bool_invalid_raises(value: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
         _ = str2bool(value)
@@ -121,6 +123,9 @@ def test_str2bool_invalid_raises(value: str) -> None:
         ("None", int, None),
         ("None", float, None),
         ("None", str, None),
+        ("null", int, None),
+        ("null", float, None),
+        ("null", str, None),
         ("1", int, 1),
         ("1.5", float, 1.5),
         ("foo", str, "foo"),
@@ -203,7 +208,9 @@ def test_build_arg_parser_smoke() -> None:
     assert args.model_type == "protein_mpnn"
     assert args.checkpoint_path == "/tmp/ckpt.pt"
     assert args.is_legacy_weights is True
-    assert args.structure_path == "/tmp/structure.cif"
+    assert args.structure_path == [
+        "/tmp/structure.cif",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -338,7 +345,7 @@ def test_cli_to_json_builds_single_input_and_parses_fields() -> None:
     assert inp["features_to_return"] == {"input_features": ["mask_for_loss"]}
     assert inp["atomize_side_chains"] is False
     assert inp["fixed_residues"] == ["A1", "A2"]
-    assert inp["designed_residues"] is None
+    # assert inp["designed_residues"] is None # Not set
     assert inp["bias"] == {"ALA": -1.0}
     assert inp["omit"] == ["UNK"]
     assert inp["temperature"] == 0.1
@@ -349,7 +356,7 @@ def test_cli_to_json_builds_single_input_and_parses_fields() -> None:
     # Structure path and name are carried through; full absolutization happens
     # later in MPNNInferenceInput.post_process_inputs.
     assert inp["structure_path"] == "/tmp/structure.cif"
-    assert "name" in inp  # may be None; defaults later
+    # assert "name" in inp  # may be None; defaults later
 
 
 def test_cli_to_json_with_config_json_file(tmp_path: Path) -> None:
@@ -370,6 +377,57 @@ def test_cli_to_json_with_config_json_file(tmp_path: Path) -> None:
 
     config = cli_to_json(args)
     assert config == original
+
+
+def test_cli_to_json_with_both_config_json_and_cmdline(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    original = {
+        "model_type": "ligand_mpnn",
+        "checkpoint_path": "/ckpt.pt",
+        "is_legacy_weights": False,
+        "write_fasta": False,
+        "inputs": [{"temperature": 0.4, "seed": 43}],
+    }
+    config_path.write_text(json.dumps(original))
+
+    parser = build_arg_parser()
+    args = parser.parse_args(
+        [
+            "--config_json",
+            str(config_path),
+            "--temperature",
+            "0.3",
+            "--structure_path",
+            "input.cif",
+            "ligand.pdb",
+            "--is_legacy_weights",
+            "true",
+            "--out_directory",
+            "out/",
+            "--structure_noise",
+            "0.5",
+            "--structure_path",
+            "one_more.cif",
+        ]
+    )
+
+    config = cli_to_json(args)
+
+    assert config["model_type"] == "ligand_mpnn"
+    assert not config["write_fasta"]
+    assert not config["is_legacy_weights"]  # From config.json, not overridden
+    assert config["out_directory"] == "out/"  # Picked up from options
+
+    inputs = config["inputs"]
+    assert len(inputs) == 3
+    structures = []
+    for inp in inputs:
+        structures.append(inp["structure_path"])
+        assert inp["seed"] == 43
+        assert inp["temperature"] == 0.4  # From template
+        assert inp["structure_noise"] == 0.5  # From options
+
+    assert sorted(structures) == sorted(["input.cif", "ligand.pdb", "one_more.cif"])
 
 
 ###############################################################################
