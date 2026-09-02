@@ -14,6 +14,7 @@ from atomworks.ml.transforms._checks import (
 from atomworks.ml.transforms.base import Transform
 from biotite.structure import AtomArray
 from biotite.structure.io.pdb import PDBFile
+from rfd3.transforms.conditioning_base import get_motif_features
 
 
 def save_atomarray_to_pdb(atom_array, output_path):
@@ -133,6 +134,8 @@ def calculate_hbonds(
     donor_mask = np.bool_(donor_array)
     acceptor_mask = np.bool_(acceptor_array)
 
+    is_motif_atom = get_motif_features(atom_array)["is_motif_atom"]
+
     motif_hbonds = []
     for item in hbonds:
         current_donor_mask = (
@@ -156,8 +159,8 @@ def calculate_hbonds(
                 f"Unable to uniquely identify an acceptor atom with chain_iid={item['a_chain']}, res_id={item['a_resi']}, atom_name={item['a_atom']}."
             )
 
-        current_donor_is_motif = atom_array.is_motif_atom[current_donor_mask][0]
-        current_acceptor_is_motif = atom_array.is_motif_atom[current_acceptor_mask][0]
+        current_donor_is_motif = is_motif_atom[current_donor_mask][0]
+        current_acceptor_is_motif = is_motif_atom[current_acceptor_mask][0]
 
         # Only keep hbonds between the motif and diffused regions
         if current_donor_is_motif != current_acceptor_is_motif:
@@ -205,9 +208,10 @@ class CalculateHbondsPlus(Transform):
 
         hbond_types = np.vstack((atom_array.active_donor, atom_array.active_acceptor)).T
 
+        is_motif_atom = np.array(get_motif_features(atom_array)["is_motif_atom"])
         final_hbond_types = hbond_types
-        final_hbond_types[:, 0] *= np.array(atom_array.is_motif_atom)
-        final_hbond_types[:, 1] *= np.array(atom_array.is_motif_atom)
+        final_hbond_types[:, 0] *= is_motif_atom
+        final_hbond_types[:, 1] *= is_motif_atom
         log_dict["hbond_total_count"] = np.sum(final_hbond_types)
 
         if data["conditions"]["hbond_subsample"] and np.sum(final_hbond_types) > 3:
