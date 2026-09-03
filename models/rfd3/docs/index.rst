@@ -12,6 +12,8 @@ If you haven't installed RFD3 yet, take a look at the `RFD3 README <https://gith
 
 Once you have everything installed, check out one of our Introductory Tutorials, listed below. 
 
+.. _rfd3_general:
+
 General
 -------
 .. toctree::
@@ -23,6 +25,8 @@ General
    output.md
    common_issues.md
 
+.. _rfd3_design_tips:
+
 RFD3 Design Tips
 ----------------
 .. toctree::
@@ -30,6 +34,8 @@ RFD3 Design Tips
 
    designability_vs_diversity.md
    design_areas/enzyme_design_tips.md
+
+.. _rfd3_introductory_tutorials:
 
 Introductory Tutorials
 ----------------------
@@ -43,6 +49,8 @@ with the capabilities of RFD3 for specific design tasks.
    tutorials/enzyme_design_tutorial.md
    tutorials/na_binder_tutorial.md
 
+.. _rfd3_intermediate_tutorials:
+
 Intermediate Tutorials
 ----------------------
 These intermediate tutorials cover more complex topics related
@@ -54,6 +62,8 @@ RFD3, we recommend starting with the introductory tutorials before moving on to 
 
    tutorials/intermediate_enzyme_design_tutorial.md
 
+.. _rfd3_advanced_tutorials:
+
 Advanced Tutorials
 ------------------
 The advanced RFdiffusion3 tutorials focus on more complex design tasks and provide in-depth explanations of the underlying principles and techniques used in RFD3. These tutorials assume some knowledge of the use of PyMOL (or other visualization software) and basic RFdiffusion3 concepts that are described in the introductory and intermediate tutorials.
@@ -62,6 +72,8 @@ The advanced RFdiffusion3 tutorials focus on more complex design tasks and provi
    :maxdepth: 1
 
    tutorials/advanced_enzyme_design_tutorial.md
+
+.. _rfd3_examples:
 
 Examples
 --------
