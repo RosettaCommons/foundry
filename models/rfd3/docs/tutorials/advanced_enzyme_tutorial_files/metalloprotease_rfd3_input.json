@@ -16,12 +16,6 @@
             17.349,
             23.971,
             19.174
-        ],
-	"select_hbond_acceptor": {
-	    "PKF": "O4,O6,O7"
-	},
-	"select_hbond_donor": {
-	    "PKF": "N2,N4,N20"
-	}
+        ]
     }
 }

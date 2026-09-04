@@ -1,20 +1,22 @@
+(adv_enzyme_tutorial_title)=
 # Advanced Enzyme Design with RFdiffusion3
 
+(adv_enzyme_tutorial_toc)=
 ## Table of Contents
 - [Introduction](#adv_enzyme_tutorial_intro)
 - [Before We Get Started...](#adv_enzyme_tutorial_getting_started)
 - [Prerequisites](#adv_enzyme_tutorial_prereqs)
-- [Setup](#setup)
-- [Designing Metalloproteases](#designing-metalloproteases)
-    - [Creating a Theozyme](#creating-a-theozyme)
-    - [Adding an ORI token](#adding-an-ori-token)
-    - [Preparing the Configuration File](#preparing-the-configuration-file)
-    - [Running RFdiffusion3](#running-rfdiffusion3)
-    - [Analyzing the Outputs](#analyzing-the-outputs)
-    - [Filtering Script](#filtering-script)
-- [Advanced Input Specifications](#advanced-input-specifications)
-    - [Hydrogen Bond Conditioning](#hydrogen-bond-conditioning)
-    - [RASA Conditioning](#rasa-conditioning)
+- [Setup](#adv_enzyme_tutorial_setup)
+- [Designing Metalloproteases](#adv_enzyme_tutorial_designing_metalloproteases)
+    - [Creating a Theozyme](#adv_enzyme_tutorial_creating_theozyme)
+    - [Adding an ORI token](#adv_enzyme_tutorial_adding_ori_token)
+    - [Preparing the Configuration File](#adv_enzyme_tutorial_preparing_config_file)
+    - [Running RFdiffusion3](#adv_enzyme_tutorial_running_rfd3)
+    - [Analyzing the Outputs](#adv_enzyme_tutorial_analyzing_outputs)
+    - [Filtering Script](#adv_enzyme_tutorial_filtering_script)
+- [Advanced Input Specifications](#adv_enzyme_tutorial_advanced_input_specs)
+    - [Hydrogen Bond Conditioning](#adv_enzyme_tutorial_hbond_conditioning)
+    - [RASA Conditioning](#adv_enzyme_tutorial_rasa_conditioning)
 - [Conclusion](#adv_enzyme_tutorial_conclusion)
 - [Glossary](#adv_enzyme_tutorial_glossary)
 - [Resources and References](#adv_enzyme_tutorial_refs)
@@ -55,10 +57,13 @@ RFD3 is optimized to run on GPUs, specifically NVIDIA GPUs. It is recommend that
 - Familiarity with a tet editor (e.g. [emacs](https://www.gnu.org/savannah-checkouts/gnu/emacs/emacs.html), [vim](https://www.vim.org/), [sublime](https://www.sublimetext.com/), etc.)
 - Interactive development environment (e.g. [VS Code](https://code.visualstudio.com), [Cursor](https://cursor.com/home))
 
+(adv_enzyme_tutorial_setup)=
 ## Setup 
-This tutorial will walk you through the creation of all the files that you will need to generate enzyme designs with RFD3. However, example files can be found here. <!-- TODO add link to the tutorial files -->
+This tutorial will walk you through the creation of all the files that you will need to generate enzyme designs with RFD3. However, example files can be found {doc}`here <advanced_enzyme_tutorial_files/advanced_enzyme_tutorial_files>`. 
 
+(adv_enzyme_tutorial_designing_metalloproteases)=
 ## Designing Metalloproteases
+(adv_enzyme_tutorial_creating_theozyme)=
 ### Creating a Theozyme
 Structural inputs to RFdiffusion3 typically either come from a structure-prediction model (e.g. [AlfaFold3](https://www.nature.com/articles/s41586-024-07487-w)) or from an experimental structure reported in resources like the [RCSB Protein Data Bank (PDB)](https://www.rcsb.org/)
 
@@ -97,6 +102,7 @@ For how to crop and save structures in PyMOL, see the 'Motif Preparation' sectio
 
 Make sure to save this structure as a **PDB** for for use in the next section.
 
+(adv_enzyme_tutorial_adding_ori_token)=
 ### Adding an ORI token
 [ORI (origin) tokens](#adv_enzyme_tutorial_ori_token_def) allow you to specify where the center of mass of the *designed* portion of your protein should approximately be. It can be used to have greater control over the interactions between the designed and input portions of your final structure as shown in [Atom-level enzyme active site scaffolding using RFdiffuson2](https://www.nature.com/articles/s41592-025-02975-x). It can be particularly important for enzyme design as it can be used to guide the approximate orientation of how the generated protein should bind the ligand. 
 
@@ -146,6 +152,7 @@ Final location of the ORI token relative to the theozyme structure. The ORI toke
 
 Once you have the ORI token in place, you can follow the previous instructions to have PyMOL print out its coordinates. Here our ORI token coordinates ended up being [17.49, 23.97, 19.17] You will need to know these for setting up your configuration file.
 
+(adv_enzyme_tutorial_preparing_config_file)=
 ### Preparing the Configuration File
 The main inputs to RFdiffusion3 are a structure file (optional) and a JSON/YAML file (required) that specifies the constraints you want to apply to the diffusion process. Here we will be using the JSON file format, however the same options can be used with the YAML format. 
 
@@ -210,6 +217,7 @@ Never specify hydrogen atoms in your constraints for RFdiffusion3. RFD3 strips a
 
 Last, but not least, we specify the ORI token we discussed at the end of the last section. Feel free to try various ORI token locations and see how they impact your results. 
 
+(adv_enzyme_tutorial_running_rfd3)=
 ### Running RFdiffusion3
 
 Once the input structure and JSON/YAML file have been prepared we can run RFD3. The simplest possible command to do so is
@@ -246,8 +254,9 @@ Feel free to reduce the number of batches or batch size if you have limited GPU 
 
 You can learn more about these settings and other possible options {ref}`here <cli-arguments>`. 
 
+(adv_enzyme_tutorial_analyzing_outputs)=
 ### Analyzing the Outputs
-You can find a set of example outputs <!-- TODO --> with the tutorial files. These files will not completely match what you produce. 
+You can find a set of example outputs with the {ref}`tutorial files <adv_enzyme_tutorial_files_basic>`. These files will not completely match what you produce. 
 
 You should see 4 types of files for each design (96 files total) in your output directory. Each design should have:
 - `<prefix>_model_<N>.cif.gz`: The final structure of the given design. 
@@ -255,8 +264,9 @@ You should see 4 types of files for each design (96 files total) in your output 
 - `<prefix>_denoised_model_<N>.cif.gz`: This trajectory files shows what the diffusion network thinks the final clean structure will be at each timestep. The input motif is not held fixed in this view. Can be used to see what the model ‘learned’ at each step as it is easier to watch the secondary structure emerge during the diffusion process.
 - `<prefix>_noisy_model_<N>.cif.gz`: A trajectory that shows how the diffusion process actually progressed while the input motifs are held fixed. Can be used to verify motif integrity.
 
-Let's go through the outputs associated with one of the designs (all files can be found here <!-- TODO: link files -->) to show some of the ways one might analyze the outputs from RFD3. 
+Let's go through the outputs associated with one of the designs (all files can be found {ref}`here <adv_enzyme_tutorial_files_basic>`) to show some of the ways one might analyze the outputs from RFD3. 
 
+(adv_enzyme_tutorial_final_structure)=
 #### Final structure
 First, open the `.cif.gz` file in PyMOL. If you are using the provided tutorial files your structure should look like this: 
 
@@ -277,6 +287,7 @@ Here is what we are looking for:
 When viewing multiple designs in PyMOL, you can use the `alignto` to roughly align all of the structures. Keep in mind that the residue numbers will vary between each design.
 ```
 
+(adv_enzyme_tutorial_output_json)=
 #### Output JSON
 Next let's inspect the JSON files. The first section of the JSON file includes the `diffused_index_map` which shows where any input residues have ended up in your design. The indices on the left of the colon are from your input structure, the right are where these residues are in your final design. 
 
@@ -294,6 +305,7 @@ For this type of enzyme design problem, you will likely care about:
 
 The JSON output file then ends with `specification`, `ckpt_path` and `seed` sections that will help you recreate this inference run. 
 
+(adv_enzyme_tutorial_trajectory_files)=
 #### Trajectory Files
 
 Trajectory files are typically not necessary for filtering your designs and creating them roughly doubles the size of your output. However, they can be useful for diagnosing:
@@ -303,6 +315,7 @@ Trajectory files are typically not necessary for filtering your designs and crea
 - a suspiciously good design where the scaffold collapsed onto the motif late in the diffusion process.
 - a fun video/GIF to use in a talk or demonstration.
 
+(adv_enzyme_tutorial_filtering_script)=
 ### Filtering Script
 While looking at these files is instructive, it is impossible to do for the tens, hundreds, or even thousands of designs you might generate for your research projects. You can instead write a simple python script to filter these designs based on the various metrics that you care about. 
 
@@ -346,12 +359,14 @@ for path in jsons:
 It is still **highly recommended** that you look at any of your passing designs in PyMOL after a quantitative filter. Some will still have issues that will not be captured by the metrics. For example, for this type of enzyme design problem, we will want relatively compact structures. 
 
 ```{note}
-All files included in the example files for this tutorial have passed this filtering script. <!-- TODO: link example files-->
+All files included in the {doc}`example files <advanced_enzyme_tutorial_files/advanced_enzyme_tutorial_files>` for this tutorial have passed this filtering script.
 ```
 
+(adv_enzyme_tutorial_advanced_input_specs)=
 ## Advanced Input Specifications
 The process discussed thus far in the tutorial shows the input specifications that will be generally useful for any enzyme design task. Here we will look at the addition of two more categories of input specification: hydrogen bond conditioning and relative accssible surface area (RASA) conditioning.
 
+(adv_enzyme_tutorial_hbond_conditioning)=
 ### Hydrogen Bond Conditioning
 ```{important}
 You must have [HBPLUS](https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/) installed on your system as described in the [RFD3 README](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/README.md#install-hbplus-for-training-with-hydrogen-bond-conditioning) to run RFD3 with hydrogen bond conditioning.
@@ -403,10 +418,11 @@ The `hbond_connections` section shows the hydrogen bonds that are present in the
 Hydrogen bonds between PKF and Y84 hilighted in blue. 
 ```
 
-You can find an example output from the addition of these diffusion constarints here. <!-- TODO: add link to files --> The images and metrics in this section come from the provided example `hbond` output.
+You can find an example output from the addition of these diffusion constarints {ref}`here <adv_enzyme_tutorial_files_hbond>`. The images and metrics in this section come from the provided example output.
 
 
 
+(adv_enzyme_tutorial_rasa_conditioning)=
 ### RASA Conditioning
 Relative accesible surface area (RASA) conditioning allows you to tell RFD3 how exposed to the solvent or buried in the designed structure you want portions of your input structure to be in your final design. This is particularly useful in enzyme design as you will want certain parts of the subtrate to be enclused by the protein while others should extend outside of the active site cleft.
 
@@ -434,9 +450,9 @@ The buried were chosen because we want to bury the zinc ions and the atoms near 
 Example output for this calculation with the PKF atoms marked to be buried in the structure hilighted in yellow and the PKF atoms marked to be exposed from the structure are in purple. 
 ```
 
-You can find an example output from the addition of these diffusion constarints here. <!-- TODO: add link to files -->
+You can find an example output from the addition of these diffusion constarints {ref}`here <adv_enzyme_tutorial_files_rasa>`. 
 
-You can find an example output from a design that uses both hydrogen bonding and RASA conditioning here. <!--TODO: add link to files-->
+You can find an example output from a design that uses both hydrogen bonding and RASA conditioning {ref}`here <adv_enzyme_tutorial_files_hbond_rasa>`. 
 
 (adv_enzyme_tutorial_conclusion)=
 ## Conclusion
