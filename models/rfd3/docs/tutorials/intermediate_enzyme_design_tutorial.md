@@ -35,7 +35,7 @@ than the current document.
 (intermediate_enzyme_prereq)=
 ## Prerequisites
 
-- RFdiffusion3 installed and working <!-- TODO: Link to installation tutorial -->
+- RFdiffusion3 installed and working, see our [installation tutorial](./RFdiffusion3_installation_tutorial.md)
 - Familiarity with [command line](https://www.freecodecamp.org/news/command-line-for-beginners/)
 - Protein visualization software, here we will use [PyMOL](https://www.pymol.org/)
 

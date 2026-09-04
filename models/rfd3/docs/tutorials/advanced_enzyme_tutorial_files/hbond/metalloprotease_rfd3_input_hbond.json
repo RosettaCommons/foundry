@@ -1,0 +1,27 @@
+{
+    "test1": {
+        "input": "./theozyme.pdb",
+        "ligand": "ZN,PKF",
+        "length": "120-150",
+        "unindex": "A92,A93,A96,A102,A147,A149",
+        "select_fixed_atoms": {
+            "A92": "NE2,CD2,CG,CB,ND1,CE1",
+            "A93": "OE1,OE2,CD,CG",
+            "A96": "NE2,CD2,CG,CB,ND1,CE1",
+            "A102": "NE2,CD2,CG,CB,ND1,CE1",
+            "A147": "SD,CE,CG",
+            "A149": "OH,CZ,CE1,CD1,CE2,CG,CB,CD2"
+        },
+        "ori_token": [
+            17.349,
+            23.971,
+            19.174
+        ],
+	"select_hbond_acceptor": {
+ 	       "PKF": "O4,O6,O7"
+	},	   
+	   "select_hbond_donor": {
+    	       "PKF": "N2,N4,N20"
+	}  
+    }
+}
