@@ -188,9 +188,20 @@ def redesign(
                 raise RuntimeError(
                     f"External MPNN failed with exit code {exc.returncode}"
                 ) from exc
-            candidate = Path(temp_dir) / "backbones" / f"{source.stem}_1.pdb"
+            # Upstream LigandMPNN parses --zero_indexed as `type=str`, so any
+            # non-empty string is truthy and the suffix is always "_0" regardless
+            # of the flag value. Accept the 0-indexed name and fall back to
+            # 1-indexed for older LigandMPNN builds.
+            backbones = Path(temp_dir) / "backbones"
+            candidate = backbones / f"{source.stem}_0.pdb"
             if not candidate.is_file():
-                raise RuntimeError(f"MPNN produced no first design: {candidate}")
+                legacy = backbones / f"{source.stem}_1.pdb"
+                if legacy.is_file():
+                    candidate = legacy
+                else:
+                    raise RuntimeError(
+                        f"MPNN produced no first design: {candidate} (or legacy {legacy})"
+                    )
             sampled = PDBParser(QUIET=True).get_structure("sample", str(candidate))
             new_residues = chain_residues(sampled, designed_chain)
             if [r.id for r in new_residues] != [r.id for r in residues]:
