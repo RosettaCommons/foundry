@@ -75,25 +75,25 @@ you will need to change the path in the `.json` file(s) before running.
 <table>
   <tr>
     <td align="center">
-      <h3><a href="./docs/na_binder_design.md">Nucleic acid binder design</a></h3>
+      <h3><a href="./docs/examples/na_binder_design.md">Nucleic acid binder design</a></h3>
       <img src="docs/.assets/dna.png" height="150" />
     </td>
     <td align="center">
-      <h3><a href="./docs/sm_binder_design.md">Small molecule binder design</a></h3>
+      <h3><a href="./docs/examples/sm_binder_design.md">Small molecule binder design</a></h3>
       <img src="docs/.assets/sm.png" height="150" />
     </td>
     <td align="center">
-      <h3><a href="./docs/protein_binder_design.md">Protein binder design</a></h3>
+      <h3><a href="./docs/examples/protein_binder_design.md">Protein binder design</a></h3>
       <img src="docs/.assets/ppi.png" height="150" />
     </td>
   </tr>
   <tr>
     <td align="center">
-      <h3><a href="./docs/enzyme_design.md">Enzyme design</a></h3>
+      <h3><a href="./docs/examples/enzyme_design.md">Enzyme design</a></h3>
       <img src="docs/.assets/enzyme.png" height="150" />
     </td>
     <td align="center">
-      <h3><a href="./docs/symmetry.md">Symmetric design</a></h3>
+      <h3><a href="./docs/examples/symmetry.md">Symmetric design</a></h3>
       <img src="docs/.assets/symm.png" height="150" />
     </td>
   </tr>
