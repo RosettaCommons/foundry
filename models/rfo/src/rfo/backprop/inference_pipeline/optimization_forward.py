@@ -1,15 +1,57 @@
 """Differentiable RF3 inference used only by RFO sequence optimization.
 
-The public RF3 confidence model disables trunk gradients in its inference
-forward. RFO needs gradients through the final trunk recycle and prediction
-heads, while diffusion coordinates are deliberately treated as constants.
-Use the existing model components without patching RF3's normal forward.
+The public RF3 confidence head detaches its trunk inputs at the top of forward
+(standard AF3 architecture: confidence is a post-hoc scorer over frozen trunk
+outputs). RFO needs gradients to flow *through* the confidence head back to
+the sequence, so ``_grad_through_confidence_head`` wraps the head and turns
+``torch.Tensor.detach`` into a no-op only for the duration of its call.
+Diffusion coordinates are still held constant: they are detached explicitly
+in ``optimization_forward`` before entering the head, so the extra internal
+detach is redundant and safely no-ops.
 """
 
 from collections import deque
+from contextlib import contextmanager
 
 import torch
 from torch.utils.checkpoint import checkpoint
+
+
+@contextmanager
+def _no_op_detach():
+    """Temporarily make ``torch.Tensor.detach`` a no-op (identity).
+
+    Scoped to the wrapped block via a context manager; the original is
+    restored on exit even if the wrapped code raises.
+    """
+    orig = torch.Tensor.detach
+    torch.Tensor.detach = lambda self: self
+    try:
+        yield
+    finally:
+        torch.Tensor.detach = orig
+
+
+class _GradThroughConfidenceHead(torch.nn.Module):
+    """Wrap ``ConfidenceHead`` to let gradients flow to its trunk inputs.
+
+    RF3's ``ConfidenceHead.forward`` runs ``S_trunk_I.detach()``,
+    ``Z_trunk_II.detach()``, ``S_inputs_I.detach()`` and ``seq.detach()``
+    at the top of forward. That severs autograd from the confidence-based
+    losses (``pae_interface_mean`` etc.) back to ``restype`` — RFO's whole
+    seq-optimization premise. This wrapper turns ``detach`` into a no-op
+    only inside the head's ``forward`` call. ``X_pred_L`` is already
+    detached by RFO before entering the head (see below), so its internal
+    ``.detach()`` no-ops both ways.
+    """
+
+    def __init__(self, head: torch.nn.Module):
+        super().__init__()
+        self.head = head
+
+    def forward(self, *args, **kwargs):
+        with _no_op_detach():
+            return self.head(*args, **kwargs)
 
 
 def optimization_forward(model, inputs, n_cycle, coordinates, skip_diffusion=False):
@@ -54,9 +96,10 @@ def optimization_forward(model, inputs, n_cycle, coordinates, skip_diffusion=Fal
         )
     coords = sampled["X_L"].detach()
     confidence = {}
+    conf_head = _GradThroughConfidenceHead(model.confidence_head)
     for sample in coords:
         values = checkpoint(
-            model.confidence_head,
+            conf_head,
             recycled["S_inputs_I"],
             recycled["S_I"],
             recycled["Z_II"],
