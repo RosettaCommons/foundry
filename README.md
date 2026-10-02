@@ -1,6 +1,6 @@
 # Protein design with Foundry
 
-Foundry provides tooling and infrastructure for using and training all classes of models for protein design, including design (RFD3), inverse folding (ProteinMPNN) and protein folding (RF3).
+Foundry provides tooling and infrastructure for using and training all classes of models for protein design, including design (RFD3), inverse folding (ProteinMPNN), protein folding (RF3), and iterative design optimization (RFOptimization).
 
 All models within Foundry rely on [AtomWorks](https://github.com/RosettaCommons/atomworks) - a unified framework for manipulating and processing biomolecular structures - for both training and inference. 
 
@@ -98,17 +98,20 @@ For an interactive Google Colab notebook walking through a basic design pipeline
 
 > *See [models/rf3/README.md](models/rf3/README.md) for complete documentation.*
 
-### RFOptimization (RFO)
-
-RFOptimization combines RF3 gradient-guided sequence optimization, Boltz-2
-structure prediction, and external ProteinMPNN/LigandMPNN sequence redesign.
-Start with the [RFO project guide](models/rfo/README.md), including the separate
-MPNN installation instructions.
-
 ### ProteinMPNN
 [ProteinMPNN](https://www.science.org/doi/10.1126/science.add2187) and [LigandMPNN](https://www.nature.com/articles/s41592-025-02626-1) are lightweight inverse-folding models which can be use to design diverse sequences for backbones under constrained conditions.
 
 > *See [models/mpnn/README.md](models/mpnn/README.md) for complete documentation.*
+
+### RFOptimization (RFO)
+
+[RFOptimization](https://www.biorxiv.org/content/10.64898/2026.09.04.749184v2) is a design optimization framework that combines all-atom structure prediction with iterative sequence redesign.
+
+<div align="center">
+  <img src="docs/_static/prot_ligand.png" alt="Protein-ligand complex optimized with RFOptimization" width="400">
+</div>
+
+> *See [models/rfo/README.md](models/rfo/README.md) for complete documentation.*
 
 ---
 
@@ -200,6 +203,18 @@ If you use this repository code or data in your work, please cite the relavant w
   pages={1--7},
   year={2025},
   publisher={Nature Publishing Group US New York}
+}
+
+@article{zhang2026_rfoptimization,
+    author = {Zhang, Odin and Wang, Jiaqi and Thompson, Tuscan Rock and You, Ziyi and Song, Zihao and DiMaio, Frank and Baker, David},
+    title = {{RFOptimization}: Guiding Design Optimization with All-Atom Structure Prediction},
+    elocation-id = {2026.09.04.749184},
+    year = {2026},
+    doi = {10.64898/2026.09.04.749184},
+    publisher = {openRxiv},
+    URL = {https://www.biorxiv.org/content/10.64898/2026.09.04.749184v2},
+    eprint = {https://www.biorxiv.org/content/10.64898/2026.09.04.749184v2.full.pdf},
+    journal = {bioRxiv}
 }
 ```
 ## Acknowledgments
