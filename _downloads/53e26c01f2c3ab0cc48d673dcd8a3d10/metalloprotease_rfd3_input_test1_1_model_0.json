@@ -1,0 +1,84 @@
+{
+    "diffused_index_map": {
+        "A92": "A40",
+        "A93": "A44",
+        "A96": "A63",
+        "A102": "A106",
+        "A147": "A38",
+        "A149": "A109"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {
+            "A92": 0.24576430022716522,
+            "A93": 0.3902687132358551,
+            "A96": 0.32692039012908936,
+            "A102": 0.34139105677604675,
+            "A147": 0.7168846130371094,
+            "A149": 0.12018638104200363
+        },
+        "insertion.mae": 0.4548730378349622,
+        "insertion.rmcd": 0.3079238335291545,
+        "insertion_rmsd": 0.32173936317364377,
+        "join_point_rmsd": 0.3569025757412116,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.04384326934814453,
+        "n_chainbreaks": 0,
+        "n_clashing.interresidue_clashes_w_sidechain": 0,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "n_clashing.ligand_clashes": 0,
+        "n_clashing.ligand_min_distance": 3.5766642093658447,
+        "non_loop_fraction": 0.6015625,
+        "loop_fraction": 0.3984375,
+        "helix_fraction": 0.4375,
+        "sheet_fraction": 0.1640625,
+        "num_ss_elements": 7,
+        "radius_of_gyration": 14.376150106441688,
+        "alanine_content": 0.2109375,
+        "glycine_content": 0.046875,
+        "num_residues": 128,
+        "diffused_com": [
+            -2.110656976699829,
+            1.3289978504180908,
+            -4.213454246520996
+        ],
+        "fixed_com": [
+            1.6950550079345703,
+            -2.16278338432312,
+            2.318854808807373
+        ]
+    },
+    "specification": {
+        "input": "/home/rclune/rfd3_tests/adv_enzyme_design/theozyme.pdb",
+        "unindex": "A92,A93,A96,A102,A147,A149",
+        "length": "120-150",
+        "ligand": "ZN,PKF",
+        "allow_ligand_on_existing_chain": true,
+        "extra": {
+            "example": "test1",
+            "task_name": "metalloprotease_rfd3_input_test1",
+            "sampled_contig": "128P",
+            "num_tokens_in": 136,
+            "num_residues_in": 136,
+            "num_chains": 2,
+            "num_atoms": 726,
+            "num_residues": 138,
+            "example_id": "metalloprotease_rfd3_input_test1_1"
+        },
+        "select_fixed_atoms": {
+            "A92": "NE2,CD2,CG,CB,ND1,CE1",
+            "A93": "OE1,OE2,CD,CG",
+            "A96": "NE2,CD2,CG,CB,ND1,CE1",
+            "A102": "NE2,CD2,CG,CB,ND1,CE1",
+            "A147": "SD,CE,CG",
+            "A149": "OH,CZ,CE1,CD1,CE2,CG,CB,CD2"
+        },
+        "select_unfixed_sequence": false,
+        "ori_token": [
+            17.349,
+            23.971,
+            19.174
+        ]
+    },
+    "ckpt_path": "/home/rclune/foundry_weights/rfd3_latest.ckpt",
+    "seed": 42
+}
