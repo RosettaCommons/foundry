@@ -57,6 +57,7 @@ MPNN_PER_INPUT_INFERENCE_DEFAULTS: dict[str, Any] = {
     # Parser Overrides
     "remove_ccds": [],
     "remove_waters": None,
+    "add_missing_atoms": None,
     # Pipeline Setup Overrides
     "occupancy_threshold_sidechain": 0.0,
     "occupancy_threshold_backbone": 0.0,
@@ -238,6 +239,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "has special behavior: use the parser default behavior."
         ),
         default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["remove_waters"],
+    )
+    parser.add_argument(
+        "--add_missing_atoms",
+        type=lambda v: none_or_type(v, str2bool),
+        choices=[True, False, None],
+        help=(
+            "If set, override the parser default for adding missing atoms from "
+            "the CCD (overrides STANDARD_PARSER_ARGS). False keeps only the atoms "
+            "present in the input. 'None' has special behavior: use the parser "
+            "default behavior."
+        ),
+        default=MPNN_PER_INPUT_INFERENCE_DEFAULTS["add_missing_atoms"],
     )
 
     # ---------------- Pipeline Setup Overrides ---------------- #
@@ -628,6 +641,7 @@ def cli_to_json(args: argparse.Namespace) -> dict[str, Any]:
                 # Parser Overrides
                 "remove_ccds": parse_list_like(args.remove_ccds),
                 "remove_waters": args.remove_waters,
+                "add_missing_atoms": args.add_missing_atoms,
                 # Pipeline Setup Overrides
                 "occupancy_threshold_sidechain": args.occupancy_threshold_sidechain,
                 "occupancy_threshold_backbone": args.occupancy_threshold_backbone,
@@ -707,13 +721,22 @@ class MPNNInferenceInput:
         fields from the input dictionary will be ignored. If you would like
         to override those annotations, please either do so in the atom array
         or delete the annotations from the atom array before passing it in.
+
+        The parser override fields (remove_ccds, remove_waters,
+        add_missing_atoms) apply to the atom array as they do to a structure
+        file; fields left unset keep the parser defaults.
         """
         # Copy input dictionary.
         input_dict = copy.deepcopy(input_dict) if input_dict is not None else dict()
 
         # Copy atom array.
         atom_array = atom_array.copy() if atom_array is not None else None
-        parser_output = parse_atom_array(atom_array) if atom_array is not None else {}
+        # The overrides feed the parser, so validate them first.
+        MPNNInferenceInput._validate_parser_overrides(input_dict)
+        overrides = MPNNInferenceInput._parser_overrides(input_dict)
+        parser_output = (
+            parse_atom_array(atom_array, **overrides) if atom_array is not None else {}
+        )
         atom_array = (
             parser_output["assemblies"]["1"][0]
             if len(parser_output.get("assemblies", {})) > 0
@@ -968,7 +991,7 @@ class MPNNInferenceInput:
 
     @staticmethod
     def _validate_parser_overrides(input_dict: dict[str, Any]) -> None:
-        """Validate parser override fields: remove_ccds, remove_waters."""
+        """Validate override fields: remove_ccds, remove_waters, add_missing_atoms."""
 
         # Check that remove_ccds is a list of strings if provided.
         remove_ccds = input_dict.get("remove_ccds")
@@ -985,6 +1008,19 @@ class MPNNInferenceInput:
         remove_waters = input_dict.get("remove_waters")
         if remove_waters is not None and not isinstance(remove_waters, bool):
             raise TypeError("remove_waters must be a bool when provided.")
+
+        add_missing_atoms = input_dict.get("add_missing_atoms")
+        if add_missing_atoms is not None and not isinstance(add_missing_atoms, bool):
+            raise TypeError("add_missing_atoms must be a bool when provided.")
+
+    @staticmethod
+    def _parser_overrides(input_dict: dict[str, Any]) -> dict[str, Any]:
+        """Parser keywords the caller set; unset or None keeps the parser default."""
+        return {
+            key: input_dict[key]
+            for key in ("remove_ccds", "remove_waters", "add_missing_atoms")
+            if input_dict.get(key) is not None
+        }
 
     @staticmethod
     def _validate_pipeline_override_fields(input_dict: dict[str, Any]) -> None:
@@ -1552,10 +1588,7 @@ class MPNNInferenceInput:
         """Build AtomArray from structure_path and parser overrides."""
         # Override parser args if specified.
         parser_args = dict(STANDARD_PARSER_ARGS)
-        if input_dict["remove_ccds"] is not None:
-            parser_args["remove_ccds"] = input_dict["remove_ccds"]
-        if input_dict["remove_waters"] is not None:
-            parser_args["remove_waters"] = input_dict["remove_waters"]
+        parser_args.update(MPNNInferenceInput._parser_overrides(input_dict))
 
         # Parse structure file. parser_args is a heterogeneous dict[str, object]
         # (STANDARD_PARSER_ARGS + overrides); atomworks parse() types each kwarg

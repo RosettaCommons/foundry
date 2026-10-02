@@ -16,8 +16,10 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
+import biotite.structure as struc
 import numpy as np
 import pytest
+from atomworks.io.parser import parse_atom_array
 from biotite.structure import AtomArray
 from mpnn.transforms.feature_aggregation.token_encodings import (
     MPNN_TOKEN_ENCODING,
@@ -272,6 +274,8 @@ def test_cli_to_json_builds_single_input_and_parses_fields() -> None:
             "A,B",
             "--remove_waters",
             "True",
+            "--add_missing_atoms",
+            "False",
             "--occupancy_threshold_sidechain",
             "0.5",
             "--occupancy_threshold_backbone",
@@ -326,6 +330,7 @@ def test_cli_to_json_builds_single_input_and_parses_fields() -> None:
     assert inp["number_of_batches"] == 2
     assert inp["remove_ccds"] == ["A", "B"]
     assert inp["remove_waters"] is True
+    assert inp["add_missing_atoms"] is False
     assert inp["occupancy_threshold_sidechain"] == 0.5
     assert inp["occupancy_threshold_backbone"] == 0.6
     assert inp["undesired_res_names"] == ["UNK", "HOH"]
@@ -488,6 +493,171 @@ def test_from_atom_array_and_dict_invalid_scalar_settings_raise() -> None:
     with pytest.raises(ValueError):
         _ = MPNNInferenceInput.from_atom_array_and_dict(
             atom_array=atom_array, input_dict=input_dict
+        )
+
+
+###############################################################################
+# MPNNInferenceInput: parser overrides for an AtomArray input
+###############################################################################
+
+
+def _atom_array_with_ligands(ligands: dict[str, str]) -> AtomArray:
+    """CA-only ALA/GLY/SER on chain A, plus one chain per ``{res_name: smiles}``."""
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+
+    atoms = [
+        struc.Atom(
+            [3.8 * i, 0.0, 0.0],
+            chain_id="A",
+            res_id=i + 1,
+            ins_code="",
+            res_name=res_name,
+            atom_name="CA",
+            element="C",
+        )
+        for i, res_name in enumerate(["ALA", "GLY", "SER"])
+    ]
+    for i, (res_name, smiles) in enumerate(ligands.items()):
+        mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
+        AllChem.EmbedMolecule(mol, randomSeed=7)
+        mol = Chem.RemoveHs(mol)
+        conf = mol.GetConformer()
+        counts: dict[str, int] = {}
+        for atom in mol.GetAtoms():
+            element = atom.GetSymbol()
+            counts[element] = counts.get(element, 0) + 1
+            xyz = conf.GetAtomPosition(atom.GetIdx())
+            atoms.append(
+                struc.Atom(
+                    [xyz.x, xyz.y, xyz.z],
+                    chain_id=chr(ord("B") + i),
+                    res_id=1,
+                    ins_code="",
+                    res_name=res_name,
+                    atom_name=f"{element}{counts[element]}",
+                    element=element,
+                    hetero=True,
+                )
+            )
+    atom_array = struc.array(atoms)
+    atom_array.set_annotation("occupancy", np.ones(len(atom_array)))
+    return atom_array
+
+
+# PHT is the CCD code of phthalate, not phenytoin.
+PHENYTOIN = "O=C1NC(=O)C(N1)(c1ccccc1)c1ccccc1"
+
+
+def test_add_missing_atoms_false_keeps_ligand_atoms_as_given() -> None:
+    atom_array = _atom_array_with_ligands({"PHT": PHENYTOIN})
+
+    kept = MPNNInferenceInput.from_atom_array_and_dict(
+        atom_array=atom_array, input_dict={"add_missing_atoms": False}
+    ).atom_array
+
+    ligand = kept[kept.res_name == "PHT"]
+    assert len(ligand) == 19
+    assert set(ligand.element) == {"C", "N", "O"}
+    assert not np.isnan(ligand.coord).any()
+
+
+def test_atom_array_defaults_are_unchanged() -> None:
+    atom_array = _atom_array_with_ligands(
+        {"PHT": PHENYTOIN, "GOL": "OCC(O)CO", "HOH": "O"}
+    )
+
+    result = MPNNInferenceInput.from_atom_array_and_dict(
+        atom_array=atom_array, input_dict={}
+    ).atom_array
+
+    expected = parse_atom_array(atom_array.copy())["assemblies"]["1"][0]
+    assert list(result.res_name) == list(expected.res_name)
+    assert list(result.atom_name) == list(expected.atom_name)
+    # The parser defaults still remove crystallization aids and waters.
+    assert {"GOL", "HOH"}.isdisjoint(result.res_name)
+
+
+def test_atom_array_route_applies_remove_ccds_and_remove_waters() -> None:
+    atom_array = _atom_array_with_ligands({"GOL": "OCC(O)CO", "HOH": "O"})
+
+    kept = MPNNInferenceInput.from_atom_array_and_dict(
+        atom_array=atom_array,
+        input_dict={"remove_ccds": [], "remove_waters": False},
+    ).atom_array
+
+    assert {"GOL", "HOH"} <= set(kept.res_name)
+
+
+def test_atom_array_route_forwards_only_the_fields_the_caller_set(
+    monkeypatch,
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_parse_atom_array(atom_array, **kwargs):
+        seen.clear()
+        seen.update(kwargs)
+        return {"assemblies": {"1": [atom_array]}}
+
+    monkeypatch.setattr("mpnn.utils.inference.parse_atom_array", fake_parse_atom_array)
+
+    MPNNInferenceInput.from_atom_array_and_dict(
+        atom_array=_make_simple_atom_array(), input_dict={}
+    )
+    assert seen == {}
+
+    overrides = {
+        "remove_ccds": ["GOL"],
+        "remove_waters": False,
+        "add_missing_atoms": False,
+    }
+    MPNNInferenceInput.from_atom_array_and_dict(
+        atom_array=_make_simple_atom_array(), input_dict=overrides
+    )
+    assert seen == overrides
+
+
+def test_atom_array_without_assembly_still_needs_structure_path(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "mpnn.utils.inference.parse_atom_array", lambda atom_array, **kwargs: {}
+    )
+
+    with pytest.raises(ValueError, match="structure_path"):
+        MPNNInferenceInput.from_atom_array_and_dict(
+            atom_array=_make_simple_atom_array(), input_dict={}
+        )
+
+
+def test_structure_path_route_forwards_parser_overrides(monkeypatch) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_parse(filename, **kwargs):
+        seen.clear()
+        seen.update(kwargs)
+        return {"asym_unit": [_make_simple_atom_array()]}
+
+    monkeypatch.setattr("mpnn.utils.inference.parse", fake_parse)
+
+    input_dict: dict[str, Any] = {"structure_path": "structure.cif"}
+    MPNNInferenceInput.apply_defaults(input_dict)
+    MPNNInferenceInput.build_atom_array(input_dict)
+    assert seen["add_missing_atoms"] is True
+    assert seen["remove_ccds"] == []
+
+    input_dict.update(add_missing_atoms=False, remove_waters=False)
+    MPNNInferenceInput.build_atom_array(input_dict)
+    assert seen["add_missing_atoms"] is False
+    assert seen["remove_waters"] is False
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [("add_missing_atoms", "no"), ("remove_waters", "yes"), ("remove_ccds", "GOL")],
+)
+def test_parser_overrides_are_validated(field: str, value: Any) -> None:
+    with pytest.raises(TypeError, match=field):
+        MPNNInferenceInput.from_atom_array_and_dict(
+            atom_array=_make_simple_atom_array(), input_dict={field: value}
         )
 
 
