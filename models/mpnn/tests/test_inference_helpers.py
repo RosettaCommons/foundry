@@ -18,13 +18,21 @@ from mpnn.utils.inference import (
 
 
 @pytest.mark.parametrize(
-    ("value", "expected"), [("True", True), ("1", True), ("False", False), ("0", False)]
+    ("value", "expected"),
+    [
+        ("True", True),
+        ("true", True),
+        ("1", True),
+        ("False", False),
+        ("false", False),
+        ("0", False),
+    ],
 )
 def test_str2bool_valid(value: str, expected: bool):
     assert str2bool(value) is expected
 
 
-@pytest.mark.parametrize("value", ["true", "false", "yes", "", "2"])
+@pytest.mark.parametrize("value", ["yes", "", "2"])
 def test_str2bool_invalid_raises(value: str):
     with pytest.raises(argparse.ArgumentTypeError):
         str2bool(value)
@@ -32,6 +40,7 @@ def test_str2bool_invalid_raises(value: str):
 
 def test_none_or_type_sentinel_and_cast():
     assert none_or_type("None", int) is None
+    assert none_or_type("null", int) is None
     assert none_or_type("5", int) == 5
     assert none_or_type("1.5", float) == 1.5
 
