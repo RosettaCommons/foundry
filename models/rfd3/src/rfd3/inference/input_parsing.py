@@ -220,11 +220,10 @@ class DesignInputSpecification(BaseModel):
             raise FileNotFoundError(f"Output file not found at {path}")
         with open(path, "r") as f:
             data = json.load(f)
-        if "input_specification" in data:
-            spec_args = data["input_specification"]
-            return cls(**spec_args)
-        else:
+        spec_args = data.get("specification", data.get("input_specification"))
+        if spec_args is None:
             raise ValueError(f"No input specification found in json output: {path}")
+        return cls(**spec_args)
 
     def get_dict_to_save(self, exclude_extra: bool = False) -> dict:
         # Returns dictionary for saving (reproducible) outputs to json
