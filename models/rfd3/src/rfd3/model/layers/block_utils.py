@@ -287,9 +287,7 @@ def get_sparse_attention_indices_with_inter_chain(
 
     # rank within each chain, so one topk interleaves them - columns are
     # disjoint per chain, so the ranks go back in place
-    d_inter = D_LL.masked_fill(
-        ~(base_mask & ~same) | (D_LL >= INTER_CHAIN_CUTOFF), inf
-    )
+    d_inter = D_LL.masked_fill(~(base_mask & ~same) | (D_LL >= INTER_CHAIN_CUTOFF), inf)
     for c in torch.unique(chain_id).tolist():
         cols = chain_id == c
         d_c = d_inter[..., cols]
@@ -301,7 +299,9 @@ def get_sparse_attention_indices_with_inter_chain(
     d_intra = torch.where(same, D_LL, D_LL + (D_LL.max() + 1.0))
     d_intra.masked_fill_(base_mask & same & local, -1.0)
     d_intra.masked_fill_(~base_mask, inf)
-    d_intra.scatter_(-1, reserved, torch.where(filled, inf, d_intra.gather(-1, reserved)))
+    d_intra.scatter_(
+        -1, reserved, torch.where(filled, inf, d_intra.gather(-1, reserved))
+    )
     intra = torch.topk(
         d_intra, min(k_intra + k_inter, L), dim=-1, largest=False
     ).indices
