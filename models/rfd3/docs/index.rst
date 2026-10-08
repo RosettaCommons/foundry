@@ -90,5 +90,6 @@ on to these examples.
    examples/na_binder_design.md
    examples/sm_binder_design.md
    examples/protein_binder_design.md
+   examples/macrocycle_design.md
    examples/symmetry.md
    examples/enzyme_design.md

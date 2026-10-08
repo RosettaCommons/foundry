@@ -24,6 +24,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_validator,
     model_validator,
 )
 from rfd3.constants import (
@@ -144,6 +145,14 @@ class DesignInputSpecification(BaseModel):
     cif_parser_args: Optional[Dict[str, Any]] = Field(None, description="CIF parser arguments")
     extra: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Extra metadata to include in output (useful for logging additional info in metadata)")
     dialect: int = Field(2, description="RFdiffusion3 input dialect. 1: legacy, 2: release.")
+    cyclic_chains: list[str] | None = Field(
+        None,
+        description=(
+            "Assembled design chain IDs to use for N-to-C cyclic residue positional "
+            "encoding. Supports one complete de novo canonical peptide in dialect 2; "
+            "None or [] keeps linear encoding."
+        ),
+    )
 
     # ========================================================================
     # Conditioning
@@ -371,6 +380,34 @@ class DesignInputSpecification(BaseModel):
     # Post-Validation
     # ========================================================================
 
+    @field_validator("cyclic_chains", mode="before")
+    @classmethod
+    def validate_cyclic_chains(cls, value: Any) -> list[str] | None:
+        """Validate the optional list of assembled cyclic chain IDs."""
+        if value is None:
+            return value
+        if not isinstance(value, list) or any(
+            not isinstance(chain, str) or not chain.strip() for chain in value
+        ):
+            raise ValueError("cyclic_chains must be a list of nonempty chain IDs.")
+        if len(set(value)) != len(value):
+            raise ValueError("cyclic_chains must not contain duplicate chain IDs.")
+        if len(value) > 1:
+            raise ValueError("cyclic_chains supports at most one chain per design.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_cyclic_modes(self) -> "DesignInputSpecification":
+        """Reject modes that do not support cyclic positional encoding."""
+        if self.cyclic_chains:
+            if self.dialect < 2:
+                raise ValueError("cyclic_chains requires dialect 2.")
+            if self.is_partial_diffusion:
+                raise ValueError("cyclic_chains does not support partial diffusion.")
+            if self.symmetry is not None and self.symmetry.id:
+                raise ValueError("cyclic_chains does not support symmetry.")
+        return self
+
     @model_validator(mode="after")
     def assert_exclusivity(self):
         with validator_context("assert_exclusivity"):
@@ -515,6 +552,7 @@ class DesignInputSpecification(BaseModel):
         # Apply post-processing
         atom_array = self._append_ligand(atom_array, atom_array_input_annotated)
         atom_array = self._apply_symmetry(atom_array, atom_array_input_annotated)
+        self._validate_cyclic_chain(atom_array)
 
         # Apply globals to all tokens (including diffused)
         atom_array = self._set_origin(atom_array)
@@ -545,6 +583,28 @@ class DesignInputSpecification(BaseModel):
     # ============================================================================
     # Building functions
     # ============================================================================
+
+    def _validate_cyclic_chain(self, atom_array: AtomArray) -> None:
+        """Check only the selected chain's chemistry and de novo provenance."""
+        if not self.cyclic_chains:
+            return
+        chain_id = self.cyclic_chains[0]
+        selected = atom_array[atom_array.chain_id == chain_id]
+        if len(selected) == 0:
+            raise ValueError(f"Cyclic chain {chain_id!r} is absent from the design.")
+        is_de_novo = all(
+            component.endswith("P") and component[:-1].isdigit()
+            for component in np.unique(selected.src_component)
+        )
+        if (
+            not is_de_novo
+            or not np.all(np.isin(selected.res_name, STANDARD_AA))
+            or np.any(selected.is_motif_atom_unindexed)
+        ):
+            raise ValueError(
+                f"Cyclic chain {chain_id!r} must be a complete de novo canonical "
+                "peptide, with no source-derived or unindexed residues."
+            )
 
     def _build_init(self, atom_array_input_annotated):
         # ... Fetch tokens
@@ -834,6 +894,8 @@ class DesignInputSpecification(BaseModel):
     @classmethod
     def safe_init(cls, **spec_kwargs):
         if spec_kwargs.get("dialect", 2) < 2:
+            if spec_kwargs.get("cyclic_chains"):
+                raise ValueError("cyclic_chains requires dialect 2.")
             warn = (
                 "Using dialect==1, which is deprecated and will be removed in future releases. "
                 "Please update your input specification to dialect=2 and use the new schema if possible"
@@ -926,6 +988,8 @@ def create_atom_array_from_design_specification(
     **spec_kwargs,
 ) -> tuple[AtomArray, dict]:
     if int(spec_kwargs.get("dialect", 2)) < 2:
+        if spec_kwargs.get("cyclic_chains"):
+            raise ValueError("cyclic_chains requires dialect 2.")
         warn = (
             "Using dialect==1, which is deprecated and will be removed in future releases. "
             "Please update your input specification to dialect=2 and use the new schema if possible"
