@@ -1,0 +1,27 @@
+RFD3 inference kernels: component licenses
+
+gather.py
+Copyright 2026 Anthropic, PBC. Apache License 2.0; see LICENSE.
+Source: https://github.com/anthropics/uplifting-biomolecular-modeling
+Commit: f4f62fa6592ae4938d49b1757bea0cfeff9f468e
+
+gather.py extracts common/opt_core/opt_core/kernels/gather_attn.py.
+Modifications: native RFD3 wrappers, optional imports, and launch settings tested
+on the RTX A4000. The kernel arithmetic is retained. The integration does not
+claim the upstream H100/A100 exact-mode guarantee on this GPU/software stack.
+
+transition.py
+BSD 3-Clause License; see FOUNDRY_LICENSE (this repository's license).
+New two-stage implementation of this repository's RFD3 Transition operations,
+specified in model/layers/layer_utils.py at commit
+829b3a1806ddee6e2dccebf911a6a9bf841075d5. The previous fpf_transition
+implementation and its helper routines are no longer included. Implementation
+provenance and the prior exposure to that code are documented in transition.py.
+
+padded_attention.py
+BSD 3-Clause License; see FOUNDRY_LICENSE (this repository's license).
+Implements the sparse slot-attention operations in layers/batched.py, with
+explicit per-example/sample masks and the native operation rounding boundaries.
+This is separate from the imported legacy index-set kernel in gather.py.
+
+Third-party software these kernels call and do not include or modify: PyTorch (BSD-3-Clause), OpenAI Triton (MIT).

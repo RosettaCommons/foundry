@@ -1,0 +1,342 @@
+{
+  "scope": "One cysteine-hydrolase input, seed 42, NVIDIA RTX A4000, B1 D1, 200 schedule points, full-memory compiled native PyTorch inference. No downstream tools or refolds.",
+  "software": {
+    "torch": "2.11.0+cu130",
+    "cuda": "13.0"
+  },
+  "shape": {
+    "protein_residues": 160,
+    "real_atoms": 2290,
+    "real_tokens": 188,
+    "padded_atoms": 3072,
+    "padded_tokens": 256
+  },
+  "protocol": "Unmodified production inference methods. Three complete rollouts per mode: two in process a, one in fresh process b. Same checkpoint, input filename, example ID, seed, sampler, shapes, native backend and shared compile cache. No trace hooks or baseline substitutions in these production repeats.",
+  "seed_audit": {
+    "hash_groups": {
+      "state": {
+        "count": 807,
+        "exact": true
+      },
+      "input_features": {
+        "count": 43,
+        "exact": true
+      },
+      "prepared_features": {
+        "count": 53,
+        "exact": true
+      },
+      "initializer": {
+        "count": 5,
+        "exact": true
+      },
+      "feature_orders": {
+        "count": 3,
+        "exact": true
+      },
+      "noise": {
+        "count": 2,
+        "exact": true
+      }
+    },
+    "captured_tensors": {
+      "input_coords": {
+        "shape": [
+          1,
+          2290,
+          3
+        ],
+        "exact": true
+      },
+      "noisy": {
+        "shape": [
+          1,
+          1,
+          3072,
+          3
+        ],
+        "exact": true
+      },
+      "time": {
+        "shape": [
+          1,
+          1
+        ],
+        "exact": true
+      },
+      "Q_L_init": {
+        "shape": [
+          1,
+          1,
+          3072,
+          128
+        ],
+        "exact": true
+      },
+      "C_L": {
+        "shape": [
+          1,
+          1,
+          3072,
+          128
+        ],
+        "exact": true
+      },
+      "S_I": {
+        "shape": [
+          1,
+          1,
+          256,
+          384
+        ],
+        "exact": true
+      },
+      "Z_II": {
+        "shape": [
+          1,
+          1,
+          256,
+          256,
+          128
+        ],
+        "exact": true
+      }
+    }
+  },
+  "seed_audit_scope": "Separate two-process captures of the baseline path: all model state, input/prepared features, five initializer tensors, initial and first-step noise and first denoiser inputs. The earlier same-process ablation additionally checked every random draw across all compared implementations.",
+  "experiments": {
+    "default": {
+      "environment": {
+        "PYTHONHASHSEED": null,
+        "TORCHINDUCTOR_DETERMINISTIC": null,
+        "CUBLAS_WORKSPACE_CONFIG": null,
+        "RFD3_REPRO_PROBE_STRICT": null
+      },
+      "same_process_coordinates_bitwise_equal": true,
+      "fresh_process_coordinates_bitwise_equal": false,
+      "raw_coordinate_hashes": [
+        {
+          "inputs_cys_pair_1_0_model_0": "968e707d89e28598d1181e7429f363e3c41f1fd6d928d0eb63878ebc9542f0db"
+        },
+        {
+          "inputs_cys_pair_1_0_model_0": "968e707d89e28598d1181e7429f363e3c41f1fd6d928d0eb63878ebc9542f0db"
+        },
+        {
+          "inputs_cys_pair_1_0_model_0": "df35ad7bc251edb8504cf94d2940282fddc06875ebca97f20c66a0e375c64c51"
+        }
+      ],
+      "warm_end_to_end_seconds": 11.625141621567309,
+      "first_call_seconds_including_startup": [
+        71.4251733534038,
+        72.74325017817318
+      ],
+      "backbone_comparisons": [
+        {
+          "label": "Production default, same process",
+          "kind": "production_replay",
+          "backbone_rmsd_A": 4.104473932410573e-15,
+          "ca_rmsd_A": 6.156015230301793e-15,
+          "raw_coordinates_exact": true,
+          "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_default_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_default_a_1/inputs_cys_pair_1_0_model_0.cif.gz",
+          "residues": 160,
+          "backbone_atoms": 640
+        },
+        {
+          "label": "Production default, fresh process",
+          "kind": "production_replay",
+          "backbone_rmsd_A": 3.5458623186351916,
+          "ca_rmsd_A": 3.6324138295569575,
+          "raw_coordinates_exact": false,
+          "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_default_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_default_b_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "residues": 160,
+          "backbone_atoms": 640
+        }
+      ]
+    },
+    "deterministic": {
+      "environment": {
+        "PYTHONHASHSEED": null,
+        "TORCHINDUCTOR_DETERMINISTIC": "1",
+        "CUBLAS_WORKSPACE_CONFIG": null,
+        "RFD3_REPRO_PROBE_STRICT": null
+      },
+      "same_process_coordinates_bitwise_equal": true,
+      "fresh_process_coordinates_bitwise_equal": false,
+      "raw_coordinate_hashes": [
+        {
+          "inputs_cys_pair_1_0_model_0": "6ff9147de481ae93e123705c36738169de21181cb488fd7303d81c641d277652"
+        },
+        {
+          "inputs_cys_pair_1_0_model_0": "6ff9147de481ae93e123705c36738169de21181cb488fd7303d81c641d277652"
+        },
+        {
+          "inputs_cys_pair_1_0_model_0": "84cdba239f6c942fde583a014c4a8b63b4763a133ece4d562583f6c423d881a2"
+        }
+      ],
+      "warm_end_to_end_seconds": 11.685823710635304,
+      "first_call_seconds_including_startup": [
+        189.0540827140212,
+        71.23394894599915
+      ],
+      "backbone_comparisons": [
+        {
+          "label": "Production deterministic, same process",
+          "kind": "production_replay",
+          "backbone_rmsd_A": 2.2997257319914166e-15,
+          "ca_rmsd_A": 4.625189986700858e-15,
+          "raw_coordinates_exact": true,
+          "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_deterministic_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_deterministic_a_1/inputs_cys_pair_1_0_model_0.cif.gz",
+          "residues": 160,
+          "backbone_atoms": 640
+        },
+        {
+          "label": "Production deterministic, fresh process",
+          "kind": "production_replay",
+          "backbone_rmsd_A": 4.526284795332318,
+          "ca_rmsd_A": 4.580677484840135,
+          "raw_coordinates_exact": false,
+          "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_deterministic_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_deterministic_b_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "residues": 160,
+          "backbone_atoms": 640
+        }
+      ]
+    },
+    "strict": {
+      "environment": {
+        "PYTHONHASHSEED": "0",
+        "TORCHINDUCTOR_DETERMINISTIC": "1",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "RFD3_REPRO_PROBE_STRICT": "1"
+      },
+      "same_process_coordinates_bitwise_equal": true,
+      "fresh_process_coordinates_bitwise_equal": true,
+      "raw_coordinate_hashes": [
+        {
+          "inputs_cys_pair_1_0_model_0": "e852879b9f07866231d441c1a2ebde7ac596fe8acbee3ba24a1b696d53389623"
+        },
+        {
+          "inputs_cys_pair_1_0_model_0": "e852879b9f07866231d441c1a2ebde7ac596fe8acbee3ba24a1b696d53389623"
+        },
+        {
+          "inputs_cys_pair_1_0_model_0": "e852879b9f07866231d441c1a2ebde7ac596fe8acbee3ba24a1b696d53389623"
+        }
+      ],
+      "warm_end_to_end_seconds": 23.29194377642125,
+      "first_call_seconds_including_startup": [
+        307.06688251532614,
+        83.93867554329336
+      ],
+      "backbone_comparisons": [
+        {
+          "label": "Production strict, same process",
+          "kind": "production_replay",
+          "backbone_rmsd_A": 2.623144195066093e-15,
+          "ca_rmsd_A": 4.06444370321209e-15,
+          "raw_coordinates_exact": true,
+          "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_strict_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_strict_a_1/inputs_cys_pair_1_0_model_0.cif.gz",
+          "residues": 160,
+          "backbone_atoms": 640
+        },
+        {
+          "label": "Production strict, fresh process",
+          "kind": "production_replay",
+          "backbone_rmsd_A": 2.623144195066093e-15,
+          "ca_rmsd_A": 4.06444370321209e-15,
+          "raw_coordinates_exact": true,
+          "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_strict_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_strict_b_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "residues": 160,
+          "backbone_atoms": 640
+        }
+      ]
+    },
+    "workspace": {
+      "environment": {
+        "PYTHONHASHSEED": "0",
+        "TORCHINDUCTOR_DETERMINISTIC": "1",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "RFD3_REPRO_PROBE_STRICT": null
+      },
+      "same_process_coordinates_bitwise_equal": true,
+      "fresh_process_coordinates_bitwise_equal": false,
+      "raw_coordinate_hashes": [
+        {
+          "inputs_cys_pair_1_0_model_0": "84cdba239f6c942fde583a014c4a8b63b4763a133ece4d562583f6c423d881a2"
+        },
+        {
+          "inputs_cys_pair_1_0_model_0": "84cdba239f6c942fde583a014c4a8b63b4763a133ece4d562583f6c423d881a2"
+        },
+        {
+          "inputs_cys_pair_1_0_model_0": "b8e54d3801997f2f38f883f1518b4348a62573c90dcd81e79a0d7b92608fa244"
+        }
+      ],
+      "warm_end_to_end_seconds": 22.236988922581077,
+      "first_call_seconds_including_startup": [
+        85.26534681580961,
+        83.08100619073957
+      ],
+      "backbone_comparisons": [
+        {
+          "label": "Production workspace, same process",
+          "kind": "production_replay",
+          "backbone_rmsd_A": 3.123361019535766e-15,
+          "ca_rmsd_A": 3.1847754232156957e-15,
+          "raw_coordinates_exact": true,
+          "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_workspace_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_workspace_a_1/inputs_cys_pair_1_0_model_0.cif.gz",
+          "residues": 160,
+          "backbone_atoms": 640
+        },
+        {
+          "label": "Production workspace, fresh process",
+          "kind": "production_replay",
+          "backbone_rmsd_A": 3.0964249696999233,
+          "ca_rmsd_A": 3.1554218628153303,
+          "raw_coordinates_exact": false,
+          "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_workspace_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_workspace_b_0/inputs_cys_pair_1_0_model_0.cif.gz",
+          "residues": 160,
+          "backbone_atoms": 640
+        }
+      ]
+    }
+  },
+  "backbone_method": "Separate optimal rigid alignments for CA and N/CA/C/O, matching chain/residue number/atom name; all 160 residues. No ligand, side chains, sequence design, refolding or outlier trimming.",
+  "limitations": [
+    "One input/seed and two launches per setting; not a guarantee across GPUs, software versions, checkpoints, backends, shapes, or compiler-cache changes.",
+    "One warm timing per setting; includes preprocessing, inference and structure writing. Startup timings include weight loading/compilation and are not warm speed measurements.",
+    "Seed-controlled randomness and numerical reproducibility are distinct. Deterministic execution does not make different kernel implementations numerically equivalent.",
+    "Initial tensors from the original four-pair pilot were not retained, so these controls do not establish the sole cause of its original replay discrepancy."
+  ],
+  "seed_identity_notes": [
+    "Noise uses SHA256-derived seeds keyed by global seed, example ID, diffusion sample index and event tag, using true lengths before padding.",
+    "Foundry example IDs may include the JSON filename or global_prefix and batch index. Preserve these when comparing runs.",
+    "Pipelines adds chunk_id to seed_offset and uses chunk-dependent prefixes. Preserve chunk assignments for replay.",
+    "The current Pipelines seed_offset=0 branch omits the seed override. This separate edge case did not affect these explicit seed-42 tests."
+  ],
+  "artifacts": {
+    "root": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation",
+    "script": "repeat_production.py",
+    "script_sha256": "ba975eda525c5bebf7ecbd056d855182453b411dfc565a3fdfafa38c2e2e4757",
+    "input_sha256": "9b3b274bfb0919a6db95ca7dc84304d051ae32d1eb738b1a82d9102f0e820a25",
+    "seed_audits": [
+      "repro_a.json",
+      "repro_b.json"
+    ],
+    "backbone_comparisons": "backbone_rmsd.json",
+    "structures": "structures/production_<mode>_<process>_<repeat>/"
+  },
+  "strict_mode_definition": "PYTHONHASHSEED=0 CUBLAS_WORKSPACE_CONFIG=:4096:8 TORCHINDUCTOR_DETERMINISTIC=1 before Python starts, plus torch.use_deterministic_algorithms(True) before constructing the inference engine. RFD3_REPRO_PROBE_STRICT is only a switch in this diagnostic script, not a Foundry inference option.",
+  "conclusions": [
+    "Seed-audit captures matched model state, prepared inputs, all initializer tensors and first noise draws exactly across processes.",
+    "Uninstrumented production inference was bitwise repeatable within each process, but the default fresh-process replay differed by 3.546 Angstrom backbone RMSD.",
+    "Full deterministic controls produced bitwise-identical raw coordinates across two processes. Warm end-to-end time was 23.292 seconds versus 11.625 seconds by default, measured once per mode.",
+    "Deterministic Inductor alone failed (4.526 Angstrom); compiler plus fixed Python hash and cuBLAS workspace without torch.use_deterministic_algorithms(True) also failed (3.096 Angstrom). The individual nondeterministic operation is not isolated.",
+    "The full controls are a tested diagnostic reference for this input and environment, not a general cross-backend equivalence guarantee. Production defaults and the existing image were not changed."
+  ]
+}

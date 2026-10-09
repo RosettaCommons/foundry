@@ -15,9 +15,17 @@ from toolz import merge_with
 
 from foundry.common import exists
 from foundry.inference_engines.base import BaseInferenceEngine
+from foundry.model.layers.attention import validate_attention_backend
 from foundry.utils.alignment import weighted_rigid_align
 from foundry.utils.ddp import RankedLogger
 from rfd3.constants import SAVED_CONDITIONING_ANNOTATIONS
+from rfd3.inference.batching import (
+    DEFAULT_COMPILE_ATOM_BUCKETS,
+    DEFAULT_COMPILE_SLOT_BUCKETS,
+    DEFAULT_COMPILE_TOKEN_BUCKETS,
+    padding_capacity,
+    validate_buckets,
+)
 from rfd3.inference.datasets import (
     assemble_distributed_inference_loader_from_json,
 )
@@ -46,6 +54,14 @@ class RFD3InferenceConfig:
         "rfd3"  # Defaults to foundry installation upon instantiation
     )
     diffusion_batch_size: int = 16
+    inference_batch_size: int = 1
+    inference_num_workers: int = 2
+    atom_padding_multiple: int = 128
+    token_padding_multiple: int = 16
+    compile_shape_policy: str = "buckets"
+    compile_atom_buckets: tuple[int, ...] = DEFAULT_COMPILE_ATOM_BUCKETS
+    compile_token_buckets: tuple[int, ...] = DEFAULT_COMPILE_TOKEN_BUCKETS
+    compile_slot_buckets: tuple[int, ...] = DEFAULT_COMPILE_SLOT_BUCKETS
 
     # RFD3 specific
     skip_existing: bool = True
@@ -72,7 +88,14 @@ class RFD3InferenceConfig:
     low_memory_mode: bool = (
         False  # False for standard mode, True for memory efficient tokenization mode
     )
-    compile_model: bool = False
+    compile_model: bool = True
+    compile_cuda_graphs: bool = True
+    compile_cache_dir: str | None = field(
+        default_factory=lambda: os.environ.get("RFD3_COMPILE_CACHE_DIR")
+    )
+    dense_attention_backend: str = "vanilla"
+    inference_kernel_backend: str = "auto"
+    inference_cuda_graph: bool = False
 
     # Other:
     num_nodes: int = 1
@@ -161,9 +184,42 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         dump_trajectories: bool,
         align_trajectory_structures: bool,
         low_memory_mode: bool,
-        compile_model: bool = False,
+        compile_model: bool = True,
+        compile_cuda_graphs: bool = True,
+        compile_cache_dir: str | None = None,
+        dense_attention_backend: str = "vanilla",
+        inference_kernel_backend: str = "auto",
+        inference_cuda_graph: bool = False,
+        inference_batch_size: int = 1,
+        inference_num_workers: int = 2,
+        atom_padding_multiple: int = 128,
+        token_padding_multiple: int = 16,
+        compile_shape_policy: str = "buckets",
+        compile_atom_buckets=DEFAULT_COMPILE_ATOM_BUCKETS,
+        compile_token_buckets=DEFAULT_COMPILE_TOKEN_BUCKETS,
+        compile_slot_buckets=DEFAULT_COMPILE_SLOT_BUCKETS,
         **kwargs,
     ):
+        if min(inference_batch_size, atom_padding_multiple, token_padding_multiple) < 1:
+            raise ValueError("Batch size and padding multiples must be positive")
+        self.inference_batch_size = inference_batch_size
+        if inference_num_workers < 0:
+            raise ValueError("inference_num_workers must be nonnegative")
+        self.inference_num_workers = inference_num_workers
+        self.atom_padding_multiple = atom_padding_multiple
+        self.token_padding_multiple = token_padding_multiple
+        if compile_shape_policy not in {"batch_max", "buckets"}:
+            raise ValueError("compile_shape_policy must be batch_max or buckets")
+        self.compile_shape_policy = compile_shape_policy
+        self.compile_atom_buckets = validate_buckets(
+            compile_atom_buckets, "compile_atom_buckets"
+        )
+        self.compile_token_buckets = validate_buckets(
+            compile_token_buckets, "compile_token_buckets"
+        )
+        self.compile_slot_buckets = validate_buckets(
+            compile_slot_buckets, "compile_slot_buckets"
+        )
         super().__init__(
             transform_overrides={"diffusion_batch_size": diffusion_batch_size},
             inference_sampler_overrides={**inference_sampler},
@@ -204,68 +260,134 @@ class RFD3InferenceEngine(BaseInferenceEngine):
             # HACK: Set attribute to the diffusion module
             os.environ["RFD3_LOW_MEMORY_MODE"] = "1"
 
+        self.dense_attention_backend = validate_attention_backend(
+            dense_attention_backend
+        )
+        if inference_kernel_backend not in {
+            "auto", "torch", "triton", "triton-transition"
+        }:
+            raise ValueError(
+                "inference_kernel_backend must be auto, torch, triton or triton-transition"
+            )
+        if (
+            inference_kernel_backend in {"triton", "triton-transition"}
+            or inference_cuda_graph
+        ) and (
+            low_memory_mode or os.environ.get("RFD3_LOW_MEMORY_MODE") == "1"
+        ):
+            raise ValueError(
+                "Accelerated inference requires low_memory_mode=false and "
+                "RFD3_LOW_MEMORY_MODE unset or 0"
+            )
+        if inference_cuda_graph and (compile_model or inference_batch_size != 1):
+            raise ValueError(
+                "inference_cuda_graph requires compile_model=false and "
+                "inference_batch_size=1; padded kernels support torch.compile directly"
+            )
+        self.inference_kernel_backend = inference_kernel_backend
+        self.inference_cuda_graph = inference_cuda_graph
         self.compile_model = compile_model
+        self.compile_cuda_graphs = compile_cuda_graphs
+        self.compile_cache_dir = compile_cache_dir
+        self.low_memory_mode = low_memory_mode
         self.compiled_ = False
 
-    # Submodules of the diffusion module that are pure tensor code and get re-entered
-    # once (encoder) or twice (the rest, via recycling) on every diffusion step.
-    _COMPILE_TARGETS = (
-        "encoder",
-        "diffusion_token_encoder",
-        "diffusion_transformer",
-        "decoder",
-    )
-
     def initialize(self):
+        first_initialize = not getattr(self, "initialized_", False)
+        if self.compile_model and torch._dynamo.config.disable:
+            raise ValueError(
+                "compile_model=true requires torch.compile to be enabled; "
+                "set TORCH_COMPILE_DISABLE=0 before importing PyTorch"
+            )
         cfg = super().initialize()
+        if first_initialize and self.inference_num_workers:
+            from omegaconf import OmegaConf
+
+            transform = next(iter(cfg.datasets.val.values())).dataset.transform
+            self._inference_transform_config = OmegaConf.to_container(
+                OmegaConf.merge(transform, self.transform_overrides), resolve=True
+            )
+        backend = getattr(self, "inference_kernel_backend", "torch")
+        cuda_graph = getattr(self, "inference_cuda_graph", False)
+        if backend == "auto":
+            from rfd3.inference.runtime import select_kernel_backend
+
+            backend = select_kernel_backend(
+                device=next(self.trainer.state["model"].parameters()).device,
+                compile_model=self.compile_model,
+                inference_batch_size=self.inference_batch_size,
+                low_memory_mode=self.low_memory_mode,
+            )
+        self.resolved_kernel_backend = backend
+        if backend in {"triton", "triton-transition"} or cuda_graph:
+            if next(self.trainer.state["model"].parameters()).device.type != "cuda":
+                raise ValueError("Accelerated inference requires CUDA")
+        if backend in {"triton", "triton-transition"}:
+            if not self.compile_model:
+                from rfd3.inference.runtime import configure_compile_cache
+
+                configure_compile_cache(self.compile_cache_dir)
+            import triton  # noqa: F401 — fail early if the optional runtime is absent
+
+        from rfd3.model.layers.layer_utils import Transition
+
+        for module in self.trainer.state["model"].modules():
+            module_backend = backend
+            if backend == "triton-transition":
+                module_backend = "triton" if isinstance(module, Transition) else "torch"
+            module.inference_kernel_backend = module_backend
+            module.inference_cuda_graph = cuda_graph
+            if hasattr(module, "dense_attention_backend"):
+                module.dense_attention_backend = self.dense_attention_backend
         if self.compile_model and not self.compiled_:
             self._compile_diffusion_submodules()
             self.compiled_ = True
+        if first_initialize:
+            ranked_logger.info(
+                f"RFD3 acceleration: policy={self.inference_kernel_backend}, "
+                f"kernels={backend}, compile_model={self.compile_model}, "
+                f"token_and_atom_cuda_graph={cuda_graph}, "
+                f"low_memory_mode={self.low_memory_mode}"
+            )
         return cfg
 
     def _compile_diffusion_submodules(self) -> None:
-        """Wrap the hot diffusion submodules in `torch.compile`.
+        """Compile the padded denoiser, including at B=1; fallbacks stay eager."""
+        diffusion_module = self._rfd3_net().diffusion_module
+        from rfd3.inference.runtime import (
+            configure_compile_cache,
+            dynamic_diffusion_batch,
+        )
 
-        The rollout is dominated by many small kernels (~14k launches per diffusion
-        step), so inductor's fusion is worth roughly 1.6x on steady-state rollout time
-        at both small and large diffusion batch sizes. It costs a one-off warmup
-        (~85-90s warm cache, ~210s cold) charged to the first diffusion step, which is
-        why this is opt-in rather than the default: it is a loss for a single rollout
-        and a win from roughly the second onwards.
-        """
-        model = self.trainer.state["model"]
-
-        # Unwrap _FabricModule / DistributedDataParallel / EMA to reach the RFD3 net
-        net = getattr(model, "_forward_module", model)
-        for _ in range(5):
-            if hasattr(net, "diffusion_module"):
-                break
-            for attr in ("module", "shadow", "model"):
-                if hasattr(net, attr):
-                    net = getattr(net, attr)
-                    break
-        else:
-            ranked_logger.warning(
-                "Could not locate the diffusion module; skipping torch.compile."
-            )
-            return
-
-        diffusion_module = net.diffusion_module
-        for name in self._COMPILE_TARGETS:
-            submodule = getattr(diffusion_module, name, None)
-            if submodule is None:
-                continue
-            # dynamic=False: L and I are fixed for a given specification, so we want
-            # static-shape kernels rather than dynamic-shape guards.
-            setattr(
-                diffusion_module,
-                name,
-                torch.compile(submodule, dynamic=False),
+        options = configure_compile_cache(getattr(self, "compile_cache_dir", None))
+        ranked_logger.info(
+            "Inductor disk cache: "
+            f"{os.environ.get('TORCHINDUCTOR_CACHE_DIR', 'PyTorch default')}"
+        )
+        device_type = next(diffusion_module.parameters()).device.type
+        if device_type == "cuda":
+            # Unbounded fan-out around sorted neighbors produced an 18-output
+            # Triton kernel with pathological compilation on the full model.
+            options["max_fusion_unique_io_buffers"] = 16
+            options["triton.cudagraphs"] = self.compile_cuda_graphs
+        if device_type == "mps":
+            # Metal limits kernel buffer arguments. Full checkpoint graphs can
+            # otherwise fuse >31 inputs, even when small model tests compile.
+            # Leave one argument for Inductor's error buffer; scope to this compile.
+            options["max_fusion_unique_io_buffers"] = 30
+        diffusion_module.forward_batched = torch.compile(
+            diffusion_module.forward_batched,
+            dynamic=False,
+            fullgraph=True,
+            options=options,
+        )
+        if device_type == "cuda":
+            diffusion_module.forward_batched = dynamic_diffusion_batch(
+                diffusion_module.forward_batched
             )
         ranked_logger.info(
-            "torch.compile enabled for diffusion submodules "
-            f"({', '.join(self._COMPILE_TARGETS)}). Expect a one-off warmup on the "
-            "first diffusion step."
+            "Compiling the padded denoiser with shape policy "
+            f"{self.compile_shape_policy}; legacy fallbacks remain eager."
         )
 
     # The base `run` is positional (`inputs, *_`); this engine deliberately exposes a
@@ -302,6 +424,8 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         self.out_dir = out_dir
 
     def _run_multi(self, specs) -> None | Dict[str, List[RFD3Output]]:
+        if self.inference_batch_size > 1 or self.compile_model:
+            return self._run_multi_batched(specs)
         # ==============================================================================
         # Prepare pipeline and inference loader
         # ==============================================================================
@@ -350,7 +474,10 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                 compute_metrics=False,
             )
         t_end = time.time()
+        ranked_logger.info(f"Finished inference batch in {t_end - t0:.2f} seconds.")
+        return self._format_model_output(pipeline_output, output_val)
 
+    def _format_model_output(self, pipeline_output, output_val) -> List[RFD3Output]:
         # Add additional information to prediction metadata
         if self.dump_trajectories:
             X_noisy_L_traj = torch.stack(
@@ -372,9 +499,9 @@ class RFD3InferenceEngine(BaseInferenceEngine):
             # Append to outputs
             if self.dump_trajectories:
                 X_denoised_L_traj_i = _reshape_trajectory(
-                    X_noisy_L_traj[idx], self.align_trajectory_structures
+                    X_denoised_L_traj[idx], self.align_trajectory_structures
                 )
-                X_noisy_L_traj_i = _reshape_trajectory(X_denoised_L_traj[idx], False)
+                X_noisy_L_traj_i = _reshape_trajectory(X_noisy_L_traj[idx], False)
                 denoised_trajectory_stack = (
                     build_stack_from_atom_array_and_batched_coords(
                         X_denoised_L_traj_i, pipeline_output["atom_array"]
@@ -399,8 +526,193 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                 )
             )
 
-        ranked_logger.info(f"Finished inference batch in {t_end - t0:.2f} seconds.")
         return outputs
+
+    def _rfd3_net(self):
+        net = self.trainer.state["model"]
+        for _ in range(8):
+            if hasattr(net, "diffusion_module"):
+                return net
+            for attr in ("_forward_module", "module", "shadow", "model"):
+                if hasattr(net, attr):
+                    net = getattr(net, attr)
+                    break
+            else:
+                break
+        raise ValueError("Cannot locate the RFD3 network for padded inference")
+
+    def _batch_fallback_reason(self, example):
+        net = self._rfd3_net()
+        if net.token_initializer.atom_transformer is not None:
+            return "static random atom attention uses the legacy initializer"
+        if len(example["feats"]["asym_id"].unique()) > 3:
+            return "more than three chains use the legacy randomized neighbor policy"
+        return None
+
+    def _compile_buckets(self):
+        if not self.compile_model or self.compile_shape_policy == "batch_max":
+            return {}
+        return dict(
+            atom_buckets=self.compile_atom_buckets,
+            token_buckets=self.compile_token_buckets,
+            slot_buckets=self.compile_slot_buckets,
+        )
+
+    def _padding_multiples(self):
+        if self.compile_model and self.compile_shape_policy == "batch_max":
+            return 1, 1
+        return self.atom_padding_multiple, self.token_padding_multiple
+
+    def _batch_capacities(self, examples):
+        buckets = self._compile_buckets()
+        atom_multiple, token_multiple = self._padding_multiples()
+        atoms = max(len(e["feats"]["atom_to_token_map"]) for e in examples)
+        tokens = max(len(e["feats"]["restype"]) for e in examples)
+        capacities = dict(
+            atom_capacity=padding_capacity(
+                atoms,
+                atom_multiple,
+                buckets.get("atom_buckets"),
+                axis="atom length",
+            ),
+            token_capacity=padding_capacity(
+                tokens,
+                token_multiple,
+                buckets.get("token_buckets"),
+                axis="token length",
+            ),
+            batch_capacity=self.inference_batch_size,
+        )
+        if self.compile_model:
+            slots = max(
+                int(torch.bincount(e["feats"]["atom_to_token_map"].long()).max())
+                for e in examples
+            )
+            capacities["slot_capacity"] = padding_capacity(
+                slots, buckets=buckets.get("slot_buckets"), axis="atoms per token"
+            )
+        return capacities
+
+    def _model_forward_batch(self, examples) -> Dict[str, List[RFD3Output]]:
+        from rfd3.inference.batching import (
+            cfg_reference_examples,
+            collate_examples,
+            unpad_output,
+        )
+        from rfd3.model.batched_sampler import ExampleRandomness
+
+        net = self._rfd3_net()
+        capacities = self._batch_capacities(examples)
+        batch = collate_examples(examples, **capacities)
+        network_input = {"f": batch["f"]}
+        if net.use_classifier_free_guidance:
+            refs = cfg_reference_examples(examples, net.cfg_features)
+            # Share A capacity with the conditional batch to limit graph variants.
+            ref_batch = collate_examples(
+                refs,
+                **{**capacities, "slot_capacity": batch["f"]["atom_slots"].shape[-1]},
+            )
+            network_input["f_ref"] = ref_batch["f"]
+        network_input = self.trainer.fabric.to_device(network_input)
+        network_input["capture_trajectories"] = self.dump_trajectories
+        seed = (
+            self.seed
+            if self.seed is not None
+            else int(torch.randint(0, 2**62, ()).item())
+        )
+        network_input["noise_source"] = ExampleRandomness(examples, seed)
+        with torch.no_grad():
+            output = self.trainer.state["model"].forward(
+                input=network_input,
+                coord_atom_lvl_to_be_noised=self.trainer.fabric.to_device(
+                    batch["coords"]
+                ),
+            )
+            # Structure construction needs CPU coordinates. Transfer the batch
+            # once, then validate each real example on CPU instead of reading
+            # a CUDA boolean and copying coordinates separately for every row.
+            output["X_L"] = output["X_L"].cpu()
+            results = {}
+            for row, example in enumerate(examples):
+                single = unpad_output(output, row, example)
+                if not torch.isfinite(single["X_L"]).all():
+                    raise ValueError(
+                        f"Nonfinite coordinates for {example['example_id']}"
+                    )
+                structures, metadata = self.trainer._build_predicted_atom_array_stack(
+                    single, example
+                )
+                results[example["example_id"]] = self._format_model_output(
+                    example,
+                    dict(
+                        network_output=single,
+                        predicted_atom_array_stack=structures,
+                        prediction_metadata=metadata,
+                    ),
+                )
+        return results
+
+    def _run_multi_batched(self, specs):
+        from rfd3.inference.batching import iter_compatible_batches
+        from rfd3.inference.datasets import ContigJsonDataset
+        from rfd3.inference.loading import iter_inference_examples
+
+        dataset = ContigJsonDataset(
+            data=specs,
+            transform=self.pipeline,
+            name="inference-dataset",
+            cif_parser_args=None,
+            subset_to_keys=None,
+            eval_every_n=1,
+        )
+        fabric = self.trainer.fabric
+
+        examples = iter_inference_examples(
+            dataset,
+            seed=self.seed,
+            rank=fabric.global_rank,
+            world_size=fabric.world_size,
+            num_workers=getattr(self, "inference_num_workers", 0),
+            transform_config=getattr(self, "_inference_transform_config", None),
+            batch_size=self.inference_batch_size,
+            pin_memory=getattr(getattr(fabric, "device", None), "type", None) == "cuda",
+        )
+
+        outputs = {}
+
+        # Fallback rows are emitted separately before feature-schema collation.
+        def supported():
+            for ex in examples:
+                reason = self._batch_fallback_reason(ex)
+                if reason:
+                    ranked_logger.warning(
+                        f"Legacy inference for {ex['example_id']}: {reason}."
+                    )
+                    save({ex["example_id"]: self._model_forward(ex)})
+                else:
+                    yield ex
+
+        def save(result):
+            if self.out_dir:
+                for values in result.values():
+                    for output in values:
+                        output.dump(out_dir=self.out_dir)
+            else:
+                outputs.update(result)
+
+        for group in iter_compatible_batches(
+            supported(),
+            self.inference_batch_size,
+            *self._padding_multiples(),
+            batch_max=self.compile_model and self.compile_shape_policy == "batch_max",
+            **self._compile_buckets(),
+        ):
+            save(self._model_forward_batch(group))
+        return {
+            dataset.idx_to_id(i): outputs[dataset.idx_to_id(i)]
+            for i in range(len(dataset))
+            if dataset.idx_to_id(i) in outputs
+        }
 
     ###############################################
     # Input merging

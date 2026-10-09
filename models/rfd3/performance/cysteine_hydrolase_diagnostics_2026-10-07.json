@@ -1,0 +1,905 @@
+{
+  "scope": "One cysteine-hydrolase input cys_pair_1; local RTX A4000, B1 D1, 200 schedule points, full memory; no additional refolds",
+  "conclusions": [
+    "GPU-CPU synchronization removal preserved every captured noise, schedule, checked initializer, trajectory, final-coordinate and logit tensor exactly in the controlled same-process comparison.",
+    "The baseline repeated exactly within that process. Cached topology changes the compiled trajectory even with native kernels.",
+    "Cached and uncached eager denoisers returned bitwise-identical output on the same captured real input. Selected atom/token neighbor indices and masks also matched in eight checks. Their compiled outputs differ.",
+    "The custom transition follows eager BF16 rounding; default compiled PyTorch elides intermediate rounding. Isolated 128-channel tests match eager and rounding-preserving compilation exactly, but differ by about 0.36 percent relative L2 from default compilation.",
+    "The native and custom-transition full-rollout means were essentially equal at local B1; baseline repetitions varied substantially. This is not evidence of a robust large local speedup.",
+    "The four-pair pilot does not establish a quality regression or equivalence. Different generated backbones produced different LigandMPNN sequences; downstream sequence RNG was only seeded once per arm.",
+    "Fresh-process baseline replay was not exact despite identical feature hashes; the original run did not save initial-coordinate tensors or full state. That discrepancy is not yet isolated and prevents calling these exact reproductions of the original pilot."
+  ],
+  "trace_comparisons": {
+    "baseline_vs_baseline_repeat": {
+      "noise_identical": true,
+      "schedule_identical": true,
+      "initial_noisy": {
+        "exact": true,
+        "max_abs": 0.0,
+        "rms_component": 0.0,
+        "relative_l2": 0.0
+      },
+      "initializer": {
+        "Q_L_init": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "C_L": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "S_I": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "Z_II": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        }
+      },
+      "final_xyz": {
+        "exact": true,
+        "max_abs": 0.0,
+        "rms_component": 0.0,
+        "relative_l2": 0.0
+      },
+      "final_aligned_feature_ca_rmsd_A": 4.754954083309647e-15,
+      "first_different_denoising_step_0based": null,
+      "selected_steps": {
+        "0": 0.0,
+        "1": 0.0,
+        "2": 0.0,
+        "9": 0.0,
+        "49": 0.0,
+        "99": 0.0,
+        "149": 0.0,
+        "198": 0.0
+      },
+      "final_sequence_logits": {
+        "exact": true,
+        "max_abs": 0.0,
+        "rms_component": 0.0,
+        "relative_l2": 0.0
+      }
+    },
+    "baseline_vs_sync_only": {
+      "noise_identical": true,
+      "schedule_identical": true,
+      "initial_noisy": {
+        "exact": true,
+        "max_abs": 0.0,
+        "rms_component": 0.0,
+        "relative_l2": 0.0
+      },
+      "initializer": {
+        "Q_L_init": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "C_L": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "S_I": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "Z_II": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        }
+      },
+      "final_xyz": {
+        "exact": true,
+        "max_abs": 0.0,
+        "rms_component": 0.0,
+        "relative_l2": 0.0
+      },
+      "final_aligned_feature_ca_rmsd_A": 4.754954083309647e-15,
+      "first_different_denoising_step_0based": null,
+      "selected_steps": {
+        "0": 0.0,
+        "1": 0.0,
+        "2": 0.0,
+        "9": 0.0,
+        "49": 0.0,
+        "99": 0.0,
+        "149": 0.0,
+        "198": 0.0
+      },
+      "final_sequence_logits": {
+        "exact": true,
+        "max_abs": 0.0,
+        "rms_component": 0.0,
+        "relative_l2": 0.0
+      }
+    },
+    "sync_only_vs_native": {
+      "noise_identical": true,
+      "schedule_identical": true,
+      "initial_noisy": {
+        "exact": true,
+        "max_abs": 0.0,
+        "rms_component": 0.0,
+        "relative_l2": 0.0
+      },
+      "initializer": {
+        "Q_L_init": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "C_L": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "S_I": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "Z_II": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        }
+      },
+      "final_xyz": {
+        "exact": false,
+        "max_abs": 10.33008098602295,
+        "rms_component": 1.6624244451522827,
+        "relative_l2": 0.22708572447299957
+      },
+      "final_aligned_feature_ca_rmsd_A": 2.382550946517892,
+      "first_different_denoising_step_0based": 0,
+      "selected_steps": {
+        "0": 0.13562607765197754,
+        "1": 0.1287020742893219,
+        "2": 0.148078054189682,
+        "9": 0.12506936490535736,
+        "49": 0.13132937252521515,
+        "99": 0.1654936671257019,
+        "149": 3.0473287105560303,
+        "198": 3.3350753784179688
+      },
+      "final_sequence_logits": {
+        "exact": false,
+        "max_abs": 1438.0,
+        "rms_component": 128.5958709716797,
+        "relative_l2": 0.2234617918729782
+      }
+    },
+    "native_vs_transition": {
+      "noise_identical": true,
+      "schedule_identical": true,
+      "initial_noisy": {
+        "exact": true,
+        "max_abs": 0.0,
+        "rms_component": 0.0,
+        "relative_l2": 0.0
+      },
+      "initializer": {
+        "Q_L_init": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "C_L": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "S_I": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "Z_II": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        }
+      },
+      "final_xyz": {
+        "exact": false,
+        "max_abs": 14.474993705749512,
+        "rms_component": 1.9042332172393799,
+        "relative_l2": 0.257585734128952
+      },
+      "final_aligned_feature_ca_rmsd_A": 2.985044434218101,
+      "first_different_denoising_step_0based": 0,
+      "selected_steps": {
+        "0": 0.15119022130966187,
+        "1": 0.12296166270971298,
+        "2": 0.09286295622587204,
+        "9": 0.12235447764396667,
+        "49": 0.12467067688703537,
+        "99": 0.1813819408416748,
+        "149": 3.657879114151001,
+        "198": 3.820289134979248
+      },
+      "final_sequence_logits": {
+        "exact": false,
+        "max_abs": 1054.0,
+        "rms_component": 117.00753021240234,
+        "relative_l2": 0.20124010741710663
+      }
+    },
+    "baseline_vs_transition": {
+      "noise_identical": true,
+      "schedule_identical": true,
+      "initial_noisy": {
+        "exact": true,
+        "max_abs": 0.0,
+        "rms_component": 0.0,
+        "relative_l2": 0.0
+      },
+      "initializer": {
+        "Q_L_init": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "C_L": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "S_I": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        },
+        "Z_II": {
+          "exact": true,
+          "max_abs": 0.0,
+          "rms_component": 0.0,
+          "relative_l2": 0.0
+        }
+      },
+      "final_xyz": {
+        "exact": false,
+        "max_abs": 11.87928581237793,
+        "rms_component": 1.930432915687561,
+        "relative_l2": 0.26369547843933105
+      },
+      "final_aligned_feature_ca_rmsd_A": 2.910561608011983,
+      "first_different_denoising_step_0based": 0,
+      "selected_steps": {
+        "0": 0.16410574316978455,
+        "1": 0.157938614487648,
+        "2": 0.14188683032989502,
+        "9": 0.07534465193748474,
+        "49": 0.13075999915599823,
+        "99": 0.18709640204906464,
+        "149": 3.7931597232818604,
+        "198": 3.872926950454712
+      },
+      "final_sequence_logits": {
+        "exact": false,
+        "max_abs": 1398.0,
+        "rms_component": 129.65162658691406,
+        "relative_l2": 0.22529642283916473
+      }
+    }
+  },
+  "first_call_audit": {
+    "preprocessed_features_match_original": true,
+    "feature_differences": [],
+    "eager_cached_vs_uncached": {
+      "exact": true,
+      "max_abs": 0.0,
+      "xyz_rmsd": 0.0
+    },
+    "compiled_cached_vs_uncached": {
+      "exact": false,
+      "max_abs": 0.796870231628418,
+      "xyz_rmsd": 0.1459164023399353
+    },
+    "eager_vs_compiled_uncached": {
+      "exact": false,
+      "max_abs": 1.1328057050704956,
+      "xyz_rmsd": 0.2457822561264038
+    },
+    "eager_vs_compiled_cached": {
+      "exact": false,
+      "max_abs": 1.2617111206054688,
+      "xyz_rmsd": 0.23885540664196014
+    },
+    "new_first_step_vs_traced_baseline": {
+      "exact": false,
+      "max_abs": 0.45312222838401794,
+      "xyz_rmsd": 0.11555851250886917
+    }
+  },
+  "neighbor_checks": [
+    {
+      "level": "atom",
+      "step": 0,
+      "forced_exact": true,
+      "selected_indices_exact": true,
+      "validity_exact": true
+    },
+    {
+      "level": "atom",
+      "step": 49,
+      "forced_exact": true,
+      "selected_indices_exact": true,
+      "validity_exact": true
+    },
+    {
+      "level": "atom",
+      "step": 99,
+      "forced_exact": true,
+      "selected_indices_exact": true,
+      "validity_exact": true
+    },
+    {
+      "level": "atom",
+      "step": 198,
+      "forced_exact": true,
+      "selected_indices_exact": true,
+      "validity_exact": true
+    },
+    {
+      "level": "token",
+      "step": 0,
+      "forced_exact": true,
+      "selected_indices_exact": true,
+      "validity_exact": true
+    },
+    {
+      "level": "token",
+      "step": 49,
+      "forced_exact": true,
+      "selected_indices_exact": true,
+      "validity_exact": true
+    },
+    {
+      "level": "token",
+      "step": 99,
+      "forced_exact": true,
+      "selected_indices_exact": true,
+      "validity_exact": true
+    },
+    {
+      "level": "token",
+      "step": 198,
+      "forced_exact": true,
+      "selected_indices_exact": true,
+      "validity_exact": true
+    }
+  ],
+  "precision_probe": [
+    {
+      "channels": 128,
+      "rows": 256,
+      "eager_vs_custom": {
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "fraction_different": 0.0
+      },
+      "compiled_vs_custom": {
+        "max_abs": 0.015625,
+        "relative_l2": 0.0036148810759186745,
+        "fraction_different": 0.550140380859375
+      },
+      "compiled_vs_eager": {
+        "max_abs": 0.015625,
+        "relative_l2": 0.0036148810759186745,
+        "fraction_different": 0.550140380859375
+      },
+      "rounded_compiled_vs_custom": {
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "fraction_different": 0.0
+      }
+    },
+    {
+      "channels": 128,
+      "rows": 3072,
+      "eager_vs_custom": {
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "fraction_different": 0.0
+      },
+      "compiled_vs_custom": {
+        "max_abs": 0.0234375,
+        "relative_l2": 0.003624564968049526,
+        "fraction_different": 0.5502523183822632
+      },
+      "compiled_vs_eager": {
+        "max_abs": 0.0234375,
+        "relative_l2": 0.003624564968049526,
+        "fraction_different": 0.5502523183822632
+      },
+      "rounded_compiled_vs_custom": {
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "fraction_different": 0.0
+      }
+    },
+    {
+      "channels": 256,
+      "rows": 256,
+      "eager_vs_custom": {
+        "max_abs": 0.0078125,
+        "relative_l2": 0.00015975181304384023,
+        "fraction_different": 0.0009765625
+      },
+      "compiled_vs_custom": {
+        "max_abs": 0.015625,
+        "relative_l2": 0.004294818267226219,
+        "fraction_different": 0.5870513916015625
+      },
+      "compiled_vs_eager": {
+        "max_abs": 0.015625,
+        "relative_l2": 0.004293846432119608,
+        "fraction_different": 0.5868988037109375
+      },
+      "rounded_compiled_vs_custom": {
+        "max_abs": 0.0078125,
+        "relative_l2": 0.00015975181304384023,
+        "fraction_different": 0.0009765625
+      }
+    }
+  ],
+  "timings": {
+    "gpu": "NVIDIA RTX A4000",
+    "timings": [
+      {
+        "mode": "baseline",
+        "forward_seconds": 10.279239049181342
+      },
+      {
+        "mode": "native",
+        "forward_seconds": 9.237276328727603
+      },
+      {
+        "mode": "transition",
+        "forward_seconds": 9.14433481823653
+      },
+      {
+        "mode": "transition",
+        "forward_seconds": 9.054003872908652
+      },
+      {
+        "mode": "native",
+        "forward_seconds": 8.949884045869112
+      },
+      {
+        "mode": "baseline",
+        "forward_seconds": 9.202066681347787
+      }
+    ],
+    "low_memory_mode": false,
+    "batch": 1,
+    "schedule_points": 200,
+    "pair": "cys_pair_1",
+    "peak_allocated_bytes": 9105449984,
+    "summary": {
+      "baseline": {
+        "seconds": [
+          10.279239049181342,
+          9.202066681347787
+        ],
+        "mean_seconds": 9.740652865264565
+      },
+      "native": {
+        "seconds": [
+          9.237276328727603,
+          8.949884045869112
+        ],
+        "mean_seconds": 9.093580187298357
+      },
+      "transition": {
+        "seconds": [
+          9.14433481823653,
+          9.054003872908652
+        ],
+        "mean_seconds": 9.09916934557259
+      }
+    }
+  },
+  "profile_summary": [
+    {
+      "mode": "baseline",
+      "forward_wall_ms": 1203.143433,
+      "gpu_kernel_busy_ms": 531.1796131591797,
+      "gpu_kernel_busy_fraction": 0.441493174121975,
+      "denoiser_mean_stream_ms": 85.26636227694425,
+      "initializer_stream_ms": 138.36032104492188,
+      "synchronization_calls": {
+        "cudaStreamSynchronize": 36,
+        "cudaDeviceSynchronize": 2
+      },
+      "kernel_count": 30510,
+      "custom_transition_ms": 0
+    },
+    {
+      "mode": "native",
+      "forward_wall_ms": 1222.486361,
+      "gpu_kernel_busy_ms": 507.55864099121095,
+      "gpu_kernel_busy_fraction": 0.41518552450435964,
+      "denoiser_mean_stream_ms": 86.81077159534802,
+      "initializer_stream_ms": 139.19602966308594,
+      "synchronization_calls": {
+        "cudaStreamSynchronize": 13,
+        "cudaDeviceSynchronize": 2
+      },
+      "kernel_count": 30399,
+      "custom_transition_ms": 0
+    },
+    {
+      "mode": "transition",
+      "forward_wall_ms": 1262.083006,
+      "gpu_kernel_busy_ms": 463.7532823486328,
+      "gpu_kernel_busy_fraction": 0.3674506986814089,
+      "denoiser_mean_stream_ms": 89.02937316894531,
+      "initializer_stream_ms": 135.45289611816406,
+      "synchronization_calls": {
+        "cudaStreamSynchronize": 13,
+        "cudaDeviceSynchronize": 2
+      },
+      "kernel_count": 30211,
+      "custom_transition_ms": 29.269691
+    }
+  ],
+  "structure_audit": {
+    "original_before_vs_baseline": {
+      "ca_rmsd_A": 2.7540421061458726,
+      "ca_raw_max_abs_A": 6.527701377868652,
+      "exact_ca_coordinates": false
+    },
+    "original_after_vs_transition": {
+      "ca_rmsd_A": 3.6592209726116547,
+      "ca_raw_max_abs_A": 9.272552490234375,
+      "exact_ca_coordinates": false
+    },
+    "baseline_vs_baseline_repeat": {
+      "ca_rmsd_A": 5.676357906368465e-15,
+      "ca_raw_max_abs_A": 0.0,
+      "exact_ca_coordinates": true
+    },
+    "baseline_vs_sync_only": {
+      "ca_rmsd_A": 5.676357906368465e-15,
+      "ca_raw_max_abs_A": 0.0,
+      "exact_ca_coordinates": true
+    },
+    "sync_only_vs_native": {
+      "ca_rmsd_A": 2.5545237827191127,
+      "ca_raw_max_abs_A": 6.3670854568481445,
+      "exact_ca_coordinates": false
+    },
+    "native_vs_transition": {
+      "ca_rmsd_A": 3.2157997702212615,
+      "ca_raw_max_abs_A": 10.28374195098877,
+      "exact_ca_coordinates": false
+    }
+  },
+  "untraced_replay": {
+    "original": {
+      "exact": false,
+      "ca_rmsd_A": 2.414424711962598
+    },
+    "traced": {
+      "exact": false,
+      "ca_rmsd_A": 2.8298200198881154
+    }
+  },
+  "sequence_audit": [
+    {
+      "pair_id": 0,
+      "sequence_identity": 0.78125,
+      "identical_length": true,
+      "motif_mapping_unchanged": true,
+      "before_sequence": "MRVVLQLNPSYPERARALIDLMADAGKLDRLILHICRPEQRPAAEELVAHARSRGIPAAIAECITPQPDVPGATEQQLLPSDVRVVREVVRAGDVVIAVGGSGGCGVYIARLAPPDARVIIIDIDPETCAANAALADAPGVEVRCGDALEVTRELVAALS",
+      "after_sequence": "SRVILQVNGSRPELALALIDLLADAGKLDELIIHIGRDEELPNAERLVAHARARGIPARIARTDTAQPAVPGSTEQTPRENDVRVVRETVRAGDVVISVGGSGGCGVYIARLAPADARVIIIDIDPETCAANRALATAPGVEVRCGDALEVTRELAAALS"
+    },
+    {
+      "pair_id": 1,
+      "sequence_identity": 0.375,
+      "identical_length": true,
+      "motif_mapping_unchanged": true,
+      "before_sequence": "SALEDRILALAKLMEKEQPTLEETAEILGVSVERVVATERRMGLTGDPRRLSGGCVIIALAIEQETGRRVLTGTHVVVDAATGELAALVGGDAELRALAAELAAAHAAGLTASQAPRRVEHPDGRTTYVQLDVFRISSRCPVPELRGRRVRGVLVIALEE",
+      "after_sequence": "MELTPEELAFIDAVTVRQPTPEEAAELTGTSVEDIAAMYRAAGLATPAEEVKMGCPGGLLVICRRLGVEAEQVVHVLLAPSGEVVVPPARVDPLLLALALERLAAHARSVTATQAPELVTLPDGRTAVVQLDRQTMPAHEPRPELRGQTVGGVAAVILKS"
+    },
+    {
+      "pair_id": 2,
+      "sequence_identity": 0.1625,
+      "identical_length": true,
+      "motif_mapping_unchanged": false,
+      "before_sequence": "LLEEILRELARVGLAAFPSIDFSAPESNIVAQIREGWTSPRTGCGNGYLPAALRELGLDEEAEELIKKMGLTPEEAELAYKDGRATLELAAAAGVPAAVVAESLVRPSTADLADPRTWEDLIGALHWLAGARLAGDAAAAAAAEAVIARALANVAAAAAA",
+      "after_sequence": "RAKALDMLIEIGEKINGKKLTLVEAARAAQAQARKRFVSSEPVCHGGALVRQADLTLPAAEVAAIAAAAGMSAEDRDLVIADIDRTVDRILANAETWDTLLALSNAGRIPLSDAYAVGGWVHRTSAQEVFGATPESDAVLAKLTAAAAAALARLAAAVAA"
+    },
+    {
+      "pair_id": 3,
+      "sequence_identity": 0.40625,
+      "identical_length": true,
+      "motif_mapping_unchanged": true,
+      "before_sequence": "EAAAIEALRRATGDQIAALAGLTNAQAAALAATYAEGDTKILMKQLGISEAEARALQADPANPHRNLVGAAAVLQEMIARGDPRAETLMAQVRALNDALAASQNVTVTSSAEERLVRAVGSISAAFAGAMSCGAVYLTALRNRIPLNDAGDEITIESAAK",
+      "after_sequence": "ELAALAARIRAIGRATLAALGMPAAPTAAEKEAAVADDVRTLMRQLDISEEEARAFALDPGSEHTRLVVAARRTLARHGSGSPETRAAVALLRAAADEVAALINATVTADFAARVVTATGGVSRLLAGGASCGHVLAIAMEAGIPLADAADAITIEVDVP"
+    }
+  ],
+  "baseline_source_audit": {
+    "sampler": {
+      "matches_commit_749d94d": true,
+      "sha256": "c71f7dd2cf0a34f07d72cc35c7643af937a77bfc17721f01cd1b1b2ab54c4157"
+    },
+    "denoiser": {
+      "matches_commit_749d94d": true,
+      "sha256": "7a06537a42fd0ada8de8e441994046231a1946a919fd71239b142a120d5efa2b"
+    },
+    "engine": {
+      "matches_commit_749d94d": true,
+      "sha256": "23974ef3e7f8c09cd84aa7319facb3edb27bd94f667700fc94a3cdaca7690da5"
+    }
+  },
+  "limitations": [
+    "One selected diagnostic pair is not a biological-quality sample.",
+    "Trajectory RMSDs use valid model atoms before unindexed-motif cleanup; final structure RMSDs use cleaned C-alpha coordinates.",
+    "Initializer comparisons cover Q_L_init, C_L, S_I and Z_II, not the large P_LL tensor.",
+    "Profiles include instrumentation overhead and a 12-point schedule. Use separate uninstrumented 200-point timings for latency; do not interpret profiled busy fractions as production utilization.",
+    "The replay discrepancy across processes remains unresolved; numerical compilation differences are demonstrated within process, not proven to explain every cross-process difference.",
+    "The original experiment explicitly forced triton-transition; compiled auto uses native kernels on A4000."
+  ],
+  "next_steps": [
+    "Keep the exact synchronization changes separate from numerically changing optimizations in quality comparisons.",
+    "Match and test the transition against the compiled numerical contract, alongside eager tests.",
+    "Record initial coordinates, initializer outputs, weight hashes and compiled artifacts when establishing cross-process reproducibility.",
+    "Seed LigandMPNN independently per design in future paired evaluations before spending more on refolds."
+  ],
+  "artifacts": "outs/cysteine-hydrolase/investigation/",
+  "diagnostic_source_sha256": {
+    "plot_traces.py": "dea6b3ba641fe4d5810b82cfa8955a63027587b7a425afd919f23a906720a5f9",
+    "first_call_audit.py": "19161908401340cd70a237ef66a451fc62e160d8e9e2c322de0a80523c628790",
+    "profile_forward.py": "aeeb035839a27d6b9ab5224153b400324fb003070b10b9636a351cfe717a2db0",
+    "ablate.py": "5ba4d9c952d2be95eda0ea6464e6a0e9c08aba95dc33f4c64f9f07c4bd6999e2",
+    "analyze_traces.py": "a86b32b9851f1143e780b977f0d4e303b355eb3b97361b6a3893865ff1f0d773",
+    "summarize_profiles.py": "e4066f31bcd9330fa6a4399a84d472550626f84c9a05b271cc4f015b2f9eca0d",
+    "audit_structures.py": "492c12df8c578753fa49bd950456143c631b46faf94666c51076bf7813ac6ea7",
+    "precision_probe.py": "34984fe2144b7c0e6aba1caedbcddfd1e0b423c8b08621ebef1b1f591ea263a7"
+  },
+  "production_reproducibility": {
+    "report": "reproducibility_2026-10-07.json",
+    "artifact_report": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/reproducibility.json",
+    "conclusions": [
+      "Seed-audit captures matched model state, prepared inputs, all initializer tensors and first noise draws exactly across processes.",
+      "Uninstrumented production inference was bitwise repeatable within each process, but the default fresh-process replay differed by 3.546 Angstrom backbone RMSD.",
+      "Full deterministic controls produced bitwise-identical raw coordinates across two processes. Warm end-to-end time was 23.292 seconds versus 11.625 seconds by default, measured once per mode.",
+      "Deterministic Inductor alone failed (4.526 Angstrom); compiler plus fixed Python hash and cuBLAS workspace without torch.use_deterministic_algorithms(True) also failed (3.096 Angstrom). The individual nondeterministic operation is not isolated.",
+      "The full controls are a tested diagnostic reference for this input and environment, not a general cross-backend equivalence guarantee. Production defaults and the existing image were not changed."
+    ]
+  },
+  "backbone_comparisons": {
+    "method": "Separate optimal rigid alignments for CA and N/CA/C/O, matching chain/residue number/atom name; all 160 residues. No ligand, side chains, sequence design, refolding or outlier trimming.",
+    "comparisons": [
+      {
+        "label": "Original pair 1",
+        "kind": "original",
+        "backbone_rmsd_A": 0.12467653123128207,
+        "ca_rmsd_A": 0.12224281983422125,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generation/before/inputs_cys_pair_0_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generation/after/inputs_cys_pair_0_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Original pair 2",
+        "kind": "original",
+        "backbone_rmsd_A": 2.1405138891276256,
+        "ca_rmsd_A": 2.1897807647576455,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generation/before/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generation/after/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Original pair 3",
+        "kind": "original",
+        "backbone_rmsd_A": 6.388894065033495,
+        "ca_rmsd_A": 6.437624286022981,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generation/before/inputs_cys_pair_2_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generation/after/inputs_cys_pair_2_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Original pair 4",
+        "kind": "original",
+        "backbone_rmsd_A": 1.7555171855546083,
+        "ca_rmsd_A": 1.8492993836493687,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generation/before/inputs_cys_pair_3_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generation/after/inputs_cys_pair_3_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Baseline repeat, same process",
+        "kind": "ablation",
+        "backbone_rmsd_A": 4.2117702767805326e-15,
+        "ca_rmsd_A": 5.676357906368465e-15,
+        "raw_coordinates_exact": true,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/baseline/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/baseline_repeat/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Sync removal only",
+        "kind": "ablation",
+        "backbone_rmsd_A": 4.2117702767805326e-15,
+        "ca_rmsd_A": 5.676357906368465e-15,
+        "raw_coordinates_exact": true,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/baseline/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/sync_only/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Cached neighbors, native kernels",
+        "kind": "ablation",
+        "backbone_rmsd_A": 2.4300151729004242,
+        "ca_rmsd_A": 2.5545237827191127,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/sync_only/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/native/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Transition kernel only",
+        "kind": "ablation",
+        "backbone_rmsd_A": 3.1240807940382482,
+        "ca_rmsd_A": 3.2157997702212615,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/native/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/transition/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Combined changes",
+        "kind": "ablation",
+        "backbone_rmsd_A": 3.040855313293109,
+        "ca_rmsd_A": 3.1467775976456602,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/baseline/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/transition/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Baseline replay, fresh process",
+        "kind": "replay",
+        "backbone_rmsd_A": 2.3600252547941163,
+        "ca_rmsd_A": 2.414424711962598,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generation/before/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/untraced_baseline/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Production default, same process",
+        "kind": "production_replay",
+        "backbone_rmsd_A": 4.104473932410573e-15,
+        "ca_rmsd_A": 6.156015230301793e-15,
+        "raw_coordinates_exact": true,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_default_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_default_a_1/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Production default, fresh process",
+        "kind": "production_replay",
+        "backbone_rmsd_A": 3.5458623186351916,
+        "ca_rmsd_A": 3.6324138295569575,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_default_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_default_b_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Production deterministic, same process",
+        "kind": "production_replay",
+        "backbone_rmsd_A": 2.2997257319914166e-15,
+        "ca_rmsd_A": 4.625189986700858e-15,
+        "raw_coordinates_exact": true,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_deterministic_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_deterministic_a_1/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Production deterministic, fresh process",
+        "kind": "production_replay",
+        "backbone_rmsd_A": 4.526284795332318,
+        "ca_rmsd_A": 4.580677484840135,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_deterministic_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_deterministic_b_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Production strict, same process",
+        "kind": "production_replay",
+        "backbone_rmsd_A": 2.623144195066093e-15,
+        "ca_rmsd_A": 4.06444370321209e-15,
+        "raw_coordinates_exact": true,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_strict_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_strict_a_1/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Production strict, fresh process",
+        "kind": "production_replay",
+        "backbone_rmsd_A": 2.623144195066093e-15,
+        "ca_rmsd_A": 4.06444370321209e-15,
+        "raw_coordinates_exact": true,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_strict_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_strict_b_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Production workspace, same process",
+        "kind": "production_replay",
+        "backbone_rmsd_A": 3.123361019535766e-15,
+        "ca_rmsd_A": 3.1847754232156957e-15,
+        "raw_coordinates_exact": true,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_workspace_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_workspace_a_1/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      },
+      {
+        "label": "Production workspace, fresh process",
+        "kind": "production_replay",
+        "backbone_rmsd_A": 3.0964249696999233,
+        "ca_rmsd_A": 3.1554218628153303,
+        "raw_coordinates_exact": false,
+        "left": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_workspace_a_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "right": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/investigation/structures/production_workspace_b_0/inputs_cys_pair_1_0_model_0.cif.gz",
+        "residues": 160,
+        "backbone_atoms": 640
+      }
+    ]
+  }
+}

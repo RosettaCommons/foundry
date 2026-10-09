@@ -1,4 +1,5 @@
 import logging
+import os
 
 import torch
 from beartype.typing import Any
@@ -33,6 +34,20 @@ def set_accelerator_based_on_availability(cfg: DictConfig) -> DictConfig:
         assert (
             key in cfg.trainer
         ), f"Configuration object must have a 'trainer.{key}' key."
+
+    requested_device = os.environ.get("FOUNDRY_DEVICE", "auto").lower()
+    if requested_device not in {"auto", "cpu", "mps", "cuda", "xpu"}:
+        raise ValueError(f"Unsupported FOUNDRY_DEVICE: {requested_device!r}")
+    if requested_device != "auto":
+        if requested_device == "mps" and not torch.backends.mps.is_available():
+            raise RuntimeError("FOUNDRY_DEVICE=mps requested, but MPS is unavailable")
+        cfg.trainer.accelerator = requested_device
+        if requested_device in {"cpu", "mps"}:
+            cfg.trainer.devices_per_node = 1
+            cfg.trainer.num_nodes = 1
+            cfg.trainer.precision = "32-true"
+        logger.info("Using explicitly requested %s accelerator", requested_device)
+        return cfg
 
     if torch.cuda.is_available():
         cfg.trainer.accelerator = "gpu"

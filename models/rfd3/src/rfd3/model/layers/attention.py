@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from opt_einsum import contract as einsum
+from rfd3.model import inference_acceleration as accel
 from rfd3.model.layers.block_utils import (
     create_attention_indices,
     indices_to_mask,
@@ -19,6 +20,11 @@ from rfd3.model.layers.layer_utils import (
 )
 
 from foundry.common import exists
+from foundry.model.layers.attention import (
+    dense_pair_attention,
+    use_dense_sdpa,
+    validate_attention_backend,
+)
 from foundry.training.checkpoint import activation_checkpointing
 from foundry.utils.ddp import RankedLogger
 
@@ -196,8 +202,12 @@ class LocalAttentionPairBias(nn.Module):
         kq_norm=True,
         n_attn_seq_neighbours=2,
         n_attn_keys=128,
+        dense_attention_backend="vanilla",
     ):
         super().__init__()
+        self.dense_attention_backend = validate_attention_backend(
+            dense_attention_backend
+        )
         self.c = c_a  # d_model dim same as input features
         self.n_head = n_head
 
@@ -336,8 +346,39 @@ class LocalAttentionPairBias(nn.Module):
                     )  # [D, L, c]
                 else:
                     # Original full P_LL path
-                    b = self.to_b(P_LL)
-                    if use_dense_sdpa_pairbias(
+                    b = (
+                        accel.cached_projection(self.to_b, P_LL)
+                        if accel.is_constant(P_LL)
+                        else self.to_b(P_LL)
+                    )
+                    if (
+                        not full
+                        and accel.enabled(self, q)
+                        and v.dtype == torch.bfloat16
+                        and self.c // self.n_head == 32
+                    ):
+                        attn_out = accel.gather_attention(
+                            q, k, v, b, indices, self.n_head, g
+                        )
+                    elif full and use_dense_sdpa(self, q):
+                        qh, kh, vh = [
+                            x.unflatten(-1, (self.n_head, -1)).transpose(-3, -2)
+                            for x in (q, k, v)
+                        ]
+                        attn_out = (
+                            dense_pair_attention(
+                                qh,
+                                kh,
+                                vh,
+                                b.movedim(-1, -3),
+                                scale=(self.c // self.n_head) ** -0.5,
+                                allowed=indices_to_mask(indices).unsqueeze(-3),
+                            )
+                            .transpose(-3, -2)
+                            .flatten(-2)
+                            * g
+                        )
+                    elif use_dense_sdpa_pairbias(
                         Q=q, indices=indices, full=full, H=self.n_head
                     ):
                         # Mathematically equivalent to the sparse path below, but avoids

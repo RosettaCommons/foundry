@@ -1,0 +1,255 @@
+{
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+  "torch": "2.11.0+cu130",
+  "cpu_affinity": [
+    0,
+    5,
+    6,
+    7,
+    32,
+    33,
+    34,
+    35
+  ],
+  "warmup_seconds": 147.32775054400554,
+  "source": "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/production-workers/src/models/rfd3/src/rfd3/__init__.py",
+  "steps": 50,
+  "inference_batch_size": 4,
+  "diffusion_batch_size": 1,
+  "initializer_policy": "unmodified production",
+  "compile_model": true,
+  "low_memory_mode": false,
+  "includes_file_writing": true,
+  "runs": [
+    {
+      "workers": 0,
+      "repetition": 0,
+      "total_seconds": 8.788676530006342,
+      "first_batch_seconds": 2.1998547820112435,
+      "later_batch_seconds": [
+        2.1478904579998925,
+        2.220256372995209,
+        2.22000833999482
+      ],
+      "steady_designs_per_second": 1.8214507230856414,
+      "total_designs_per_second": 1.8205243924239016,
+      "model_forward_seconds": [
+        1.8405250999931013,
+        1.8384151700010989,
+        1.854911175003508,
+        1.8551072959962767
+      ],
+      "file_writing_seconds": 0.6038537949498277,
+      "validation_seconds_after_timing": 0.04316542200103868,
+      "saved_designs": 16,
+      "input_feature_parity": true,
+      "peak_allocated_bytes": 32169294336
+    },
+    {
+      "workers": 2,
+      "repetition": 0,
+      "total_seconds": 18.461172434996115,
+      "first_batch_seconds": 11.32313457399141,
+      "later_batch_seconds": [
+        2.0363851570000406,
+        2.233472496009199,
+        2.0525952390016755
+      ],
+      "steady_designs_per_second": 1.897997534337229,
+      "total_designs_per_second": 0.8666838499200318,
+      "model_forward_seconds": [
+        1.8519414469919866,
+        1.833092471002601,
+        1.987792914005695,
+        1.8490850199887063
+      ],
+      "file_writing_seconds": 0.6049468740238808,
+      "validation_seconds_after_timing": 0.04484431799210142,
+      "saved_designs": 16,
+      "input_feature_parity": true,
+      "peak_allocated_bytes": 32169294336
+    },
+    {
+      "workers": 4,
+      "repetition": 0,
+      "total_seconds": 18.040216207999038,
+      "first_batch_seconds": 10.881144411003334,
+      "later_batch_seconds": [
+        2.0539099409943447,
+        2.0502902370062657,
+        2.0240744429902406
+      ],
+      "steady_designs_per_second": 1.958136790883529,
+      "total_designs_per_second": 0.8869073305732109,
+      "model_forward_seconds": [
+        1.9277973650023341,
+        1.8916481470077997,
+        1.8340115189930657,
+        1.8336148059897823
+      ],
+      "file_writing_seconds": 0.60028210101882,
+      "validation_seconds_after_timing": 0.04431598400697112,
+      "saved_designs": 16,
+      "input_feature_parity": true,
+      "peak_allocated_bytes": 32169294336
+    },
+    {
+      "workers": 4,
+      "repetition": 1,
+      "total_seconds": 23.94253185999696,
+      "first_batch_seconds": 16.607362130991532,
+      "later_batch_seconds": [
+        2.048110217001522,
+        2.036597651007469,
+        2.0125692790024914
+      ],
+      "steady_designs_per_second": 1.968091610512026,
+      "total_designs_per_second": 0.6682668355025855,
+      "model_forward_seconds": [
+        1.8317236400034744,
+        1.834158693003701,
+        1.8457737300050212,
+        1.8351951310032746
+      ],
+      "file_writing_seconds": 0.6016526360035641,
+      "validation_seconds_after_timing": 0.07785993300785776,
+      "saved_designs": 16,
+      "input_feature_parity": true,
+      "peak_allocated_bytes": 32169294336
+    },
+    {
+      "workers": 2,
+      "repetition": 1,
+      "total_seconds": 18.06284667,
+      "first_batch_seconds": 10.886993496998912,
+      "later_batch_seconds": [
+        2.0303625090018613,
+        2.123828042007517,
+        2.0710952899971744
+      ],
+      "steady_designs_per_second": 1.927622330360295,
+      "total_designs_per_second": 0.8857961478781684,
+      "model_forward_seconds": [
+        1.8911049000016646,
+        1.8345805760036455,
+        1.889233055000659,
+        1.8702988360018935
+      ],
+      "file_writing_seconds": 0.599143553947215,
+      "validation_seconds_after_timing": 0.05847187100152951,
+      "saved_designs": 16,
+      "input_feature_parity": true,
+      "peak_allocated_bytes": 32169294336
+    },
+    {
+      "workers": 0,
+      "repetition": 1,
+      "total_seconds": 8.788917871992453,
+      "first_batch_seconds": 2.2505275150033413,
+      "later_batch_seconds": [
+        2.134927784994943,
+        2.2002731599932304,
+        2.2025505360070383
+      ],
+      "steady_designs_per_second": 1.8354934467734303,
+      "total_designs_per_second": 1.8204744011759426,
+      "model_forward_seconds": [
+        1.8538020480045816,
+        1.8172176710068015,
+        1.8421366169932298,
+        1.8455163940088823
+      ],
+      "file_writing_seconds": 0.5925769209716236,
+      "validation_seconds_after_timing": 0.05440781499783043,
+      "saved_designs": 16,
+      "input_feature_parity": true,
+      "peak_allocated_bytes": 32169294336
+    }
+  ],
+  "exact_coordinate_hash_parity": true,
+  "saved_cif_count": 96,
+  "saved_json_count": 96,
+  "artifact_directory": "outs/production-workers/b4",
+  "source_commit": "8ce2529",
+  "atom_bucket": 3072,
+  "token_bucket": 256,
+  "seed": 42,
+  "inference_kernel_backend": "torch",
+  "source_note": "Frozen RFD3 source byte-for-byte matched commit 8ce2529 during measurement",
+  "validation": "Finite coordinates; gzip CIF payloads and JSON metadata read successfully; input feature hashes and coordinate hashes match across all six runs",
+  "prefetch_retrieval_diagnostic": {
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+    "batch": 4,
+    "workers": 2,
+    "compile_model": true,
+    "low_memory_mode": false,
+    "initializer": "unmodified production",
+    "prefetch_factor": 2,
+    "num_timesteps": 50,
+    "atom_bucket": 3072,
+    "token_bucket": 256,
+    "warmup_seconds": 20.263201219029725,
+    "total_seconds": 27.37123561836779,
+    "per_example_retrieval_seconds": [
+      9.27378469798714,
+      5.788123235106468e-05,
+      0.04351725475862622,
+      0.023825764190405607,
+      0.013826057780534029,
+      0.013412682805210352,
+      0.018356306944042444,
+      0.020184556022286415,
+      0.013761317357420921,
+      0.013707937207072973,
+      0.017338905949145555,
+      0.023204039316624403,
+      0.011891058180481195,
+      0.00909713702276349,
+      0.02234503999352455,
+      0.015875769779086113,
+      0.014476243872195482,
+      0.011461102869361639,
+      0.019133734982460737,
+      0.01721273409202695,
+      0.015349513851106167,
+      0.012800946831703186,
+      0.02239333000034094,
+      0.02398104639723897,
+      0.014087480958551168,
+      0.01661123987287283,
+      0.01974795525893569,
+      0.022113284096121788,
+      0.016040345653891563,
+      0.016153377015143633,
+      0.007426578085869551,
+      0.007998942863196135
+    ],
+    "per_batch_retrieval_seconds": [
+      9.341185598168522,
+      0.06577960355207324,
+      0.06801219983026385,
+      0.05920900497585535,
+      0.06228381581604481,
+      0.07452483708038926,
+      0.07255996018648148,
+      0.04761924361810088
+    ],
+    "mean_later_batch_retrieval_seconds": 0.06428409500845841,
+    "max_later_batch_retrieval_seconds": 0.07452483708038926,
+    "forward_seconds": [
+      1.8209412922151387,
+      1.789292713161558,
+      1.849152693990618,
+      1.8129783067852259,
+      1.8045229860581458,
+      1.790409835986793,
+      1.8106519388966262,
+      1.815923579968512
+    ],
+    "worker_shutdown_seconds": [
+      1.8656667708419263
+    ],
+    "includes_file_writing": true,
+    "retrieval_definition": "Wall time inside next(example_iterator), includes IPC/unpickling and waiting; first batch includes worker startup; no CUDA synchronization in retrieval hook"
+  }
+}
