@@ -1,0 +1,600 @@
+{
+  "scope": "RTX A4000, cysteine hydrolase, 160 protein residues, B=1 independent input, D=1 diffusion sample, 200 schedule points, full memory, native kernels, 4 PyTorch CPU threads. No downstream refolds.",
+  "fast_image": "/projects/ml/pipelines/containers/foundry_fast.sif",
+  "image_switch_benchmark": {
+    "torch": "2.11.0+cu128",
+    "gpu": "NVIDIA RTX A4000",
+    "source": "/opt/foundry/models/rfd3/src/rfd3/engine.py",
+    "batch_examples": 1,
+    "diffusion_samples": 1,
+    "workers": 0,
+    "schedule_points": 200,
+    "full_memory": true,
+    "timings": [
+      {
+        "mode": "eager",
+        "seconds_excluding_model_load_and_structure_dump": 45.64783902838826,
+        "first_call_for_mode": true,
+        "peak_allocated_GB": 5.681790464
+      },
+      {
+        "mode": "compiled",
+        "seconds_excluding_model_load_and_structure_dump": 388.5495229549706,
+        "first_call_for_mode": true,
+        "peak_allocated_GB": 9.105425408
+      },
+      {
+        "mode": "compiled",
+        "seconds_excluding_model_load_and_structure_dump": 13.375426459126174,
+        "first_call_for_mode": false,
+        "peak_allocated_GB": 9.105437696
+      },
+      {
+        "mode": "eager",
+        "seconds_excluding_model_load_and_structure_dump": 41.37371915765107,
+        "first_call_for_mode": false,
+        "peak_allocated_GB": 9.105437696
+      },
+      {
+        "mode": "eager",
+        "seconds_excluding_model_load_and_structure_dump": 40.78620359674096,
+        "first_call_for_mode": false,
+        "peak_allocated_GB": 9.105437696
+      },
+      {
+        "mode": "compiled",
+        "seconds_excluding_model_load_and_structure_dump": 12.564261580817401,
+        "first_call_for_mode": false,
+        "peak_allocated_GB": 9.105437696
+      }
+    ]
+  },
+  "pipeline_defaults_validation": {
+    "defaults": {
+      "compile_model": true,
+      "inference_kernel_backend": "auto",
+      "inference_num_workers": 2,
+      "inference_batch_size": 1,
+      "diffusion_batch_size": 1,
+      "low_memory_mode": false,
+      "seed": 0
+    },
+    "overrides": {
+      "compile_model": false,
+      "inference_kernel_backend": "torch",
+      "inference_num_workers": 0,
+      "inference_batch_size": 2,
+      "diffusion_batch_size": 1,
+      "low_memory_mode": false,
+      "seed": 0
+    },
+    "old_argument_rejected": "Could not override 'model_seeds'.\nTo append to your config use +model_seeds=0"
+  },
+  "transition_coverage": {
+    "conditioned_count": 48,
+    "plain_count": 16,
+    "conditioned": [
+      "diffusion_module.encoder.blocks.0.attention_pair_bias",
+      "diffusion_module.encoder.blocks.0.transition_block",
+      "diffusion_module.encoder.blocks.1.attention_pair_bias",
+      "diffusion_module.encoder.blocks.1.transition_block",
+      "diffusion_module.encoder.blocks.2.attention_pair_bias",
+      "diffusion_module.encoder.blocks.2.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.0.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.0.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.1.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.1.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.2.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.2.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.3.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.3.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.4.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.4.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.5.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.5.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.6.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.6.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.7.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.7.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.8.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.8.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.9.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.9.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.10.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.10.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.11.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.11.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.12.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.12.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.13.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.13.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.14.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.14.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.15.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.15.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.16.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.16.transition_block",
+      "diffusion_module.diffusion_transformer.blocks.17.attention_pair_bias",
+      "diffusion_module.diffusion_transformer.blocks.17.transition_block",
+      "diffusion_module.decoder.atom_transformer.0.attention_pair_bias",
+      "diffusion_module.decoder.atom_transformer.0.transition_block",
+      "diffusion_module.decoder.atom_transformer.1.attention_pair_bias",
+      "diffusion_module.decoder.atom_transformer.1.transition_block",
+      "diffusion_module.decoder.atom_transformer.2.attention_pair_bias",
+      "diffusion_module.decoder.atom_transformer.2.transition_block"
+    ],
+    "plain": [
+      "token_initializer.transition_post_token",
+      "token_initializer.transition_post_atom",
+      "token_initializer.transition_1.0",
+      "token_initializer.transition_1.1",
+      "token_initializer.transformer_stack.0.z_transition",
+      "token_initializer.transformer_stack.0.s_transition",
+      "token_initializer.transformer_stack.1.z_transition",
+      "token_initializer.transformer_stack.1.s_transition",
+      "diffusion_module.diffusion_token_encoder.transition_1.0",
+      "diffusion_module.diffusion_token_encoder.transition_1.1",
+      "diffusion_module.diffusion_token_encoder.transition_2.0",
+      "diffusion_module.diffusion_token_encoder.transition_2.1",
+      "diffusion_module.diffusion_token_encoder.pairformer_stack.0.z_transition",
+      "diffusion_module.diffusion_token_encoder.pairformer_stack.0.s_transition",
+      "diffusion_module.diffusion_token_encoder.pairformer_stack.1.z_transition",
+      "diffusion_module.diffusion_token_encoder.pairformer_stack.1.s_transition"
+    ]
+  },
+  "warm_means_seconds": {
+    "eager": 41.079961377196014,
+    "compiled": 12.969844019971788
+  },
+  "compile_switch_warm_speedup": 3.167344288330568,
+  "cold_compile_call_seconds": 388.5495229549706,
+  "approximate_cold_break_even_calls": 14,
+  "original_image_benchmark": {
+    "torch": "2.11.0+cu128",
+    "gpu": "NVIDIA RTX A4000",
+    "image": "/projects/ml/pipelines/containers/foundry.sif",
+    "diffusion_samples": 1,
+    "schedule_points": 200,
+    "full_memory": true,
+    "timings": [
+      {
+        "repeat": 0,
+        "seconds_excluding_model_load_and_structure_dump": 44.2906220247969,
+        "first_call": true
+      },
+      {
+        "repeat": 1,
+        "seconds_excluding_model_load_and_structure_dump": 41.77101834863424,
+        "first_call": false
+      },
+      {
+        "repeat": 2,
+        "seconds_excluding_model_load_and_structure_dump": 40.68577223457396,
+        "first_call": false
+      }
+    ]
+  },
+  "original_image_warm_mean_seconds": 41.2283952916041,
+  "original_to_fast_image_warm_speedup": 3.1787888295432083,
+  "isolated_transition": {
+    "gpu": "NVIDIA RTX A4000",
+    "torch": "2.11.0+cu128",
+    "normalization_included": false,
+    "weights_preconverted": true,
+    "workloads": [
+      {
+        "rows": 256,
+        "channels": 128,
+        "hidden": 512,
+        "timings": {
+          "compiled_native": {
+            "graph_gpu_median_ms": 0.01791999936103821,
+            "host_wall_median_ms": 0.307740814362963,
+            "graph_gpu_samples_ms": [
+              0.01826133330663045,
+              0.01795413295427958,
+              0.017851734161376955,
+              0.017885865767796834,
+              0.017851734161376955,
+              0.017885865767796834,
+              0.018090667327245076,
+              0.01853440006573995,
+              0.01795413295427958,
+              0.01815893252690633,
+              0.01791999936103821,
+              0.017885865767796834,
+              0.01791999936103821,
+              0.017885865767796834
+            ],
+            "host_wall_samples_ms": [
+              0.36004014934102696,
+              0.22479668259620667,
+              0.3851424902677536,
+              0.24979859590530396,
+              0.3500516836841901,
+              0.24694760019580522,
+              0.42361974095304805,
+              0.26542994504173595,
+              0.257005263119936,
+              0.4058311382929484
+            ]
+          },
+          "compiled_custom": {
+            "graph_gpu_median_ms": 0.012492799758911132,
+            "host_wall_median_ms": 0.45594422457118833,
+            "graph_gpu_samples_ms": [
+              0.01276586651802063,
+              0.012526933352152507,
+              0.012492799758911132,
+              0.012663466731707256,
+              0.012492799758911132,
+              0.012492799758911132,
+              0.012458667159080505,
+              0.012868266304334004,
+              0.012526933352152507,
+              0.012458667159080505,
+              0.012458667159080505,
+              0.11240106423695882,
+              0.012492799758911132,
+              0.012458667159080505
+            ],
+            "host_wall_samples_ms": [
+              0.4182739493747552,
+              0.5189329075316588,
+              0.4167792697747548,
+              0.4552389184633891,
+              0.5803215938309828,
+              0.39200587198138237,
+              0.4153468335668246,
+              0.5199923490484556,
+              0.4566495306789875,
+              0.4571969000001748
+            ]
+          }
+        },
+        "relative_l2_difference": 0.004169176798313856
+      },
+      {
+        "rows": 3072,
+        "channels": 128,
+        "hidden": 512,
+        "timings": {
+          "compiled_native": {
+            "graph_gpu_median_ms": 0.06000639994939168,
+            "host_wall_median_ms": 0.1425229012966156,
+            "graph_gpu_samples_ms": [
+              0.059084800879160564,
+              0.05847040017445882,
+              0.05847040017445882,
+              0.05867520173390706,
+              0.05843626658121745,
+              0.05881173213322957,
+              0.05850453376770019,
+              0.06167893409729004,
+              0.06113280057907104,
+              0.06099626620610555,
+              0.06130346854527791,
+              0.06116693417231242,
+              0.06103039979934692,
+              0.0609279990196228
+            ],
+            "host_wall_samples_ms": [
+              0.15599833180507025,
+              0.14456063508987427,
+              0.14299070462584496,
+              0.14205509796738625,
+              0.13887292395035425,
+              0.14086303611596426,
+              0.13570962473750114,
+              0.13518153379360834,
+              0.16142989819248518,
+              0.18542117128769556
+            ]
+          },
+          "compiled_custom": {
+            "graph_gpu_median_ms": 0.03397973378499349,
+            "host_wall_median_ms": 0.2467739551017682,
+            "graph_gpu_samples_ms": [
+              0.03341653347015381,
+              0.03293866713841756,
+              0.03300693432490031,
+              0.03297280073165894,
+              0.03297280073165894,
+              0.03300693432490031,
+              0.03290453354517619,
+              0.03495253324508667,
+              0.034815998872121175,
+              0.034577067693074545,
+              0.034645334879557295,
+              0.03461120128631592,
+              0.034645334879557295,
+              0.034542934099833174
+            ],
+            "host_wall_samples_ms": [
+              0.24037833015124002,
+              0.2174124432106813,
+              0.19852466260393462,
+              0.19613076001405716,
+              0.26246653869748116,
+              0.5485751355687777,
+              0.3245416097342968,
+              0.26514331499735516,
+              0.21145318945248923,
+              0.25316958005229634
+            ]
+          }
+        },
+        "relative_l2_difference": 0.0035766155924648046
+      },
+      {
+        "rows": 65536,
+        "channels": 128,
+        "hidden": 512,
+        "timings": {
+          "compiled_native": {
+            "graph_gpu_median_ms": 1.2169898986816405,
+            "host_wall_median_ms": 1.22712889375786,
+            "graph_gpu_samples_ms": [
+              1.2156927744547525,
+              1.216034189860026,
+              1.2195498148600261,
+              1.2336128234863282,
+              1.2250794728597005,
+              1.2189013163248699,
+              1.2166826883951822,
+              1.2184234619140626,
+              1.2161706288655598,
+              1.217297108968099,
+              1.2175360361735026,
+              1.2164095560709636,
+              1.2150442759195963,
+              1.216034189860026
+            ],
+            "host_wall_samples_ms": [
+              1.2399217424293358,
+              1.2302510440349579,
+              1.2268038156131904,
+              1.2262159648040931,
+              1.2250698171555996,
+              1.22627563153704,
+              1.2274539719025295,
+              1.2261142022907734,
+              1.2274788382152717,
+              1.2291377720733483
+            ]
+          },
+          "compiled_custom": {
+            "graph_gpu_median_ms": 0.7127893447875977,
+            "host_wall_median_ms": 0.7222061666349571,
+            "graph_gpu_samples_ms": [
+              0.7099050521850586,
+              0.7008597056070963,
+              0.7101098378499349,
+              0.7189845403035482,
+              0.7181311925252278,
+              0.7185749053955078,
+              0.7184042612711589,
+              0.6936576207478841,
+              0.6722560246785482,
+              0.6749866485595704,
+              0.7121237436930339,
+              0.7138986587524414,
+              0.7134549458821614,
+              0.7136597315470378
+            ],
+            "host_wall_samples_ms": [
+              0.7236944821973642,
+              0.7328574545681477,
+              0.7191003300249577,
+              0.7203739757339159,
+              0.7207178510725498,
+              0.8472091518342495,
+              0.6589841097593307,
+              0.7064614444971085,
+              0.7336430872480074,
+              0.7774528115987778
+            ]
+          }
+        },
+        "relative_l2_difference": 0.0035646131727844477
+      },
+      {
+        "rows": 256,
+        "channels": 256,
+        "hidden": 1024,
+        "timings": {
+          "compiled_native": {
+            "graph_gpu_median_ms": 0.023671467105547586,
+            "host_wall_median_ms": 0.1578951720148325,
+            "graph_gpu_samples_ms": [
+              0.02594133416811625,
+              0.025634133815765382,
+              0.025600000222524007,
+              0.025600000222524007,
+              0.025600000222524007,
+              0.025634133815765382,
+              0.025600000222524007,
+              0.02174293398857117,
+              0.021333332856496176,
+              0.0212991992632548,
+              0.0212991992632548,
+              0.0212991992632548,
+              0.0212991992632548,
+              0.0212991992632548
+            ],
+            "host_wall_samples_ms": [
+              0.17792250340183577,
+              0.17666562149922052,
+              0.17535146325826645,
+              0.21528021122018495,
+              0.2075567531088988,
+              0.13991066565116247,
+              0.14043888077139854,
+              0.13692940895756087,
+              0.13637288163105646,
+              0.13644893964131674
+            ]
+          },
+          "compiled_custom": {
+            "graph_gpu_median_ms": 0.020292266209920248,
+            "host_wall_median_ms": 0.3519850162168344,
+            "graph_gpu_samples_ms": [
+              0.020343466599782308,
+              0.020070399840672812,
+              0.020104533433914183,
+              0.020172800620396933,
+              0.020036266247431437,
+              0.020036266247431437,
+              0.01996799906094869,
+              0.02095786730448405,
+              0.02054826617240906,
+              0.020480000972747804,
+              0.020309333006540933,
+              0.020275199413299562,
+              0.020377600193023683,
+              0.020343466599782308
+            ],
+            "host_wall_samples_ms": [
+              0.581861628840367,
+              0.3802239273985227,
+              0.3476264576117198,
+              0.25488054379820824,
+              0.25368671243389446,
+              0.6035911850631237,
+              0.46808114275336266,
+              0.356343574821949,
+              0.21491233880321184,
+              0.20403508096933365
+            ]
+          }
+        },
+        "relative_l2_difference": 0.004155408125370741
+      },
+      {
+        "rows": 3072,
+        "channels": 256,
+        "hidden": 1024,
+        "timings": {
+          "compiled_native": {
+            "graph_gpu_median_ms": 0.15605759620666504,
+            "host_wall_median_ms": 0.17312420532107353,
+            "graph_gpu_samples_ms": [
+              0.16114346186319986,
+              0.1605631987253825,
+              0.15704746246337892,
+              0.15697919527689616,
+              0.15725226402282716,
+              0.15773013432820637,
+              0.15790079434712728,
+              0.15513599713643392,
+              0.15465812683105468,
+              0.15472639401753743,
+              0.15465812683105468,
+              0.15486292839050292,
+              0.15465812683105468,
+              0.15486292839050292
+            ],
+            "host_wall_samples_ms": [
+              0.16466332599520683,
+              0.16432913641134897,
+              0.16525955870747566,
+              0.16870632146795592,
+              0.16849180683493614,
+              0.17961530635754266,
+              0.17983261495828629,
+              0.17754208917419115,
+              0.1781038319071134,
+              0.2579346609612306
+            ]
+          },
+          "compiled_custom": {
+            "graph_gpu_median_ms": 0.10414079825083415,
+            "host_wall_median_ms": 0.20157932303845882,
+            "graph_gpu_samples_ms": [
+              0.10400426387786865,
+              0.10379947026570638,
+              0.10386772950490315,
+              0.10373120307922364,
+              0.10383360385894776,
+              0.10448213418324788,
+              0.10683733622233073,
+              0.10451626777648926,
+              0.10417493184407552,
+              0.1042090654373169,
+              0.10414079825083415,
+              0.10414079825083415,
+              0.10414079825083415,
+              0.10410666465759277
+            ],
+            "host_wall_samples_ms": [
+              0.20548577109972635,
+              0.1996867669125398,
+              0.19905896236499152,
+              0.20023869971434274,
+              0.20043163870771727,
+              0.5775474322338899,
+              0.4337979791065057,
+              0.23902527367075285,
+              0.20272700736920038,
+              0.19833225136001906
+            ]
+          }
+        },
+        "relative_l2_difference": 0.0035451315343379974
+      }
+    ],
+    "measurement_order": "Native, custom, custom, native per shape; no concurrent test suite in final run",
+    "host_wall_definition": "Median of 10 samples, each timing 30 calls plus final CUDA synchronize, divided by 30",
+    "device_definition": "Median of 14 samples, each timing 30 CUDA graph replays with CUDA events, divided by 30"
+  },
+  "previous_compiled_transition_comparison": {
+    "native_forward_seconds": [
+      9.237276328727603,
+      8.949884045869112
+    ],
+    "custom_forward_seconds": [
+      9.14433481823653,
+      9.054003872908652
+    ],
+    "interpretation": "No meaningful incremental end-to-end transition speedup in the earlier A4000 B1/D1 compiled diagnostic."
+  },
+  "limits": [
+    "Two warmed repeats per mode; descriptive timings, not confidence intervals.",
+    "Timing includes preprocessing and sampling, excludes model loading and output writing. Container startup and scheduler time are excluded.",
+    "Workers were set to 0 for one-input repeated calls; production image default is 2.",
+    "compile_model=False/B1 uses legacy eager inference; True uses padded compiled inference. This measures the practical configuration switch, not compiler code generation alone.",
+    "Compilation and alternate kernels change numerical trajectories; this is a speed test, not an equivalence claim.",
+    "The new image has a cold-cache penalty. Persistent caches reuse code, not loaded model weights or live CUDA graphs."
+  ],
+  "pipeline_changes": {
+    "status": "Locally staged in outs/pipelines-fast-pr; not pushed or deployed",
+    "runtime_fields": [
+      "compile_model",
+      "inference_kernel_backend",
+      "inference_num_workers",
+      "inference_batch_size"
+    ],
+    "field_defaults": "None inherits installed image defaults; no unsupported new flags sent by default to older images",
+    "fast_image_defaults": {
+      "compile_model": true,
+      "inference_kernel_backend": "auto",
+      "inference_num_workers": 2,
+      "inference_batch_size": 1,
+      "diffusion_batch_size": 1,
+      "low_memory_mode": false,
+      "seed": 0
+    },
+    "cpus_per_task": 4,
+    "seed_parameter_on_digs": "seed",
+    "seed_zero_preserved": true,
+    "tests": "22 focused tests passed; Ruff passed; generated overrides composed against real fast-image configuration"
+  },
+  "conclusions": [
+    "Direct original-image to fast-image comparison: 41.228 to 12.970 seconds warm, 3.179x speedup on the tested A4000 B1/D1 workload.",
+    "The fast image with compilation disabled averaged 41.080 seconds. The practical compiled padded path supplies the warm gain.",
+    "Earlier compiled-native versus compiled-transition comparison was 9.094 versus 9.099 seconds, showing no meaningful extra transition speedup. These are separate experiments with different timing boundaries.",
+    "Custom transition reduces GPU execution time but can increase host-driven invocation time for small workloads. It does not cover the 48 conditioned transition modules in this checkpoint.",
+    "Cold compilation took 388.550 seconds in this test. Warm gains do not imply faster short cold jobs.",
+    "Keep sampler/recycling protocol unchanged. Use image defaults and auto backend rather than forcing custom kernels universally."
+  ]
+}

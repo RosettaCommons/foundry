@@ -1,0 +1,28 @@
+Bootstrap: localimage
+From: {{ base_image }}
+
+%files
+    {{ snapshot }} /opt/foundry-fast-source
+
+%post
+    set -eu
+    rm -rf /opt/foundry
+    mv /opt/foundry-fast-source /opt/foundry
+    /opt/foundry-env/bin/python -m pip install --no-cache-dir --no-deps -e /opt/foundry
+    /opt/foundry-env/bin/python -m pip install --no-cache-dir 'pytest==8.4.2'
+
+%environment
+    export RFD3_LOW_MEMORY_MODE=0
+    export TORCH_COMPILE_DISABLE=0
+
+%labels
+    org.foundry.variant foundry_fast
+    org.foundry.source_manifest /opt/foundry/IMAGE_SOURCE.json
+    org.foundry.description "Local Foundry snapshot with compiled padded RFD3 inference and optional Triton kernels"
+
+%test
+    cd /opt/foundry
+    /opt/foundry-env/bin/python -c 'import torch, triton; from rfd3.engine import RFD3InferenceConfig; from rfd3.model import kernel_ops; c=RFD3InferenceConfig(); assert c.compile_model and not c.low_memory_mode and c.inference_kernel_backend == "auto"; assert c.inference_num_workers == 2; print("Foundry fast import check:", torch.__version__, triton.__version__)'
+
+%runscript
+    exec "$@"

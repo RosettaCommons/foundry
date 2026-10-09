@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from einops import rearrange
+from rfd3.model import inference_acceleration as accel
 from rfd3.model.layers.attention import (
     GatedCrossAttention,
     LocalAttentionPairBias,
@@ -656,6 +657,13 @@ class LocalTokenTransformer(nn.Module):
             n_attn_seq_neighbours=self.n_local_tokens,
         )
 
+        if full and accel.graph_enabled(self, A_I):
+            return accel.graph_call(
+                self, self._forward_blocks, (A_I, S_I, Z_II, indices), full=full
+            )
+        return self._forward_blocks(A_I, S_I, Z_II, indices, full=full)
+
+    def _forward_blocks(self, A_I, S_I, Z_II, indices, *, full):
         for i, block in enumerate(self.blocks):
             # Set checkpointing
             block.attention_pair_bias.use_checkpointing = not DISABLE_CHECKPOINTING
@@ -689,8 +697,25 @@ class LocalAtomTransformer(nn.Module):
         )
 
     def forward(self, Q_L, C_L, P_LL, **kwargs):
+        if (
+            accel.graph_enabled(self, Q_L)
+            and isinstance(C_L, torch.Tensor)
+            and isinstance(P_LL, torch.Tensor)
+            and set(kwargs) == {"indices"}
+        ):
+            return accel.graph_call(
+                self,
+                self._forward_graph,
+                (Q_L, C_L, P_LL, kwargs["indices"]),
+                full=False,
+            )
         for block in self.blocks:
             Q_L = block(Q_L, C_L, P_LL, **kwargs)
+        return Q_L
+
+    def _forward_graph(self, Q_L, C_L, P_LL, indices, *, full):
+        for block in self.blocks:
+            Q_L = block(Q_L, C_L, P_LL, indices=indices, full=full)
         return Q_L
 
 
@@ -779,6 +804,64 @@ class CompactStreamingDecoder(nn.Module):
         self.downcast = Downcast(c_atom=c_atom, c_token=c_token, c_s=c_s, **downcast)
 
     def forward(
+        self,
+        A_I,
+        S_I,
+        Z_II,
+        Q_L,
+        C_L,
+        P_LL,
+        tok_idx,
+        indices,
+        f=None,
+        chunked_pairwise_embedder=None,
+        initializer_outputs=None,
+    ):
+        if (
+            accel.graph_enabled(self, Q_L)
+            and accel.indexing_enabled()
+            and chunked_pairwise_embedder is None
+            and isinstance(P_LL, torch.Tensor)
+        ):
+            # Token membership is fixed throughout a rollout. Key the graph by
+            # its identity so another same-shaped CFG mapping gets fresh masks.
+            return accel.graph_call(
+                self,
+                self._forward_graph,
+                (A_I, S_I, Z_II, Q_L, C_L, P_LL, tok_idx, indices),
+                full=False,
+                constant_inputs=(6,),
+            )
+        return self._forward(
+            A_I,
+            S_I,
+            Z_II,
+            Q_L,
+            C_L,
+            P_LL,
+            tok_idx,
+            indices,
+            f=f,
+            chunked_pairwise_embedder=chunked_pairwise_embedder,
+            initializer_outputs=initializer_outputs,
+        )
+
+    def _forward_graph(
+        self,
+        A_I,
+        S_I,
+        Z_II,
+        Q_L,
+        C_L,
+        P_LL,
+        tok_idx,
+        indices,
+        *,
+        full,
+    ):
+        return self._forward(A_I, S_I, Z_II, Q_L, C_L, P_LL, tok_idx, indices)
+
+    def _forward(
         self,
         A_I,
         S_I,

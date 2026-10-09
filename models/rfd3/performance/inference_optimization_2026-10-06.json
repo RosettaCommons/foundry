@@ -1,0 +1,284 @@
+{
+  "base_revision": "749d94d",
+  "source_sha256": {
+    "engine.py": "278eb56841d91f8466d91f3edf90820810be6ff131f40e65a0087dea3391ba41",
+    "inference/batching.py": "64f8b7ff556184c704cf9312fd3f20338abd4557ecac84d594293cf23e4c9939",
+    "inference/loading.py": "e87d84a7f979004e77b442f542582d89583ca0254357a01c8895eb5979a29463",
+    "inference/runtime.py": "89eea2090a6dc37095b541cdcca401d58c79ec6a1a8c7b1fb6cbcb2775225ee6",
+    "model/batched_denoiser.py": "50d92d25d7f878838b9f11e9c93d5377d235cc0d39adc8ee8f103a9f36689e22",
+    "model/batched_sampler.py": "2263e7066453c9a4b79b2a6ececaa765670eb0dcee0a5473e8b432851d9ceb50",
+    "model/layers/batched.py": "d2e3e1781f7bdadd4e38b2530c2d158639ed9b21ff4dd85f4108118df3bb25de"
+  },
+  "blackwell_auto": {
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+    "batch": 4,
+    "workers": 2,
+    "steps": 50,
+    "compile_model": true,
+    "low_memory_mode": false,
+    "initializer": "unmodified",
+    "runs": [
+      {
+        "mode": "before",
+        "resolved_policy": "torch",
+        "repeat": 0,
+        "total_seconds": 18.265147358994,
+        "forward_seconds": [
+          1.8750185070093721,
+          1.8102598330006003,
+          1.8214482699986547,
+          1.818150624007103
+        ],
+        "repeat_coordinate_parity": true,
+        "first_batch_seconds": 11.52838294400135,
+        "later_batch_seconds": [
+          1.9442063939932268,
+          1.9786218240042217,
+          1.9752902180043748
+        ],
+        "peak_allocated_bytes": 32182931968
+      },
+      {
+        "mode": "after",
+        "resolved_policy": "triton-transition",
+        "repeat": 1,
+        "total_seconds": 15.965168993003317,
+        "forward_seconds": [
+          1.5101875269901939,
+          1.4278232850047061,
+          1.4508627159957541,
+          1.4455560450005578
+        ],
+        "repeat_coordinate_parity": true,
+        "first_batch_seconds": 10.39516808600456,
+        "later_batch_seconds": [
+          1.5603903019946301,
+          1.604595157012227,
+          1.6040734319976764
+        ],
+        "peak_allocated_bytes": 32182931968
+      },
+      {
+        "mode": "after",
+        "resolved_policy": "triton-transition",
+        "repeat": 2,
+        "total_seconds": 17.092219440004556,
+        "forward_seconds": [
+          1.6229549540003063,
+          1.425733954005409,
+          1.5992051249922952,
+          1.446876567992149
+        ],
+        "repeat_coordinate_parity": true,
+        "first_batch_seconds": 11.326969012996415,
+        "later_batch_seconds": [
+          1.5589376169955358,
+          1.7534471610124456,
+          1.605333133993554
+        ],
+        "peak_allocated_bytes": 32182931968
+      },
+      {
+        "mode": "before",
+        "resolved_policy": "torch",
+        "repeat": 3,
+        "total_seconds": 17.44348327300395,
+        "forward_seconds": [
+          1.8286124950100202,
+          1.7915528680023272,
+          1.8149325130070793,
+          1.8138241630076664
+        ],
+        "repeat_coordinate_parity": true,
+        "first_batch_seconds": 10.712626863998594,
+        "later_batch_seconds": [
+          1.9230701850028709,
+          1.9726282420015195,
+          1.9691887100052554
+        ],
+        "peak_allocated_bytes": 32182931968
+      }
+    ],
+    "both_modes_use_pinned_loader": true,
+    "baseline_note": "Original sampler, RNG, denoiser and output method; current topology preparation also computes unused cached indices in the before variant",
+    "atom_bucket": 3072,
+    "token_bucket": 256,
+    "seed": 42
+  },
+  "comparison": [
+    {
+      "workload": "RTX PRO 6000 \u00b7 B=4 \u00b7 150\u2013200 tokens",
+      "unit": "Seconds per warm batch",
+      "before": 1.9605009288352448,
+      "after": 1.6144628005010115,
+      "latency_reduction": 0.17650495505749053,
+      "throughput_ratio": 1.2143363899291135
+    },
+    {
+      "workload": "H200 \u00b7 B=1 \u00b7 512 tokens",
+      "unit": "Milliseconds per warm sampling step",
+      "before": 31.609370017538264,
+      "after": 20.849887770049428,
+      "latency_reduction": 0.3403890125465646,
+      "throughput_ratio": 1.5160450917603827
+    },
+    {
+      "workload": "Two workers \u00b7 B=4 \u00b7 CPU retrieval",
+      "unit": "Milliseconds to retrieve next batch",
+      "before": 61.0576868057251,
+      "after": 0.25449254150901524,
+      "latency_reduction": 0.9958319328028465,
+      "throughput_ratio": 239.91935655042437
+    }
+  ],
+  "synchronization_counts": [
+    {
+      "mode": "before",
+      "scope": "full_forward",
+      "synchronizations": {
+        "cudaStreamSynchronize": 142,
+        "cudaDeviceSynchronize": 2
+      },
+      "copies": {
+        "cudaMemcpyAsync": 1134
+      }
+    },
+    {
+      "mode": "before",
+      "scope": "rollout",
+      "synchronizations": {
+        "cudaStreamSynchronize": 99
+      },
+      "copies": {
+        "cudaMemcpyAsync": 834
+      }
+    },
+    {
+      "mode": "after",
+      "scope": "full_forward",
+      "synchronizations": {
+        "cudaStreamSynchronize": 37,
+        "cudaDeviceSynchronize": 2
+      },
+      "copies": {
+        "cudaMemcpyAsync": 875
+      }
+    },
+    {
+      "mode": "after",
+      "scope": "rollout",
+      "synchronizations": {
+        "cudaStreamSynchronize": 1
+      },
+      "copies": {
+        "cudaMemcpyAsync": 786
+      }
+    }
+  ],
+  "neighbor_cache_numerics": [
+    {
+      "level": "atom",
+      "mode": "eager_original",
+      "index_differences": 0,
+      "mask_differences": 0
+    },
+    {
+      "level": "atom",
+      "mode": "eager_cached",
+      "index_differences": 0,
+      "mask_differences": 0
+    },
+    {
+      "level": "atom",
+      "mode": "compiled_original",
+      "index_differences": 0,
+      "mask_differences": 0
+    },
+    {
+      "level": "atom",
+      "mode": "compiled_cached",
+      "index_differences": 0,
+      "mask_differences": 0
+    },
+    {
+      "level": "token",
+      "mode": "eager_original",
+      "index_differences": 0,
+      "mask_differences": 0
+    },
+    {
+      "level": "token",
+      "mode": "eager_cached",
+      "index_differences": 0,
+      "mask_differences": 0
+    },
+    {
+      "level": "token",
+      "mode": "compiled_original",
+      "index_differences": 0,
+      "mask_differences": 0
+    },
+    {
+      "level": "token",
+      "mode": "compiled_cached",
+      "index_differences": 0,
+      "mask_differences": 0
+    },
+    {
+      "level": "full_denoiser",
+      "mode": "eager_original",
+      "max_abs": 0.7426713109016418,
+      "rms": 0.06702020019292831
+    },
+    {
+      "level": "full_denoiser",
+      "mode": "compiled_original",
+      "max_abs": 0.0,
+      "rms": 0.0
+    },
+    {
+      "level": "full_denoiser",
+      "mode": "eager_cached",
+      "max_abs": 0.7426713109016418,
+      "rms": 0.06702020019292831
+    },
+    {
+      "level": "full_denoiser",
+      "mode": "compiled_cached",
+      "max_abs": 0.5781214833259583,
+      "rms": 0.04773363843560219
+    },
+    {
+      "level": "eager_cached_vs_original",
+      "exact_equal": true
+    }
+  ],
+  "discarded_experiments": [
+    "Inductor CUDA graphs: 3.4% slower in this workload",
+    "Batched sequence-output transfers: no measured speedup"
+  ],
+  "training_changed": false,
+  "low_memory_mode": false,
+  "tests": "42 passed on allocated CUDA GPU",
+  "artifacts": [
+    "outs/inference-auto",
+    "outs/inference-final",
+    "outs/h200-inference-updates",
+    "outs/inference-syncs",
+    "outs/neighbor-cache",
+    "outs/worker-prefetch",
+    "outs/mixed-transitions",
+    "outs/compiled-graphs",
+    "outs/output-staging"
+  ],
+  "final_source_sha256": {
+    "engine.py": "aeb56399b62a4bafaf325d4dd242208f96decfaa03a8425819e459ee84778f0a",
+    "inference/batching.py": "64f8b7ff556184c704cf9312fd3f20338abd4557ecac84d594293cf23e4c9939",
+    "inference/loading.py": "e87d84a7f979004e77b442f542582d89583ca0254357a01c8895eb5979a29463",
+    "inference/runtime.py": "89eea2090a6dc37095b541cdcca401d58c79ec6a1a8c7b1fb6cbcb2775225ee6",
+    "model/batched_denoiser.py": "50d92d25d7f878838b9f11e9c93d5377d235cc0d39adc8ee8f103a9f36689e22",
+    "model/batched_sampler.py": "2263e7066453c9a4b79b2a6ececaa765670eb0dcee0a5473e8b432851d9ceb50",
+    "model/layers/batched.py": "d2e3e1781f7bdadd4e38b2530c2d158639ed9b21ff4dd85f4108118df3bb25de"
+  },
+  "post_measurement_changes": "Extended the explicit accelerated-backend CPU rejection to triton-transition; no CUDA computation changed. source_sha256 records the measured version; final_source_sha256 records staged source."
+}

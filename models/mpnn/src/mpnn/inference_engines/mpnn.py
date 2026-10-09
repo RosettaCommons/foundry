@@ -1,4 +1,5 @@
 import copy
+import os
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +70,10 @@ class MPNNInferenceEngine:
         )
 
         # Determine the device (supports XPU, CUDA, and CPU).
+        if device is None:
+            requested_device = os.environ.get("FOUNDRY_DEVICE", "auto").lower()
+            if requested_device != "auto":
+                device = requested_device
         if device is not None:
             self.device = torch.device(device)
         elif torch.cuda.is_available():

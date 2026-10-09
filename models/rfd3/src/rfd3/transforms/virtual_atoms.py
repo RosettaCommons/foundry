@@ -4,7 +4,7 @@ Virtual-atom transforms for Atom14
 
 import biotite.structure as struc
 import numpy as np
-from atomworks.io.utils.atom_array_plus import insert_atoms
+from atomworks.io.utils.atom_array_plus import concatenate_any
 from atomworks.ml.transforms.base import (
     Transform,
 )
@@ -186,72 +186,18 @@ class PadTokensWithVirtualAtoms(Transform):
             is_motif_atom_with_fixed_seq | is_motif_token_unindexed
         )
 
-        # Collect virtual atoms to insert (we will insert them all at once)
-        virtual_atoms_to_insert = []
-        insert_positions = []
-
-        # First pass: collect virtual atoms for insertion
-        for token_id, (start, end) in enumerate(zip(starts[:-1], starts[1:])):
-            if is_paddable[token_id]:
-                token = atom_array[start:end]
-                # First, pad with virtual atoms if needed
-                n_pad = self.n_atoms_per_token - len(token)
-                if n_pad > 0:
-                    mask = get_af3_token_representative_masks(
-                        token, central_atom=self.atom_to_pad_from
-                    )
-                    assert_single_representative(token)
-
-                    # ... Create virtual atoms
-                    pad_atoms = token[mask].copy()
-                    pad_atoms = (
-                        pad_atoms[0]
-                        if isinstance(pad_atoms, struc.AtomArray)
-                        else pad_atoms
-                    )
-                    pad_atoms.element = VIRTUAL_ATOM_ELEMENT_NAME
-
-                    # ... Expand to desired number of atoms
-                    pad_array = struc.array([pad_atoms] * n_pad)
-
-                    # ... Change occupancy | if any atom in the token has occupancy, set to 1.0
-                    occ = 1.0 if pad_atoms.occupancy.sum() > 0.0 else 0.0
-                    pad_array.occupancy = np.full(n_pad, occ)
-
-                    # ... Even if the input pad_atoms are all motif, we don't ever want padded atoms to be motif
-                    pad_array.is_motif_atom = np.zeros(n_pad, dtype=bool)
-
-                    # ... Pad_atoms should never inherit fixed state
-                    if data["is_inference"]:
-                        pad_array.is_motif_atom_with_fixed_coord = np.zeros(
-                            n_pad, dtype=token.is_motif_atom_with_fixed_coord.dtype
-                        )
-
-                    # Handle multidimensional annotations
-                    def _fix_multidimensional_annotations_in_pad_array(
-                        atomarray, padarray
-                    ):
-                        for annotation in atomarray.get_annotation_categories():
-                            if len(atomarray.get_annotation(annotation).shape) > 1:
-                                stacked = np.stack(
-                                    padarray.get_annotation(annotation)
-                                ).astype(float)
-                                padarray.del_annotation(annotation)
-                                padarray.set_annotation(annotation, stacked)
-                        return padarray
-
-                    pad_array = _fix_multidimensional_annotations_in_pad_array(
-                        token, pad_array
-                    )
-
-                    # Collect virtual atoms for later insertion
-                    virtual_atoms_to_insert.append(pad_array)
-                    insert_positions.append(end)
-
-        # Insert all virtual atoms at once using insert_atoms
-        if virtual_atoms_to_insert:
-            atom_array_padded = insert_atoms(
-                atom_array, virtual_atoms_to_insert, insert_positions
+        # First pass: append virtual atoms to every paddable token that is short of
+        # `n_atoms_per_token` atoms. Each virtual atom is a copy of the token's
+        # representative atom, and all of them are inserted in a single step.
+        n_pad = self.n_atoms_per_token - np.diff(starts)
+        pad_token_idxs = np.flatnonzero(is_paddable & (n_pad > 0))
+        if len(pad_token_idxs) > 0:
+            atom_array_padded = self._insert_virtual_atoms(
+                atom_array,
+                starts,
+                pad_token_idxs,
+                n_pad[pad_token_idxs],
+                is_inference=data["is_inference"],
             )
         else:
             atom_array_padded = atom_array
@@ -309,3 +255,95 @@ class PadTokensWithVirtualAtoms(Transform):
 
         data["atom_array"] = atom_array_padded
         return data
+
+    def _insert_virtual_atoms(
+        self,
+        atom_array: struc.AtomArray,
+        starts: np.ndarray,
+        pad_token_idxs: np.ndarray,
+        n_pad: np.ndarray,
+        is_inference: bool,
+    ) -> struc.AtomArray:
+        """Insert ``n_pad[i]`` virtual atoms at the end of token ``pad_token_idxs[i]``.
+
+        Vectorised equivalent of building one ``struc.array([pad_atom] * n_pad)``
+        per token and inserting them with ``insert_atoms``: the virtual atoms,
+        their annotations (including dtypes and order) and their positions in the
+        returned array are identical.
+        """
+        token_of_atom = np.repeat(np.arange(len(starts) - 1), np.diff(starts))
+        rep_mask = get_af3_token_representative_masks(
+            atom_array, central_atom=self.atom_to_pad_from
+        )
+        # `assert_single_representative` checks the default (CB) representative.
+        single_rep_mask = (
+            rep_mask
+            if self.atom_to_pad_from == "CB"
+            else get_af3_token_representative_masks(atom_array, central_atom="CB")
+        )
+        n_reps = np.bincount(token_of_atom[rep_mask], minlength=len(starts) - 1)
+        n_single_reps = np.bincount(
+            token_of_atom[single_rep_mask], minlength=len(starts) - 1
+        )
+        is_invalid = (n_single_reps[pad_token_idxs] != 1) | (
+            n_reps[pad_token_idxs] == 0
+        )
+        if is_invalid.any():
+            # Re-run the per-token checks on the first invalid token so that the
+            # same exception (and message) is raised as by a per-token loop.
+            token_idx = pad_token_idxs[np.argmax(is_invalid)]
+            token = atom_array[starts[token_idx] : starts[token_idx + 1]]
+            mask = get_af3_token_representative_masks(
+                token, central_atom=self.atom_to_pad_from
+            )
+            assert_single_representative(token)
+            token[mask][0]
+            raise AssertionError(f"Token {token_idx} has no representative atom")
+
+        # ... The first representative atom of each token is copied as virtual atom
+        rep_idxs = np.flatnonzero(rep_mask)
+        _, first = np.unique(token_of_atom[rep_idxs], return_index=True)
+        rep_idx_per_token = np.full(len(starts) - 1, -1)
+        rep_idx_per_token[token_of_atom[rep_idxs[first]]] = rep_idxs[first]
+        rep_idxs = rep_idx_per_token[pad_token_idxs]
+
+        # ... Expand to desired number of atoms (mirrors the annotation order and
+        # dtypes of the patched `struc.array`, which `atomworks` installs)
+        src_idxs = np.repeat(rep_idxs, n_pad)
+        n_total = len(src_idxs)
+        pad_array = struc.AtomArray(n_total)
+        for annotation in sorted(atom_array.get_annotation_categories()):
+            if annotation == "element":
+                values = np.full(n_total, VIRTUAL_ATOM_ELEMENT_NAME)
+            else:
+                values = atom_array.get_annotation(annotation)[src_idxs]
+            pad_array.set_annotation(annotation, values)
+        pad_array.coord = atom_array.coord[src_idxs].astype(np.float32)
+
+        # ... Change occupancy | if the representative atom has occupancy, set to 1.0
+        occ = np.where(atom_array.occupancy[rep_idxs] > 0.0, 1.0, 0.0)
+        pad_array.occupancy = np.repeat(occ, n_pad)
+
+        # ... Even if the input pad_atoms are all motif, we don't ever want padded atoms to be motif
+        pad_array.is_motif_atom = np.zeros(n_total, dtype=bool)
+
+        # ... Pad_atoms should never inherit fixed state
+        if is_inference:
+            pad_array.is_motif_atom_with_fixed_coord = np.zeros(
+                n_total, dtype=atom_array.is_motif_atom_with_fixed_coord.dtype
+            )
+
+        # ... Handle multidimensional annotations
+        for annotation in atom_array.get_annotation_categories():
+            if len(atom_array.get_annotation(annotation).shape) > 1:
+                stacked = np.stack(pad_array.get_annotation(annotation)).astype(float)
+                pad_array.del_annotation(annotation)
+                pad_array.set_annotation(annotation, stacked)
+
+        # ... Insert the virtual atoms of each token before the start of the next token
+        insert_positions = np.repeat(starts[pad_token_idxs + 1], n_pad)
+        n_atoms = atom_array.array_length()
+        order = np.insert(
+            np.arange(n_atoms), insert_positions, np.arange(n_atoms, n_atoms + n_total)
+        )
+        return concatenate_any([atom_array, pad_array])[order]

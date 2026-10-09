@@ -4,6 +4,7 @@ from atomworks.ml.utils.token import (
     get_token_starts,
 )
 from beartype.typing import Any
+from scipy.spatial import cKDTree
 from rfd3.metrics.metrics_utils import (
     _flatten_dict,
     get_hotspot_contacts,
@@ -46,24 +47,22 @@ def get_clash_metrics(
 
     def get_interresidue_clashes(backbone_only=False):
         protein_array = atom_array[atom_array.is_protein]
-        resid = protein_array.res_id - protein_array.res_id.min()
         xyz = protein_array.coord
-        dists = np.linalg.norm(xyz[:, None] - xyz[None], axis=-1)  # N_atoms x N_atoms
-
-        # Block out intra-residue distances
-        mask = np.triu(np.ones_like(dists), k=1).astype(bool)
-        block_mask = np.abs(resid[:, None] - resid[None, :]) <= 1
-        mask[block_mask] = False
-        dists[~mask] = 999
-
+        if len(xyz) < 2:
+            return 0
+        # Sparse pair search (i < j, as in the dense triu formulation); the slightly
+        # larger float64 radius keeps every pair the float32 check below can accept
+        pairs = cKDTree(xyz).query_pairs(clash_threshold * (1 + 1e-5), output_type="ndarray")
+        i, j = pairs.T
+        # Exact strict threshold on float32 distances, as in the dense formulation
+        keep = np.linalg.norm(xyz[i] - xyz[j], axis=-1) < clash_threshold
+        # Block out intra-residue and adjacent-residue pairs
+        keep &= np.abs(protein_array.res_id[i] - protein_array.res_id[j]) > 1
         if backbone_only:
-            # Block out non-backbone atoms
             backbone_mask = np.isin(protein_array.atom_name, ["N", "CA", "C"])
-            mask = backbone_mask[:, None] & backbone_mask[None, :]
-            dists[~mask] = 999
-
-        num_clashes_L = dists.min(axis=-1) < clash_threshold
-        return int(num_clashes_L.sum())
+            keep &= backbone_mask[i] & backbone_mask[j]
+        # Count atoms with a clashing partner later in the array
+        return len(np.unique(i[keep]))
 
     def get_ligand_clash_metrics():
         if not is_ligand.any():

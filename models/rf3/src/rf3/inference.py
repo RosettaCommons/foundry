@@ -1,6 +1,8 @@
 #!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../../../.ipd/shebang/rf3_exec.sh" "$0" "$@"'
 
+import json
 import os
+from pathlib import Path
 
 import hydra
 import rootutils
@@ -34,11 +36,26 @@ def run_inference(cfg: DictConfig) -> None:
 
     # Extract run() parameters from config
     # Preserve string inputs, convert other sequence-like inputs to a Python list (None -> [])
-    inputs_param = cfg.inputs if isinstance(cfg.inputs, str) else list(cfg.inputs or [])
+    jobs_path = cfg.get("jobs")
+    if jobs_path:
+        from rf3.inference_engines.jobs import validate_jobs
+
+        jobs = validate_jobs(json.loads(Path(jobs_path).read_text()))
+        if not OmegaConf.is_missing(cfg, "inputs") and cfg.get("inputs"):
+            raise ValueError("Specify jobs or inputs, not both")
+        if not OmegaConf.is_missing(cfg, "out_dir") and cfg.get("out_dir"):
+            raise ValueError("With jobs, set out_dir inside each job")
+        inputs_param = None
+    else:
+        inputs_param = (
+            cfg.inputs if isinstance(cfg.inputs, str) else list(cfg.inputs or [])
+        )
 
     run_params = {
         "inputs": inputs_param,
-        "out_dir": str(cfg.out_dir) if cfg.get("out_dir") else None,
+        "out_dir": None
+        if jobs_path
+        else (str(cfg.out_dir) if cfg.get("out_dir") else None),
         "dump_predictions": cfg.get("dump_predictions", True),
         "dump_trajectories": cfg.get("dump_trajectories", False),
         "one_model_per_file": cfg.get("one_model_per_file", False),
@@ -58,7 +75,7 @@ def run_inference(cfg: DictConfig) -> None:
     # cfg is a DictConfig, so to_container returns a dict; its annotated return type
     # is a broad union (list / str / None) covering non-mapping OmegaConf nodes.
     assert isinstance(cfg_dict, dict)
-    run_param_keys = set(run_params.keys())
+    run_param_keys = set(run_params.keys()) | {"jobs"}
     init_cfg_dict = {k: v for k, v in cfg_dict.items() if k not in run_param_keys}
     init_cfg = OmegaConf.create(init_cfg_dict)
 
@@ -67,7 +84,12 @@ def run_inference(cfg: DictConfig) -> None:
 
     # Run inference
     with suppress_warnings(is_inference=True):
-        inference_engine.run(**run_params)
+        if jobs_path:
+            run_params.pop("inputs")
+            run_params.pop("out_dir")
+            inference_engine.run_jobs(jobs, **run_params)
+        else:
+            inference_engine.run(**run_params)
 
 
 if __name__ == "__main__":

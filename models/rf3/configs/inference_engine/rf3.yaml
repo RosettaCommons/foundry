@@ -20,6 +20,8 @@ template_noise_scale: 1e-5
 early_stopping_plddt_threshold: 0.5
 seed: null
 verbose: false
+triangle_attention_backend: auto
+jobs: null # JSON file with inputs/out_dir/seed jobs; one shared engine
 raise_if_missing_msa_for_protein_of_length_n: null
 
 # Metrics
@@ -31,3 +33,6 @@ metrics_cfg:
     _target_: rf3.metrics.predicted_error.ComputeIPTM
   count_clashing_chains:
     _target_: rf3.metrics.clashing_chains.CountClashingChains
+
+# Dense token/pairformer attention; sparse atom attention is unchanged.
+dense_attention_backend: auto

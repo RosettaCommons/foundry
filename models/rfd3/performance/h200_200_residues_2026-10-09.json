@@ -1,0 +1,309 @@
+{
+  "protocol": "200 protein residues, cysteine hydrolase input, B1/D1, 200 schedule points, full memory, workers=0, torch threads=4; excludes model loading and structure writing; prevalidation disabled",
+  "peak_definition": "Maximum of five unprofiled warm repetitions; cold first call reported separately. Not a tail-percentile estimate.",
+  "rows": [
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "old_eager",
+      "resolved_backend": "legacy-native",
+      "n": 5,
+      "mean_s": 15.28605291005224,
+      "median_s": 15.270368797704577,
+      "min_s": 15.243303671479225,
+      "peak_s": 15.332736808806658,
+      "peak_allocated_GB": 8.049442816,
+      "first_call_s": 15.998228391632438,
+      "shape_policy": "legacy",
+      "peak_reserved_GB": 8.327790592,
+      "source_report": "outs/h200-l200-image-benchmark/old_eager.json",
+      "custom_kernel_counts": null
+    },
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "new_eager_torch",
+      "resolved_backend": "torch",
+      "n": 5,
+      "mean_s": 13.953070034831763,
+      "median_s": 13.954240335151553,
+      "min_s": 13.90418996475637,
+      "peak_s": 14.016383120790124,
+      "peak_allocated_GB": 8.049442816,
+      "first_call_s": 15.579059259034693,
+      "shape_policy": "legacy",
+      "peak_reserved_GB": 8.327790592,
+      "source_report": "outs/h200-l200-image-benchmark/new_eager_torch.json",
+      "custom_kernel_counts": null
+    },
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "new_eager_transition",
+      "resolved_backend": "triton-transition",
+      "n": 5,
+      "mean_s": 14.056796174310147,
+      "median_s": 14.021695612929761,
+      "min_s": 13.888284633867443,
+      "peak_s": 14.286552170291543,
+      "peak_allocated_GB": 8.049442816,
+      "first_call_s": 17.623409437015653,
+      "shape_policy": "legacy",
+      "peak_reserved_GB": 8.227127296,
+      "source_report": "outs/h200-l200-image-benchmark/new_eager_transition.json",
+      "custom_kernel_counts": null
+    },
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "new_eager_graphs",
+      "resolved_backend": "triton",
+      "n": 5,
+      "mean_s": 6.870934035815298,
+      "median_s": 6.874907391145825,
+      "min_s": 6.852264134213328,
+      "peak_s": 6.880787317641079,
+      "peak_allocated_GB": 8.568361472,
+      "first_call_s": 9.730598460882902,
+      "shape_policy": null,
+      "peak_reserved_GB": 10.047455232,
+      "source_report": "outs/h200-l200-image-benchmark/new_eager_graphs.json",
+      "custom_kernel_counts": null
+    },
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "new_compiled_auto",
+      "resolved_backend": "torch",
+      "n": 5,
+      "mean_s": 5.756077178567648,
+      "median_s": 5.754751801490784,
+      "min_s": 5.75018466077745,
+      "peak_s": 5.767792688682675,
+      "peak_allocated_GB": 8.061095424,
+      "first_call_s": 141.51125090755522,
+      "shape_policy": "batch_max",
+      "peak_reserved_GB": 8.376025088,
+      "source_report": "outs/h200-l200-image-benchmark/new_compiled_auto.json",
+      "custom_kernel_counts": null
+    },
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "new_compiled_triton",
+      "resolved_backend": "triton",
+      "n": 5,
+      "mean_s": 5.955124739743769,
+      "median_s": 5.957305943593383,
+      "min_s": 5.946031332015991,
+      "peak_s": 5.961680406704545,
+      "peak_allocated_GB": 8.061095424,
+      "first_call_s": 322.6578429378569,
+      "shape_policy": "batch_max",
+      "peak_reserved_GB": 8.248098816,
+      "source_report": "outs/h200-l200-image-benchmark/new_compiled_triton.json",
+      "custom_kernel_counts": {
+        "_project_swiglu": 20,
+        "_attention": 18
+      }
+    },
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "new_compiled_graphs",
+      "resolved_backend": "torch",
+      "n": 5,
+      "mean_s": 4.639892107062042,
+      "median_s": 4.63072189502418,
+      "min_s": 4.624273803085089,
+      "peak_s": 4.680616945959628,
+      "peak_allocated_GB": 8.060967936,
+      "first_call_s": 141.4972060667351,
+      "shape_policy": "batch_max",
+      "peak_reserved_GB": 9.504292864,
+      "source_report": "outs/h200-l200-image-benchmark/new_compiled_graphs.json",
+      "custom_kernel_counts": {}
+    },
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "new_compiled_triton_graphs",
+      "resolved_backend": "triton",
+      "n": 5,
+      "mean_s": 4.561282740905881,
+      "median_s": 4.553107281215489,
+      "min_s": 4.551067399792373,
+      "peak_s": 4.596592169255018,
+      "peak_allocated_GB": 8.060969984,
+      "first_call_s": 121.17534339055419,
+      "shape_policy": "batch_max",
+      "peak_reserved_GB": 9.349103616,
+      "source_report": "outs/h200-l200-image-benchmark/new_compiled_triton_graphs.json",
+      "custom_kernel_counts": {
+        "_project_swiglu": 20,
+        "_attention": 18
+      }
+    },
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "new_compiled_bucket_graphs",
+      "resolved_backend": "torch",
+      "n": 5,
+      "mean_s": 4.569077120535075,
+      "median_s": 4.558184647932649,
+      "min_s": 4.548626407980919,
+      "peak_s": 4.615289969369769,
+      "peak_allocated_GB": 9.130471424,
+      "first_call_s": 147.81999203842133,
+      "shape_policy": "buckets",
+      "peak_reserved_GB": 10.856955904,
+      "source_report": "outs/h200-l200-image-benchmark/new_compiled_bucket_graphs.json",
+      "custom_kernel_counts": {}
+    },
+    {
+      "gpu": "NVIDIA H200 NVL",
+      "variant": "new_compiled_triton_bucket_graphs",
+      "resolved_backend": "triton",
+      "n": 5,
+      "mean_s": 4.492203877680003,
+      "median_s": 4.484376713633537,
+      "min_s": 4.476135767996311,
+      "peak_s": 4.536956348456442,
+      "peak_allocated_GB": 9.130473472,
+      "first_call_s": 119.14777441509068,
+      "shape_policy": "buckets",
+      "peak_reserved_GB": 10.607394816,
+      "source_report": "outs/h200-l200-image-benchmark/new_compiled_triton_bucket_graphs.json",
+      "custom_kernel_counts": {
+        "_project_swiglu": 20,
+        "_attention": 18
+      }
+    },
+    {
+      "gpu": "NVIDIA RTX A4000",
+      "variant": "new_eager_torch",
+      "resolved_backend": "torch",
+      "n": 5,
+      "mean_s": 51.8672488941811,
+      "median_s": 51.71973485779017,
+      "min_s": 51.24154884973541,
+      "peak_s": 52.631785575300455,
+      "peak_allocated_GB": 8.024408064,
+      "first_call_s": 62.76567050209269,
+      "shape_policy": "legacy",
+      "peak_reserved_GB": 8.31520768,
+      "source_report": "outs/rtx-a4000-l200-image-benchmark/new_eager_torch.json",
+      "custom_kernel_counts": null
+    },
+    {
+      "gpu": "NVIDIA RTX A4000",
+      "variant": "new_eager_auto",
+      "resolved_backend": "triton",
+      "n": 5,
+      "mean_s": 46.78784351060167,
+      "median_s": 46.06100331572816,
+      "min_s": 45.43619299028069,
+      "peak_s": 48.51335022877902,
+      "peak_allocated_GB": 8.024408064,
+      "first_call_s": 56.99618677189574,
+      "shape_policy": "legacy",
+      "peak_reserved_GB": 8.216641536,
+      "source_report": "outs/rtx-a4000-l200-image-benchmark/new_eager_auto.json",
+      "custom_kernel_counts": null
+    }
+  ],
+  "source_note": "Compiled measurements use frozen updated source on fast-image dependencies; eager measurements use the pre-refresh image. Warm timing excludes model loading, compilation and file writes.",
+  "refreshed_image_sha256": "3af5738b1f9affb02fffefe26eb8c67a5cce7c12e20e9460b42556a080d3ec21",
+  "production_worker_comparison": {
+    "selected_variant": "new_compiled_bucket_graphs",
+    "scope": "One input stream of six designs at B1/D1. Warm intervals are completion-to-completion times for the last five designs, including parent preprocessing waits.",
+    "streams": [
+      {
+        "workers": 0,
+        "total_wall_s": 27.418882357887924,
+        "records": [
+          {
+            "index": 0,
+            "forward_s": 2.323171427473426,
+            "parent_wait_s": 2.313366058282554,
+            "completion_interval_s": 4.63653748575598
+          },
+          {
+            "index": 1,
+            "forward_s": 2.2788051879033446,
+            "parent_wait_s": 2.280663129873574,
+            "completion_interval_s": 4.559468317776918
+          },
+          {
+            "index": 2,
+            "forward_s": 2.27655369695276,
+            "parent_wait_s": 2.2908770395442843,
+            "completion_interval_s": 4.567430736497045
+          },
+          {
+            "index": 3,
+            "forward_s": 2.276450777426362,
+            "parent_wait_s": 2.2746912548318505,
+            "completion_interval_s": 4.551142032258213
+          },
+          {
+            "index": 4,
+            "forward_s": 2.2766227163374424,
+            "parent_wait_s": 2.272856052033603,
+            "completion_interval_s": 4.549478768371046
+          },
+          {
+            "index": 5,
+            "forward_s": 2.277130775153637,
+            "parent_wait_s": 2.2774253943935037,
+            "completion_interval_s": 4.554556169547141
+          }
+        ],
+        "warm_mean_s": 4.556415204890072,
+        "warm_min_s": 4.549478768371046,
+        "warm_peak_s": 4.567430736497045,
+        "peak_allocated_GB": 9.130471424
+      },
+      {
+        "workers": 2,
+        "total_wall_s": 21.883799905888736,
+        "records": [
+          {
+            "index": 0,
+            "forward_s": 2.280524240806699,
+            "parent_wait_s": 7.019731599837542,
+            "completion_interval_s": 9.30025584064424
+          },
+          {
+            "index": 1,
+            "forward_s": 2.277888150885701,
+            "parent_wait_s": 0.0006375480443239212,
+            "completion_interval_s": 2.278525698930025
+          },
+          {
+            "index": 2,
+            "forward_s": 2.274287536740303,
+            "parent_wait_s": 0.00048499833792448044,
+            "completion_interval_s": 2.2747725350782275
+          },
+          {
+            "index": 3,
+            "forward_s": 2.274635794572532,
+            "parent_wait_s": 0.0004426678642630577,
+            "completion_interval_s": 2.2750784624367952
+          },
+          {
+            "index": 4,
+            "forward_s": 2.2741243271157146,
+            "parent_wait_s": 0.00047214794903993607,
+            "completion_interval_s": 2.2745964750647545
+          },
+          {
+            "index": 5,
+            "forward_s": 2.273667588829994,
+            "parent_wait_s": 0.00045215804129838943,
+            "completion_interval_s": 2.2741197468712926
+          }
+        ],
+        "warm_mean_s": 2.275418583676219,
+        "warm_min_s": 2.2741197468712926,
+        "warm_peak_s": 2.278525698930025,
+        "peak_allocated_GB": 9.130471424
+      }
+    ],
+    "warmup_s": 117.7063213037327,
+    "cache_dir": "/projects/ml/pipelines/compile-cache/rfd3/${USER}"
+  }
+}
