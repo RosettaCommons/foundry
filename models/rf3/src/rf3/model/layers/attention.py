@@ -36,6 +36,7 @@ class TriangleAttention(nn.Module):
         p_drop=0.1,  # noqa: E402
         start_node=True,
         use_cuequivariance=True,
+        attention_backend="auto",
     ):
         super(TriangleAttention, self).__init__()
 
@@ -55,6 +56,9 @@ class TriangleAttention(nn.Module):
         self.start_node = start_node
 
         self.use_cuequivariance = use_cuequivariance
+        if attention_backend not in {"auto", "vanilla", "sdpa"}:
+            raise ValueError("attention_backend must be auto, vanilla or sdpa")
+        self.attention_backend = attention_backend
 
         self.reset_parameter()
 
@@ -85,7 +89,17 @@ class TriangleAttention(nn.Module):
             pair = rearrange(pair, "b i j d -> b j i d")
 
         # Route to appropriate implementation
-        if self.use_cuequivariance and SHOULD_USE_CUEQUIVARIANCE:
+        if self.attention_backend == "sdpa" or (
+            self.attention_backend == "auto"
+            and pair.device.type == "mps"
+            and not self.training
+        ):
+            out = self._forward_sdpa(pair, bias)
+        elif (
+            self.attention_backend == "auto"
+            and self.use_cuequivariance
+            and SHOULD_USE_CUEQUIVARIANCE
+        ):
             out = self._forward_cuequivariance(pair, bias)
         else:
             out = self._forward_vanilla(pair, bias)
@@ -96,6 +110,39 @@ class TriangleAttention(nn.Module):
         # output projection
         out = self.to_out(out)
         return out
+
+    def _forward_sdpa(self, pair, bias):
+        """Native attention without explicitly materializing [B,I,J,K,H]."""
+        query = rearrange(self.to_q(pair), "b i j (h d) -> b i h j d", h=self.h)
+        key = rearrange(self.to_k(pair), "b i k (h d) -> b i h k d", h=self.h)
+        value = rearrange(self.to_v(pair), "b i k (h d) -> b i h k d", h=self.h)
+        # Keep the original bias orientation even for ending-node attention;
+        # forward transposes the normalized pair, not the bias.
+        bias = rearrange(bias, "b j k h -> b 1 h j k")
+        if pair.device.type == "mps" and pair.shape[0] > 1:
+            # MPS cannot flatten the broadcast bias's B,I strides when B>1.
+            # Keep each bias broadcast instead of allocating a dense B,I,H,J,K
+            # mask. Normal single-input RF3 inference takes the vectorized branch.
+            out = torch.cat(
+                [
+                    F.scaled_dot_product_attention(
+                        query[b : b + 1],
+                        key[b : b + 1],
+                        value[b : b + 1],
+                        attn_mask=bias[b : b + 1],
+                        dropout_p=0.0,
+                        scale=self.scaling,
+                    )
+                    for b in range(pair.shape[0])
+                ],
+                dim=0,
+            )
+        else:
+            out = F.scaled_dot_product_attention(
+                query, key, value, attn_mask=bias, dropout_p=0.0, scale=self.scaling
+            )
+        out = rearrange(out, "b i h j d -> b i j (h d)")
+        return torch.sigmoid(self.to_g(pair)) * out
 
     def _forward_cuequivariance(self, pair, bias):
         """cuEquivariance triangle attention implementation."""

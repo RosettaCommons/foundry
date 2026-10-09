@@ -18,6 +18,18 @@ specification: {}
 
 # Diffusion args
 diffusion_batch_size: 8
+# Independent examples per device; eager B=1 retains the legacy inference path.
+inference_batch_size: 1
+# CPU preprocessing workers for padded inference; 0 runs synchronously.
+inference_num_workers: 2
+# Post-transform atom/token bucket capacities (multiples of these values).
+atom_padding_multiple: 128
+token_padding_multiple: 16
+# Compile-only ceilings; smallest bucket that fits, error above the largest.
+# These replace the multiples above when compile_model=true, including at B=1.
+compile_atom_buckets: [256, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768]
+compile_token_buckets: [128, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096]
+compile_slot_buckets: [1, 4, 8, 14, 24, 32, 64, 128]
 n_batches: 1
 
 # Inference sampler args | set to None to use the default in the checkpoint's config
@@ -67,5 +79,15 @@ align_trajectory_structures: False
 prevalidate_inputs: False
 low_memory_mode: False # False for standard mode, True for memory efficient tokenization mode
 
-# torch.compile the hot diffusion submodules. Cuts steady-state rollout time by ~1.6x.
-compile_model: False
+# Compile the padded denoiser. Speed and amortization depend on backend/workload.
+compile_model: True
+# Persistent generated code; explicit config overrides this env default.
+# A non-default TORCHINDUCTOR_CACHE_DIR remains the framework-level override.
+compile_cache_dir: ${oc.env:RFD3_COMPILE_CACHE_DIR,null}
+
+# Dense token/pairformer attention; sparse atom attention is unchanged.
+dense_attention_backend: vanilla
+
+# Optional fused CUDA inference kernels and rollout-local invariant projections.
+inference_kernel_backend: auto  # auto | torch | triton | triton-transition
+inference_cuda_graph: false  # Replay token/atom stacks; graphs live for one rollout.

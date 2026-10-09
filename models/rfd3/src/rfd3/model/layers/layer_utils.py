@@ -4,6 +4,7 @@ from functools import partial
 import numpy as np
 import torch
 import torch.nn as nn
+from rfd3.model import inference_acceleration as accel
 from torch.nn.functional import silu
 
 from foundry.training.checkpoint import activation_checkpointing
@@ -129,6 +130,10 @@ class Transition(nn.Module):
         X,
     ):
         X = self.layer_norm_1(X)
+        if accel.enabled(self, X):
+            fused = accel.fused_transition(self, X)
+            if fused is not None:
+                return fused
         A = self.linear_1(X)
         B = self.linear_2(X)
         X = self.linear_3(silu(A) * B)

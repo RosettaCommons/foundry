@@ -1,0 +1,217 @@
+{
+  "n_backbone_pairs": 16,
+  "sequences_per_backbone": 4,
+  "n_refolds": 128,
+  "criteria": "CA RMSD <2 Angstrom AND ESMFold2 pLDDT >=80/100; backbone passes if any of four sequences passes",
+  "geometry": {
+    "median_aligned_ca_rmsd": 0.6755097778872918,
+    "maximum_aligned_ca_rmsd": 6.80225199201405,
+    "pairs_under_2A": 13
+  },
+  "variants": {
+    "before": {
+      "backbones_passing": 15,
+      "backbone_pass_fraction": 0.9375,
+      "backbone_pass_fraction_wilson95": [
+        0.7167126242970107,
+        0.9888806552353576
+      ],
+      "mean_best_ca_rmsd": 0.9330281873975352,
+      "mean_mean_ca_rmsd": 2.0458310320842483,
+      "mean_mean_plddt": 88.36609375,
+      "mean_sequence_pass_fraction": 0.765625,
+      "sequences_passing": 49
+    },
+    "after": {
+      "backbones_passing": 15,
+      "backbone_pass_fraction": 0.9375,
+      "backbone_pass_fraction_wilson95": [
+        0.7167126242970107,
+        0.9888806552353576
+      ],
+      "mean_best_ca_rmsd": 0.778132697636031,
+      "mean_mean_ca_rmsd": 1.5109968670249085,
+      "mean_mean_plddt": 89.6790625,
+      "mean_sequence_pass_fraction": 0.875,
+      "sequences_passing": 56
+    }
+  },
+  "paired_differences_after_minus_before": {
+    "best_ca_rmsd": {
+      "mean": -0.15489548976150436,
+      "paired_bootstrap95": [
+        -0.49954611785313086,
+        0.07712556826279876
+      ]
+    },
+    "mean_ca_rmsd": {
+      "mean": -0.5348341650593397,
+      "paired_bootstrap95": [
+        -1.044648282198573,
+        -0.08751780077662802
+      ]
+    },
+    "mean_plddt": {
+      "mean": 1.3129687499999991,
+      "paired_bootstrap95": [
+        -1.1260976562500007,
+        3.6212656250000004
+      ]
+    },
+    "sequence_pass_fraction": {
+      "mean": 0.109375,
+      "paired_bootstrap95": [
+        0.015625,
+        0.203125
+      ]
+    },
+    "passed": {
+      "mean": 0.0,
+      "paired_bootstrap95": [
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "discordant_backbones": {
+    "lost_pass": [],
+    "gained_pass": []
+  },
+  "generator_geometry_metrics": {
+    "before": {
+      "n_chainbreaks": {
+        "mean": 0.0625,
+        "maximum": 1.0
+      },
+      "n_clashing.interresidue_clashes_w_backbone": {
+        "mean": 0.0,
+        "maximum": 0.0
+      },
+      "n_clashing.interresidue_clashes_w_sidechain": {
+        "mean": 0.0,
+        "maximum": 0.0
+      },
+      "max_ca_deviation": {
+        "mean": 0.1907893568277359,
+        "maximum": 0.8458430767059326
+      },
+      "helix_fraction": {
+        "mean": 0.4948439072743669,
+        "maximum": 0.5778894472361809
+      },
+      "sheet_fraction": {
+        "mean": 0.18931972978278183,
+        "maximum": 0.28104575163398693
+      },
+      "radius_of_gyration": {
+        "mean": 14.281668356371314,
+        "maximum": 15.540595456126804
+      }
+    },
+    "after": {
+      "n_chainbreaks": {
+        "mean": 0.0625,
+        "maximum": 1.0
+      },
+      "n_clashing.interresidue_clashes_w_backbone": {
+        "mean": 0.0,
+        "maximum": 0.0
+      },
+      "n_clashing.interresidue_clashes_w_sidechain": {
+        "mean": 0.125,
+        "maximum": 1.0
+      },
+      "max_ca_deviation": {
+        "mean": 0.15387435257434845,
+        "maximum": 0.8508205413818359
+      },
+      "helix_fraction": {
+        "mean": 0.4926855572816974,
+        "maximum": 0.6231155778894473
+      },
+      "sheet_fraction": {
+        "mean": 0.19192097058798324,
+        "maximum": 0.28104575163398693
+      },
+      "radius_of_gyration": {
+        "mean": 14.304127782542803,
+        "maximum": 15.590564497989522
+      }
+    }
+  },
+  "limitations": [
+    "No formal equivalence margin was pre-established; absence of a significant difference is not evidence of equivalence.",
+    "16 pairs from one generator seed and one unconditional length range; no functional or experimental validation.",
+    "Identical timing repeats were excluded, and four sequence replicates were grouped by backbone.",
+    "Bootstrap intervals can be degenerate when all observed outcomes agree; Wilson intervals show finite-sample uncertainty.",
+    "Existing ESMFold2 container uses fallback numerical operators; both variants use the same evaluator environment."
+  ],
+  "generation_speed": {
+    "source": "outs/inference-auto/summary.json",
+    "biological_structures_from": [
+      "before-0",
+      "after-1"
+    ],
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+    "configuration": {
+      "batch": 4,
+      "workers": 2,
+      "steps": 50,
+      "compile_model": true,
+      "low_memory_mode": false,
+      "initializer": "unmodified",
+      "atom_bucket": 3072,
+      "token_bucket": 256,
+      "seed": 42
+    },
+    "metrics": {
+      "warm_batch_seconds": {
+        "before": 1.9660394786672744,
+        "after": 1.589686297001511,
+        "latency_reduction_percent": 19.142707242119215,
+        "throughput_ratio": 1.2367468238077197
+      },
+      "warm_forward_seconds": {
+        "before": 1.816619575668786,
+        "after": 1.4414140153336727,
+        "latency_reduction_percent": 20.65405246979032,
+        "throughput_ratio": 1.2603038102472293
+      },
+      "request_16_designs_seconds": {
+        "before": 18.265147358994,
+        "after": 15.965168993003317,
+        "latency_reduction_percent": 12.592169779884877,
+        "throughput_ratio": 1.1440622624789403
+      }
+    },
+    "baseline_revision": "749d94d",
+    "baseline_file_sha256": {
+      "model/batched_sampler.py": "c71f7dd2cf0a34f07d72cc35c7643af937a77bfc17721f01cd1b1b2ab54c4157",
+      "model/batched_denoiser.py": "7a06537a42fd0ada8de8e441994046231a1946a919fd71239b142a120d5efa2b",
+      "engine.py": "23974ef3e7f8c09cd84aa7319facb3edb27bd94f667700fc94a3cdaca7690da5"
+    },
+    "method": "Same initialized engine and weights; replace sampler.sample, sampler.ExampleRandomness, denoiser.denoise, engine._model_forward_batch with 749d94d implementations for before; torch kernels before, current auto triton-transition after. Both modes warmed before measurement.",
+    "limitations": [
+      "Controlled function substitution, not a pristine checkout or old-SIF versus fast-SIF benchmark.",
+      "Both variants use current pinned loader and topology preparation; before computes unused cached indices.",
+      "Warm batch includes structure writing; three later batches per variant in this exact pair.",
+      "Request time excludes engine construction/checkpoint loading and prewarming; includes worker startup and output writing.",
+      "Biological evaluation reused previously generated structures; today\u2019s refold runtimes do not measure RFD3 acceleration."
+    ]
+  },
+  "protocol": {
+    "scope": "Pilot on 16 paired unconditional 150\u2013200-residue backbones; timing duplicates excluded",
+    "generator": "B=4, compiled, 50 schedule points, seed 42; before torch versus optimized auto triton-transition",
+    "sequence_design": "ProteinMPNN, temperature 0.1, seed 42, four sequences per backbone; one sidechain pack each",
+    "refolding": "ESMFold2, one diffusion sample per sequence, three trunk loops, 200 sampling steps, seed 42, no templates or MSA",
+    "primary_outcome": "Fraction of backbones with at least one sequence having CA-aligned CA RMSD <2 Angstrom and mean refold pLDDT >=80 (0\u2013100 scale)",
+    "secondary_outcomes": [
+      "All per-sequence CA RMSDs and pLDDT",
+      "Best CA RMSD per backbone",
+      "Paired geometry, clashes, chain breaks, secondary structure fractions"
+    ],
+    "analysis": "Paired bootstrap confidence intervals over the 16 backbone pairs; sequence replicates are not independent backbones",
+    "limitations": "Computational pilot only, no pre-established equivalence margin, limited power, no binding/function/experimental validation or longer/conditional inputs"
+  },
+  "artifacts": "outs/biological-equivalence/"
+}

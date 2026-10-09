@@ -1,0 +1,11 @@
+[
+  {
+    "name": "local_peptide",
+    "components": [
+      {
+        "seq": "LSDEDFKAVFGMTRSAFANLPLWKQQNLKKEK",
+        "chain_id": "A"
+      }
+    ]
+  }
+]

@@ -1,0 +1,436 @@
+{
+  "n_pairs": 4,
+  "n_refolds": 8,
+  "speed": {
+    "before_forward_seconds": 9.664757329039276,
+    "after_forward_seconds": 9.716628674417734,
+    "forward_latency_reduction_percent": -0.5367061335580958,
+    "before_request_seconds": 48.52437724545598,
+    "after_request_seconds": 55.87310328055173,
+    "gpu": "NVIDIA RTX A4000",
+    "before_all_forward_seconds": [
+      9.664757329039276,
+      9.886523914523423,
+      9.421841430477798,
+      9.304553113877773
+    ],
+    "after_all_forward_seconds": [
+      9.716628674417734,
+      10.808427106589079,
+      11.845209672115743,
+      12.90250510443002
+    ],
+    "note": "First local B1 pair shown separately; remaining pairs overlapped host-side PR validation. Diagnostic timings, not a controlled throughput benchmark."
+  },
+  "protocol": {
+    "rfd3": "1EUV tutorial constraints, length fixed at 160, 200 schedule points, B1 D1 compiled full memory on local RTX A4000 (16 GB)",
+    "pairing": "Four stable example streams under master seed 42; feature tensor hashes checked identical before/after",
+    "comparison": "749d94d sampler/RNG/denoiser/output methods vs current code plus explicit triton-transition on RTX A4000; shared current preprocessing, workers=0",
+    "sequence": "LigandMPNN, one sequence per backbone, temperature 0.1, seed 42; mapped His/Asp/Gln/Cys identities and packed sidechains fixed",
+    "refold": "ESMFold2 apo, one sample per sequence, 3 loops, 200 steps, seed 42; same pinned checkpoint and evaluator for both arms"
+  },
+  "limitations": [
+    "Four paired examples cannot establish equivalence or estimate reliable pass rates.",
+    "Apo prediction does not validate the covalent Cys-ligand complex, ligand pose, binding, or catalysis.",
+    "Fixed-atom agreement at generation measures conditioning only; refold geometry is the independent check.",
+    "Different designed sequences mean this compares complete design workflows, not identical-sequence prediction.",
+    "Motif-frame metric aligns four catalytic residue backbones; Asp OD1/OD2 label symmetry is allowed.",
+    "Compiled A4000 auto normally selects native torch; this experiment explicitly exercises the transition kernel too."
+  ],
+  "paired_outputs": [
+    {
+      "pair_id": 0,
+      "generator_ca_rmsd_A": 0.12224281983422125,
+      "same_motif_residue_assignments": true,
+      "before_mapping": {
+        "A514": "A34",
+        "A531": "A82",
+        "A574": "A76",
+        "A579": "A104",
+        "A580": "A105",
+        "A581": "A106"
+      },
+      "after_mapping": {
+        "A514": "A34",
+        "A531": "A82",
+        "A574": "A76",
+        "A579": "A104",
+        "A580": "A105",
+        "A581": "A106"
+      }
+    },
+    {
+      "pair_id": 1,
+      "generator_ca_rmsd_A": 2.1897807647576455,
+      "same_motif_residue_assignments": true,
+      "before_mapping": {
+        "A514": "A75",
+        "A531": "A132",
+        "A574": "A18",
+        "A579": "A54",
+        "A580": "A55",
+        "A581": "A56"
+      },
+      "after_mapping": {
+        "A514": "A75",
+        "A531": "A132",
+        "A574": "A18",
+        "A579": "A54",
+        "A580": "A55",
+        "A581": "A56"
+      }
+    },
+    {
+      "pair_id": 2,
+      "generator_ca_rmsd_A": 6.437624286022981,
+      "same_motif_residue_assignments": false,
+      "before_mapping": {
+        "A514": "A126",
+        "A531": "A82",
+        "A574": "A32",
+        "A579": "A43",
+        "A580": "A44",
+        "A581": "A45"
+      },
+      "after_mapping": {
+        "A514": "A122",
+        "A531": "A82",
+        "A574": "A32",
+        "A579": "A43",
+        "A580": "A44",
+        "A581": "A45"
+      }
+    },
+    {
+      "pair_id": 3,
+      "generator_ca_rmsd_A": 1.8492993836493687,
+      "same_motif_residue_assignments": true,
+      "before_mapping": {
+        "A514": "A64",
+        "A531": "A38",
+        "A574": "A45",
+        "A579": "A131",
+        "A580": "A132",
+        "A581": "A133"
+      },
+      "after_mapping": {
+        "A514": "A64",
+        "A531": "A38",
+        "A574": "A45",
+        "A579": "A131",
+        "A580": "A132",
+        "A581": "A133"
+      }
+    }
+  ],
+  "per_design": [
+    {
+      "variant": "before",
+      "pair_id": 0,
+      "ca_rmsd_A": 3.1891434405838686,
+      "plddt": 84.31,
+      "motif_backbone_local_rmsd_A": 2.9740183763028636,
+      "catalytic_atoms_global_rmsd_A": 6.671697451819416,
+      "catalytic_atoms_motif_frame_rmsd_A": 6.06859302959592,
+      "catalytic_atoms_to_theozyme_bestfit_rmsd_A": 5.688404847752219,
+      "pocket_ca_rmsd_A": 3.7331161716223815,
+      "pocket_residues": 34,
+      "fixed_atoms_ligand_frame_rmsd_A": 0.013006188320968805,
+      "ligand_aligned_rmsd_A": 0.007003022749829788,
+      "mpnn_ca_max_change_A": 0.0007989833465209629,
+      "motif_identities_preserved": true,
+      "motif_mapping": {
+        "A514": "A34",
+        "A531": "A82",
+        "A574": "A76",
+        "A580": "A105"
+      },
+      "refold_distances": {
+        "cys_sg_his_nd1_A": 3.512642712665341,
+        "cys_sg_his_ne2_A": 4.357321442432147,
+        "hisN_aspO_min_A": 3.727857335979767,
+        "cys_sg_gln_ne2_A": 19.369729576006478
+      },
+      "distance_errors_to_theozyme_A": {
+        "cys_sg_his_nd1_A": -0.19752716756493438,
+        "cys_sg_his_ne2_A": -1.0545515391223947,
+        "hisN_aspO_min_A": 0.9252246844295651,
+        "cys_sg_gln_ne2_A": 14.400004717226818
+      },
+      "fold_pass": false
+    },
+    {
+      "variant": "before",
+      "pair_id": 1,
+      "ca_rmsd_A": 2.237952335063361,
+      "plddt": 73.02,
+      "motif_backbone_local_rmsd_A": 1.5437341859575708,
+      "catalytic_atoms_global_rmsd_A": 2.472249513902844,
+      "catalytic_atoms_motif_frame_rmsd_A": 2.26699422031054,
+      "catalytic_atoms_to_theozyme_bestfit_rmsd_A": 2.1184274637126643,
+      "pocket_ca_rmsd_A": 2.7016745594056504,
+      "pocket_residues": 36,
+      "fixed_atoms_ligand_frame_rmsd_A": 0.013006188320968805,
+      "ligand_aligned_rmsd_A": 0.007003022749829788,
+      "mpnn_ca_max_change_A": 0.0007663141062555283,
+      "motif_identities_preserved": true,
+      "motif_mapping": {
+        "A514": "A75",
+        "A531": "A132",
+        "A574": "A18",
+        "A580": "A55"
+      },
+      "refold_distances": {
+        "cys_sg_his_nd1_A": 3.225651868115684,
+        "cys_sg_his_ne2_A": 4.935512799659309,
+        "hisN_aspO_min_A": 3.4616312309020563,
+        "cys_sg_gln_ne2_A": 7.15372440347561
+      },
+      "distance_errors_to_theozyme_A": {
+        "cys_sg_his_nd1_A": -0.48451801211459156,
+        "cys_sg_his_ne2_A": -0.47636018189523277,
+        "hisN_aspO_min_A": 0.6589985793518545,
+        "cys_sg_gln_ne2_A": 2.1839995446959497
+      },
+      "fold_pass": false
+    },
+    {
+      "variant": "before",
+      "pair_id": 2,
+      "ca_rmsd_A": 9.196709865877885,
+      "plddt": 62.09,
+      "motif_backbone_local_rmsd_A": 5.265526832964671,
+      "catalytic_atoms_global_rmsd_A": 7.868367045470626,
+      "catalytic_atoms_motif_frame_rmsd_A": 6.471695718091155,
+      "catalytic_atoms_to_theozyme_bestfit_rmsd_A": 6.267369249165346,
+      "pocket_ca_rmsd_A": 9.203325427037347,
+      "pocket_residues": 35,
+      "fixed_atoms_ligand_frame_rmsd_A": 0.013006188320968805,
+      "ligand_aligned_rmsd_A": 0.007003022749829788,
+      "mpnn_ca_max_change_A": 0.0008021036091317079,
+      "motif_identities_preserved": true,
+      "motif_mapping": {
+        "A514": "A126",
+        "A531": "A82",
+        "A574": "A32",
+        "A580": "A44"
+      },
+      "refold_distances": {
+        "cys_sg_his_nd1_A": 7.121138797209063,
+        "cys_sg_his_ne2_A": 5.1348569642106305,
+        "hisN_aspO_min_A": 6.788223121097921,
+        "cys_sg_gln_ne2_A": 19.555613971622016
+      },
+      "distance_errors_to_theozyme_A": {
+        "cys_sg_his_nd1_A": 3.410968916978788,
+        "cys_sg_his_ne2_A": -0.2770160173439109,
+        "hisN_aspO_min_A": 3.9855904695477196,
+        "cys_sg_gln_ne2_A": 14.585889112842356
+      },
+      "fold_pass": false
+    },
+    {
+      "variant": "before",
+      "pair_id": 3,
+      "ca_rmsd_A": 11.679502728751164,
+      "plddt": 51.74999999999999,
+      "motif_backbone_local_rmsd_A": 5.228117048971624,
+      "catalytic_atoms_global_rmsd_A": 10.128948149829991,
+      "catalytic_atoms_motif_frame_rmsd_A": 8.996890937954921,
+      "catalytic_atoms_to_theozyme_bestfit_rmsd_A": 8.693908116549624,
+      "pocket_ca_rmsd_A": 7.626899659620469,
+      "pocket_residues": 33,
+      "fixed_atoms_ligand_frame_rmsd_A": 0.013006188320968805,
+      "ligand_aligned_rmsd_A": 0.007003022749829788,
+      "mpnn_ca_max_change_A": 0.0007930248156762471,
+      "motif_identities_preserved": true,
+      "motif_mapping": {
+        "A514": "A64",
+        "A531": "A38",
+        "A574": "A45",
+        "A580": "A132"
+      },
+      "refold_distances": {
+        "cys_sg_his_nd1_A": 17.274914489411486,
+        "cys_sg_his_ne2_A": 17.226542866626787,
+        "hisN_aspO_min_A": 17.750132773923347,
+        "cys_sg_gln_ne2_A": 12.61479021241807
+      },
+      "distance_errors_to_theozyme_A": {
+        "cys_sg_his_nd1_A": 13.564744609181211,
+        "cys_sg_his_ne2_A": 11.814669885072245,
+        "hisN_aspO_min_A": 14.947500122373146,
+        "cys_sg_gln_ne2_A": 7.64506535363841
+      },
+      "fold_pass": false
+    },
+    {
+      "variant": "after",
+      "pair_id": 0,
+      "ca_rmsd_A": 2.8735980833128636,
+      "plddt": 85.71,
+      "motif_backbone_local_rmsd_A": 0.45950311409254563,
+      "catalytic_atoms_global_rmsd_A": 2.449268477597843,
+      "catalytic_atoms_motif_frame_rmsd_A": 2.0827964668715953,
+      "catalytic_atoms_to_theozyme_bestfit_rmsd_A": 1.8002569976012737,
+      "pocket_ca_rmsd_A": 3.7419850689445067,
+      "pocket_residues": 34,
+      "fixed_atoms_ligand_frame_rmsd_A": 0.013006188320968805,
+      "ligand_aligned_rmsd_A": 0.007003022749829788,
+      "mpnn_ca_max_change_A": 0.0007400991806863167,
+      "motif_identities_preserved": true,
+      "motif_mapping": {
+        "A514": "A34",
+        "A531": "A82",
+        "A574": "A76",
+        "A580": "A105"
+      },
+      "refold_distances": {
+        "cys_sg_his_nd1_A": 4.950080747359699,
+        "cys_sg_his_ne2_A": 6.162878353248558,
+        "hisN_aspO_min_A": 3.221091558930616,
+        "cys_sg_gln_ne2_A": 5.564694023050213
+      },
+      "distance_errors_to_theozyme_A": {
+        "cys_sg_his_nd1_A": 1.2399108671294239,
+        "cys_sg_his_ne2_A": 0.7510053716940162,
+        "hisN_aspO_min_A": 0.41845890738041414,
+        "cys_sg_gln_ne2_A": 0.5949691642705526
+      },
+      "fold_pass": false
+    },
+    {
+      "variant": "after",
+      "pair_id": 1,
+      "ca_rmsd_A": 8.381176467298983,
+      "plddt": 67.74,
+      "motif_backbone_local_rmsd_A": 3.8922462914837137,
+      "catalytic_atoms_global_rmsd_A": 6.004346068091246,
+      "catalytic_atoms_motif_frame_rmsd_A": 4.805859931254004,
+      "catalytic_atoms_to_theozyme_bestfit_rmsd_A": 4.296745450522335,
+      "pocket_ca_rmsd_A": 9.092219471766944,
+      "pocket_residues": 30,
+      "fixed_atoms_ligand_frame_rmsd_A": 0.013006188320968805,
+      "ligand_aligned_rmsd_A": 0.007003022749829788,
+      "mpnn_ca_max_change_A": 0.0007954403114322596,
+      "motif_identities_preserved": true,
+      "motif_mapping": {
+        "A514": "A75",
+        "A531": "A132",
+        "A574": "A18",
+        "A580": "A55"
+      },
+      "refold_distances": {
+        "cys_sg_his_nd1_A": 6.365665250575881,
+        "cys_sg_his_ne2_A": 7.499983056289208,
+        "hisN_aspO_min_A": 3.1647739807708777,
+        "cys_sg_gln_ne2_A": 12.743883016140595
+      },
+      "distance_errors_to_theozyme_A": {
+        "cys_sg_his_nd1_A": 2.6554953703456055,
+        "cys_sg_his_ne2_A": 2.088110074734667,
+        "hisN_aspO_min_A": 0.3621413292206759,
+        "cys_sg_gln_ne2_A": 7.774158157360935
+      },
+      "fold_pass": false
+    },
+    {
+      "variant": "after",
+      "pair_id": 2,
+      "ca_rmsd_A": 11.905623062744576,
+      "plddt": 61.09,
+      "motif_backbone_local_rmsd_A": 6.906507721813704,
+      "catalytic_atoms_global_rmsd_A": 11.680236273159721,
+      "catalytic_atoms_motif_frame_rmsd_A": 8.686457677448306,
+      "catalytic_atoms_to_theozyme_bestfit_rmsd_A": 8.380084468117937,
+      "pocket_ca_rmsd_A": 12.803367425722438,
+      "pocket_residues": 30,
+      "fixed_atoms_ligand_frame_rmsd_A": 0.013006188320968805,
+      "ligand_aligned_rmsd_A": 0.007003022749829788,
+      "mpnn_ca_max_change_A": 0.0007951103763682921,
+      "motif_identities_preserved": true,
+      "motif_mapping": {
+        "A514": "A122",
+        "A531": "A82",
+        "A574": "A32",
+        "A580": "A44"
+      },
+      "refold_distances": {
+        "cys_sg_his_nd1_A": 10.785413174104779,
+        "cys_sg_his_ne2_A": 11.045328359115356,
+        "hisN_aspO_min_A": 17.58835687082716,
+        "cys_sg_gln_ne2_A": 22.304307278349416
+      },
+      "distance_errors_to_theozyme_A": {
+        "cys_sg_his_nd1_A": 7.075243293874504,
+        "cys_sg_his_ne2_A": 5.633455377560814,
+        "hisN_aspO_min_A": 14.785724219276958,
+        "cys_sg_gln_ne2_A": 17.334582419569756
+      },
+      "fold_pass": false
+    },
+    {
+      "variant": "after",
+      "pair_id": 3,
+      "ca_rmsd_A": 17.601950071357322,
+      "plddt": 61.24000000000001,
+      "motif_backbone_local_rmsd_A": 6.999199554532143,
+      "catalytic_atoms_global_rmsd_A": 13.60033817443776,
+      "catalytic_atoms_motif_frame_rmsd_A": 8.814132983541176,
+      "catalytic_atoms_to_theozyme_bestfit_rmsd_A": 8.24178946848669,
+      "pocket_ca_rmsd_A": 17.438155436556993,
+      "pocket_residues": 32,
+      "fixed_atoms_ligand_frame_rmsd_A": 0.013006188320968805,
+      "ligand_aligned_rmsd_A": 0.007003022749829788,
+      "mpnn_ca_max_change_A": 0.0007741985428911056,
+      "motif_identities_preserved": true,
+      "motif_mapping": {
+        "A514": "A64",
+        "A531": "A38",
+        "A574": "A45",
+        "A580": "A132"
+      },
+      "refold_distances": {
+        "cys_sg_his_nd1_A": 10.468320764984501,
+        "cys_sg_his_ne2_A": 11.00787087889584,
+        "hisN_aspO_min_A": 15.986944315687383,
+        "cys_sg_gln_ne2_A": 19.456851966855822
+      },
+      "distance_errors_to_theozyme_A": {
+        "cys_sg_his_nd1_A": 6.758150884754226,
+        "cys_sg_his_ne2_A": 5.595997897341299,
+        "hisN_aspO_min_A": 13.184311664137182,
+        "cys_sg_gln_ne2_A": 14.487127108076162
+      },
+      "fold_pass": false
+    }
+  ],
+  "artifact_directory": "outs/cysteine-hydrolase/",
+  "provenance": {
+    "pipelines_revision": "c6102925935145a261a18b1d08974d57ef068c25",
+    "execution": "All scored generation, LigandMPNN and eight ESMFold2 refolds completed locally on g2119 RTX A4000, without OOM or low-memory mode; cluster jobs are failed/cancelled history only",
+    "jobs": {
+      "generation": 28567472,
+      "evaluation": 28567676,
+      "failed_generation": 28561902,
+      "failed_generation_reason": "Triton temporary directory disappeared after baseline warmup; no scored structures written",
+      "first_evaluation_dependency": 28564067,
+      "socket_failure_generation": 28565725,
+      "cluster_jobs_cancelled_for_local_first": [
+        28567472,
+        28567676
+      ]
+    },
+    "files": {
+      "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/analyze.py": "86e6dcce8bacdd753683e051bfdd8309f82e3ad77d236809148fc4ae232be002",
+      "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generate_local_more.py": "8cd2f3fe457c44d8f11b4af62e1c4879fe419912c5ea3f59bbe9d816624d6516",
+      "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/evaluate.py": "ef2e5369d31ebb1570b630d6525e60f56ab4745b351deed703a0a80c45d16ca5",
+      "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generate_local.py": "217a91e070cd1ec1ea665b089097fa258774aae288109ba3e5c488c9ea8abbe7",
+      "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/evaluate_all_local.py": "7f63068045979173ba079646ead6c12c4f1a45adf233f48a442a1d2187b8e5cf",
+      "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/plot.py": "662fdc4a58469a077e5209b01a3df87aeea9a847a96db678839a1c723d87dd1f",
+      "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/evaluate_local.py": "a87e152147c0edb1560bfa4f2e3750ec24af77bdefd3e8946b2a0721279b7a70",
+      "/mnt/home/jbutch/Projects/HT25/af3/foundry-private/outs/cysteine-hydrolase/generate.py": "7acd53f925d3912c18286326781092bfbaf297bade0fea1866be73983fb016c8"
+    },
+    "esmfold2_snapshot": "1ebf0e3481a5184eb6171d40615c79e384b48796"
+  }
+}

@@ -1,3 +1,4 @@
+import functools
 import itertools
 
 import numpy as np
@@ -6,7 +7,19 @@ from atomworks.ml.preprocessing.utils.structure_utils import (
 )
 from atomworks.ml.utils.token import spread_token_wise
 from biotite.structure import CellList, annotate_sse, gyration_radius
+from biotite.structure.info import mass
 from rfd3.transforms.conditioning_base import get_motif_features
+
+
+@functools.cache
+def _element_mass(element: str) -> float:
+    # biotite's mass() re-reads its JSON table on every call; look up each element once.
+    return mass(element)
+
+
+def atom_masses(atom_array) -> np.ndarray:
+    elements, inverse = np.unique(atom_array.element, return_inverse=True)
+    return np.array([_element_mass(str(e)) for e in elements])[inverse]
 
 
 def get_ss_metrics_and_rg(
@@ -57,7 +70,7 @@ def get_ss_metrics_and_rg(
                 ss_adherence_dict[metric_name] = np.nan
 
     # Compute radius of gyration
-    radius_of_gyration = gyration_radius(atom_array)
+    radius_of_gyration = gyration_radius(atom_array, masses=atom_masses(atom_array))
 
     # Return output metrics
     output_metrics = {
