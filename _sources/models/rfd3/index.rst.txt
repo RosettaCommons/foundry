@@ -1,0 +1,95 @@
+RFdiffusion3 Documentation
+==========================
+
+RFdiffusion3 is a powerful protein design tool that operates on the atomic level to 
+study ligand-protein interactions, create nucleic acid-protein interfaces, and 
+design *de novo* enzymes. It is designed to be highly flexible and 
+user-friendly, making it suitable for a wide range of applications in computational biology and biochemistry.
+
+New to RFD3?
+------------
+If you haven't installed RFD3 yet, take a look at the `RFD3 README <https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/README.md#getting-started>`_ or, if you are on a UNIX system, see the :doc:`tutorials/RFdiffusion3_installation_tutorial` .
+
+Once you have everything installed, check out one of our Introductory Tutorials, listed below. 
+
+.. _rfd3_general:
+
+General
+-------
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/RFdiffusion3_installation_tutorial.md
+   intro_inference_calculations.md
+   input.md
+   output.md
+   common_issues.md
+
+.. _rfd3_design_tips:
+
+RFD3 Design Tips
+----------------
+.. toctree::
+   :maxdepth: 1
+
+   designability_vs_diversity.md
+   design_areas/enzyme_design_tips.md
+
+.. _rfd3_introductory_tutorials:
+
+Introductory Tutorials
+----------------------
+These introductory tutorials are designed to help users get familiar
+with the capabilities of RFD3 for specific design tasks. 
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/ppi_design_tutorial.md
+   tutorials/enzyme_design_tutorial.md
+   tutorials/na_binder_tutorial.md
+
+.. _rfd3_intermediate_tutorials:
+
+Intermediate Tutorials
+----------------------
+These intermediate tutorials cover more complex topics related
+to specific design tasks in RFD3. If this is your first time using
+RFD3, we recommend starting with the introductory tutorials before moving on to these.
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/intermediate_enzyme_design_tutorial.md
+   tutorials/binder_design_tutorial.md
+
+.. _rfd3_advanced_tutorials:
+
+Advanced Tutorials
+------------------
+The advanced RFdiffusion3 tutorials focus on more complex design tasks and provide in-depth explanations of the underlying principles and techniques used in RFD3. These tutorials assume some knowledge of the use of PyMOL (or other visualization software) and basic RFdiffusion3 concepts that are described in the introductory and intermediate tutorials.
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/advanced_enzyme_design_tutorial.md
+
+.. _rfd3_examples:
+
+Examples
+--------
+The following examples demonstrate how to use RFD3 for various design
+tasks. However, they do not go into detail about how to set up RFD3
+or how the different constraints work. If you are new to RFD3, we 
+recommend starting with the introductory tutorials before moving
+on to these examples.
+
+.. toctree::
+   :maxdepth: 1 
+
+   examples/na_binder_design.md
+   examples/sm_binder_design.md
+   examples/protein_binder_design.md
+   examples/macrocycle_design.md
+   examples/symmetry.md
+   examples/enzyme_design.md

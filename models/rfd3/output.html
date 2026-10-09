@@ -1,0 +1,616 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="Common Issues" href="common_issues.html"><link rel="prev" title="RFdiffusion3 — Input Specification &amp; Command-line arguments" href="input.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>RFdiffusion3 — Output Metrics - foundry 0.1.7 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=acfd86a5" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #F68A33;
+  --color-brand-content: #37939B;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-background-hover: #DCE8E8ff;
+  --color-announcement-background: #F68A33dd;
+  --color-announcement-text: #070707;
+  --color-brand-visited: #37939B;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #37939B;
+  --color-brand-content: #F68A33;
+  --font-stack: Open Sans, sans-serif;
+  --font-stack--headings: Open Sans, sans-serif;
+  --color-brand-visited: #37939B;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">foundry 0.1.7 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">foundry 0.1.7 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">General</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../license_link.html">LICENSE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation_faq.html">Common Installation Issues</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../contributing_link.html">CONTRIBUTING</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Models</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">RFdiffusion3 Documentation</a><input aria-label="Toggle navigation of RFdiffusion3 Documentation" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="tutorials/RFdiffusion3_installation_tutorial.html">Installation of RFdiffusion3 on Unix Systems</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro_inference_calculations.html">Inference Calculation Basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="input.html">RFdiffusion3 — Input Specification &amp; Command-line arguments</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">RFdiffusion3 — Output Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="common_issues.html">Common Issues</a></li>
+<li class="toctree-l2"><a class="reference internal" href="designability_vs_diversity.html">Designability vs. Diversity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design_areas/enzyme_design_tips.html">Tips for Designing Enzymes with RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/ppi_design_tutorial.html">Protein-Protein Interface Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/enzyme_design_tutorial.html">Enzyme Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/na_binder_tutorial.html">Nuclei Acid Binder Design in RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/intermediate_enzyme_design_tutorial.html">Intermediate Enzyme Design Tutorial</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/binder_design_tutorial.html">Protein and Small Molecule Binder Design with Hydrogen Bond Conditioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/advanced_enzyme_design_tutorial.html">Advanced Enzyme Design with RFdiffusion3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples/na_binder_design.html">RFdiffusion3 — Nucleic acid binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples/sm_binder_design.html">RFdiffusion3 — Small molecule binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples/protein_binder_design.html">RFdiffusion3 — Protein binder design examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples/macrocycle_design.html">N-to-C macrocycle design</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples/symmetry.html">Overview of Symmetry in RFD3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples/enzyme_design.html">RFdiffusion3 — Enzyme design examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../rf3/index.html">RF3 Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mpnn/index.html">MPNN Documentation</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../../_sources/models/rfd3/output.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="rfdiffusion3-output-metrics">
+<h1>RFdiffusion3 — Output Metrics<a class="headerlink" href="#rfdiffusion3-output-metrics" title="Link to this heading">¶</a></h1>
+<p>For each design RFD3 creates, a JSON file with metrics that can be used to evaluate the design is also produced. This document describes the shape of that JSON file and gives a complete reference for every metric it can contain, including the conditions under which each metric is (or isn’t) present.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For more detailed information on RFdiffusion3 inputs, see <a class="reference internal" href="input.html"><span class="doc">RFdiffusion3 — Input Specification &amp; Command-line arguments</span></a>.</p>
+</div>
+<hr class="docutils" />
+<section id="contents">
+<h2>Contents<a class="headerlink" href="#contents" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="#output-file-structure">Output file structure</a></p></li>
+<li><p><a class="reference internal" href="#metrics-reference">Metrics reference</a></p>
+<ul>
+<li><p><a class="reference internal" href="#insertion-join-point-metrics">Insertion &amp; join-point metrics</a></p></li>
+<li><p><a class="reference internal" href="#backbone-geometry-clashes-fold-composition">Backbone geometry, clashes &amp; fold composition</a></p></li>
+<li><p><a class="reference internal" href="#hydrogen-bonds">Hydrogen bonds</a></p></li>
+<li><p><a class="reference internal" href="#partial-diffusion-metrics">Partial diffusion</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#faq-gotchas">FAQ / Gotchas</a></p></li>
+</ul>
+<hr class="docutils" />
+</section>
+<section id="output-file-structure">
+<span id="id1"></span><h2>Output file structure<a class="headerlink" href="#output-file-structure" title="Link to this heading">¶</a></h2>
+<p>A typical output JSON file will have the various sections:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;diffused_index_map&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<span class="w">    </span><span class="nt">&quot;metrics&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;n_chainbreaks&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;max_ca_deviation&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.04</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;helix_fraction&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.31</span><span class="p">,</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;specification&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<span class="w">    </span><span class="nt">&quot;inference_sampler&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<span class="w">    </span><span class="nt">&quot;ckpt_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;seed&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>You can see a real example of a full output JSON in the <a class="reference internal" href="tutorials/advanced_enzyme_design_tutorial.html"><span class="doc">advanced enzyme design tutorial</span></a>.</p>
+<section id="diffused-index-map">
+<h3>Diffused Index Map<a class="headerlink" href="#diffused-index-map" title="Link to this heading">¶</a></h3>
+<p>The first section of each output JSON file for your generated designs is the <code class="docutils literal notranslate"><span class="pre">diffused_index_map</span></code>. This section lists the original residue labels (chain ID and residue number) for each residue that was read in from an input structure – such as a theozyme or motif – and matches it to where this residue is now located in the final design.</p>
+</section>
+<section id="metrics">
+<h3>Metrics<a class="headerlink" href="#metrics" title="Link to this heading">¶</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Not every metric is always present.</strong> Several groups of metrics are only computed under specific conditions (e.g., only for unindexed motifs, only when <code class="docutils literal notranslate"><span class="pre">cleanup_virtual_atoms=True</span></code>, only when a ligand is present). When the condition isn’t met, the key(s) are omitted from <code class="docutils literal notranslate"><span class="pre">&quot;metrics&quot;</span></code> entirely — they will not appear as <code class="docutils literal notranslate"><span class="pre">null</span></code> or <code class="docutils literal notranslate"><span class="pre">0</span></code>. Each table below notes the relevant condition.</p>
+</div>
+</section>
+</section>
+<section id="metrics-reference">
+<span id="id2"></span><h2>Metrics reference<a class="headerlink" href="#metrics-reference" title="Link to this heading">¶</a></h2>
+<section id="insertion-join-point-metrics">
+<span id="id3"></span><h3>Insertion &amp; join-point metrics<a class="headerlink" href="#insertion-join-point-metrics" title="Link to this heading">¶</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This entire group is only computed when the design spec contains <strong>unindexed</strong> motif residues (i.e., you used the <code class="docutils literal notranslate"><span class="pre">unindex</span></code> input field, see <a class="reference internal" href="input.html#unindexing-specifics"><span class="std std-ref">Unindexing Specifics</span></a>). For fully indexed or fully unconditional designs, none of these keys appear in the output at all. Computed in <a class="reference external" href="https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/src/rfd3/trainer/trainer_utils.py"><code class="docutils literal notranslate"><span class="pre">process_unindexed_outputs</span></code></a>.</p>
+</div>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Metric Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">insertion_rmsd</span></code></p></td>
+<td><p><strong>Insertion RMSD</strong> (Å). Measures how accurately the unindexed motif residues were placed into the generated backbone, averaged over all unindexed motif residues. This is the root-mean-square deviation between the original motif atom positions and their matched positions in the diffused structure. <strong>Lower is better</strong>; values below ~0.5 Å indicate good placement.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">insertion.mae</span></code></p></td>
+<td><p><strong>Insertion MAE</strong> (Å). Mean absolute error of the motif atom placement. Similar to <code class="docutils literal notranslate"><span class="pre">insertion_rmsd</span></code> but less sensitive to outliers. <strong>Lower is better.</strong></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">insertion.rmcd</span></code></p></td>
+<td><p><strong>Insertion RMCD</strong> (Å). Root mean cubic deviation of the motif atom placement. More sensitive to large deviations than RMSD. <strong>Lower is better.</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">join_point_rmsd</span></code></p></td>
+<td><p><strong>Join point RMSD</strong> (Å), averaged over <code class="docutils literal notranslate"><span class="pre">join_point_rmsd_by_token</span></code>. <strong>Lower is better.</strong> Acts as a measure of how well the input motif connects to the generated scaffold, averaged over motif atoms that meet the following criteria: ⚠️ Only covers unindexed motif residues where <strong>no backbone atoms are held fixed</strong> (<code class="docutils literal notranslate"><span class="pre">N</span></code>/<code class="docutils literal notranslate"><span class="pre">CA</span></code>/<code class="docutils literal notranslate"><span class="pre">C</span></code>/<code class="docutils literal notranslate"><span class="pre">O</span></code>) — i.e. the <code class="docutils literal notranslate"><span class="pre">select_fixed_atoms</span></code> fixes only side-chain atoms (e.g. <code class="docutils literal notranslate"><span class="pre">TIP</span></code>) or a single atom for that residue, so no backbone coordinates were carried over from the input and the join is measured from a <code class="docutils literal notranslate"><span class="pre">CB</span></code> or atomized atom instead.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">join_point_rmsd_by_token</span></code></p></td>
+<td><p>Per-residue breakdown of <code class="docutils literal notranslate"><span class="pre">join_point_rmsd</span></code>, keyed by the <strong>input</strong> residue label (where the residue was in your input motif, not the output design). Only contains entries for the residues described above, those with no fixed backbone atoms.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">n_conjoined_residues</span></code></p></td>
+<td><p>Number of motif residues that mapped to multiple diffused positions. Should be <strong>0</strong> for a clean design.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="backbone-geometry-clashes-fold-composition">
+<span id="id4"></span><h3>Backbone geometry, clashes &amp; fold composition<a class="headerlink" href="#backbone-geometry-clashes-fold-composition" title="Link to this heading">¶</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This entire group is only computed when <code class="docutils literal notranslate"><span class="pre">cleanup_virtual_atoms=True</span></code> (the default; see <a class="reference internal" href="input.html#other-useful-cli-arguments"><span class="std std-ref">Other CLI arguments</span></a>). If a run is launched with <code class="docutils literal notranslate"><span class="pre">cleanup_virtual_atoms=False</span></code> - e.g. while debugging virtual atoms, see <a class="reference internal" href="input.html#debugging-recommendations"><span class="std std-ref">Debugging recommendations</span></a> - <strong>none</strong> of the metrics below are computed and the whole group is absent from <code class="docutils literal notranslate"><span class="pre">&quot;metrics&quot;</span></code>. Computed in <a class="reference external" href="https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/src/rfd3/metrics/design_metrics.py"><code class="docutils literal notranslate"><span class="pre">get_all_backbone_metrics</span></code></a>.</p>
+</div>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Metric Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">n_chainbreaks</span></code></p></td>
+<td><p>Number of backbone breaks where the CA-CA distance deviates significantly from the ideal 3.8 Å. Should be <strong>0</strong> for a clean design.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">max_ca_deviation</span></code></p></td>
+<td><p>Largest CA-CA distance deviation from the standard 3.8 Å bond length. <strong>Lower is better</strong>; very small values (&lt; 0.1 Å) indicate a clean backbone trace.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">n_clashing.interresidue_clashes_w_sidechain</span></code></p></td>
+<td><p>Number of interresidue steric clashes considering <strong>all</strong> atoms (backbone + sidechain) between non-adjacent residues (distance &lt; 1.5 Å). Should be <strong>0</strong> or very low.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">n_clashing.interresidue_clashes_w_backbone</span></code></p></td>
+<td><p>Number of interresidue steric clashes restricted to backbone atoms (<code class="docutils literal notranslate"><span class="pre">N</span></code>/<code class="docutils literal notranslate"><span class="pre">CA</span></code>/<code class="docutils literal notranslate"><span class="pre">C</span></code>) only. Should be <strong>0</strong>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">n_clashing.ligand_clashes</span></code></p></td>
+<td><p>Number of ligand atoms that clash with the generated backbone (distance &lt; 1.5 Å). <strong>Only present if the design includes a ligand and has diffused backbone atoms to compare against</strong>; omitted entirely for ligand-free designs. Should be <strong>0</strong>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">n_clashing.ligand_min_distance</span></code></p></td>
+<td><p>Minimum distance (Å) between any ligand atom and the generated backbone. Values around 2.5–4.0 Å are typical and indicate the scaffold is close to the ligand without clashing. <strong>Only present under the same condition as <code class="docutils literal notranslate"><span class="pre">n_clashing.ligand_clashes</span></code>.</strong></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">helix_fraction</span></code></p></td>
+<td><p>Fraction of residues in alpha-helices (computed using the P-SEA algorithm). Gives a sense of fold topology. Computed with fixed motif atoms <strong>excluded</strong> — see note below.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sheet_fraction</span></code></p></td>
+<td><p>Fraction of residues in beta-sheets. Fixed motif atoms excluded, same as <code class="docutils literal notranslate"><span class="pre">helix_fraction</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">non_loop_fraction</span></code></p></td>
+<td><p>Fraction of residues in regular secondary structure (helices + sheets). Higher values generally indicate a more structured, designable protein. Fixed motif atoms excluded.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">loop_fraction</span></code></p></td>
+<td><p>Fraction of residues in loops/coils (1 minus <code class="docutils literal notranslate"><span class="pre">non_loop_fraction</span></code>). Fixed motif atoms excluded.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">num_ss_elements</span></code></p></td>
+<td><p>Number of distinct secondary structure elements (individual helices and sheets). Gives a sense of fold complexity. Fixed motif atoms excluded.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">radius_of_gyration</span></code></p></td>
+<td><p>Radius of gyration (Å). Measures how compact the structure is. Smaller values indicate a more globular, tightly packed protein. Fixed motif atoms excluded.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">alanine_content</span></code></p></td>
+<td><p>Fraction of designed residues that are alanine. The backbone-only output tends to default to alanine in many positions; very high values (&gt; 0.4) may indicate regions where the model struggled to build meaningful secondary structure. Includes fixed motif residues by default (see note below).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">glycine_content</span></code></p></td>
+<td><p>Fraction of designed residues that are glycine. High glycine content can indicate flexible or disordered regions. Includes fixed motif residues by default.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">num_residues</span></code></p></td>
+<td><p>Total number of protein residues in the generated design (within the requested length range). Includes fixed motif residues by default.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">diffused_com</span></code></p></td>
+<td><p>Center-of-mass coordinates <code class="docutils literal notranslate"><span class="pre">[x,</span> <span class="pre">y,</span> <span class="pre">z]</span></code> of the generated (diffused) portion of the protein.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fixed_com</span></code></p></td>
+<td><p>Center-of-mass coordinates <code class="docutils literal notranslate"><span class="pre">[x,</span> <span class="pre">y,</span> <span class="pre">z]</span></code> of the fixed motif atoms. <strong>Only present if the design has at least one fixed-coordinate motif atom</strong> (e.g. from <code class="docutils literal notranslate"><span class="pre">select_fixed_atoms</span></code>); omitted entirely for fully unconditional designs.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Fixed-motif scoping differs between the two halves of this table.</strong> <code class="docutils literal notranslate"><span class="pre">helix_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">sheet_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">non_loop_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">loop_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">num_ss_elements</span></code>, and <code class="docutils literal notranslate"><span class="pre">radius_of_gyration</span></code> always exclude atoms with fixed coordinates (i.e. the input motif). <code class="docutils literal notranslate"><span class="pre">alanine_content</span></code>, <code class="docutils literal notranslate"><span class="pre">glycine_content</span></code>, <code class="docutils literal notranslate"><span class="pre">num_residues</span></code>, and <code class="docutils literal notranslate"><span class="pre">diffused_com</span></code> include the whole structure (motif + diffused). This means, for a design with a sizeable fixed motif, <code class="docutils literal notranslate"><span class="pre">helix_fraction</span></code> reflects only the diffused region while <code class="docutils literal notranslate"><span class="pre">num_residues</span></code>/<code class="docutils literal notranslate"><span class="pre">alanine_content</span></code> reflect the full structure — keep this in mind when comparing designs with different motif sizes.</p>
+</div>
+</section>
+<section id="hydrogen-bonds">
+<span id="id5"></span><h3>Hydrogen bonds<a class="headerlink" href="#hydrogen-bonds" title="Link to this heading">¶</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This group is only present when the design was run with H-bond conditioning (spec uses <code class="docutils literal notranslate"><span class="pre">select_hbond_donor</span></code>/<code class="docutils literal notranslate"><span class="pre">select_hbond_acceptor</span></code>), HBPLUS is installed with <code class="docutils literal notranslate"><span class="pre">HBPLUS_PATH</span></code> set, and the H-bond selection matches real atoms. Otherwise the whole group is silently omitted (a <code class="docutils literal notranslate"><span class="pre">Could</span> <span class="pre">not</span> <span class="pre">calculate</span> <span class="pre">hbond</span> <span class="pre">metrics</span></code> warning is written to the run log). Computed in <a class="reference external" href="https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/src/rfd3/metrics/hbonds_hbplus_metrics.py"><code class="docutils literal notranslate"><span class="pre">get_hbond_metrics</span></code></a>.</p>
+</div>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Metric Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">num_hbonds</span></code></p></td>
+<td><p>Number of hydrogen bonds detected (by HBPLUS) between the motif and diffused regions. ⚠️ This counts <strong>any</strong> detected motif↔diffused hydrogen bond, not just bonds involving the specific atoms you requested via <code class="docutils literal notranslate"><span class="pre">select_hbond_donor</span></code>/<code class="docutils literal notranslate"><span class="pre">select_hbond_acceptor</span></code> — use <code class="docutils literal notranslate"><span class="pre">correct_donor_percent</span></code>/<code class="docutils literal notranslate"><span class="pre">correct_acceptor_percent</span></code> below to check adherence to your requested atoms specifically.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">correct_donor_percent</span></code></p></td>
+<td><p>Fraction of the requested donor atoms that actually formed a hydrogen bond in the design. <strong>Higher is better.</strong></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">correct_acceptor_percent</span></code></p></td>
+<td><p>Fraction of the requested acceptor atoms that actually formed a hydrogen bond in the design. <strong>Higher is better.</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">donor_atom_names</span></code></p></td>
+<td><p>List of the donor atoms that participated in a detected H-bond, each formatted as <code class="docutils literal notranslate"><span class="pre">{atom}_{resname}_{resid}</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">acceptor_atom_names</span></code></p></td>
+<td><p>List of the acceptor atoms that participated in a detected H-bond, each formatted as <code class="docutils literal notranslate"><span class="pre">{atom}_{resname}_{resid}</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">hbond_connections</span></code></p></td>
+<td><p>List of the detected donor–acceptor pairs, each formatted as <code class="docutils literal notranslate"><span class="pre">{donor}-{acceptor}</span></code> (same per-atom format as above).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="partial-diffusion-metrics">
+<span id="id6"></span><h3>Partial diffusion metrics<a class="headerlink" href="#partial-diffusion-metrics" title="Link to this heading">¶</a></h3>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Only present for partial-diffusion runs, see <a class="reference internal" href="input.html#partial-diffusion"><span class="std std-ref">Partial Diffusion</span></a>.</p>
+</div>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Metric Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ca_rmsd_to_input</span></code></p></td>
+<td><p>CA RMSD (Å) between the generated design and the original input structure, after rigid alignment. Measures how far partial diffusion moved the backbone from the starting structure. <strong>Only present</strong> when <code class="docutils literal notranslate"><span class="pre">partial_t</span></code> is set and the input and output have a matching number of CA atoms.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+<section id="faq-gotchas">
+<span id="id7"></span><h2>FAQ / Gotchas<a class="headerlink" href="#faq-gotchas" title="Link to this heading">¶</a></h2>
+<details>
+<summary><b>Why don't I see any clash / secondary-structure / composition metrics in my output?</b></summary>
+<p>Check whether the run used <code class="docutils literal notranslate"><span class="pre">cleanup_virtual_atoms=False</span></code>. That whole group of metrics (chainbreaks, clashes, SS fractions, radius of gyration, composition, <code class="docutils literal notranslate"><span class="pre">num_residues</span></code>, <code class="docutils literal notranslate"><span class="pre">diffused_com</span></code>/<code class="docutils literal notranslate"><span class="pre">fixed_com</span></code>) requires virtual atoms to have been cleaned up first, since they need a real (non-virtual) atom count. See <a class="reference internal" href="#backbone-geometry-clashes-fold-composition">Backbone geometry, clashes &amp; fold composition</a>.</p>
+</details>
+<details>
+<summary><b>Why is `fixed_com` missing from my output?</b></summary>
+<p><code class="docutils literal notranslate"><span class="pre">fixed_com</span></code> is only written when the design has at least one atom with a fixed coordinate (e.g. from a motif or <code class="docutils literal notranslate"><span class="pre">select_fixed_atoms</span></code>). Fully unconditional designs have no fixed atoms, so this key is omitted rather than set to <code class="docutils literal notranslate"><span class="pre">null</span></code>.</p>
+</details>
+<details>
+<summary><b>Why don't I see `insertion_rmsd` / `join_point_rmsd` for my motif?</b></summary>
+<p>These are only computed for <strong>unindexed</strong> motif residues (the <code class="docutils literal notranslate"><span class="pre">unindex</span></code> input field). If your motif is fully indexed via <code class="docutils literal notranslate"><span class="pre">contig</span></code>, these keys won’t appear — indexed motif placement is deterministic by construction, so there’s nothing to measure. See <a class="reference internal" href="#insertion-join-point-metrics">Insertion &amp; join-point metrics</a>.</p>
+</details>
+<details>
+<summary><b>Why does `join_point_rmsd_by_token` only list some of my unindexed residues?</b></summary>
+<p><code class="docutils literal notranslate"><span class="pre">join_point_rmsd</span></code> only applies to unindexed residues where <strong>none of the fixed atoms are backbone atoms</strong>. <code class="docutils literal notranslate"><span class="pre">unindex</span></code> selects a residue by chain + residue number, but only the atoms marked fixed via <code class="docutils literal notranslate"><span class="pre">select_fixed_atoms</span></code> are actually carried over from the input — if that residue is fixed as side-chain-only (e.g. <code class="docutils literal notranslate"><span class="pre">TIP</span></code>) or a single atom, no backbone coordinates make it into the token, and it’s included in this metric. Residues fixed with at least one backbone atom are excluded from this metric entirely.</p>
+</details>
+<p>Let us know if you have any additional questions, we’d be happy to answer them either in our <a class="reference external" href="https://join.slack.com/t/proteinmodelfoundry/shared_invite/zt-3kpwru8c6-nrmTW6LNHnSE7h16GNnfLA">Slack channel</a> or in a GitHub discussion.</p>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="common_issues.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Common Issues</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="input.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">RFdiffusion3 — Input Specification &amp; Command-line arguments</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Institute for Protein Design, University of Washington
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">RFdiffusion3 — Output Metrics</a><ul>
+<li><a class="reference internal" href="#contents">Contents</a></li>
+<li><a class="reference internal" href="#output-file-structure">Output file structure</a><ul>
+<li><a class="reference internal" href="#diffused-index-map">Diffused Index Map</a></li>
+<li><a class="reference internal" href="#metrics">Metrics</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#metrics-reference">Metrics reference</a><ul>
+<li><a class="reference internal" href="#insertion-join-point-metrics">Insertion &amp; join-point metrics</a></li>
+<li><a class="reference internal" href="#backbone-geometry-clashes-fold-composition">Backbone geometry, clashes &amp; fold composition</a></li>
+<li><a class="reference internal" href="#hydrogen-bonds">Hydrogen bonds</a></li>
+<li><a class="reference internal" href="#partial-diffusion-metrics">Partial diffusion metrics</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#faq-gotchas">FAQ / Gotchas</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=ca7ad2ea"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script async="async" defer="defer" src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
+    </body>
+</html>
