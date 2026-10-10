@@ -1,0 +1,12 @@
+[
+  {
+    "name": "nanobody_3ogo",
+    "components": [
+      {
+        "seq": "MQVQLVESGGALVQPGGSLRLSCAASGFPVNRYSMRWYRQAPGKEREWVAGMSSAGDRSSYEDSVKGRFTISRDDARNTVYLQMNSLKPEDTAVYYCNVNVGFEYWGQGTQVTVSS",
+        "msa_path": "data/msas/nanobody_3ogo.a3m",
+        "chain_id": "A"
+      }
+    ]
+  }
+]
