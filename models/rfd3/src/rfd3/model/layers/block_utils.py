@@ -278,53 +278,36 @@ def get_sparse_attention_indices_with_inter_chain(
     Returns:
         attn_indices: [B, L, k_total] where k_total = k_intra + k_inter
     """
-    B, L, _ = D_LL.shape
+    INTER_CHAIN_CUTOFF = 12.0  # only reserve keys for chains this close
+    L = D_LL.shape[-1]
+    k_inter = min(k_inter, L)
+    same = chain_id[:, None] == chain_id[None, :]
+    local = (tok_idx[:, None] - tok_idx[None, :]).abs() <= n_seq_neighbours
+    inf = float("inf")
 
-    # Get regular intra-chain indices (limited to k_intra)
-    intra_indices = get_sparse_attention_indices(
-        tok_idx, D_LL, n_seq_neighbours, k_intra, chain_id, base_mask
-    )  # [B, L, k_intra]
+    # rank within each chain, so one topk interleaves them - columns are
+    # disjoint per chain, so the ranks go back in place
+    d_inter = D_LL.masked_fill(~(base_mask & ~same) | (D_LL >= INTER_CHAIN_CUTOFF), inf)
+    for c in torch.unique(chain_id).tolist():
+        cols = chain_id == c
+        d_c = d_inter[..., cols]
+        d_inter[..., cols] = d_c.argsort(-1).argsort(-1) * INTER_CHAIN_CUTOFF + d_c
+    reserved_d, reserved = torch.topk(d_inter, k_inter, dim=-1, largest=False)
+    filled = torch.isfinite(reserved_d)
 
-    # Get inter-chain indices for clash avoidance
-    inter_indices = torch.zeros(B, L, k_inter, dtype=torch.long, device=D_LL.device)
-    unique_chains = torch.unique(chain_id)
-    for b in range(B):
-        for c in unique_chains:
-            query_chain = chain_id[c]
+    # sequence neighbours, then own chain, then everything else - minus the reserved
+    d_intra = torch.where(same, D_LL, D_LL + (D_LL.max() + 1.0))
+    d_intra.masked_fill_(base_mask & same & local, -1.0)
+    d_intra.masked_fill_(~base_mask, inf)
+    d_intra.scatter_(
+        -1, reserved, torch.where(filled, inf, d_intra.gather(-1, reserved))
+    )
+    intra = torch.topk(
+        d_intra, min(k_intra + k_inter, L), dim=-1, largest=False
+    ).indices
 
-            # Find atoms from different chains
-            other_chain_mask = (chain_id != query_chain) & base_mask[c, :]
-            other_chain_atoms = torch.where(other_chain_mask)[0]
-
-            if len(other_chain_atoms) > 0:
-                # Get distances to other chains
-                distances_to_other = D_LL[b, c, other_chain_atoms]
-
-                # Select k_inter closest atoms from other chains
-                n_select = min(k_inter, len(other_chain_atoms))
-                _, closest_idx = torch.topk(distances_to_other, n_select, largest=False)
-                selected_atoms = other_chain_atoms[closest_idx]
-
-                # Fill inter-chain indices
-                inter_indices[b, c, :n_select] = selected_atoms
-                # Pad with random atoms if needed
-                if n_select < k_inter:
-                    padding = torch.randint(
-                        0, L, (k_inter - n_select,), device=D_LL.device
-                    )
-                    inter_indices[b, c, n_select:] = padding
-            else:
-                # No other chains found, fill with random indices
-                inter_indices[b, c, :] = torch.randint(
-                    0, L, (k_inter,), device=D_LL.device
-                )
-
-    # Combine intra and inter chain indices
-    combined_indices = torch.cat(
-        [intra_indices, inter_indices], dim=-1
-    )  # [B, L, k_total]
-
-    return combined_indices
+    inter = torch.where(filled, reserved, intra[..., k_intra : k_intra + k_inter])
+    return torch.cat([intra[..., :k_intra], inter], dim=-1).detach()
 
 
 @torch.no_grad()
