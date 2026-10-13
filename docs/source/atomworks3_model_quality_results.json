@@ -1,0 +1,1363 @@
+{
+  "summary": {
+    "native_quality_gate": true,
+    "case_mean_plddt_deltas": {
+      "protein32": 0.00013333333333328165,
+      "protein_dna": -0.000300000000000004,
+      "template32": 0.0,
+      "glycan": -0.002966666666666636,
+      "ligands": 0.00013333333333335565,
+      "protein32_dna8": -0.00019999999999997797,
+      "cap": 0.006366666666666669
+    },
+    "native_structural_equivalence": false,
+    "rf3_native_pairs": 21,
+    "rf3_fixed_pairs": 21,
+    "mpnn_pairs": 36,
+    "median_plddt_delta": 0.0,
+    "rf3_fixed_all_pass": true,
+    "mpnn_all_pass": true
+  },
+  "rf3_native": [
+    {
+      "case": "cap",
+      "seed": "seed11",
+      "ca_rmsd": 0.07236118614673615,
+      "plddt_delta": 0.007099999999999995,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "cap",
+      "seed": "seed29",
+      "ca_rmsd": 0.40883663296699524,
+      "plddt_delta": 0.006099999999999994,
+      "geometry_outlier_change": 0.045454545454545456,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "cap",
+      "seed": "seed47",
+      "ca_rmsd": 0.2690553665161133,
+      "plddt_delta": 0.005900000000000016,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "glycan",
+      "seed": "seed11",
+      "ca_rmsd": 0.17339003086090088,
+      "plddt_delta": -0.0030999999999999917,
+      "geometry_outlier_change": -0.029411764705882353,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "glycan",
+      "seed": "seed29",
+      "ca_rmsd": 0.9399248361587524,
+      "plddt_delta": -0.0021999999999999797,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "glycan",
+      "seed": "seed47",
+      "ca_rmsd": 1.1363396644592285,
+      "plddt_delta": -0.0035999999999999366,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "ligands",
+      "seed": "seed11",
+      "ca_rmsd": 0.030999058857560158,
+      "plddt_delta": 0.000300000000000078,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "ligands",
+      "seed": "seed29",
+      "ca_rmsd": 0.045342136174440384,
+      "plddt_delta": 0.0009000000000000119,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "ligands",
+      "seed": "seed47",
+      "ca_rmsd": 0.03669405356049538,
+      "plddt_delta": -0.0008000000000000229,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "protein32",
+      "seed": "seed11",
+      "ca_rmsd": 0.01924547180533409,
+      "plddt_delta": 0.0006999999999999229,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "protein32",
+      "seed": "seed29",
+      "ca_rmsd": 0.020559659227728844,
+      "plddt_delta": -0.000500000000000056,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "protein32",
+      "seed": "seed47",
+      "ca_rmsd": 0.01700695976614952,
+      "plddt_delta": 0.00019999999999997797,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "protein32_dna8",
+      "seed": "seed11",
+      "ca_rmsd": 0.12228886038064957,
+      "plddt_delta": -0.00029999999999996696,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "protein32_dna8",
+      "seed": "seed29",
+      "ca_rmsd": 0.04014165326952934,
+      "plddt_delta": 0.000200000000000089,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "protein32_dna8",
+      "seed": "seed47",
+      "ca_rmsd": 0.15661421418190002,
+      "plddt_delta": -0.000500000000000056,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "protein_dna",
+      "seed": "seed11",
+      "ca_rmsd": 3.043961524963379,
+      "plddt_delta": -0.0009000000000000119,
+      "geometry_outlier_change": -0.14545454545454545,
+      "severe_clash_change": -33,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "protein_dna",
+      "seed": "seed29",
+      "ca_rmsd": 0.14851467311382294,
+      "plddt_delta": -0.00019999999999997797,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "protein_dna",
+      "seed": "seed47",
+      "ca_rmsd": 0.029611879959702492,
+      "plddt_delta": 0.00019999999999997797,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": null
+    },
+    {
+      "case": "template32",
+      "seed": "seed11",
+      "ca_rmsd": 0.016660727560520172,
+      "plddt_delta": 9.999999999998899e-05,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": 0.1635681837797165
+    },
+    {
+      "case": "template32",
+      "seed": "seed29",
+      "ca_rmsd": 0.01669982820749283,
+      "plddt_delta": 0.0,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": 0.16670729219913483
+    },
+    {
+      "case": "template32",
+      "seed": "seed47",
+      "ca_rmsd": 0.015930239111185074,
+      "plddt_delta": -9.999999999998899e-05,
+      "geometry_outlier_change": 0.0,
+      "severe_clash_change": 0,
+      "template_ca_rmsd": 0.1727251559495926
+    }
+  ],
+  "rf3_fixed_features": [
+    {
+      "case": "cap",
+      "seed": "seed11",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "cap",
+      "seed": "seed29",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "cap",
+      "seed": "seed47",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "glycan",
+      "seed": "seed11",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "glycan",
+      "seed": "seed29",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "glycan",
+      "seed": "seed47",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "ligands",
+      "seed": "seed11",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "ligands",
+      "seed": "seed29",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "ligands",
+      "seed": "seed47",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "protein32",
+      "seed": "seed11",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "protein32",
+      "seed": "seed29",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "protein32",
+      "seed": "seed47",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "protein32_dna8",
+      "seed": "seed11",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "protein32_dna8",
+      "seed": "seed29",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "protein32_dna8",
+      "seed": "seed47",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "protein_dna",
+      "seed": "seed11",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "protein_dna",
+      "seed": "seed29",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "protein_dna",
+      "seed": "seed47",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "template32",
+      "seed": "seed11",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "template32",
+      "seed": "seed29",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    },
+    {
+      "case": "template32",
+      "seed": "seed47",
+      "tensors": 154,
+      "bitwise_equal": 154,
+      "max_abs": 0.0,
+      "pass_threshold": true,
+      "failures": []
+    }
+  ],
+  "mpnn": [
+    {
+      "model": "ligand_mpnn",
+      "case": "cap",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "cap",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "cap",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "glycan",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "glycan",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "glycan",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "ligands",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "ligands",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "ligands",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "protein32",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "protein32",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "protein32",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "protein_dna",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "protein_dna",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "protein_dna",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "template32",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "template32",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "ligand_mpnn",
+      "case": "template32",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "cap",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "cap",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "cap",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "glycan",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "glycan",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "glycan",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "ligands",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "ligands",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "ligands",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "protein32",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "protein32",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "protein32",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "protein_dna",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "protein_dna",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "protein_dna",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "template32",
+      "seed": "seed11",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "template32",
+      "seed": "seed29",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    },
+    {
+      "model": "protein_mpnn",
+      "case": "template32",
+      "seed": "seed47",
+      "inputs": {
+        "tensors": 14,
+        "bitwise_equal": 13,
+        "max_abs": 0.0,
+        "pass_threshold": false,
+        "failures": [
+          {
+            "key": "/input/input_features/X",
+            "reason": "nonfinite"
+          }
+        ]
+      },
+      "outputs": {
+        "tensors": 5,
+        "bitwise_equal": 5,
+        "max_abs": 0.0,
+        "pass_threshold": true,
+        "failures": []
+      },
+      "fixed_residues_preserved": true
+    }
+  ],
+  "thresholds": {
+    "registered_before_run": true,
+    "seeds": [
+      11,
+      29,
+      47
+    ],
+    "rf3": {
+      "n_recycles": 10,
+      "num_steps": 50,
+      "diffusion_batch_size": 1,
+      "fixed_features_atol": 1e-05,
+      "fixed_features_rtol": 1e-05,
+      "native_median_confidence_decline_max": 0.05,
+      "native_case_mean_confidence_decline_max": 0.1,
+      "native_covalent_outlier_fraction_increase_max": 0.1,
+      "covalent_allowed_A": [
+        0.9,
+        2.0
+      ],
+      "new_nonbonded_clashes_below_A": 0.8,
+      "template_ca_rmsd_max_A": 1.0,
+      "native_ca_rmsd_equivalence_max_A": 2.0
+    },
+    "mpnn": {
+      "atol": 1e-05,
+      "rtol": 1e-05,
+      "sampled_sequences_identical": true,
+      "fixed_residues_retained": true
+    }
+  },
+  "protocol": {
+    "cases": [
+      "protein32",
+      "protein_dna",
+      "glycan",
+      "cap",
+      "ligands",
+      "template32",
+      "protein32_dna8"
+    ],
+    "seeds": [
+      11,
+      29,
+      47
+    ],
+    "preprocessing_seed": "reset Python, NumPy, torch CPU and CUDA before each input construction and engine.run",
+    "backend": "DISABLE_CUEQUIVARIANCE=1 before imports; vanilla triangle/dense attention",
+    "rf3": {
+      "n_recycles": 10,
+      "num_steps": 50,
+      "diffusion_batch_size": 1,
+      "early_stopping_plddt_threshold": 0
+    },
+    "mpnn": "Reuse original matched36pairs (both MPNN models do not invoke RF3 triangle multiplication); identical archived AW2 coordinates,2designs per seed,temperature.1,fixedA4",
+    "amendments": "Preserve initial stress-case failure/backend-confounded18pair study and incomplete seed-first study. Add separate32aa+8ntDNA diagnostic; thresholds unchanged.",
+    "fixed_replay": "Saved AW2 pipeline output plus captured Python/NumPy/Torch CPU+CUDA RNG restored into AW3, with actual pre-validation input tensors archived."
+  }
+}
