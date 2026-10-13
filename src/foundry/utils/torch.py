@@ -210,13 +210,13 @@ class _SegmentMean(torch.autograd.Function):
     """Fixed-order mean with a differentiable backward (including double backward)."""
 
     @staticmethod
-    def forward(ctx, source, lengths):
+    def forward(ctx: Any, source: Tensor, lengths: Tensor) -> Tensor:
         ctx.save_for_backward(lengths)
         ctx.source_size = source.shape[0]
         return torch.segment_reduce(source, "mean", lengths=lengths, axis=0)
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: Tensor) -> tuple[Tensor, None]:
         (lengths,) = ctx.saved_tensors
         shape = (-1,) + (1,) * (grad_output.ndim - 1)
         grad = grad_output / lengths.clamp_min(1).view(shape)
