@@ -158,6 +158,58 @@ def test_scatter_mean_matches_index_reduce():
     assert torch.allclose(out, expected)
 
 
+@pytest.mark.parametrize("dim", [0, 1, -2])
+def test_scatter_mean_batched_matches_float64_reference(dim):
+    # Scatter along `dim` of a (B, N, C)-shaped source (dim=0 uses (N, B, C)).
+    torch.manual_seed(0)
+    n_src, n_out = 40, 7
+    index = torch.randint(0, n_out - 1, (n_src,))  # last output row receives nothing
+    shape = [3, 3, 5]
+    shape[dim] = n_src
+    source = torch.randn(*shape)
+    out_shape = list(shape)
+    out_shape[dim] = n_out
+
+    out = scatter_mean(torch.zeros(out_shape), dim, index, source)
+
+    expected = torch.zeros(out_shape, dtype=torch.float64)
+    counts = torch.bincount(index, minlength=n_out).clamp(min=1).double()
+    expected.index_add_(dim, index, source.double())
+    view = [1, 1, 1]
+    view[dim] = -1
+    expected = expected / counts.view(view)
+    assert out.shape == expected.shape
+    assert torch.allclose(out.double(), expected, atol=1e-6)
+    assert torch.all(out.select(dim, n_out - 1) == 0)
+
+
+def test_scatter_mean_preserves_dtype_and_accumulates_in_float32():
+    index = torch.tensor([0] * 300 + [1])
+    # Summing 300 copies of 1 + 2**-7 in bfloat16 stalls once the running total outgrows the
+    # bfloat16 mantissa, so the mean drifts; a float32 accumulator recovers the value exactly.
+    source = torch.full((301, 1), 1.0 + 2**-7, dtype=torch.bfloat16)
+    out = scatter_mean(torch.zeros(2, 1, dtype=torch.bfloat16), 0, index, source)
+    assert out.dtype == torch.bfloat16
+    assert out[0, 0].item() == source[0, 0].item()
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_scatter_mean_is_bitwise_repeatable_on_cuda(dtype):
+    # `index_reduce` (and `index_add_`) accumulate with atomics on CUDA, so repeated calls on
+    # identical inputs return different bits; sampling then diverges despite a fixed seed.
+    torch.manual_seed(0)
+    n_atoms, n_tokens = 20_000, 1_500
+    index = torch.randint(0, n_tokens, (n_atoms,), device="cuda")
+    source = torch.randn(4, n_atoms, 128, device="cuda", dtype=dtype)
+    zeros = torch.zeros(4, n_tokens, 128, device="cuda", dtype=dtype)
+
+    reference = scatter_mean(zeros, 1, index, source)
+    for _ in range(20):
+        assert torch.equal(scatter_mean(zeros, 1, index, source), reference)
+
+
 def test_scatter_mean_does_not_mutate_input():
     zeros = torch.zeros(2, 2)
     index = torch.tensor([0, 1])

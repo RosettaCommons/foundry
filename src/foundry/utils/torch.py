@@ -209,10 +209,20 @@ def assert_same_shape(tensor: Tensor, ref_tensor: Tensor) -> None:
 def scatter_mean(zeros: Tensor, dim: int, index: Tensor, source: Tensor) -> Tensor:
     """Scatter-mean aggregation, with an MPS-compatible fallback.
 
-    On non-MPS devices uses index_reduce (faster, in-place kernel).
-    On MPS, index_reduce is not implemented so falls back to scatter_add + count.
+    On non-MPS devices, sums with ``index_put_(accumulate=True)`` and divides by the
+    contributor count. On MPS it falls back to scatter_add + count (unchanged).
 
     Equivalent to: zeros.index_reduce(dim, index, source, 'mean', include_self=False)
+    (up to floating-point rounding; the sum is accumulated in at least float32).
+
+    Note:
+        This used to call ``index_reduce``. On CUDA that kernel accumulates with atomics
+        and has no deterministic implementation, so calls on byte-identical inputs return
+        different results. Callers feed this pooling through every denoising step of a
+        sampler, where last-bit differences compound, so runs with a fixed seed produced
+        different outputs. ``Tensor.index_add_`` is not a substitute: on CUDA it also uses
+        atomics unless ``torch.use_deterministic_algorithms`` is on. ``index_put_`` with
+        ``accumulate=True`` sorts the indices first, so its summation order is fixed.
 
     Args:
         zeros: Pre-allocated zero tensor, shape (..., I, C). Will not be modified in-place.
@@ -223,12 +233,26 @@ def scatter_mean(zeros: Tensor, dim: int, index: Tensor, source: Tensor) -> Tens
     Returns:
         Tensor of same shape as zeros.
     """
-    if zeros.device.type != "mps":
-        return zeros.index_reduce(dim, index, source, "mean", include_self=False)
-
     ndim = source.dim()
     if dim < 0:
         dim = ndim + dim
+
+    if zeros.device.type != "mps":
+        # Work with the scatter dimension first, so one index tensor addresses it.
+        acc_dtype = torch.promote_types(source.dtype, torch.float32)
+        totals = torch.zeros_like(zeros.movedim(dim, 0), dtype=acc_dtype)
+        totals.index_put_(
+            (index,), source.movedim(dim, 0).to(acc_dtype), accumulate=True
+        )
+
+        count = torch.zeros(totals.shape[0], device=zeros.device, dtype=acc_dtype)
+        count.index_put_(
+            (index,), torch.ones_like(index, dtype=acc_dtype), accumulate=True
+        )
+
+        # Positions that received nothing keep a zero total, so clamping gives 0 / 1 = 0.
+        count = count.clamp(min=1).view(-1, *([1] * (ndim - 1)))
+        return (totals / count).movedim(0, dim).to(zeros.dtype)
 
     # Expand 1D index (N,) to match source shape (..., N, C)
     shape = [1] * ndim
