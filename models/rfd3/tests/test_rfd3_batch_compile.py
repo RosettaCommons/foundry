@@ -77,7 +77,9 @@ def test_cuda_inductor_parity(cuda_graphs):
         t = torch.ones(2, 3, device="cuda")
         expected = model.diffusion_module.forward_batched(x, t, f, **init)
         compiled = torch.compile(
-            model.diffusion_module.forward_batched, fullgraph=True, dynamic=False,
+            model.diffusion_module.forward_batched,
+            fullgraph=True,
+            dynamic=False,
             options={"triton.cudagraphs": cuda_graphs},
         )
         for step in range(3):
@@ -86,7 +88,9 @@ def test_cuda_inductor_parity(cuda_graphs):
             expected = model.diffusion_module.forward_batched(step_x, t, f, **init)
             actual = compiled(step_x, t, f, **init)
             for k in ("X_L", "sequence_logits_I"):
-                torch.testing.assert_close(actual[k], expected[k], atol=0.025, rtol=0.025)
+                torch.testing.assert_close(
+                    actual[k], expected[k], atol=0.025, rtol=0.025
+                )
             del actual
 
 

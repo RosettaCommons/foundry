@@ -74,7 +74,10 @@ def denoise(module, X_noisy_L, t, f, Q_L_init, C_L, P_LL, S_I, Z_II, n_recycle=N
     s = mask_nodes(s + module.process_time_(token_t, 1), tv)
     c = mask_nodes(c + module.process_c(c), av)
     indices, neighbor_valid = select_neighbors(
-        x, av, f["atom_sequence_mask"], module.n_attn_keys,
+        x,
+        av,
+        f["atom_sequence_mask"],
+        module.n_attn_keys,
         f.get("atom_forced_neighbors"),
     )
     gathered = isinstance(P_LL, dict)

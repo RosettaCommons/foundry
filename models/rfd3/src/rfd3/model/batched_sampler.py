@@ -25,7 +25,10 @@ class ExampleRandomness:
 
     def __call__(self, tag, template, atomwise=True):
         result = torch.zeros(
-            template.shape, dtype=template.dtype, device="cpu", pin_memory=template.is_cuda
+            template.shape,
+            dtype=template.dtype,
+            device="cpu",
+            pin_memory=template.is_cuda,
         )
         for b, (name, length) in enumerate(zip(self.ids, self.lengths)):
             for d in range(template.shape[1]):
@@ -201,7 +204,9 @@ def sample(
             min(int(len(schedule) * sampler.sym_step_frac), len(schedule) - 1)
         ]
         symmetry_active = current_times > symmetry_until
-    decisions = torch.stack((gamma_active, cfg_active, symmetry_active), -1).cpu().tolist()
+    decisions = (
+        torch.stack((gamma_active, cfg_active, symmetry_active), -1).cpu().tolist()
+    )
     x = mask_nodes(
         coords
         + torch.where(
@@ -256,11 +261,7 @@ def sample(
         if symmetric and use_symmetry:
             denoised = apply_symmetry(denoised, f, sampler.allow_realignment)
         delta = (noisy - denoised) / t_hat
-        if (
-            sampler.use_classifier_free_guidance
-            and sampler.cfg_scale != 1
-            and use_cfg
-        ):
+        if sampler.use_classifier_free_guidance and sampler.cfg_scale != 1 and use_cfg:
             if f_ref is None or ref_initializer is None:
                 raise ValueError(
                     "CFG requires separately initialized reference features"

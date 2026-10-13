@@ -68,13 +68,17 @@ def test_auto_backend_compatibility(monkeypatch):
     assert select_kernel_backend(**options) == "torch"
 
 
-def test_compiled_transition_policy_is_scoped_to_measured_hardware_and_batch(monkeypatch):
+def test_compiled_transition_policy_is_scoped_to_measured_hardware_and_batch(
+    monkeypatch,
+):
     monkeypatch.setenv("RFD3_LOW_MEMORY_MODE", "0")
     monkeypatch.setattr("importlib.util.find_spec", lambda _: object())
     monkeypatch.setattr(torch.cuda, "get_device_capability", lambda _: (12, 0))
     options = dict(
-        device=torch.device("cuda"), compile_model=True,
-        inference_batch_size=4, low_memory_mode=False,
+        device=torch.device("cuda"),
+        compile_model=True,
+        inference_batch_size=4,
+        low_memory_mode=False,
     )
     assert select_kernel_backend(**options) == "triton-transition"
     assert select_kernel_backend(**(options | dict(inference_batch_size=1))) == "torch"

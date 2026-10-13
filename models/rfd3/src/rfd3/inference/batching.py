@@ -237,9 +237,12 @@ def prepare_attention(f, *, atom_keys, atom_neighbors, token_keys, token_neighbo
         # N-by-N integer grid in every denoiser/recycle is needlessly expensive.
         forced = seq & valid[:, :, None] & valid[:, None, :]
         grid = torch.arange(n, device=valid.device)
-        f[f"{level}_forced_neighbors"] = torch.where(forced, grid, n).sort(-1).values[
-            ..., : min(keys, n)
-        ].contiguous()
+        f[f"{level}_forced_neighbors"] = (
+            torch.where(forced, grid, n)
+            .sort(-1)
+            .values[..., : min(keys, n)]
+            .contiguous()
+        )
     return f
 
 

@@ -89,10 +89,15 @@ def test_worker_config_required():
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA pinning required")
 def test_pinned_prefetch_preserves_values_order_and_cpu_ownership():
     def stream(workers, pin):
-        return list(iter_inference_examples(
-            TensorExamples(), seed=123, num_workers=workers, pin_memory=pin,
-            transform_config={"_target_": f"{__name__}.RandomTransform"},
-        ))
+        return list(
+            iter_inference_examples(
+                TensorExamples(),
+                seed=123,
+                num_workers=workers,
+                pin_memory=pin,
+                transform_config={"_target_": f"{__name__}.RandomTransform"},
+            )
+        )
 
     expected = stream(0, False)
     actual = stream(2, True)

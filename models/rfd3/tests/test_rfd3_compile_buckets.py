@@ -44,11 +44,16 @@ def test_grouping_uses_bucketed_atoms_tokens_and_slots():
     ]
 
 
-@pytest.mark.parametrize("policy,expected", [
-    ("buckets", ((3, 8), (3, 4), (3, 4, 4))),
-    ("batch_max", ((3, 6), (3, 3), (3, 3, 3))),
-])
-def test_compiled_engine_cfg_and_tail_share_all_capacities(monkeypatch, policy, expected):
+@pytest.mark.parametrize(
+    "policy,expected",
+    [
+        ("buckets", ((3, 8), (3, 4), (3, 4, 4))),
+        ("batch_max", ((3, 6), (3, 3), (3, 3, 3))),
+    ],
+)
+def test_compiled_engine_cfg_and_tail_share_all_capacities(
+    monkeypatch, policy, expected
+):
     model = tiny_model()
     model.use_classifier_free_guidance = True
     model.cfg_features = ["active_donor"]
@@ -108,18 +113,29 @@ def test_compiled_batch_max_ignores_rounding_and_groups_variable_slots():
     obj.atom_padding_multiple = 128
     obj.token_padding_multiple = 16
     exs = [example((2, 2), seed=1), example((3, 3, 3), seed=2)]
-    groups = list(iter_compatible_batches(
-        exs, obj.inference_batch_size, *obj._padding_multiples(),
-        batch_max=True, **obj._compile_buckets(),
-    ))
+    groups = list(
+        iter_compatible_batches(
+            exs,
+            obj.inference_batch_size,
+            *obj._padding_multiples(),
+            batch_max=True,
+            **obj._compile_buckets(),
+        )
+    )
     assert len(groups) == 1
     assert obj._batch_capacities(groups[0]) == dict(
-        atom_capacity=9, token_capacity=3, slot_capacity=3, batch_capacity=3,
+        atom_capacity=9,
+        token_capacity=3,
+        slot_capacity=3,
+        batch_capacity=3,
     )
     outputs = obj._model_forward_batch(groups[0])
     for ex in exs:
         assert len(outputs[ex["example_id"]]) == 3
-        assert outputs[ex["example_id"]][0].atom_array.shape == (len(ex["feats"]["atom_to_token_map"]), 3)
+        assert outputs[ex["example_id"]][0].atom_array.shape == (
+            len(ex["feats"]["atom_to_token_map"]),
+            3,
+        )
 
 
 def test_invalid_compile_shape_policy_fails_before_loading_model():

@@ -4,12 +4,12 @@ from atomworks.ml.utils.token import (
     get_token_starts,
 )
 from beartype.typing import Any
-from scipy.spatial import cKDTree
 from rfd3.metrics.metrics_utils import (
     _flatten_dict,
     get_hotspot_contacts,
     get_ss_metrics_and_rg,
 )
+from scipy.spatial import cKDTree
 
 from foundry.common import exists
 from foundry.metrics.metric import Metric
@@ -52,7 +52,9 @@ def get_clash_metrics(
             return 0
         # Sparse pair search (i < j, as in the dense triu formulation); the slightly
         # larger float64 radius keeps every pair the float32 check below can accept
-        pairs = cKDTree(xyz).query_pairs(clash_threshold * (1 + 1e-5), output_type="ndarray")
+        pairs = cKDTree(xyz).query_pairs(
+            clash_threshold * (1 + 1e-5), output_type="ndarray"
+        )
         i, j = pairs.T
         # Exact strict threshold on float32 distances, as in the dense formulation
         keep = np.linalg.norm(xyz[i] - xyz[j], axis=-1) < clash_threshold

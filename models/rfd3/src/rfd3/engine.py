@@ -264,7 +264,10 @@ class RFD3InferenceEngine(BaseInferenceEngine):
             dense_attention_backend
         )
         if inference_kernel_backend not in {
-            "auto", "torch", "triton", "triton-transition"
+            "auto",
+            "torch",
+            "triton",
+            "triton-transition",
         }:
             raise ValueError(
                 "inference_kernel_backend must be auto, torch, triton or triton-transition"
@@ -272,9 +275,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         if (
             inference_kernel_backend in {"triton", "triton-transition"}
             or inference_cuda_graph
-        ) and (
-            low_memory_mode or os.environ.get("RFD3_LOW_MEMORY_MODE") == "1"
-        ):
+        ) and (low_memory_mode or os.environ.get("RFD3_LOW_MEMORY_MODE") == "1"):
             raise ValueError(
                 "Accelerated inference requires low_memory_mode=false and "
                 "RFD3_LOW_MEMORY_MODE unset or 0"

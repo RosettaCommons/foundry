@@ -18,8 +18,12 @@ def test_schedule_thresholds_and_entropy_trajectory(device):
     # Include exact equality at both cutoffs; decisions must retain strict >.
     schedule = torch.tensor([10.0, 5.0, 2.0, 0.0], device=device)
     sampler = SampleDiffusionWithMotif(
-        num_timesteps=4, allow_realignment=False, gamma_min=2.0,
-        cfg_t_max=5.0, use_classifier_free_guidance=True, cfg_scale=2.0,
+        num_timesteps=4,
+        allow_realignment=False,
+        gamma_min=2.0,
+        cfg_t_max=5.0,
+        use_classifier_free_guidance=True,
+        cfg_scale=2.0,
     )
     sampler._construct_inference_noise_schedule = lambda *args: schedule
     times = []
@@ -31,7 +35,13 @@ def test_schedule_thresholds_and_entropy_trajectory(device):
             return {"X_L": x / 2, "sequence_logits_I": logits}
 
     out = sample(
-        sampler, Denoiser(), x, f, {}, f_ref=f, ref_initializer={},
+        sampler,
+        Denoiser(),
+        x,
+        f,
+        {},
+        f_ref=f,
+        ref_initializer={},
         noise_source=lambda tag, template, atomwise=True: torch.zeros_like(template),
     )
     # No CFG call at t=5 (equal to cutoff), or at either lower timestep.

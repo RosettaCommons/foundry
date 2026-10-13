@@ -48,18 +48,25 @@ def test_precomputed_neighbors_follow_moving_coordinates_and_empty_rows(device):
     f = {k: v.to(device) for k, v in f.items()}
     cached_select = (
         torch.compile(select_neighbors, fullgraph=True)
-        if device == "cuda" else select_neighbors
+        if device == "cuda"
+        else select_neighbors
     )
     for level in ("atom", "token"):
         valid = f[f"{level}_valid"]
         for seed in (1, 2):
             x = torch.randn(
-                valid.shape[0], 2, valid.shape[1], 3,
+                valid.shape[0],
+                2,
+                valid.shape[1],
+                3,
                 generator=torch.Generator().manual_seed(seed),
             ).to(device)
             expected = select_neighbors(x, valid, f[f"{level}_sequence_mask"], 4)
             actual = cached_select(
-                x, valid, f[f"{level}_sequence_mask"], 4,
+                x,
+                valid,
+                f[f"{level}_sequence_mask"],
+                4,
                 f[f"{level}_forced_neighbors"],
             )
             for got, ref in zip(actual, expected):
