@@ -1,25 +1,27 @@
 import json
 import logging
 import os
+from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
-from typing import Iterable, cast
+from typing import cast
 
 import numpy as np
 import pandas as pd
 from atomworks.common import as_list
 from atomworks.enums import GroundTruthConformerPolicy
 from atomworks.io import parse
-from atomworks.io.parser import parse_atom_array
+from atomworks.io.parser import PrepareConfig, parse_atom_array
 from atomworks.io.tools.inference import (
     ChemicalComponent,
     build_msa_paths_by_chain_id_from_component_list,
     components_to_atom_array,
 )
 from atomworks.io.transforms.categories import category_to_dict
-from atomworks.io.utils.selection import AtomSelectionStack
+from atomworks.io.utils.ccd import add_annotations_from_ccd
+from atomworks.io.utils.query import AtomSelectionStack
 from atomworks.ml.transforms.atom_array import add_global_token_id_annotation
 from biotite.structure import AtomArray
 from rf3.utils.io import (
@@ -175,8 +177,7 @@ class InferenceInput:
 
         parsed = parse_atom_array(
             atom_array,
-            build_assembly="_spoof",  # type: ignore[arg-type]  # recognized (deprecated) atomworks sentinel, absent from the public Literal
-            hydrogen_policy="keep",
+            config=PrepareConfig(hydrogen_policy="keep"),
         )
 
         chain_info = parsed.get("chain_info", {})
@@ -241,12 +242,14 @@ class InferenceInput:
         Returns:
           InferenceInput object.
         """
-        # Use parse_atom_array
+        atom_array = atom_array.copy()
+        if "charge" not in atom_array.get_annotation_categories():
+            add_annotations_from_ccd(atom_array, annotations=["charge"])
+
+        # Restore RF3 conditioning after in-memory structure preparation.
         parsed = parse_atom_array(
             atom_array,
-            build_assembly="_spoof",  # type: ignore[arg-type]  # recognized (deprecated) atomworks sentinel, absent from the public Literal
-            hydrogen_policy="keep",
-            extra_fields="all",
+            config=PrepareConfig(hydrogen_policy="keep"),
         )
 
         extracted_chain_info = parsed.get("chain_info", {})
@@ -264,6 +267,8 @@ class InferenceInput:
             if "assemblies" in parsed
             else parsed["asym_unit"][0]
         )
+
+        _restore_conditioning_annotations(atom_array, final_atom_array)
 
         return cls(
             atom_array=final_atom_array,
@@ -296,6 +301,70 @@ class InferenceInput:
             "atom_array": atom_array,
             "chain_info": self.chain_info,
         }
+
+
+def _restore_conditioning_annotations(source: AtomArray, target: AtomArray) -> None:
+    """Retain explicit RF3 conditioning after AtomWorks rebuilds missing atoms.
+
+    AtomWorks 3's in-memory parser no longer accepts ``extra_fields`` and can
+    discard custom fields while inserting CCD atoms. Match original atoms by
+    identity; newly inserted, unresolved atoms must remain unconditioned.
+    """
+    fields = [
+        name
+        for name in ("is_input_file_templated", "ground_truth_conformer_policy")
+        if name in source.get_annotation_categories()
+    ]
+    if not fields:
+        return
+
+    def identities(array, *, normalize_nonpolymer_ids=False):
+        residue_ids = array.res_id.copy()
+        if (
+            normalize_nonpolymer_ids
+            and "auth_seq_id" in array.get_annotation_categories()
+        ):
+            # AtomWorks updates non-polymer res_id to auth_seq_id before CCD
+            # completion. Use the parsed chain classification, not a possibly
+            # absent or stale is_polymer annotation on the caller's input.
+            nonpolymer_chains = np.unique(target.chain_id[~target.is_polymer])
+            nonpolymer = np.isin(array.chain_id, nonpolymer_chains)
+            residue_ids[nonpolymer] = array.auth_seq_id[nonpolymer]
+        transformation_ids = (
+            array.transformation_id
+            if "transformation_id" in array.get_annotation_categories()
+            else np.full(len(array), "1")
+        )
+        return list(
+            zip(
+                array.chain_id,
+                residue_ids,
+                array.ins_code,
+                array.atom_name,
+                transformation_ids,
+                strict=True,
+            )
+        )
+
+    source_ids = identities(source, normalize_nonpolymer_ids=True)
+    if len(set(source_ids)) != len(source_ids):
+        raise ValueError(
+            "Cannot preserve RF3 conditioning with duplicate atom identities"
+        )
+    source_indices = {key: index for index, key in enumerate(source_ids)}
+    target_ids = identities(target)
+    for field in fields:
+        values = source.get_annotation(field)
+        default = (
+            False
+            if field == "is_input_file_templated"
+            else GroundTruthConformerPolicy.IGNORE
+        )
+        restored = np.full(len(target), default, dtype=values.dtype)
+        for index, key in enumerate(target_ids):
+            if key in source_indices:
+                restored[index] = values[source_indices[key]]
+        target.set_annotation(field, restored)
 
 
 def _process_single_path(

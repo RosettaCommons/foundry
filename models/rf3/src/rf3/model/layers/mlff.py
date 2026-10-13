@@ -51,7 +51,9 @@ class ConformerEmbeddingWeightedAverage(nn.Module):
         )
 
         # Zero-init the final linear layer to ensure the model starts with identity function (output ≈ 0)
-        nn.init.zeros_(self.conformers_to_atom_single_embedding[0].weight)
+        final_linear = self.conformers_to_atom_single_embedding[0]
+        assert isinstance(final_linear, nn.Linear)
+        nn.init.zeros_(final_linear.weight)
 
     def forward(
         self,

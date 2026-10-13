@@ -16,7 +16,7 @@ from atomworks.ml.transforms.base import (
     Transform,
 )
 from atomworks.ml.transforms.covalent_modifications import (
-    FlagAndReassignCovalentModifications,
+    AnnotateCovalentModifications,
 )
 from atomworks.ml.transforms.featurize_unresolved_residues import (
     MaskResiduesWithSpecificUnresolvedAtoms,
@@ -116,7 +116,10 @@ def build_mpnn_transform_pipeline(
         # + --------- Atomization --------- +
         # ... add within-chain instance res idx
         AddWithinChainInstanceResIdx(),
-        FlagAndReassignCovalentModifications(),
+        # Preserve the checkpoint tokenization for side-chain and backbone adducts.
+        AnnotateCovalentModifications(
+            p_reassign_modified_residue=1.0, atomize_backbone_modifications=True
+        ),
         # Atomization: keep standard AA + unknown AA as residues,
         # atomize everything else
         FlagNonPolymersForAtomization(),

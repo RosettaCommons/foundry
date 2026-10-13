@@ -1,5 +1,10 @@
 # Local Foundry installation
 
+This is the historical AtomWorks 2 validation record. Its macOS lock file does
+not apply to the AtomWorks 3 branch; install this branch from `pyproject.toml`.
+The AtomWorks 3 port has been validated on Linux/CUDA; CPU/MPS inference on
+macOS requires a fresh validation before extending the results below.
+
 Installed in `/Users/jbutch/Projects/foundry-latest/.venv` on an Apple M3 Mac with 16 GiB unified memory. This is an editable install of the existing checkout (base commit `673fa32`), with Python 3.12.12, PyTorch 2.14.0 and AtomWorks 2.2.1. Exact installed versions are in `requirements-macos.lock.txt`.
 
 RFD3 and RF3 reuse the existing official checkpoints in `/Users/jbutch/.foundry/checkpoints`. ProteinMPNN uses `local/checkpoints/proteinmpnn_v_48_020.pt`, downloaded from the official IPD checkpoint registry. The repository `.env` includes this additional checkpoint directory.

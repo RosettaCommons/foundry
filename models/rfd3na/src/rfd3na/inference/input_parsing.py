@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from atomworks.constants import STANDARD_AA, STANDARD_DNA, STANDARD_RNA
+from atomworks.io.config import PrepareConfig
 from atomworks.io.parser import parse_atom_array
 
 # from atomworks.ml.datasets.datasets import BaseDataset
@@ -26,7 +27,6 @@ from pydantic import (
     model_validator,
 )
 from rfd3na.constants import (
-    INFERENCE_ANNOTATIONS,
     OPTIONAL_CONDITIONING_VALUES,
     REQUIRED_CONDITIONING_ANNOTATION_VALUES,
     REQUIRED_INFERENCE_ANNOTATIONS,
@@ -871,12 +871,15 @@ def prepare_pipeline_input_from_atom_array(  # see atomworks.ml.datasets.parsers
     # Temporary spoof of chain IDs to ensure duplicates aren't dropped:
     result_dict = parse_atom_array(
         atom_array_orig,
-        remove_ccds=[],
-        fix_arginines=False,
-        add_missing_atoms=False,
-        extra_fields=INFERENCE_ANNOTATIONS,
-        build_assembly=None,
-        hydrogen_policy="remove",
+        config=PrepareConfig(
+            remove_ccds=(),
+            fix_arginines=False,
+            add_missing_atoms=False,
+            hydrogen_policy="remove",
+            # These are synthetic/partially diffused coordinates, not geometry
+            # from which authored motif bonds can be judged.
+            long_bond_policy="keep",
+        ),
     )
     atom_array = result_dict["asym_unit"][0]
 

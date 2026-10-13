@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import torch
 from atomworks.io.parser import STANDARD_PARSER_ARGS
-from atomworks.ml.datasets.pandas_dataset import PandasDataset, StructuralDatasetWrapper
+from atomworks.ml.datasets.pandas_dataset import PandasDataset
 from atomworks.ml.datasets.parsers.default_metadata_row_parsers import GenericDFParser
 from atomworks.ml.samplers import (
     DistributedMixedSampler,
@@ -16,6 +16,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from foundry.callbacks.metrics_logging import StoreValidationMetricsInDFCallback
+from foundry.datasets.structure import StructuralDatasetWrapper
 from foundry.utils.datasets import wrap_dataset_and_sampler_with_fallbacks
 from foundry.utils.weights import CheckpointConfig
 from mpnn.collate.feature_collator import TokenBudgetAwareFeatureCollator
@@ -129,7 +130,7 @@ train_structural_dataset = StructuralDatasetWrapper(
         name="pn_units_df_train",
         filters=MPNN_TRAIN_FILTERS,
     ),
-    dataset_parser=GenericDFParser(  # type: ignore[arg-type]  # parser object; atomworks stub types this param Callable
+    dataset_parser=GenericDFParser(
         example_id_colname="example_id",
         path_colname="path",
         assembly_id_colname="assembly_id",
@@ -150,7 +151,7 @@ train_fallback_dataset = StructuralDatasetWrapper(
         name="pn_units_df_train",
         filters=MPNN_TRAIN_FILTERS,
     ),
-    dataset_parser=GenericDFParser(  # type: ignore[arg-type]  # parser object; atomworks stub types this param Callable
+    dataset_parser=GenericDFParser(
         example_id_colname="example_id",
         path_colname="path",
         assembly_id_colname="assembly_id",
@@ -220,7 +221,7 @@ val_structural_dataset = StructuralDatasetWrapper(
         name="pn_units_df_val",
         filters=MPNN_FILTERS,
     ),
-    dataset_parser=GenericDFParser(  # type: ignore[arg-type]  # parser object; atomworks stub types this param Callable
+    dataset_parser=GenericDFParser(
         example_id_colname="example_id",
         path_colname="path",
         assembly_id_colname="assembly_id",

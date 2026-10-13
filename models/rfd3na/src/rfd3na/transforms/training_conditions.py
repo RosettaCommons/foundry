@@ -141,7 +141,7 @@ class IslandCondition(TrainingCondition):
             )
             is_motif_token[token_level_array.is_protein] = islands_mask
 
-        # TODO: Atoms with covalent bonds should be motif, needs FlagAndReassignCovalentModifications transform prior to this
+        # TODO: Atoms with covalent bonds should be motif, needs AnnotateCovalentModifications transform prior to this
         # atom_with_coval_bond = token_level_array.covale  # (n_atoms, )
         # is_motif_token[atom_with_coval_bond] = True
 

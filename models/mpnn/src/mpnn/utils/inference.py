@@ -26,6 +26,7 @@ from atomworks.io.utils.atom_array_plus import (
     AtomArrayPlus,
     as_atom_array_plus,
 )
+from atomworks.io.utils.ccd import add_annotations_from_ccd
 from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.ml.utils.token import get_token_starts, spread_token_wise
 from biotite.structure import AtomArray
@@ -713,6 +714,13 @@ class MPNNInferenceInput:
 
         # Copy atom array.
         atom_array = atom_array.copy() if atom_array is not None else None
+        if (
+            atom_array is not None
+            and "charge" not in atom_array.get_annotation_categories()
+        ):
+            # AtomWorks 3 requires charges before template/bond preparation.
+            # Derive absent charges from chemistry, preserving supplied charges.
+            add_annotations_from_ccd(atom_array, annotations=["charge"])
         parser_output = parse_atom_array(atom_array) if atom_array is not None else {}
         atom_array = (
             parser_output["assemblies"]["1"][0]
@@ -1557,13 +1565,11 @@ class MPNNInferenceInput:
         if input_dict["remove_waters"] is not None:
             parser_args["remove_waters"] = input_dict["remove_waters"]
 
-        # Parse structure file. parser_args is a heterogeneous dict[str, object]
-        # (STANDARD_PARSER_ARGS + overrides); atomworks parse() types each kwarg
-        # specifically, so **-unpacking it doesn't type-check.
+        # Parse with the standard processing options and user overrides.
         data = parse(
-            filename=input_dict["structure_path"],
+            input_dict["structure_path"],
             keep_cif_block=True,
-            **parser_args,  # type: ignore[arg-type]
+            **parser_args,
         )
 
         # Use assembly 1 if present, otherwise use asymmetric unit.

@@ -21,9 +21,10 @@ import logging
 
 import biotite.structure as struc
 import numpy as np
+from atomworks.io.utils.atom_array_plus import AnnotationList2D
+from atomworks.io.utils.standard_annotations.base import Level
 from atomworks.io.utils.visualize import get_pymol_session, view_pymol
 from atomworks.ml.conditions import C_DIS, Condition
-from atomworks.ml.conditions.base import Level
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -110,9 +111,9 @@ def get_atom_array_style_cmd(
     if hasattr(atom_array, "_annot_2d"):
         distance_commands = []
         if C_DIS.full_name in atom_array._annot_2d:
-            # atomworks types `annotation()` as `-> np.ndarray`, but the runtime
-            # 2-body annotation object exposes `.as_array()` to materialise the ndarray.
-            constraint_data = C_DIS.annotation(atom_array).as_array()  # type: ignore[attr-defined]
+            constraint = C_DIS.annotation(atom_array)
+            assert isinstance(constraint, AnnotationList2D)
+            constraint_data = constraint.as_array()
             if len(constraint_data) > 0:
                 _atom_idxs = np.unique(constraint_data[:, :2].flatten()).astype(int)
                 _atom_ids = atom_ids[_atom_idxs]

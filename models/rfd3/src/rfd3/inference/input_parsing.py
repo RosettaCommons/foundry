@@ -9,9 +9,17 @@ from os import PathLike
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-from atomworks.constants import STANDARD_AA, STANDARD_DNA, STANDARD_RNA
+from atomworks.constants import (
+    AA_LIKE_CHEM_TYPES,
+    NA_LIKE_CHEM_TYPES,
+    STANDARD_AA,
+    STANDARD_DNA,
+    STANDARD_RNA,
+)
+from atomworks.enums import ChainType
+from atomworks.io.config import PrepareConfig
 from atomworks.io.parser import parse_atom_array
-from atomworks.io.utils.bonds import get_inferred_polymer_bonds
+from atomworks.io.utils.ccd import get_chem_comp_type, get_polymerization_atoms
 
 # from atomworks.ml.datasets.datasets import BaseDataset
 from atomworks.ml.transforms.base import TransformedDict
@@ -28,7 +36,6 @@ from pydantic import (
     model_validator,
 )
 from rfd3.constants import (
-    INFERENCE_ANNOTATIONS,
     OPTIONAL_CONDITIONING_VALUES,
     REQUIRED_CONDITIONING_ANNOTATION_VALUES,
     REQUIRED_INFERENCE_ANNOTATIONS,
@@ -946,12 +953,15 @@ def prepare_pipeline_input_from_atom_array(  # see atomworks.ml.datasets.parsers
     # Temporary spoof of chain IDs to ensure duplicates aren't dropped:
     result_dict = parse_atom_array(
         atom_array_orig,
-        remove_ccds=[],
-        fix_arginines=False,
-        add_missing_atoms=False,
-        extra_fields=INFERENCE_ANNOTATIONS,
-        build_assembly=None,
-        hydrogen_policy="remove",
+        config=PrepareConfig(
+            remove_ccds=(),
+            fix_arginines=False,
+            add_missing_atoms=False,
+            hydrogen_policy="remove",
+            # These are synthetic/partially diffused coordinates, not geometry
+            # from which authored motif bonds can be judged.
+            long_bond_policy="keep",
+        ),
     )
     atom_array = result_dict["asym_unit"][0]
 
@@ -1280,8 +1290,10 @@ def _add_backbone_bonds_for_nonstandard_residues(
     """
     Add backbone/polymer bonds for cases where at least one residue is non-standard.
 
-    Uses `atomworks.io.utils.bonds.get_inferred_polymer_bonds`, which consults CCD
-    chem-comp metadata to decide the correct polymerization atoms (C/N, CG/N, etc.).
+    Uses AtomWorks' CCD polymerization-site lookup (C/N, CG/N, etc.).
+    This is topology assembly for incomplete, synthetic design residues, so it
+    deliberately does not run coordinate-based bond filtering or full chemical
+    sanitization. Existing intra-residue and authored crosslinks are preserved.
     Only bonds involving at least one non-standard residue are added; standard
     AA/DNA/RNA pairs are assumed to already carry their backbone bonds.
     """
@@ -1299,10 +1311,47 @@ def _add_backbone_bonds_for_nonstandard_residues(
     }
     bonds_to_add: List[List[int]] = []
 
-    inferred_bonds, _ = get_inferred_polymer_bonds(atom_array_accum)
-    for atom_i_idx, atom_j_idx, bond_type in inferred_bonds:
-        atom_i_idx = int(atom_i_idx)
-        atom_j_idx = int(atom_j_idx)
+    starts = struc.get_residue_starts(atom_array_accum, add_exclusive_stop=True)
+    annotations = atom_array_accum.get_annotation_categories()
+    for start, next_start, stop in zip(starts[:-2], starts[1:-1], starts[2:]):
+        if atom_array_accum.chain_id[start] != atom_array_accum.chain_id[next_start]:
+            continue
+        if atom_array_accum.res_id[next_start] - atom_array_accum.res_id[start] > 1:
+            continue
+        if "transformation_id" in annotations and (
+            atom_array_accum.transformation_id[start]
+            != atom_array_accum.transformation_id[next_start]
+        ):
+            continue
+        first_type = get_chem_comp_type(atom_array_accum.res_name[start])
+        second_type = get_chem_comp_type(atom_array_accum.res_name[next_start])
+        if (first_type in AA_LIKE_CHEM_TYPES and second_type in NA_LIKE_CHEM_TYPES) or (
+            first_type in NA_LIKE_CHEM_TYPES and second_type in AA_LIKE_CHEM_TYPES
+        ):
+            # Independent attachment-site lookup must not invent a peptide/NA
+            # crosslink solely because the two residues are adjacent.
+            continue
+
+        def attachment(res_start, res_stop, side):
+            chain_type = (
+                ChainType.as_enum(atom_array_accum.chain_type[res_start])
+                if "chain_type" in annotations
+                else None
+            )
+            name = get_polymerization_atoms(
+                atom_array_accum.res_name[res_start], chain_type
+            )[side]
+            if name is None:
+                return None
+            indices = np.flatnonzero(
+                atom_array_accum.atom_name[res_start:res_stop] == name
+            )
+            return int(res_start + indices[0]) if len(indices) else None
+
+        atom_i_idx = attachment(start, next_start, 0)
+        atom_j_idx = attachment(next_start, stop, 1)
+        if atom_i_idx is None or atom_j_idx is None:
+            continue
 
         # Do not connect unindexed residues across residue boundaries
         if (unindexed_mask[atom_i_idx] or unindexed_mask[atom_j_idx]) and (
@@ -1324,7 +1373,7 @@ def _add_backbone_bonds_for_nonstandard_residues(
         if pair in existing_pairs:
             continue
         existing_pairs.add(pair)
-        bonds_to_add.append([pair[0], pair[1], int(bond_type)])
+        bonds_to_add.append([pair[0], pair[1], int(struc.BondType.SINGLE)])
 
     if bonds_to_add:
         new_bonds = struc.BondList(

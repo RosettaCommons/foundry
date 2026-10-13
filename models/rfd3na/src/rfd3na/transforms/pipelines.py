@@ -41,7 +41,7 @@ from atomworks.ml.transforms.bfactor_conditioned_transforms import SetOccToZeroO
 from atomworks.ml.transforms.bonds import AddAF3TokenBondFeatures
 from atomworks.ml.transforms.cached_residue_data import LoadCachedResidueLevelData
 from atomworks.ml.transforms.covalent_modifications import (
-    FlagAndReassignCovalentModifications,
+    AnnotateCovalentModifications,
 )
 from atomworks.ml.transforms.crop import CropContiguousLikeAF3, CropSpatialLikeAF3
 from atomworks.ml.transforms.diffusion.batch_structures import (
@@ -168,7 +168,9 @@ def get_pre_crop_transforms(
         TrainingRoute(
             RemoveTokensWithoutCorrespondingCentralAtom(central_atom=central_atom),
         ),
-        FlagAndReassignCovalentModifications(),
+        AnnotateCovalentModifications(
+            p_reassign_modified_residue=1.0, atomize_backbone_modifications=True
+        ),
         FlagNonPolymersForAtomization(),
         AddGlobalAtomIdAnnotation(),
         AtomizeByCCDName(

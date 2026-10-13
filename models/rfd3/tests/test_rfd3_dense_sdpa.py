@@ -126,14 +126,23 @@ def test_legacy_token_topology_and_sparse_atom_dispatch(monkeypatch):
         torch.testing.assert_close(sparse, expected, atol=2e-6, rtol=2e-6)
 
 
-def test_engine_dense_backend_reaches_all_copies(monkeypatch):
+def test_engine_dense_backend_reaches_all_copies(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
     from rfd3.engine import RFD3InferenceConfig, RFD3InferenceEngine
 
     from foundry.inference_engines.base import BaseInferenceEngine
 
-    obj = RFD3InferenceEngine(**RFD3InferenceConfig(dense_attention_backend="sdpa"))
+    # initialize() is stubbed below: no downloaded scientific checkpoint is
+    # needed to verify dispatch to every model copy on a fresh installation.
+    obj = RFD3InferenceEngine(
+        **RFD3InferenceConfig(
+            ckpt_path=tmp_path / "unused.ckpt",
+            dense_attention_backend="sdpa",
+            inference_num_workers=0,
+            compile_model=False,
+        )
+    )
     copies = torch.nn.ModuleList([tiny_model(), tiny_model()])
     obj.trainer = SimpleNamespace(state={"model": copies})
     monkeypatch.setattr(BaseInferenceEngine, "initialize", lambda self: None)
@@ -144,7 +153,11 @@ def test_engine_dense_backend_reaches_all_copies(monkeypatch):
         if hasattr(m, "dense_attention_backend")
     )
     with pytest.raises(ValueError, match="dense_attention_backend"):
-        RFD3InferenceEngine(**RFD3InferenceConfig(dense_attention_backend="invalid"))
+        RFD3InferenceEngine(
+            **RFD3InferenceConfig(
+                ckpt_path=tmp_path / "unused.ckpt", dense_attention_backend="invalid"
+            )
+        )
 
 
 @pytest.mark.parametrize("d", [1, 3])

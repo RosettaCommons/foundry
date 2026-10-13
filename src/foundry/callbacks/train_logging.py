@@ -1,5 +1,6 @@
 import time
 from collections import defaultdict
+from typing import cast
 
 import pandas as pd
 from atomworks.ml.example_id import parse_example_id
@@ -65,7 +66,9 @@ class LogDatasetSamplingRatiosCallback(BaseCallback):
         example_id = batch[0]["example_id"]
 
         if trainer.fabric.is_global_zero:
-            dataset_string = "/".join(parse_example_id(example_id)["datasets"])
+            dataset_string = "/".join(
+                cast(list[str], parse_example_id(example_id)["datasets"])
+            )
             self.dataset_sampling_counts[dataset_string] += 1
 
     def on_train_epoch_end(self, trainer: Any) -> None:

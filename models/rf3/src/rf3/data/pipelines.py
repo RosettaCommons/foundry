@@ -47,9 +47,6 @@ from atomworks.ml.transforms.base import (
     Transform,
 )
 from atomworks.ml.transforms.bfactor_conditioned_transforms import SetOccToZeroOnBfactor
-from atomworks.ml.transforms.bonds import (
-    AddAF3TokenBondFeatures,
-)
 from atomworks.ml.transforms.cached_residue_data import (
     LoadCachedResidueLevelData,
     RandomSubsampleCachedConformers,
@@ -57,7 +54,7 @@ from atomworks.ml.transforms.cached_residue_data import (
 from atomworks.ml.transforms.center_random_augmentation import CenterRandomAugmentation
 from atomworks.ml.transforms.chirals import AddAF3ChiralFeatures
 from atomworks.ml.transforms.covalent_modifications import (
-    FlagAndReassignCovalentModifications,
+    AnnotateCovalentModifications,
 )
 from atomworks.ml.transforms.crop import CropContiguousLikeAF3, CropSpatialLikeAF3
 from atomworks.ml.transforms.diffusion.batch_structures import (
@@ -99,6 +96,7 @@ from atomworks.ml.transforms.random_atomize_residues import RandomAtomizeResidue
 from atomworks.ml.transforms.rdkit_utils import GetRDKitChiralCenters
 from atomworks.ml.transforms.symmetry import FindAutomorphismsWithNetworkX
 from omegaconf import DictConfig
+from rf3.data.bond_features import AddRF3TokenBondFeatures
 from rf3.data.cyclic_transform import AddCyclicBonds
 from rf3.data.extra_xforms import (
     CheckForNaNsInInputs,
@@ -306,7 +304,10 @@ def build_af3_transform_pipeline(
         # TrainingRoute(
         # PadDNA(p_skip=pad_dna_p_skip),
         # ),
-        FlagAndReassignCovalentModifications(),
+        # Preserve the checkpoint tokenization for side-chain and backbone adducts.
+        AnnotateCovalentModifications(
+            p_reassign_modified_residue=1.0, atomize_backbone_modifications=True
+        ),
         FlagNonPolymersForAtomization(),
     ]
 
@@ -469,13 +470,7 @@ def build_af3_transform_pipeline(
             pad_token=af3_sequence_encoding.token_to_idx["<G>"],  # type: ignore[arg-type]
             add_residue_is_paired_feature=add_residue_is_paired_feature,
         ),
-        ConditionalRoute(
-            condition_func=lambda data: data.get("is_inference", False),
-            transform_map={
-                True: AddAF3TokenBondFeatures(np.inf),
-                False: AddAF3TokenBondFeatures(),
-            },
-        ),
+        AddRF3TokenBondFeatures(),
     ]
 
     if add_cyclic_bonds:
