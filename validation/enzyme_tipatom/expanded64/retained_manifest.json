@@ -1,0 +1,770 @@
+[
+  {
+    "path": "results/native_aw2/s11_d0/cleaned.pdb",
+    "sha256": "437f5bc9243575c5a833db700aca38b4d3d59cff58141953a3499acc33497b38"
+  },
+  {
+    "path": "results/native_aw2/s11_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/native_aw2/s11_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "39e0ea2dd073b299c9938c7ce68608ad7be5aedf00fbb535d939d4657e7f908c"
+  },
+  {
+    "path": "results/native_aw2/s11_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "7654a9eab5395e1a99c3abcca1d005f2e3033a939a441d46ff7183f0e32f77f7"
+  },
+  {
+    "path": "results/native_aw2/s11_d0/preinsert.pdb",
+    "sha256": "28dc0b91fe991bdd42151c573b0344f3eead8a169ad1a6b08e775b27f900a09c"
+  },
+  {
+    "path": "results/native_aw2/s11_d0/scores.json",
+    "sha256": "0fc506b7d0cadf42c3d10970a2daea22543f2d28c66a559f956d26f6edac01b4"
+  },
+  {
+    "path": "results/native_aw2/s11_d1/cleaned.pdb",
+    "sha256": "395ca2a6ba67bb55121f7a2dd55ca9dcea72612bc6830cbd27892827d95eb54d"
+  },
+  {
+    "path": "results/native_aw2/s11_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/native_aw2/s11_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "ba18d1f836cd1166a8c0c11851511c2ecd5aea68742b9e034b0de35159d76bb4"
+  },
+  {
+    "path": "results/native_aw2/s11_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "7b7991cf93f9b1debf162471eaaa148cd6f63e49b9e291e5f8687a1904766897"
+  },
+  {
+    "path": "results/native_aw2/s11_d1/preinsert.pdb",
+    "sha256": "a3c0146c3b93860135e5a545f0e4f0328bc4247145e8bba1a932f4ae59630cd6"
+  },
+  {
+    "path": "results/native_aw2/s11_d1/scores.json",
+    "sha256": "767385d7cbd5fc36b284b367e899c80257405880ccd42aea235a4758d9017dcb"
+  },
+  {
+    "path": "results/native_aw2/s22_d0/cleaned.pdb",
+    "sha256": "d039bdb9ce335fba08ec337f9c89d7e99bc5d7196e7232eda6c783e1a4621770"
+  },
+  {
+    "path": "results/native_aw2/s22_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/native_aw2/s22_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "f49c3fd32800baf11219ca29a07444ded6c0064e274d4e34a465d5769fc2d2dd"
+  },
+  {
+    "path": "results/native_aw2/s22_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "9d5aa157529b7b841f137b5e9af7a271d6035fc746514ce97b5da16e151c928f"
+  },
+  {
+    "path": "results/native_aw2/s22_d0/preinsert.pdb",
+    "sha256": "b7799be3b4a58b4331d1520d13bac4dd32d2b2a448d516efb8b6a92cf3254d9d"
+  },
+  {
+    "path": "results/native_aw2/s22_d0/scores.json",
+    "sha256": "efbcf597bfa05413a1b28b599e27e6cf1d8d6638f168222f368322286b813eff"
+  },
+  {
+    "path": "results/native_aw2/s22_d1/cleaned.pdb",
+    "sha256": "a2a9822ec0df0a817711e7cdfe0dbfe0a90e35c4479a61a8d42c011cc406d21c"
+  },
+  {
+    "path": "results/native_aw2/s22_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/native_aw2/s22_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "14e772cc0bf3d6f8a110f51ca374e437535f3d3ac14ab986ee10709960358511"
+  },
+  {
+    "path": "results/native_aw2/s22_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "c4d8c1c1f212680075f97da2121d2b607f5c19922de67fbc2614b359975c4d32"
+  },
+  {
+    "path": "results/native_aw2/s22_d1/preinsert.pdb",
+    "sha256": "55112a8b6a19a33f71f7bbd19d120141bf4f1b3b4cd841979c1d252f02235f2f"
+  },
+  {
+    "path": "results/native_aw2/s22_d1/scores.json",
+    "sha256": "09d1b07c469825bdcca35bbe58b194ec7966ba8bb76cbb6995ca74363c53f329"
+  },
+  {
+    "path": "results/native_aw2/s33_d0/cleaned.pdb",
+    "sha256": "ee11831a2c17ebd944a2fa0b621f65ac3125ed78aed86f81797f41af8512735a"
+  },
+  {
+    "path": "results/native_aw2/s33_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/native_aw2/s33_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "8b02254f783e6f21f45ad84caf498eef26b9d03e462d51acff06a3fe2425f7da"
+  },
+  {
+    "path": "results/native_aw2/s33_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "b35780f8fc67cf6f937a4cbd1b912cf8d558c7652246aa7ccccb7430f9862b0b"
+  },
+  {
+    "path": "results/native_aw2/s33_d0/preinsert.pdb",
+    "sha256": "af86a29171114b850c2e85db88c0f3b6ce9c6baacb9750f2b1e3acfed5ea5de2"
+  },
+  {
+    "path": "results/native_aw2/s33_d0/scores.json",
+    "sha256": "2d484db40469e0d35b8c1046d81844057b92872155fbef45899a360535475caa"
+  },
+  {
+    "path": "results/native_aw2/s33_d1/cleaned.pdb",
+    "sha256": "296f94a63a3f90b4944c8b3c834620da9e6d4b10b6d6d6377905b9c155719ba2"
+  },
+  {
+    "path": "results/native_aw2/s33_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/native_aw2/s33_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "8d60ad50711c87309fc9b42af9a4eb854cbb1e6ce1096d0ecb694fde24aa9123"
+  },
+  {
+    "path": "results/native_aw2/s33_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "304b44cc55a041c2be8f6ddb70e119c47af78a28859849aa1781d19380cbb593"
+  },
+  {
+    "path": "results/native_aw2/s33_d1/preinsert.pdb",
+    "sha256": "0449814be0ab8fe8b1e438a5c28c574559bc7975fbd159671044c9940b08a169"
+  },
+  {
+    "path": "results/native_aw2/s33_d1/scores.json",
+    "sha256": "7455891a042570c7a8ecfc6a1069fe6d660daba5d951367cf0295ae1898d5788"
+  },
+  {
+    "path": "results/native_aw2/s44_d0/cleaned.pdb",
+    "sha256": "8a84541cea8255493ebb03cf294912a1efb1e849a79b0156a21e175cdb427e0f"
+  },
+  {
+    "path": "results/native_aw2/s44_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/native_aw2/s44_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "ae5d453b0902d2cf17441933c232c8b6a6cc7df1ea40f94a6f7e7a650be1b968"
+  },
+  {
+    "path": "results/native_aw2/s44_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "9f6e1f263a0393839c08a62ee32d91ae088f0cdd6b636b8a8e74d4d249b52c7c"
+  },
+  {
+    "path": "results/native_aw2/s44_d0/preinsert.pdb",
+    "sha256": "b97bce7338293f02ab894a29343475882b57ecbe8ca63a504a1e37810b2ce9f7"
+  },
+  {
+    "path": "results/native_aw2/s44_d0/scores.json",
+    "sha256": "eb284b7a63081bbe0da42fb9203ff74cfbd8fb6a1bcfb49193910dffc36d0ba3"
+  },
+  {
+    "path": "results/native_aw2/s44_d1/cleaned.pdb",
+    "sha256": "7594bb820cafae5d42f41d67eac5ac78a1259083953d5cde9d7e405f7cbee38c"
+  },
+  {
+    "path": "results/native_aw2/s44_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/native_aw2/s44_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "4bccb7f052fe45ce193b3083bab8c4ab3e61e6114854687613c5002ef2bec2fc"
+  },
+  {
+    "path": "results/native_aw2/s44_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "89070a6f89974ccf0c1b59217d2e32c058d6971c3b358efca976b9d01f85873c"
+  },
+  {
+    "path": "results/native_aw2/s44_d1/preinsert.pdb",
+    "sha256": "a1b13bde1008e833658c2e76ac56c65633031657908f938bda977dfdfc6c2241"
+  },
+  {
+    "path": "results/native_aw2/s44_d1/scores.json",
+    "sha256": "060f44cbdcb5ee5f4fdab2238f7a37fbc8d5a456e5bce740e8a0ada463d6569e"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d0/cleaned.pdb",
+    "sha256": "7de15ac34d308889dd5eecc6734b424b3c5968b595ef358a241f75990638e88b"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "823aef9e9b674bfd7b73dc61d054ef0665dbd7fe9a779ac6a173a57073dbecf0"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "1c3d5f26135478a7820ac4667db18fd98645b0361eb00a956ee92e094342af2e"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d0/preinsert.pdb",
+    "sha256": "4bfddfdf87125d9042df7ac78933fbc95965b26b02f389f67d3e6c395b231073"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d0/scores.json",
+    "sha256": "883e433633364b3a63df355dc013c2016972a2c8728e7e613f94617514a78c8e"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d1/cleaned.pdb",
+    "sha256": "ac846f3479d558038191f3738fce693b0fe3819c90fd89774dc4d028f7f2f055"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "69a1ef3f09f3cd19ab3b97cab01e7e36c76ee69ec251b63f1ed0f27da8ff8cf6"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "f2093ee247e7f83249365b31a8dff6aa668ed7f47557f9dc77bf215a62a14a11"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d1/preinsert.pdb",
+    "sha256": "b99f4ac1fa98d53169304472b0f3f6fc46b45b34cc09e5c9a0835699464b5f32"
+  },
+  {
+    "path": "results/fixed_aw2/s11_d1/scores.json",
+    "sha256": "d3fe968806dd82970b2043e7c96642f1949c6b194a719573e35098ae7c07a80c"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d0/cleaned.pdb",
+    "sha256": "1cd9f9c2ce4eb889fce09d2c64f5019a728f10a124760806c50252a16195783b"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "36beac8cbc4fccd99f1792e77fd5fd3d36862429a8d32c428fa96a4b9591a31b"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "94762e091043268d82755e2a6c13ff5258fbaba59b38b537abd8e2283a97524f"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d0/preinsert.pdb",
+    "sha256": "9762a965b2ed14eeea456da9f101544dd8a12de3b7763b95222af3c966c5e0b9"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d0/scores.json",
+    "sha256": "2c09d5f0622690dbb1a6d14f62743a3d3bccc758988da0ced2f28bf320b0cd42"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d1/cleaned.pdb",
+    "sha256": "8e8602a35b243439b1fba913e898017fe6ce1fe90c9b31ef30637e633c514911"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "23450d2943e1b650a48758583fff04c38d4e9b0c646e0f2f915f60f462dc50b3"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "f7a808fc915649471c58918c233bae86d5d9337e35882cff06728b44edd932d6"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d1/preinsert.pdb",
+    "sha256": "296bce454fcdcbf9356062e99523d9f679f6e609c1198ec2229e3f9bda919187"
+  },
+  {
+    "path": "results/fixed_aw2/s22_d1/scores.json",
+    "sha256": "6ed65fe077b12cd960e02da2dbc7639087baa22cdbb8fd7629d05f21070429b6"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d0/cleaned.pdb",
+    "sha256": "5eb42d047ac720273d81c41bc7d66d671da5edf0ddeaa0bc3c3f1d6d77bb6be5"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "21b99b6bad041bc18942840bdf4b8161414ed6ac99bf345e885b1db8a5cbbe8c"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "70b6f6d5f83f888e6b3ba778ff694b68116248ecc43f6b22ad4698048b723999"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d0/preinsert.pdb",
+    "sha256": "e14a8393c195c6d8306994e5cf11528c1459fa2ddb2ffa3dffb525c7f117f747"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d0/scores.json",
+    "sha256": "abfaaf98c93f80f90ac02ef8c2647115c20c9d706206472b31f37e4c039b27b6"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d1/cleaned.pdb",
+    "sha256": "d31aedb9b4f480b165d02bbc7e05b3b4ae1d6f240c416c29b49cb9a65e856e69"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "43c0bc4c52e7098c57ac7eb53c27017d9ffb8a73d06fc3219c6254733f0d0980"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "63fa92e710c378532f94c27e2fb2f5afaa932fe83adcff84ba0ef2d98cf0ef00"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d1/preinsert.pdb",
+    "sha256": "bf7120e629f4e7b79c8f885af46c66bd005f269485a3c2aecac99983b77f8c66"
+  },
+  {
+    "path": "results/fixed_aw2/s33_d1/scores.json",
+    "sha256": "c89468c4fa64d408db36374dd17815e1c4cc76fc916f95d1409c558b7cbeafda"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d0/cleaned.pdb",
+    "sha256": "4ce597f951825875774b5b410b5e20aab2abb7affa8f090110b2d6727fcb3f5b"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "d24f97c9ff07ccbe94503bb39b5f38a4871b0a680454a966caa6e3830100423d"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "b37f66c5e8000f9a176b9120081a0ee1269a79f3989e3bdf5fbd1910df110383"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d0/preinsert.pdb",
+    "sha256": "fa654f7a9ed1b9b298c34796e8815ea6e2d22a220dc45645b61bb12d22b138b2"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d0/scores.json",
+    "sha256": "4dc5700f370712ec44708901e5cb9b875fee364bf95c90479f0f367fc1d732af"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d1/cleaned.pdb",
+    "sha256": "76ac0b6144a80fc843e621464d190ab81c80f1b7596e745623fc8dea0b1d47c2"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "816626730cd73deba48b9f97c19ac6a071420b5676e150a542b55b700af04e5a"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "6f48c9d584b08938828950922ad0632416dbb2fd5220db05c99807aacafd81c0"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d1/preinsert.pdb",
+    "sha256": "b79add223ac763452952cc53b918bb2c6971addf9d74955b476c965b5faeddb8"
+  },
+  {
+    "path": "results/fixed_aw2/s44_d1/scores.json",
+    "sha256": "8948fc3d472eff0200b41645921edb525f66b8a50b39c8622eeaf71337f30928"
+  },
+  {
+    "path": "results/padded_aw2/s11_d0/cleaned.pdb",
+    "sha256": "fca046f941b592b523cf5ace6e96cb66dc944d06cd29a63bb7a3aeaee1213756"
+  },
+  {
+    "path": "results/padded_aw2/s11_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw2/s11_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "9b6d7bfea58b1fac3faff6a2191b44db511cbe604fd60f5690a86a84c248a5f0"
+  },
+  {
+    "path": "results/padded_aw2/s11_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "c1ec041de90d12fd98818ff2487a12be9f1d3df802dddd0dbb1513d93c8aa380"
+  },
+  {
+    "path": "results/padded_aw2/s11_d0/preinsert.pdb",
+    "sha256": "08cc79a35cf62532408e01814e1778cd585d92763a18ac841bbbdebdf5ab21a0"
+  },
+  {
+    "path": "results/padded_aw2/s11_d0/scores.json",
+    "sha256": "33155804489ee573969594811e6ef23e930929a33af4fbd46df7d035f587a03a"
+  },
+  {
+    "path": "results/padded_aw2/s11_d1/cleaned.pdb",
+    "sha256": "e2bcf7e72ab17e23c43cd9ba0e0ec1626d0539b9d90a2dc0e10fe0c55a081241"
+  },
+  {
+    "path": "results/padded_aw2/s11_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw2/s11_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "f0b8da3b31b5d49ee86831174e991fbe581694377ae8a793ba824dc4780d25d1"
+  },
+  {
+    "path": "results/padded_aw2/s11_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "76901cf78430a4f440a4d73ff0d89a06842112631c21e05ee8d7fd59da64c84f"
+  },
+  {
+    "path": "results/padded_aw2/s11_d1/preinsert.pdb",
+    "sha256": "8e42e1a5ece643e03b5a8144cbf35fda654deb205ed0c2528125354e30ccc1b9"
+  },
+  {
+    "path": "results/padded_aw2/s11_d1/scores.json",
+    "sha256": "0b249c6af37250a37a0c05a512316728b7a99544734fbd42bfb33892173ad70e"
+  },
+  {
+    "path": "results/padded_aw2/s22_d0/cleaned.pdb",
+    "sha256": "7bec0a88f10445bbb169410aee48adc29d7bdb4335780b9da47e839d9f711bb1"
+  },
+  {
+    "path": "results/padded_aw2/s22_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw2/s22_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "e6d5dd8eb531a9ed58a344e18147a4713a57e16827ac27f02400090c97ea36dd"
+  },
+  {
+    "path": "results/padded_aw2/s22_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "79483aea26315fc43aa8fabb7efdeea738cbf957c1e9afcf3e8871f31d6ec501"
+  },
+  {
+    "path": "results/padded_aw2/s22_d0/preinsert.pdb",
+    "sha256": "a31d62cb7092aacc09d068d73d4f758b1762832235daeea50e594da9aada73b5"
+  },
+  {
+    "path": "results/padded_aw2/s22_d0/scores.json",
+    "sha256": "0c331c164644356eac4d64ebec519692e8293dc750ae9ec231617eac3c237025"
+  },
+  {
+    "path": "results/padded_aw2/s22_d1/cleaned.pdb",
+    "sha256": "eeedf95acc3efc973a79e18c48538fe8eff36d3154be202d124fcfdea872f6a9"
+  },
+  {
+    "path": "results/padded_aw2/s22_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw2/s22_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "f1e277519c5664cbada2f6efa37d66d88b6d3a46ec3e32653bdbc8d4207e8a7b"
+  },
+  {
+    "path": "results/padded_aw2/s22_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "679ddb705a8a220db2a95eff650a4af88c5f57922f5a3a4f4985e811ce9bd743"
+  },
+  {
+    "path": "results/padded_aw2/s22_d1/preinsert.pdb",
+    "sha256": "126afbdd7f87a37d92b70d99ee2a93c881188bea42fef07a755da7edb298374d"
+  },
+  {
+    "path": "results/padded_aw2/s22_d1/scores.json",
+    "sha256": "e446ebf12871bc5d634c2dc5c0f15a254803e125dcdf6026911a884399fa667e"
+  },
+  {
+    "path": "results/padded_aw2/s33_d0/cleaned.pdb",
+    "sha256": "84c1f3e5bbbcb432deabe8dd4a6c709c17efbd389e6be54ee3cc6405b0212217"
+  },
+  {
+    "path": "results/padded_aw2/s33_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw2/s33_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "8f09841b7f7551487711e1c6f9f39c59ac527ca9d3a99f7ebe1b67563820569f"
+  },
+  {
+    "path": "results/padded_aw2/s33_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "c9cb3d3fad74737743e48292aa0f6eb517de4169203213c2ff8c315077b1097c"
+  },
+  {
+    "path": "results/padded_aw2/s33_d0/preinsert.pdb",
+    "sha256": "04f6f092422e15aee457f0225c6b587b3f98b8174b8e2c3d4620d23fe1339a3f"
+  },
+  {
+    "path": "results/padded_aw2/s33_d0/scores.json",
+    "sha256": "ab2abed504e077c44152edaddf55bcc722d62f396ce1153f1ad388f84bced020"
+  },
+  {
+    "path": "results/padded_aw2/s33_d1/cleaned.pdb",
+    "sha256": "221fc84a6d67a71fed07fa27d92fd2d4cfc211330547ac25d370b69dae7c02f5"
+  },
+  {
+    "path": "results/padded_aw2/s33_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw2/s33_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "02fb09b5daf9f9ff150489cfc11650ec0240939f2128018406af42d5cfb64027"
+  },
+  {
+    "path": "results/padded_aw2/s33_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "082f396d2747d18fd3e69739de55aa62896df9f2738949de76a10d113a71e968"
+  },
+  {
+    "path": "results/padded_aw2/s33_d1/preinsert.pdb",
+    "sha256": "c526f98c9173797021ca5da81eed06a702610e97bfa0708b423bfa82a2ac8963"
+  },
+  {
+    "path": "results/padded_aw2/s33_d1/scores.json",
+    "sha256": "f216a5049ec237f67faa95b5fe25bdf8aba3138fab9baf267f2df05802076527"
+  },
+  {
+    "path": "results/padded_aw2/s44_d0/cleaned.pdb",
+    "sha256": "6ac37a682b6539ada079352aebe558fa7af7e80d675d46759d30fcb2a58095a3"
+  },
+  {
+    "path": "results/padded_aw2/s44_d0/guideposts.pdb",
+    "sha256": "5471b2fd226e5fd63a7b2c5ef5fcd5a355995184dbb4ba086d5f4d00bb0121b0"
+  },
+  {
+    "path": "results/padded_aw2/s44_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "c7dcb97b7add6c45c052e85a5ae1e7c5a9420d2e76ea2f3277a62ee26714cb32"
+  },
+  {
+    "path": "results/padded_aw2/s44_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "e6ee1c3d1a367ef811b31c2c6124871c386fda34c3f3a3785670f38ac15a3b88"
+  },
+  {
+    "path": "results/padded_aw2/s44_d0/preinsert.pdb",
+    "sha256": "5b613c8a0272c3ac8d435116f6568f54da7525ec8b70300594426bf29bec4252"
+  },
+  {
+    "path": "results/padded_aw2/s44_d0/scores.json",
+    "sha256": "4fea390920e7339e8539f1951014b7c79bb9aad6cec7a2c693e8cb8dd09288d2"
+  },
+  {
+    "path": "results/padded_aw2/s44_d1/cleaned.pdb",
+    "sha256": "880eef8acac8e66d58a7c8f33d23154ce25da95ee78a149a444dd5a10ce9f883"
+  },
+  {
+    "path": "results/padded_aw2/s44_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw2/s44_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "305d68f310044b7ca418e22689c6f07b3bd6bc7371f7d8ddd12b556de345798f"
+  },
+  {
+    "path": "results/padded_aw2/s44_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "5a0bca5dcade2b50b38a7ecfd802790da176597bfb431cb7f2520dc5b0ef080c"
+  },
+  {
+    "path": "results/padded_aw2/s44_d1/preinsert.pdb",
+    "sha256": "4a66ce634ea5de20d4ee86a525467f74cc7755a64121d4b78fc07ac02539f4bd"
+  },
+  {
+    "path": "results/padded_aw2/s44_d1/scores.json",
+    "sha256": "b160455237a67f2d78d09b3d13dbd544c6d846d7be5c603ea3117d411897505a"
+  },
+  {
+    "path": "results/padded_aw3/s11_d0/cleaned.pdb",
+    "sha256": "057d509e3cf45e63c27fe4ac247230d8edb87bb42ea23e37fa0602bdceb481cb"
+  },
+  {
+    "path": "results/padded_aw3/s11_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw3/s11_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "f824d50888e62681b0332bac76fa1703cbe1c51ae5bca9be5512c1ccec03ba81"
+  },
+  {
+    "path": "results/padded_aw3/s11_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "9682f6a1a0bea95f9fdbad535e4b4ff14d88f1f1b2bb6850de4af12102a5ebe9"
+  },
+  {
+    "path": "results/padded_aw3/s11_d0/preinsert.pdb",
+    "sha256": "205e44ade8e368a4df0b4f1973d0899dedc1654c23ead0ef69ff5d025a3973d5"
+  },
+  {
+    "path": "results/padded_aw3/s11_d0/scores.json",
+    "sha256": "529e01f0a5f1c8d7ef3221bbe3b0aa8dc694b6f2dee2579f8703d3e497320db1"
+  },
+  {
+    "path": "results/padded_aw3/s11_d1/cleaned.pdb",
+    "sha256": "03a45b4b8d31a5995a299e8e6d193a6009fed582072b47783d3914d84fe8d2fe"
+  },
+  {
+    "path": "results/padded_aw3/s11_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw3/s11_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "6e93bb91d3d9e8e6f2d8c2156f391c473458d0e0ee06ffa543b6bd03ddeb952c"
+  },
+  {
+    "path": "results/padded_aw3/s11_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "e5f7aca6a1e8fed957237590a94a2cec001c85f99b09121d5c34c8d28b85f73a"
+  },
+  {
+    "path": "results/padded_aw3/s11_d1/preinsert.pdb",
+    "sha256": "284c87488f2179253b91e60ec8e203f4fca0b8fcc0bc3d3554c44856c132ce3c"
+  },
+  {
+    "path": "results/padded_aw3/s11_d1/scores.json",
+    "sha256": "0ae467a6fdcfe0e9146cbb6c60ebe12bd7dcc7827baa341133d7678d1a47b03b"
+  },
+  {
+    "path": "results/padded_aw3/s22_d0/cleaned.pdb",
+    "sha256": "ed54d9de4ddd06117b6522457a53966b9c59e5d044c25453af7476349d4a53d7"
+  },
+  {
+    "path": "results/padded_aw3/s22_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw3/s22_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "1b9a34e5d086c26d9ebdd7f352f01c66d7f0097727b110959994e70c0c0fb90d"
+  },
+  {
+    "path": "results/padded_aw3/s22_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "26a184c10726cd3440f39ca065c7fc81fbb6d8c1bf4d8507b8c0998744371a6d"
+  },
+  {
+    "path": "results/padded_aw3/s22_d0/preinsert.pdb",
+    "sha256": "70423fc35712f9d8ce401ca2a631b68b34b9c72e1e56ccb3457c5ade0f8ff5d9"
+  },
+  {
+    "path": "results/padded_aw3/s22_d0/scores.json",
+    "sha256": "06f6d469e6f9ec7ddcc5b969211bbc54d9f0150e5e6c86939d24e13fba6f339b"
+  },
+  {
+    "path": "results/padded_aw3/s22_d1/cleaned.pdb",
+    "sha256": "b607eb456388bf994e329d93a75955b363ffa0590fdc090d30b4a55f9b169832"
+  },
+  {
+    "path": "results/padded_aw3/s22_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw3/s22_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "0f8690baeac7c27a94d72199c861830db144778b4c62fba3484f26569b45f74d"
+  },
+  {
+    "path": "results/padded_aw3/s22_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "5f537011190a3545b121f5631a08e84c731bfbcba96a7c58506880eea2a1a1a2"
+  },
+  {
+    "path": "results/padded_aw3/s22_d1/preinsert.pdb",
+    "sha256": "a02259ec449209e88fe81f36089ffe292f6382221cec92efa42ffe0676db354c"
+  },
+  {
+    "path": "results/padded_aw3/s22_d1/scores.json",
+    "sha256": "e4fd6e481a26cdb92299f38a0c7e04b5f36fc0dd68114a54f03b920f8be77026"
+  },
+  {
+    "path": "results/padded_aw3/s33_d0/cleaned.pdb",
+    "sha256": "07c1edf0a0049fe6b1e62f15d8b856fa3e79d832484c20de310445451b4c2bda"
+  },
+  {
+    "path": "results/padded_aw3/s33_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw3/s33_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "218e974f3f539802526a8c594fde486ef58df744875e259e3da343e640a61c34"
+  },
+  {
+    "path": "results/padded_aw3/s33_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "1527c2914e8c0ef70b21d7da5825e2c2ecaa0bd7ee9c797239608fb66ebb8658"
+  },
+  {
+    "path": "results/padded_aw3/s33_d0/preinsert.pdb",
+    "sha256": "38cf7563eb18e39836ebd79d1cd1b16276fb12f4dbe37eb4d1ae591c92dc7ab0"
+  },
+  {
+    "path": "results/padded_aw3/s33_d0/scores.json",
+    "sha256": "6286180fa8d94d944eba9efd633c8cd57da6bce1a4b5b1573f2ff99880074996"
+  },
+  {
+    "path": "results/padded_aw3/s33_d1/cleaned.pdb",
+    "sha256": "c9979ffc216e9d41c858554bcbb7d16aa9ef28b891ec36fa34162d83bb229c26"
+  },
+  {
+    "path": "results/padded_aw3/s33_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw3/s33_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "359d0997f3a72ed3c9bf44830de156af6b0477bd01884a67fb76608d3128a410"
+  },
+  {
+    "path": "results/padded_aw3/s33_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "f28ef641996d2291c83ec938e221a5b44ca0eeef16c1e5f874c594cef1c73e8a"
+  },
+  {
+    "path": "results/padded_aw3/s33_d1/preinsert.pdb",
+    "sha256": "9668832172e636ee058500e8e508c9cc664cbf32e2305ebcf7efd4d8c6dfcf77"
+  },
+  {
+    "path": "results/padded_aw3/s33_d1/scores.json",
+    "sha256": "ae516aab12d7bf400f309c076eaf3ab43f4a48ce96938c4dcbcc012c65fed172"
+  },
+  {
+    "path": "results/padded_aw3/s44_d0/cleaned.pdb",
+    "sha256": "613be490d7e73de2a158b718198cb23416a4ab9f466ba976ee35d78a07d213c4"
+  },
+  {
+    "path": "results/padded_aw3/s44_d0/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw3/s44_d0/input_cys_1euv_lig_0_model_0.cif.gz",
+    "sha256": "458adf8d7cb347c337fb63eadf6069cd76d71538e22f3022f79ddb90947ddc49"
+  },
+  {
+    "path": "results/padded_aw3/s44_d0/input_cys_1euv_lig_0_model_0.json",
+    "sha256": "ac37aacb5c411a63882f268aec6637f7f405bc34421de31a309732933c03f5a5"
+  },
+  {
+    "path": "results/padded_aw3/s44_d0/preinsert.pdb",
+    "sha256": "077ca90304e82be38171f06b9e2ea153428470360b3574a393648ff4f58c259a"
+  },
+  {
+    "path": "results/padded_aw3/s44_d0/scores.json",
+    "sha256": "75b2e3cf6e07de0414d8365c8278701520ae40cde0538b76e19bcd54a5e94441"
+  },
+  {
+    "path": "results/padded_aw3/s44_d1/cleaned.pdb",
+    "sha256": "50fd8b2ce956699a52b20b791c7e99aeda4b5701fe42d570aaf3355cb5296355"
+  },
+  {
+    "path": "results/padded_aw3/s44_d1/guideposts.pdb",
+    "sha256": "0f1dd86ccb8ca0811ba645af034855110a2eac029181f7713cd2a9f14def89d7"
+  },
+  {
+    "path": "results/padded_aw3/s44_d1/input_cys_1euv_lig_0_model_1.cif.gz",
+    "sha256": "8cb18c2c1d93cc87debc888af0ccf69aefb269b351e1ca696fdc18827a6eb0b0"
+  },
+  {
+    "path": "results/padded_aw3/s44_d1/input_cys_1euv_lig_0_model_1.json",
+    "sha256": "ec85ea07f630dba4b626e7745543b4c16282673e5fbdaaed415e5f43e0897914"
+  },
+  {
+    "path": "results/padded_aw3/s44_d1/preinsert.pdb",
+    "sha256": "612d415e2172aa03d011df5e90d9eddfc5da0fc6d9e8b50dc1903a4f4a908f7e"
+  },
+  {
+    "path": "results/padded_aw3/s44_d1/scores.json",
+    "sha256": "8f7398b0013925e30d6fb13b82af81b2b7193b80754a7060bee5c5b4d5e80232"
+  }
+]
