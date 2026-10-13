@@ -21,3 +21,6 @@
 torch==2.7.1
 rdkit==2025.3.6
 mypy==2.1.0
+
+# Production uses AtomWorks 2 APIs; upgrade to 3 only with the separate source port.
+atomworks==2.2.1
