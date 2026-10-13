@@ -65,7 +65,9 @@ def main():
     )
     if rows:
         with (root / "scores.csv").open("w") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+            writer = csv.DictWriter(
+                handle, fieldnames=list(rows[0]), lineterminator="\n"
+            )
             writer.writeheader()
             writer.writerows(rows)
     if missing:
