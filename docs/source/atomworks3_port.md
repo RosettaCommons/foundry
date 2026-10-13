@@ -143,9 +143,29 @@ Pristine upstream itself was nondeterministic (4.904 Å CA replay RMSD); replaci
 only its nondeterministic pooling for diagnosis made upstream and PR legacy
 inference bitwise identical. The diagnostic intervention is not pristine behavior.
 
-The acceleration also changes the seed contract. These results do not establish
-equivalent designability or actual motif preservation. Require a paired quality
-benchmark against pristine production, with predetermined acceptance margins,
-before adopting those speedups by default. This dependency port does not resolve
-that separate merge gate. CPU/MPS checkpoint inference, Apex, long sequences,
-large real-checkpoint batches, and full training runs remain outside this validation.
+The acceleration also changes the seed contract. The upstream
+[pooling prerequisite](https://github.com/RosettaCommons/foundry/pull/400),
+including its regression tests and training diagnostics, is now included in this
+branch as separate commits. It makes CPU/CUDA pooling deterministic and improves
+low-precision arithmetic; preservation of scientific quality is a separate question.
+
+The completed [paired design/refolding pilot](../../validation/quality/report.md)
+generated 64 backbones and refolded 128 designed sequences. Successful backbones
+were 15/16 for pristine production, 14/16 for corrected production pooling, and
+16/16 for each corrected accelerated arm (AtomWorks 2 and 3). The pooling contrast
+did not meet the preset exploratory noninferiority margins; it does not establish
+better design quality. Keep the pooling prerequisite separate and draft pending
+broader production-sampler validation. The acceleration and dependency contrasts
+passed the pilot's exploratory gates, with identical generated CA arrays and
+designed sequences across the two AtomWorks versions. This small unconditional,
+single-sample Torch-backend study does not validate default RNG behavior,
+multi-example batching, Triton kernels, motifs, or nucleic-acid design quality.
+
+The separate [RF3/MPNN checkpoint audit](atomworks3_model_quality.md) found all
+36 MPNN paired runs and all 21 RF3 fixed-feature replays bitwise identical with
+matched backends. Native RF3 preprocessing passed the bounded quality criteria,
+but one short peptide–DNA stress case failed seeded structural equivalence while
+improving geometry. These results support the dependency migration on the tested
+inputs; they do not remove the pooling rollout decision or prove broad scientific
+equivalence. CPU/MPS checkpoint inference, Apex, long sequences, large
+real-checkpoint batches, and full training runs remain outside this validation.
