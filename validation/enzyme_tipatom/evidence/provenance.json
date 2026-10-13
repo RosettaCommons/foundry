@@ -1,0 +1,58 @@
+{
+  "native_aw2": {
+    "arm": "native_aw2",
+    "torch": "2.11.0+cu128",
+    "gpu": "NVIDIA H200",
+    "source": "/mnt/home/jiechen7/other/foundry-pr397-base",
+    "commit": "8bffbcb9bec7eb8c3be0813f87d33c98faa0f5d2",
+    "pooling_sha256": "f22f87503943676932add0d5b05d60a2230a4119b38b10e068ee8e09678bdbf9",
+    "config": {
+      "compile_model": false,
+      "batch_size": 2,
+      "sampler_overrides": {},
+      "kernel": "legacy"
+    }
+  },
+  "fixed_aw2": {
+    "arm": "fixed_aw2",
+    "torch": "2.11.0+cu128",
+    "gpu": "NVIDIA H200",
+    "source": "/mnt/home/jiechen7/other/foundry-pr397-base",
+    "commit": "8bffbcb9bec7eb8c3be0813f87d33c98faa0f5d2",
+    "pooling_sha256": "5f1a285700caa0571db64980ffcedd1bf013137365b889bbe0519d4d2ff79248",
+    "config": {
+      "compile_model": false,
+      "batch_size": 2,
+      "sampler_overrides": {},
+      "kernel": "legacy"
+    }
+  },
+  "padded_aw2": {
+    "arm": "padded_aw2",
+    "torch": "2.11.0+cu128",
+    "gpu": "NVIDIA H200",
+    "source": "/mnt/home/jiechen7/other/foundry-pr397-precision",
+    "commit": "0999dce8365955f2b64f88020aafcb37ec64474f",
+    "pooling_sha256": "5f1a285700caa0571db64980ffcedd1bf013137365b889bbe0519d4d2ff79248",
+    "config": {
+      "compile_model": true,
+      "batch_size": 2,
+      "sampler_overrides": {},
+      "kernel": "auto"
+    }
+  },
+  "padded_aw3": {
+    "arm": "padded_aw3",
+    "torch": "2.11.0+cu128",
+    "gpu": "NVIDIA H200",
+    "source": "/mnt/home/jiechen7/other/foundry-atomworks3",
+    "commit": "2b265cc817e0e6edeccba1af19410e845fcbfd18",
+    "pooling_sha256": "5f1a285700caa0571db64980ffcedd1bf013137365b889bbe0519d4d2ff79248",
+    "config": {
+      "compile_model": true,
+      "batch_size": 2,
+      "sampler_overrides": {},
+      "kernel": "auto"
+    }
+  }
+}

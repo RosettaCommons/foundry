@@ -1,0 +1,4 @@
+.venv-pymol/
+results/
+*.log
+__pycache__/

@@ -169,3 +169,25 @@ improving geometry. These results support the dependency migration on the tested
 inputs; they do not remove the pooling rollout decision or prove broad scientific
 equivalence. CPU/MPS checkpoint inference, Apex, long sequences, large
 real-checkpoint batches, and full training runs remain outside this validation.
+
+### Basic enzyme insertion follow-up
+
+The [1euv enzyme benchmark](../../validation/enzyme_tipatom/README.md) adds 32
+150-residue designs with unindexed catalytic atoms, public inference sampling,
+two diffusion samples per batch, and compiled auto kernels. It scores the raw
+generated tip positions before guidepost coordinates are inserted; no refolding
+is involved. Mean native insertion RMSD is 0.445 Å for original pooling, 0.579 Å
+for corrected eager pooling, 0.522 Å for corrected #397/AW2, and 0.692 Å for
+corrected #397/AW3. These small samples do not demonstrate a pooling quality gain.
+
+This conditional input exposes a previously uncovered dependency change:
+AtomWorks 3 retains an unoptimized ligand conformer after UFF optimization raises
+an error, whereas AtomWorks 2 masks the failed conformer. All 22 ligand reference
+mask entries change; all other model features and starting coordinates match.
+Restoring only the old mask in a diagnostic reproduces all eight AW2 designs,
+atom identities, saved coordinates, and full-precision pre-insertion motif
+coordinates exactly. Thus the earlier unconditional equivalence does not extend
+to this failure path. An explicit, tested conformer-failure policy is required
+before promoting a compatibility-preserving port; the diagnostic does not change
+the production implementation. The report retains primary results, symmetry-aware
+secondary scores, the mask intervention, and PyMOL reproduction instructions.

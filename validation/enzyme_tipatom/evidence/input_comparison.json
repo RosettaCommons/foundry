@@ -1,0 +1,98 @@
+[
+  {
+    "seed": 11,
+    "ids": [
+      "input_cys_1euv_lig_0",
+      "input_cys_1euv_lig_0"
+    ],
+    "features_changed": {
+      "ref_mask": {
+        "shape": [
+          [
+            2150
+          ],
+          [
+            2150
+          ]
+        ],
+        "max_abs": 1.0
+      }
+    },
+    "coords_max_abs": 0.0,
+    "annotations_changed": [],
+    "atom_coords_max_abs": 0.0,
+    "bonds_equal": false
+  },
+  {
+    "seed": 22,
+    "ids": [
+      "input_cys_1euv_lig_0",
+      "input_cys_1euv_lig_0"
+    ],
+    "features_changed": {
+      "ref_mask": {
+        "shape": [
+          [
+            2150
+          ],
+          [
+            2150
+          ]
+        ],
+        "max_abs": 1.0
+      }
+    },
+    "coords_max_abs": 0.0,
+    "annotations_changed": [],
+    "atom_coords_max_abs": 0.0,
+    "bonds_equal": false
+  },
+  {
+    "seed": 33,
+    "ids": [
+      "input_cys_1euv_lig_0",
+      "input_cys_1euv_lig_0"
+    ],
+    "features_changed": {
+      "ref_mask": {
+        "shape": [
+          [
+            2150
+          ],
+          [
+            2150
+          ]
+        ],
+        "max_abs": 1.0
+      }
+    },
+    "coords_max_abs": 0.0,
+    "annotations_changed": [],
+    "atom_coords_max_abs": 0.0,
+    "bonds_equal": false
+  },
+  {
+    "seed": 44,
+    "ids": [
+      "input_cys_1euv_lig_0",
+      "input_cys_1euv_lig_0"
+    ],
+    "features_changed": {
+      "ref_mask": {
+        "shape": [
+          [
+            2150
+          ],
+          [
+            2150
+          ]
+        ],
+        "max_abs": 1.0
+      }
+    },
+    "coords_max_abs": 0.0,
+    "annotations_changed": [],
+    "atom_coords_max_abs": 0.0,
+    "bonds_equal": false
+  }
+]

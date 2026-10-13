@@ -1,0 +1,128 @@
+{
+  "comparison": "AW3 diagnostic: restore only AW2 ref_mask; all other model input features asserted identical",
+  "pairs": [
+    {
+      "seed": 11,
+      "sample": 0,
+      "builtin_aw2": 0.34652479986349743,
+      "builtin_aw3_restored_mask": 0.34652479986349743,
+      "tip_aw2": 0.3802711304377363,
+      "tip_aw3_restored_mask": 0.3802711304377363,
+      "identities_exact": true,
+      "pdb_coordinates_exact": true,
+      "max_pdb_coordinate_delta": 0.0,
+      "full_precision_preinsert_motif_coords_exact": true
+    },
+    {
+      "seed": 11,
+      "sample": 1,
+      "builtin_aw2": 0.5930547093351682,
+      "builtin_aw3_restored_mask": 0.5930547093351682,
+      "tip_aw2": 0.890977745906077,
+      "tip_aw3_restored_mask": 0.890977745906077,
+      "identities_exact": true,
+      "pdb_coordinates_exact": true,
+      "max_pdb_coordinate_delta": 0.0,
+      "full_precision_preinsert_motif_coords_exact": true
+    },
+    {
+      "seed": 22,
+      "sample": 0,
+      "builtin_aw2": 0.5085251207153002,
+      "builtin_aw3_restored_mask": 0.5085251207153002,
+      "tip_aw2": 0.8425642674907029,
+      "tip_aw3_restored_mask": 0.8425642674907029,
+      "identities_exact": true,
+      "pdb_coordinates_exact": true,
+      "max_pdb_coordinate_delta": 0.0,
+      "full_precision_preinsert_motif_coords_exact": true
+    },
+    {
+      "seed": 22,
+      "sample": 1,
+      "builtin_aw2": 0.47486771394809085,
+      "builtin_aw3_restored_mask": 0.47486771394809085,
+      "tip_aw2": 0.7426053695093198,
+      "tip_aw3_restored_mask": 0.7426053695093198,
+      "identities_exact": true,
+      "pdb_coordinates_exact": true,
+      "max_pdb_coordinate_delta": 0.0,
+      "full_precision_preinsert_motif_coords_exact": true
+    },
+    {
+      "seed": 33,
+      "sample": 0,
+      "builtin_aw2": 0.40156179169813794,
+      "builtin_aw3_restored_mask": 0.40156179169813794,
+      "tip_aw2": 0.5291366218210979,
+      "tip_aw3_restored_mask": 0.5291366218210979,
+      "identities_exact": true,
+      "pdb_coordinates_exact": true,
+      "max_pdb_coordinate_delta": 0.0,
+      "full_precision_preinsert_motif_coords_exact": true
+    },
+    {
+      "seed": 33,
+      "sample": 1,
+      "builtin_aw2": 0.38477615515391034,
+      "builtin_aw3_restored_mask": 0.38477615515391034,
+      "tip_aw2": 0.48786152301269436,
+      "tip_aw3_restored_mask": 0.48786152301269436,
+      "identities_exact": true,
+      "pdb_coordinates_exact": true,
+      "max_pdb_coordinate_delta": 0.0,
+      "full_precision_preinsert_motif_coords_exact": true
+    },
+    {
+      "seed": 44,
+      "sample": 0,
+      "builtin_aw2": 1.0739359309275944,
+      "builtin_aw3_restored_mask": 1.0739359309275944,
+      "tip_aw2": 1.3478117668864653,
+      "tip_aw3_restored_mask": 1.3478117668864653,
+      "identities_exact": true,
+      "pdb_coordinates_exact": true,
+      "max_pdb_coordinate_delta": 0.0,
+      "full_precision_preinsert_motif_coords_exact": true
+    },
+    {
+      "seed": 44,
+      "sample": 1,
+      "builtin_aw2": 0.39649638533592224,
+      "builtin_aw3_restored_mask": 0.39649638533592224,
+      "tip_aw2": 0.45593647862122594,
+      "tip_aw3_restored_mask": 0.45593647862122594,
+      "identities_exact": true,
+      "pdb_coordinates_exact": true,
+      "max_pdb_coordinate_delta": 0.0,
+      "full_precision_preinsert_motif_coords_exact": true
+    }
+  ],
+  "mean_tip_aw3_restored_mask": 0.709645612960665,
+  "mask_audit": [
+    {
+      "seed": 11,
+      "changed_features": [
+        "ref_mask"
+      ]
+    },
+    {
+      "seed": 22,
+      "changed_features": [
+        "ref_mask"
+      ]
+    },
+    {
+      "seed": 33,
+      "changed_features": [
+        "ref_mask"
+      ]
+    },
+    {
+      "seed": 44,
+      "changed_features": [
+        "ref_mask"
+      ]
+    }
+  ]
+}
