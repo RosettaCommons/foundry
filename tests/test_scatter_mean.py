@@ -88,7 +88,10 @@ def test_first_and_second_derivatives(device):
     dest = torch.randn(2, 4, 2, device=device, dtype=torch.double, requires_grad=True)
     source = torch.randn(2, 5, 2, device=device, dtype=torch.double, requires_grad=True)
     index = torch.tensor([2, 0, 2, 0, 2], device=device)
-    fn = lambda d, s: scatter_mean(d, 1, index, s)
+
+    def fn(d, s):
+        return scatter_mean(d, 1, index, s)
+
     assert torch.autograd.gradcheck(fn, (dest, source))
     assert torch.autograd.gradgradcheck(fn, (dest, source))
     fn(dest, source).sum().backward()
