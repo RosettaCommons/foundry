@@ -14,8 +14,8 @@ from atomworks.ml.datasets.parsers import MetadataRowParser
 class StructuralDatasetWrapper(PandasDataset):
     """Load structures while retaining existing metadata parsers and samplers.
 
-    Historical Foundry configs referenced an AtomWorks wrapper that is absent
-    from both released AtomWorks 2.2.1 and 3. Reuse the native dataset's metadata
+    Historical Foundry configs referenced a compatibility wrapper deprecated in
+    AtomWorks 2.2.1 and removed in 3. Reuse the native dataset's metadata
     index and failure handling, and its supported structure loader. This adapter
     preserves parser-produced crop queries and validation metadata unchanged.
     """
