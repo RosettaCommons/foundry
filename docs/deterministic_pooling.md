@@ -6,6 +6,10 @@ independent [PR #397 precision audit](https://github.com/Ubiquinone-dot/foundry/
 It includes no #397 acceleration or AtomWorks 3 changes. **This is not approval to
 merge #397, and reproducibility is not evidence of designability.**
 
+The follow-up [controlled training validation](pooling_training_validation.md)
+checks real RFD3/RF3 modules, short optimizer trajectories, and a checkpoint
+denoiser backward pass.
+
 ## Diagnosis
 
 Production's shared `scatter_mean` calls `index_reduce(..., "mean",
