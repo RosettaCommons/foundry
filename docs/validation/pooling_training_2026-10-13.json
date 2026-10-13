@@ -1,0 +1,1202 @@
+{
+  "torch": "2.11.0+cu128",
+  "device": "cuda",
+  "tolerances": {
+    "float32": {
+      "output": 1e-05,
+      "loss": 1e-05,
+      "gradient": 0.0001,
+      "update": 0.001
+    },
+    "bfloat16": {
+      "output": 0.001,
+      "loss": 0.001,
+      "gradient": 0.005,
+      "update": 0.02
+    }
+  },
+  "cases": [
+    {
+      "module": "rfd3",
+      "group_size": 14,
+      "batch": 1,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 9.205127866741806e-08,
+          "loss": 1.2310043715427242e-07,
+          "gradient": 1.0859057921199812e-07,
+          "update": 0.0
+        },
+        "native": {
+          "output": 7.487014470823764e-08,
+          "loss": 6.145779865048507e-08,
+          "gradient": 5.29430109609507e-08,
+          "update": 0.0
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.9713057279586792,
+          0.9705759286880493,
+          0.9698467254638672,
+          0.9691182971000671,
+          0.9683904647827148
+        ],
+        "fixed": [
+          0.9713057279586792,
+          0.9705759286880493,
+          0.969846785068512,
+          0.9691182971000671,
+          0.9683905839920044
+        ],
+        "native": [
+          0.9713057279586792,
+          0.9705759286880493,
+          0.969846785068512,
+          0.9691182971000671,
+          0.9683904647827148
+        ]
+      }
+    },
+    {
+      "module": "rfd3",
+      "group_size": 14,
+      "batch": 1,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 0.0,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.005973714656781648,
+          "loss": 0.00025318812616650026,
+          "gradient": 0.0021432409464749442,
+          "update": 0.0013535072983633244
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.9712085127830505,
+          0.9706230759620667,
+          0.9698362350463867,
+          0.9691708087921143,
+          0.9680323600769043
+        ],
+        "fixed": [
+          0.9712085127830505,
+          0.9706230759620667,
+          0.9698362350463867,
+          0.9691708087921143,
+          0.9680323600769043
+        ],
+        "native": [
+          0.971397876739502,
+          0.9706548452377319,
+          0.9698168635368347,
+          0.9691336154937744,
+          0.9682774543762207
+        ]
+      }
+    },
+    {
+      "module": "rfd3",
+      "group_size": 14,
+      "batch": 4,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 8.17841443202138e-08,
+          "loss": 1.1497979804948271e-07,
+          "gradient": 9.520844454200549e-08,
+          "update": 1.1871253525832542e-08
+        },
+        "native": {
+          "output": 7.908707420812377e-08,
+          "loss": 0.0,
+          "gradient": 9.846622711766972e-08,
+          "update": 0.0
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          1.0376851558685303,
+          1.0373847484588623,
+          1.0370843410491943,
+          1.0367846488952637,
+          1.036484956741333
+        ],
+        "fixed": [
+          1.0376852750778198,
+          1.0373847484588623,
+          1.0370843410491943,
+          1.0367845296859741,
+          1.036484956741333
+        ],
+        "native": [
+          1.0376851558685303,
+          1.0373847484588623,
+          1.0370843410491943,
+          1.0367846488952637,
+          1.036484956741333
+        ]
+      }
+    },
+    {
+      "module": "rfd3",
+      "group_size": 14,
+      "batch": 4,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 1.150211794248734e-07,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.00568737662384924,
+          "loss": 8.58882599486947e-05,
+          "gradient": 0.0022247518000664533,
+          "update": 0.00038973494745320246
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          1.0376763343811035,
+          1.0373649597167969,
+          1.0370540618896484,
+          1.0368045568466187,
+          1.0364116430282593
+        ],
+        "fixed": [
+          1.0376763343811035,
+          1.0373649597167969,
+          1.0370540618896484,
+          1.0368046760559082,
+          1.0364115238189697
+        ],
+        "native": [
+          1.0376708507537842,
+          1.0373331308364868,
+          1.037008285522461,
+          1.0367155075073242,
+          1.0363831520080566
+        ]
+      }
+    },
+    {
+      "module": "rfd3",
+      "group_size": 23,
+      "batch": 1,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 1.209514272602438e-07,
+          "loss": 6.995830764697471e-08,
+          "gradient": 8.094670956037492e-08,
+          "update": 3.0422787496946694e-07
+        },
+        "native": {
+          "output": 1.299758949759673e-07,
+          "loss": 6.992368389292559e-08,
+          "gradient": 1.2404149049617853e-07,
+          "update": 7.605696874236673e-08
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.8532687425613403,
+          0.8528463840484619,
+          0.8524242639541626,
+          0.8520023822784424,
+          0.8515808582305908
+        ],
+        "fixed": [
+          0.8532687425613403,
+          0.8528463840484619,
+          0.8524243235588074,
+          0.8520024418830872,
+          0.8515808582305908
+        ],
+        "native": [
+          0.8532688021659851,
+          0.8528463840484619,
+          0.8524243235588074,
+          0.8520023822784424,
+          0.8515808582305908
+        ]
+      }
+    },
+    {
+      "module": "rfd3",
+      "group_size": 23,
+      "batch": 1,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 0.0,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.009441786873020379,
+          "loss": 0.0003605938510325922,
+          "gradient": 0.002678253090826278,
+          "update": 0.0005768121550540472
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.8532455563545227,
+          0.8527609705924988,
+          0.8524458408355713,
+          0.8520983457565308,
+          0.8515502214431763
+        ],
+        "fixed": [
+          0.8532455563545227,
+          0.8527609705924988,
+          0.8524458408355713,
+          0.8520983457565308,
+          0.8515502214431763
+        ],
+        "native": [
+          0.8533614277839661,
+          0.853068470954895,
+          0.8524267673492432,
+          0.8521289825439453,
+          0.8513323664665222
+        ]
+      }
+    },
+    {
+      "module": "rfd3",
+      "group_size": 23,
+      "batch": 4,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 1.059155063190038e-07,
+          "loss": 6.913938132837078e-08,
+          "gradient": 1.1194268705691797e-07,
+          "update": 0.0
+        },
+        "native": {
+          "output": 1.1026761678577714e-07,
+          "loss": 6.916744802827123e-08,
+          "gradient": 1.1184781447396214e-07,
+          "update": 3.043053185162015e-07
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.8622691631317139,
+          0.862093985080719,
+          0.8619189262390137,
+          0.8617441654205322,
+          0.8615695238113403
+        ],
+        "fixed": [
+          0.8622691631317139,
+          0.8620939254760742,
+          0.8619189262390137,
+          0.8617441654205322,
+          0.8615695238113403
+        ],
+        "native": [
+          0.8622691631317139,
+          0.862093985080719,
+          0.8619189262390137,
+          0.8617441058158875,
+          0.8615695238113403
+        ]
+      }
+    },
+    {
+      "module": "rfd3",
+      "group_size": 23,
+      "batch": 4,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 6.918448374676598e-08,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.0072211626647062915,
+          "loss": 9.825498184218894e-05,
+          "gradient": 0.0030722129118398727,
+          "update": 0.0003755824557687611
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.8622607588768005,
+          0.8620244860649109,
+          0.8619024753570557,
+          0.8617321848869324,
+          0.8615319728851318
+        ],
+        "fixed": [
+          0.8622607588768005,
+          0.8620244264602661,
+          0.8619024753570557,
+          0.8617322444915771,
+          0.8615319132804871
+        ],
+        "native": [
+          0.8622837066650391,
+          0.8621091842651367,
+          0.8618258237838745,
+          0.8617874979972839,
+          0.8614866137504578
+        ]
+      }
+    },
+    {
+      "module": "rf3_pairformer",
+      "group_size": 14,
+      "batch": 1,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 7.01389797307847e-08,
+          "loss": 0.0,
+          "gradient": 7.143966067706785e-08,
+          "update": 2.1632859042587148e-05
+        },
+        "native": {
+          "output": 7.304417317460157e-08,
+          "loss": 0.0,
+          "gradient": 9.202596204905438e-08,
+          "update": 1.788350967149446e-05
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.9434221386909485,
+          0.9386076927185059,
+          0.9339210987091064,
+          0.9293058514595032,
+          0.9247497320175171
+        ],
+        "fixed": [
+          0.9434221386909485,
+          0.9386076927185059,
+          0.9339210987091064,
+          0.9293058514595032,
+          0.9247497320175171
+        ],
+        "native": [
+          0.9434221386909485,
+          0.9386076927185059,
+          0.9339210987091064,
+          0.9293058514595032,
+          0.9247497320175171
+        ]
+      }
+    },
+    {
+      "module": "rf3_pairformer",
+      "group_size": 14,
+      "batch": 1,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 0.0,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.0048180112405508966,
+          "loss": 9.909338213987059e-05,
+          "gradient": 0.0036845286635101746,
+          "update": 0.05657322394524782
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.9434517621994019,
+          0.9384390711784363,
+          0.933996319770813,
+          0.9293171167373657,
+          0.9248101711273193
+        ],
+        "fixed": [
+          0.9434517621994019,
+          0.9384390711784363,
+          0.933996319770813,
+          0.9293171167373657,
+          0.9248101711273193
+        ],
+        "native": [
+          0.9434913396835327,
+          0.9384108781814575,
+          0.9340057373046875,
+          0.9294092059135437,
+          0.9248014688491821
+        ]
+      }
+    },
+    {
+      "module": "rf3_pairformer",
+      "group_size": 23,
+      "batch": 1,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 7.413338676124201e-08,
+          "loss": 0.0,
+          "gradient": 6.030280039414744e-08,
+          "update": 1.1128111816119488e-05
+        },
+        "native": {
+          "output": 6.56222227891714e-08,
+          "loss": 0.0,
+          "gradient": 5.850604178406337e-08,
+          "update": 1.0980874920292369e-05
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.8844724297523499,
+          0.880185604095459,
+          0.8759994506835938,
+          0.8718808889389038,
+          0.8678103685379028
+        ],
+        "fixed": [
+          0.8844724297523499,
+          0.880185604095459,
+          0.8759994506835938,
+          0.8718808889389038,
+          0.8678103685379028
+        ],
+        "native": [
+          0.8844724297523499,
+          0.880185604095459,
+          0.8759994506835938,
+          0.8718808889389038,
+          0.8678103685379028
+        ]
+      }
+    },
+    {
+      "module": "rf3_pairformer",
+      "group_size": 23,
+      "batch": 1,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 0.0,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.005632470500994695,
+          "loss": 0.00021685160455965375,
+          "gradient": 0.036324515783439294,
+          "update": 0.04642464189999058
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.8845575451850891,
+          0.8801137208938599,
+          0.875951886177063,
+          0.8718767166137695,
+          0.8678809404373169
+        ],
+        "fixed": [
+          0.8845575451850891,
+          0.8801137208938599,
+          0.875951886177063,
+          0.8718767166137695,
+          0.8678809404373169
+        ],
+        "native": [
+          0.8844847679138184,
+          0.8803045749664307,
+          0.8758395910263062,
+          0.871805727481842,
+          0.8677849769592285
+        ]
+      }
+    },
+    {
+      "module": "rf3_diffusion",
+      "group_size": 14,
+      "batch": 1,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 6.088977104021564e-08,
+          "loss": 0.0,
+          "gradient": 6.475950336070964e-08,
+          "update": 1.568576790044586e-05
+        },
+        "native": {
+          "output": 6.816816036729739e-08,
+          "loss": 7.584783468084597e-08,
+          "gradient": 6.944985800685578e-08,
+          "update": 2.3548463266367652e-05
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.7858450412750244,
+          0.7801247835159302,
+          0.7745659351348877,
+          0.7691552042961121,
+          0.7638059854507446
+        ],
+        "fixed": [
+          0.7858450412750244,
+          0.7801247835159302,
+          0.7745659351348877,
+          0.7691552042961121,
+          0.7638059854507446
+        ],
+        "native": [
+          0.7858449816703796,
+          0.7801247835159302,
+          0.7745659351348877,
+          0.7691552042961121,
+          0.7638059854507446
+        ]
+      }
+    },
+    {
+      "module": "rf3_diffusion",
+      "group_size": 14,
+      "batch": 1,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 0.0,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.004641091176890431,
+          "loss": 0.00027826504286487553,
+          "gradient": 0.029141044088606186,
+          "update": 0.07752812897188338
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.7859033942222595,
+          0.7801258563995361,
+          0.7746655344963074,
+          0.7692774534225464,
+          0.7639567852020264
+        ],
+        "fixed": [
+          0.7859033942222595,
+          0.7801258563995361,
+          0.7746655344963074,
+          0.7692774534225464,
+          0.7639567852020264
+        ],
+        "native": [
+          0.7856847047805786,
+          0.7801044583320618,
+          0.7747166156768799,
+          0.7692670822143555,
+          0.7639287114143372
+        ]
+      }
+    },
+    {
+      "module": "rf3_diffusion",
+      "group_size": 14,
+      "batch": 4,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 6.814604784182752e-08,
+          "loss": 1.2844628610729466e-07,
+          "gradient": 7.34451999738205e-08,
+          "update": 1.3296794394073754e-05
+        },
+        "native": {
+          "output": 6.566744662016109e-08,
+          "loss": 6.422314305364733e-08,
+          "gradient": 7.640343296141029e-08,
+          "update": 1.4280915601354958e-05
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.9426693916320801,
+          0.9389159083366394,
+          0.9352437853813171,
+          0.9316394925117493,
+          0.9280866980552673
+        ],
+        "fixed": [
+          0.9426693916320801,
+          0.9389159679412842,
+          0.9352437853813171,
+          0.9316394925117493,
+          0.9280865788459778
+        ],
+        "native": [
+          0.9426693916320801,
+          0.9389159083366394,
+          0.9352437853813171,
+          0.9316394925117493,
+          0.9280866384506226
+        ]
+      }
+    },
+    {
+      "module": "rf3_diffusion",
+      "group_size": 14,
+      "batch": 4,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 6.372890437841153e-08,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.004174666800185583,
+          "loss": 9.400013395815701e-05,
+          "gradient": 0.02451284729004618,
+          "update": 0.050470624478513124
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.9427006244659424,
+          0.9389340877532959,
+          0.9352843165397644,
+          0.9317365884780884,
+          0.9281549453735352
+        ],
+        "fixed": [
+          0.9427006840705872,
+          0.9389340281486511,
+          0.9352843761444092,
+          0.9317365884780884,
+          0.9281549453735352
+        ],
+        "native": [
+          0.9427280426025391,
+          0.9388955235481262,
+          0.9353722333908081,
+          0.9317615032196045,
+          0.9281033873558044
+        ]
+      }
+    },
+    {
+      "module": "rf3_diffusion",
+      "group_size": 23,
+      "batch": 1,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 7.50308358177398e-08,
+          "loss": 0.0,
+          "gradient": 7.236606144476067e-08,
+          "update": 2.207413173080085e-05
+        },
+        "native": {
+          "output": 8.13390723369182e-08,
+          "loss": 0.0,
+          "gradient": 7.252456437742444e-08,
+          "update": 2.2748628789782828e-05
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          1.0851353406906128,
+          1.0795859098434448,
+          1.074127197265625,
+          1.068727970123291,
+          1.0633788108825684
+        ],
+        "fixed": [
+          1.0851353406906128,
+          1.0795859098434448,
+          1.074127197265625,
+          1.068727970123291,
+          1.0633788108825684
+        ],
+        "native": [
+          1.0851353406906128,
+          1.0795859098434448,
+          1.074127197265625,
+          1.068727970123291,
+          1.0633788108825684
+        ]
+      }
+    },
+    {
+      "module": "rf3_diffusion",
+      "group_size": 23,
+      "batch": 1,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 0.0,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.005095081091877339,
+          "loss": 0.00022958334029040425,
+          "gradient": 0.03172218762267794,
+          "update": 0.05019901756201007
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          1.0852155685424805,
+          1.079552173614502,
+          1.0739631652832031,
+          1.068772792816162,
+          1.063399076461792
+        ],
+        "fixed": [
+          1.0852155685424805,
+          1.079552173614502,
+          1.0739631652832031,
+          1.068772792816162,
+          1.063399076461792
+        ],
+        "native": [
+          1.0849664211273193,
+          1.079427719116211,
+          1.0740400552749634,
+          1.0688867568969727,
+          1.0633659362792969
+        ]
+      }
+    },
+    {
+      "module": "rf3_diffusion",
+      "group_size": 23,
+      "batch": 4,
+      "dtype": "torch.float32",
+      "steps": 5,
+      "tolerance": {
+        "output": 1e-05,
+        "loss": 1e-05,
+        "gradient": 0.0001,
+        "update": 0.001
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 6.925260000904734e-08,
+          "loss": 6.712455457823695e-08,
+          "gradient": 8.768790256979864e-08,
+          "update": 9.571447203504632e-06
+        },
+        "native": {
+          "output": 7.196193846053783e-08,
+          "loss": 0.0,
+          "gradient": 9.237285280967462e-08,
+          "update": 7.687922663956898e-06
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.8906466960906982,
+          0.8879708051681519,
+          0.8853724002838135,
+          0.8828133344650269,
+          0.8802993297576904
+        ],
+        "fixed": [
+          0.8906466960906982,
+          0.8879707455635071,
+          0.8853724002838135,
+          0.8828133344650269,
+          0.8802993297576904
+        ],
+        "native": [
+          0.8906466960906982,
+          0.8879708051681519,
+          0.8853724002838135,
+          0.8828133344650269,
+          0.8802993297576904
+        ]
+      }
+    },
+    {
+      "module": "rf3_diffusion",
+      "group_size": 23,
+      "batch": 4,
+      "dtype": "torch.bfloat16",
+      "steps": 5,
+      "tolerance": {
+        "output": 0.001,
+        "loss": 0.001,
+        "gradient": 0.005,
+        "update": 0.02
+      },
+      "fixed_pass": true,
+      "maximum_relative_errors_vs_oracle": {
+        "fixed": {
+          "output": 0.0,
+          "loss": 6.732195161490551e-08,
+          "gradient": 0.0,
+          "update": 0.0
+        },
+        "native": {
+          "output": 0.004500710138522109,
+          "loss": 0.00014949716688146569,
+          "gradient": 0.01731758808484959,
+          "update": 0.04419072792589219
+        }
+      },
+      "loss_trajectories": {
+        "oracle": [
+          0.8906976580619812,
+          0.8879146575927734,
+          0.8853671550750732,
+          0.8828548192977905,
+          0.8803560733795166
+        ],
+        "fixed": [
+          0.8906976580619812,
+          0.8879146575927734,
+          0.8853670954704285,
+          0.8828548192977905,
+          0.8803560733795166
+        ],
+        "native": [
+          0.890564501285553,
+          0.8879702687263489,
+          0.8854840993881226,
+          0.8827497959136963,
+          0.8804143071174622
+        ]
+      }
+    }
+  ],
+  "checkpoint": {
+    "torch": "2.11.0+cu128",
+    "gpu": "NVIDIA H200",
+    "limits": {
+      "float32": {
+        "output": 0.0001,
+        "loss": 0.0001,
+        "gradient": 0.001
+      },
+      "bfloat16": {
+        "output": 0.02,
+        "loss": 0.02,
+        "gradient": 0.1
+      }
+    },
+    "target": "generated structure from matched-noise inference snapshot",
+    "cases": [
+      {
+        "dtype": "torch.float32",
+        "arm": "oracle",
+        "loss": 0.4345812201499939,
+        "terms": {
+          "mse_loss_mean": 0.015173539519309998,
+          "mse_loss_low_t": null,
+          "mse_loss_high_t": 0.015173539519309998,
+          "mean_lddt": 0.3738870620727539,
+          "mean_lddt_dna": 1.0,
+          "mean_lddt_rna": 1.0,
+          "mean_lddt_protein": 0.3738870620727539
+        },
+        "gradient_parameter_count": 159166466,
+        "peak_allocated_bytes": 2243371008
+      },
+      {
+        "dtype": "torch.float32",
+        "arm": "fixed",
+        "loss": 0.4345811903476715,
+        "terms": {
+          "mse_loss_mean": 0.015173534862697124,
+          "mse_loss_low_t": null,
+          "mse_loss_high_t": 0.015173534862697124,
+          "mean_lddt": 0.37388700246810913,
+          "mean_lddt_dna": 1.0,
+          "mean_lddt_rna": 1.0,
+          "mean_lddt_protein": 0.37388700246810913
+        },
+        "gradient_parameter_count": 159166466,
+        "peak_allocated_bytes": 2243371008,
+        "relative_errors_vs_oracle": {
+          "output": 6.425228559055395e-07,
+          "loss": 6.85771059720647e-08,
+          "gradient": 0.0005270775157876465
+        },
+        "gradient_cosine": 0.999999861202431,
+        "pool_weight_gradient_relative_error": 1.5095717300725007e-05,
+        "within_declared_limits": true
+      },
+      {
+        "dtype": "torch.float32",
+        "arm": "native",
+        "loss": 0.4345814287662506,
+        "terms": {
+          "mse_loss_mean": 0.015173560939729214,
+          "mse_loss_low_t": null,
+          "mse_loss_high_t": 0.015173560939729214,
+          "mean_lddt": 0.37388718128204346,
+          "mean_lddt_dna": 1.0,
+          "mean_lddt_rna": 1.0,
+          "mean_lddt_protein": 0.37388718128204346
+        },
+        "gradient_parameter_count": 159166466,
+        "peak_allocated_bytes": 2245321216,
+        "relative_errors_vs_oracle": {
+          "output": 8.079673216139917e-07,
+          "loss": 4.800397418044529e-07,
+          "gradient": 0.0006621334716341686
+        },
+        "gradient_cosine": 0.9999997833872636,
+        "pool_weight_gradient_relative_error": 2.2032073731623273e-05,
+        "within_declared_limits": true
+      },
+      {
+        "dtype": "torch.bfloat16",
+        "arm": "oracle",
+        "loss": 0.4556542932987213,
+        "terms": {
+          "mse_loss_mean": 0.017201194539666176,
+          "mse_loss_low_t": null,
+          "mse_loss_high_t": 0.017201194539666176,
+          "mean_lddt": 0.386849582195282,
+          "mean_lddt_dna": 1.0,
+          "mean_lddt_rna": 1.0,
+          "mean_lddt_protein": 0.386849582195282
+        },
+        "gradient_parameter_count": 159166466,
+        "peak_allocated_bytes": 2245321216
+      },
+      {
+        "dtype": "torch.bfloat16",
+        "arm": "fixed",
+        "loss": 0.4556542932987213,
+        "terms": {
+          "mse_loss_mean": 0.017201194539666176,
+          "mse_loss_low_t": null,
+          "mse_loss_high_t": 0.017201194539666176,
+          "mean_lddt": 0.386849582195282,
+          "mean_lddt_dna": 1.0,
+          "mean_lddt_rna": 1.0,
+          "mean_lddt_protein": 0.386849582195282
+        },
+        "gradient_parameter_count": 159166466,
+        "peak_allocated_bytes": 2245321216,
+        "relative_errors_vs_oracle": {
+          "output": 0.0,
+          "loss": 0.0,
+          "gradient": 0.0
+        },
+        "gradient_cosine": 1.0,
+        "pool_weight_gradient_relative_error": 0.0,
+        "within_declared_limits": true
+      },
+      {
+        "dtype": "torch.bfloat16",
+        "arm": "native",
+        "loss": 0.44552725553512573,
+        "terms": {
+          "mse_loss_mean": 0.016360461711883545,
+          "mse_loss_low_t": null,
+          "mse_loss_high_t": 0.016360461711883545,
+          "mean_lddt": 0.38008546829223633,
+          "mean_lddt_dna": 1.0,
+          "mean_lddt_rna": 1.0,
+          "mean_lddt_protein": 0.38008546829223633
+        },
+        "gradient_parameter_count": 159166466,
+        "peak_allocated_bytes": 2245321216,
+        "relative_errors_vs_oracle": {
+          "output": 0.016618556338531935,
+          "loss": 0.022225265760760473,
+          "gradient": 0.45921198966763077
+        },
+        "gradient_cosine": 0.9074663002900094,
+        "pool_weight_gradient_relative_error": 0.4233286663751748,
+        "within_declared_limits": false
+      }
+    ],
+    "loss_weights": {
+      "weight": 4.0,
+      "lddt_weight": 0.25
+    }
+  },
+  "fixture_sha256": {
+    "input": "4408e3e3b53375c48fcfce9b83feeffd58c3a61d1f855e8c2a554b0d21f0506e",
+    "generated_target": "760a459c3d53cdb66af43d997f091471ee0263eae927565e9770ed709bfc8978"
+  },
+  "checkpoint_sha256": "9b3f85923e0d51e9453e15cdd2f8c666e7ce096a60577f57d11bbc54ae6d67c1",
+  "environment": {
+    "date": "2026-10-13",
+    "gpu": "NVIDIA H200",
+    "atomworks": "2.2.1",
+    "production_base": "69d5f735f272b78b6b23c230abba849f18315234"
+  }
+}
