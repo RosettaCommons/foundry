@@ -174,11 +174,13 @@ real-checkpoint batches, and full training runs remain outside this validation.
 
 The [1euv enzyme benchmark](../../validation/enzyme_tipatom/README.md) adds 32
 150-residue designs with unindexed catalytic atoms, public inference sampling,
-two diffusion samples per batch, and compiled auto kernels. It scores the raw
-generated tip positions before guidepost coordinates are inserted; no refolding
-is involved. Mean native insertion RMSD is 0.445 Å for original pooling, 0.579 Å
+two diffusion samples per batch, and compiled auto kernels. The requested score
+is `metrics.insertion_rmsd` read directly from the native output JSON, with <1 Å
+as the criterion; no refolding is involved. Mean native insertion RMSD is 0.445 Å for original pooling, 0.579 Å
 for corrected eager pooling, 0.522 Å for corrected #397/AW2, and 0.692 Å for
-corrected #397/AW3. These small samples do not demonstrate a pooling quality gain.
+corrected #397/AW3. Sub-angstrom counts are respectively 8/8, 7/8, 7/8, and
+7/8. These small samples demonstrate neither a pooling quality gain nor a drastic
+general regression. The earlier independent tip score is supplementary.
 
 This conditional input exposes a previously uncovered dependency change:
 AtomWorks 3 retains an unoptimized ligand conformer after UFF optimization raises

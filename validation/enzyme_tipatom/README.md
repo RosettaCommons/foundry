@@ -26,52 +26,45 @@ legacy public engine requires a string filename rather than `Path`. The harness
 was corrected; the subsequent smoke and all primary designs completed. There
 were no omitted primary designs or score-based recovery runs.
 
-## What is measured
+## Metric and results
 
-**Score before cleanup.** RFD3 normally overwrites matched motif coordinates with
-the fixed guideposts. Measuring those cleaned atoms alone would hide placement
-errors. A read-only hook captures the generated positions before that overwrite
-and uses RFD3's own assigned residue map. Internal atom14 slot labels are mapped
-back to `gt_atom_name` chemical identities.
+The requested metric is **`metrics.insertion_rmsd` read directly from each native
+RFD3 output JSON**, with **<1 Å** as the sub-angstrom criterion. No refolding or
+independent coordinate scoring is needed for this check. It is the mean of six
+residue-level guidepost RMSDs, logged before guidepost replacement.
 
-The independent tip score pools the squared distances of these **15 atoms** in
-their shared model frame; it applies no tip fitting and drops no atoms:
+| Arm | Mean insertion RMSD (Å) | Maximum (Å) | <1 Å |
+| --- | ---: | ---: | ---: |
+| Original pooling, AW2 | 0.445 | 0.651 | 8/8 |
+| Corrected pooling, AW2 | 0.579 | 1.342 | 7/8 |
+| Corrected pooling + #397, AW2 | 0.522 | 1.074 | 7/8 |
+| Corrected pooling + #397, AW3 | 0.692 | 1.138 | 7/8 |
 
-| Input residue | Tip atoms |
-| --- | --- |
-| HIS A514 | CG, ND1, CD2, CE1, NE2 |
-| ASP A531 | CB, CG, OD1, OD2 |
-| GLN A574 | CG, CD, OE1, NE2 |
-| CYS A580 | CB, SG |
+The exceptions are corrected eager AW2 seed33/sample1 (1.341699 Å), corrected
+#397/AW2 seed44/sample0 (1.073936 Å), and corrected #397/AW3 seed33/sample1
+(1.137874 Å). Every design is included.
 
-A579/A581 have backbone-only constraints and therefore contribute to the native
-insertion metric, but not the independent tip subset. The native `insertion_rmsd`
-is the mean of six residue-level guidepost RMSDs; it is not the atom-weighted
-15-tip RMSD. The independently captured native metric matches every output JSON.
+Most designs meet the requested sub-angstrom criterion. This small sample shows
+no quality improvement from corrected pooling, but does not establish a drastic
+or general regression. The AW3 port has the same 7/8 pass count as corrected
+#397/AW2, with a 0.169 Å higher mean on this fixture. Four seed groups and one
+enzyme cannot establish population-wide quality or enzyme activity.
 
-After the preflight suggested an ASP oxygen-label exchange, a secondary score
-was specified before inspecting the full-arm outcomes. It permits **only ASP
-OD1/OD2 exchange**, without fitting or dropping atoms. GLN O/N identities remain
-distinct. Strict scores stay primary. The 0.5 Å cutoff is a descriptive
-insertion-quality reference, not a population-equivalence test.
+### Earlier supplementary analysis
 
-## Primary results
+The initial analysis used an independent 15-tip-atom RMSD and a 0.5 Å cutoff.
+The user subsequently clarified the intended metric and threshold above; this
+is a user-directed reanalysis, not a prespecified statistical gate. The original
+`plan.json` and supplementary columns remain archived for provenance, but do not
+set the acceptance criterion. `summarize.py` now reads the native JSON metric
+and computes its <1 Å counts, outliers, and seed-group differences directly.
 
-All values below are mean RMSDs in Å across all eight designs per arm.
-
-| Arm | Native insertion | Strict 15-tip | ASP-symmetry-aware tip | Strict tip <0.5 Å |
-| --- | ---: | ---: | ---: | ---: |
-| Original pooling, AW2 | 0.445 | 0.640 | 0.592 | 4/8 |
-| Corrected pooling, AW2 | 0.579 | 0.938 | 0.872 | 2/8 |
-| Corrected pooling + #397, AW2 | 0.522 | 0.710 | 0.682 | 3/8 |
-| Corrected pooling + #397, AW3 | 0.692 | 1.192 | 1.170 | 2/8 |
-
-These measurements do not show a pooling quality improvement. The corrected
-eager arm's worst sample (seed33/sample1) has 2.652 Å pooled tip RMSD, dominated by
-HIS A514 at 4.320 Å. The primary AW3 arm has three GLN A574 placement outliers
-(3.675–4.224 Å residue tip RMSD). Thus the higher AW3 error is not explained away
-by equivalent ASP oxygen names. There are only four seed groups per arm and one
-enzyme task; this is not a general estimate of enzyme-design success or activity.
+The read-only coordinate capture remains useful for the PyMOL images: it shows
+generated motif positions before cleanup overwrites them. Supplementary scoring
+maps internal atom14 names to chemical identities, uses no fitting, and includes
+HIS A514 (CG/ND1/CD2/CE1/NE2), ASP A531 (CB/CG/OD1/OD2), GLN A574
+(CG/CD/OE1/NE2), and CYS A580 (CB/SG). A secondary symmetry score allows only
+ASP OD1/OD2 exchange. These scores are distinct from the native JSON metric.
 
 ## Identified AtomWorks 3 semantic change
 
@@ -96,7 +89,7 @@ for the primary AW3 measurements.
 **Diagnostic result:** all eight designs reproduce the corrected #397/AW2 arm
 exactly: atom identities, PDB coordinates (maximum difference zero),
 full-precision pre-insertion motif coordinates, and both RMSD metrics. Mean native
-insertion RMSD returns to **0.522 Å** and strict tip RMSD to **0.710 Å**. Every
+insertion RMSD returns to **0.522 Å**, with **7/8 below 1 Å**, matching AW2. Every
 runtime assertion confirmed that `ref_mask` was the sole changed input feature.
 The diagnostic job completed successfully in a separate short allocation.
 See [all eight comparisons](evidence/mask_diagnostic.json).

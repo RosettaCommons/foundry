@@ -8,6 +8,9 @@
       "tip_max": 1.3396260197577659,
       "tip_below_0.5": 4,
       "builtin_mean": 0.4447231690088908,
+      "builtin_max": 0.6510547349850336,
+      "builtin_below_1": 8,
+      "builtin_outliers": [],
       "symmetry_aware_tip_mean": 0.5920850030390723,
       "symmetry_aware_tip_below_0.5": 5
     },
@@ -19,6 +22,16 @@
       "tip_max": 2.6519615579597953,
       "tip_below_0.5": 2,
       "builtin_mean": 0.5789992157369852,
+      "builtin_max": 1.3416993791858356,
+      "builtin_below_1": 7,
+      "builtin_outliers": [
+        {
+          "seed": 33,
+          "sample": 1,
+          "insertion_rmsd": 1.3416993791858356,
+          "native_json": "results/fixed_aw2/s33_d1/input_cys_1euv_lig_0_model_1.json"
+        }
+      ],
       "symmetry_aware_tip_mean": 0.8723831356075529,
       "symmetry_aware_tip_below_0.5": 3
     },
@@ -30,6 +43,16 @@
       "tip_max": 1.3478117668864653,
       "tip_below_0.5": 3,
       "builtin_mean": 0.5224678258722026,
+      "builtin_max": 1.0739359309275944,
+      "builtin_below_1": 7,
+      "builtin_outliers": [
+        {
+          "seed": 44,
+          "sample": 0,
+          "insertion_rmsd": 1.0739359309275944,
+          "native_json": "results/padded_aw2/s44_d0/input_cys_1euv_lig_0_model_0.json"
+        }
+      ],
       "symmetry_aware_tip_mean": 0.681947384391399,
       "symmetry_aware_tip_below_0.5": 3
     },
@@ -41,6 +64,16 @@
       "tip_max": 2.199746857267256,
       "tip_below_0.5": 2,
       "builtin_mean": 0.6917214067652822,
+      "builtin_max": 1.1378736644983292,
+      "builtin_below_1": 7,
+      "builtin_outliers": [
+        {
+          "seed": 33,
+          "sample": 1,
+          "insertion_rmsd": 1.1378736644983292,
+          "native_json": "results/padded_aw3/s33_d1/input_cys_1euv_lig_0_model_1.json"
+        }
+      ],
       "symmetry_aware_tip_mean": 1.1697463867914946,
       "symmetry_aware_tip_below_0.5": 2
     }
@@ -48,32 +81,32 @@
   "contrasts": {
     "fixed_aw2_minus_native_aw2": {
       "seed_mean_deltas": [
-        0.05839673357009845,
-        -0.023225002840412068,
-        0.9588856720588583,
-        0.1979654437444719
+        0.05464674159884442,
+        0.035841815173625946,
+        0.3643896679083506,
+        0.08222596223155659
       ],
-      "mean_delta": 0.2980057116332542,
+      "mean_delta": 0.1342760467280944,
       "interpretation": "Four seed groups only; descriptive, not a significance or noninferiority test."
     },
     "padded_aw2_minus_fixed_aw2": {
       "seed_mean_deltas": [
-        -0.18567219432275983,
-        -0.04457123961620768,
-        -0.982430260458192,
-        0.30006669538864417
+        -0.062160198887189155,
+        -0.03223702311515808,
+        -0.4323292312522729,
+        0.3006008937954902
       ],
-      "mean_delta": -0.22815174975212882,
+      "mean_delta": -0.05653138986478247,
       "interpretation": "Four seed groups only; descriptive, not a significance or noninferiority test."
     },
     "padded_aw3_minus_padded_aw2": {
       "seed_mean_deltas": [
-        0.26662676537475205,
-        -0.43230552604254646,
-        1.6177869955102562,
-        0.475503315587426
+        0.15702753389875101,
+        -0.14855082829793292,
+        0.6531892617543538,
+        0.01534835621714603
       ],
-      "mean_delta": 0.48190288760747196,
+      "mean_delta": 0.16925358089307949,
       "interpretation": "Four seed groups only; descriptive, not a significance or noninferiority test."
     }
   },
@@ -108,5 +141,8 @@
       "reason": "The one-sample preflight showed a possible ASP OD1/OD2 label exchange. Before inspecting full-arm outcomes, add a secondary symmetry-aware score permitting only this chemically equivalent exchange. Keep the strict primary score unchanged and retain every atom/case.",
       "permitted_exchange": "ASP OD1 <-> OD2 only; no fitting or other equivalence rules"
     }
-  }
+  },
+  "reporting_metric": "native output JSON metrics.insertion_rmsd",
+  "reporting_threshold_angstrom": 1.0,
+  "reporting_note": "User-directed reanalysis after results; original plan retained."
 }

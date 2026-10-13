@@ -21,6 +21,15 @@ def main():
                     missing.append(str(path))
                     continue
                 result = json.loads(path.read_text())
+                output_files = [
+                    p for p in path.parent.glob("*.json") if p.name != "scores.json"
+                ]
+                assert len(output_files) == 1, output_files
+                output = json.loads(output_files[0].read_text())
+                native_score = output["metrics"]["insertion_rmsd"]
+                assert np.isfinite(native_score)
+                assert abs(native_score - result["insertion_rmsd"]) < 1e-6
+                result["insertion_rmsd"] = native_score
                 numeric = [result["tip_atom_rmsd"], result["insertion_rmsd"]]
                 assert np.isfinite(numeric).all()
                 assert result["n_tip_atoms"] == 15 and result["protein_length"] == 150
@@ -42,6 +51,8 @@ def main():
                         "insertion_rmsd",
                     ]
                 }
+                row["insertion_below_1"] = native_score < 1.0
+                row["native_json"] = str(output_files[0].relative_to(here))
                 row["tip_below_0.5"] = result["tip_atom_rmsd"] < 0.5
                 symmetry_rmsd, swaps = symmetry_aware_tip_rmsd(result["replacements"])
                 row["symmetry_aware_tip_rmsd"] = symmetry_rmsd
@@ -59,7 +70,14 @@ def main():
             writer.writerows(rows)
     if missing:
         raise ValueError(f"Incomplete experiment: {len(missing)} missing outputs")
-    summary = {"arms": {}, "contrasts": {}, "plan": plan}
+    summary = {
+        "arms": {},
+        "contrasts": {},
+        "plan": plan,
+        "reporting_metric": "native output JSON metrics.insertion_rmsd",
+        "reporting_threshold_angstrom": 1.0,
+        "reporting_note": "User-directed reanalysis after results; original plan retained.",
+    }
     for arm in plan["arms"]:
         scores = [row for row in rows if row["arm"] == arm]
         tips = np.array([row["tip_atom_rmsd"] for row in scores])
@@ -73,6 +91,16 @@ def main():
             "tip_max": float(tips.max()),
             "tip_below_0.5": int((tips < 0.5).sum()),
             "builtin_mean": float(native.mean()),
+            "builtin_max": float(native.max()),
+            "builtin_below_1": int((native < 1.0).sum()),
+            "builtin_outliers": [
+                {
+                    key: row[key]
+                    for key in ("seed", "sample", "insertion_rmsd", "native_json")
+                }
+                for row in scores
+                if row["insertion_rmsd"] >= 1.0
+            ],
             "symmetry_aware_tip_mean": float(symmetric.mean()),
             "symmetry_aware_tip_below_0.5": int((symmetric < 0.5).sum()),
         }
@@ -81,14 +109,14 @@ def main():
         for seed in plan["seeds"]:
             old_mean = np.mean(
                 [
-                    r["tip_atom_rmsd"]
+                    r["insertion_rmsd"]
                     for r in rows
                     if r["arm"] == old and r["seed"] == seed
                 ]
             )
             new_mean = np.mean(
                 [
-                    r["tip_atom_rmsd"]
+                    r["insertion_rmsd"]
                     for r in rows
                     if r["arm"] == new and r["seed"] == seed
                 ]
