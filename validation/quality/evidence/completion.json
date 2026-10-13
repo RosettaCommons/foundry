@@ -1,0 +1,355 @@
+{
+  "generation_failures": 0,
+  "refolding_failures": 0,
+  "recovery_jobs": 0,
+  "planned_backbones": 64,
+  "completed_backbones": 64,
+  "planned_refolds": 128,
+  "completed_refolds": 128,
+  "preflight_refolds_excluded": 2,
+  "native_L64_s11_generation_reused_from_preflight": true,
+  "gpu_model": "NVIDIA H200",
+  "main_job": 664474,
+  "preflight_job": 664458,
+  "generated_port_pairs": [
+    {
+      "case": "L64_s11",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L64_s22",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L64_s33",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L64_s44",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L96_s11",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L96_s22",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L96_s33",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L96_s44",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L128_s11",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L128_s22",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L128_s33",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L128_s44",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L160_s11",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L160_s22",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L160_s33",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    },
+    {
+      "case": "L160_s44",
+      "generated_ca_bitwise_equal": true,
+      "pdb_bytes_equal": false,
+      "pdb_atom_records_equal": true,
+      "pdb_difference_only_conect": true
+    }
+  ],
+  "oracle_port_pairs": [
+    {
+      "case": "L64_s11",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L64_s11",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L64_s22",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L64_s22",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L64_s33",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": -0.00031795520405419886,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L64_s33",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L64_s44",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L64_s44",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L96_s11",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L96_s11",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L96_s22",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L96_s22",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.019824142344502915,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L96_s33",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L96_s33",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L96_s44",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L96_s44",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L128_s11",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L128_s11",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": -0.002477590710872557,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L128_s22",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L128_s22",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L128_s33",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L128_s33",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": -0.0008343623584133875,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L128_s44",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L128_s44",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L160_s11",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L160_s11",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L160_s22",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L160_s22",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L160_s33",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L160_s33",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": -0.008241705901759433,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L160_s44",
+      "draw": 0,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    },
+    {
+      "case": "L160_s44",
+      "draw": 1,
+      "sequence_identical": true,
+      "rmsd_delta_aw3_minus_aw2": 0.0,
+      "plddt_delta_aw3_minus_aw2": 0.0
+    }
+  ],
+  "note": "Small RF3 coordinate differences remain even with identical generated structures/sequences and paired seeds; this study does not establish bitwise oracle repeatability."
+}

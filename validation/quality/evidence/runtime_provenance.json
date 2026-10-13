@@ -1,0 +1,93 @@
+{
+  "sources": {
+    "native_aw2": {
+      "registered_revision": "8bffbcb9bec7eb8c3be0813f87d33c98faa0f5d2",
+      "actual_head": "8bffbcb9bec7eb8c3be0813f87d33c98faa0f5d2",
+      "runtime_diff": [],
+      "nonruntime_model_changes": []
+    },
+    "padded_aw2": {
+      "registered_revision": "754d1caae5a74b35a3bfcf68169e459474b7dbc4",
+      "actual_head": "0999dce8365955f2b64f88020aafcb37ec64474f",
+      "runtime_diff": [],
+      "nonruntime_model_changes": [
+        "models/rfd3/benchmark_precision.py",
+        "models/rfd3/docs/pr397_precision_audit.md",
+        "models/rfd3/performance/pr397_precision_audit_2026-10-13.json",
+        "models/rfd3/summarize_precision.py",
+        "models/rfd3/tests/test_rfd3_matched_noise_audit.py"
+      ]
+    },
+    "padded_aw3": {
+      "registered_revision": "d0474f0f467793d7dd7151399499470fe9475efc",
+      "actual_head": "d0474f0f467793d7dd7151399499470fe9475efc",
+      "runtime_diff": [],
+      "nonruntime_model_changes": []
+    },
+    "pooling_helper": {
+      "registered_revision": "aa97ded8b93deccab353682c331694821185923a",
+      "actual_head": "e042026a5d883c12226c5b8a4fa4360d7be44a69",
+      "sha256": "5f1a285700caa0571db64980ffcedd1bf013137365b889bbe0519d4d2ff79248",
+      "runtime_identical": true
+    }
+  },
+  "environments": {
+    "aw2": {
+      "python": "3.12.10",
+      "packages": {
+        "atomworks": "2.2.1",
+        "biotite": "1.4.0",
+        "numpy": "2.5.4",
+        "scipy": "1.18.1",
+        "pandas": "3.0.6",
+        "torch": "2.11.0+cu128",
+        "lightning": "2.6.6",
+        "hydra-core": "1.3.7",
+        "rdkit": "2026.9.1",
+        "triton": "3.6.0",
+        "numba": null,
+        "cuequivariance-torch": null,
+        "cuequivariance-ops-torch-cu12": null,
+        "cuequivariance-ops-cu12": null
+      },
+      "torch_cuda": "12.8"
+    },
+    "aw3": {
+      "python": "3.12.10",
+      "packages": {
+        "atomworks": "3.0.1",
+        "biotite": "1.6.0",
+        "numpy": "2.5.4",
+        "scipy": "1.18.1",
+        "pandas": "3.0.6",
+        "torch": "2.11.0+cu128",
+        "lightning": "2.6.6",
+        "hydra-core": "1.3.7",
+        "rdkit": "2026.9.1",
+        "triton": "3.6.0",
+        "numba": "0.68.0",
+        "cuequivariance-torch": "0.12.0",
+        "cuequivariance-ops-torch-cu12": "0.12.0",
+        "cuequivariance-ops-cu12": "0.12.0"
+      },
+      "torch_cuda": "12.8"
+    }
+  },
+  "checkpoints": {
+    "rfd3": {
+      "filename": "rfd3_latest.ckpt",
+      "bytes": 2690316669,
+      "sha256": "9b3f85923e0d51e9453e15cdd2f8c666e7ce096a60577f57d11bbc54ae6d67c1"
+    },
+    "mpnn": {
+      "filename": "proteinmpnn_v_48_020.pt",
+      "bytes": 6681301,
+      "sha256": "c9cb4a671d79604111231f8dbfc7c590e06f1197453b7a6854ac6661a642f5bd"
+    },
+    "rf3": {
+      "filename": "rf3_foundry_01_24_latest_remapped.ckpt",
+      "bytes": 3038876446,
+      "sha256": "364ef592fd8042a9cf4176d045015190f8322f961ccca38d891b20ca578d3bb0"
+    }
+  }
+}

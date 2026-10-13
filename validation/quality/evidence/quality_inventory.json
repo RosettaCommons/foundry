@@ -1,0 +1,1285 @@
+{
+  "records": [
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L64_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L64_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L64_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L64_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L64_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L64_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L64_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L64_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L64_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L64_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L64_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L64_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L96_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L96_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L96_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L96_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L96_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L96_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L96_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L96_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L96_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L96_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L96_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L96_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L128_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L128_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L128_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L128_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L128_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L128_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L128_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L128_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L128_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L128_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L128_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L128_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L160_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L160_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L160_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L160_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L160_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L160_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L160_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L160_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L160_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "native_aw2",
+      "case": "L160_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L160_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "native_aw2",
+      "case": "L160_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L64_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L64_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L64_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L64_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L64_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L64_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L64_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L64_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L64_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L64_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L64_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L64_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L96_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L96_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L96_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L96_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L96_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L96_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L96_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L96_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L96_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L96_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L96_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L96_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L128_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L128_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L128_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L128_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L128_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L128_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L128_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L128_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L128_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L128_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L128_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L128_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L160_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L160_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L160_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L160_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L160_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L160_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L160_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L160_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L160_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "fixed_aw2",
+      "case": "L160_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L160_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "fixed_aw2",
+      "case": "L160_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L64_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L64_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L64_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L64_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L64_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L64_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L64_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L64_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L64_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L64_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L64_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L64_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L96_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L96_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L96_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L96_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L96_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L96_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L96_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L96_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L96_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L96_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L96_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L96_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L128_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L128_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L128_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L128_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L128_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L128_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L128_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L128_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L128_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L128_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L128_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L128_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L160_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L160_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L160_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L160_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L160_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L160_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L160_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L160_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L160_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw2",
+      "case": "L160_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L160_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw2",
+      "case": "L160_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L64_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L64_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L64_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L64_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L64_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L64_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L64_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L64_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L64_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L64_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L64_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L64_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L96_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L96_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L96_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L96_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L96_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L96_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L96_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L96_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L96_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L96_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L96_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L96_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L128_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L128_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L128_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L128_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L128_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L128_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L128_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L128_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L128_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L128_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L128_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L128_s44",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L160_s11",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L160_s11",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L160_s11",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L160_s22",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L160_s22",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L160_s22",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L160_s33",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L160_s33",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L160_s33",
+      "draw": 1,
+      "missing": []
+    },
+    {
+      "stage": "generate",
+      "arm": "padded_aw3",
+      "case": "L160_s44",
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L160_s44",
+      "draw": 0,
+      "missing": []
+    },
+    {
+      "stage": "refold",
+      "arm": "padded_aw3",
+      "case": "L160_s44",
+      "draw": 1,
+      "missing": []
+    }
+  ],
+  "incomplete_records": 0
+}

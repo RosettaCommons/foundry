@@ -1,0 +1,21 @@
+{
+  "registered_before_outputs": true,
+  "lengths": [64, 96, 128, 160],
+  "seeds": [11, 22, 33, 44],
+  "arms": ["native_aw2", "fixed_aw2", "padded_aw2", "padded_aw3"],
+  "contrasts": [["fixed_aw2", "native_aw2"], ["padded_aw2", "fixed_aw2"], ["padded_aw3", "padded_aw2"]],
+  "rfd3_steps": 200,
+  "rfd3_realignment": false,
+  "matched_gaussian_noise": true,
+  "padded_capacity": {"atoms": 2304, "tokens": 192},
+  "mpnn_sequences_per_backbone": 2,
+  "mpnn_temperature": 0.1,
+  "rf3_steps": 50,
+  "rf3_recycles": 10,
+  "refold_success": {"aligned_ca_rmsd_lt": 2.0, "overall_plddt_gte": 0.8},
+  "noninferiority_exploratory_margins": {"backbone_success_fraction": -0.10, "best_refold_plddt": -0.03, "best_refold_rmsd": 0.25},
+  "confidence_interval": "paired percentile bootstrap, 90%, 10000 resamples, seed 914; small exploratory pilot, no definitive equivalence claim",
+  "independent_units": "16 backbone seed/length cases; two sequence siblings are not independent samples",
+  "oracle": "one fixed AW3 Foundry ProteinMPNN/RF3 stack with the same #400 pooling fix for every generated arm",
+  "limits": "unconditional protein pilot; motif/NA quality, training convergence, and experimental function are not inferred from this study"
+}

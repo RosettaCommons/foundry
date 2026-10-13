@@ -1,0 +1,689 @@
+{
+  "passed": true,
+  "n_cases_per_arm": 16,
+  "n_refolds": 128,
+  "registered_script_hashes": {
+    "plan.json": "8241bbff5ea3ea21871f4611dba887e98cf2526a81d52d93316e2fc822dc9c12",
+    "driver.py": "7c9912659832b72e99ea094316b1154052f9dcb0f34e5eeae99261bb9a186e42",
+    "score.py": "b44fe23b4ba75bd5f5e017afd23d304f336ef679b572f9640eb2c288368e04f0",
+    "run.sh": "9998b861da9a503b84beea5c6f87c0027887f720242b2504cdb873c8a3a6313f"
+  },
+  "matched_input_sha256": {
+    "L64_s11": "99436a201d1298885b5f8cf9a490e7398bdc74069f5e2ce1c27220a7327bf760",
+    "L64_s22": "16edb23a69c74b28aa6bb36123783c5708398639084464222be8a6e19416aedf",
+    "L64_s33": "d3dabe0c8a875d0d9bc003791111f8d475af5259f7b4d27a041debabb4331b8b",
+    "L64_s44": "ad84b44c85633e9455ec96428880752debfbda85892dbca86c0633acb9305d99",
+    "L96_s11": "05fa503638b789acdba5026c9190cd9ed5c2a1438fcd1407ff65606563fd941d",
+    "L96_s22": "c4c435940a91824d447531b8edd6030c53106cba82973fe3ca5062ec92d14553",
+    "L96_s33": "b167e9d0de9c2d56ffa9b1dd4a8071de68c0c9381b3c6c54566ecee2422a03b0",
+    "L96_s44": "3cf82d6ad6a2cf08e07247f51e7f0a2a6b39918b2f4f88027b32a67f6b76dd86",
+    "L128_s11": "8caa6f110eed2d920086c2357edfe02a4efcff26f38ce714744c179a8bb8287b",
+    "L128_s22": "235edffb55a9f2eec847d6bff19a1ceea4275c793fc8cafb36b624bef9fe337e",
+    "L128_s33": "9709e0322a79fd47e9208adc0f776f87a9fc4f998d1a0903fb55ce0b844b8eac",
+    "L128_s44": "becfbbcdf642478a7db36612fea0a0853b83907449baa6235b0104be1657cc46",
+    "L160_s11": "058e34cd283d8a00802ffa0f1688cab51bfbba213ad2a632e7b428a02e3d991d",
+    "L160_s22": "5bd14533f887638e589f5bed9daf5ef7be321738b7a54dbe85f4741af231a298",
+    "L160_s33": "a862004eac18c0e30a7acd1a761c96c7a13eccd3214f03632e53bb79c82b9fd3",
+    "L160_s44": "4cf061419ef5f5f5c20a91dbfaadf4ca979a022823f4e232ce9bcb7deaea7f10"
+  },
+  "aw3_feature_changes": {
+    "L64_s11": [],
+    "L64_s22": [],
+    "L64_s33": [],
+    "L64_s44": [],
+    "L96_s11": [],
+    "L96_s22": [],
+    "L96_s33": [],
+    "L96_s44": [],
+    "L128_s11": [],
+    "L128_s22": [],
+    "L128_s33": [],
+    "L128_s44": [],
+    "L160_s11": [],
+    "L160_s22": [],
+    "L160_s33": [],
+    "L160_s44": []
+  },
+  "refold_identity_and_finite_checks": [
+    {
+      "name": "native_aw2_L64_s11_d0",
+      "model_sha256": "7945d34283cf07c676fc67fc0ad85c9aa292dc129b588c89bd93cfe4b435e68c",
+      "summary_sha256": "2ffdae0967fc94b14b8ba18c5f98971e74b86b6ef6a31749b234db0b411c8b77"
+    },
+    {
+      "name": "native_aw2_L64_s11_d1",
+      "model_sha256": "fea1afec95c4adca93a0b7b3bf933725e054ffd214e846aaf9fa5b83a9b95285",
+      "summary_sha256": "25d645e76de5d4aa2fa43bc8d791e5fcdfa5690d330332f2c58909af993e289b"
+    },
+    {
+      "name": "native_aw2_L64_s22_d0",
+      "model_sha256": "91ef4720b59748eb664849b87d4bc8d0f3c8bf96d8e07978e235742a751cbdd3",
+      "summary_sha256": "9f7b42a1bc3e96d3b8d5a914ed672b4a17077beb8ce5f59a9f64a26f579c14af"
+    },
+    {
+      "name": "native_aw2_L64_s22_d1",
+      "model_sha256": "d9cee68bde1b84ab47f5ac7318c9517c219406ee5c41d2d3f78baef3438e92b6",
+      "summary_sha256": "2fbdff50d7eadf8f805a30a0d402fe7f1099565ed7c3e7b3777bfcfc8ee0c6a9"
+    },
+    {
+      "name": "native_aw2_L64_s33_d0",
+      "model_sha256": "fe71027b4eddf2b301454b538b7a793752bb254069e35b51394dbf26f9c62b8c",
+      "summary_sha256": "7e1f1f29bc761c5182d1fb13d1ffb9d89d7b1fc93ac51704ee3701a06737acd9"
+    },
+    {
+      "name": "native_aw2_L64_s33_d1",
+      "model_sha256": "1d29ed351377a41d25faf2d5dd3ade53830c9e351ae688086d108a10d9f4f325",
+      "summary_sha256": "3c0496e5e0cb09cd3717b1dc9eddc23f7230f6a5e59cf1e484fe9cfd6944826c"
+    },
+    {
+      "name": "native_aw2_L64_s44_d0",
+      "model_sha256": "d6af2dc842a14beaf5fdec31661aa31e1185d44c1065a0cec6b71a4a60e045de",
+      "summary_sha256": "496d685691733a36b077016bd2dd03b00704709230450290304f1d7fb443bf3a"
+    },
+    {
+      "name": "native_aw2_L64_s44_d1",
+      "model_sha256": "20e3d21ca9bd75046659a176064e610f8f5efcbaf5ac44368ba83d9f46b586b3",
+      "summary_sha256": "3bb3eb98c576623f70f2ba5ad8a3c03257b34cfc5573c9a554e1190a6898eb5e"
+    },
+    {
+      "name": "native_aw2_L96_s11_d0",
+      "model_sha256": "67955c9687865e55c550dcea2267e57b646dd3eaeeb6994cf2a303e83c9ef27f",
+      "summary_sha256": "985d062226194e41be655c24c8d14ee5257a1563252e8271f78c834794dfcc46"
+    },
+    {
+      "name": "native_aw2_L96_s11_d1",
+      "model_sha256": "d94c5298e4bff5af409a102ccb3935afa0fdffa91be50a6de02d3bbe2276a577",
+      "summary_sha256": "188a7278c3576908d075726993d8053f886fe77b9666317883c35c92fdb2b88a"
+    },
+    {
+      "name": "native_aw2_L96_s22_d0",
+      "model_sha256": "1391240f799e146e6d3772f79530688fcecfb479e267792ca45dd5ea07e1b3b6",
+      "summary_sha256": "7d620f7685e8b3359c011546e344463c1e6e2241f7d078a7780da001dc6bbf20"
+    },
+    {
+      "name": "native_aw2_L96_s22_d1",
+      "model_sha256": "ff691f19b0fb5e0759b8ae597632cf89784cc0f93f005c0bc7244d1d0476fb73",
+      "summary_sha256": "aa0eeed102e3a60eb0e228e1afd038e384e2689e210000c0a5f13771393d332a"
+    },
+    {
+      "name": "native_aw2_L96_s33_d0",
+      "model_sha256": "776b46b39063c7afdadbcc6ca7b84161b4ef57cca1852cdd9120e43f652a47e0",
+      "summary_sha256": "1918aa961fd97bdc5355af7586ed2751856c8faf8bbe136f7eb8273715aba56b"
+    },
+    {
+      "name": "native_aw2_L96_s33_d1",
+      "model_sha256": "24663f06dfb6f7f2a7fc37f9d722ce556ef5c346ef525b1d19fe36553d6a9384",
+      "summary_sha256": "f1a83ca20a5aa9081235e3e912d98070fb458967d2739afc9b7f76a8138d5171"
+    },
+    {
+      "name": "native_aw2_L96_s44_d0",
+      "model_sha256": "6d77015a10b60e6b66e218e1082b4bffe38c733be77dc6e3353576f1a25cba18",
+      "summary_sha256": "95ff7225e742188106759ac03e10b9c73877d764eeee38bbb630198530f7e3b3"
+    },
+    {
+      "name": "native_aw2_L96_s44_d1",
+      "model_sha256": "12c1d84cc3144d8e6684b299c26ea058f2d41df957a0880147c4a20f9e967f27",
+      "summary_sha256": "93e860b2c2f4db968bea3b4faf79b51101fe89361759d72384537c219600f36b"
+    },
+    {
+      "name": "native_aw2_L128_s11_d0",
+      "model_sha256": "24624e7df2cdc40aef114c984a1fe27fff800407c060ae9533eb0f43292bc06c",
+      "summary_sha256": "13b39cf8e5c625507adca08481113c007cfdf8d4d2b5dfc0d37b0ec7e33cfd8c"
+    },
+    {
+      "name": "native_aw2_L128_s11_d1",
+      "model_sha256": "76c7a8d35bd3c68445cdafcb0b81108ef3ec8790a4d3d495d97d54af7aa79dc1",
+      "summary_sha256": "3fb671d8fe17203d2cca28ee3bda7c1eb0529c8890abe401ddec448f8968d918"
+    },
+    {
+      "name": "native_aw2_L128_s22_d0",
+      "model_sha256": "1baaabd67fcdb30e261884e6e07c3d4d36161b42fc53db729cf075a49cbffbe2",
+      "summary_sha256": "45c045cfaa0b9f756db8d6db03d46a341be5b4b1eeac0a179c5ed4347a5212e7"
+    },
+    {
+      "name": "native_aw2_L128_s22_d1",
+      "model_sha256": "7b18522476902efa1b43a55745a524171db951feb2ee3f89ead32d0f96ec712c",
+      "summary_sha256": "f32983e07572828972f5c5d697344f2184add1479ac5ebc900e7e8c20c2fea86"
+    },
+    {
+      "name": "native_aw2_L128_s33_d0",
+      "model_sha256": "1495c7a9bfec7e4ecf4534205994cc74920df4759fdf718effdba873c9d4f8ed",
+      "summary_sha256": "a0164789da36753a991ae6098b68470964763ead8878a3277c6b58e35cb4650b"
+    },
+    {
+      "name": "native_aw2_L128_s33_d1",
+      "model_sha256": "f14b0c45806777dc9332e9a6ebb7d34029453dd3caddf8fdf97744a98afc4d0f",
+      "summary_sha256": "440a47e0cc5e4463319afc0584c1de7a1f19e29ffb7b5d1d8904930fc5d4e9ee"
+    },
+    {
+      "name": "native_aw2_L128_s44_d0",
+      "model_sha256": "b3526993d42f4aee5fc3779dabc2a614a9d216f8195cae4a7f099979ae509348",
+      "summary_sha256": "667fed41807877374aa5bc5dfa2dfe91b35729de7dbfcf652e2f0740f5150fb4"
+    },
+    {
+      "name": "native_aw2_L128_s44_d1",
+      "model_sha256": "0bc241a50dc3401e30bc7971b67f742a3b31de09a011b29eeff9718910d4f1c8",
+      "summary_sha256": "47be89dfdbc7776b57cb8df0ab708f0aceaade5eb2be0113b4f7408f3280ec1f"
+    },
+    {
+      "name": "native_aw2_L160_s11_d0",
+      "model_sha256": "5b4f54479d78784c463cdfa892eec07fc6618726279fa6fba5ada42ed3928838",
+      "summary_sha256": "1a399f559c63270106ffc2a44c5e5e7898000aa784b0c69263095e1b608674f6"
+    },
+    {
+      "name": "native_aw2_L160_s11_d1",
+      "model_sha256": "622401740d5bc3c717e96fa50127eef7a911f909ac73af635d551d3292ce6f0c",
+      "summary_sha256": "4fc2b763af2014dbbcccf5af20360a5c2c08a5a9cb3efac7b9a06463d54793bb"
+    },
+    {
+      "name": "native_aw2_L160_s22_d0",
+      "model_sha256": "924c81f0d0d140e074885d550ccecc5874c923cd3312f4982056ee51d61b25df",
+      "summary_sha256": "62e26aa8d659a2f9d52d7d7804261693396795d83582d2b23b7ae9b8fbed8be8"
+    },
+    {
+      "name": "native_aw2_L160_s22_d1",
+      "model_sha256": "11e978aefcb38c2b823d574d5c7913bd5f5ebeb6cdcf7cf5262e18f9e518d1cc",
+      "summary_sha256": "f29b3a96b09b40b3bfab0a4b8e4a9f6ed10db4b7a235e1db002a737c3248cfe5"
+    },
+    {
+      "name": "native_aw2_L160_s33_d0",
+      "model_sha256": "e63488797bd24e90a9f2f8f9353bb3b2147f94ba995ddaf35a6158b1b10f5258",
+      "summary_sha256": "11168c0fab20a260a42f972d6d53e303e44d5d3c2ae8dc1926991d59ce1fac88"
+    },
+    {
+      "name": "native_aw2_L160_s33_d1",
+      "model_sha256": "994a45ed62b48018ef2527547c626a38229905e658da496f8e40ce411c533604",
+      "summary_sha256": "85d993a442d67f7d00fe64ca0e6b09b2e40541318acd5cc43708910b22e90e40"
+    },
+    {
+      "name": "native_aw2_L160_s44_d0",
+      "model_sha256": "798878e861f641beab2ab918b6246189aa78910040d42d01f8d1039c6c937750",
+      "summary_sha256": "b09d898a615bd9d42bd3e33a0cc8d0c7ba63fd18bea26529947f7534fb8161cd"
+    },
+    {
+      "name": "native_aw2_L160_s44_d1",
+      "model_sha256": "df9679c7abd7fd1689da4d40f3c47d36e42e65b6e87f221c1669bc1e7e220c25",
+      "summary_sha256": "466a82b77f594342e875c6992c9532b975ee20993c3bc7c73cf9414fbed2a860"
+    },
+    {
+      "name": "fixed_aw2_L64_s11_d0",
+      "model_sha256": "a5a758ab3bf7a67ec7ced90b6b156b07baffe4080e47ade112c4f51f5a65626d",
+      "summary_sha256": "806c2da2d70d4bb570b902b1f63d89c3556a48b6d34ee8a7e43e4c62f7c3ef39"
+    },
+    {
+      "name": "fixed_aw2_L64_s11_d1",
+      "model_sha256": "bbceaf7c1a1bf630db3b977062a4515331acaa297742b536be9548bc44d66988",
+      "summary_sha256": "a5b2cd69ba6dca37ce7f9b2c6dd0b7f678d99d90b4a26c7ed4dcb64857c8a89a"
+    },
+    {
+      "name": "fixed_aw2_L64_s22_d0",
+      "model_sha256": "af013d47b61399f43c6c0e20b79a0e2079324b34c4fcfd6017ba5190dcaf3df8",
+      "summary_sha256": "05135777717c42000bb68f13d72b65254c23a112b8d167de231d28f581884d56"
+    },
+    {
+      "name": "fixed_aw2_L64_s22_d1",
+      "model_sha256": "ac58905d32cd30d9d2c1c04593fc165b0887ae7137c49d560898c520994bf32b",
+      "summary_sha256": "03b6f7a86f32bcc5d2cd6f76df74f3fddac84504fcb33ce336eba16210b207ec"
+    },
+    {
+      "name": "fixed_aw2_L64_s33_d0",
+      "model_sha256": "458f8520f6c67c56d1d3aeab8298ecc13474bf9745626be85a12e93352922cbd",
+      "summary_sha256": "6737b8ec78adf73e1c801b8aaa465ba0321b74052de029e0144c127ce361e51c"
+    },
+    {
+      "name": "fixed_aw2_L64_s33_d1",
+      "model_sha256": "8a57202443df9b77408d910700916fdc431470e962ef072c21e9cd39c1d03c14",
+      "summary_sha256": "b847eed91353acd52c6276f8d08f473613ce38756c88ee2cd83a54479686bd48"
+    },
+    {
+      "name": "fixed_aw2_L64_s44_d0",
+      "model_sha256": "037e10e1d8c0e6a04d73bc41cc095caa80814361f9173bfc61859e9a277661dd",
+      "summary_sha256": "8020d66bc2d6656e2e7aa4b20d25a304179c7669fad7f010b542ea593f1ae80d"
+    },
+    {
+      "name": "fixed_aw2_L64_s44_d1",
+      "model_sha256": "6f8fcad134b1f2268fa2c8d669a01f2ecf56291008f5648bc2a1a66fed62ee61",
+      "summary_sha256": "e16641d482ab08d478aba8c41d09a6eff91015e536a3fcd31c9e0cf89e388c74"
+    },
+    {
+      "name": "fixed_aw2_L96_s11_d0",
+      "model_sha256": "c11080727a094c555a0d08a2d796bdce76c515501491af7f940d7cf93690eab8",
+      "summary_sha256": "14ec8aada3cef63f486af1208fd38e97551ff948792e8de8ee8049ab77f73394"
+    },
+    {
+      "name": "fixed_aw2_L96_s11_d1",
+      "model_sha256": "286fe41f7410c4de8996c3d0772ebdd6de16619f8ccd209aee27d4598dc8e563",
+      "summary_sha256": "d60cd539db559cc180993553ad953343381ee0cd6b4da4dc9ba5f5974f71bab7"
+    },
+    {
+      "name": "fixed_aw2_L96_s22_d0",
+      "model_sha256": "eb992925d8803f4de67dbb6fcc94bfba7acec4618bda061a158f3afb59561c1e",
+      "summary_sha256": "fddfd29bb1502ccc9dca0d39a31b8884c0aaff289cabd5907875678de4569797"
+    },
+    {
+      "name": "fixed_aw2_L96_s22_d1",
+      "model_sha256": "102f97d2b32b854be91bb005f75939f66cd263d778aea4e52cf4802b68572665",
+      "summary_sha256": "bde0ee2747496b0746f146c6d1925a696fc172e23c78d765d8d4018ec6fcb68c"
+    },
+    {
+      "name": "fixed_aw2_L96_s33_d0",
+      "model_sha256": "d5c585260e4dd28ff64efa0d0ff8ea7d8f0c650ccf26514e02cf35d299b09fe1",
+      "summary_sha256": "000de33bb22ccf0b7dd7db36ea1617b346cf5d4775b59afff89294eb48fcae73"
+    },
+    {
+      "name": "fixed_aw2_L96_s33_d1",
+      "model_sha256": "a232b506b22bb6d00b96823aa646c1ae204f18b0fec2d942977cc1b1fc0f0bd7",
+      "summary_sha256": "a358751214457a3da0ee862c407183b8da72ca0ba34d4eaf60bee1b764374b1c"
+    },
+    {
+      "name": "fixed_aw2_L96_s44_d0",
+      "model_sha256": "fe9a4847dcc81fe040d65927fe1e801ea99a2218d073ba4153836d9080433e65",
+      "summary_sha256": "e7b0c5a4cfcabef5b363449763d9e69d5fb0f1b5048966ad3feb03ef67514ffa"
+    },
+    {
+      "name": "fixed_aw2_L96_s44_d1",
+      "model_sha256": "a992ab689953ace9278f4962f088bf414c689444918021f363f9860877bf6e53",
+      "summary_sha256": "3590605a3f2df37a86e6b1aa74859c97c71722214365e2446832b665cc023d0b"
+    },
+    {
+      "name": "fixed_aw2_L128_s11_d0",
+      "model_sha256": "469798cdd5f2b2244cdcd14cd7ed4ed0828c68bce36b29d8b358a4174ab4fa36",
+      "summary_sha256": "a3a6bd1bd968c09e623784fe137397c47f93039ce87c51be5e5bf44b39e337d0"
+    },
+    {
+      "name": "fixed_aw2_L128_s11_d1",
+      "model_sha256": "def7dfe83fd9f42023914b73596f084c48173b23e0c240f57ac53a61354ec303",
+      "summary_sha256": "50fa525b56329569fd2a867fdb55ffbbd29d80cdd163c72319cf016cfde1314e"
+    },
+    {
+      "name": "fixed_aw2_L128_s22_d0",
+      "model_sha256": "7d565fe45dc97e4ca020313cd49d17b201d1c5a70dff56c8d25495c0a7c0370c",
+      "summary_sha256": "accda6f3626866658c7d3acd011c29ca3f058aa0cf4dce5532914c392612c0d6"
+    },
+    {
+      "name": "fixed_aw2_L128_s22_d1",
+      "model_sha256": "3c779b8ecfdd16901a43e7e9843e0a8696d79a701ac1effeedbf9c654a1b0bf4",
+      "summary_sha256": "1998cfb2ea40eb714465a4bf53facc2e02d691fc40134f5ae01f9db2237054ba"
+    },
+    {
+      "name": "fixed_aw2_L128_s33_d0",
+      "model_sha256": "38654f1bb11a30fa55accd66d2932c5ab75b4c3795fe970a1240b4beb15e2504",
+      "summary_sha256": "aaf3fe3add8cf3d4be0c2e11c0db49921357aa5e52c768c6284c1b0df6622e31"
+    },
+    {
+      "name": "fixed_aw2_L128_s33_d1",
+      "model_sha256": "4501f30c8ee332a0c29ae7a1c6211711f4a29f42fd910dc16c16b9ae4adb8171",
+      "summary_sha256": "304e6de360a9235bbae4458f40f8c7cf76b748c1aa9879abcad15407ba59fbe4"
+    },
+    {
+      "name": "fixed_aw2_L128_s44_d0",
+      "model_sha256": "aff17a78ea619b76602ebf07392cc16bea8a4097ffcded57f39369f790c95711",
+      "summary_sha256": "2cdbf125b7e4e62247e943f2a2f88943da5ada117bb12d9fcc6a5b8d7390de22"
+    },
+    {
+      "name": "fixed_aw2_L128_s44_d1",
+      "model_sha256": "08c0191a15cfd457519ebda8ca739b3c9462be6e950f9b3013f7c78d1c9a97bd",
+      "summary_sha256": "18c1a01f2f9d9c3429976539ffe2726360c5a2178004d563aa632552662d26ed"
+    },
+    {
+      "name": "fixed_aw2_L160_s11_d0",
+      "model_sha256": "ef59f117448242ec0e946bd3f4121e96541333f24eb19c2f43dba4d93b9ded59",
+      "summary_sha256": "64805ca4c31bd0e46c395830464e3e60856e89365d33b3860ec50abfb44523c0"
+    },
+    {
+      "name": "fixed_aw2_L160_s11_d1",
+      "model_sha256": "01801973644e319949e3c36aa43c8b5bf8e36fd1bd80435475eece22563e24dc",
+      "summary_sha256": "f34f704c59e55fac15672b94a501ceb728f8b05b63eff57c6fe1734b904a5d20"
+    },
+    {
+      "name": "fixed_aw2_L160_s22_d0",
+      "model_sha256": "22355aea87010f98c81af67a23c9ee6f6cb04ae7824b39a57bfc868beb22c5ca",
+      "summary_sha256": "c8b6a543d53c2f86670779bbe048202991fb3d3904cb353ad3ba2470dbd83a58"
+    },
+    {
+      "name": "fixed_aw2_L160_s22_d1",
+      "model_sha256": "06d353db1f2b5c5c5c76e7a87e9ebcd0ae371b7b0966d67fdb892f4fcb7afc9e",
+      "summary_sha256": "80b16d2eda47a63c950e7352550a5c4fdb586121451216e878500ceb57043c84"
+    },
+    {
+      "name": "fixed_aw2_L160_s33_d0",
+      "model_sha256": "d90f70096737b4ecd5531d90eccfa731419879e3d7ba6eee40c0ca37c3b290e8",
+      "summary_sha256": "d9d70e0fbb6ea96bafb4adbd2f6045759432ffff15e51da2009e8313433c83f0"
+    },
+    {
+      "name": "fixed_aw2_L160_s33_d1",
+      "model_sha256": "da267fdff804e9d25e925a9eacdf572eebd42b5004fcada1fb0db0ea3d6d44d0",
+      "summary_sha256": "d1c78fa40b3156e4c2ff93bd89e5f3aadd2d4d6c53d94f1b34b8e0df1798bd45"
+    },
+    {
+      "name": "fixed_aw2_L160_s44_d0",
+      "model_sha256": "d6ecaaa9f6a641911a74eb22e488096c5c7812919abcacf7cb2f78b37334f42e",
+      "summary_sha256": "1c66a3da78101c1236097b7dd8ef70fd3cb7dca4d7537faf00e3f791e8ccba01"
+    },
+    {
+      "name": "fixed_aw2_L160_s44_d1",
+      "model_sha256": "5339a45c4482762b8fbb1aa4b7be3daa41a0f1bdd1ccc45090358375f330c293",
+      "summary_sha256": "43c6336d17ce089ff30595b8ed610f87231c6a8882674ef796ceb932bedb25dc"
+    },
+    {
+      "name": "padded_aw2_L64_s11_d0",
+      "model_sha256": "9d1380d9e2527ae948eeda5222167170ea5bc455d4d0626483d7138fb98f14e7",
+      "summary_sha256": "a136cff1d9ba1976d05d8ec7e93d06de2f0698358de9ed637d0f1b79ec35db92"
+    },
+    {
+      "name": "padded_aw2_L64_s11_d1",
+      "model_sha256": "b3e43e24a0b490f845099adbc2002906da7505a045c7b69947e0f10d0e554090",
+      "summary_sha256": "d359d4f0eed04cd2ac12f4ad038827ffab64d999d7ab2865e572cfb192a0c3ab"
+    },
+    {
+      "name": "padded_aw2_L64_s22_d0",
+      "model_sha256": "a27855740fac15318e43242cba22c0cdc975440a2a58884f60b76b878fc01729",
+      "summary_sha256": "ff1e65778579ee52ce07d631123d338bf3dcb1946c5b06cf80691a01390abaf9"
+    },
+    {
+      "name": "padded_aw2_L64_s22_d1",
+      "model_sha256": "8bcdccd18659202f6e6946613d01f9314d399dd708a5514f13aa00a1469dbb76",
+      "summary_sha256": "b514ad0972f99cc42193fa9e1d227ae7777057ab0990b956e4cc42356ef44a14"
+    },
+    {
+      "name": "padded_aw2_L64_s33_d0",
+      "model_sha256": "32f8029da4cb95b8a6c102937e2860b927b632ca3e6e992984d5698b1ca128cc",
+      "summary_sha256": "011b12851af6508c903b28350a0849a982af48beee3662c300e7babfc53d1dfc"
+    },
+    {
+      "name": "padded_aw2_L64_s33_d1",
+      "model_sha256": "4d81c089f8b41b64e7f92014fc05f1a95ce378998c4bb00eb75b737892b1dec3",
+      "summary_sha256": "019d9d71ad276294108a44374b48b92541db9e6ee4bd48a2bc2f159c135f113f"
+    },
+    {
+      "name": "padded_aw2_L64_s44_d0",
+      "model_sha256": "c9a6d1a692cde34f3742c9508650401ee80db362c94b4519cf5ba156fa89146b",
+      "summary_sha256": "37f711985d38238fa39d4728ff536a778925796221274ac009fea3548af220c5"
+    },
+    {
+      "name": "padded_aw2_L64_s44_d1",
+      "model_sha256": "fa00d28a7423c1c732d4196f0753406a3973c93b2f67367bbff591e27f271800",
+      "summary_sha256": "d4562eee6f81b7d49857bfe3f969337c8c6c42504c512b04bc78554117d81f46"
+    },
+    {
+      "name": "padded_aw2_L96_s11_d0",
+      "model_sha256": "c6b7757415aba8f90deb3de39bc6b105e21c9ae6957b14c05ca64da3e913b2b3",
+      "summary_sha256": "d709144617605ab6664a975e3b0a42c26a86a40f73cd9c097a877820ca874a56"
+    },
+    {
+      "name": "padded_aw2_L96_s11_d1",
+      "model_sha256": "88a23740122410f6649252d36e4190ed1558fe8b4787f6f975251b57e3f84f7a",
+      "summary_sha256": "03034ed7f6d933461d5a83177672be6da5ba2eea2ca7bdf6ba5a68fab541ab2a"
+    },
+    {
+      "name": "padded_aw2_L96_s22_d0",
+      "model_sha256": "7b1d81d7d9681c109e0c67d0ee909e18def69de28d30125023ca8881fdebbeb7",
+      "summary_sha256": "21392fc7a4d17319b0dae4c9820fd60d8c006632ddcbbcac01bd62486a7fd308"
+    },
+    {
+      "name": "padded_aw2_L96_s22_d1",
+      "model_sha256": "7134754edd3aa28ef85340d8f7b9f412270432ef231678ee54051d57b56f3b69",
+      "summary_sha256": "22dec51791d3367dec932e0a48da8e7eeb9f57e369fba8a7142f03b089acde34"
+    },
+    {
+      "name": "padded_aw2_L96_s33_d0",
+      "model_sha256": "39ef696b3be580d3a430f2209fe7d481a0f026be512e82c33bce364d0123d06d",
+      "summary_sha256": "fdb111c5ed6156314c1783b5de828fdbe5dabd192f52e6d8a2f134b94daae456"
+    },
+    {
+      "name": "padded_aw2_L96_s33_d1",
+      "model_sha256": "9103d54f8510a31b96436002759a63e313d3ac116b65173b3f29ac45d242e354",
+      "summary_sha256": "62095c1212291cb1fa4180f57da815f6e3cc0351a7b0dfa33a60f6b268a95e64"
+    },
+    {
+      "name": "padded_aw2_L96_s44_d0",
+      "model_sha256": "db0fdb0b619902398f4bb4a4aa28f914095c59b46ad75d13ea18df09fdfd44f7",
+      "summary_sha256": "4684f770521f288e116a2916c47a57ffd42227886c655092bf3394b096d7224f"
+    },
+    {
+      "name": "padded_aw2_L96_s44_d1",
+      "model_sha256": "4435f76669c8d3c155e7efffd7735378a8e60d504e27f8101a000f279c4fd1ca",
+      "summary_sha256": "fb6522c592bc6210eee97467cf489a0a679cacd637af977805a2045d34760d79"
+    },
+    {
+      "name": "padded_aw2_L128_s11_d0",
+      "model_sha256": "1b030b7adbed74204fe14fbc33ebc83c1608aef860d624c444ca74c0d2bececb",
+      "summary_sha256": "ddc5a475e21f326632a2c954174ddbc01117901ea111a67f618bfa7fc100717a"
+    },
+    {
+      "name": "padded_aw2_L128_s11_d1",
+      "model_sha256": "7f207bcd19d80c3b9764b41918a922479f73924311248844e0e1be0c5c3f9f1d",
+      "summary_sha256": "616eead26ae30cf52be794282088b32235be91fdd2a61d897eaa4e4b8bf27701"
+    },
+    {
+      "name": "padded_aw2_L128_s22_d0",
+      "model_sha256": "798f07b56ca2139cc84824ecccdd43353dd354d2b3e4ada27c360f3c8d51c15d",
+      "summary_sha256": "1894ea0480e01b67e02d3f05ba20927949f5120b49bb03cf4d483057d4c576f5"
+    },
+    {
+      "name": "padded_aw2_L128_s22_d1",
+      "model_sha256": "e27c1c459af3596506ac331d5fc5bf7117ce0b4be1906790bee4fecdf8316a5b",
+      "summary_sha256": "d7b3984d8e5a5da8fabb3d6fdd0900d53b7127a5cbe87cfe3e5309053007341c"
+    },
+    {
+      "name": "padded_aw2_L128_s33_d0",
+      "model_sha256": "af792e96e353a51f16d6876db5d0abadca37715fe59c16a44d4d905ce7ee22b3",
+      "summary_sha256": "49fba272757dbe5f02e9d2215ff15f87635ae3bef045639dc789935c028b2b65"
+    },
+    {
+      "name": "padded_aw2_L128_s33_d1",
+      "model_sha256": "5ab54264c91d14492340f0d5829b306b83e443e76e57ac234e6956b57ffab691",
+      "summary_sha256": "42b8e558fe202996dd00c6d7d2543f256c72c480d2d528abc5b1913452dc2ba2"
+    },
+    {
+      "name": "padded_aw2_L128_s44_d0",
+      "model_sha256": "e23792b10cf425899e212382f5c9b17c657c695a09e7f83e2103bc37d6438b3e",
+      "summary_sha256": "2e6fed835662806acdb5495a61a873d7aabd5d67c659813282ab3c9df8870357"
+    },
+    {
+      "name": "padded_aw2_L128_s44_d1",
+      "model_sha256": "f39ac849329c0bd029e5af81519a937ab4950066459f15f560f7aa277a06f029",
+      "summary_sha256": "d50e49b82c86c10fcd9460b498af1ab70b4aea6876337d2409a47eb5bc11b43f"
+    },
+    {
+      "name": "padded_aw2_L160_s11_d0",
+      "model_sha256": "198cdf80d69dde1374761ee7394d036ba46badcba51dab7e8d2d8664b3f4f596",
+      "summary_sha256": "a10ea67c0df57313c2040376bb175fe7f312c4c6550285696f083d3920af7311"
+    },
+    {
+      "name": "padded_aw2_L160_s11_d1",
+      "model_sha256": "66a9d15cfbce0d4deeeeb847bad659d2b0331e7336b514f94cb63cd193d8d253",
+      "summary_sha256": "a38b0c1444cafd09db457abc55e7173d7a55342161e1e1f507e77f72cbad261a"
+    },
+    {
+      "name": "padded_aw2_L160_s22_d0",
+      "model_sha256": "6716cb8f7a726d633ec952e25fad536901dd823662327d27358e9277131f9b77",
+      "summary_sha256": "99643ecb4e7d46bb71845cbd6a25f9df770aba468f14d932de5cc0732cdb11a0"
+    },
+    {
+      "name": "padded_aw2_L160_s22_d1",
+      "model_sha256": "04796787d0b94f2ac0180e9534055ccb1965f9f1e0e31d9ee69aa5eb5314d5ac",
+      "summary_sha256": "7eb2845da7f168f2763db6a6c792c2ddc60840c5693ea05a0921ce62198e5e72"
+    },
+    {
+      "name": "padded_aw2_L160_s33_d0",
+      "model_sha256": "3320a627fce36fc48ce44579fc1a941556642dbfb08668553aefe89c9914af47",
+      "summary_sha256": "7e6e8b3ecee71d99da03c5d51e21cd868f6e1dd1a736c291be91da18af5be6bd"
+    },
+    {
+      "name": "padded_aw2_L160_s33_d1",
+      "model_sha256": "b8f5956a410e1673b4c7462914397e7c65e82a23b40a6db8941c845837373b51",
+      "summary_sha256": "b2598aa143d52eec6a6895e4e7c9e9ca01e5377e5bbe7d7430d24f99f1d66acf"
+    },
+    {
+      "name": "padded_aw2_L160_s44_d0",
+      "model_sha256": "2921ca89f96168af93969b3d8d444afb7b1f7f2a49bd0f0495d52c923b17ab5c",
+      "summary_sha256": "468b1527bf78b5fb0e2c3e23b383c465990b8c42cfda71be81526752ef8cda3d"
+    },
+    {
+      "name": "padded_aw2_L160_s44_d1",
+      "model_sha256": "cfbe9c3fb52ee90e64d004dc86fdca49e1e6aaae0edb9d45e928d8b0aa28ca45",
+      "summary_sha256": "7ea361d3b29a5e9bb63f31c7edf88f92fae24cca64eeecf7ad0a2d43e9ff5a0a"
+    },
+    {
+      "name": "padded_aw3_L64_s11_d0",
+      "model_sha256": "cf685743ab75683ec030fb0e0edd72fb4631f93e5ae7da5e12c540dbc11331ce",
+      "summary_sha256": "a136cff1d9ba1976d05d8ec7e93d06de2f0698358de9ed637d0f1b79ec35db92"
+    },
+    {
+      "name": "padded_aw3_L64_s11_d1",
+      "model_sha256": "8a0ecae4e7d0eec2c3fd9b5336796527bf09d516a57a9356db020dc96ecee35f",
+      "summary_sha256": "d359d4f0eed04cd2ac12f4ad038827ffab64d999d7ab2865e572cfb192a0c3ab"
+    },
+    {
+      "name": "padded_aw3_L64_s22_d0",
+      "model_sha256": "7e3a933e858fba33830b682b8e30ac7dd16a0197eb45de570ff0553fd6caeabd",
+      "summary_sha256": "ff1e65778579ee52ce07d631123d338bf3dcb1946c5b06cf80691a01390abaf9"
+    },
+    {
+      "name": "padded_aw3_L64_s22_d1",
+      "model_sha256": "7df05a574b7c81fb2b15357cabefd5cb7309a116e7b1d8c75652eb629a4dead9",
+      "summary_sha256": "b514ad0972f99cc42193fa9e1d227ae7777057ab0990b956e4cc42356ef44a14"
+    },
+    {
+      "name": "padded_aw3_L64_s33_d0",
+      "model_sha256": "3cf1327d73c01da1611ce696fdebb569bc7798ebcb45bb7ea46baad20538ef14",
+      "summary_sha256": "108f3466af4eb9706452b67978799a976e6b0b1f0857a8d595c1c946f0abbe52"
+    },
+    {
+      "name": "padded_aw3_L64_s33_d1",
+      "model_sha256": "e4698334cae31644c7d658590f43464152a9eff7e0cd2db56d940c6a6545f776",
+      "summary_sha256": "019d9d71ad276294108a44374b48b92541db9e6ee4bd48a2bc2f159c135f113f"
+    },
+    {
+      "name": "padded_aw3_L64_s44_d0",
+      "model_sha256": "7cd5bfa00841bf098aaf5a6fa4abe0a486e365d3e4c1ca21688113b8694c49f5",
+      "summary_sha256": "37f711985d38238fa39d4728ff536a778925796221274ac009fea3548af220c5"
+    },
+    {
+      "name": "padded_aw3_L64_s44_d1",
+      "model_sha256": "1c77aab232ebc8c0a910b447d72f88f33f39cc8544bcbf4bc1bb7461f0c31e31",
+      "summary_sha256": "d4562eee6f81b7d49857bfe3f969337c8c6c42504c512b04bc78554117d81f46"
+    },
+    {
+      "name": "padded_aw3_L96_s11_d0",
+      "model_sha256": "423b89569d2bdc2ef8030884e9f89028510c75d7a66292212ca9a5f10524e8d9",
+      "summary_sha256": "d709144617605ab6664a975e3b0a42c26a86a40f73cd9c097a877820ca874a56"
+    },
+    {
+      "name": "padded_aw3_L96_s11_d1",
+      "model_sha256": "bf3e34a9f9e363d532a8167fedea1b584bf5b474d7b8d24318d1132efa95dcfb",
+      "summary_sha256": "03034ed7f6d933461d5a83177672be6da5ba2eea2ca7bdf6ba5a68fab541ab2a"
+    },
+    {
+      "name": "padded_aw3_L96_s22_d0",
+      "model_sha256": "9d27edeac11cd382d682b6cf27e4dc2957f568b431c366d38d4f0e22eacc55c6",
+      "summary_sha256": "21392fc7a4d17319b0dae4c9820fd60d8c006632ddcbbcac01bd62486a7fd308"
+    },
+    {
+      "name": "padded_aw3_L96_s22_d1",
+      "model_sha256": "36b7b28eca8202232e9c716e78e1ffb75f3e2c5a2e8f10e05a1b23ed943ac617",
+      "summary_sha256": "fa0b120ee9901894a595a15bfdceed655b975fa3286a4fdc7574ca0b01057abb"
+    },
+    {
+      "name": "padded_aw3_L96_s33_d0",
+      "model_sha256": "caabe27c449805a3ea66f9170e9279f920f06ffa770de3b488a17bbc5fc32129",
+      "summary_sha256": "fdb111c5ed6156314c1783b5de828fdbe5dabd192f52e6d8a2f134b94daae456"
+    },
+    {
+      "name": "padded_aw3_L96_s33_d1",
+      "model_sha256": "37bc97ce0a42aed05ac12cf87a4d644f3c8582421efb482e9eccdfea77c53d16",
+      "summary_sha256": "62095c1212291cb1fa4180f57da815f6e3cc0351a7b0dfa33a60f6b268a95e64"
+    },
+    {
+      "name": "padded_aw3_L96_s44_d0",
+      "model_sha256": "599026dc8634a5a8d5e78c9dc6e95302f53ce5d711b7ec3998c47f9680c11ca5",
+      "summary_sha256": "4684f770521f288e116a2916c47a57ffd42227886c655092bf3394b096d7224f"
+    },
+    {
+      "name": "padded_aw3_L96_s44_d1",
+      "model_sha256": "cf164b16ec662213683d07ebdff42a034f6a6bd930e6ab9521d09c4331ac0087",
+      "summary_sha256": "fb6522c592bc6210eee97467cf489a0a679cacd637af977805a2045d34760d79"
+    },
+    {
+      "name": "padded_aw3_L128_s11_d0",
+      "model_sha256": "44eebe1cda787962d98d6053fc157b9100f04ff34dcc4b1e6e365f02c0f58a58",
+      "summary_sha256": "ddc5a475e21f326632a2c954174ddbc01117901ea111a67f618bfa7fc100717a"
+    },
+    {
+      "name": "padded_aw3_L128_s11_d1",
+      "model_sha256": "446f31b3e1eac692e2bcddac9f59a097631dccec7022eec00a19c3102bb67fa4",
+      "summary_sha256": "20ade40d9f096e92a7b501f164ea46eab0774d39577489166c599d1d0ae2dcd6"
+    },
+    {
+      "name": "padded_aw3_L128_s22_d0",
+      "model_sha256": "a90e1750e600987d6e2c8f5ccb6cb18a5be39c4ee2a55270696fcd2332c7cd72",
+      "summary_sha256": "1894ea0480e01b67e02d3f05ba20927949f5120b49bb03cf4d483057d4c576f5"
+    },
+    {
+      "name": "padded_aw3_L128_s22_d1",
+      "model_sha256": "07a88369d07346b787314bbea880650bb39a4ddcdeef7a5330bc070bf987bb72",
+      "summary_sha256": "d7b3984d8e5a5da8fabb3d6fdd0900d53b7127a5cbe87cfe3e5309053007341c"
+    },
+    {
+      "name": "padded_aw3_L128_s33_d0",
+      "model_sha256": "9368fe17f02ce9daf458695109a35353b012691f82b479f27e7e60b640309112",
+      "summary_sha256": "49fba272757dbe5f02e9d2215ff15f87635ae3bef045639dc789935c028b2b65"
+    },
+    {
+      "name": "padded_aw3_L128_s33_d1",
+      "model_sha256": "1685b566466a566aaae0d8767649532fdb822cfd0b01b62853a55c1cecd13b3d",
+      "summary_sha256": "73be851f58c1f4c7c918a4ad87268054b8f763cdd02633bce4cc384423eff844"
+    },
+    {
+      "name": "padded_aw3_L128_s44_d0",
+      "model_sha256": "1ba70613444c93b85dcca66d385c010e5eecdaf9f1d689bd29a1bc2ac516ed78",
+      "summary_sha256": "2e6fed835662806acdb5495a61a873d7aabd5d67c659813282ab3c9df8870357"
+    },
+    {
+      "name": "padded_aw3_L128_s44_d1",
+      "model_sha256": "8bcf86ad3bc9670acc84a5da956d0e56b12945cc7c04429899d4b0f5c1e1e07b",
+      "summary_sha256": "d50e49b82c86c10fcd9460b498af1ab70b4aea6876337d2409a47eb5bc11b43f"
+    },
+    {
+      "name": "padded_aw3_L160_s11_d0",
+      "model_sha256": "e96ae42e30ec61d5131a9ee2e8edc543551f90b7026e3cd403f02b1247639b30",
+      "summary_sha256": "a10ea67c0df57313c2040376bb175fe7f312c4c6550285696f083d3920af7311"
+    },
+    {
+      "name": "padded_aw3_L160_s11_d1",
+      "model_sha256": "e0507ebbe03eef8ea4dbc3f564a7702359ffa34d05ca36a00a1f4338211a0943",
+      "summary_sha256": "a38b0c1444cafd09db457abc55e7173d7a55342161e1e1f507e77f72cbad261a"
+    },
+    {
+      "name": "padded_aw3_L160_s22_d0",
+      "model_sha256": "5b3bd3045a99210d6c745a9173a7ba59f6a70cb606857f0269c4c46d265519b2",
+      "summary_sha256": "99643ecb4e7d46bb71845cbd6a25f9df770aba468f14d932de5cc0732cdb11a0"
+    },
+    {
+      "name": "padded_aw3_L160_s22_d1",
+      "model_sha256": "2009b2327aac3ebaee1098d75eccdfc74bb33551f139ca2f361dc3d183e109c1",
+      "summary_sha256": "7eb2845da7f168f2763db6a6c792c2ddc60840c5693ea05a0921ce62198e5e72"
+    },
+    {
+      "name": "padded_aw3_L160_s33_d0",
+      "model_sha256": "a698c61b85ccc5b32260ddd9f75295cf37ed28495ae03d35fe12b88235087d25",
+      "summary_sha256": "7e6e8b3ecee71d99da03c5d51e21cd868f6e1dd1a736c291be91da18af5be6bd"
+    },
+    {
+      "name": "padded_aw3_L160_s33_d1",
+      "model_sha256": "d95c52f4a19bff8df766e0cb6a76089ffc6dd9525f03073de1e14348f12062a4",
+      "summary_sha256": "df246eec7dc6a3fddad773ca8273225e7e4236154a611655103b9438f20c1366"
+    },
+    {
+      "name": "padded_aw3_L160_s44_d0",
+      "model_sha256": "84c28858f552b7a4e07a32e4f63deda1eb7985c989f41b751419474aea64c6cf",
+      "summary_sha256": "468b1527bf78b5fb0e2c3e23b383c465990b8c42cfda71be81526752ef8cda3d"
+    },
+    {
+      "name": "padded_aw3_L160_s44_d1",
+      "model_sha256": "b14c48f7418160e403492e8c89609057fd4cb2038f0038e7fbaa44d5b366da61",
+      "summary_sha256": "7ea361d3b29a5e9bb63f31c7edf88f92fae24cca64eeecf7ad0a2d43e9ff5a0a"
+    }
+  ]
+}
