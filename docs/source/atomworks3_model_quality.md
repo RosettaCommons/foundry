@@ -213,3 +213,15 @@ for cold and warm calls. The initial 128-residue dispatch was 2–3% slower, and
 128-residue fallback check was effectively tied (5.453 s native, 5.466 s with
 the adapter, zero custom kernel calls). The 400-residue activation census had
 no calls in the removed 65,536–131,071-row range.
+
+With the **final dispatch and default automatic triangle attention**, five
+samples, seed 11, and two warm repetitions per arm, 512 residues took
+**10.495 s native versus 9.094 s exact (1.154×, 13.4% less time)**. All 154
+output tensors matched, and 3,632 custom kernel calls executed per prediction.
+At 256 residues the final dispatch made zero custom calls: 5.984 s native versus
+5.965 s with the adapter, effectively tied. These timings exclude checkpoint
+loading and preprocessing; they are measured cases, not a universal speedup.
+The H200 kernel suite passes **110 tests**, including all affine variants,
+BF16 autocast, transposed/expanded/column-strided inputs, large dynamic ranges,
+nearly constant inputs, signed zeros, alignment and dtype fallback, nondefault
+streams, and preservation of native training/gradient behavior.
