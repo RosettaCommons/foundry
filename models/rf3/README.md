@@ -86,6 +86,15 @@ From the above command, you should see several outputs:
 
 For this example, the pTM in the `5vht_from_json_summary_confidences.json` should be `>0.8` (even without an MSA); if not, there may be something wrong with your setup.
 
+## Exact inference kernels
+
+`rf3 fold ... inference_kernel_backend=exact` (default) enables the measured
+CUDA LayerNorm kernels on H200 with Torch 2.11/CUDA 12.8 for large tensors.
+Unsupported calls retain PyTorch; `inference_kernel_backend=torch` disables the
+replacements. No checkpoint conversion is needed. See the
+[validation and reproducibility conditions](../../docs/source/atomworks3_model_quality.md#exact-rf3-inference-kernels)
+for measured speedups, bitwise comparisons, and deterministic-runtime settings.
+
 ## Common Scenarios
 
 <details>

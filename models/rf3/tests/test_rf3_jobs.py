@@ -136,6 +136,7 @@ def test_cli_composes_real_config_for_jobs(tmp_path, monkeypatch):
     def instantiate(cfg, **kwargs):
         assert cfg.triangle_attention_backend == "auto"
         assert cfg.dense_attention_backend == "auto"
+        assert cfg.inference_kernel_backend == "exact"
         assert cfg.num_steps == 50 and cfg.n_recycles == 10
         assert "jobs" not in cfg and "inputs" not in cfg and "out_dir" not in cfg
         return SimpleNamespace(run_jobs=lambda jobs, **options: calls.append(jobs))
@@ -163,10 +164,18 @@ def test_backend_override_reaches_all_model_copies(monkeypatch):
             AttentionPairBiasDiffusion(16, 16, 8, 4, True),
         ]
     )
-    obj.trainer = SimpleNamespace(state={"model": torch.nn.ModuleList([copies, dense])})
+    norms = torch.nn.ModuleList([torch.nn.LayerNorm(128), torch.nn.LayerNorm(128)])
+    obj.trainer = SimpleNamespace(
+        state={"model": torch.nn.ModuleList([copies, dense, norms])}
+    )
     obj.triangle_attention_backend = "vanilla"
     obj.dense_attention_backend = "sdpa"
+    obj.inference_kernel_backend = "exact"
     monkeypatch.setattr(BaseInferenceEngine, "initialize", lambda self: None)
     obj.initialize()
     assert all(m.attention_backend == "vanilla" for m in copies)
     assert all(m.dense_attention_backend == "sdpa" for m in dense)
+    assert all(m.exact_enabled for m in norms)
+    obj.inference_kernel_backend = "torch"
+    obj.initialize()
+    assert all(not m.exact_enabled for m in norms)

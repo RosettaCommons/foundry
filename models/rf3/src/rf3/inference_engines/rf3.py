@@ -25,6 +25,7 @@ from foundry.metrics.metric import MetricManager
 from foundry.model.layers.attention import validate_attention_backend
 from foundry.utils.ddp import RankedLogger
 from rf3.model.layers.attention import TriangleAttention
+from rf3.model.layers.inference_kernels import set_exact_kernels
 from rf3.model.RF3 import ShouldEarlyStopFn
 from rf3.utils.inference import (
     InferenceInput,
@@ -260,6 +261,7 @@ class RF3InferenceEngine(BaseInferenceEngine):
         early_stopping_plddt_threshold: float | None = None,
         triangle_attention_backend: Literal["auto", "vanilla", "sdpa"] = "auto",
         dense_attention_backend: Literal["auto", "vanilla", "sdpa"] = "auto",
+        inference_kernel_backend: Literal["exact", "torch"] = "exact",
         # Metrics
         metrics_cfg: dict | OmegaConf | MetricManager | str | None = "default",
         **kwargs,
@@ -284,6 +286,9 @@ class RF3InferenceEngine(BaseInferenceEngine):
               reference einsum path; ``sdpa`` explicitly selects native attention.
           dense_attention_backend: Same backend choices for dense pairformer and
               diffusion token attention; sparse atom attention is unaffected.
+          inference_kernel_backend: ``exact`` enables measured bitwise-exact CUDA
+              kernels on validated stacks and retains PyTorch elsewhere. ``torch``
+              disables these replacements. Training always retains PyTorch.
           metrics_cfg: Metrics configuration. Can be:
               - "default" to use standard RF3 metrics (ptm, iptm, clashing chains)
               - dict/OmegaConf with Hydra configs
@@ -303,6 +308,9 @@ class RF3InferenceEngine(BaseInferenceEngine):
             dense_attention_backend
         )
         self.triangle_attention_backend = triangle_attention_backend
+        if inference_kernel_backend not in {"exact", "torch"}:
+            raise ValueError("inference_kernel_backend must be exact or torch")
+        self.inference_kernel_backend = inference_kernel_backend
         # set MSA directories from environment variable only
         if env_var_msa_dirs := get_msa_dirs_from_env(raise_if_not_set=False):
             override_msa_dirs = [str(msa_dir) for msa_dir in env_var_msa_dirs]
@@ -375,6 +383,10 @@ class RF3InferenceEngine(BaseInferenceEngine):
                 module.attention_backend = self.triangle_attention_backend
             if hasattr(module, "dense_attention_backend"):
                 module.dense_attention_backend = self.dense_attention_backend
+
+        set_exact_kernels(
+            self.trainer.state["model"], self.inference_kernel_backend == "exact"
+        )
 
         if cfg is not None:
             self.cfg = cfg  # store for later use

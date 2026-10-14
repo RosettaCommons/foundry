@@ -122,3 +122,94 @@ reported criterion.
 
 The scorer's nine CPU tests cover tolerance, missing/discrete changes,
 nonfinite and empty outputs, and fixed-residue preservation.
+
+## Exact RF3 inference kernels
+
+The RF3 inference engine can use the standalone CUDA LayerNorm forward kernel
+from [uplifting-biomolecular-modeling](https://github.com/anthropics/uplifting-biomolecular-modeling),
+revision `f4f62fa6592ae4938d49b1757bea0cfeff9f468e`. It reproduces ATen's
+Welford reduction and affine arithmetic while processing multiple rows per warp.
+The port retains those operations, uses per-device compilation and thread-local
+launch buffers, and omits the upstream provider registry, prebuilt binaries,
+disk cache, and unused residual fusion. Source and license notices ship in the
+wheel; CUDA Torch's NVRTC compiles the kernel on first use without `nvcc`.
+
+`inference_kernel_backend=exact` is the default. The measured dispatch requires
+H200, Torch 2.11.0/CUDA 12.8, widths 64/128/256, at least 131,072 rows, and either
+FP32 input or BF16 input under CUDA autocast with FP32 parameters. Training,
+gradient-enabled evaluation, unsupported layouts/dtypes, smaller tensors, and
+other stacks use PyTorch. `inference_kernel_backend=torch` disables the adapters.
+Parameter objects and checkpoint keys are preserved; attention backends and the
+AtomWorks 3 port are unchanged by this switch.
+
+### Equivalence protocol
+
+`scripts/benchmark_rf3_exact_kernels.py` compares complete checkpoint forwards,
+including all diffusion trajectory and confidence tensors, using identical
+prepared features and restored Python/NumPy/CPU/CUDA RNG states. Each invocation
+gets a fresh copy of the prepared batch. Both arms use the corrected pooling
+implementation. The reference is the current Foundry/AW3 implementation, not
+pre-fix PR #397 or AtomWorks 2 preprocessing.
+
+Bitwise model reproducibility requires a controlled runtime:
+`CUBLAS_WORKSPACE_CONFIG=:4096:8` must be set before CUDA initialization, and the
+benchmark enables `torch.use_deterministic_algorithms(True)` for both arms.
+Initial comparisons without these controls exposed allocation-sensitive full
+prediction differences even though every replaced LayerNorm output matched its
+native operation. A follow-up with only the fixed cuBLAS workspace also produced
+different outputs between two native repeats; that setting alone was insufficient.
+Thus the kernel's arithmetic equivalence is not an
+unconditional guarantee of seeded whole-model reproducibility in an uncontrolled
+runtime. The engine does not change process-wide determinism settings.
+
+The benchmark rejects nonfinite outputs, checks every tensor's dtype/shape and
+raw bytes (including signed zero), and counts actual kernel executions so a
+native fallback cannot masquerade as an acceleration result. It excludes model
+loading, input preparation and the first call of each backend from its paired,
+alternating warm-run medians. Generated reports remain local benchmark artifacts.
+
+```bash
+CUBLAS_WORKSPACE_CONFIG=:4096:8 python scripts/benchmark_rf3_exact_kernels.py \
+  --checkpoint /path/to/rf3_foundry_01_24_latest_remapped.ckpt \
+  --lengths 128 256 400 512 --seeds 11 29 --repeats 3 \
+  --out outs/rf3-kernels/benchmark.json
+```
+
+### Candidate selection
+
+On the H200, the warmed isolated FP32 LayerNorm case `[256,256,128]` took
+106.3 µs with native LayerNorm, 33.0 µs with upstream's CUDA candidate and
+48.1 µs with its Triton candidate (median of five 20-call CUDA-event batches).
+Both candidates matched all tested output bits. These are isolated operation
+timings; whole-model gains are smaller.
+
+The fused transition candidate also passed the controlled checkpoint comparison,
+but adding it to CUDA LayerNorm did not improve that run (16.85 s versus
+16.44 s), so it is not included. The upstream exact triangle-attention provider
+has proven cells for cuEquivariance 0.10.0/0.11.1, while this environment uses
+0.12.0; those replacements are not enabled here. Approximate kernels and the
+upstream source overlay are not part of this port.
+
+### Whole-model measurements
+
+H200, Torch 2.11.0+cu128, AtomWorks 3.0.1, cuEquivariance 0.12.0,
+`rf3_foundry_01_24_latest_remapped.ckpt` (SHA256 above), 10 recycles,
+50 steps, no early stopping. Fixed heterogeneous synthetic protein sequences
+are numerical/performance fixtures, not a protein-quality benchmark. The table
+uses one diffusion sample, vanilla triangle/dense attention and the existing
+cuEquivariance triangle-multiplication backend. Times are medians over three
+warm repetitions for each of seeds 11 and 29, then averaged across those seeds.
+
+| Residues | Native | Exact LayerNorm | Speedup |
+| --- | ---: | ---: | ---: |
+| 400 | 16.060 s | 15.555 s | 1.032× |
+| 512 | 26.204 s | 25.291 s | 1.036× |
+
+All 154 output tensors, including the full diffusion trajectories, matched
+bitwise in all eight length/seed cases (128/256/400/512 residues × seeds 11/29),
+for cold and warm calls. The initial 128-residue dispatch was 2–3% slower, and
+256 residues provided negligible benefit; a five-sample/auto-attention check at
+256 residues was 1.2% slower. These sizes now use native LayerNorm. The final
+128-residue fallback check was effectively tied (5.453 s native, 5.466 s with
+the adapter, zero custom kernel calls). The 400-residue activation census had
+no calls in the removed 65,536–131,071-row range.
