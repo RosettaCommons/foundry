@@ -7,7 +7,7 @@ AtomWorks 3.0.1; the supported Torch minimum is the validated 2.11 runtime.
 RFD3 defaults to `inference_mode=fast`; `inference_mode=legacy` restores its
 old execution choices. Both modes retain AtomWorks 3 preprocessing, including
 its conformer-failure policy. See the [inference options and exact compatibility
-boundary](../../models/rfd3/docs/inference_acceleration.md). The dial applies only to RFD3.
+boundary](https://github.com/RosettaCommons/foundry/blob/10b9c7407fa71b0f97dd491f7b0b853df63a7d28/models/rfd3/docs/inference_acceleration.md). The dial applies only to RFD3.
 
 ## Compatibility changes
 
