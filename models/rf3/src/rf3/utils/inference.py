@@ -112,13 +112,16 @@ class InferenceInput:
         # Extract from CIF
         cif_template_sel = None
         cif_conformer_sel = None
-        if "cif_block" in parsed:
-            template_dict = category_to_dict(parsed["cif_block"], "template_selection")
+        # AtomWorks 3 includes cif_block=None for PDB inputs.  A present
+        # result key does not imply that CIF categories can be inspected.
+        cif_block = parsed.get("cif_block")
+        if cif_block is not None:
+            template_dict = category_to_dict(cif_block, "template_selection")
             if template_dict:
                 cif_template_sel = list(template_dict.get("template_selection", []))
 
             conformer_dict = category_to_dict(
-                parsed["cif_block"], "ground_truth_conformer_selection"
+                cif_block, "ground_truth_conformer_selection"
             )
             if conformer_dict:
                 cif_conformer_sel = list(
