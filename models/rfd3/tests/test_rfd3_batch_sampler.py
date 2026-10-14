@@ -1,12 +1,11 @@
 from unittest.mock import patch
 
 import torch
+from rfd3._core.utils.alignment import weighted_rigid_align
 from rfd3.inference.batching import collate_examples
 from rfd3.model.batched_sampler import ExampleRandomness, augment, masked_align, sample
 from rfd3.model.inference_sampler import SampleDiffusionWithMotif
 from rfd3_batch_fixtures import example
-
-from foundry.utils.alignment import weighted_rigid_align
 
 
 class StubDenoiser:

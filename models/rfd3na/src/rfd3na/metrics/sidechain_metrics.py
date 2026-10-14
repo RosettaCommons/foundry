@@ -1,9 +1,8 @@
 import networkx as nx
 import numpy as np
 from biotite.structure.info import residue
+from rfd3na._core.metrics.metric import Metric
 from scipy.spatial.distance import cdist
-
-from foundry.metrics.metric import Metric
 
 
 def collapsing_virtual_atoms_batched(

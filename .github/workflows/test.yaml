@@ -28,7 +28,7 @@ jobs:
             ci-constraints.txt
       - name: Install package + dev extras
         # `[dev]` pulls in mypy and the dev tooling. The package itself is needed
-        # so mypy can resolve `import foundry.*` against the installed source.
+        # so mypy can resolve the model packages against the installed source.
         # `-c ci-constraints.txt` pins the type-stub-sensitive packages to the
         # validated versions so the gate is reproducible (see that file).
         run: pip install -e ".[dev]" -c ci-constraints.txt
@@ -47,14 +47,14 @@ jobs:
           cache-dependency-path: |
             pyproject.toml
             ci-constraints.txt
-      - name: Install package + dev extras
+      - name: Install wheel + dev extras
         # `-c ci-constraints.txt` pins the type-stub-sensitive packages to the
         # validated versions so the gate is reproducible (see that file).
-        run: pip install -e ".[dev]" -c ci-constraints.txt
+        run: pip install ".[dev]" -c ci-constraints.txt
       - name: pytest
-        # Runs the shared-layer tests/ plus the CPU-portable per-model tests under
+        # Runs infrastructure regression tests/ plus the CPU-portable per-model tests under
         # models/*/tests/ (collected via `testpaths`; the model packages are importable
-        # because `pip install -e .` exposes them). Each model's tests/conftest.py uses
+        # because the installed wheel includes them). Each model's tests/conftest.py uses
         # `collect_ignore` to hold its cluster-coupled suite (GPU / downloaded checkpoints
         # / IPD data) out of CI — those run locally on the cluster.
         run: pytest

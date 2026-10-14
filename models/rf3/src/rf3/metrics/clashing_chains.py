@@ -3,8 +3,7 @@ from typing import Any
 
 import torch
 from biotite.structure import AtomArrayStack
-
-from foundry.metrics.metric import Metric
+from rf3._core.metrics.metric import Metric
 
 
 class CountClashingChains(Metric):

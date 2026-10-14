@@ -18,7 +18,7 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-from foundry.inference_engines.checkpoint_registry import (
+from foundry_cli.checkpoints import (
     REGISTERED_CHECKPOINTS,
     append_checkpoint_to_env,
     get_default_checkpoint_dirs,

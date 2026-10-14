@@ -1,4 +1,4 @@
-"""Unit tests for foundry.common.
+"""Unit tests for rf3._core.common.
 
 These are small, pervasively-used helpers with no prior coverage. The contracts
 worth pinning are the ones where behaviour is easy to get subtly wrong:
@@ -10,8 +10,7 @@ zips same-keyed dicts into lists, the `listmap` family materialises a list, and
 
 import pytest
 import torch
-
-from foundry.common import (
+from rf3._core.common import (
     at_least_one_exists,
     concat_dicts,
     default,

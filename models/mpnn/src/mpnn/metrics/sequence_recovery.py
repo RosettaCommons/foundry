@@ -2,13 +2,12 @@ from typing import Any
 
 import torch
 from atomworks.ml.transforms.base import ConvertToTorch
+from mpnn._core.metrics.metric import Metric
 from mpnn.collate.feature_collator import FeatureCollator
 from mpnn.transforms.feature_aggregation.polymer_ligand_interface import (
     FeaturizePolymerLigandInterfaceMask,
 )
 from mpnn.transforms.polymer_ligand_interface import ComputePolymerLigandInterface
-
-from foundry.metrics.metric import Metric
 
 
 class SequenceRecovery(Metric):

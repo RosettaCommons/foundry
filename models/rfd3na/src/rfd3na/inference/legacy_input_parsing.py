@@ -13,6 +13,16 @@ from atomworks.ml.utils.token import (
     get_token_starts,
 )
 from biotite.structure import AtomArray, concatenate, get_residue_starts
+from rfd3na._core.common import exists
+from rfd3na._core.utils.components import (
+    fetch_mask_from_component,
+    fetch_mask_from_idx,
+    get_design_pattern_with_constraints,
+    get_motif_components_and_breaks,
+    get_name_mask,
+    split_contig,
+)
+from rfd3na._core.utils.ddp import RankedLogger
 from rfd3na.constants import (
     INFERENCE_ANNOTATIONS,
     OPTIONAL_CONDITIONING_VALUES,
@@ -41,17 +51,6 @@ from rfd3na.utils.inference import (
     set_indices,
     spoof_helical_bundle_ss_conditioning_fn,
 )
-
-from foundry.common import exists
-from foundry.utils.components import (
-    fetch_mask_from_component,
-    fetch_mask_from_idx,
-    get_design_pattern_with_constraints,
-    get_motif_components_and_breaks,
-    get_name_mask,
-    split_contig,
-)
-from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)

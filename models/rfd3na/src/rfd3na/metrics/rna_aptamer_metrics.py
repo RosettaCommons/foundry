@@ -1,9 +1,8 @@
 import logging
 
 import numpy as np
-
-from foundry.metrics.metric import Metric
-from foundry.utils.ddp import RankedLogger
+from rfd3na._core.metrics.metric import Metric
+from rfd3na._core.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 global_logger = RankedLogger(__name__, rank_zero_only=False)

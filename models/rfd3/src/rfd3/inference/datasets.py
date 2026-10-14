@@ -12,6 +12,8 @@ import yaml
 from atomworks.ml.datasets import MolecularDataset
 from atomworks.ml.transforms.base import Compose, Transform
 from omegaconf import DictConfig, OmegaConf
+from rfd3._core.utils.datasets import assemble_distributed_loader
+from rfd3._core.utils.ddp import RankedLogger
 from rfd3.inference.input_parsing import (
     DesignInputSpecification,
     ensure_input_is_abspath,
@@ -20,9 +22,6 @@ from torch.utils.data import (
     DataLoader,
     SequentialSampler,
 )
-
-from foundry.utils.datasets import assemble_distributed_loader
-from foundry.utils.ddp import RankedLogger
 
 logger = RankedLogger(__name__, rank_zero_only=True)
 all_ranks_logger = RankedLogger(__name__, rank_zero_only=False)

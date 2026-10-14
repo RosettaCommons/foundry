@@ -6,6 +6,7 @@ occurs here. The legacy forward remains available as a regression reference.
 """
 
 import torch
+from rfd3._core.model.layers.attention import use_dense_sdpa
 from rfd3.model.layers.batched import (
     downcast,
     gather_nodes,
@@ -19,8 +20,6 @@ from rfd3.model.layers.batched import (
     transformer_block,
     upcast,
 )
-
-from foundry.model.layers.attention import use_dense_sdpa
 
 
 def encode_tokens(module, f, r, s, z, recycled):

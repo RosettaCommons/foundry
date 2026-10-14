@@ -1,9 +1,8 @@
 from typing import Any
 
 import torch
+from rf3._core.metrics.metric import Metric
 from rf3.metrics.metric_utils import find_bin_midpoints
-
-from foundry.metrics.metric import Metric
 
 
 def compute_ptm(

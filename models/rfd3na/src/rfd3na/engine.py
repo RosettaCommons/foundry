@@ -13,10 +13,10 @@ from atomworks.io.utils.io_utils import to_cif_file
 from biotite.structure import AtomArray, AtomArrayStack
 from toolz import merge_with
 
-from foundry.common import exists
-from foundry.inference_engines.base import BaseInferenceEngine
-from foundry.utils.alignment import weighted_rigid_align
-from foundry.utils.ddp import RankedLogger
+from rfd3na._core.common import exists
+from rfd3na._core.inference_engines.base import BaseInferenceEngine
+from rfd3na._core.utils.alignment import weighted_rigid_align
+from rfd3na._core.utils.ddp import RankedLogger
 from rfd3na.constants import SAVED_CONDITIONING_ANNOTATIONS
 from rfd3na.inference.datasets import (
     assemble_distributed_inference_loader_from_json,
@@ -43,7 +43,7 @@ ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 @dataclass(kw_only=True)
 class RFD3InferenceConfig:
     ckpt_path: str | Path = (
-        "rfd3"  # Defaults to foundry installation upon instantiation
+        "rfd3na"  # Defaults to foundry installation upon instantiation
     )
     diffusion_batch_size: int = 16
 

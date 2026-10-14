@@ -1,4 +1,4 @@
-"""Unit tests for foundry.utils.components contig/component parsing.
+"""Unit tests for rfd3._core.utils.components contig/component parsing.
 
 These string parsers turn user-facing contig specifications (e.g. "A14-15,A16",
 "5-10,A20-21") into the component/break/free-residue structures the rfd3/rfd3na
@@ -12,8 +12,7 @@ import random
 
 import numpy as np
 import pytest
-
-from foundry.utils.components import (
+from rfd3._core.utils.components import (
     ComponentValidationError,
     extract_pn_unit_info,
     get_design_pattern_with_constraints,

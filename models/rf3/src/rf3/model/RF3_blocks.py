@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from foundry.training.checkpoint import activation_checkpointing
+from rf3._core.training.checkpoint import activation_checkpointing
 
 
 class MSASubsampleEmbedder(nn.Module):

@@ -1,8 +1,7 @@
 import json
 
 from beartype.typing import Any, Literal
-
-from foundry.metrics.metric import Metric
+from rf3._core.metrics.metric import Metric
 
 
 class ExtraInfo(Metric):

@@ -33,6 +33,7 @@ from atomworks.ml.utils.token import (
     get_token_starts,
 )
 from biotite.structure import AtomArray
+from rfd3._core.utils.ddp import RankedLogger  # noqa
 from rfd3.constants import VIRTUAL_ATOM_ELEMENT_NAME
 from rfd3.transforms.conditioning_base import (
     UnindexFlaggedTokens,
@@ -45,8 +46,6 @@ from rfd3.transforms.util_transforms import (
     get_af3_token_representative_masks,
 )
 from rfd3.transforms.virtual_atoms import PadTokensWithVirtualAtoms
-
-from foundry.utils.ddp import RankedLogger  # noqa
 
 #####################################################################################################
 # Other design transforms

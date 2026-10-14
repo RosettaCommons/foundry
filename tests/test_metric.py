@@ -1,4 +1,4 @@
-"""Unit tests for foundry.metrics.metric.
+"""Unit tests for rf3._core.metrics.metric.
 
 `Metric` + `MetricManager` are the introspection machinery every model's
 validation metrics ride on. The contracts worth pinning are non-obvious from
@@ -13,8 +13,7 @@ batch does not satisfy.
 from functools import cached_property
 
 import pytest
-
-from foundry.metrics.metric import Metric, MetricManager
+from rf3._core.metrics.metric import Metric, MetricManager
 
 
 class _SumMetric(Metric):

@@ -1,9 +1,8 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
-from foundry.training.checkpoint import activation_checkpointing
-from foundry.utils.alignment import weighted_rigid_align
+from rf3._core.training.checkpoint import activation_checkpointing
+from rf3._core.utils.alignment import weighted_rigid_align
 
 
 # resolve residue-level symmetries in native vs pred

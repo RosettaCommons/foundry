@@ -16,6 +16,7 @@ import hydra
 import torch
 from biotite.structure import AtomArray
 from omegaconf import OmegaConf
+from rf3._core.compat import load_checkpoint
 from rf3.chemical import NHEAVY
 from rf3.metrics.metric_utils import (
     compute_mean_over_subsampled_pairs,
@@ -24,7 +25,7 @@ from rf3.metrics.metric_utils import (
 from rf3.utils.io import build_stack_from_atom_array_and_batched_coords
 from rf3.utils.predicted_error import compile_af3_confidence_outputs
 
-from foundry.utils.ddp import RankedLogger, set_accelerator_based_on_availability
+from rfo._core.utils.ddp import RankedLogger, set_accelerator_based_on_availability
 from rfo.backprop.inference_pipeline.optimization_forward import optimization_forward
 from rfo.backprop.tools.af3 import cif2input
 from rfo.backprop.tools.loss import (
@@ -75,7 +76,7 @@ class AF3InferencePipeline:
     def _initialize_model(self):
         ranked_logger.info(f"Loading checkpoint from {self.ckpt_path.resolve()}...")
 
-        checkpoint = torch.load(self.ckpt_path, "cpu", weights_only=False)
+        checkpoint = load_checkpoint(self.ckpt_path)
         self.cfg = OmegaConf.create(checkpoint["train_cfg"])
 
         # Save confidence config before nulling the loss (needed for PAE/pLDDT unbinning)

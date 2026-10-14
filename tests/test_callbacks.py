@@ -1,4 +1,4 @@
-"""Unit tests for the pure logic in foundry.callbacks.
+"""Unit tests for the pure logic in rfd3._core.callbacks.
 
 Most of the callbacks package is side-effecting training/validation glue (Rich
 console output, fabric logging, forward-hook registration, matplotlib plotting)
@@ -13,8 +13,7 @@ one rank) and skipping empty rank files.
 
 import pandas as pd
 import pytest
-
-from foundry.callbacks.metrics_logging import StoreValidationMetricsInDFCallback
+from rfd3._core.callbacks.metrics_logging import StoreValidationMetricsInDFCallback
 
 
 def _write_rank_csv(save_dir, rank: int, epoch: int, rows: list[dict]) -> None:

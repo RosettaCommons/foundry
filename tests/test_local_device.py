@@ -3,8 +3,7 @@
 import pytest
 import torch
 from omegaconf import OmegaConf
-
-from foundry.utils.ddp import set_accelerator_based_on_availability
+from rf3._core.utils.ddp import set_accelerator_based_on_availability
 
 
 @pytest.mark.parametrize("device", ["cpu", "mps"])

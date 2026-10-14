@@ -26,11 +26,10 @@ from lightning.fabric.wrappers import (
     _FabricModule,
     _FabricOptimizer,
 )
-
-from foundry.callbacks.callback import BaseCallback
-from foundry.training.EMA import EMA
-from foundry.training.schedulers import SchedulerConfig
-from foundry.utils.ddp import RankedLogger
+from rfd3na._core.callbacks.callback import BaseCallback
+from rfd3na._core.training.EMA import EMA
+from rfd3na._core.training.schedulers import SchedulerConfig
+from rfd3na._core.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 logger = RankedLogger(__name__, rank_zero_only=False)

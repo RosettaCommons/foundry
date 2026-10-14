@@ -6,10 +6,9 @@ import torch.nn.functional as F
 from einops import rearrange
 from jaxtyping import Float
 from opt_einsum import contract as einsum
+from rf3._core import SHOULD_USE_CUEQUIVARIANCE
+from rf3._core.training.checkpoint import activation_checkpointing
 from rf3.util_module import init_lecun_normal
-
-from foundry import SHOULD_USE_CUEQUIVARIANCE
-from foundry.training.checkpoint import activation_checkpointing
 
 if SHOULD_USE_CUEQUIVARIANCE:
     import cuequivariance_torch as cuet

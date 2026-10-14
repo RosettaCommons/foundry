@@ -1,4 +1,4 @@
-"""Unit tests for foundry.utils.rotation_augmentation.
+"""Unit tests for rf3._core.utils.rotation_augmentation.
 
 These helpers apply the random SE(3) augmentation used during rf3 sampling.
 The contracts worth pinning are geometric: `uniform_random_rotation` must emit
@@ -10,8 +10,7 @@ existence mask is [D, L].
 
 import pytest
 import torch
-
-from foundry.utils.rotation_augmentation import (
+from rf3._core.utils.rotation_augmentation import (
     centre,
     centre_random_augmentation,
     get_random_augmentation,

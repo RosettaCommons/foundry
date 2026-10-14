@@ -1,9 +1,9 @@
 import pandas as pd
 from beartype.typing import Any
 
-from foundry.callbacks.callback import BaseCallback
-from foundry.utils.ddp import RankedLogger
-from foundry.utils.logging import print_df_as_table
+from rfd3na._core.callbacks.callback import BaseCallback
+from rfd3na._core.utils.ddp import RankedLogger
+from rfd3na._core.utils.logging import print_df_as_table
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

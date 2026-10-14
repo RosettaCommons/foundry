@@ -1,9 +1,15 @@
 """Pooling semantics, precision and reproducibility independent of model weights."""
 
+from importlib import import_module
+
 import pytest
 import torch
 
-from foundry.utils.torch import scatter_mean
+
+@pytest.fixture(params=["rf3", "rfd3", "rfd3na", "mpnn"])
+def scatter_mean(request):
+    return import_module(f"{request.param}._core.utils.torch").scatter_mean
+
 
 DEVICES = (
     ["cpu"]
@@ -33,7 +39,7 @@ def reference(destination, dim, index, source):
     "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
 )
 @pytest.mark.parametrize("dim", [0, 1, -1])
-def test_mean_semantics(device, dtype, dim):
+def test_mean_semantics(scatter_mean, device, dtype, dim):
     if device == "mps" and dtype == torch.float64:
         pytest.skip("MPS has no float64")
     torch.manual_seed(123)
@@ -59,7 +65,7 @@ def test_mean_semantics(device, dtype, dim):
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("n", [14, 23, 64, 300, 3000])
-def test_low_precision_mean_uses_exact_counts(device, dtype, n):
+def test_low_precision_mean_uses_exact_counts(scatter_mean, device, dtype, n):
     # At large n the old CUDA BF16 reduction returns 2.0 instead of ~0.5.
     source = torch.linspace(-1, 2, n, device=device, dtype=dtype).reshape(n, 1)
     index = torch.zeros(n, device=device, dtype=torch.long)
@@ -71,7 +77,7 @@ def test_low_precision_mean_uses_exact_counts(device, dtype, n):
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_empty_input_and_destination_gradients(device):
+def test_empty_input_and_destination_gradients(scatter_mean, device):
     dest = torch.randn(2, 4, 3, device=device, requires_grad=True)
     source = torch.empty(2, 0, 3, device=device, requires_grad=True)
     result = scatter_mean(
@@ -84,7 +90,7 @@ def test_empty_input_and_destination_gradients(device):
 
 
 @pytest.mark.parametrize("device", [d for d in DEVICES if d != "mps"])
-def test_first_and_second_derivatives(device):
+def test_first_and_second_derivatives(scatter_mean, device):
     dest = torch.randn(2, 4, 2, device=device, dtype=torch.double, requires_grad=True)
     source = torch.randn(2, 5, 2, device=device, dtype=torch.double, requires_grad=True)
     index = torch.tensor([2, 0, 2, 0, 2], device=device)
@@ -116,13 +122,13 @@ def test_first_and_second_derivatives(device):
         torch.tensor([[0, 1]]),
     ],
 )
-def test_invalid_indices_rejected(index):
+def test_invalid_indices_rejected(scatter_mean, index):
     with pytest.raises((RuntimeError, IndexError, ValueError)):
         scatter_mean(torch.zeros(3, 2), 0, index, torch.ones(2, 2))
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
-def test_cuda_repeatability_with_and_without_global_determinism():
+def test_cuda_repeatability_with_and_without_global_determinism(scatter_mean):
     original = torch.are_deterministic_algorithms_enabled()
     original_warn = torch.is_deterministic_algorithms_warn_only_enabled()
     try:
@@ -147,7 +153,7 @@ def test_cuda_repeatability_with_and_without_global_determinism():
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_empty_destination(device):
+def test_empty_destination(scatter_mean, device):
     source = torch.empty(2, 0, 3, device=device, requires_grad=True)
     destination = torch.empty_like(source, requires_grad=True)
     output = scatter_mean(

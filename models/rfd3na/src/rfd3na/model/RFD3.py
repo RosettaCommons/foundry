@@ -3,14 +3,13 @@ import os
 import hydra
 import torch
 from omegaconf import DictConfig
+from rfd3na._core.utils.ddp import RankedLogger
 from rfd3na.model.cfg_utils import (
     strip_f,
 )
 from rfd3na.model.inference_sampler import ConditionalDiffusionSampler
 from rfd3na.model.layers.encoders import TokenInitializer
 from torch import nn
-
-from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

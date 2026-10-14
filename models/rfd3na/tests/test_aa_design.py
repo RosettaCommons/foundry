@@ -4,6 +4,7 @@ import os
 import sys
 
 import pytest
+from rfd3na._core.utils.logging import print_config_tree
 from rfd3na.testing.testing_utils import (
     PIPES,
     TEST_CFG_INFERENCE,
@@ -11,8 +12,6 @@ from rfd3na.testing.testing_utils import (
     TEST_JSON_DATA,
     instantiate_example,
 )
-
-from foundry.utils.logging import print_config_tree
 
 PATH_TO_REPO_ROOT = os.path.dirname(os.path.abspath(__file__)) + "/../../.."
 PATH_TO_SRC = os.path.dirname(os.path.abspath(__file__)) + "/../../../src"
@@ -24,7 +23,7 @@ smoke_test = list(TEST_JSON_DATA.keys())
 
 @pytest.mark.fast
 def test_imports():
-    import foundry
+    import rfd3na._core as foundry
 
     print("Imported rfd3 version:", rfd3)
     print("Imported foundry version:", foundry)
@@ -71,7 +70,9 @@ def test_training_pipeline(example_name):
 
 def test_dataset_instantiation():
     """Test that the train and val pipelines can be run without errors."""
-    from foundry.utils.datasets import recursively_instantiate_datasets_and_samplers
+    from rfd3na._core.utils.datasets import (
+        recursively_instantiate_datasets_and_samplers,
+    )
 
     recursively_instantiate_datasets_and_samplers(TEST_CFG_TRAIN.datasets.train)
 

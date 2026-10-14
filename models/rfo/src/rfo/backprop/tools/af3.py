@@ -15,7 +15,7 @@ from atomworks.io.tools.inference import (
     components_to_atom_array,
 )
 from atomworks.io.utils.io_utils import to_cif_file
-from atomworks.io.utils.selection import AtomSelectionStack
+from atomworks.io.utils.query import AtomSelectionStack
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from atomworks.ml.transforms.template import add_input_file_template
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict

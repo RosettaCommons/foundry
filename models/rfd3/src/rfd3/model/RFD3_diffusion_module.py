@@ -5,6 +5,9 @@ from contextlib import ExitStack
 
 import torch
 import torch.nn as nn
+from rfd3._core.model.layers.blocks import (
+    FourierEmbedding,
+)
 from rfd3.model import inference_acceleration as accel
 from rfd3.model.layers.block_utils import (
     bucketize_scaled_distogram,
@@ -22,10 +25,6 @@ from rfd3.model.layers.encoders import (
     DiffusionTokenEncoder,
 )
 from rfd3.model.layers.layer_utils import RMSNorm, linearNoBias
-
-from foundry.model.layers.blocks import (
-    FourierEmbedding,
-)
 
 logger = logging.getLogger(__name__)
 

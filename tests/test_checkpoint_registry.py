@@ -1,5 +1,5 @@
 """Unit tests for the pure path-resolution logic in
-foundry.inference_engines.checkpoint_registry.
+rf3.checkpoints.
 
 The download/dotenv-writing helpers are side-effecting glue. The path search
 order is load-bearing (it decides which checkpoint directory wins) and is pinned
@@ -10,9 +10,8 @@ searched *before* the default ``~/.foundry/checkpoints`` directory.
 from pathlib import Path
 
 import pytest
-
-from foundry.inference_engines import checkpoint_registry as cr
-from foundry.inference_engines.checkpoint_registry import (
+from rf3 import checkpoints as cr
+from rf3.checkpoints import (
     RegisteredCheckpoint,
     _normalize_paths,
     get_default_checkpoint_dir,

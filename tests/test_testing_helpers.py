@@ -1,4 +1,4 @@
-"""Unit tests for the pure helper in foundry.testing.fixtures.
+"""Unit tests for the pure helper in tests.helpers.
 
 The ``gpu`` fixture and ``configure_pytest`` hook are environment/side-effecting
 glue (GPU detection, project-root setup, dotenv loading) and are not tested.
@@ -8,7 +8,7 @@ sits next to the conftest file that calls it.
 
 import pytest
 
-from foundry.testing.fixtures import get_test_data_dir
+from tests.helpers import get_test_data_dir
 
 
 def test_get_test_data_dir_is_data_next_to_conftest(tmp_path):

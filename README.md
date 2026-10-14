@@ -116,36 +116,32 @@ MPNN installation instructions.
 
 ### Code Organization
 
-**Strict dependency flow:** `foundry` → `atomworks`
+Foundry 1.0.0 ships the tools in one `rc-foundry` distribution. Each tool owns
+its runtime infrastructure under `models/<tool>/src/<tool>/_core/`. Model
+checkpoint registries live in `<tool>/checkpoints.py`. Structure I/O and featurization
+continue to use AtomWorks 3. RFO explicitly uses RF3 for prediction.
 
-- **atomworks**: Structure I/O, preprocessing, featurization
-- **foundry**: Model architectures, training, inference endpoints
-- **models/\<model\>:** Released models.
+The shared `foundry` Python package has been removed. Custom Python imports and
+Hydra `_target_` paths must use the corresponding tool's namespace (for example,
+`foundry.utils.torch` becomes `rfd3._core.utils.torch` for RFD3). Existing released
+checkpoints are translated when loaded; weights are unchanged. The `foundry`
+checkpoint CLI, model CLIs, checkpoint locations, and `FOUNDRY_*` environment
+variables are retained. Numerical settings, including RFD3's fast/legacy modes,
+are unchanged by this refactor.
 
-#### For Core Developers (Multiple Packages)
-
-Install both `foundry` and models in editable mode for development:
+Install for development and run the CPU regression suite:
 
 ```bash
 uv pip install -e '.[all,dev]'
+pytest
 ```
-
-This approach allows you to:
-- Modify `foundry` shared utilities and see changes immediately
-- Work on specific models without installing all models
-- Add new models as independent packages in `models/`
-
-> [!NOTE]
-> Running tests is not currently supported, test files may be missing.
 
 ### Adding New Models
 
-To add a new model:
-
-1. Create `models/<model_name>/` directory with its own `pyproject.toml`
-2. Add `foundry` as a dependency
-3. Implement model-specific code in `models/<model_name>/src/`
-4. Users can install with: `uv pip install -e ./models/<model_name>`
+1. Create `models/<model_name>/src/<model_name>/` with model-owned infrastructure.
+2. Add its package, entry point, and optional dependencies to the root `pyproject.toml`.
+3. Add model tests under `models/<model_name>/tests/` and include them in `testpaths`.
+4. Register downloadable checkpoints with `foundry_cli.checkpoints` when applicable.
 
 ### Pre-commit Formatting
 

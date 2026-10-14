@@ -7,8 +7,6 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from foundry.utils.torch import scatter_mean
-
 rfd3_blocks = pytest.importorskip("rfd3.model.layers.blocks")
 rf3_pairformer = pytest.importorskip("rf3.model.layers.pairformer_layers")
 rf3_diffusion = pytest.importorskip("rf3.model.layers.af3_diffusion_transformer")
@@ -158,7 +156,7 @@ def compare_case(kind, group_size, batch, device, dtype, steps):
         name: run_arm(module, owner, args, target, pool, dtype, steps)
         for name, pool in [
             ("oracle", oracle),
-            ("fixed", scatter_mean),
+            ("fixed", owner.scatter_mean),
             ("native", native),
         ]
     }

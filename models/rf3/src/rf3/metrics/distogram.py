@@ -9,10 +9,9 @@ from beartype.typing import Any, Literal
 from biotite.structure import AtomArrayStack
 from einops import rearrange, repeat
 from jaxtyping import Bool, Float
+from rf3._core.metrics.metric import Metric
+from rf3._core.utils.torch import assert_no_nans
 from rf3.loss.af3_losses import distogram_loss
-
-from foundry.metrics.metric import Metric
-from foundry.utils.torch import assert_no_nans
 
 
 @dataclass

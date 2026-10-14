@@ -10,8 +10,7 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
-
-from foundry.utils.components import (
+from rfd3na._core.utils.components import (
     ComponentStr,
     fetch_mask_from_idx,
     get_name_mask,

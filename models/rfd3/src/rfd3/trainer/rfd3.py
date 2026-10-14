@@ -6,6 +6,11 @@ from biotite.structure.residues import get_residue_starts
 from einops import repeat
 from lightning_utilities import apply_to_collection
 from omegaconf import DictConfig
+from rfd3._core.metrics.losses import Loss
+from rfd3._core.metrics.metric import MetricManager
+from rfd3._core.trainers.fabric import FabricTrainer
+from rfd3._core.utils.ddp import RankedLogger
+from rfd3._core.utils.torch import assert_no_nans, assert_same_shape
 from rfd3.metrics.design_metrics import get_all_backbone_metrics
 from rfd3.metrics.hbonds_hbplus_metrics import get_hbond_metrics
 from rfd3.trainer.recycling import get_recycle_schedule
@@ -20,12 +25,6 @@ from rfd3.trainer.trainer_utils import (
 from rfd3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
 )
-
-from foundry.metrics.losses import Loss
-from foundry.metrics.metric import MetricManager
-from foundry.trainers.fabric import FabricTrainer
-from foundry.utils.ddp import RankedLogger
-from foundry.utils.torch import assert_no_nans, assert_same_shape
 
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 

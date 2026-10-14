@@ -6,11 +6,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 from omegaconf import OmegaConf
+from rfd3._core.inference_engines.base import BaseInferenceEngine
+from rfd3._core.utils.torch import scatter_mean
 from rfd3.engine import RFD3InferenceConfig, RFD3InferenceEngine
 from rfd3.model.layers.blocks import LinearEmbedWithPool
-
-from foundry.inference_engines.base import BaseInferenceEngine
-from foundry.utils.torch import scatter_mean
 
 
 def make_engine(tmp_path, **kwargs):
@@ -59,7 +58,7 @@ def test_legacy_preset_overrides_acceleration_and_is_scoped(tmp_path, monkeypatc
         engine.trainer = SimpleNamespace(state={"model": model})
         engine.initialize()
         assert all(m.legacy_pooling == (engine is legacy) for m in model)
-    assert scatter_mean.__module__ == "foundry.utils.torch"
+    assert scatter_mean.__module__ == "rfd3._core.utils.torch"
     # A legacy request must never route into padded execution.
     monkeypatch.setattr(
         legacy, "_run_multi_batched", lambda _: pytest.fail("padded path")

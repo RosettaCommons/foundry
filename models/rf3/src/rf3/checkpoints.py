@@ -1,0 +1,77 @@
+"""Management of checkpoints"""
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, List
+
+DEFAULT_CHECKPOINT_DIR = Path.home() / ".foundry" / "checkpoints"
+
+
+def _normalize_paths(paths: Iterable[Path]) -> list[Path]:
+    """Return absolute, deduplicated paths in order."""
+    seen = set()
+    normalized: List[Path] = []
+    for path in paths:
+        resolved = path.expanduser().absolute()
+        if resolved not in seen:
+            normalized.append(resolved)
+            seen.add(resolved)
+    return normalized
+
+
+def get_default_checkpoint_dirs() -> list[Path]:
+    """Return checkpoint search paths.
+
+    Search FOUNDRY_CHECKPOINT_DIRS first, then ~/.foundry/checkpoints.
+    """
+    env_dirs = os.environ.get("FOUNDRY_CHECKPOINT_DIRS", "")
+
+    # For backward compatibility, also check FOUNDRY_CHECKPOINTS_DIR
+    if not env_dirs:
+        env_dirs = os.environ.get("FOUNDRY_CHECKPOINTS_DIR", "")
+
+    extra_dirs: list[Path] = []
+    if env_dirs:
+        extra_dirs = [Path(p.strip()) for p in env_dirs.split(":") if p.strip()]
+    return _normalize_paths([*extra_dirs, DEFAULT_CHECKPOINT_DIR])
+
+
+def get_default_checkpoint_dir() -> Path:
+    """Backward-compatible helper returning the primary checkpoint directory."""
+    return get_default_checkpoint_dirs()[0]
+
+
+@dataclass
+class RegisteredCheckpoint:
+    url: str
+    filename: str
+    description: str
+    sha256: None = None  # Optional: add checksum for verification
+
+    def get_default_path(self) -> Path:
+        checkpoint_dirs = get_default_checkpoint_dirs()
+        for checkpoint_dir in checkpoint_dirs:
+            candidate = checkpoint_dir / self.filename
+            if candidate.exists():
+                return candidate
+        return checkpoint_dirs[0] / self.filename
+
+
+REGISTERED_CHECKPOINTS = {
+    "rf3": RegisteredCheckpoint(
+        url="https://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_latest_remapped.ckpt",
+        filename="rf3_foundry_01_24_latest_remapped.ckpt",
+        description="latest RF3 checkpoint trained with data until 1/2024 (expect best performance)",
+    ),
+    "rf3_preprint_921": RegisteredCheckpoint(
+        url="https://files.ipd.uw.edu/pub/rf3/rf3_foundry_09_21_preprint_remapped.ckpt",
+        filename="rf3_foundry_09_21_preprint_remapped.ckpt",
+        description="RF3 preprint checkpoint trained with data until 9/2021",
+    ),
+    "rf3_preprint_124": RegisteredCheckpoint(
+        url="https://files.ipd.uw.edu/pub/rf3/rf3_foundry_01_24_preprint_remapped.ckpt",
+        filename="rf3_foundry_01_24_preprint_remapped.ckpt",
+        description="RF3 preprint checkpoint trained with data until 1/2024",
+    ),
+}

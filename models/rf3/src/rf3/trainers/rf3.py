@@ -5,6 +5,12 @@ from einops import repeat
 from jaxtyping import Float, Int
 from lightning_utilities import apply_to_collection
 from omegaconf import DictConfig
+from rf3._core.metrics.losses import Loss
+from rf3._core.metrics.metric import MetricManager
+from rf3._core.trainers.fabric import FabricTrainer
+from rf3._core.training.EMA import EMA
+from rf3._core.utils.ddp import RankedLogger
+from rf3._core.utils.torch import assert_no_nans, assert_same_shape
 from rf3.loss.af3_losses import (
     ResidueSymmetryResolution,
     SubunitSymmetryResolution,
@@ -12,13 +18,6 @@ from rf3.loss.af3_losses import (
 from rf3.model.RF3 import ShouldEarlyStopFn
 from rf3.utils.io import build_stack_from_atom_array_and_batched_coords
 from rf3.utils.recycling import get_recycle_schedule
-
-from foundry.metrics.losses import Loss
-from foundry.metrics.metric import MetricManager
-from foundry.trainers.fabric import FabricTrainer
-from foundry.training.EMA import EMA
-from foundry.utils.ddp import RankedLogger
-from foundry.utils.torch import assert_no_nans, assert_same_shape
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

@@ -1,6 +1,6 @@
 """Test configuration for rfd3na tests."""
 
-from foundry.testing import configure_pytest
+from tests.helpers import configure_pytest
 
 # The pre-existing rfd3na suite is cluster-coupled: every file below builds pipelines via
 # `rfd3na.testing.testing_utils` / `build_pipelines(...)` at module import (needing IPD

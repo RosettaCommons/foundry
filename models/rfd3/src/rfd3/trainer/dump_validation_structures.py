@@ -4,14 +4,13 @@ from pathlib import Path
 
 from atomworks.ml.example_id import parse_example_id
 from beartype.typing import Any, Literal
+from rfd3._core.callbacks.callback import BaseCallback
+from rfd3._core.utils.ddp import RankedLogger
 from rfd3.utils.io import (
     dump_metadata,
     dump_structures,
     dump_trajectories,
 )
-
-from foundry.callbacks.callback import BaseCallback
-from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

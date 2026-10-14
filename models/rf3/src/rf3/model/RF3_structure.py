@@ -2,6 +2,8 @@ import logging
 
 import torch
 import torch.nn as nn
+from rf3._core.model.layers.blocks import FourierEmbedding
+from rf3._core.training.checkpoint import activation_checkpointing
 from rf3.model.layers.af3_diffusion_transformer import (
     AtomAttentionEncoderDiffusion,
     AtomTransformer,
@@ -14,9 +16,6 @@ from rf3.model.layers.pairformer_layers import (
     RelativePositionEncoding,
     RF3TemplateEmbedder,
 )
-
-from foundry.model.layers.blocks import FourierEmbedding
-from foundry.training.checkpoint import activation_checkpointing
 
 logger = logging.getLogger(__name__)
 

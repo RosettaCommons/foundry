@@ -129,9 +129,8 @@ def test_legacy_token_topology_and_sparse_atom_dispatch(monkeypatch):
 def test_engine_dense_backend_reaches_all_copies(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
+    from rfd3._core.inference_engines.base import BaseInferenceEngine
     from rfd3.engine import RFD3InferenceConfig, RFD3InferenceEngine
-
-    from foundry.inference_engines.base import BaseInferenceEngine
 
     # initialize() is stubbed below: no downloaded scientific checkpoint is
     # needed to verify dispatch to every model copy on a fresh installation.

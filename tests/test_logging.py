@@ -1,4 +1,4 @@
-"""Unit tests for the pure helpers in foundry.utils.logging.
+"""Unit tests for the pure helpers in rf3._core.utils.logging.
 
 The display/configuration functions in this module are side-effecting glue
 (Rich console output, warning filters, logger levels). The two pieces with a
@@ -15,8 +15,7 @@ import logging
 
 import pandas as pd
 import pytest
-
-from foundry.utils.logging import (
+from rf3._core.utils.logging import (
     CachedDataFilter,
     condense_count_columns_of_grouped_df,
 )

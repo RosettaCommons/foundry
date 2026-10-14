@@ -3,18 +3,17 @@ import sys
 import numpy as np
 import pytest
 from atomworks.io.utils.io_utils import load_any
-from rfd3na.inference.input_parsing import DesignInputSpecification
-from rfd3na.inference.parsing import InputSelection
-from rfd3na.testing.testing_utils import (
-    TEST_JSON_DATA,
-)
-
-from foundry.utils.components import (
+from rfd3na._core.utils.components import (
     fetch_mask_from_component,
     fetch_mask_from_idx,
     fetch_mask_from_name,
     get_name_mask,
     unravel_components,
+)
+from rfd3na.inference.input_parsing import DesignInputSpecification
+from rfd3na.inference.parsing import InputSelection
+from rfd3na.testing.testing_utils import (
+    TEST_JSON_DATA,
 )
 
 # TEST 1 - test the selections
