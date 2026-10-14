@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-# Implements this repository's RFD3 Transition; see FOUNDRY_LICENSE.
+# Implements this repository's RFD3 Transition; see the repository LICENSE.md.
 """Two-stage implementation of RFD3's post-normalization transition.
 
 Specification: model/layers/layer_utils.py::Transition.forward at repository

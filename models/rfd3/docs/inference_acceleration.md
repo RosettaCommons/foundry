@@ -105,10 +105,25 @@ transition implementations are repository-native. Component provenance and
 redistribution notices are in `src/rfd3/model/kernels/NOTICE`; retain the supplied
 licenses. No universal bitwise-exactness guarantee is made for the accelerated path.
 
-## Regression results
+## Measured quality and reproducibility limits
 
-See [RFD3 regression answers](../../../docs/source/atomworks3_port.md#rfd3-regression-answers)
-for the pooling correction, final 64-output enzyme comparison, quality limits,
-and AtomWorks 3 behavior. Permanent tests cover numerical values and gradients,
-NaN padding, empty groups, independent batch axes, CFG, graph lifetimes, compiler
-reuse and legacy settings. Development timing reports are not shipped.
+The final 1euv enzyme comparison used 32 seeds × two designs per preset, the
+public 200-step sampler, and native JSON `metrics.insertion_rmsd` without refolding
+or filtering outliers:
+
+| AtomWorks 3 preset | Insertion RMSD <1 Å | Mean (Å) |
+| --- | ---: | ---: |
+| Fast | 62/64 | 0.485 |
+| Legacy | 63/64 | 0.447 |
+
+The mean difference was +0.038 Å (paired seed-group 95% interval
+[−0.051, +0.131] Å): no clear quality separation on this fixture, not proof of
+population equivalence or improvement. Earlier pooling-only pilots had adverse
+signals; correcting arithmetic is not itself evidence of better model quality.
+Acceleration is not bitwise exact even after controlling the old reduction's
+nondeterminism. Full training convergence and broad design quality remain untested.
+
+Permanent tests cover numerical values and gradients, NaN padding, empty groups,
+independent batch axes, CFG, graph lifetimes, compiler reuse and legacy settings.
+Detailed development measurements remain with the
+[consolidated change](https://github.com/RosettaCommons/foundry/pull/401).

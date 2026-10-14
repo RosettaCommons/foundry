@@ -2,7 +2,7 @@
 
 import numpy as np
 from atomworks.ml.transforms.bonds import AddAF3TokenBondFeatures
-from atomworks.ml.utils.token import apply_segment_wise_2d, get_token_starts
+from atomworks.ml.utils.token import get_token_starts
 
 
 class AddRF3TokenBondFeatures(AddAF3TokenBondFeatures):
@@ -21,13 +21,15 @@ class AddRF3TokenBondFeatures(AddAF3TokenBondFeatures):
         distance = np.linalg.norm(
             atom_array.coord[bonds[:, 0]] - atom_array.coord[bonds[:, 1]], axis=-1
         )
-        distances = np.full((len(atom_array), len(atom_array)), np.inf)
-        distances[bonds[:, 0], bonds[:, 1]] = distance
-        distances[bonds[:, 1], bonds[:, 0]] = distance
         starts = get_token_starts(atom_array, add_exclusive_stop=True)
-        # Match the checkpoint's minimum bonded distance per token pair,
-        # including its handling of non-finite coordinates.
-        token_distances = apply_segment_wise_2d(distances, starts, np.min)
+        n_tokens = len(starts) - 1
+        atom_to_token = np.repeat(np.arange(n_tokens), np.diff(starts))
+        left, right = atom_to_token[bonds[:, :2]].T
+        # Reduce only bonded distances: no atom-by-atom dense allocation.
+        # minimum.at propagates NaN just like the original segment-wise np.min.
+        token_distances = np.full((n_tokens, n_tokens), np.inf)
+        np.minimum.at(token_distances, (left, right), distance)
+        np.minimum.at(token_distances, (right, left), distance)
         cutoff = np.inf if data.get("is_inference", False) else 2.4
         token_bonds = token_distances < cutoff
         np.fill_diagonal(token_bonds, False)

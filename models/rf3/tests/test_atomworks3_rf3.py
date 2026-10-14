@@ -5,6 +5,7 @@ import pytest
 import torch
 from atomworks.enums import GroundTruthConformerPolicy
 from atomworks.io.tools.inference import components_to_atom_array
+from atomworks.ml.utils.token import apply_segment_wise_2d, get_token_starts
 from biotite.structure import AtomArray, BondList
 from rf3.data.bond_features import AddRF3TokenBondFeatures
 from rf3.data.pipelines import build_af3_transform_pipeline
@@ -36,6 +37,68 @@ def test_bond_features_keep_inference_topology_and_training_cutoff():
         assert not np.diag(bonds).any()
         np.testing.assert_array_equal(bonds, bonds.T)
         np.testing.assert_array_equal(atoms.bonds.as_array(), original_bonds)
+
+
+@pytest.mark.parametrize("is_inference", [False, True])
+@pytest.mark.parametrize("explicit_tokens", [False, True])
+@pytest.mark.parametrize("edge_case", ["finite", "nan", "inf", "no_bonds"])
+def test_bond_features_match_dense_reference(is_inference, explicit_tokens, edge_case):
+    atoms = AtomArray(9)
+    atoms.chain_id[:] = "A"
+    atoms.res_id = np.array([1, 1, 1, 2, 2, 2, 3, 4, 5])
+    atoms.coord = np.random.default_rng(17).normal(size=(9, 3)).astype(np.float32)
+    atoms.set_annotation("atomize", np.array([False] * 6 + [True] * 3))
+    if explicit_tokens:
+        # Explicit token IDs, including nonzero/gapped labels, own the boundaries.
+        atoms.set_annotation("token_id", np.array([10, 10, 20, 30, 30, 30, 40, 50, 60]))
+    if edge_case in {"nan", "inf"}:
+        atoms.coord[0, 0] = np.nan if edge_case == "nan" else np.inf
+    edges = np.array([[0, 6, 1], [1, 6, 1], [2, 3, 1], [3, 4, 1], [6, 7, 1]])
+    atoms.bonds = BondList(9, edges if edge_case != "no_bonds" else None)
+    bonds = atoms.bonds.as_array()
+    distances = np.full((len(atoms), len(atoms)), np.inf)
+    lengths = np.linalg.norm(
+        atoms.coord[bonds[:, 0]] - atoms.coord[bonds[:, 1]], axis=-1
+    )
+    distances[bonds[:, 0], bonds[:, 1]] = lengths
+    distances[bonds[:, 1], bonds[:, 0]] = lengths
+    starts = get_token_starts(atoms, add_exclusive_stop=True)
+    expected = apply_segment_wise_2d(distances, starts, np.min) < (
+        np.inf if is_inference else 2.4
+    )
+    np.fill_diagonal(expected, False)
+    residues = ~atoms.atomize[starts[:-1]]
+    expected[np.outer(residues, residues)] = False
+    actual = AddRF3TokenBondFeatures().forward(
+        {"atom_array": atoms, "is_inference": is_inference}
+    )["feats"]["token_bonds"]
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(atoms.bonds.as_array(), bonds)
+
+
+def test_bond_features_large_structure_allocates_only_token_matrix(monkeypatch):
+    atoms = AtomArray(50_000)
+    atoms.chain_id[:] = "A"
+    atoms.res_id = np.arange(len(atoms)) // 100
+    atoms.coord[:, 0] = np.arange(len(atoms))
+    atoms.coord[:, 1:] = 0
+    atoms.set_annotation("atomize", np.arange(len(atoms)) == len(atoms) - 1)
+    atoms.bonds = BondList(len(atoms), np.array([[len(atoms) - 2, len(atoms) - 1, 1]]))
+    n_tokens = len(get_token_starts(atoms))
+    full = np.full
+
+    def bounded_full(shape, *args, **kwargs):
+        # Fail before allocating the old ~20 GB atom matrix.
+        assert np.prod(shape) <= n_tokens**2
+        return full(shape, *args, **kwargs)
+
+    monkeypatch.setattr(np, "full", bounded_full)
+    actual = AddRF3TokenBondFeatures().forward(
+        {"atom_array": atoms, "is_inference": True}
+    )["feats"]["token_bonds"]
+    assert actual.shape == (n_tokens, n_tokens)
+    assert actual[-2, -1] and actual[-1, -2]
+    assert actual.sum() == 2
 
 
 def _pipeline():

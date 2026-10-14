@@ -13,7 +13,8 @@ This document outlines the various input settings and configurations you can use
 - [CLI arguments](#cli-arguments)
   - [Required CLI Arguments](#required-cli-arguments)
   - [Other Useful CLI Arguments](#other-useful-cli-arguments)
-  - [Other CLI options](#other-CLI-options)
+  - [Inference execution options](#inference-execution-options)
+  - [Other CLI options](#other-cli-options)
 - [InputSpecification fields](#inputspecification-fields)
 - [The `InputSelection` mini-language](#the-inputselection-mini-language)
 - [Contig Strings](#contig-strings)
@@ -64,6 +65,7 @@ rfd3 design out_dir=<path/to/outdir> inputs=<path/to/inputs>
 (other-useful-cli-arguments)=
 ### Other Useful CLI arguments:
 (From the [default config](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/configs/inference_engine/rfdiffusion3.yaml))
+- `inference_mode` — `fast` (default) enables corrected pooling and acceleration; `legacy` restores serial eager execution, native kernels and original pooling. Legacy overrides acceleration settings but keeps AtomWorks 3 preprocessing; it does not guarantee historical coordinates. See [Inference execution options](#inference-execution-options).
 - `n_batches` — number of batches to generate per input key (default: 1). 
 - `diffusion_batch_size` — number of diffusion samples (designs) per batch (default: 8). If `n_batches=1` and `diffusion_batch_size=8` then 8 designs will be generated from the inference run. 
 - `specification` — JSON overrides for the per-example InputSpecification (default: `{}`). For example, you can run `rfd3 design inputs=null specification.length=200` for a quick debug of creating a 200-length protein.
@@ -75,7 +77,45 @@ rfd3 design out_dir=<path/to/outdir> inputs=<path/to/inputs>
 - `global_prefix` — This setting allows you to change the beginning of the name of the output files from the name of the input JSON or YAML file to your own string (default: null).
 - `dump_trajectories` — If True, the trajectory files are also saved to the specified output directory (default: False).
 - `prevalidate_inputs` — Check that your inputs (JSON or YAML file) are valid before running inference (default: False).
-- `low_memory_mode` - Set to True (default: False) for memory efficient tokenization mode. 
+
+(inference-execution-options)=
+### Inference execution options
+
+These are top-level CLI arguments, not fields inside an input specification.
+Defaults below are for the `rfd3 design` CLI. `inference_mode=legacy` overrides
+compilation, kernels, CUDA graphs, workers and independent-example batching;
+`diffusion_batch_size` and sampler settings remain under your control.
+
+```bash
+rfd3 design inputs=designs.json out_dir=outputs/legacy inference_mode=legacy
+rfd3 design inputs=designs.json out_dir=outputs/fast inference_batch_size=2
+```
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `inference_mode` | `fast` | `fast` or `legacy`; see the compatibility notes above. |
+| `inference_batch_size` | `1` | Independent input examples per device; distinct from samples per input (`diffusion_batch_size`). Legacy forces `1`. |
+| `inference_num_workers` | `2` | CPU preprocessing workers for padded inference; `0` runs synchronously. Legacy forces `0`. |
+| `compile_model` | `true` | Compile the padded denoiser. The first new shape incurs compilation cost; legacy forces `false`. |
+| `compile_cuda_graphs` | `true` | Replay compiled CUDA denoiser graphs. Ignored without compilation or on non-CUDA devices; legacy forces `false`. |
+| `compile_shape_policy` | `buckets` | `buckets` reuses preset padding capacities; `batch_max` uses actual post-transform maximum sizes. |
+| `compile_atom_buckets` | Preset list in the default config | Atom-capacity ceilings for compiled `buckets` inference. |
+| `compile_token_buckets` | Preset list in the default config | Token-capacity ceilings for compiled `buckets` inference. |
+| `compile_slot_buckets` | Preset list in the default config | Atoms-per-token capacity ceilings for compiled `buckets` inference. |
+| `atom_padding_multiple` | `128` | Atom padding multiple; ignored by compiled `batch_max`. |
+| `token_padding_multiple` | `16` | Token padding multiple; ignored by compiled `batch_max`. |
+| `compile_cache_dir` | `RFD3_COMPILE_CACHE_DIR`, otherwise `null` | Optional persistent generated-code cache. A non-default `TORCHINDUCTOR_CACHE_DIR` takes precedence. |
+| `inference_kernel_backend` | `auto` | `auto`, `torch`, `triton` or `triton-transition`; automatic selection depends on device, compilation and batch size. Legacy forces `torch`. |
+| `dense_attention_backend` | `vanilla` | `auto`, `vanilla` or `sdpa`; controls dense token/pairformer attention. Legacy forces `vanilla`. |
+| `inference_cuda_graph` | `false` | Eager token/atom-stack graph replay; requires CUDA, `compile_model=false`, `inference_batch_size=1` and no low-memory mode. Legacy forces `false`. |
+
+Explicit Triton kernels also require CUDA and no low-memory mode. Incompatible
+settings fail rather than silently changing the requested execution mode.
+Use separate output directories when comparing modes: `skip_existing=true`
+otherwise reuses existing outputs. `dump_prediction_metadata_json=true` records
+resolved settings and the actual execution/random-stream path in output JSON.
+See {doc}`inference_acceleration` for automatic kernel selection, cache behavior
+and the limits of legacy reproducibility.
 
 (other-cli-options)=
 ### Other CLI Options:

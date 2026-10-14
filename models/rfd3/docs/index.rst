@@ -22,6 +22,7 @@ General
    tutorials/RFdiffusion3_installation_tutorial.md
    intro_inference_calculations.md
    input.md
+   inference_acceleration.md
    output.md
    common_issues.md
 

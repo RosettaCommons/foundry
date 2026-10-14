@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-# Implements layers/batched.py::local_attention; see FOUNDRY_LICENSE.
+# Implements layers/batched.py::local_attention; see the repository LICENSE.md.
 """Sparse slot attention for explicit B,D axes and padding masks.
 
 One program handles one query/head. All neighbor slots are reduced together,

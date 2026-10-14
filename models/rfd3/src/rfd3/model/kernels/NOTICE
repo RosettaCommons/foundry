@@ -11,7 +11,7 @@ on the RTX A4000. The kernel arithmetic is retained. The integration does not
 claim the upstream H100/A100 exact-mode guarantee on this GPU/software stack.
 
 transition.py
-BSD 3-Clause License; see FOUNDRY_LICENSE (this repository's license).
+BSD 3-Clause License; see the repository LICENSE.md (included in distribution license metadata).
 New two-stage implementation of this repository's RFD3 Transition operations,
 specified in model/layers/layer_utils.py at commit
 829b3a1806ddee6e2dccebf911a6a9bf841075d5. The previous fpf_transition
@@ -19,7 +19,7 @@ implementation and its helper routines are no longer included. Implementation
 provenance and the prior exposure to that code are documented in transition.py.
 
 padded_attention.py
-BSD 3-Clause License; see FOUNDRY_LICENSE (this repository's license).
+BSD 3-Clause License; see the repository LICENSE.md (included in distribution license metadata).
 Implements the sparse slot-attention operations in layers/batched.py, with
 explicit per-example/sample masks and the native operation rounding boundaries.
 This is separate from the imported legacy index-set kernel in gather.py.
