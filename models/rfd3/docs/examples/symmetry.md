@@ -92,7 +92,8 @@ The tasks that these examples describe are as follows:
         "length": 130,
         "select_fixed_atoms": {
             "A250": "OD1,CG"
-        }
+        },
+        "allow_ligand_on_existing_chain": true
     },
     "unindexed_C2_1e3v": {
         "symmetry": {
@@ -122,7 +123,8 @@ The tasks that these examples describe are as follows:
         "length": null,
         "select_fixed_atoms": {
             "M52": "CG,SD,CE"
-        }
+        },
+        "allow_ligand_on_existing_chain": true
     },
     "unsym_C3_6t8h": {
         "symmetry": {

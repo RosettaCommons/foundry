@@ -1,6 +1,8 @@
 BSD 3-Clause License
 
-Copyright (c) 2025, Institute for Protein Design, University of Washington
+Copyright (c) 2025, Institute for Protein Design, University of Washington. 
+This copyright and license covers both the source code and model
+weights referenced for download in the README file.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:

@@ -39,7 +39,8 @@ The input files for the different examples are provided in `foundry/models/rfd3/
             "A156": "NZ,CE,CD",
             "ACT": "OXT",
             "NAI": ""
-        }
+        },
+        "allow_ligand_on_existing_chain": true
     }
 }
 ```
