@@ -50,6 +50,7 @@ ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
 @dataclass(kw_only=True)
 class RFD3InferenceConfig:
+    inference_mode: str = "fast"
     ckpt_path: str | Path = (
         "rfd3"  # Defaults to foundry installation upon instantiation
     )
@@ -184,6 +185,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         dump_trajectories: bool,
         align_trajectory_structures: bool,
         low_memory_mode: bool,
+        inference_mode: str = "fast",
         compile_model: bool = True,
         compile_cuda_graphs: bool = True,
         compile_cache_dir: str | None = None,
@@ -200,6 +202,16 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         compile_slot_buckets=DEFAULT_COMPILE_SLOT_BUCKETS,
         **kwargs,
     ):
+        if inference_mode not in {"fast", "legacy"}:
+            raise ValueError("inference_mode must be fast or legacy")
+        self.inference_mode = inference_mode
+        if inference_mode == "legacy":
+            # The preset wins over acceleration knobs, including their defaults.
+            compile_model = compile_cuda_graphs = inference_cuda_graph = False
+            inference_kernel_backend = "torch"
+            dense_attention_backend = "vanilla"
+            inference_batch_size = 1
+            inference_num_workers = 0
         if min(inference_batch_size, atom_padding_multiple, token_padding_multiple) < 1:
             raise ValueError("Batch size and padding multiples must be positive")
         self.inference_batch_size = inference_batch_size
@@ -330,9 +342,12 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                 configure_compile_cache(self.compile_cache_dir)
             import triton  # noqa: F401 — fail early if the optional runtime is absent
 
+        from rfd3.model.layers.blocks import LinearEmbedWithPool
         from rfd3.model.layers.layer_utils import Transition
 
         for module in self.trainer.state["model"].modules():
+            if isinstance(module, LinearEmbedWithPool):
+                module.legacy_pooling = self.inference_mode == "legacy"
             module_backend = backend
             if backend == "triton-transition":
                 module_backend = "triton" if isinstance(module, Transition) else "torch"
@@ -345,7 +360,8 @@ class RFD3InferenceEngine(BaseInferenceEngine):
             self.compiled_ = True
         if first_initialize:
             ranked_logger.info(
-                f"RFD3 acceleration: policy={self.inference_kernel_backend}, "
+                f"RFD3 inference: mode={self.inference_mode}, "
+                f"policy={self.inference_kernel_backend}, "
                 f"kernels={backend}, compile_model={self.compile_model}, "
                 f"token_and_atom_cuda_graph={cuda_graph}, "
                 f"low_memory_mode={self.low_memory_mode}"
@@ -478,7 +494,9 @@ class RFD3InferenceEngine(BaseInferenceEngine):
         ranked_logger.info(f"Finished inference batch in {t_end - t0:.2f} seconds.")
         return self._format_model_output(pipeline_output, output_val)
 
-    def _format_model_output(self, pipeline_output, output_val) -> List[RFD3Output]:
+    def _format_model_output(
+        self, pipeline_output, output_val, *, execution_path="legacy"
+    ) -> List[RFD3Output]:
         # Add additional information to prediction metadata
         if self.dump_trajectories:
             X_noisy_L_traj = torch.stack(
@@ -496,6 +514,28 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                     ckpt = ckpt.resolve(strict=True)  # follow symlink to target
                 output_val["prediction_metadata"][idx]["ckpt_path"] = str(ckpt)
                 output_val["prediction_metadata"][idx]["seed"] = self.seed
+                output_val["prediction_metadata"][idx]["inference_settings"] = {
+                    "mode": getattr(self, "inference_mode", "fast"),
+                    "execution_path": execution_path,
+                    "random_stream": "example_keyed"
+                    if execution_path == "padded"
+                    else "legacy_global",
+                    "pooling": (
+                        "legacy_index_reduce"
+                        if getattr(self, "inference_mode", "fast") == "legacy"
+                        else "fp32_mean"
+                    ),
+                    "compile_model": self.compile_model,
+                    "compile_cuda_graphs": self.compile_cuda_graphs,
+                    "inference_batch_size": self.inference_batch_size,
+                    "kernel_backend": getattr(self, "resolved_kernel_backend", "torch"),
+                    "dense_attention_backend": getattr(
+                        self, "dense_attention_backend", "vanilla"
+                    ),
+                    "inference_cuda_graph": getattr(
+                        self, "inference_cuda_graph", False
+                    ),
+                }
 
             # Append to outputs
             if self.dump_trajectories:
@@ -650,6 +690,7 @@ class RFD3InferenceEngine(BaseInferenceEngine):
                         predicted_atom_array_stack=structures,
                         prediction_metadata=metadata,
                     ),
+                    execution_path="padded",
                 )
         return results
 

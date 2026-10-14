@@ -93,6 +93,7 @@ def write_pdb(atoms, path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--arm", required=True)
+    parser.add_argument("--inference-mode", choices=["fast", "legacy"])
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, required=True)
@@ -129,7 +130,9 @@ def main():
         records.append((metrics, metadata, expected))
         return process_unindexed_outputs(atoms, **kwargs)
 
+    mode_kwargs = {"inference_mode": args.inference_mode} if args.inference_mode else {}
     config = RFD3InferenceConfig(
+        **mode_kwargs,
         ckpt_path=str(args.checkpoint),
         diffusion_batch_size=args.batch_size,
         compile_model=args.arm.startswith("padded"),

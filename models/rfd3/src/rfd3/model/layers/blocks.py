@@ -205,6 +205,8 @@ class LinearEmbedWithPool(nn.Module):
         super().__init__()
         self.c_token = c_token
         self.linear = linearNoBias(3, c_token)
+        # Inference-engine opt-in only; training always uses corrected pooling.
+        self.legacy_pooling = False
 
     def forward(self, R_L, tok_idx):
         B = R_L.shape[0]
@@ -215,6 +217,10 @@ class LinearEmbedWithPool(nn.Module):
             self.c_token,
         )
         Q_L = self.linear(R_L)
+        if self.legacy_pooling and not self.training:
+            return torch.zeros(
+                A_I_shape, device=R_L.device, dtype=Q_L.dtype
+            ).index_reduce(-2, tok_idx.long(), Q_L, "mean", include_self=False)
         A_I = scatter_mean(
             torch.zeros(A_I_shape, device=R_L.device, dtype=Q_L.dtype),
             -2,

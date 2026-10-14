@@ -10,6 +10,10 @@ inputs: ???  # null, json, pdb or
 ckpt_path: rfd3
 json_keys_subset: null
 skip_existing: True
+# fast: corrected pooling and the acceleration settings below.
+# legacy: original index_reduce pooling, eager serial examples, Torch kernels,
+# vanilla attention, no graphs/workers. This preset overrides acceleration knobs.
+inference_mode: fast
 
 #########################################################
 # Design spec args: overrides args from input json

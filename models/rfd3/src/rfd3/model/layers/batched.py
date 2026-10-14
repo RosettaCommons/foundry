@@ -62,19 +62,31 @@ def ungroup_atoms(x, f):
 
 def pool_atoms(x, f):
     grouped = group_atoms(x, f)
+    # Keep the sum AND division in FP32; BF16/FP16 sum outputs otherwise round
+    # (or overflow) before division, even when the reduction accumulates in FP32.
+    if grouped.dtype in (torch.float16, torch.bfloat16):
+        grouped = grouped.float()
     count = f["slot_valid"].sum(-1).clamp(min=1)
-    return mask_nodes(grouped.sum(-2) / count[:, None, :, None], f["token_valid"])
+    mean = (grouped.sum(-2) / count[:, None, :, None]).to(x.dtype)
+    return mask_nodes(mean, f["token_valid"])
 
 
 def pool_pairs(x, f):
     i = f["token_valid"].shape[-1]
-    assignment = F.one_hot(f["atom_to_token_map"], i).to(x.dtype)
+    assignment = F.one_hot(f["atom_to_token_map"], i)
     assignment = assignment * f["atom_valid"][..., None]
-    x = mask_pairs(x, f["atom_valid"])
-    sums = torch.einsum("bli,bdlmc,bmj->bdijc", assignment, x, assignment)
     count = assignment.sum(1)
     denominator = (count[:, :, None] * count[:, None, :]).clamp(min=1)
-    return mask_pairs(sums / denominator[:, None, :, :, None], f["token_valid"])
+    dtype = x.dtype
+    x = mask_pairs(x, f["atom_valid"])
+    if dtype in (torch.float16, torch.bfloat16):
+        x = x.float()
+    assignment = assignment.to(x.dtype)
+    # Fabric autocast must not downcast the FP32 pooling contractions again.
+    with torch.autocast(device_type=x.device.type, enabled=False):
+        sums = torch.einsum("bli,bdlmc,bmj->bdijc", assignment, x, assignment)
+        means = (sums / denominator[:, None, :, :, None]).to(dtype)
+    return mask_pairs(means, f["token_valid"])
 
 
 def masked_softmax(logits, valid):
