@@ -10,11 +10,8 @@ from atomworks.enums import ChainType, ChainTypeInfo
 from beartype.typing import Any, Callable
 from omegaconf import OmegaConf
 
-from ..common import run_once
-
 
 #  (Custom resolvers)
-@run_once
 def register_resolvers() -> None:
     resolvers: dict[str, Callable[..., Any]] = {
         "resolve_import": resolve_import,

@@ -26,7 +26,7 @@ from lightning.fabric.wrappers import (
 )
 
 from rfd3na._core.callbacks.callback import BaseCallback
-from rfd3na._core.compat import load_checkpoint, migrate_config
+from rfd3na._core.compat import load_checkpoint
 from rfd3na._core.training.EMA import EMA
 from rfd3na._core.training.schedulers import SchedulerConfig
 from rfd3na._core.utils.ddp import RankedLogger
@@ -229,8 +229,6 @@ class FabricTrainer(ABC):
                 self.state.setdefault(key, value)
 
         # Merge the updates into the existing state
-        if "train_cfg" in updates:
-            updates = {**updates, "train_cfg": migrate_config(updates["train_cfg"])}
         self.state.update(updates)
 
     def construct_optimizer(self) -> None:

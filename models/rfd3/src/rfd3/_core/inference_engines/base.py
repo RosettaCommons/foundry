@@ -10,7 +10,7 @@ from biotite.structure import AtomArray
 from lightning.fabric import seed_everything
 from omegaconf import OmegaConf
 
-from rfd3._core.compat import load_checkpoint, migrate_config
+from rfd3._core.compat import load_checkpoint
 from rfd3._core.utils.ddp import RankedLogger, set_accelerator_based_on_availability
 from rfd3._core.utils.logging import (
     configure_minimal_inference_logging,
@@ -162,7 +162,7 @@ class BaseInferenceEngine:
     ###################################################################################
 
     def _override_checkpoint_config(self, cfg: Any) -> Any:
-        cfg = merge(migrate_config(cfg), self.overrides)
+        cfg = merge(cfg, self.overrides)
         cfg = set_accelerator_based_on_availability(cfg)
         return cfg
 

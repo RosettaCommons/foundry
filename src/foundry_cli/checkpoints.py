@@ -32,9 +32,7 @@ def _normalize_paths(paths: Iterable[Path]) -> list[Path]:
 def get_default_checkpoint_dirs() -> list[Path]:
     """Return checkpoint search paths.
 
-    Always starts with the default ~/.foundry/checkpoints directory and then
-    appends any additional directories from the colon-separated
-    FOUNDRY_CHECKPOINT_DIRS environment variable.
+    Search FOUNDRY_CHECKPOINT_DIRS first, then ~/.foundry/checkpoints.
     """
     env_dirs = os.environ.get("FOUNDRY_CHECKPOINT_DIRS", "")
 

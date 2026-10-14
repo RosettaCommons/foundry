@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import hydra
 import pytest
@@ -179,3 +179,46 @@ def test_checkpoint_registries_are_owned_by_each_model(model, tmp_path, monkeypa
     monkeypatch.setenv("FOUNDRY_CHECKPOINT_DIRS", str(tmp_path))
     for checkpoint in registry.REGISTERED_CHECKPOINTS.values():
         assert checkpoint.get_default_path() == tmp_path / checkpoint.filename
+
+
+@pytest.mark.parametrize("model", MODELS)
+def test_trainer_keeps_live_config_and_its_flags(model):
+    trainer_type = importlib.import_module(
+        f"{model}._core.trainers.fabric"
+    ).FabricTrainer
+    trainer = SimpleNamespace()
+    config = OmegaConf.create({"model": {"net": {"width": 16}}})
+    OmegaConf.set_struct(config, True)
+    OmegaConf.set_readonly(config, True)
+    trainer_type.initialize_or_update_trainer_state(trainer, {"train_cfg": config})
+    trainer_type.initialize_or_update_trainer_state(trainer, {"global_step": 7})
+    assert trainer.state["train_cfg"] is config
+    assert OmegaConf.is_struct(trainer.state["train_cfg"])
+    assert OmegaConf.is_readonly(trainer.state["train_cfg"])
+    assert trainer.state["global_step"] == 7
+
+
+@pytest.mark.parametrize("model", ["rfd3", "rfd3na"])
+def test_previous_trainer_import_resolves_to_active_implementation(model):
+    previous = importlib.import_module(f"{model}.trainer.fabric_trainer")
+    active = importlib.import_module(f"{model}._core.trainers.fabric")
+    design = importlib.import_module(f"{model}.trainer.{model}")
+    assert previous.FabricTrainer is active.FabricTrainer
+    assert issubclass(design.AADesignTrainer, previous.FabricTrainer)
+
+
+@pytest.mark.parametrize("model", MODELS)
+def test_resolvers_can_be_registered_after_hydra_reset(model):
+    resolvers = importlib.import_module(f"{model}._core.hydra.resolvers")
+    resolvers.register_resolvers()
+    OmegaConf.clear_resolver("resolve_import")
+    OmegaConf.clear_resolver("chain_type_info_to_regex")
+    resolvers.register_resolvers()
+    config = OmegaConf.create(
+        {
+            "join": "${resolve_import:os,path.join}",
+            "chain": "${chain_type_info_to_regex:DNA}",
+        }
+    )
+    assert config.join is os.path.join
+    assert config.chain == resolvers.chain_type_info_to_regex("DNA")
