@@ -1,0 +1,27 @@
+{
+  "AW2": {
+    "python": "3.12.10 (main, May 30 2025, 05:37:37) [Clang 20.1.4 ]",
+    "versions": {
+      "torch": "2.11.0+cu128",
+      "atomworks": "2.2.1",
+      "biotite": "1.4.0",
+      "rdkit": "2026.9.1",
+      "numpy": "2.5.4"
+    }
+  },
+  "AW3": {
+    "python": "3.12.10 (main, May 30 2025, 05:37:37) [Clang 20.1.4 ]",
+    "versions": {
+      "torch": "2.11.0+cu128",
+      "atomworks": "3.0.1",
+      "biotite": "1.6.0",
+      "rdkit": "2026.9.1",
+      "numpy": "2.5.4"
+    }
+  },
+  "checkpoint": {
+    "path": "/mnt/home/jiechen7/other/foundry-pr397-precision/audit_artifacts/rfd3_latest.ckpt",
+    "sha256": "9b3f85923e0d51e9453e15cdd2f8c666e7ce096a60577f57d11bbc54ae6d67c1"
+  },
+  "model_source_diff_since_initial_pilot": ""
+}

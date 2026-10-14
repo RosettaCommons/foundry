@@ -193,3 +193,25 @@ to this failure path. An explicit, tested conformer-failure policy is required
 before promoting a compatibility-preserving port; the diagnostic does not change
 the production implementation. The report retains primary results, symmetry-aware
 secondary scores, the mask intervention, and PyMOL reproduction instructions.
+
+### Expanded enzyme insertion benchmark (64 outputs per configuration)
+
+The [expanded benchmark](../../validation/enzyme_tipatom/expanded64/README.md)
+retains the original eight outputs and adds 56 predetermined outputs per arm:
+256/256 total, all jobs successful. Native JSON insertion RMSD <1 Å counts are
+63/64 original AW2, 61/64 fixed eager AW2, 57/64 fixed+#397 AW2, and 61/64
+fixed+#397 AW3. Corresponding means are 0.435, 0.485, 0.532, and 0.478 Å.
+
+The pooling fix has a small +0.050 Å mean penalty on this fixture (95% paired
+seed-group bootstrap interval +0.009 to +0.094 Å), with two fewer successes.
+It corrects arithmetic but does not improve measured design quality. The AW3
+port's initial eight-output disadvantage does not persist: compared with matched
+#397/AW2, it has four more successes and a 0.054 Å lower mean, though both
+contrast intervals include zero. This supports comparable insertion quality on
+this fixture, without a population-equivalence or superiority claim.
+
+These data do not support blocking the port because of the original quality
+estimate. The conformer-failure policy still needs an explicit rollout decision;
+the larger sample does not justify requiring the historical mask on quality
+grounds. All 256 structures are included in the saved PyMOL session, with median,
+worst-case, and all-design PNG views. No refolding was needed.

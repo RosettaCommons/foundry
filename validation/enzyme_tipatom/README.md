@@ -5,6 +5,11 @@ with Foundry's basic **1euv cysteine-hydrolase tutorial**. This run ends at RFD3
 there is no ProteinMPNN sequence redesign or refolding. The sequence labels in
 the structures come from RFD3's sequence head and motif insertion.
 
+**Expanded result:** the [64-output-per-configuration benchmark](expanded64/README.md)
+supersedes the eight-output quality estimate below. Native JSON <1 Å counts are
+63/64, 61/64, 57/64, and 61/64; AW3's initial mean disadvantage did not persist.
+The original pilot and mask diagnostic remain recorded here.
+
 ## Protocol
 
 - Bundled input: `models/rfd3/docs/tutorials/enzyme_tutorial_files/1euv_lig.pdb`.

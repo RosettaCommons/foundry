@@ -12,6 +12,7 @@ ROOT = HERE / "results"
 ARMS = ["native_aw2", "fixed_aw2", "padded_aw2", "padded_aw3"]
 pymol.finish_launching(["pymol", "-cq"])
 cmd = pymol.cmd
+cmd.set("max_threads", 4)
 cmd.load(
     str(
         HERE.parents[2]
