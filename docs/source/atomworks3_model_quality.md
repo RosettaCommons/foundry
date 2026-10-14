@@ -47,8 +47,8 @@ coordination; clashes exclude bonds and 1–3 neighbors. Native CA RMSD above
 
 ## Results
 
-The checked-in JSON accompanies this report; full PT/CIF/provenance artifacts
-are in the audit worktree's `.validation/paired-controlled/` directory.
+This summary records the controlled audit; generated per-case JSON reports are
+not shipped as documentation. The runners below can produce a new report.
 
 - MPNN: all 36 comparisons are bitwise identical for feature tensors, logits,
   log probabilities, sampled/argmax sequences, and reported sequence confidence.

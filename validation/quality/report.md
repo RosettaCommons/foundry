@@ -2,18 +2,12 @@
 
 ## Decision
 
-**The deterministic/FP32 pooling fix has a numerical-correctness rationale, but
-this pilot does not show better design quality and does not clear its registered
-exploratory noninferiority margins.** Keep Foundry #400 separate and in draft
-pending broader quality evidence with the production sampler; do not infer that
-the arithmetic fix is ready for an automatic default rollout. Numerical
-correctness does not require reproducing legacy coordinates, but downstream
-quality remains a separate gate.
-
-The padded-execution and AtomWorks 3 contrasts clear all three exploratory
-margins in this bounded configuration. These results support continuing the
-port review. They do not bypass the pooling quality gate or establish general
-equivalence, quality improvement, or production readiness for untested modes.
+This historical pilot predates the expanded enzyme benchmark and final batched
+pooling correction. Pooling alone did not clear its registered exploratory
+noninferiority margins; padded execution and AW3 did in this bounded setup.
+The consolidated [RFD3 regression answers](../../docs/source/atomworks3_port.md#rfd3-regression-answers)
+state the final results and rollout policy. The measurements below are retained
+as evidence; they do not establish broad equivalence or a pooling quality gain.
 
 ## Completed experiment
 

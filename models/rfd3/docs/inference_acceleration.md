@@ -351,33 +351,15 @@ RFD3_LOW_MEMORY_MODE=0 TORCH_COMPILE_DISABLE=0 .venv/bin/python \
   --lengths 64 128 256 384 512 --steps 200
 ```
 
-## Validation and historical measurements
+## Regression and quality results
 
-The current checkpoint and precision evidence is recorded separately:
-
-- [Fast/legacy comparison](../../../validation/inference_modes/README.md):
-  64 enzyme designs per mode on CoreWeave H200. Native JSON insertion RMSD was
-  below 1 Å for 62/64 fast and 63/64 legacy designs. The paired mean difference
-  was +0.038 Å (95% seed-cluster bootstrap interval −0.051 to +0.131 Å).
-  This fixture does not establish a quality advantage or general equivalence.
-- [Pooling training validation](../../../docs/pooling_training_validation.md):
-  value/gradient references and checkpoint tests; no full training-convergence
-  claim.
-- [Paired design and refolding](../../../validation/quality/README.md) and
-  [64-design enzyme ablations](../../../validation/enzyme_tipatom/expanded64/README.md):
-  isolate pooling, padded inference and AtomWorks changes. These predate the final
-  batched-pooling precision correction; the fast/legacy comparison above tests it.
-- [AtomWorks 3 model quality](../../../docs/source/atomworks3_model_quality.md):
-  MPNN and RF3 feature, checkpoint and native-pipeline comparisons and limitations.
-
-Regression coverage includes padded values/gradients, masked and empty examples,
-compiled pooling, kernel dispatch, graph/cache lifetime, batch isolation, seeded
-sampling and legacy policy overrides. See the tests under `models/rfd3/tests/`
-and the current CI results; historical test counts are not current gates.
+See [RFD3 regression answers](../../../docs/source/atomworks3_port.md#rfd3-regression-answers)
+for the pooling diagnosis, non-exact acceleration, training limits, paired
+refolding, 64-output enzyme comparisons, final fast/legacy results and rollout
+policy. The AtomWorks 3 port and permanent regression tests remain part of the
+same change.
 
 Earlier hardware timing reports remain in [performance](../performance/).
-The full [development and timing record at d887d01](https://github.com/RosettaCommons/foundry/blob/d887d01529ce26a2b51fe9ddfddf9b6105ac0e5c/models/rfd3/docs/inference_acceleration.md)
-preserves the original environments, commands, raw-result links, image comparisons
-and limitations. Those historical AW2 measurements are not new AW3 performance
-claims. The obsolete source-overlay container and machine-specific macOS harness
-remain available in that revision's Git history.
+The [historical development record](https://github.com/RosettaCommons/foundry/blob/1abfe1978216dac2066b42d7cedfa064bc6d4d15/models/rfd3/docs/inference_acceleration.md)
+links the original environments and measurements. Historical AW2 timings are
+not new AW3 performance claims.
