@@ -74,7 +74,7 @@ Both presets accept AW3's conformer fallback: on the enzyme fixture, AW3 retains
 a ligand reference conformer after UFF failure where AW2 masked it. Restoring
 only that old mask reproduced eight diagnostic AW2 outputs, but the expanded
 quality results do not justify forcing it. See the
-[inference guide](models/rfd3/inference_acceleration.md)
+{doc}`inference guide </models/rfd3/inference_acceleration>`
 for the preset contract.
 
 Real RFD3/RF3 pooling-module tests and short optimizer trajectories pass against
