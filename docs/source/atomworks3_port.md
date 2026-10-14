@@ -178,20 +178,28 @@ legacy execution option for fallback/comparison. Describe pooling as a numerical
 correction, not a proven design-quality upgrade. Broader tasks, long sequences,
 large checkpoint batches and full training remain outside this validation.
 
-## Other model checks and reproduction
+## Other model checks
 
 CoreWeave H200 public-checkpoint smoke tests completed for RFD3 eager/compiled,
 RFD3NA mixed RNA/DNA/protein, ProteinMPNN, LigandMPNN, RF3 protein/ligands and
 RFD3 → MPNN → RF3. Generated coordinates were finite; MPNN retained its expected
 unplaced zero-occupancy terminal OXT. These are functionality checks.
-The [RF3/MPNN paired audit](atomworks3_model_quality.md) summarizes exactness and
-its native-preprocessing exception.
 
-The [fast/legacy benchmark](https://github.com/RosettaCommons/foundry/blob/1abfe1978216dac2066b42d7cedfa064bc6d4d15/validation/inference_modes/README.md),
-[expanded enzyme benchmark](https://github.com/RosettaCommons/foundry/blob/1abfe1978216dac2066b42d7cedfa064bc6d4d15/validation/enzyme_tipatom/expanded64/README.md)
-and [paired refolding protocol](https://github.com/RosettaCommons/foundry/blob/1abfe1978216dac2066b42d7cedfa064bc6d4d15/validation/quality/README.md) retain the
-runners and measurement protocols. Pooling training runners remain under
-`examples/validate_pooling*_training.py`; their GPU/checkpoint inputs must be
-supplied explicitly. Historical detailed pooling reports are available in Git
-history at `1abfe19`; generated report JSON is not required to install or test
-this port.
+The paired AW2/AW3 checkpoint audit used identical corrected pooling in both
+arms. RF3 fixed-feature replay matched all 154 output tensors bitwise in 21
+cases (seven fixtures, three seeds). With native preprocessing, all 21 passed
+the confidence/geometry gates, but one short peptide–DNA case failed seeded
+structural equivalence (3.044 Å CA RMSD, with 33 fewer severe clashes in AW3).
+MPNN matched features, logits and sequences bitwise in all 36 comparisons.
+These small fixtures do not establish broad folding or training-quality equivalence.
+
+The RF3 exact LayerNorm port matched all 154 output tensors across four protein
+lengths (128–512 residues) and two seeds under deterministic runtime settings.
+With final dispatch, default attention and five samples, the 512-residue H200
+case took 10.495 s native versus 9.094 s optimized (1.15×); 256 residues used
+native kernels. The focused kernel suite passed 110 tests. See the
+[RF3 kernel options](https://github.com/RosettaCommons/foundry/blob/095cdf2c5a225f9be54c4dccc73094bb35b6769e/models/rf3/README.md#exact-inference-kernels).
+
+Historical campaign scripts and detailed reports remain in Git history at
+`095cdf2`; permanent model, pooling and AtomWorks regression tests remain in
+the test suites.

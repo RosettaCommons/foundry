@@ -1,4 +1,0 @@
-664458|quality_preflight|interactive|COMPLETED|0:0|2026-10-13T22:05:09|2026-10-13T22:06:20|00:01:11|billing=8,cpu=8,gres/gpu=1,mem=64G,node=1|
-664458.batch|batch||COMPLETED|0:0|2026-10-13T22:05:09|2026-10-13T22:06:20|00:01:11|cpu=8,gres/gpu=1,mem=64G,node=1|7094992K
-664474|foundry_quality|hpc-mid|COMPLETED|0:0|2026-10-13T22:07:51|2026-10-13T22:32:50|00:24:59|billing=8,cpu=8,gres/gpu=1,mem=64G,node=1|
-664474.batch|batch||COMPLETED|0:0|2026-10-13T22:07:51|2026-10-13T22:32:50|00:24:59|cpu=8,gres/gpu=1,mem=64G,node=1|14903820K

@@ -1,3 +1,0 @@
-664697           FAILED      1:0   00:00:21 slurm-h200-int+ 
-664722        COMPLETED      0:0   00:07:39 slurm-h200-int+ 
-664738        COMPLETED      0:0   00:01:04 slurm-h200-int+ 

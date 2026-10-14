@@ -1,5 +1,0 @@
-JobID|State|ExitCode|Elapsed|NodeList|AllocTRES
-664847_0|COMPLETED|0:0|00:06:08|slurm-h200-interactive-244-105|billing=8,cpu=8,gres/gpu=1,mem=64G,node=1
-664847_0.batch|COMPLETED|0:0|00:06:08|slurm-h200-interactive-244-105|cpu=8,gres/gpu=1,mem=64G,node=1
-664847_1|COMPLETED|0:0|00:04:03|slurm-h200-interactive-244-105|billing=8,cpu=8,gres/gpu=1,mem=64G,node=1
-664847_1.batch|COMPLETED|0:0|00:04:03|slurm-h200-interactive-244-105|cpu=8,gres/gpu=1,mem=64G,node=1

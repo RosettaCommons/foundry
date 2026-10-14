@@ -1,9 +1,0 @@
-JobID|State|ExitCode|Elapsed|NodeList|AllocTRES
-664743_0|COMPLETED|0:0|00:04:00|slurm-h200-interactive-244-105|billing=8,cpu=8,gres/gpu=1,mem=64G,node=1
-664743_0.batch|COMPLETED|0:0|00:04:00|slurm-h200-interactive-244-105|cpu=8,gres/gpu=1,mem=64G,node=1
-664743_1|COMPLETED|0:0|00:03:56|slurm-h200-interactive-244-105|billing=8,cpu=8,gres/gpu=1,mem=64G,node=1
-664743_1.batch|COMPLETED|0:0|00:03:56|slurm-h200-interactive-244-105|cpu=8,gres/gpu=1,mem=64G,node=1
-664743_2|COMPLETED|0:0|00:01:51|slurm-h200-interactive-244-105|billing=8,cpu=8,gres/gpu=1,mem=64G,node=1
-664743_2.batch|COMPLETED|0:0|00:01:51|slurm-h200-interactive-244-105|cpu=8,gres/gpu=1,mem=64G,node=1
-664743_3|COMPLETED|0:0|00:01:55|slurm-h200-interactive-244-105|billing=8,cpu=8,gres/gpu=1,mem=64G,node=1
-664743_3.batch|COMPLETED|0:0|00:01:55|slurm-h200-interactive-244-105|cpu=8,gres/gpu=1,mem=64G,node=1
