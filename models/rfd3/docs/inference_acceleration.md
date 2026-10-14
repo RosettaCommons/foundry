@@ -146,7 +146,8 @@ compiled padded denoisers; other supported devices use PyTorch.
 
 ## Run
 
-Use an environment installed from this checkout with its AtomWorks 3 dependencies.
+Use an environment installed from this checkout with PyTorch >=2.11 and its
+AtomWorks 3 dependencies.
 The current CoreWeave validation used PyTorch 2.11.0+cu128 and AtomWorks 3.0.1:
 
 ```bash

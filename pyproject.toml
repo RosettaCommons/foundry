@@ -34,7 +34,9 @@ dependencies = [
     "beartype>=0.18.0",
     "typer>=0.20.0",
     # ... ml tools (core)
-    "torch>=2.2.0",
+    # RFD3's compiled inference uses the custom-op and Inductor APIs validated
+    # with this runtime; the old 2.2 lower bound cannot import the new operators.
+    "torch>=2.11.0",
     "lightning>=2.5.0",
     "loralib>=0.1.1",
     "einops>=0.8.0",
