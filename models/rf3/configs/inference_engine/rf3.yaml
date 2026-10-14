@@ -36,6 +36,3 @@ metrics_cfg:
 
 # Dense token/pairformer attention; sparse atom attention is unchanged.
 dense_attention_backend: auto
-
-# Bitwise-exact kernels on validated stacks; torch disables replacements.
-inference_kernel_backend: exact

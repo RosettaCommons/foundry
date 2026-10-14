@@ -197,8 +197,8 @@ The RF3 exact LayerNorm port matched all 154 output tensors across four protein
 lengths (128–512 residues) and two seeds under deterministic runtime settings.
 With final dispatch, default attention and five samples, the 512-residue H200
 case took 10.495 s native versus 9.094 s optimized (1.15×); 256 residues used
-native kernels. The focused kernel suite passed 110 tests. See the
-[RF3 kernel options](https://github.com/RosettaCommons/foundry/blob/095cdf2c5a225f9be54c4dccc73094bb35b6769e/models/rf3/README.md#exact-inference-kernels).
+native kernels. The focused kernel suite passed 110 tests. RF3 selects these
+kernels automatically and logs a warning once per inference fallback reason.
 
 Historical campaign scripts and detailed reports remain in Git history at
 `095cdf2`; permanent model, pooling and AtomWorks regression tests remain in
