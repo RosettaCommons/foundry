@@ -89,11 +89,12 @@ def test_pair_pooling_keeps_fp32_under_autocast(device, dtype):
     pairs = x.unsqueeze(3).expand(-1, -1, -1, 8, -1).clone().requires_grad_()
     ref = pairs.detach().double().requires_grad_()
     expected = ref[0, 0, :3, :3].mean((0, 1)).to(dtype)
+    fn = torch.compile(pool_pairs, fullgraph=True) if device == "cuda" else pool_pairs
     with torch.autocast(device_type=device, dtype=dtype):
-        out = pool_pairs(pairs, f)
+        out = fn(pairs, f)
     torch.testing.assert_close(out[0, 0, 0, 0], expected, atol=0, rtol=0)
     assert torch.isfinite(out).all()
-    assert out[0, 0, 1, 1].item() == 40000
+    assert out[0, 0, 1, 1].item() == torch.tensor(40000, dtype=dtype).item()
     assert (out[2] == 0).all() and (out[:, :, 2:] == 0).all()
     got_grad = torch.autograd.grad(out[0, 0, 0, 0].sum(), pairs)[0]
     ref_grad = torch.autograd.grad(ref[0, 0, :3, :3].mean((0, 1)).sum(), ref)[0]

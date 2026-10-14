@@ -1,5 +1,95 @@
 # RFD3 CUDA inference acceleration
 
+## Fast and legacy inference presets
+
+RFD3 defaults to `inference_mode=fast`. To select the existing serial inference
+path and original pooling operation:
+
+```bash
+rfd3 design inputs=designs.json out_dir=outputs/fast inference_mode=fast
+rfd3 design inputs=designs.json out_dir=outputs/legacy inference_mode=legacy
+```
+
+Python uses the same setting:
+
+```python
+config = RFD3InferenceConfig(inference_mode="legacy", ckpt_path="rfd3")
+engine = RFD3InferenceEngine(**config)
+```
+
+Use separate output directories (or `skip_existing=false`) when comparing modes,
+and construct a new engine for each mode. This preset is currently an **RFD3**
+option; RFD3NA, MPNN, and RF3 receive the AtomWorks 3 port but do not acquire
+RFD3's padded inference implementation or this dial.
+
+| Setting | `fast` (default) | `legacy` |
+| --- | --- | --- |
+| Compilation | Enabled by default; existing overrides supported | Disabled |
+| Independent-example batch | Configurable, default 1 | Forced to 1 |
+| Preprocessing workers | Configurable, default 2 | Forced to 0 |
+| Kernels | `auto`, with existing overrides | Forced to `torch` |
+| Dense attention | `vanilla` by default | Forced to `vanilla` |
+| CUDA graph options | Existing fast-mode settings | Both disabled |
+| Atom-to-token mean | Corrected accumulation; batched sum and division in FP32 for FP16/BF16 | Original `index_reduce(..., "mean", include_self=False)` |
+| Pair mean on padded path | FP32 sum/division for FP16/BF16, integer counts, pooling autocast disabled | Existing legacy pair-pooling path |
+| Random stream | Example-keyed on padded path | Existing global-RNG serial path |
+
+The legacy preset **takes precedence over acceleration settings**, including
+explicit `compile_model=true`, `inference_batch_size>1`, kernel and graph flags.
+It preserves your checkpoint, diffusion sample count, sampler parameters, input
+specification, seed, and low-memory setting. `fast` leaves existing expert
+settings configurable; for example, `compile_model=false inference_batch_size=1
+inference_kernel_backend=torch` still uses corrected pooling on the eager path.
+Unsupported padded inputs can use an explicitly logged eager fallback.
+
+With prediction metadata enabled (the default), output JSON includes
+`inference_settings`: requested mode, resolved compilation/kernel/attention/batch
+settings, pooling policy, and **actual** execution path/random-stream family for
+that output. The latter distinguishes a fast-mode eager fallback from padded
+execution. Pooling selection is local to each model instance, including EMA
+copies. Training always retains corrected pooling; the legacy option does not
+change checkpoint parameters or the process-wide helper.
+
+### What legacy reproduces
+
+`legacy` restores the listed pre-#397 **execution choices** on CPU/CUDA: serial
+examples, eager model execution, native Torch/vanilla attention, the legacy RNG
+path, and the original atom-to-token reduction. It is useful as an execution
+fallback and for comparisons on identical prepared inputs.
+
+It **does not promise bitwise historical coordinates**, even with the same seed:
+
+- The original CUDA `index_reduce` mean can be nondeterministic and uses the old
+  low-precision arithmetic. Selecting it deliberately restores those limitations.
+- AtomWorks 3 remains installed in both modes. Parser/bond/conformer behavior is
+  unchanged by this switch, including the identified UFF-failure reference-mask
+  change. A legacy run under AW3 is not an AW2 run.
+- Other source fixes, checkpoint choice, Torch/CUDA/RDKit versions, hardware,
+  precision flags, input order and batch size can affect results. The preset
+  does not restore an entire historical checkout or environment.
+- The same integer seed does not imply the same random draws between fast and
+  legacy paths. Compare distributions or explicitly matched model inputs/noise.
+- MPS legacy execution is not supported by this original `index_reduce` path;
+  CUDA/CoreWeave is the validated target for this compatibility option.
+
+For historical reproduction, preserve the old checkout, checkpoint, input and
+AW2 environment separately. Even that environment cannot guarantee exact replay
+of an inherently nondeterministic reduction. These modes are execution policies,
+not a guarantee of protein folding, binding or experimental function.
+
+### Pooling precision regression coverage
+
+The old padded atom mean materialized a FP16/BF16 sum before division; padded
+pair contractions could also downcast under autocast. Small fixtures demonstrate
+one-rounding-step errors and FP16 sum overflow despite a representable mean.
+Both now retain FP32 intermediates through division and cast the final mean back.
+Regression tests compare values and gradients against FP64 references built from
+the already-quantized inputs, cover NaN padding and empty examples, and exercise
+CUDA Inductor/fullgraph execution and autocast. This prevents avoidable rounding;
+it does not assert that different reduction trees or complete trajectories are
+bitwise equal. It cannot recover precision already lost in input activations.
+
+
 Compilation defaults to `compile_shape_policy=buckets`, which reuses compiled
 graphs across nearby lengths. Set `compile_shape_policy=batch_max` to use each
 batch's actual maximum post-transform atom, token and per-token atom-slot counts. This
