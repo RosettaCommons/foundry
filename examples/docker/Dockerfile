@@ -14,6 +14,9 @@
 ARG BASE_IMAGE=ubuntu:22.04
 FROM ${BASE_IMAGE} AS BUILDER
 
+# Pin to a release tag or commit when building a deployment image.
+ARG FOUNDRY_REVISION=production
+
 COPY --from=ghcr.io/astral-sh/uv /uv /uvx /bin/
 
 # Install system dependencies and build tools
@@ -30,8 +33,10 @@ WORKDIR /app
 # Create a virtual environment and install dependencies with uv
 RUN git clone https://github.com/RosettaCommons/foundry /app/foundry \
     && cd /app/foundry \
+    && git checkout --detach "${FOUNDRY_REVISION}" \
     && uv venv --python 3.12 \
     && uv pip install ".[all]" \
+    && uv pip check \
     && /app/foundry/.venv/bin/foundry --help \
     && /app/foundry/.venv/bin/foundry install base-models --checkpoint-dir /app/foundry/checkpoints \
     && uv cache clean \
