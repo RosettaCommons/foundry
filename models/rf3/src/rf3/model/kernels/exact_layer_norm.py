@@ -26,14 +26,6 @@ _T = {"float32": "float", "bfloat16": "exactln::bf16_t"}
 _LOCAL = threading.local()
 
 
-def _bindings(name):
-    return {"driver": driver, "nvrtc": nvrtc}[name]
-
-
-def _cu():
-    return driver
-
-
 @lru_cache(maxsize=1)
 def _source() -> bytes:
     return Path(__file__).with_name("exactln_fwd.cu").read_bytes()
@@ -55,8 +47,8 @@ def _compile(tin, tpar, tout, C, affine, rpw, device):
     cubin, lowered = _nvrtc(expr, _opts(cc))
     torch.cuda.current_stream()
     _ensure_ctx()
-    module = _check(_cu().cuModuleLoadData(cubin), "cuModuleLoadData")[0]
-    func = _check(_cu().cuModuleGetFunction(module, lowered), "cuModuleGetFunction")[0]
+    module = _check(driver.cuModuleLoadData(cubin), "cuModuleLoadData")[0]
+    func = _check(driver.cuModuleGetFunction(module, lowered), "cuModuleGetFunction")[0]
     return func, module
 
 
@@ -91,7 +83,6 @@ def _opts(cc: Optional[str]):
 
 def _nvrtc(expr: str, opts) -> Tuple[bytes, bytes]:
     """One NVRTC compile of the carried source for the name expression `expr`: (cubin, lowered name)."""
-    nvrtc = _bindings("nvrtc")
     prog = _check(
         nvrtc.nvrtcCreateProgram(_source(), b"exactln_fwd.cu", 0, [], []),
         "nvrtcCreateProgram",
@@ -122,12 +113,13 @@ def _nvrtc(expr: str, opts) -> Tuple[bytes, bytes]:
 
 def _ensure_ctx() -> None:
     """Make torch's primary context current on this thread for the driver-API calls (it is after any torch CUDA op on the thread)."""
-    cu = _cu()
-    ctx = _check(cu.cuCtxGetCurrent(), "cuCtxGetCurrent")[0]
+    ctx = _check(driver.cuCtxGetCurrent(), "cuCtxGetCurrent")[0]
     if int(ctx) == 0:
-        dev = _check(cu.cuDeviceGet(torch.cuda.current_device()), "cuDeviceGet")[0]
-        pctx = _check(cu.cuDevicePrimaryCtxRetain(dev), "cuDevicePrimaryCtxRetain")[0]
-        _check((cu.cuCtxSetCurrent(pctx)[0],), "cuCtxSetCurrent")
+        dev = _check(driver.cuDeviceGet(torch.cuda.current_device()), "cuDeviceGet")[0]
+        pctx = _check(driver.cuDevicePrimaryCtxRetain(dev), "cuDevicePrimaryCtxRetain")[
+            0
+        ]
+        _check((driver.cuCtxSetCurrent(pctx)[0],), "cuCtxSetCurrent")
 
 
 def _rows_per_warp(C: int) -> int:
@@ -284,7 +276,7 @@ class _Launcher:
             st[i].value = values[i]
         _check(
             (
-                _cu().cuLaunchKernel(
+                driver.cuLaunchKernel(
                     self.func,
                     blocks,
                     1,
@@ -313,7 +305,7 @@ def _grid(rows: int, rpw: int):
 
 
 def call_signature(
-    x: torch.Tensor, normalized_shape, weight, bias, widen: bool, out_dtype
+    x: torch.Tensor, normalized_shape, weight, bias, widen: bool
 ) -> tuple:
     """Everything plan() depends on, as a hashable key (shape, strides, dtypes, 16-byte alignment classes, parameter identity)."""
     return (
@@ -328,7 +320,6 @@ def call_signature(
         if isinstance(normalized_shape, (tuple, list, torch.Size))
         else (int(normalized_shape),),
         bool(widen),
-        out_dtype,
     )
 
 
@@ -339,28 +330,16 @@ def _layer_norm(
     bias: Optional[torch.Tensor] = None,
     eps: float = 1e-5,
     widen: bool = False,
-    out_dtype: Optional[torch.dtype] = None,
-    _plan: Optional[Dict[str, Any]] = None,
 ) -> torch.Tensor:
-    """torch.nn.functional.layer_norm(x, normalized_shape, weight, bias, eps) bit for bit (see module doc for the served set; raises Unsupported
-    otherwise).  ``widen``: the bf16-autocast form (bf16 x, fp32 parameters, fp32 arithmetic and output).  ``out_dtype=torch.bfloat16`` on an
-    fp32 result: the caller's following ``.to(torch.bfloat16)`` fused into the store (round-to-nearest-even, the cast's own rounding)."""
+    """Exact LayerNorm; ``widen`` serves BF16 autocast with FP32 output."""
     if not hasattr(_LOCAL, "plans"):
         _LOCAL.plans = {}
     _PLANS = _LOCAL.plans
-    sig = call_signature(x, normalized_shape, weight, bias, widen, out_dtype)
+    sig = call_signature(x, normalized_shape, weight, bias, widen)
     ent = _PLANS.get(sig)
     if ent is None:
-        p = (
-            _plan
-            if _plan is not None
-            else plan(x, normalized_shape, weight, bias, widen=widen)
-        )
-        tout_ = (
-            p["tout"]
-            if out_dtype is None
-            else {torch.float32: "float32", torch.bfloat16: "bfloat16"}[out_dtype]
-        )
+        p = plan(x, normalized_shape, weight, bias, widen=widen)
+        tout_ = p["tout"]
         func_, _m = _compile(
             p["tin"], p["tpar"], tout_, p["C"], p["affine"], p["rpw"], x.get_device()
         )

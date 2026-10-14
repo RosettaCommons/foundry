@@ -16,7 +16,6 @@ from atomworks.ml.preprocessing.msa.finding import (
 )
 from atomworks.ml.samplers import LoadBalancedDistributedSampler
 from biotite.structure import AtomArray, AtomArrayStack
-from lightning.fabric.utilities.seed import seed_everything
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
@@ -402,34 +401,6 @@ class RF3InferenceEngine(BaseInferenceEngine):
                 self.trainer.metrics = None
 
         return cfg
-
-    def run_jobs(self, jobs: list[dict], **run_options) -> list:
-        """Run independent seeded jobs sequentially while loading weights once.
-
-        Each job supplies inputs, out_dir and seed. Seeds apply after model loading,
-        so a job's random stream does not depend on earlier jobs. This is an explicit
-        seed contract; legacy run() retains its constructor-seeded stream.
-        """
-        from rf3.inference_engines.jobs import validate_jobs
-
-        jobs = validate_jobs(jobs)
-        if {"inputs", "out_dir", "seed"} & run_options.keys():
-            raise ValueError("inputs, out_dir and seed must be set per job")
-        self.initialize()
-        previous_seed = self.seed
-        results = []
-        try:
-            for job in jobs:
-                self.seed = job["seed"]
-                seed_everything(self.seed, workers=True, verbose=False)
-                results.append(
-                    self.run(
-                        inputs=job["inputs"], out_dir=job["out_dir"], **run_options
-                    )
-                )
-        finally:
-            self.seed = previous_seed
-        return results
 
     def run(
         self,
