@@ -14,10 +14,11 @@ from atomworks.ml.utils.rng import (
     create_rng_state_from_seeds,
     rng_state,
 )
-from conftest import TEST_DATA_DIR
 from hydra import compose, initialize
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
+
+from conftest import TEST_DATA_DIR
 
 RUN_PARAM_KEYS = {
     "inputs",

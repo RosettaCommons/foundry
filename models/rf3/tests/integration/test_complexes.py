@@ -16,6 +16,7 @@ as nucleic acid rather than protein, so they cannot stand in for a peptide.
 """
 
 import pytest
+
 from conftest import (
     assert_chain_count,
     assert_standard_outputs,
