@@ -1,0 +1,20 @@
+{
+  "cpu_full": {
+    "passed": 1112,
+    "skipped": 84,
+    "elapsed_seconds": 58.96
+  },
+  "gpu_focused": {
+    "passed": 21,
+    "skipped": 4,
+    "elapsed_seconds": 40.68
+  },
+  "mypy": "256 source files passed",
+  "ruff": "check/format passed, 460 Python files",
+  "cli_compose": [
+    "fast",
+    "legacy"
+  ],
+  "code_commit": "1514aa8e5cdf815d074dadee9efd277e7cb4ebe1",
+  "historical_pdb_reorder": "All 84 atom lines preserved exactly; only the four ACT records moved after NAI."
+}

@@ -5,6 +5,26 @@ This port starts at public Foundry PR #397 revision
 `>=3.0.1,<4`; CI pins 3.0.1. Dependency compatibility and approval of PR #397's
 acceleration defaults are separate decisions.
 
+## Consolidated rollout policy
+
+[PR #401](https://github.com/RosettaCommons/foundry/pull/401) consolidates the
+speedups, pooling fixes, and dependency port. RFD3 defaults to `inference_mode=fast`
+and offers `inference_mode=legacy` for the old execution choices. See the
+[precise compatibility contract](models/rfd3/inference_acceleration.md).
+Both modes use AW3 preprocessing, including its upstream conformer-failure
+fallback. This is an explicit acceptance of the newer dependency policy; the
+execution dial does not emulate AW2 inputs. The original eight-output diagnostic
+below remains historical evidence, not a requirement to force the old ligand
+mask. Historical quality measurements also predate the final batched atom/pair
+precision correction; the [new mode validation](../../validation/inference_modes/README.md)
+reports runs after that correction.
+
+The latest production example tests also exposed a bundled PDB with ligand
+residues ordered 900 then 850. AW3 checks per-chain residue order. The bundled
+M0255 fixture now places 850 first, preserving every atom record, identifier and
+coordinate. Unsorted user inputs require normalization before parsing; no global
+parser-validation bypass was introduced.
+
 ## Compatibility changes
 
 - Use `ParseConfig` / `PrepareConfig` and the new annotation/query imports.
