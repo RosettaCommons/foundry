@@ -6,7 +6,7 @@ import torch
 from atomworks.io.utils.io_utils import to_cif_file
 from atomworks.ml.utils.io import apply_sharding_pattern
 from atomworks.ml.utils.misc import hash_sequence
-from beartype.typing import Literal, cast
+from beartype.typing import Literal
 from biotite.structure import AtomArray, AtomArrayStack, stack
 from rf3._core.utils.alignment import weighted_rigid_align
 from rf3._core.utils.ddp import RankedLogger
@@ -129,7 +129,9 @@ def dump_structures(
     else:
         # Include all models in a single CIF file
         to_cif_file(
-            atom_arrays,
+            list(atom_arrays)
+            if isinstance(atom_arrays, AtomArrayStack)
+            else atom_arrays,
             base_path,
             file_type=file_type,
             include_entity_poly=False,
@@ -143,6 +145,7 @@ def dump_trajectories(
     base_path: Path,
     align_structures: bool = True,
     file_type: Literal["cif", "bcif", "cif.gz"] = "cif.gz",
+    final_frame_first: bool = True,
 ) -> None:
     """Write denoising trajectories to CIF files.
 
@@ -153,36 +156,48 @@ def dump_trajectories(
         base_path (Path): Base path where the output files will be saved.
         align_structures (bool): Flag to determine if the structures should be aligned on the final prediction.
             If False, each step may have a different alignment.
+        final_frame_first (bool): Write the final frame first for PyMOL bond inference
+            (default). False retains chronological diffusion order, final frame last.
         file_type (str): File type for output (e.g., "cif", "cif.gz", "pdb"). Defaults to ``"cif.gz"``.
     """
-    n_steps = len(trajectory_list)
+    if not trajectory_list:
+        raise ValueError("Cannot write an empty diffusion trajectory")
+    # Work on a separate list: alignment must not replace the caller's frames.
+    frames = [torch.as_tensor(frame).detach() for frame in trajectory_list]
+    if any(frame.ndim != 3 or frame.shape[-1] != 3 for frame in frames):
+        raise ValueError("Trajectory frames must have shape [samples, atoms, 3]")
+    if frames[0].shape[1] != len(atom_array) or any(
+        frame.shape != frames[0].shape for frame in frames
+    ):
+        raise ValueError(
+            "Trajectory frame shapes must match each other and the atom array"
+        )
+    n_steps = len(frames)
 
     if align_structures:
         # ... align the trajectories on the last prediction
-        w_L = torch.ones(*trajectory_list[0].shape[:2]).to(trajectory_list[0].device)
-        X_exists_L = torch.ones(trajectory_list[0].shape[1], dtype=torch.bool).to(
-            trajectory_list[0].device
+        w_L = torch.ones(*frames[0].shape[:2]).to(frames[0].device)
+        X_exists_L = torch.ones(frames[0].shape[1], dtype=torch.bool).to(
+            frames[0].device
         )
         for step in range(n_steps - 1):
-            # `trajectory_list` is typed `Tensor | np.ndarray`, but every path here
-            # (alignment + the `torch.stack` below) is tensor-only, so the diffusion
-            # trajectories are always tensors when alignment runs.
-            trajectory_list[step] = weighted_rigid_align(
-                X_L=cast(torch.Tensor, trajectory_list[-1]),
-                X_gt_L=cast(torch.Tensor, trajectory_list[step]),
+            frames[step] = weighted_rigid_align(
+                X_L=frames[-1],
+                X_gt_L=frames[step],
                 X_exists_L=X_exists_L,
                 w_L=w_L,
             )
 
     # ... invert the list, to make the trajectory compatible with PyMol (which builds the bond graph from the first frame)
-    trajectory_list = trajectory_list[::-1]
+    if final_frame_first:
+        frames = frames[::-1]
 
     # ... iterate over the range of D (diffusion batch size; e.g., 5 during validation)
-    # (We want to convert `aligned_trajectory_list` to a list of length D where each item is a tensor of shape [n_steps, L, 3])
+    # (We want to convert `aligned_frames` to a list of length D where each item is a tensor of shape [n_steps, L, 3])
     trajectories_split_by_model = []
-    for d in range(trajectory_list[0].shape[0]):
+    for d in range(frames[0].shape[0]):
         trajectory_for_single_model = torch.stack(
-            [trajectory_list[step][d] for step in range(n_steps)], dim=0
+            [frames[step][d] for step in range(n_steps)], dim=0
         )
         trajectories_split_by_model.append(trajectory_for_single_model)
 
@@ -199,5 +214,9 @@ def dump_trajectories(
 
         path = Path(f"{base_path}_model_{i}")
         to_cif_file(
-            atom_array_stack, path, file_type=file_type, include_entity_poly=False
+            # AtomWorks 3 accepts a list of models, not an AtomArrayStack.
+            list(atom_array_stack),
+            path,
+            file_type=file_type,
+            include_entity_poly=False,
         )

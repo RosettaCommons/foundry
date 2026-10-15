@@ -17,7 +17,8 @@ try:
 except Exception:
     pass
 
-load_dotenv(override=True)
+# Explicit runtime configuration takes precedence over repository defaults.
+load_dotenv(override=False)
 
 _config_path = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs"
