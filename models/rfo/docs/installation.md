@@ -15,6 +15,10 @@ foundry install rf3
 export RF3_CKPT="$HOME/.foundry/checkpoints/rf3_foundry_01_24_latest_remapped.ckpt"
 ```
 
+The Foundry/RF3 environment uses AtomWorks 3 (`atomworks[ml]>=3.0.1,<4`).
+Keep Boltz and upstream MPNN in their separate environments; their NumPy
+requirements need not match Foundry's.
+
 RFO requires a confidence-enabled RF3 checkpoint with its `train_cfg`.
 Use `RF3_CKPT` to select a checkpoint explicitly. The command above uses
 Foundry's public registry; historical RFO research configurations used
@@ -41,7 +45,20 @@ Set `RFO_PYTHON` if the source launcher should use a specific Python binary.
 The RF3 branch uses an RFO-specific differentiable forward pass: gradients
 reach the sequence through the RF3 trunk and prediction heads, while sampled
 diffusion coordinates are held constant. Standard Foundry RF3 inference is
-unchanged.
+unchanged. If the installed cuEquivariance triangle kernel fails in the
+gradient path, use Foundry's supported PyTorch implementation:
+
+```bash
+export DISABLE_CUEQUIVARIANCE=1
+```
+
+RFO overrides the checkpoint's training residue cache with `None`, and disables
+geometry-based cyclic-bond detection: sequence-derived placeholder coordinates
+must not be interpreted as physical terminal closure bonds. This does not add
+RF3 cyclic-peptide support; `cyclic` still affects only the Boltz branch.
+
+Template selection accepts whole chains (`B`), compact residue ranges
+(`B1103-1120`), and AtomWorks path queries (`B/*/[1103-1120]/CA`).
 
 ## 2. Install upstream MPNN yourself
 

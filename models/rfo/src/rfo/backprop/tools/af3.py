@@ -9,13 +9,13 @@ import numpy as np
 import torch
 import tree
 from atomworks.constants import DICT_THREE_TO_ONE
-from atomworks.io.parser import parse
+from atomworks.io.parser import ParseConfig, parse
 from atomworks.io.tools.inference import (
     build_msa_paths_by_chain_id_from_component_list,
     components_to_atom_array,
 )
 from atomworks.io.utils.io_utils import to_cif_file
-from atomworks.io.utils.selection import AtomSelectionStack
+from atomworks.io.utils.query import AtomSelectionStack
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from atomworks.ml.transforms.template import add_input_file_template
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
@@ -466,7 +466,7 @@ def cif2input(cif, pipeline, device="cpu", handle_chain_breaks=True):
     if not isinstance(cif, PathLike):
         cif = Path(cif)
     # ... parse into an AtomArray (`parse` handles all valid formats)
-    out = parse(cif, hydrogen_policy="remove")
+    out = parse(cif, config=ParseConfig(hydrogen_policy="remove"))
     # ... get the atom array and set NaN coordinates to random
     atom_array = (
         out["assemblies"]["1"][0] if "assemblies" in out else out["asym_unit"][0]
@@ -696,7 +696,13 @@ def apply_template_selection(atom_array, self_template_selection_syntax: str | N
         mask = np.isin(atom_array.chain_id, chain_ids)
 
     else:
-        selector = AtomSelectionStack.from_query(self_template_selection_syntax)
+        # Compact contigs and path queries are distinct AtomWorks grammars.
+        # Passing A1103-1120 to from_query treats it as a literal chain ID.
+        syntax = self_template_selection_syntax.replace(" ", "")
+        if re.fullmatch(r"[A-Za-z]+[0-9]+-[0-9]+(?:,[A-Za-z]+[0-9]+-[0-9]+)*", syntax):
+            selector = AtomSelectionStack.from_contig(syntax)
+        else:
+            selector = AtomSelectionStack.from_query(self_template_selection_syntax)
         mask = selector.get_mask(atom_array)
 
     if np.any(mask):
@@ -721,7 +727,7 @@ def cif2input_with_template(
     handle_chain_breaks: bool = True,
 ):
     cif = Path(cif) if not isinstance(cif, PathLike) else cif
-    out = parse(cif, hydrogen_policy="remove")
+    out = parse(cif, config=ParseConfig(hydrogen_policy="remove"))
 
     atom_array = (
         out["assemblies"]["1"][0] if "assemblies" in out else out["asym_unit"][0]
@@ -821,7 +827,9 @@ def template_dict2template_feats(
 ):
     templates_by_chain = defaultdict(list)
     for chain_id, template_file in template_dict.items():
-        template_out = parse(template_file, hydrogen_policy="remove")
+        template_out = parse(
+            template_file, config=ParseConfig(hydrogen_policy="remove")
+        )
 
         template_aa = (
             template_out["assemblies"]["1"][0]
