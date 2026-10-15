@@ -59,6 +59,10 @@ RF3 cyclic-peptide support; `cyclic` still affects only the Boltz branch.
 
 Template selection accepts whole chains (`B`), compact residue ranges
 (`B1103-1120`), and AtomWorks path queries (`B/*/[1103-1120]/CA`).
+RFO explicitly sorts parsed chains to keep initial and reconstructed sequence
+tokens aligned; AtomWorks 3 otherwise preserves file order. Reconstructed
+protein components explicitly retain their polymer type, even for sequences
+such as `AAAA` that could otherwise be interpreted as RNA.
 
 ## 2. Install upstream MPNN yourself
 

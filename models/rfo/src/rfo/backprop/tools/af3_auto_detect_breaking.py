@@ -106,12 +106,18 @@ def seq2cif(seq, add_info=None, protein_mask=None, out_file=None):
                         ]
                     ),
                     "chain_id": chain_id.split("_")[0],
+                    "chain_type": "polypeptide(L)",
                     "msa_path": None,
                 }
             )
     else:
         inputs = [
-            {"seq": seq, "chain_id": add_info["chain_id"], "msa_path": None},
+            {
+                "seq": seq,
+                "chain_id": add_info["chain_id"],
+                "chain_type": "polypeptide(L)",
+                "msa_path": None,
+            },
         ]
 
     if add_info["msa_paths"] is not None:
@@ -257,6 +263,9 @@ def cif2input(cif, pipeline, device="cpu", handle_chain_breaks=True):
     atom_array = (
         out["assemblies"]["1"][0] if "assemblies" in out else out["asym_unit"][0]
     )
+    # AW3 preserves file order; sequence reconstruction sorts chain IDs.
+    # Keep initial and reconstructed token order aligned (binder A first).
+    atom_array = atom_array[np.argsort(atom_array.chain_id, kind="stable")]
     atom_array.coord[np.isnan(atom_array.coord)] = np.random.rand(
         *atom_array.coord[np.isnan(atom_array.coord)].shape
     )
@@ -516,6 +525,9 @@ def cif2input_with_template(
     atom_array = (
         out["assemblies"]["1"][0] if "assemblies" in out else out["asym_unit"][0]
     )
+    # AW3 preserves file order; sequence reconstruction sorts chain IDs.
+    # Keep initial and reconstructed token order aligned (binder A first).
+    atom_array = atom_array[np.argsort(atom_array.chain_id, kind="stable")]
     nan_mask = np.isnan(atom_array.coord)
     atom_array.coord[nan_mask] = np.random.rand(*atom_array.coord[nan_mask].shape)
     # ... apply chain break renumbering to handle discontinuous sequences (default: enabled)

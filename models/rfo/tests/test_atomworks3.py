@@ -116,7 +116,10 @@ def test_sequence_placeholders_do_not_create_cyclic_chains(tmp_path, seed):
     from rfo.backprop.tools.af3 import cif2input
 
     array, _ = components_to_atom_array(
-        [{"seq": "AAAA", "chain_id": "A"}, {"seq": "GGGG", "chain_id": "B"}],
+        [
+            {"seq": "AAAA", "chain_id": "A", "chain_type": "polypeptide(L)"},
+            {"seq": "GGGG", "chain_id": "B", "chain_type": "polypeptide(L)"},
+        ],
         return_components=True,
     )
     path = tmp_path / "linear.cif"
@@ -133,3 +136,73 @@ def test_sequence_placeholders_do_not_create_cyclic_chains(tmp_path, seed):
     assert not output["feats"].get("cyclic_asym_ids", [])
     assert "seq" in confidence and "frame_atom_idxs" in confidence
     assert torch.isfinite(output["coord_atom_lvl_to_be_noised"]).all()
+
+
+@pytest.mark.parametrize("with_template", [False, True])
+def test_target_first_input_retains_sorted_chain_contract(
+    adapter, tmp_path, with_template
+):
+    # AW3 preserves file order; RFO reconstructs components in sorted order.
+    # Different sequences detect a silent binder/target swap.
+    array, _ = components_to_atom_array(
+        [
+            {"seq": "GGGG", "chain_id": "B", "chain_type": "polypeptide(L)"},
+            {"seq": "AAAA", "chain_id": "A", "chain_type": "polypeptide(L)"},
+        ],
+        return_components=True,
+    )
+    path = tmp_path / "target_first.cif"
+    to_cif_file(array, path)
+    captured = []
+
+    class Captured(Exception):
+        pass
+
+    def capture(data):
+        captured.append(data["atom_array"].copy())
+        raise Captured
+
+    fn = adapter.cif2input_with_template if with_template else adapter.cif2input
+    with pytest.raises(Captured):
+        fn(path, capture)
+    parsed = captured[0]
+    assert list(dict.fromkeys(parsed.chain_id)) == ["A", "B"]
+    assert set(parsed.res_name[parsed.chain_id == "A"]) == {"ALA"}
+    assert set(parsed.res_name[parsed.chain_id == "B"]) == {"GLY"}
+
+
+def test_target_first_tokens_match_sequence_reconstruction(tmp_path):
+    from atomworks.ml.encoding_definitions import AF3SequenceEncoding
+    from rfo.backprop.tools.af3 import cif2input, decode_restype, seq2cif
+
+    array, _ = components_to_atom_array(
+        [
+            {"seq": "GGGG", "chain_id": "B", "chain_type": "polypeptide(L)"},
+            {"seq": "AAAA", "chain_id": "A", "chain_type": "polypeptide(L)"},
+        ],
+        return_components=True,
+    )
+    path = tmp_path / "target_first.cif"
+    to_cif_file(array, path)
+    network, _, data = cif2input(path, inference_pipeline(), handle_chain_breaks=False)
+    seq = decode_restype(network["f"]["restype"], AF3SequenceEncoding())
+    reconstructed, components = seq2cif(
+        seq,
+        add_info={
+            "chain_iid_token_level": data["ground_truth"]["chain_iid_token_lvl"],
+            "msa_paths": None,
+            "smiles": None,
+        },
+        protein_mask=network["f"]["is_protein"],
+        out_file=tmp_path / "reconstructed.cif",
+    )
+    assert [(c["chain_id"], c["seq"]) for c in components] == [
+        ("A", "AAAA"),
+        ("B", "GGGG"),
+    ]
+    assert seq == "AAAAGGGG"
+    rebuilt, _, _ = cif2input(
+        reconstructed, inference_pipeline(), handle_chain_breaks=False
+    )
+    assert rebuilt["f"]["is_protein"].all()
+    assert decode_restype(rebuilt["f"]["restype"], AF3SequenceEncoding()) == seq
