@@ -24,7 +24,8 @@ from foundry_cli.checkpoints import (
     get_default_checkpoint_dirs,
 )
 
-load_dotenv(override=True)
+# Explicit runtime configuration takes precedence over repository defaults.
+load_dotenv(override=False)
 
 app = typer.Typer(help="Foundry model checkpoint installation utilities")
 console = Console()

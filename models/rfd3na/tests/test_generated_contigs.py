@@ -4,10 +4,9 @@ import numpy as np
 import pytest
 from biotite.structure import filter_amino_acids, get_residue_starts
 from pydantic import ValidationError
+from rfd3na._core.utils.components import ComponentValidationError
 from rfd3na.inference.input_parsing import DesignInputSpecification
 from rfd3na.inference.parsing import InputSelection
-
-from rfd3na._core.utils.components import ComponentValidationError
 
 
 @pytest.mark.parametrize(

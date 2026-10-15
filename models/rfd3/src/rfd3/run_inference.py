@@ -9,7 +9,8 @@ from omegaconf import DictConfig, OmegaConf
 
 from rfd3.engine import RFD3InferenceConfig, RFD3InferenceEngine
 
-load_dotenv(override=True)
+# Explicit runtime configuration takes precedence over repository defaults.
+load_dotenv(override=False)
 
 # For pip-installed package, configs should be relative to this file
 # Adjust this path based on where configs are bundled in the package

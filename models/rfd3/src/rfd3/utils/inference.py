@@ -54,7 +54,7 @@ def set_common_annotations(array, set_src_component_to_res_name=True):
     if "b_factor" not in annots:
         array.set_annotation("b_factor", np.zeros(array.shape[0], dtype=float))
     if "charge" not in annots:
-        array.set_annotation("charge", np.zeros(array.shape[0], dtype=float))
+        array.set_annotation("charge", np.zeros(array.shape[0], dtype=np.int8))
     if "src_component" not in annots:
         if set_src_component_to_res_name:
             array.set_annotation(
