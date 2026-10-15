@@ -1,4 +1,4 @@
-# De novo Design of Biopolymers with Atomic Functional Sites using RFdiffusion3
+# Atomic functional site scaffolding in biopolymers with RFdiffusion3
 
 RFdiffusion3NA (RFD3NA) is an expanded version of RFDiffusion3, that can design multiplolymer structures (including protein-DNA-RNA) under complex constraints.
 
