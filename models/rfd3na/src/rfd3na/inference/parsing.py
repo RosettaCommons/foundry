@@ -96,6 +96,10 @@ class InputSelection(BaseModel):
         return self.mask
 
     def get_tokens(self, aa):
+        if aa is None:
+            if self.data:
+                raise ValueError("Input atoms are required for selected motif tokens")
+            return {}
         _, _, tokens = from_any_(v=self.raw, atom_array=aa)
         return tokens
 

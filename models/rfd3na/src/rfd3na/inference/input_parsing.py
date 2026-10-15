@@ -2,6 +2,7 @@ import copy
 import json
 import logging
 import os
+import re
 import time
 import warnings
 from contextlib import contextmanager
@@ -319,6 +320,22 @@ class DesignInputSpecification(BaseModel):
             if not exists(data.get("input")) and not exists(
                 data.get("atom_array_input")
             ):
+                # Generated segments need no motif atoms, including RNA/DNA
+                # suffixes and explicit chain breaks. Input-backed selections
+                # must still fail when no input structure was supplied.
+                if selections == ["contig"] and isinstance(data["contig"], str):
+                    parts = [part.strip() for part in data["contig"].split(",")]
+                    if any(part != "/0" for part in parts) and all(
+                        re.fullmatch(r"(?:[0-9]+(?:-[0-9]+)?[RD]?|/0)", part)
+                        for part in parts
+                    ):
+                        data["contig"] = InputSelection(
+                            raw=",".join(parts),
+                            data={},
+                            mask=np.zeros(0, dtype=bool),
+                            tokens={},
+                        )
+                        return data
                 if selections:
                     raise ValueError(
                         "Atom array input must be provided before parsing selections: {}".format(

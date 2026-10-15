@@ -33,8 +33,10 @@ from rf3.utils.inference import (
 )
 from rf3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
-    dump_structures,
     get_sharded_output_path,
+)
+from rf3.utils.io import (
+    dump_trajectories as dump_diffusion_trajectories,
 )
 from rf3.utils.predicted_error import (
     annotate_atom_array_b_factor_with_plddt,
@@ -317,6 +319,8 @@ class RF3InferenceEngine(BaseInferenceEngine):
 
         super().__init__(
             transform_overrides={
+                # Training caches are site-specific and must not affect inference.
+                "residue_cache_dir": None,
                 "diffusion_batch_size": diffusion_batch_size,
                 "n_recycles": n_recycles,
                 "raise_if_missing_msa_for_protein_of_length_n": raise_if_missing_msa_for_protein_of_length_n,
@@ -745,16 +749,27 @@ class RF3InferenceEngine(BaseInferenceEngine):
                         )
 
                 if dump_trajectories:
-                    dump_structures(
-                        atom_arrays=network_output["X_denoised_L_traj"],
+                    # The sampler records denoiser/noisy intermediates before
+                    # its final coordinate update. Append the actual prediction
+                    # so the last frame matches the scored per-sample structure.
+                    dump_diffusion_trajectories(
+                        trajectory_list=[
+                            *network_output["X_denoised_L_traj"],
+                            network_output["X_L"],
+                        ],
+                        atom_array=pipeline_output["atom_array"],
                         base_path=example_out_dir / "denoised",
-                        one_model_per_file=True,
+                        final_frame_first=False,
                         file_type=file_type,
                     )
-                    dump_structures(
-                        atom_arrays=network_output["X_noisy_L_traj"],
+                    dump_diffusion_trajectories(
+                        trajectory_list=[
+                            *network_output["X_noisy_L_traj"],
+                            network_output["X_L"],
+                        ],
+                        atom_array=pipeline_output["atom_array"],
                         base_path=example_out_dir / "noisy",
-                        one_model_per_file=True,
+                        final_frame_first=False,
                         file_type=file_type,
                     )
 
