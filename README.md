@@ -170,18 +170,18 @@ If you use this repository code or data in your work, please cite the relavant w
   year={2025}
 }
 
-@article{
-butcher2026_rfdiffusion3_science,
-author = {Jasper Butcher  and Rohith Krishna  and Raktim Mitra  and Seth M. Woodbury  and Donghyo Kim  and Rafael I. Brent  and Yanjing Li  and Nathaniel Corley  and Andrew Favor  and Anqi Chen  and Paul T. Kim  and Jonathan Funk  and Gabriela Bastidas Reinoso  and Kejia Wu  and Aiko Muraishi  and Helen E. Eisenach  and Saman Salike  and Simon Mathis  and Tuscan Rock Thompson  and Antonia Ruder  and Enisha Sehgal  and Andrew Kubaney  and Jie Chen  and Yuliya Politanska  and Brian Coventry  and Odin Zhang  and Florence J. Hardy  and Bo Qiang  and Kieran Didi  and Maxwell Kazman  and Lars L. Schaaf  and Frank DiMaio  and David Baker },
-title = {Atomic functional site scaffolding in biopolymers with RFdiffusion3},
-journal = {Science},
-volume = {0},
-number = {0},
-pages = {eaeh2982},
-year = {},
-doi = {10.1126/science.aeh2982},
-URL = {https://www.science.org/doi/abs/10.1126/science.aeh2982},
-eprint = {https://www.science.org/doi/pdf/10.1126/science.aeh2982}}
+@article{butcher2026_rfdiffusion3_science,
+    author = {Jasper Butcher  and Rohith Krishna  and Raktim Mitra  and Seth M. Woodbury  and Donghyo Kim  and Rafael I. Brent  and Yanjing Li  and Nathaniel Corley  and Andrew Favor  and Anqi Chen  and Paul T. Kim  and Jonathan Funk  and Gabriela Bastidas Reinoso  and Kejia Wu  and Aiko Muraishi  and Helen E. Eisenach  and Saman Salike  and Simon Mathis  and Tuscan Rock Thompson  and Antonia Ruder  and Enisha Sehgal  and Andrew Kubaney  and Jie Chen  and Yuliya Politanska  and Brian Coventry  and Odin Zhang  and Florence J. Hardy  and Bo Qiang  and Kieran Didi  and Maxwell Kazman  and Lars L. Schaaf  and Frank DiMaio  and David Baker },
+    title = {Atomic functional site scaffolding in biopolymers with RFdiffusion3},
+    journal = {Science},
+    volume = {0},
+    number = {0},
+    pages = {eaeh2982},
+    year = {},
+    doi = {10.1126/science.aeh2982},
+    URL = {https://www.science.org/doi/abs/10.1126/science.aeh2982},
+    eprint = {https://www.science.org/doi/pdf/10.1126/science.aeh2982}
+}
 
 @article {butcher2025_rfdiffusion3,
     author = {Butcher, Jasper and Krishna, Rohith and Mitra, Raktim and Brent, Rafael Isaac and Li, Yanjing and Corley, Nathaniel and Kim, Paul T and Funk, Jonathan and Mathis, Simon Valentin and Salike, Saman and Muraishi, Aiko and Eisenach, Helen and Thompson, Tuscan Rock and Chen, Jie and Politanska, Yuliya and Sehgal, Enisha and Coventry, Brian and Zhang, Odin and Qiang, Bo and Didi, Kieran and Kazman, Maxwell and DiMaio, Frank and Baker, David},
