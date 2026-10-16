@@ -4,6 +4,7 @@ from typing import Tuple
 import torch
 import torch.nn.functional as F
 from jaxtyping import Float, Int
+from rfd3.model import inference_acceleration as accel
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,12 @@ def build_valid_mask(
     valid_mask : (n_tokens, A)  True where an atom exists
     tokens     : (n_tokens,)    the unique token IDs in ascending order
     """
+    if accel.indexing_enabled():
+        return accel.cached_projection(_build_valid_mask, tok_idx, n_atoms_per_tok_max)
+    return _build_valid_mask(tok_idx, n_atoms_per_tok_max)
+
+
+def _build_valid_mask(tok_idx, n_atoms_per_tok_max):
     tokens, counts = torch.unique(tok_idx, return_counts=True)
     A = int(counts.max()) if n_atoms_per_tok_max is None else int(n_atoms_per_tok_max)
 
@@ -56,6 +63,12 @@ def build_valid_mask(
 
 def _atom_flat_idx(valid_mask: torch.Tensor) -> torch.Tensor:
     """Return the 1-D indices of valid atoms in the flattened (n_tokens * A) grid."""
+    if accel.indexing_enabled():
+        return accel.cached_projection(_make_atom_flat_idx, valid_mask)
+    return _make_atom_flat_idx(valid_mask)
+
+
+def _make_atom_flat_idx(valid_mask):
     return valid_mask.flatten().nonzero(as_tuple=False).squeeze(1)
 
 
@@ -72,7 +85,12 @@ def ungroup_atoms(Q_L, valid_mask):
     """
     B, n_atoms, c = Q_L.shape
     n_tokens, A = valid_mask.shape
-    if Q_L.device.type == "mps":
+    if accel.indexing_enabled():
+        flat_idx = _atom_flat_idx(valid_mask)
+        Q_IA = torch.zeros(B, n_tokens * A, c, dtype=Q_L.dtype, device=Q_L.device)
+        Q_IA.index_copy_(1, flat_idx, Q_L)
+        return Q_IA.reshape(B, n_tokens, A, c)
+    elif Q_L.device.type == "mps":
         # masked_scatter_ with non-contiguous masks is unreliable on MPS;
         # use scatter with integer indices instead.
         flat_idx = _atom_flat_idx(valid_mask)  # (n_atoms,)
@@ -100,7 +118,10 @@ def group_atoms(Q_IA: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
     Q_L        : (B, n_atoms, c)  flattened real atoms, order preserved
     """
     B, n_tok, A, c = Q_IA.shape
-    if Q_IA.device.type == "mps":
+    if accel.indexing_enabled():
+        flat_idx = _atom_flat_idx(valid_mask)
+        return Q_IA.reshape(B, n_tok * A, c).index_select(1, flat_idx)
+    elif Q_IA.device.type == "mps":
         # Boolean indexing with non-contiguous expanded masks is unreliable on MPS;
         # use integer index gather instead.
         flat_idx = _atom_flat_idx(valid_mask)  # (n_atoms,)

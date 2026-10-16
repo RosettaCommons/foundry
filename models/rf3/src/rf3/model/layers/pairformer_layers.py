@@ -19,6 +19,11 @@ from rf3.model.RF3_blocks import MSAPairWeightedAverage, MSASubsampleEmbedder
 from torch import nn
 from torch.nn.functional import one_hot, relu
 
+from foundry.model.layers.attention import (
+    dense_pair_attention,
+    use_dense_sdpa,
+    validate_attention_backend,
+)
 from foundry.model.layers.blocks import Dropout
 from foundry.training.checkpoint import activation_checkpointing
 from foundry.utils.torch import scatter_mean
@@ -214,7 +219,7 @@ class AtomAttentionEncoderPairformer(nn.Module):
 
 
 class AttentionPairBiasPairformerDeepspeed(nn.Module):
-    def __init__(self, c_a, c_s, c_pair, n_head):
+    def __init__(self, c_a, c_s, c_pair, n_head, dense_attention_backend="auto"):
         super().__init__()
         self.n_head = n_head
         self.c_a = c_a
@@ -239,6 +244,9 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
         self.ln_1 = nn.LayerNorm((c_a,))
         self.use_deepspeed_evo = False
         self.force_bfloat16 = True
+        self.dense_attention_backend = validate_attention_backend(
+            dense_attention_backend
+        )
 
     def forward(
         self,
@@ -251,7 +259,11 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
         assert S_I is None
         A_I = self.ln_1(A_I)
 
-        if (self.use_deepspeed_evo or self.force_bfloat16) and A_I.device.type != "mps":
+        # Local float32 inference must match the projection weights' dtype.
+        if (self.use_deepspeed_evo or self.force_bfloat16) and A_I.device.type not in {
+            "cpu",
+            "mps",
+        }:
             A_I = A_I.to(torch.bfloat16)
 
         Q_IH = self.to_q(A_I)  # / np.sqrt(self.c)
@@ -262,7 +274,18 @@ class AttentionPairBiasPairformerDeepspeed(nn.Module):
 
         B, L = B_IIH.shape[:2]
 
-        if not self.use_deepspeed_evo or L <= 24:
+        if use_dense_sdpa(self, Q_IH):
+            # Keep the reference scaling/rounding, including bf16 checkpoints.
+            Q_IH = Q_IH / torch.sqrt(torch.tensor(self.c).to(Q_IH.device, Q_IH.dtype))
+            A_I = dense_pair_attention(
+                Q_IH.transpose(-3, -2),
+                K_IH.transpose(-3, -2),
+                V_IH.transpose(-3, -2),
+                B_IIH.movedim(-1, -3),
+                scale=1.0,
+            ).transpose(-3, -2)
+            A_I = (G_IH * A_I).flatten(start_dim=-2)
+        elif not self.use_deepspeed_evo or L <= 24:
             Q_IH = Q_IH / torch.sqrt(torch.tensor(self.c).to(Q_IH.device, Q_IH.dtype))
             # Attention
             A_IIH = torch.softmax(

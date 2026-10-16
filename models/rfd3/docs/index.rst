@@ -22,6 +22,7 @@ General
    tutorials/RFdiffusion3_installation_tutorial.md
    intro_inference_calculations.md
    input.md
+   inference_acceleration.md
    output.md
    common_issues.md
 
@@ -90,5 +91,6 @@ on to these examples.
    examples/na_binder_design.md
    examples/sm_binder_design.md
    examples/protein_binder_design.md
+   examples/macrocycle_design.md
    examples/symmetry.md
    examples/enzyme_design.md

@@ -21,7 +21,10 @@ from torch.utils.data import DataLoader
 
 from foundry.inference_engines.base import BaseInferenceEngine
 from foundry.metrics.metric import MetricManager
+from foundry.model.layers.attention import validate_attention_backend
 from foundry.utils.ddp import RankedLogger
+from rf3.model.layers.attention import TriangleAttention
+from rf3.model.layers.inference_kernels import enable_exact_kernels
 from rf3.model.RF3 import ShouldEarlyStopFn
 from rf3.utils.inference import (
     InferenceInput,
@@ -30,8 +33,10 @@ from rf3.utils.inference import (
 )
 from rf3.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
-    dump_structures,
     get_sharded_output_path,
+)
+from rf3.utils.io import (
+    dump_trajectories as dump_diffusion_trajectories,
 )
 from rf3.utils.predicted_error import (
     annotate_atom_array_b_factor_with_plddt,
@@ -255,6 +260,8 @@ class RF3InferenceEngine(BaseInferenceEngine):
         # Output control
         compress_outputs: bool = False,
         early_stopping_plddt_threshold: float | None = None,
+        triangle_attention_backend: Literal["auto", "vanilla", "sdpa"] = "auto",
+        dense_attention_backend: Literal["auto", "vanilla", "sdpa"] = "auto",
         # Metrics
         metrics_cfg: dict | OmegaConf | MetricManager | str | None = "default",
         **kwargs,
@@ -274,6 +281,11 @@ class RF3InferenceEngine(BaseInferenceEngine):
               Defaults to ``False``.
           compress_outputs: Whether to gzip output files. Defaults to ``False``.
           early_stopping_plddt_threshold: Stop early if pLDDT below threshold. Defaults to ``None``.
+          triangle_attention_backend: ``auto`` uses native SDPA on MPS during
+              inference and preserves other backends. ``vanilla`` selects the
+              reference einsum path; ``sdpa`` explicitly selects native attention.
+          dense_attention_backend: Same backend choices for dense pairformer and
+              diffusion token attention; sparse atom attention is unaffected.
           metrics_cfg: Metrics configuration. Can be:
               - "default" to use standard RF3 metrics (ptm, iptm, clashing chains)
               - dict/OmegaConf with Hydra configs
@@ -287,6 +299,12 @@ class RF3InferenceEngine(BaseInferenceEngine):
               - devices_per_node (int): Number of devices per node. Defaults to ``1``.
               - verbose (bool): If True, show detailed logging and config trees. Defaults to ``False``.
         """
+        if triangle_attention_backend not in {"auto", "vanilla", "sdpa"}:
+            raise ValueError("triangle_attention_backend must be auto, vanilla or sdpa")
+        self.dense_attention_backend = validate_attention_backend(
+            dense_attention_backend
+        )
+        self.triangle_attention_backend = triangle_attention_backend
         # set MSA directories from environment variable only
         if env_var_msa_dirs := get_msa_dirs_from_env(raise_if_not_set=False):
             override_msa_dirs = [str(msa_dir) for msa_dir in env_var_msa_dirs]
@@ -301,6 +319,8 @@ class RF3InferenceEngine(BaseInferenceEngine):
 
         super().__init__(
             transform_overrides={
+                # Training caches are site-specific and must not affect inference.
+                "residue_cache_dir": None,
                 "diffusion_batch_size": diffusion_batch_size,
                 "n_recycles": n_recycles,
                 "raise_if_missing_msa_for_protein_of_length_n": raise_if_missing_msa_for_protein_of_length_n,
@@ -353,6 +373,14 @@ class RF3InferenceEngine(BaseInferenceEngine):
             )
 
         cfg = super().initialize()
+
+        for module in self.trainer.state["model"].modules():
+            if isinstance(module, TriangleAttention):
+                module.attention_backend = self.triangle_attention_backend
+            if hasattr(module, "dense_attention_backend"):
+                module.dense_attention_backend = self.dense_attention_backend
+
+        enable_exact_kernels(self.trainer.state["model"])
 
         if cfg is not None:
             self.cfg = cfg  # store for later use
@@ -721,16 +749,27 @@ class RF3InferenceEngine(BaseInferenceEngine):
                         )
 
                 if dump_trajectories:
-                    dump_structures(
-                        atom_arrays=network_output["X_denoised_L_traj"],
+                    # The sampler records denoiser/noisy intermediates before
+                    # its final coordinate update. Append the actual prediction
+                    # so the last frame matches the scored per-sample structure.
+                    dump_diffusion_trajectories(
+                        trajectory_list=[
+                            *network_output["X_denoised_L_traj"],
+                            network_output["X_L"],
+                        ],
+                        atom_array=pipeline_output["atom_array"],
                         base_path=example_out_dir / "denoised",
-                        one_model_per_file=True,
+                        final_frame_first=False,
                         file_type=file_type,
                     )
-                    dump_structures(
-                        atom_arrays=network_output["X_noisy_L_traj"],
+                    dump_diffusion_trajectories(
+                        trajectory_list=[
+                            *network_output["X_noisy_L_traj"],
+                            network_output["X_L"],
+                        ],
+                        atom_array=pipeline_output["atom_array"],
                         base_path=example_out_dir / "noisy",
-                        one_model_per_file=True,
+                        final_frame_first=False,
                         file_type=file_type,
                     )
 

@@ -34,7 +34,9 @@ dependencies = [
     "beartype>=0.18.0",
     "typer>=0.20.0",
     # ... ml tools (core)
-    "torch>=2.2.0",
+    # RFD3's compiled inference uses the custom-op and Inductor APIs validated
+    # with this runtime; the old 2.2 lower bound cannot import the new operators.
+    "torch>=2.11.0",
     "lightning>=2.5.0",
     "loralib>=0.1.1",
     "einops>=0.8.0",
@@ -43,7 +45,7 @@ dependencies = [
     "dm-tree>=0.1.6",
     "zstandard",
     "pandas",
-    "atomworks[ml]>=2.1.1",
+    "atomworks[ml]>=3.0.1,<4",
     "ipykernel>=6.31.0",
     "assertpy",
     "toolz",
@@ -91,7 +93,7 @@ dev = [
     "pytest-dotenv>=0.5.2", # load environment variables from .env file
     "pytest-cov>=4.1.0", # generate coverage report
     "pytest-benchmark>=5.0.0", # benchmark tests for speed
-    "atomworks[ml,dev,openbabel]>=2.1.1",
+    "atomworks[ml,dev,openbabel]>=3.0.1,<4",
     "pre-commit"
 ]
 [project.scripts]

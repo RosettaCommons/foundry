@@ -24,6 +24,9 @@ inputs=./enzyme_design.json
 An example script for running these examples in batches is also provided in `run_inf_tutorial.sh`.
 
 The input files for the different examples are provided in `foundry/models/rfd3/docs/input_pdbs`.
+Keep residues ordered by residue ID within each chain. In `M0255_1mg5.pdb`,
+NAI A850 precedes ACT A900 so the input passes residue-order validation; the
+reordering preserves all atom records, residue IDs and coordinates.
 
 ```json
 {
@@ -39,7 +42,8 @@ The input files for the different examples are provided in `foundry/models/rfd3/
             "A156": "NZ,CE,CD",
             "ACT": "OXT",
             "NAI": ""
-        }
+        },
+        "allow_ligand_on_existing_chain": true
     }
 }
 ```

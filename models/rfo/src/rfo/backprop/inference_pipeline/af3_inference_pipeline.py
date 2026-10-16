@@ -130,7 +130,10 @@ class AF3InferencePipeline:
         # Get config references
         self.distogram_config = self.cfg.model.net.distogram_head
 
-        # Construct pipeline (follows BaseInferenceEngine._construct_pipeline pattern)
+        self._initialize_pipeline()
+
+    def _initialize_pipeline(self):
+        """Build inference features without inheriting training-only assumptions."""
         first_val_dataset_key, first_val_dataset = next(
             iter(self.cfg.datasets.val.items())
         )
@@ -143,6 +146,12 @@ class AF3InferencePipeline:
             "n_recycles": self.n_recycles,
             "is_inference": True,
             "run_confidence_head": True,
+            # Sequence-built atoms have random placeholder coordinates. They
+            # cannot establish physical terminal bonds in a linear protein.
+            "add_cyclic_bonds": False,
+            # Public checkpoints may embed a training site's private cache.
+            # Override it explicitly, including values serialized in train_cfg.
+            "residue_cache_dir": None,
         }
         transform_cfg = OmegaConf.merge(
             first_val_dataset.dataset.transform,

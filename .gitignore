@@ -232,3 +232,6 @@ logs/
 # AI
 **/CLAUDE.md
 **/.claude
+
+# Local RFD3 measurements and machine-specific compiled artifacts
+/outs/

@@ -206,46 +206,91 @@ def assert_same_shape(tensor: Tensor, ref_tensor: Tensor) -> None:
     assert_shape(tensor, ref_tensor.shape)
 
 
+class _SegmentMean(torch.autograd.Function):
+    """Fixed-order mean with a differentiable backward (including double backward)."""
+
+    @staticmethod
+    def forward(ctx: Any, source: Tensor, lengths: Tensor) -> Tensor:
+        ctx.save_for_backward(lengths)
+        ctx.source_size = source.shape[0]
+        return torch.segment_reduce(source, "mean", lengths=lengths, axis=0)
+
+    @staticmethod
+    def backward(ctx: Any, grad_output: Tensor) -> tuple[Tensor, None]:
+        (lengths,) = ctx.saved_tensors
+        shape = (-1,) + (1,) * (grad_output.ndim - 1)
+        grad = grad_output / lengths.clamp_min(1).view(shape)
+        return grad.repeat_interleave(lengths, dim=0, output_size=ctx.source_size), None
+
+
 def scatter_mean(zeros: Tensor, dim: int, index: Tensor, source: Tensor) -> Tensor:
-    """Scatter-mean aggregation, with an MPS-compatible fallback.
+    """Average source entries by index, excluding the destination from each mean.
 
-    On non-MPS devices uses index_reduce (faster, in-place kernel).
-    On MPS, index_reduce is not implemented so falls back to scatter_add + count.
-
-    Equivalent to: zeros.index_reduce(dim, index, source, 'mean', include_self=False)
+    Unreferenced destinations retain their original values; neither input is mutated.
+    CPU/CUDA use a stable ordering and segmented reduction, so repeated calls with
+    identical inputs are deterministic without changing global PyTorch settings.
+    Half and BF16 inputs accumulate in FP32 and are cast back after division.
+    MPS uses a scatter-add fallback because segment_reduce is unavailable there.
 
     Args:
-        zeros: Pre-allocated zero tensor, shape (..., I, C). Will not be modified in-place.
-        dim: Dimension to scatter along. Must not be the last dimension.
-        index: 1D index tensor of shape (N,) mapping source positions to output positions.
-        source: Source tensor where size at `dim` equals N.
+        zeros: Destination tensor, shape (..., I, C); need not contain zeros.
+        dim: Dimension to scatter along.
+        index: 1D int32/int64 tensor of length N mapping source to destination.
+        source: Same dtype/device/shape as zeros except size N along dim.
 
     Returns:
-        Tensor of same shape as zeros.
+        Tensor with the same shape and dtype as zeros.
     """
-    if zeros.device.type != "mps":
-        return zeros.index_reduce(dim, index, source, "mean", include_self=False)
+    if source.ndim != zeros.ndim or not -source.ndim <= dim < source.ndim:
+        raise ValueError(
+            "source and destination must have matching ranks and a valid dim"
+        )
+    dim %= source.ndim
+    if index.ndim != 1 or index.dtype not in (torch.int32, torch.int64):
+        raise ValueError("index must be a one-dimensional int32 or int64 tensor")
+    if source.dtype != zeros.dtype or not source.is_floating_point():
+        raise ValueError(
+            "source and destination must have the same floating-point dtype"
+        )
+    if source.device != zeros.device or index.device != source.device:
+        raise ValueError("source, destination, and index must be on the same device")
+    if source.shape[dim] != index.numel() or any(
+        source.shape[d] != zeros.shape[d] for d in range(source.ndim) if d != dim
+    ):
+        raise ValueError("source shape must match destination except along dim")
 
-    ndim = source.dim()
-    if dim < 0:
-        dim = ndim + dim
-
-    # Expand 1D index (N,) to match source shape (..., N, C)
-    shape = [1] * ndim
-    shape[dim] = index.shape[0]
-    idx = index.view(shape).expand_as(source)
-
-    # Sum source values into output positions
-    result = zeros.scatter_add(dim, idx, source)
-
-    # Count how many source values land in each output position.
-    # Take a single slice along the last dim to avoid allocating a full (N, C) ones tensor.
-    idx_count = idx[..., :1]  # (..., N, 1)
-    ones = torch.ones_like(source[..., :1])  # (..., N, 1)
-    count = torch.zeros(*zeros.shape[:-1], 1, device=zeros.device, dtype=zeros.dtype)
-    count = count.scatter_add(dim, idx_count, ones)  # (..., I, 1)
-
-    return result / count.clamp(min=1)
+    index = index.long()
+    # Integer counts avoid low-precision count saturation. bincount also rejects
+    # negative indices; an oversized count vector detects out-of-range indices.
+    lengths = torch.bincount(
+        index.cpu() if index.device.type == "mps" else index,
+        minlength=zeros.shape[dim],
+    ).to(index.device)
+    if lengths.numel() != zeros.shape[dim]:
+        raise IndexError("scatter_mean index exceeds destination size")
+    if source.numel() == 0:
+        # Keep both autograd edges, including a zero-sized destination.
+        return zeros + source.sum() * 0
+    src = source.movedim(dim, 0)
+    dst = zeros.movedim(dim, 0)
+    shape = (-1,) + (1,) * (src.ndim - 1)
+    if source.device.type == "mps":
+        if src.dtype in (torch.float16, torch.bfloat16):
+            src = src.float()
+        expanded = index.view((-1,) + (1,) * (src.ndim - 1)).expand_as(src)
+        total = torch.zeros_like(dst, dtype=src.dtype).scatter_add(0, expanded, src)
+        means = total / lengths.clamp_min(1).view(shape)
+    else:
+        # Stable sorting preserves the source order within each group. Sorting
+        # and materialization scale with the source, not source x destination.
+        order = torch.argsort(index, stable=True)
+        ordered = src.index_select(0, order)
+        if ordered.dtype in (torch.float16, torch.bfloat16):
+            ordered = ordered.float()
+        means = _SegmentMean.apply(ordered, lengths)
+    return torch.where(lengths.view(shape) > 0, means.to(zeros.dtype), dst).movedim(
+        0, dim
+    )
 
 
 def device_of(obj: Any) -> torch.device:

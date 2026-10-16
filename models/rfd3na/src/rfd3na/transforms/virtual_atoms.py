@@ -2,6 +2,8 @@
 Virtual-atom transforms for Atom14
 """
 
+from typing import cast
+
 import biotite.structure as struc
 import numpy as np
 from atomworks.io.utils.atom_array_plus import insert_atoms
@@ -301,6 +303,11 @@ class PadTokensWithVirtualAtoms(Transform):
                 "gt_atom_name", np.empty(len(atom_array_padded), dtype="U4")
             )
 
+        # This is a one-body annotation; AW3 also types two-body accessors here.
+        gt_atom_names = cast(
+            np.ndarray, atom_array_padded.get_annotation("gt_atom_name")
+        )
+
         # Second pass: process tokens with proper atom name assignment after padding
         # Get updated token starts after padding
         starts_padded = get_token_starts(atom_array_padded, add_exclusive_stop=True)
@@ -328,7 +335,7 @@ class PadTokensWithVirtualAtoms(Transform):
                     atom_names = ATOM_NAMES
 
                 atom_array_padded.atom_name[start:end] = atom_names
-                atom_array_padded.get_annotation("gt_atom_name")[start:end] = atom_names
+                gt_atom_names[start:end] = atom_names
 
             elif is_non_paddable_residue[token_id]:
                 # When sequence-constrained, we want to directly map the residue name based on the sequence
@@ -336,7 +343,7 @@ class PadTokensWithVirtualAtoms(Transform):
                     atom_array_padded.atom_name[start:end],
                     atom_array_padded.res_name[start],
                 )
-                atom_array_padded.get_annotation("gt_atom_name")[start:end] = atom_names
+                gt_atom_names[start:end] = atom_names
                 atom_names = map_to_association_scheme(
                     atom_names,
                     res_name,
@@ -347,7 +354,7 @@ class PadTokensWithVirtualAtoms(Transform):
             else:
                 # ... Add gt_atom_name annotation to other tokens
                 atom_names = atom_array_padded.atom_name[start:end]
-                atom_array_padded.get_annotation("gt_atom_name")[start:end] = atom_names
+                gt_atom_names[start:end] = atom_names
 
             # ... Update atom array
             assert {VIRTUAL_ATOM_ELEMENT_NAME} != set(

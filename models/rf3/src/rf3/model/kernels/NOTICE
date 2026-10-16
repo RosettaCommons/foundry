@@ -1,0 +1,19 @@
+RF3 inference kernels
+
+Copyright 2026 Anthropic, PBC. Apache License 2.0; see LICENSE.
+Source: https://github.com/anthropics/uplifting-biomolecular-modeling
+Commit: f4f62fa6592ae4938d49b1757bea0cfeff9f468e
+
+exact_layer_norm.py and exactln_fwd.cu extract the standalone forward path from
+common/opt_core/opt_core/kernels/ln/exactln/{__init__.py,exactln_fwd.cu}.
+Modifications: native Foundry dispatch, per-device compilation, thread-local
+launch buffers, and removal of unused fusion, binary/disk caches and reporting.
+CUDA arithmetic and launch settings are retained. Only the measured shapes and software/GPU stack are enabled by
+rf3.model.layers.inference_kernels; all other calls retain PyTorch.
+
+This kernel restates the arithmetic order of PyTorch's CUDA LayerNorm forward
+(aten/src/ATen/native/cuda/layer_norm_kernel.cu). No PyTorch source file is
+included. PyTorch: Copyright (c) 2016- Facebook, Inc (Adam Paszke) and the other
+copyright holders named in PYTORCH_LICENSE, BSD-3-Clause.
+
+Runtime dependencies, not bundled: PyTorch (BSD-3-Clause), CUDA Python bindings (Apache-2.0), CUDA NVRTC (NVIDIA CUDA Toolkit EULA).

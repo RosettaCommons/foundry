@@ -9,9 +9,17 @@ from os import PathLike
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-from atomworks.constants import STANDARD_AA, STANDARD_DNA, STANDARD_RNA
+from atomworks.constants import (
+    AA_LIKE_CHEM_TYPES,
+    NA_LIKE_CHEM_TYPES,
+    STANDARD_AA,
+    STANDARD_DNA,
+    STANDARD_RNA,
+)
+from atomworks.enums import ChainType
+from atomworks.io.config import PrepareConfig
 from atomworks.io.parser import parse_atom_array
-from atomworks.io.utils.bonds import get_inferred_polymer_bonds
+from atomworks.io.utils.ccd import get_chem_comp_type, get_polymerization_atoms
 
 # from atomworks.ml.datasets.datasets import BaseDataset
 from atomworks.ml.transforms.base import TransformedDict
@@ -24,10 +32,10 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_validator,
     model_validator,
 )
 from rfd3.constants import (
-    INFERENCE_ANNOTATIONS,
     OPTIONAL_CONDITIONING_VALUES,
     REQUIRED_CONDITIONING_ANNOTATION_VALUES,
     REQUIRED_INFERENCE_ANNOTATIONS,
@@ -144,6 +152,14 @@ class DesignInputSpecification(BaseModel):
     cif_parser_args: Optional[Dict[str, Any]] = Field(None, description="CIF parser arguments")
     extra: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Extra metadata to include in output (useful for logging additional info in metadata)")
     dialect: int = Field(2, description="RFdiffusion3 input dialect. 1: legacy, 2: release.")
+    cyclic_chains: list[str] | None = Field(
+        None,
+        description=(
+            "Assembled design chain IDs to use for N-to-C cyclic residue positional "
+            "encoding. Supports one complete de novo canonical peptide in dialect 2; "
+            "None or [] keeps linear encoding."
+        ),
+    )
 
     # ========================================================================
     # Conditioning
@@ -371,6 +387,34 @@ class DesignInputSpecification(BaseModel):
     # Post-Validation
     # ========================================================================
 
+    @field_validator("cyclic_chains", mode="before")
+    @classmethod
+    def validate_cyclic_chains(cls, value: Any) -> list[str] | None:
+        """Validate the optional list of assembled cyclic chain IDs."""
+        if value is None:
+            return value
+        if not isinstance(value, list) or any(
+            not isinstance(chain, str) or not chain.strip() for chain in value
+        ):
+            raise ValueError("cyclic_chains must be a list of nonempty chain IDs.")
+        if len(set(value)) != len(value):
+            raise ValueError("cyclic_chains must not contain duplicate chain IDs.")
+        if len(value) > 1:
+            raise ValueError("cyclic_chains supports at most one chain per design.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_cyclic_modes(self) -> "DesignInputSpecification":
+        """Reject modes that do not support cyclic positional encoding."""
+        if self.cyclic_chains:
+            if self.dialect < 2:
+                raise ValueError("cyclic_chains requires dialect 2.")
+            if self.is_partial_diffusion:
+                raise ValueError("cyclic_chains does not support partial diffusion.")
+            if self.symmetry is not None and self.symmetry.id:
+                raise ValueError("cyclic_chains does not support symmetry.")
+        return self
+
     @model_validator(mode="after")
     def assert_exclusivity(self):
         with validator_context("assert_exclusivity"):
@@ -515,6 +559,7 @@ class DesignInputSpecification(BaseModel):
         # Apply post-processing
         atom_array = self._append_ligand(atom_array, atom_array_input_annotated)
         atom_array = self._apply_symmetry(atom_array, atom_array_input_annotated)
+        self._validate_cyclic_chain(atom_array)
 
         # Apply globals to all tokens (including diffused)
         atom_array = self._set_origin(atom_array)
@@ -545,6 +590,28 @@ class DesignInputSpecification(BaseModel):
     # ============================================================================
     # Building functions
     # ============================================================================
+
+    def _validate_cyclic_chain(self, atom_array: AtomArray) -> None:
+        """Check only the selected chain's chemistry and de novo provenance."""
+        if not self.cyclic_chains:
+            return
+        chain_id = self.cyclic_chains[0]
+        selected = atom_array[atom_array.chain_id == chain_id]
+        if len(selected) == 0:
+            raise ValueError(f"Cyclic chain {chain_id!r} is absent from the design.")
+        is_de_novo = all(
+            component.endswith("P") and component[:-1].isdigit()
+            for component in np.unique(selected.src_component)
+        )
+        if (
+            not is_de_novo
+            or not np.all(np.isin(selected.res_name, STANDARD_AA))
+            or np.any(selected.is_motif_atom_unindexed)
+        ):
+            raise ValueError(
+                f"Cyclic chain {chain_id!r} must be a complete de novo canonical "
+                "peptide, with no source-derived or unindexed residues."
+            )
 
     def _build_init(self, atom_array_input_annotated):
         # ... Fetch tokens
@@ -834,6 +901,8 @@ class DesignInputSpecification(BaseModel):
     @classmethod
     def safe_init(cls, **spec_kwargs):
         if spec_kwargs.get("dialect", 2) < 2:
+            if spec_kwargs.get("cyclic_chains"):
+                raise ValueError("cyclic_chains requires dialect 2.")
             warn = (
                 "Using dialect==1, which is deprecated and will be removed in future releases. "
                 "Please update your input specification to dialect=2 and use the new schema if possible"
@@ -884,12 +953,15 @@ def prepare_pipeline_input_from_atom_array(  # see atomworks.ml.datasets.parsers
     # Temporary spoof of chain IDs to ensure duplicates aren't dropped:
     result_dict = parse_atom_array(
         atom_array_orig,
-        remove_ccds=[],
-        fix_arginines=False,
-        add_missing_atoms=False,
-        extra_fields=INFERENCE_ANNOTATIONS,
-        build_assembly=None,
-        hydrogen_policy="remove",
+        config=PrepareConfig(
+            remove_ccds=(),
+            fix_arginines=False,
+            add_missing_atoms=False,
+            hydrogen_policy="remove",
+            # These are synthetic/partially diffused coordinates, not geometry
+            # from which authored motif bonds can be judged.
+            long_bond_policy="keep",
+        ),
     )
     atom_array = result_dict["asym_unit"][0]
 
@@ -926,6 +998,8 @@ def create_atom_array_from_design_specification(
     **spec_kwargs,
 ) -> tuple[AtomArray, dict]:
     if int(spec_kwargs.get("dialect", 2)) < 2:
+        if spec_kwargs.get("cyclic_chains"):
+            raise ValueError("cyclic_chains requires dialect 2.")
         warn = (
             "Using dialect==1, which is deprecated and will be removed in future releases. "
             "Please update your input specification to dialect=2 and use the new schema if possible"
@@ -1216,8 +1290,10 @@ def _add_backbone_bonds_for_nonstandard_residues(
     """
     Add backbone/polymer bonds for cases where at least one residue is non-standard.
 
-    Uses `atomworks.io.utils.bonds.get_inferred_polymer_bonds`, which consults CCD
-    chem-comp metadata to decide the correct polymerization atoms (C/N, CG/N, etc.).
+    Uses AtomWorks' CCD polymerization-site lookup (C/N, CG/N, etc.).
+    This is topology assembly for incomplete, synthetic design residues, so it
+    deliberately does not run coordinate-based bond filtering or full chemical
+    sanitization. Existing intra-residue and authored crosslinks are preserved.
     Only bonds involving at least one non-standard residue are added; standard
     AA/DNA/RNA pairs are assumed to already carry their backbone bonds.
     """
@@ -1235,10 +1311,47 @@ def _add_backbone_bonds_for_nonstandard_residues(
     }
     bonds_to_add: List[List[int]] = []
 
-    inferred_bonds, _ = get_inferred_polymer_bonds(atom_array_accum)
-    for atom_i_idx, atom_j_idx, bond_type in inferred_bonds:
-        atom_i_idx = int(atom_i_idx)
-        atom_j_idx = int(atom_j_idx)
+    starts = struc.get_residue_starts(atom_array_accum, add_exclusive_stop=True)
+    annotations = atom_array_accum.get_annotation_categories()
+    for start, next_start, stop in zip(starts[:-2], starts[1:-1], starts[2:]):
+        if atom_array_accum.chain_id[start] != atom_array_accum.chain_id[next_start]:
+            continue
+        if atom_array_accum.res_id[next_start] - atom_array_accum.res_id[start] > 1:
+            continue
+        if "transformation_id" in annotations and (
+            atom_array_accum.transformation_id[start]
+            != atom_array_accum.transformation_id[next_start]
+        ):
+            continue
+        first_type = get_chem_comp_type(atom_array_accum.res_name[start])
+        second_type = get_chem_comp_type(atom_array_accum.res_name[next_start])
+        if (first_type in AA_LIKE_CHEM_TYPES and second_type in NA_LIKE_CHEM_TYPES) or (
+            first_type in NA_LIKE_CHEM_TYPES and second_type in AA_LIKE_CHEM_TYPES
+        ):
+            # Independent attachment-site lookup must not invent a peptide/NA
+            # crosslink solely because the two residues are adjacent.
+            continue
+
+        def attachment(res_start, res_stop, side):
+            chain_type = (
+                ChainType.as_enum(atom_array_accum.chain_type[res_start])
+                if "chain_type" in annotations
+                else None
+            )
+            name = get_polymerization_atoms(
+                atom_array_accum.res_name[res_start], chain_type
+            )[side]
+            if name is None:
+                return None
+            indices = np.flatnonzero(
+                atom_array_accum.atom_name[res_start:res_stop] == name
+            )
+            return int(res_start + indices[0]) if len(indices) else None
+
+        atom_i_idx = attachment(start, next_start, 0)
+        atom_j_idx = attachment(next_start, stop, 1)
+        if atom_i_idx is None or atom_j_idx is None:
+            continue
 
         # Do not connect unindexed residues across residue boundaries
         if (unindexed_mask[atom_i_idx] or unindexed_mask[atom_j_idx]) and (
@@ -1260,7 +1373,7 @@ def _add_backbone_bonds_for_nonstandard_residues(
         if pair in existing_pairs:
             continue
         existing_pairs.add(pair)
-        bonds_to_add.append([pair[0], pair[1], int(bond_type)])
+        bonds_to_add.append([pair[0], pair[1], int(struc.BondType.SINGLE)])
 
     if bonds_to_add:
         new_bonds = struc.BondList(

@@ -2,7 +2,7 @@
 
 disorder_distillation:
   dataset:
-    _target_: atomworks.ml.datasets.StructuralDatasetWrapper
+    _target_: foundry.datasets.structure.StructuralDatasetWrapper
     save_failed_examples_to_dir: null
 
     # cif parser arguments

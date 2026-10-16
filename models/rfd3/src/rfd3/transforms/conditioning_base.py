@@ -291,7 +291,7 @@ class SampleConditioningType(Transform):
 
 class SampleConditioningFlags(Transform):
     requires_previous_transforms = [
-        "FlagAndReassignCovalentModifications",
+        "AnnotateCovalentModifications",
         "AssignTypes",
         "SampleConditioningType",
     ]  # We use is_protein in the PPI training condition

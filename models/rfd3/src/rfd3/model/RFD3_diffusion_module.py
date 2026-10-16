@@ -5,6 +5,7 @@ from contextlib import ExitStack
 
 import torch
 import torch.nn as nn
+from rfd3.model import inference_acceleration as accel
 from rfd3.model.layers.block_utils import (
     bucketize_scaled_distogram,
     create_attention_indices,
@@ -168,6 +169,18 @@ class RFD3DiffusionModule(nn.Module):
         C_L = C_L * (t_L > 0).float()[..., None]  # [B, L, C_atom]
         return C_L
 
+    def forward_batched(
+        self, X_noisy_L, t, f, Q_L_init, C_L, P_LL, S_I, Z_II, n_recycle=None
+    ):
+        """Padded inference with coordinates (B,D,L,3) and times (B,D)."""
+        from rfd3.model.batched_denoiser import denoise
+
+        if self.training:
+            raise ValueError("Padded batching currently supports inference only")
+        if X_noisy_L.ndim != 4 or t.shape != X_noisy_L.shape[:2]:
+            raise ValueError("Expected coordinates (B,D,L,3) and explicit times (B,D)")
+        return denoise(self, X_noisy_L, t, f, Q_L_init, C_L, P_LL, S_I, Z_II, n_recycle)
+
     def forward(
         self,
         X_noisy_L,
@@ -189,6 +202,10 @@ class RFD3DiffusionModule(nn.Module):
         Diffusion forward pass with recycling.
         Computes denoised positions given encoded features and noisy coordinates.
         """
+        if X_noisy_L.ndim == 4:
+            return self.forward_batched(
+                X_noisy_L, t, f, Q_L_init, C_L, P_LL, S_I, Z_II, n_recycle
+            )
         # ... Collect inputs
         tok_idx = f["atom_to_token_map"]
         L = len(tok_idx)
@@ -199,6 +216,8 @@ class RFD3DiffusionModule(nn.Module):
             n_attn_keys=self.n_attn_keys,
             n_attn_seq_neighbours=self.n_attn_seq_neighbours,
         )
+        if accel.enabled(self, X_noisy_L):
+            f["attn_indices"] = f["attn_indices"].sort(dim=-1).values.to(torch.int32)
 
         # ... Expand t tensors
         t_L = t.unsqueeze(-1).expand(-1, L) * (
@@ -214,7 +233,7 @@ class RFD3DiffusionModule(nn.Module):
 
         # ... Pool initial representation to sequence level
         A_I = self.process_a(R_noisy_L, tok_idx=tok_idx)
-        S_I = self.downcast_c(C_L, S_I, tok_idx=tok_idx)
+        S_I = accel.cached_projection(self.downcast_c, C_L, S_I, tok_idx=tok_idx)
 
         # ... Add batch-wise features to inputs
         Q_L = Q_L_init.unsqueeze(0) + self.process_r(R_noisy_L)

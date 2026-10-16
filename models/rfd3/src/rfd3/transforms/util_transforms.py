@@ -363,6 +363,39 @@ class RemoveTokensWithoutCorrespondingCentralAtom(Transform):
         return data
 
 
+def _resolve_cyclic_asym_ids(
+    atom_array: AtomArray,
+    token_starts: np.ndarray,
+    asym_id: np.ndarray,
+    chain_id: str,
+) -> np.ndarray:
+    """Resolve a selected peptide to its exclusive model chain identity."""
+    tokens = atom_array[token_starts]
+    selected = tokens.chain_id == chain_id
+    selected_ids = np.unique(asym_id[selected])
+    if len(selected_ids) != 1:
+        raise ValueError(
+            f"Cyclic chain {chain_id!r} must contain tokens with exactly one asym_id."
+        )
+    if not np.array_equal(asym_id == selected_ids[0], selected):
+        raise ValueError(
+            f"Cyclic chain {chain_id!r} must not share its asym_id with other chains."
+        )
+    selected_atoms = atom_array[atom_array.chain_id == chain_id]
+    selected_residue_indices = tokens.within_chain_res_idx[selected]
+    if (
+        np.any(selected_atoms.atomize)
+        or not np.all(np.isin(selected_atoms.res_name, STANDARD_AA))
+        or np.any(selected_atoms.is_motif_atom_unindexed)
+        or not np.all(np.diff(selected_residue_indices) == 1)
+    ):
+        raise ValueError(
+            f"Cyclic chain {chain_id!r} requires one canonical, nonatomized, indexed "
+            "token per consecutive residue."
+        )
+    return selected_ids.astype(np.int64)
+
+
 class EncodeAF3TokenLevelFeatures(Transform):
     def __init__(
         self,
@@ -408,6 +441,13 @@ class EncodeAF3TokenLevelFeatures(Transform):
         )
         # ... (within chain entity)
         sym_name, sym_id = get_within_entity_idx(token_level_array, level="pn_unit")
+
+        # Validate residue identity before sequence masking replaces names with GAP.
+        cyclic_chains = data.get("specification", {}).get("cyclic_chains") or []
+        if cyclic_chains:
+            data.setdefault("feats", {})["cyclic_asym_ids"] = _resolve_cyclic_asym_ids(
+                atom_array, token_starts, asym_id, cyclic_chains[0]
+            )
 
         # ... molecule type
         _aa_like_res_names = self.sequence_encoding.all_res_names[

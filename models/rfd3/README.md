@@ -183,6 +183,16 @@ additionally complete the following steps:
 2. Follow the installation instruction here: https://www.ebi.ac.uk/thornton-srv/software/HBPLUS/install.html
 3. Update `HBPLUS_PATH` in `foundry/.env` file with the path to your `hbplus` executable.
 
+## CUDA inference performance
+
+Inference defaults to `compile_model=true` and `inference_kernel_backend=auto`.
+Set `RFD3_COMPILE_CACHE_DIR` to choose a persistent compiler cache directory;
+when unset, `compile_cache_dir` is `None` and framework cache settings are unchanged.
+Custom CUDA kernels support
+padded input batches and multiple diffusion samples inside compiled inference.
+Eager single-input inference also supports token/atom-transformer CUDA graphs.
+See [setup, measurements, numerical checks and profiling commands](docs/inference_acceleration.md).
+
 ## Citation
 
 If you use this code or data in your work, please consider citing:

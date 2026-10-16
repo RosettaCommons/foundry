@@ -16,12 +16,12 @@ class AddCyclicBonds(Transform):
     chain as being cyclic.
 
     Requirements:
-        - Must be applied after "AddAF3TokenBondFeatures" and "EncodeAF3TokenLevelFeatures" transforms.
+        - Must be applied after "AddRF3TokenBondFeatures" and "EncodeAF3TokenLevelFeatures" transforms.
     """
 
     # need to do it after this transform, because we want to include poly-poly bonds, which AF3TokenBondFeatures does not.
     requires_previous_transforms = [
-        "AddAF3TokenBondFeatures",
+        "AddRF3TokenBondFeatures",
         "EncodeAF3TokenLevelFeatures",
         "AddGlobalTokenIdAnnotation",
     ]

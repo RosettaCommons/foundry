@@ -1,0 +1,10 @@
+{
+    "insulinr_macrocycle_12": {
+        "dialect": 2,
+        "input": "../input_pdbs/4zxb_cropped.pdb",
+        "contig": "12,/0,E6-155",
+        "cyclic_chains": ["A"],
+        "infer_ori_strategy": "hotspots",
+        "select_hotspots": {"E64": "CD2,CZ"}
+    }
+}

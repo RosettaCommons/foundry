@@ -86,6 +86,29 @@ From the above command, you should see several outputs:
 
 For this example, the pTM in the `5vht_from_json_summary_confidences.json` should be `>0.8` (even without an MSA); if not, there may be something wrong with your setup.
 
+## Attention backends
+
+These top-level `rf3 fold` options both default to `auto`:
+
+| Option | Values | Behavior |
+| --- | --- | --- |
+| `triangle_attention_backend` | `auto`, `vanilla`, `sdpa` | `auto` uses cuEquivariance when enabled/available, or the reference path; MPS inference uses native SDPA. `vanilla` forces the reference implementation; `sdpa` forces native PyTorch attention. |
+| `dense_attention_backend` | `auto`, `vanilla`, `sdpa` | Controls dense Pairformer/diffusion token attention. `auto` preserves the existing path except for MPS inference, which uses SDPA. Sparse atom attention is unaffected. |
+
+For example, append `triangle_attention_backend=vanilla dense_attention_backend=vanilla`
+to compare reference attention. Changing attention backends can change rounding;
+these options are independent of automatic LayerNorm selection below.
+
+## Exact inference kernels
+
+RF3 automatically uses the optimized CUDA LayerNorm kernels on H200 with
+Torch 2.11.0/CUDA 12.8 for large tensors. Other inference calls use PyTorch,
+with a warning once per fallback reason per process. No kernel-selection option
+or checkpoint conversion is needed; training and autograd use PyTorch silently.
+Whole-model bitwise comparisons require `CUBLAS_WORKSPACE_CONFIG=:4096:8` before
+CUDA initialization and `torch.use_deterministic_algorithms(True)` in both runs.
+The engine does not enable these process-wide settings automatically.
+
 ## Common Scenarios
 
 <details>

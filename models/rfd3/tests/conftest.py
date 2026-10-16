@@ -1,6 +1,20 @@
 import sys
 
+import pytest
 import rootutils
+import torch
+
+
+@pytest.fixture(autouse=True)
+def _batch_regression_seed(request):
+    """Keep synthetic batching regressions independent of test collection order."""
+    if request.module.__name__.startswith("test_rfd3_batch_"):
+        with torch.random.fork_rng(devices=[]):
+            torch.random.default_generator.manual_seed(0)
+            yield
+    else:
+        yield
+
 
 # The pre-existing per-model suite is cluster-coupled (needs IPD `/projects/ml/...` data,
 # GPU, or checkpoints) and is run locally on the cluster, not in the generic-environment

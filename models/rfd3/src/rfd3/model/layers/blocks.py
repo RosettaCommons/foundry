@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from einops import rearrange
+from rfd3.model import inference_acceleration as accel
 from rfd3.model.layers.attention import (
     GatedCrossAttention,
     LocalAttentionPairBias,
@@ -204,6 +205,8 @@ class LinearEmbedWithPool(nn.Module):
         super().__init__()
         self.c_token = c_token
         self.linear = linearNoBias(3, c_token)
+        # Inference-engine opt-in only; training always uses corrected pooling.
+        self.legacy_pooling = False
 
     def forward(self, R_L, tok_idx):
         B = R_L.shape[0]
@@ -214,6 +217,10 @@ class LinearEmbedWithPool(nn.Module):
             self.c_token,
         )
         Q_L = self.linear(R_L)
+        if self.legacy_pooling and not self.training:
+            return torch.zeros(
+                A_I_shape, device=R_L.device, dtype=Q_L.dtype
+            ).index_reduce(-2, tok_idx.long(), Q_L, "mean", include_self=False)
         A_I = scatter_mean(
             torch.zeros(A_I_shape, device=R_L.device, dtype=Q_L.dtype),
             -2,
@@ -274,6 +281,35 @@ class SimpleRecycler(nn.Module):
         return S_I, Z_II
 
 
+def _cyclic_residue_offsets(
+    offsets: torch.Tensor,
+    asym_id: torch.Tensor,
+    residue_index: torch.Tensor,
+    cyclic_asym_ids: torch.Tensor,
+) -> torch.Tensor:
+    """Wrap intrachain offsets for one canonical peptide, preserving half-ring ties.
+
+    Args:
+        offsets: Signed residue differences, with shape [I, I].
+        asym_id: Chain identities, with shape [I].
+        residue_index: Residue identities, with shape [I].
+        cyclic_asym_ids: The selected chain identity, with shape [1].
+
+    Returns:
+        Residue offsets with only the selected intrachain pairs wrapped.
+    """
+    selected = asym_id == cyclic_asym_ids[0]
+    length = residue_index[selected].unique().shape[0]
+    wrapped = torch.where(
+        2 * offsets > length,
+        offsets - length,
+        torch.where(2 * offsets < -length, offsets + length, offsets),
+    )
+    return torch.where(
+        selected.unsqueeze(-1) & selected.unsqueeze(-2), wrapped, offsets
+    )
+
+
 class RelativePositionEncodingWithIndexRemoval(nn.Module):
     """
     Usual RPE but utilizes `is_motif_atom_3d_unindexed` to ensure within-chain position is spoofed.
@@ -295,12 +331,21 @@ class RelativePositionEncodingWithIndexRemoval(nn.Module):
     def forward(self, f):
         b_samechain_II = f["asym_id"].unsqueeze(-1) == f["asym_id"].unsqueeze(-2)
         b_same_entity_II = f["entity_id"].unsqueeze(-1) == f["entity_id"].unsqueeze(-2)
+        residue_offsets = f["residue_index"].unsqueeze(-1) - f[
+            "residue_index"
+        ].unsqueeze(-2)
+        cyclic_asym_ids = f.get("cyclic_asym_ids")
+        if cyclic_asym_ids is not None and cyclic_asym_ids.numel() > 0:
+            residue_offsets = _cyclic_residue_offsets(
+                residue_offsets,
+                f["asym_id"],
+                f["residue_index"],
+                cyclic_asym_ids,
+            )
         d_residue_II = torch.where(
             b_samechain_II,
             torch.clip(
-                f["residue_index"].unsqueeze(-1)
-                - f["residue_index"].unsqueeze(-2)
-                + self.r_max,
+                residue_offsets + self.r_max,
                 0,
                 2 * self.r_max,
             ),
@@ -618,6 +663,13 @@ class LocalTokenTransformer(nn.Module):
             n_attn_seq_neighbours=self.n_local_tokens,
         )
 
+        if full and accel.graph_enabled(self, A_I):
+            return accel.graph_call(
+                self, self._forward_blocks, (A_I, S_I, Z_II, indices), full=full
+            )
+        return self._forward_blocks(A_I, S_I, Z_II, indices, full=full)
+
+    def _forward_blocks(self, A_I, S_I, Z_II, indices, *, full):
         for i, block in enumerate(self.blocks):
             # Set checkpointing
             block.attention_pair_bias.use_checkpointing = not DISABLE_CHECKPOINTING
@@ -651,8 +703,25 @@ class LocalAtomTransformer(nn.Module):
         )
 
     def forward(self, Q_L, C_L, P_LL, **kwargs):
+        if (
+            accel.graph_enabled(self, Q_L)
+            and isinstance(C_L, torch.Tensor)
+            and isinstance(P_LL, torch.Tensor)
+            and set(kwargs) == {"indices"}
+        ):
+            return accel.graph_call(
+                self,
+                self._forward_graph,
+                (Q_L, C_L, P_LL, kwargs["indices"]),
+                full=False,
+            )
         for block in self.blocks:
             Q_L = block(Q_L, C_L, P_LL, **kwargs)
+        return Q_L
+
+    def _forward_graph(self, Q_L, C_L, P_LL, indices, *, full):
+        for block in self.blocks:
+            Q_L = block(Q_L, C_L, P_LL, indices=indices, full=full)
         return Q_L
 
 
@@ -741,6 +810,64 @@ class CompactStreamingDecoder(nn.Module):
         self.downcast = Downcast(c_atom=c_atom, c_token=c_token, c_s=c_s, **downcast)
 
     def forward(
+        self,
+        A_I,
+        S_I,
+        Z_II,
+        Q_L,
+        C_L,
+        P_LL,
+        tok_idx,
+        indices,
+        f=None,
+        chunked_pairwise_embedder=None,
+        initializer_outputs=None,
+    ):
+        if (
+            accel.graph_enabled(self, Q_L)
+            and accel.indexing_enabled()
+            and chunked_pairwise_embedder is None
+            and isinstance(P_LL, torch.Tensor)
+        ):
+            # Token membership is fixed throughout a rollout. Key the graph by
+            # its identity so another same-shaped CFG mapping gets fresh masks.
+            return accel.graph_call(
+                self,
+                self._forward_graph,
+                (A_I, S_I, Z_II, Q_L, C_L, P_LL, tok_idx, indices),
+                full=False,
+                constant_inputs=(6,),
+            )
+        return self._forward(
+            A_I,
+            S_I,
+            Z_II,
+            Q_L,
+            C_L,
+            P_LL,
+            tok_idx,
+            indices,
+            f=f,
+            chunked_pairwise_embedder=chunked_pairwise_embedder,
+            initializer_outputs=initializer_outputs,
+        )
+
+    def _forward_graph(
+        self,
+        A_I,
+        S_I,
+        Z_II,
+        Q_L,
+        C_L,
+        P_LL,
+        tok_idx,
+        indices,
+        *,
+        full,
+    ):
+        return self._forward(A_I, S_I, Z_II, Q_L, C_L, P_LL, tok_idx, indices)
+
+    def _forward(
         self,
         A_I,
         S_I,

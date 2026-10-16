@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from torch import Tensor
 from torch.optim.lr_scheduler import LRScheduler, _LRScheduler
 from torch.optim.optimizer import Optimizer
 
@@ -46,7 +47,7 @@ class AF3Scheduler(_LRScheduler):
         self.decay_steps = decay_steps
         super(AF3Scheduler, self).__init__(optimizer, last_epoch)
 
-    def get_lr(self) -> list[float]:
+    def get_lr(self) -> list[float | Tensor]:
         if self.last_epoch < self.warmup_steps:
             # Linear warmup
             return [

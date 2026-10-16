@@ -15,6 +15,7 @@ many of the machine learning models produced by `Rosetta Commons member labs <ht
    
    license_link.rst
    installation_faq.md
+   atomworks3_port.md
    contributing_link.rst
 
 .. toctree::
