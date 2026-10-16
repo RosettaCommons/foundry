@@ -6,10 +6,9 @@ Python branches or variable-size boolean indexing and may be captured fullgraph.
 
 import torch
 import torch.nn.functional as F
+from rfd3._core.model.layers.attention import dense_pair_attention, use_dense_sdpa
 from rfd3.model import inference_acceleration as accel
 from rfd3.model.kernel_ops import padded_attention
-
-from foundry.model.layers.attention import dense_pair_attention, use_dense_sdpa
 
 
 @torch.library.custom_op("rfd3::sort_neighbor_values", mutates_args=())

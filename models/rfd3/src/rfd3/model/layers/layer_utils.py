@@ -4,11 +4,10 @@ from functools import partial
 import numpy as np
 import torch
 import torch.nn as nn
+from rfd3._core.training.checkpoint import activation_checkpointing
+from rfd3._core.utils.ddp import RankedLogger
 from rfd3.model import inference_acceleration as accel
 from torch.nn.functional import silu
-
-from foundry.training.checkpoint import activation_checkpointing
-from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 try:

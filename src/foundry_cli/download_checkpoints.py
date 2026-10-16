@@ -18,13 +18,14 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-from foundry.inference_engines.checkpoint_registry import (
+from foundry_cli.checkpoints import (
     REGISTERED_CHECKPOINTS,
     append_checkpoint_to_env,
     get_default_checkpoint_dirs,
 )
 
-load_dotenv(override=True)
+# Explicit runtime configuration takes precedence over repository defaults.
+load_dotenv(override=False)
 
 app = typer.Typer(help="Foundry model checkpoint installation utilities")
 console = Console()

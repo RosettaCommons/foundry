@@ -13,11 +13,11 @@ from atomworks.io.utils.io_utils import to_cif_file
 from biotite.structure import AtomArray, AtomArrayStack
 from toolz import merge_with
 
-from foundry.common import exists
-from foundry.inference_engines.base import BaseInferenceEngine
-from foundry.model.layers.attention import validate_attention_backend
-from foundry.utils.alignment import weighted_rigid_align
-from foundry.utils.ddp import RankedLogger
+from rfd3._core.common import exists
+from rfd3._core.inference_engines.base import BaseInferenceEngine
+from rfd3._core.model.layers.attention import validate_attention_backend
+from rfd3._core.utils.alignment import weighted_rigid_align
+from rfd3._core.utils.ddp import RankedLogger
 from rfd3.constants import SAVED_CONDITIONING_ANNOTATIONS
 from rfd3.inference.batching import (
     DEFAULT_COMPILE_ATOM_BUCKETS,

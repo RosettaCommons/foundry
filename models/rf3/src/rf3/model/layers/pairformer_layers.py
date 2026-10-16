@@ -1,4 +1,12 @@
 import torch
+from rf3._core.model.layers.attention import (
+    dense_pair_attention,
+    use_dense_sdpa,
+    validate_attention_backend,
+)
+from rf3._core.model.layers.blocks import Dropout
+from rf3._core.training.checkpoint import activation_checkpointing
+from rf3._core.utils.torch import scatter_mean
 from rf3.data.ground_truth_template import (
     af3_noise_scale_to_noise_level,
 )
@@ -18,15 +26,6 @@ from rf3.model.layers.outer_product import (
 from rf3.model.RF3_blocks import MSAPairWeightedAverage, MSASubsampleEmbedder
 from torch import nn
 from torch.nn.functional import one_hot, relu
-
-from foundry.model.layers.attention import (
-    dense_pair_attention,
-    use_dense_sdpa,
-    validate_attention_backend,
-)
-from foundry.model.layers.blocks import Dropout
-from foundry.training.checkpoint import activation_checkpointing
-from foundry.utils.torch import scatter_mean
 
 
 class AtomAttentionEncoderPairformer(nn.Module):

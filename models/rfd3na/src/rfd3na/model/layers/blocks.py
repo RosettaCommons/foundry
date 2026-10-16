@@ -6,6 +6,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from einops import rearrange
+from rfd3na._core import DISABLE_CHECKPOINTING
+from rfd3na._core.common import exists
 from rfd3na.model.layers.attention import (
     GatedCrossAttention,
     LocalAttentionPairBias,
@@ -27,9 +29,6 @@ from rfd3na.model.layers.layer_utils import (
 )
 from rfd3na.model.layers.pairformer_layers import PairformerBlock
 from torch.nn.functional import one_hot
-
-from foundry import DISABLE_CHECKPOINTING
-from foundry.common import exists
 
 logger = logging.getLogger(__name__)
 

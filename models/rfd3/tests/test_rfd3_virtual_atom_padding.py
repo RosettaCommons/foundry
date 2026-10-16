@@ -18,6 +18,7 @@ import pytest
 import torch
 from atomworks.io.utils.atom_array_plus import AtomArrayPlus, insert_atoms
 from atomworks.ml.utils.token import get_token_starts
+from rfd3._core.common import exists
 from rfd3.constants import ATOM14_ATOM_NAMES, VIRTUAL_ATOM_ELEMENT_NAME
 from rfd3.inference.input_parsing import DesignInputSpecification
 from rfd3.transforms.pipelines import build_atom14_base_pipeline
@@ -30,8 +31,6 @@ from rfd3.transforms.virtual_atoms import (
     map_to_association_scheme,
     permute_symmetric_atom_names_,
 )
-
-from foundry.common import exists
 
 INPUT_PDBS = Path(__file__).resolve().parents[1] / "docs" / "input_pdbs"
 

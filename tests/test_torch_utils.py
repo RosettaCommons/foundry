@@ -4,7 +4,7 @@ import pytest
 import torch
 
 os.environ["NAN_CHECKING"] = "True"
-from foundry.utils.torch import (
+from rf3._core.utils.torch import (
     Timer,
     Timers,
     assert_no_nans,

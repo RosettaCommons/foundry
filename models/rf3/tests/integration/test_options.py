@@ -9,6 +9,7 @@ only inspect the resulting files and metrics.
 """
 
 import pytest
+
 from conftest import (
     assert_chain_count,
     assert_standard_outputs,

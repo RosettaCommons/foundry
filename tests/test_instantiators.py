@@ -1,4 +1,4 @@
-"""Unit tests for foundry.utils.instantiators.
+"""Unit tests for rf3._core.utils.instantiators.
 
 These helpers turn a hydra config group into a list of instantiated objects.
 The contract worth pinning is the control flow, not the object type: a missing /
@@ -13,8 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 from omegaconf import OmegaConf
-
-from foundry.utils.instantiators import (
+from rf3._core.utils.instantiators import (
     InstantiationError,
     _can_be_instantiated,
     instantiate_callbacks,

@@ -1,6 +1,10 @@
 import torch
 from beartype.typing import Any
 from lightning_utilities import apply_to_collection
+from mpnn._core.metrics.metric import MetricManager
+from mpnn._core.trainers.fabric import FabricTrainer
+from mpnn._core.utils.ddp import RankedLogger
+from mpnn._core.utils.torch import assert_no_nans
 from mpnn.loss.nll_loss import LabelSmoothedNLLLoss
 from mpnn.metrics.nll import NLL, InterfaceNLL
 from mpnn.metrics.sequence_recovery import (
@@ -9,11 +13,6 @@ from mpnn.metrics.sequence_recovery import (
 )
 from mpnn.model.mpnn import LigandMPNN, ProteinMPNN
 from omegaconf import DictConfig
-
-from foundry.metrics.metric import MetricManager
-from foundry.trainers.fabric import FabricTrainer
-from foundry.utils.ddp import RankedLogger
-from foundry.utils.torch import assert_no_nans
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

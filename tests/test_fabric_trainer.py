@@ -1,4 +1,4 @@
-"""Unit tests for the pure pieces of foundry.trainers.fabric.
+"""Unit tests for the pure pieces of rf3._core.trainers.fabric.
 
 ``FabricTrainer`` is training-orchestration glue (fit / train / validation loops,
 checkpoint save-load, optimizer/scheduler stepping) that needs a real model,
@@ -12,8 +12,7 @@ latent bug in the roadmap). These tests pin the *current* behaviour.
 """
 
 import pytest
-
-from foundry.trainers.fabric import FabricTrainer
+from rf3._core.trainers.fabric import FabricTrainer
 
 
 def test_get_latest_checkpoint_returns_none_for_missing_dir(tmp_path):

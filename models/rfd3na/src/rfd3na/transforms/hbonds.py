@@ -12,9 +12,8 @@ from atomworks.ml.transforms._checks import (
 )
 from atomworks.ml.transforms.base import Transform
 from biotite.structure import AtomArray, AtomArrayStack
+from rfd3na._core.utils.ddp import RankedLogger
 from rfd3na.constants import SELECTION_NONPROTEIN, SELECTION_PROTEIN
-
-from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger()
 

@@ -1,4 +1,4 @@
-"""Unit tests for foundry.training.EMA.
+"""Unit tests for rf3._core.training.EMA.
 
 `EMA` keeps a shadow copy of a model whose parameters track the live model via
 the exponential-moving-average update
@@ -12,8 +12,7 @@ training and to the shadow while evaluating.
 import pytest
 import torch
 import torch.nn as nn
-
-from foundry.training.EMA import EMA
+from rf3._core.training.EMA import EMA
 
 
 class _TinyModel(nn.Module):

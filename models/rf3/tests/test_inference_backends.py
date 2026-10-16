@@ -35,9 +35,8 @@ def test_cli_composes_real_config(monkeypatch):
 
 
 def test_backend_override_reaches_all_model_copies(monkeypatch):
+    from rf3._core.inference_engines.base import BaseInferenceEngine
     from rf3.model.layers.attention import TriangleAttention
-
-    from foundry.inference_engines.base import BaseInferenceEngine
 
     obj = RF3InferenceEngine.__new__(RF3InferenceEngine)
     obj.initialized_ = True

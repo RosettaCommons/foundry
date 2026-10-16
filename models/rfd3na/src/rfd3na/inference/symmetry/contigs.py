@@ -1,6 +1,5 @@
 import numpy as np
-
-from foundry.utils.components import fetch_mask_from_idx
+from rfd3na._core.utils.components import fetch_mask_from_idx
 
 
 def expand_contig_to_resid_from_string(contig_string):

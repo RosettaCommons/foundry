@@ -1,4 +1,4 @@
-"""Unit tests for foundry.model.layers.blocks.
+"""Unit tests for rf3._core.model.layers.blocks.
 
 ``FourierEmbedding`` and ``Dropout`` are small CPU nn.Modules. Their
 deterministic, reachable behaviours are pinned here: the Fourier features are
@@ -9,8 +9,7 @@ drops entire rows/columns rather than individual entries.
 """
 
 import torch
-
-from foundry.model.layers.blocks import Dropout, FourierEmbedding
+from rf3._core.model.layers.blocks import Dropout, FourierEmbedding
 
 
 def test_fourier_embedding_shape_and_cosine_range():

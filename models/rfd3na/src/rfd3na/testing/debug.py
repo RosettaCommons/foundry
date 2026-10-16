@@ -13,6 +13,7 @@ import tree
 from atomworks.ml.utils.token import (
     get_token_starts,
 )
+from rfd3na._core.utils.ddp import set_accelerator_based_on_availability
 from rfd3na.testing.testing_utils import (
     TEST_CFG_TRAIN,
     TEST_JSON_DATA,
@@ -20,8 +21,6 @@ from rfd3na.testing.testing_utils import (
     instantiate_example,
     load_train_or_val_cfg,
 )
-
-from foundry.utils.ddp import set_accelerator_based_on_availability
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

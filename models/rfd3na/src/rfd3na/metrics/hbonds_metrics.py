@@ -5,6 +5,8 @@ import biotite.structure as struc
 import numpy as np
 from atomworks.enums import ChainType
 from atomworks.io.transforms.atom_array import remove_hydrogens
+from rfd3na._core.metrics.metric import Metric
+from rfd3na._core.utils.ddp import RankedLogger
 from rfd3na.constants import (
     ATOM14_ATOM_NAMES,
     SELECTION_NONPROTEIN,
@@ -15,9 +17,6 @@ from rfd3na.transforms.hbonds import (
     add_hydrogen_atom_positions,
     calculate_hbonds,
 )
-
-from foundry.metrics.base import Metric
-from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 global_logger = RankedLogger(__name__, rank_zero_only=False)

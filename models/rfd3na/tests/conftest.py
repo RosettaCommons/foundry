@@ -1,7 +1,5 @@
 """Test configuration for rfd3na tests."""
 
-from foundry.testing import configure_pytest
-
 # The pre-existing rfd3na suite is cluster-coupled: every file below builds pipelines via
 # `rfd3na.testing.testing_utils` / `build_pipelines(...)` at module import (needing IPD
 # `/projects/ml/...` data, configs, or the `transforms/regression_test_data`), so it fails
@@ -22,8 +20,3 @@ collect_ignore = [
     "test_unindexing.py",
     "transforms",
 ]
-
-
-def pytest_configure(config):
-    """Configure pytest for rfd3na tests."""
-    configure_pytest(config, __file__)

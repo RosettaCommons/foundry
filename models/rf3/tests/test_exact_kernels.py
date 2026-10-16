@@ -219,7 +219,7 @@ def test_cuda_nondefault_stream(cuda_stack):
 
 
 def test_inference_fallback_warns_once_even_in_quiet_mode(caplog):
-    from foundry.utils.logging import configure_minimal_inference_logging
+    from rf3._core.utils.logging import configure_minimal_inference_logging
 
     _warn_fallback.cache_clear()
     model = nn.Sequential(nn.LayerNorm(128), nn.LayerNorm(128)).eval()

@@ -10,8 +10,7 @@ from atomworks.ml.datasets.parsers import (
     InterfacesDFParser,
     PNUnitsDFParser,
 )
-
-from foundry.datasets.structure import StructuralDatasetWrapper
+from rf3._core.datasets.structure import StructuralDatasetWrapper
 
 
 @pytest.mark.parametrize("kind", ["generic", "pn_unit", "interface"])

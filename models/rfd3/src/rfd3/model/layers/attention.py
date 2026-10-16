@@ -7,6 +7,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from opt_einsum import contract as einsum
+from rfd3._core.common import exists
+from rfd3._core.model.layers.attention import (
+    dense_pair_attention,
+    use_dense_sdpa,
+    validate_attention_backend,
+)
+from rfd3._core.training.checkpoint import activation_checkpointing
+from rfd3._core.utils.ddp import RankedLogger
 from rfd3.model import inference_acceleration as accel
 from rfd3.model.layers.block_utils import (
     create_attention_indices,
@@ -18,15 +26,6 @@ from rfd3.model.layers.layer_utils import (
     RMSNorm,
     linearNoBias,
 )
-
-from foundry.common import exists
-from foundry.model.layers.attention import (
-    dense_pair_attention,
-    use_dense_sdpa,
-    validate_attention_backend,
-)
-from foundry.training.checkpoint import activation_checkpointing
-from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

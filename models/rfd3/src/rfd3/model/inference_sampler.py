@@ -6,17 +6,16 @@ from typing import Any, Literal
 
 import torch
 from jaxtyping import Float
-from rfd3.inference.symmetry.atom_array import FIXED_ENTITY_ID
-from rfd3.inference.symmetry.symmetry_utils import apply_symmetry_to_xyz_atomwise
-from rfd3.model.cfg_utils import strip_X
-
-from foundry.common import exists
-from foundry.utils.alignment import weighted_rigid_align
-from foundry.utils.ddp import RankedLogger
-from foundry.utils.rotation_augmentation import (
+from rfd3._core.common import exists
+from rfd3._core.utils.alignment import weighted_rigid_align
+from rfd3._core.utils.ddp import RankedLogger
+from rfd3._core.utils.rotation_augmentation import (
     rot_vec_mul,
     uniform_random_rotation,
 )
+from rfd3.inference.symmetry.atom_array import FIXED_ENTITY_ID
+from rfd3.inference.symmetry.symmetry_utils import apply_symmetry_to_xyz_atomwise
+from rfd3.model.cfg_utils import strip_X
 
 logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)

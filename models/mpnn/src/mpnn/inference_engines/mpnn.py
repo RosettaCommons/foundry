@@ -12,6 +12,10 @@ from atomworks.constants import (
 )
 from atomworks.ml.utils.token import get_token_starts, spread_token_wise
 from biotite.structure import AtomArray
+from mpnn._core.compat import load_checkpoint
+from mpnn._core.metrics.metric import MetricManager
+from mpnn._core.utils.ddp import RankedLogger
+from mpnn.checkpoints import REGISTERED_CHECKPOINTS
 from mpnn.collate.feature_collator import FeatureCollator
 from mpnn.metrics.nll import MPNNConfidence, MPNNLigandInterfaceConfidence
 from mpnn.metrics.sequence_recovery import (
@@ -28,10 +32,6 @@ from mpnn.utils.inference import (
     _absolute_path_or_none,
 )
 from mpnn.utils.weights import load_legacy_weights
-
-from foundry.inference_engines.checkpoint_registry import REGISTERED_CHECKPOINTS
-from foundry.metrics.metric import MetricManager
-from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 
@@ -183,9 +183,7 @@ class MPNNInferenceEngine:
             ranked_logger.info("Loading MPNN weights.")
 
             # Load the checkpoint.
-            checkpoint = torch.load(
-                self.checkpoint_path, map_location="cpu", weights_only=False
-            )
+            checkpoint = load_checkpoint(self.checkpoint_path)
 
             # Check that checkpoint is a dict.
             if not isinstance(checkpoint, dict) or "model" not in checkpoint:

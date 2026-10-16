@@ -1,11 +1,10 @@
 import numpy as np
+from rfd3._core.utils.ddp import RankedLogger
 from rfd3.inference.symmetry.contigs import (
     expand_contig_unsym_motif,
     get_unsym_motif_mask,
 )
 from rfd3.transforms.conditioning_base import get_motif_features
-
-from foundry.utils.ddp import RankedLogger
 
 MIN_ATOMS_ALIGN = 30
 MAX_TRANSFORMS = 10

@@ -1,4 +1,4 @@
-"""Unit tests for foundry.metrics.losses.
+"""Unit tests for rf3._core.metrics.losses.
 
 `Loss` aggregates a set of child loss functions: its `forward` sums their scalar
 losses, merges their per-loss dicts, and records the (detached) running total
@@ -9,8 +9,7 @@ exercise the aggregation logic without a config.
 
 import pytest
 import torch
-
-from foundry.metrics.losses import Loss
+from rf3._core.metrics.losses import Loss
 
 
 def _stub_loss(value: float, extra: dict, requires_grad: bool = False):

@@ -26,10 +26,9 @@ from atomworks.ml.utils.token import (
     spread_token_wise,
 )
 from biotite.structure import AtomArray
+from rfd3._core.utils.ddp import RankedLogger
 from rfd3.transforms.conditioning_utils import sample_island_tokens
 from scipy.spatial import KDTree
-
-from foundry.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

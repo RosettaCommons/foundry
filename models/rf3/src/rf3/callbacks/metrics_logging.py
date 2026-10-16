@@ -6,10 +6,9 @@ import pandas as pd
 from atomworks.ml.utils import nested_dict
 from beartype.typing import Any, Literal
 from omegaconf import ListConfig
-
-from foundry.callbacks.callback import BaseCallback
-from foundry.utils.ddp import RankedLogger
-from foundry.utils.logging import (
+from rf3._core.callbacks.callback import BaseCallback
+from rf3._core.utils.ddp import RankedLogger
+from rf3._core.utils.logging import (
     condense_count_columns_of_grouped_df,
     print_df_as_table,
 )

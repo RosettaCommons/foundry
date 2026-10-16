@@ -1,4 +1,4 @@
-"""Unit tests for foundry.training.checkpoint.
+"""Unit tests for rf3._core.training.checkpoint.
 
 `create_custom_forward` adapts a kwargs-taking callable into the positional-only
 shape `torch.utils.checkpoint` requires, by binding the kwargs into a closure.
@@ -10,8 +10,10 @@ match the non-checkpointed result) on the checkpointed path.
 
 import pytest
 import torch
-
-from foundry.training.checkpoint import activation_checkpointing, create_custom_forward
+from rf3._core.training.checkpoint import (
+    activation_checkpointing,
+    create_custom_forward,
+)
 
 
 def test_create_custom_forward_binds_fixed_kwargs():

@@ -1,5 +1,5 @@
 store_validation_metrics_in_df_callback:
-    _target_: foundry.callbacks.metrics_logging.StoreValidationMetricsInDFCallback
+    _target_: rfd3._core.callbacks.metrics_logging.StoreValidationMetricsInDFCallback
     save_dir: ${paths.output_dir}/val_metrics
     metrics_to_save: "all"
 

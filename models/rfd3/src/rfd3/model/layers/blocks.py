@@ -6,6 +6,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from atomworks.ml.encoding_definitions import AF3SequenceEncoding
 from einops import rearrange
+from rfd3._core import DISABLE_CHECKPOINTING
+from rfd3._core.common import exists
+from rfd3._core.utils.torch import scatter_mean
 from rfd3.model import inference_acceleration as accel
 from rfd3.model.layers.attention import (
     GatedCrossAttention,
@@ -28,10 +31,6 @@ from rfd3.model.layers.layer_utils import (
 )
 from rfd3.model.layers.pairformer_layers import PairformerBlock
 from torch.nn.functional import one_hot
-
-from foundry import DISABLE_CHECKPOINTING
-from foundry.common import exists
-from foundry.utils.torch import scatter_mean
 
 logger = logging.getLogger(__name__)
 

@@ -5,14 +5,13 @@ from atomworks.ml.utils.token import (
     get_token_starts,
 )
 from biotite.structure import AtomArray
+from rfd3na._core.metrics.metric import Metric
+from rfd3na._core.utils.ddp import RankedLogger
 from rfd3na.trainer.trainer_utils import (
     _cleanup_virtual_atoms_and_assign_atom_name_elements,
     _readout_seq_from_struc,
 )
 from rfd3na.transforms.na_geom_utils import annotate_na_ss
-
-from foundry.metrics.metric import Metric
-from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 global_logger = RankedLogger(__name__, rank_zero_only=False)

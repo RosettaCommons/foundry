@@ -116,36 +116,32 @@ MPNN installation instructions.
 
 ### Code Organization
 
-**Strict dependency flow:** `foundry` → `atomworks`
+Foundry 1.0.0 ships the tools in one `rc-foundry` distribution. Each tool owns
+its runtime infrastructure under `models/<tool>/src/<tool>/_core/`. Model
+checkpoint registries live in `<tool>/checkpoints.py`. Structure I/O and featurization
+continue to use AtomWorks 3. RFO explicitly uses RF3 for prediction.
 
-- **atomworks**: Structure I/O, preprocessing, featurization
-- **foundry**: Model architectures, training, inference endpoints
-- **models/\<model\>:** Released models.
+The shared `foundry` Python package has been removed. Custom Python imports and
+Hydra `_target_` paths must use the corresponding tool's namespace (for example,
+`foundry.utils.torch` becomes `rfd3._core.utils.torch` for RFD3). Existing released
+checkpoints are translated when loaded; weights are unchanged. The `foundry`
+checkpoint CLI, model CLIs, checkpoint locations, and `FOUNDRY_*` environment
+variables are retained. Numerical settings, including RFD3's fast/legacy modes,
+are unchanged by this refactor.
 
-#### For Core Developers (Multiple Packages)
-
-Install both `foundry` and models in editable mode for development:
+Install for development and run the CPU regression suite:
 
 ```bash
 uv pip install -e '.[all,dev]'
+pytest
 ```
-
-This approach allows you to:
-- Modify `foundry` shared utilities and see changes immediately
-- Work on specific models without installing all models
-- Add new models as independent packages in `models/`
-
-> [!NOTE]
-> Running tests is not currently supported, test files may be missing.
 
 ### Adding New Models
 
-To add a new model:
-
-1. Create `models/<model_name>/` directory with its own `pyproject.toml`
-2. Add `foundry` as a dependency
-3. Implement model-specific code in `models/<model_name>/src/`
-4. Users can install with: `uv pip install -e ./models/<model_name>`
+1. Create `models/<model_name>/src/<model_name>/` with model-owned infrastructure.
+2. Add its package, entry point, and optional dependencies to the root `pyproject.toml`.
+3. Add model tests under `models/<model_name>/tests/` and include them in `testpaths`.
+4. Register downloadable checkpoints with `foundry_cli.checkpoints` when applicable.
 
 ### Pre-commit Formatting
 
@@ -168,6 +164,19 @@ If you use this repository code or data in your work, please cite the relavant w
   author={Corley, Nathaniel and Mathis, Simon and Krishna, Rohith and Bauer, Magnus S and Thompson, Tuscan R and Ahern, Woody and Kazman, Maxwell W and Brent, Rafael I and Didi, Kieran and Kubaney, Andrew and others},
   journal={bioRxiv},
   year={2025}
+}
+
+@article{butcher2026_rfdiffusion3_science,
+    author = {Jasper Butcher  and Rohith Krishna  and Raktim Mitra  and Seth M. Woodbury  and Donghyo Kim  and Rafael I. Brent  and Yanjing Li  and Nathaniel Corley  and Andrew Favor  and Anqi Chen  and Paul T. Kim  and Jonathan Funk  and Gabriela Bastidas Reinoso  and Kejia Wu  and Aiko Muraishi  and Helen E. Eisenach  and Saman Salike  and Simon Mathis  and Tuscan Rock Thompson  and Antonia Ruder  and Enisha Sehgal  and Andrew Kubaney  and Jie Chen  and Yuliya Politanska  and Brian Coventry  and Odin Zhang  and Florence J. Hardy  and Bo Qiang  and Kieran Didi  and Maxwell Kazman  and Lars L. Schaaf  and Frank DiMaio  and David Baker },
+    title = {Atomic functional site scaffolding in biopolymers with RFdiffusion3},
+    journal = {Science},
+    volume = {0},
+    number = {0},
+    pages = {eaeh2982},
+    year = {},
+    doi = {10.1126/science.aeh2982},
+    URL = {https://www.science.org/doi/abs/10.1126/science.aeh2982},
+    eprint = {https://www.science.org/doi/pdf/10.1126/science.aeh2982}
 }
 
 @article {butcher2025_rfdiffusion3,

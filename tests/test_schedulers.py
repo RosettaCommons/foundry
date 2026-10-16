@@ -1,4 +1,4 @@
-"""Unit tests for foundry.training.schedulers.
+"""Unit tests for rf3._core.training.schedulers.
 
 `AF3Scheduler` implements the AF-3 two-phase learning-rate schedule: a linear
 warmup from 0 to `base_lr` over `warmup_steps`, then a geometric decay by
@@ -9,9 +9,8 @@ config wrapper whose state-dict round-trip is also pinned.
 
 import pytest
 import torch
+from rf3._core.training.schedulers import AF3Scheduler, SchedulerConfig
 from torch.optim import SGD
-
-from foundry.training.schedulers import AF3Scheduler, SchedulerConfig
 
 # Small, exact schedule: base_lr=1.0 keeps the expected LR values trivial.
 _KW = dict(base_lr=1.0, warmup_steps=10, decay_factor=0.5, decay_steps=20)

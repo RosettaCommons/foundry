@@ -1,4 +1,4 @@
-"""Unit tests for the Intel-XPU Lightning plugins in foundry.utils.xpu.
+"""Unit tests for the Intel-XPU Lightning plugins in rf3._core.utils.xpu.
 
 These plugins target Intel GPUs (``torch.xpu``), which are absent in CI, so the
 parts that actually touch XPU hardware (``setup_device`` success, autocast
@@ -9,10 +9,9 @@ and the precision→dtype mapping + tensor conversion.
 
 import pytest
 import torch
-
-from foundry.utils.xpu.single_xpu_strategy import SingleXPUStrategy
-from foundry.utils.xpu.xpu_accelerator import XPUAccelerator
-from foundry.utils.xpu.xpu_precision import XPUMixedPrecision
+from rf3._core.utils.xpu.single_xpu_strategy import SingleXPUStrategy
+from rf3._core.utils.xpu.xpu_accelerator import XPUAccelerator
+from rf3._core.utils.xpu.xpu_precision import XPUMixedPrecision
 
 
 def test_accelerator_name():

@@ -1,4 +1,4 @@
-"""Unit tests for the pure Hydra resolver helpers in foundry.hydra.resolvers.
+"""Unit tests for the pure Hydra resolver helpers in rf3._core.hydra.resolvers.
 
 ``register_resolvers`` is one-shot global registration with OmegaConf (side
 effecting) and is not tested. The two resolver functions have a non-obvious
@@ -11,8 +11,7 @@ import os
 
 import pytest
 from atomworks.enums import ChainType, ChainTypeInfo
-
-from foundry.hydra.resolvers import chain_type_info_to_regex, resolve_import
+from rf3._core.hydra.resolvers import chain_type_info_to_regex, resolve_import
 
 
 def test_resolve_import_returns_the_module_when_no_attribute():

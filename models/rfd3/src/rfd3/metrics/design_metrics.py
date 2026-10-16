@@ -4,15 +4,14 @@ from atomworks.ml.utils.token import (
     get_token_starts,
 )
 from beartype.typing import Any
+from rfd3._core.common import exists
+from rfd3._core.metrics.metric import Metric
 from rfd3.metrics.metrics_utils import (
     _flatten_dict,
     get_hotspot_contacts,
     get_ss_metrics_and_rg,
 )
 from scipy.spatial import cKDTree
-
-from foundry.common import exists
-from foundry.metrics.metric import Metric
 
 STANDARD_CACA_DIST = 3.8
 

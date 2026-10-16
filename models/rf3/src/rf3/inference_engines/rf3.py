@@ -19,10 +19,10 @@ from biotite.structure import AtomArray, AtomArrayStack
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
-from foundry.inference_engines.base import BaseInferenceEngine
-from foundry.metrics.metric import MetricManager
-from foundry.model.layers.attention import validate_attention_backend
-from foundry.utils.ddp import RankedLogger
+from rf3._core.inference_engines.base import BaseInferenceEngine
+from rf3._core.metrics.metric import MetricManager
+from rf3._core.model.layers.attention import validate_attention_backend
+from rf3._core.utils.ddp import RankedLogger
 from rf3.model.layers.attention import TriangleAttention
 from rf3.model.layers.inference_kernels import enable_exact_kernels
 from rf3.model.RF3 import ShouldEarlyStopFn

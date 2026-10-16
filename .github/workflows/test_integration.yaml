@@ -24,8 +24,8 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install package + dev extras
-        run: pip install -e ".[dev]"
+      - name: Install wheel + dev extras
+        run: pip install ".[dev]"
 
       - name: Cache RF3 checkpoint
         id: cache-ckpt

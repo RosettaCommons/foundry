@@ -1,4 +1,4 @@
-"""Unit tests for foundry.utils.rigid.
+"""Unit tests for rf3._core.utils.rigid.
 
 `Rotation` and `Rigid` are the OpenFold-derived SE(3) frame primitives used across
 the models for backbone/atom frames and IPA-style structure updates. Their contracts
@@ -12,8 +12,7 @@ compared with a loose tolerance (the quaternion path goes through torch.linalg.e
 
 import pytest
 import torch
-
-from foundry.utils.rigid import (
+from rf3._core.utils.rigid import (
     Rigid,
     Rotation,
     identity_quats,

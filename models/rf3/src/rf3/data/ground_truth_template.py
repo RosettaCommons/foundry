@@ -18,9 +18,8 @@ from atomworks.ml.utils.token import (
 from beartype.typing import Any, Callable, Final, Sequence, cast
 from biotite.structure import AtomArray
 from jaxtyping import Bool, Float
+from rf3._core.utils.torch import assert_no_nans
 from torch import Tensor
-
-from foundry.utils.torch import assert_no_nans
 
 logger = logging.getLogger(__name__)
 

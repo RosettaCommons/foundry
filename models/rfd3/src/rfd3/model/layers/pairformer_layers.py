@@ -1,4 +1,11 @@
 import torch
+from rfd3._core.model.layers.attention import (
+    dense_pair_attention,
+    use_dense_sdpa,
+    validate_attention_backend,
+)
+from rfd3._core.training.checkpoint import activation_checkpointing
+from rfd3._core.utils.torch import device_of
 from rfd3.model.layers.layer_utils import (
     MultiDimLinear,
     RMSNorm,
@@ -6,14 +13,6 @@ from rfd3.model.layers.layer_utils import (
     linearNoBias,
 )
 from torch import nn
-
-from foundry.model.layers.attention import (
-    dense_pair_attention,
-    use_dense_sdpa,
-    validate_attention_backend,
-)
-from foundry.training.checkpoint import activation_checkpointing
-from foundry.utils.torch import device_of
 
 
 class AttentionPairBiasPairformerDeepspeed(nn.Module):

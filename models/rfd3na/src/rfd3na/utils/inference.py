@@ -19,6 +19,13 @@ from atomworks.ml.utils.token import (
     get_token_starts,
     spread_token_wise,
 )
+from rfd3na._core.common import exists
+from rfd3na._core.utils.components import (
+    fetch_mask_from_component,
+    get_name_mask,
+    unravel_components,
+)
+from rfd3na._core.utils.ddp import RankedLogger
 from rfd3na.constants import (
     REQUIRED_CONDITIONING_ANNOTATIONS,
 )
@@ -27,14 +34,6 @@ from rfd3na.transforms.conditioning_base import (
     set_default_conditioning_annotations,
 )
 from rfd3na.transforms.conditioning_utils import sample_island_tokens
-
-from foundry.common import exists
-from foundry.utils.components import (
-    fetch_mask_from_component,
-    get_name_mask,
-    unravel_components,
-)
-from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
@@ -55,7 +54,7 @@ def set_common_annotations(array, set_src_component_to_res_name=True):
     if "b_factor" not in annots:
         array.set_annotation("b_factor", np.zeros(array.shape[0], dtype=float))
     if "charge" not in annots:
-        array.set_annotation("charge", np.zeros(array.shape[0], dtype=float))
+        array.set_annotation("charge", np.zeros(array.shape[0], dtype=np.int8))
     if "src_component" not in annots:
         if set_src_component_to_res_name:
             array.set_annotation(

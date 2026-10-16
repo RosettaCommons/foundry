@@ -8,7 +8,7 @@ import rootutils
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 
-from foundry.utils.logging import suppress_warnings
+from rf3._core.utils.logging import suppress_warnings
 
 load_dotenv(override=True)
 
@@ -38,12 +38,12 @@ def validate(cfg: DictConfig) -> None:
     # Reference: https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
     torch.set_float32_matmul_precision("medium")
 
-    from foundry.callbacks.callback import BaseCallback  # noqa
-    from foundry.utils.instantiators import instantiate_loggers, instantiate_callbacks  # noqa
-    from foundry.utils.logging import print_config_tree  # noqa
-    from foundry.utils.ddp import RankedLogger, set_accelerator_based_on_availability  # noqa
-    from foundry.utils.ddp import is_rank_zero  # noqa
-    from foundry.utils.datasets import assemble_val_loader_dict  # noqa
+    from rf3._core.callbacks.callback import BaseCallback  # noqa
+    from rf3._core.utils.instantiators import instantiate_loggers, instantiate_callbacks  # noqa
+    from rf3._core.utils.logging import print_config_tree  # noqa
+    from rf3._core.utils.ddp import RankedLogger, set_accelerator_based_on_availability  # noqa
+    from rf3._core.utils.ddp import is_rank_zero  # noqa
+    from rf3._core.utils.datasets import assemble_val_loader_dict  # noqa
 
     set_accelerator_based_on_availability(cfg)
 

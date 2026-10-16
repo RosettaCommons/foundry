@@ -31,6 +31,7 @@ from atomworks.ml.utils.token import (
     get_token_starts,
 )
 from biotite.structure import AtomArray
+from rfd3na._core.common import exists
 from rfd3na.constants import (
     OPTIONAL_CONDITIONING_VALUES,
     REQUIRED_CONDITIONING_ANNOTATIONS,
@@ -39,8 +40,6 @@ from rfd3na.transforms.conditioning_utils import random_condition
 from rfd3na.transforms.util_transforms import (
     add_representative_atom,
 )
-
-from foundry.common import exists
 
 nx.from_numpy_matrix = nx.from_numpy_array
 logger = logging.getLogger(__name__)

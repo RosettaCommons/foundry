@@ -21,6 +21,7 @@ distinct input modes — CCD code (MG), SDF file path (HEM) and SMILES
 """
 
 import pytest
+
 from conftest import (
     assert_chain_count,
     assert_standard_outputs,

@@ -4,15 +4,14 @@ from atomworks.ml.utils.token import (
     get_token_starts,
 )
 from beartype.typing import Any
+from rfd3na._core.common import exists
+from rfd3na._core.metrics.metric import Metric
 from rfd3na.constants import backbone_atoms_RNA
 from rfd3na.metrics.metrics_utils import (
     _flatten_dict,
     get_hotspot_contacts,
     get_ss_metrics_and_rg,
 )
-
-from foundry.common import exists
-from foundry.metrics.metric import Metric
 
 STANDARD_CACA_DIST = 3.8
 STANDARD_P_P_DISTANCE = 6.4  ## average of B and A form 7 and 5.9

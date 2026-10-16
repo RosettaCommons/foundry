@@ -11,6 +11,8 @@ from atomworks.ml.utils.token import (
 )
 from biotite.structure import concatenate, infer_elements
 from jaxtyping import Float, Int
+from rfd3na._core.common import exists
+from rfd3na._core.utils.ddp import RankedLogger
 from rfd3na.constants import (
     ATOM14_ATOM_NAMES,
     ATOM23_ATOM_NAMES_DNA,
@@ -24,9 +26,6 @@ from rfd3na.utils.io import (
     build_stack_from_atom_array_and_batched_coords,
 )
 from scipy.optimize import linear_sum_assignment
-
-from foundry.common import exists
-from foundry.utils.ddp import RankedLogger
 
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 

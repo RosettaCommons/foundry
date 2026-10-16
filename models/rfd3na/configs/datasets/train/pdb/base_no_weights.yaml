@@ -3,7 +3,7 @@ defaults:
   - _self_
 
 dataset:
-  _target_: foundry.datasets.structure.StructuralDatasetWrapper
+  _target_: rfd3na._core.datasets.structure.StructuralDatasetWrapper
   save_failed_examples_to_dir: ${paths.data.failed_examples_dir}
   cif_parser_args:
     cache_dir: null

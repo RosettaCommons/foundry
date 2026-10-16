@@ -8,9 +8,8 @@ from atomworks.ml.utils.token import get_token_starts
 from beartype.typing import Any
 from biotite.structure import AtomArray, AtomArrayStack, stack
 from jaxtyping import Bool, Float, Int
-
-from foundry.metrics.metric import Metric
-from foundry.utils.ddp import RankedLogger
+from rf3._core.metrics.metric import Metric
+from rf3._core.utils.ddp import RankedLogger
 
 ranked_logger = RankedLogger(__name__, rank_zero_only=True)
 

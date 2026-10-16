@@ -3,6 +3,8 @@ import logging
 
 import torch
 import torch.nn as nn
+from rfd3na._core.common import exists
+from rfd3na._core.training.checkpoint import activation_checkpointing
 from rfd3na.model.layers.block_utils import (
     bucketize_scaled_distogram,
     pairwise_mean_pool,
@@ -27,9 +29,6 @@ from rfd3na.model.layers.layer_utils import (
     linearNoBias,
 )
 from rfd3na.model.layers.pairformer_layers import PairformerBlock
-
-from foundry.common import exists
-from foundry.training.checkpoint import activation_checkpointing
 
 logger = logging.getLogger(__name__)
 

@@ -11,6 +11,7 @@ from atomworks.ml.transforms.base import (
     Transform,
 )
 from atomworks.ml.utils.token import get_token_starts
+from rfd3na._core.common import exists
 from rfd3na.constants import (
     ATOM14_ATOM_NAMES,
     ATOM23_ATOM_NAME_TO_ELEMENT,
@@ -28,8 +29,6 @@ from rfd3na.transforms.util_transforms import (
     assert_single_representative,
     get_af3_token_representative_masks,
 )
-
-from foundry.common import exists
 
 
 def map_to_association_scheme(

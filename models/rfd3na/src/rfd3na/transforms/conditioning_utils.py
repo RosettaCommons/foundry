@@ -1,8 +1,7 @@
 import networkx as nx
 import numpy as np
 from atomworks.io.utils.bonds import _atom_array_to_networkx_graph
-
-from foundry.utils.ddp import RankedLogger
+from rfd3na._core.utils.ddp import RankedLogger
 
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 

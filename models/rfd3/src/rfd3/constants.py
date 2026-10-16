@@ -1,6 +1,6 @@
 import numpy as np
 
-from foundry.constants import TIP_BY_RESTYPE
+from rfd3._core.constants import TIP_BY_RESTYPE
 
 TIP_BY_RESTYPE
 

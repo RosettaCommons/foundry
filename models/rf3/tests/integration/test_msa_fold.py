@@ -29,6 +29,7 @@ every chain does.
 import json
 
 import pytest
+
 from conftest import (
     assert_standard_outputs,
     assert_valid_plddt,

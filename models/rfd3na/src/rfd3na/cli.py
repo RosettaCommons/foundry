@@ -36,7 +36,7 @@ def design(ctx: typer.Context):
         cfg = compose(config_name="inference", overrides=args)
 
         # Lazy import to avoid loading heavy dependencies at CLI startup
-        from foundry.utils.logging import suppress_warnings
+        from rfd3na._core.utils.logging import suppress_warnings
         from rfd3na.run_inference import run_inference
 
         with suppress_warnings(is_inference=True):

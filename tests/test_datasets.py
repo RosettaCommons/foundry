@@ -1,4 +1,4 @@
-"""Unit tests for foundry.utils.datasets.
+"""Unit tests for rf3._core.utils.datasets.
 
 These helpers build the training/validation dataloading stack from hydra configs:
 selecting a sampler from config keys, wrapping a dataset+sampler with fallback
@@ -18,6 +18,11 @@ from atomworks.ml.samplers import (
     MixedSampler,
 )
 from omegaconf import OmegaConf
+from rf3._core.utils.datasets import (
+    assemble_distributed_loader,
+    instantiate_single_dataset_and_sampler,
+    wrap_dataset_and_sampler_with_fallbacks,
+)
 from torch.utils.data import (
     DataLoader,
     Dataset,
@@ -28,12 +33,6 @@ from torch.utils.data import (
     WeightedRandomSampler,
 )
 from torch.utils.data.distributed import DistributedSampler
-
-from foundry.utils.datasets import (
-    assemble_distributed_loader,
-    instantiate_single_dataset_and_sampler,
-    wrap_dataset_and_sampler_with_fallbacks,
-)
 
 
 class _Tiny(Dataset):

@@ -5,6 +5,9 @@ from contextlib import ExitStack
 
 import torch
 import torch.nn as nn
+from rfd3na._core.model.layers.blocks import (
+    FourierEmbedding,
+)
 from rfd3na.model.layers.block_utils import (
     bucketize_scaled_distogram,
     create_attention_indices,
@@ -21,10 +24,6 @@ from rfd3na.model.layers.encoders import (
     DiffusionTokenEncoder,
 )
 from rfd3na.model.layers.layer_utils import RMSNorm, linearNoBias
-
-from foundry.model.layers.blocks import (
-    FourierEmbedding,
-)
 
 logger = logging.getLogger(__name__)
 

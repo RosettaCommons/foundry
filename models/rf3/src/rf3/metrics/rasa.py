@@ -2,8 +2,7 @@ import numpy as np
 from atomworks.ml.transforms.sasa import calculate_atomwise_rasa
 from beartype.typing import Any
 from biotite.structure import AtomArrayStack
-
-from foundry.metrics.metric import Metric
+from rf3._core.metrics.metric import Metric
 
 
 class UnresolvedRegionRASA(Metric):

@@ -2,7 +2,7 @@ from typing import Any
 
 import numpy as np
 
-from foundry.constants import TIP_BY_RESTYPE
+from rfd3na._core.constants import TIP_BY_RESTYPE
 
 TIP_BY_RESTYPE
 

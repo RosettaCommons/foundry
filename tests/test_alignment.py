@@ -1,4 +1,4 @@
-"""Unit tests for foundry.utils.alignment.
+"""Unit tests for rf3._core.utils.alignment.
 
 `weighted_rigid_align` is the SE(3) Kabsch alignment used across rf3/rfd3/rfd3na
 to align predicted/ground-truth coordinates before computing losses and during
@@ -13,8 +13,7 @@ float32 (which used to make float64 inputs raise).
 
 import pytest
 import torch
-
-from foundry.utils.alignment import get_rmsd, weighted_rigid_align
+from rf3._core.utils.alignment import get_rmsd, weighted_rigid_align
 
 
 def _rotation_about_z(angle: float, dtype: torch.dtype = torch.float32) -> torch.Tensor:

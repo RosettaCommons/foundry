@@ -2,15 +2,14 @@ import logging
 
 import biotite.structure as struc
 import numpy as np
+from rfd3._core.metrics.metric import Metric
+from rfd3._core.utils.ddp import RankedLogger
 from rfd3.constants import (
     ATOM14_ATOM_NAMES,
     association_schemes_stripped,
 )
 from rfd3.transforms.conditioning_base import get_motif_features
 from rfd3.transforms.hbonds_hbplus import calculate_hbonds
-
-from foundry.metrics.metric import Metric
-from foundry.utils.ddp import RankedLogger
 
 logging.basicConfig(level=logging.INFO)
 global_logger = RankedLogger(__name__, rank_zero_only=False)

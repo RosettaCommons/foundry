@@ -79,6 +79,7 @@ that directory.  Once committed, this test will run automatically.
 import json
 
 import pytest
+
 from conftest import GPU_BASELINE_DIR, load_summary
 
 _BASELINE_DIR = GPU_BASELINE_DIR / "two_protein_chains"

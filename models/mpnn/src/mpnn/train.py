@@ -15,10 +15,10 @@ from atomworks.ml.samplers import (
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
-from foundry.callbacks.metrics_logging import StoreValidationMetricsInDFCallback
-from foundry.datasets.structure import StructuralDatasetWrapper
-from foundry.utils.datasets import wrap_dataset_and_sampler_with_fallbacks
-from foundry.utils.weights import CheckpointConfig
+from mpnn._core.callbacks.metrics_logging import StoreValidationMetricsInDFCallback
+from mpnn._core.datasets.structure import StructuralDatasetWrapper
+from mpnn._core.utils.datasets import wrap_dataset_and_sampler_with_fallbacks
+from mpnn._core.utils.weights import CheckpointConfig
 from mpnn.collate.feature_collator import TokenBudgetAwareFeatureCollator
 from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
 from mpnn.samplers.samplers import PaddedTokenBudgetBatchSampler

@@ -1,6 +1,13 @@
 import numpy as np
 import torch
 import torch.nn as nn
+from rf3._core.model.layers.attention import (
+    dense_pair_attention,
+    use_dense_sdpa,
+    validate_attention_backend,
+)
+from rf3._core.training.checkpoint import activation_checkpointing
+from rf3._core.utils.torch import device_of, scatter_mean
 from rf3.loss.loss import calc_chiral_grads_flat_impl
 from rf3.model.layers.layer_utils import (
     AdaLN,
@@ -10,14 +17,6 @@ from rf3.model.layers.layer_utils import (
     linearNoBias,
 )
 from rf3.model.layers.mlff import ConformerEmbeddingWeightedAverage
-
-from foundry.model.layers.attention import (
-    dense_pair_attention,
-    use_dense_sdpa,
-    validate_attention_backend,
-)
-from foundry.training.checkpoint import activation_checkpointing
-from foundry.utils.torch import device_of, scatter_mean
 
 
 class AtomAttentionEncoderDiffusion(nn.Module):
