@@ -20,6 +20,7 @@ import biotite.structure as struc
 import numpy as np
 import pytest
 from atomworks.io.parser import parse_atom_array
+from atomworks.io.utils.ccd import add_annotations_from_ccd
 from biotite.structure import AtomArray
 from mpnn.transforms.feature_aggregation.token_encodings import (
     MPNN_TOKEN_ENCODING,
@@ -563,15 +564,15 @@ def test_add_missing_atoms_false_keeps_ligand_atoms_as_given() -> None:
 
 
 def test_atom_array_defaults_are_unchanged() -> None:
-    atom_array = _atom_array_with_ligands(
-        {"PHT": PHENYTOIN, "GOL": "OCC(O)CO", "HOH": "O"}
-    )
+    atom_array = _atom_array_with_ligands({"GOL": "OCC(O)CO", "HOH": "O"})
 
     result = MPNNInferenceInput.from_atom_array_and_dict(
         atom_array=atom_array, input_dict={}
     ).atom_array
 
-    expected = parse_atom_array(atom_array.copy())["assemblies"]["1"][0]
+    expected = atom_array.copy()
+    add_annotations_from_ccd(expected, annotations=["charge"])
+    expected = parse_atom_array(expected)["assemblies"]["1"][0]
     assert list(result.res_name) == list(expected.res_name)
     assert list(result.atom_name) == list(expected.atom_name)
     # The parser defaults still remove crystallization aids and waters.
