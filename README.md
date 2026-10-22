@@ -11,6 +11,9 @@ All models within Foundry rely on [AtomWorks](https://github.com/RosettaCommons/
 ## Getting Started
 ### Quickstart guide
 **Installation**
+
+Use pip 26.2.2 or newer (`python -m pip install --upgrade pip`); older pip releases still trust the
+withdrawn emSign root CA certificate.
 ```bash
 pip install "rc-foundry[all]"
 ```
