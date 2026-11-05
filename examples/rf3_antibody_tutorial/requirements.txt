@@ -1,0 +1,5 @@
+rc-foundry[all]
+atomworks[ml]
+py3Dmol
+matplotlib
+pandas
