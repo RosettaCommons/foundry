@@ -20,9 +20,7 @@ except Exception:
 # Explicit runtime configuration takes precedence over repository defaults.
 load_dotenv(override=False)
 
-_config_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs"
-)
+_config_path = os.path.join(os.path.dirname(__file__), "configs")
 
 
 @hydra.main(
