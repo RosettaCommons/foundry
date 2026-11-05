@@ -31,7 +31,9 @@ jobs:
         # so mypy can resolve the model packages against the installed source.
         # `-c ci-constraints.txt` pins the type-stub-sensitive packages to the
         # validated versions so the gate is reproducible (see that file).
-        run: pip install -e ".[dev]" -c ci-constraints.txt
+        run: |
+          python -m pip install --upgrade "pip>=26.2.2"
+          pip install -e ".[dev]" -c ci-constraints.txt
       - name: mypy
         run: mypy
 
@@ -50,7 +52,9 @@ jobs:
       - name: Install wheel + dev extras
         # `-c ci-constraints.txt` pins the type-stub-sensitive packages to the
         # validated versions so the gate is reproducible (see that file).
-        run: pip install ".[dev]" -c ci-constraints.txt
+        run: |
+          python -m pip install --upgrade "pip>=26.2.2"
+          pip install ".[dev]" -c ci-constraints.txt
       - name: pytest
         # Runs infrastructure regression tests/ plus the CPU-portable per-model tests under
         # models/*/tests/ (collected via `testpaths`; the model packages are importable

@@ -20,6 +20,7 @@ If you have already installed all of the models available in Foundry and downloa
 
 If you would like to install only RF3: 
 ```bash
+python -m pip install --upgrade pip   # pip 26.2.2 or newer
 pip install rc-foundry[rf3]
 ```
 

@@ -30,7 +30,9 @@ jobs:
           echo "RUFF_VERSION=$(grep 'ruff==' pyproject.toml \
             | sed -E 's/.*ruff==([^",]+).*/\1/')" >> "$GITHUB_ENV"
       - name: Install ruff
-        run: pip install ruff==${{ env.RUFF_VERSION }}
+        run: |
+          python -m pip install --upgrade "pip>=26.2.2"
+          pip install ruff==${{ env.RUFF_VERSION }}
       - name: Ruff format
         run: ruff format --diff src models tests
       - name: Ruff check

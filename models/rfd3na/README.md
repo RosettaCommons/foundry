@@ -17,6 +17,7 @@ both are described in more detail below.
   If you would like to install all of the foundry models (recommended), see the [foundry README](../../README.md) for instructions. <br><br>
   If you would like to install only RFD3NA: 
     ```bash
+    python -m pip install --upgrade pip   # pip 26.2.2 or newer
     pip install rc-foundry[rfd3na]
     ```
 
