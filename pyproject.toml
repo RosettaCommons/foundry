@@ -54,6 +54,9 @@ dependencies = [
 
 [project.optional-dependencies]
 rfo = [
+    # RFO uses the RF3 checkpoint transform pipeline's AtomWorks 3.0.1 API.
+    # Keep its covalent-modification behavior until that pipeline is migrated.
+    "atomworks[ml]==3.0.1",
     "biopython>=1.83",
     "pyyaml>=6.0",
     "numpy>=1.26",

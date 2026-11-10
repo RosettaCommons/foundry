@@ -15,7 +15,13 @@ foundry install rf3
 export RF3_CKPT="$HOME/.foundry/checkpoints/rf3_foundry_01_24_latest_remapped.ckpt"
 ```
 
-The Foundry/RF3 environment uses AtomWorks 3 (`atomworks[ml]>=3.0.1,<4`).
+The `rfo` extra pins AtomWorks to **3.0.1**. RFO uses the RF3 checkpoint
+transform pipeline, whose covalent-modification arguments are incompatible
+with AtomWorks 3.0.4. This temporary pin preserves the existing pipeline
+behavior without editing other models' code. Rerun the installation command above
+to apply the pin to an existing environment; avoid upgrading AtomWorks
+independently in that environment.
+
 Keep Boltz and upstream MPNN in their separate environments; their NumPy
 requirements need not match Foundry's.
 
