@@ -186,8 +186,13 @@ def symmetry_maps(features, b, l, device):
                     )
                 r, t = f["sym_transform"][str(tid)]
                 source[row, target] = original
-                rotation[row, target] = r
-                translation[row, target] = t
+                # Frames can come in as integer tensors (e.g. a zero translation).
+                rotation[row, target] = torch.as_tensor(
+                    r, dtype=rotation.dtype, device=device
+                )
+                translation[row, target] = torch.as_tensor(
+                    t, dtype=translation.dtype, device=device
+                )
                 apply[row, target] = True
     return dict(
         symmetry_source=source,
