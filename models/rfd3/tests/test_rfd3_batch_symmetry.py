@@ -75,3 +75,16 @@ def test_symmetric_rollout_matches_legacy_with_injected_noise():
             torch.testing.assert_close(
                 actual["X_L"][b, :, :n], expected["X_L"], atol=1e-4, rtol=1e-5
             )
+
+
+def test_symmetry_maps_accept_integer_frames():
+    ex = symmetric(7, 2)
+    ex["feats"]["sym_transform"] = {
+        k: (r.long(), t.long()) for k, (r, t) in ex["feats"]["sym_transform"].items()
+    }
+    f = collate_examples([ex], atom_capacity=10, token_capacity=10)["f"]
+    assert f["symmetry_rotation"].dtype == torch.float32
+    assert f["symmetry_translation"].dtype == torch.float32
+    torch.testing.assert_close(
+        f["symmetry_translation"][0, 2], torch.tensor([7.0, 0.0, 0.0])
+    )
