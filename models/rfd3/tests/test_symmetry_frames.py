@@ -214,3 +214,32 @@ def test_decompose_symmetry_frame_origin_is_translation():
     Ori, _X, _Y = decompose_symmetry_frame((R, T))
     # each returned value is a packed (1,) structured array; the origin is T.
     assert np.allclose(unpack_vector(Ori)[0], T, atol=1e-6)
+
+
+# --- translation dtype --------------------------------------------------------
+
+
+@pytest.mark.parametrize("symmetry_id", ["C2", "C3", "D2"])
+def test_frame_translation_keeps_the_rotation_dtype(symmetry_id):
+    """A frame's translation is float, like its rotation.
+
+    The generators build it as `np.array([0, 0, 0])`, which numpy makes int64,
+    while the rotation ends up float because it is divided by a norm. Nothing
+    after that converts it: `pack_vector` keeps the dtype and `torch.tensor`
+    infers it back from the unpacked values, so an integer translation reaches
+    the indexed write in `symmetry_maps`, which raises on a float destination.
+    """
+    frames = get_symmetry_frames_from_symmetry_id(symmetry_id)
+    Ori, X, Y = zip(*(decompose_symmetry_frame(frame) for frame in frames))
+
+    def stack(packed):
+        return torch.tensor(
+            [np.asarray(unpack_vector(vector)).tolist() for vector in packed]
+        )
+
+    R, T = framecoords_to_RTs(stack(Ori), stack(X), stack(Y))
+    assert T.dtype == R.dtype
+    # The index put that symmetry_maps performs on a float destination.
+    flat = T.reshape(-1, 3)
+    destination = torch.zeros_like(flat, dtype=torch.float32)
+    destination[torch.arange(len(flat))] = flat
