@@ -4,8 +4,8 @@
     rfo --config config.yaml
 
 Runs the optimization: each cycle routes to RF3 backprop or Boltz with
-probability ``backprop_fraction`` (default 0.5), then redesigns the binder
-chain with MPNN and feeds the result into the next cycle. A YAML config sets
+probability ``backprop_fraction`` (default 0.5), then applies one MPNN-guided
+amino-acid substitution and feeds the result into the next cycle. A YAML config sets
 the inputs and output directory; any field can be overridden on the command
 line. The driver launches separate processes for Boltz, RF3 and external
 MPNN, optionally through Apptainer.
@@ -100,8 +100,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--num-samples", type=int, help="Boltz diffusion samples per prediction."
     )
-    p.add_argument("--mpnn-num-seqs", type=int)
-    p.add_argument("--mpnn-temperature", type=float)
+    p.add_argument(
+        "--mpnn-num-seqs",
+        type=int,
+        help="MPNN decoding orders to average for single-mutation scoring.",
+    )
+    p.add_argument(
+        "--mpnn-temperature",
+        type=float,
+        help="Compatibility option; unused by maximum-likelihood mutation selection.",
+    )
     p.add_argument("--template-plddt-threshold", type=int)
     p.add_argument(
         "--cyclic", action="store_true", help="Designed chain is a cyclic peptide."

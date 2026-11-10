@@ -2,8 +2,9 @@
 
 Each cycle chooses RF3 gradient/MCMC optimization with probability
 `backprop_fraction` (default 0.5), or Boltz-2 prediction otherwise. Both
-branches then redesign unfixed chain-A residues with an external MPNN
-installation and feed the redesigned complex into the next cycle.
+branches then apply one highest-probability amino-acid substitution among
+unfixed chain-A residues using an external MPNN installation, and feed the
+resulting complex into the next cycle.
 
 ```text
 RF3 gradient optimization ─┐
@@ -41,9 +42,16 @@ including insertion codes. Partner chains are never redesigned.
 
 `MPNN_MODEL_TYPE=protein_mpnn` selects ProteinMPNN and
 `MPNN_MODEL_TYPE=ligand_mpnn` selects LigandMPNN in the upstream checkout.
-The first generated sample is carried forward; all samples are retained.
-Fully fixed binders bypass sampling. The adapter calls upstream `run.py`
-and does not import the bundled Foundry MPNN engine.
+For each eligible position, MPNN scores amino acids conditioned on the
+backbone and the rest of the current sequence. RFO excludes the native amino
+acid and selects the single position/substitution with the highest probability
+across all unfixed positions. Equal scores use chain position, then alphabetical
+amino-acid order. Fully fixed binders bypass scoring.
+
+`mpnn_num_seqs` is the number of decoding orders to average;
+`mpnn_temperature` is accepted for compatibility but does not affect selection.
+The scoring worker imports the upstream model in `MPNN_PYTHON`, without
+importing the bundled Foundry MPNN engine.
 
 ## Outputs
 
@@ -54,9 +62,9 @@ recycle_<n>/
   rf3_config.yaml           # RF3 branch: exact per-cycle config
   mpnn/
     mpnn_design.pdb         # handoff complex
-    mpnn_result.json        # chain-A sequence and handoff path
-    mpnn_spec.json          # residue mask and sampling settings
-    samples/                # upstream FASTA and structures (if sampled)
+    mpnn_result.json        # chain-A sequence, handoff path, and mutation
+    mpnn_spec.json          # residue mask and scoring settings
+    samples/                # scoring spec.json and scores.json (if scored)
   <stem>/                   # RF3 history.json and modelhub_pred/<step>.cif
 <stem>_records.json
 ```
