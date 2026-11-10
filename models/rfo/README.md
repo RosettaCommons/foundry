@@ -7,8 +7,10 @@
 RFOptimization (RFO) improves an initial biomolecular design through repeated
 sequence optimization and structure prediction. Each cycle selects RF3
 gradient-guided sequence optimization with probability `backprop_fraction`,
-or Boltz-2 structure prediction otherwise. MPNN then redesigns the unfixed
-residues of chain A, and the redesigned complex seeds the next cycle.
+or Boltz-2 structure prediction otherwise. MPNN then makes one amino-acid
+substitution among the unfixed residues of chain A, choosing the non-native
+amino acid with the highest conditional probability. The resulting complex
+seeds the next cycle.
 
 ## Installation
 
@@ -96,8 +98,12 @@ RF3 optimizer.
 `inputs/` with the redesigned complexes, and `<name>_records.json` with
 per-cycle scores, timing and designed sequences. Each cycle's `mpnn/`
 directory contains `mpnn_design.pdb`, `mpnn_result.json`, the design mask in
-`mpnn_spec.json`, and upstream samples. RFO carries the **first** MPNN sample
-forward when `mpnn_num_seqs > 1`; it does not rank the samples.
+`mpnn_spec.json`, and probabilities in `samples/scores.json`. The result JSON
+records the selected residue, old/new amino acid, and probability.
+`mpnn_num_seqs` controls the number of decoding orders whose probabilities
+are averaged before choosing one substitution. `mpnn_temperature` is retained
+for config compatibility but is not used in maximum-likelihood selection.
+Fully fixed chains are copied unchanged.
 
 RF3's `modelhub_pred/` output name is retained for compatibility with existing
 analysis scripts. Independent AlphaFold3 filtering is outside this pipeline.

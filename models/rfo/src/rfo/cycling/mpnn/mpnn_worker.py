@@ -7,6 +7,7 @@ Conda/venv environment, or in an optional MPNN_SIF Apptainer image.
 from __future__ import annotations
 
 import json
+import math
 import os
 import shlex
 import shutil
@@ -16,7 +17,9 @@ import tempfile
 from pathlib import Path
 
 from Bio.PDB import PDBIO, PDBParser
-from Bio.SeqUtils import seq1
+from Bio.SeqUtils import seq1, seq3
+
+AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
 CHECKPOINTS = {
     "protein_mpnn": "proteinmpnn_v_48_020.pt",
@@ -35,6 +38,9 @@ def settings():
     repo = Path(repo).expanduser().resolve()
     if not (repo / "run.py").is_file():
         raise FileNotFoundError(f"MPNN_REPO must contain LigandMPNN run.py: {repo}")
+    for module in ("model_utils.py", "data_utils.py"):
+        if not (repo / module).is_file():
+            raise FileNotFoundError(f"MPNN_REPO must contain upstream {module}: {repo}")
     model = os.environ.get("MPNN_MODEL_TYPE", "protein_mpnn")
     if model not in CHECKPOINTS:
         raise ValueError(f"MPNN_MODEL_TYPE must be one of {tuple(CHECKPOINTS)}")
@@ -78,6 +84,37 @@ def chain_residues(structure, chain_id):
     return residues
 
 
+def select_mutation(scores, residues, positions, designed_chain):
+    """Choose one non-native AA by raw probability; ties follow chain/AA order."""
+    rows = {row["residue_id"]: row for row in scores}
+    if len(rows) != len(scores):
+        raise ValueError("MPNN scores contain duplicate residue IDs.")
+    best = None
+    for i in positions:
+        residue = residues[i]
+        residue_id = f"{designed_chain}{residue.id[1]}{residue.id[2].strip()}"
+        native = seq1(residue.resname)
+        row = rows.get(residue_id)
+        if row is None or row["native_aa"] != native:
+            raise ValueError(f"MPNN scores do not match input residue {residue_id}.")
+        probs = row["probabilities"]
+        for aa in AMINO_ACIDS:
+            value = probs.get(aa)
+            if value is None or not math.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError(f"Invalid MPNN probability for {residue_id}/{aa}.")
+            if aa != native and (best is None or value > best["probability"]):
+                best = dict(
+                    position_0idx=i,
+                    residue_id=residue_id,
+                    from_aa=native,
+                    to_aa=aa,
+                    probability=value,
+                )
+    if best is None or best["probability"] <= 0:
+        raise ValueError("MPNN returned no positive-probability substitution.")
+    return best
+
+
 def redesign(
     structure_file,
     fixed_residues_0idx,
@@ -87,7 +124,7 @@ def redesign(
     seed,
     designed_chain="A",
 ):
-    """Return (chain sequence, PDB path), selecting the first sampled design.
+    """Return (chain sequence, PDB path) after one maximum-likelihood mutation.
 
     Masks are zero-based positions in the designed protein chain. Translate
     them to actual PDB residue IDs (including gaps and insertion codes). Keep
@@ -121,8 +158,9 @@ def redesign(
         seed=seed,
     )
 
-    # Upstream treats an empty redesign list as "design all". Explicitly skip
-    # sampling when the entire binder is fixed, retaining the original file.
+    mutation = None
+
+    # No eligible substitution: retain the original complex without scoring.
     if not positions:
         shutil.copy2(source, design_path)
     else:
@@ -130,38 +168,18 @@ def redesign(
         spec.update(
             model_type=model, checkpoint_path=str(checkpoint), mpnn_repo=str(repo)
         )
-        # A fresh output directory prevents a failed/retried step from reading
-        # a previous sample. Keep the first sample as the stable handoff file.
+        # Score in the user's MPNN environment; the host needs no torch import.
+        # Fresh artifacts prevent failed/retried steps from reusing old scores.
+        worker = Path(__file__).with_name("score_worker.py").resolve()
         with tempfile.TemporaryDirectory(prefix="mpnn_", dir=out) as temp_dir:
-            command = [
-                python,
-                str(repo / "run.py"),
-                "--pdb_path",
-                str(source),
-                "--out_folder",
-                temp_dir,
-                "--model_type",
-                model,
-                f"--checkpoint_{model}",
-                str(checkpoint),
-                "--chains_to_design",
-                designed_chain,
-                "--redesigned_residues",
-                " ".join(ids),
-                "--batch_size",
-                "1",
-                "--number_of_batches",
-                str(num_seqs),
-                "--temperature",
-                str(temperature),
-                "--seed",
-                str(seed),
-                "--zero_indexed",
-                "0",
-            ]
+            score_path = Path(temp_dir) / "scores.json"
+            spec_path = Path(temp_dir) / "spec.json"
+            spec_path.write_text(json.dumps(spec))
+            command = [python, str(worker), str(spec_path), str(score_path)]
             if sif:
                 binds = [
                     str(repo),
+                    str(worker.parent),
                     str(source.parent),
                     str(out),
                     str(checkpoint.parent),
@@ -188,41 +206,20 @@ def redesign(
                 raise RuntimeError(
                     f"External MPNN failed with exit code {exc.returncode}"
                 ) from exc
-            # Upstream LigandMPNN parses --zero_indexed as `type=str`, so any
-            # non-empty string is truthy and the suffix is always "_0" regardless
-            # of the flag value. Accept the 0-indexed name and fall back to
-            # 1-indexed for older LigandMPNN builds.
-            backbones = Path(temp_dir) / "backbones"
-            candidate = backbones / f"{source.stem}_0.pdb"
-            if not candidate.is_file():
-                legacy = backbones / f"{source.stem}_1.pdb"
-                if legacy.is_file():
-                    candidate = legacy
-                else:
-                    raise RuntimeError(
-                        f"MPNN produced no first design: {candidate} (or legacy {legacy})"
-                    )
-            sampled = PDBParser(QUIET=True).get_structure("sample", str(candidate))
-            new_residues = chain_residues(sampled, designed_chain)
-            if [r.id for r in new_residues] != [r.id for r in residues]:
-                raise ValueError(
-                    "MPNN output changed the designed chain's residue IDs."
-                )
-            for i, (old, new) in enumerate(zip(residues, new_residues)):
-                if i in fixed and old.resname != new.resname:
-                    raise ValueError(
-                        f"MPNN changed a fixed residue: {designed_chain}{old.id[1]}"
-                    )
-                if old.resname != new.resname:
-                    old.resname = new.resname
-                    # Old side chains are chemically invalid after mutation.
-                    for atom in list(old):
-                        if atom.name not in {"N", "CA", "C", "O", "OXT"}:
-                            old.detach_child(atom.id)
+            if not score_path.is_file():
+                raise RuntimeError("MPNN produced no single-residue scores.")
+            scores = json.loads(score_path.read_text())["scores"]
+            mutation = select_mutation(scores, residues, positions, designed_chain)
+            residue = residues[mutation["position_0idx"]]
+            residue.resname = seq3(mutation["to_aa"]).upper()
+            # Only the mutated residue loses chemically invalid old side chains.
+            for atom in list(residue):
+                if atom.name not in {"N", "CA", "C", "O", "OXT"}:
+                    residue.detach_child(atom.id)
             writer = PDBIO()
             writer.set_structure(structure)
             writer.save(str(design_path))
-            # Retain upstream samples and FASTA for inspection / best-of-N work.
+            # Preserve scoring inputs/probabilities for inspection.
             samples = out / "samples"
             if samples.exists():
                 shutil.rmtree(samples)
@@ -230,7 +227,14 @@ def redesign(
     sequence = "".join(seq1(res.resname) for res in residues)
     (out / "mpnn_spec.json").write_text(json.dumps(spec, indent=2) + "\n")
     result_path.write_text(
-        json.dumps({"sequence": sequence, "structure_pdb": str(design_path)}, indent=2)
+        json.dumps(
+            {
+                "sequence": sequence,
+                "structure_pdb": str(design_path),
+                "mutation": mutation,
+            },
+            indent=2,
+        )
         + "\n"
     )
     return sequence, str(design_path)
