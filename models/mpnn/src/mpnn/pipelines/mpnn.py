@@ -118,7 +118,7 @@ def build_mpnn_transform_pipeline(
         AddWithinChainInstanceResIdx(),
         # Preserve the checkpoint tokenization for side-chain and backbone adducts.
         AnnotateCovalentModifications(
-            p_reassign_modified_residue=1.0, atomize_backbone_modifications=True
+            reassign_modified_residue=True, atomize_modified_residue=True
         ),
         # Atomization: keep standard AA + unknown AA as residues,
         # atomize everything else

@@ -306,7 +306,7 @@ def build_af3_transform_pipeline(
         # ),
         # Preserve the checkpoint tokenization for side-chain and backbone adducts.
         AnnotateCovalentModifications(
-            p_reassign_modified_residue=1.0, atomize_backbone_modifications=True
+            reassign_modified_residue=True, atomize_modified_residue=True
         ),
         FlagNonPolymersForAtomization(),
     ]

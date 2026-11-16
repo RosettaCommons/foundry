@@ -10,7 +10,7 @@
 # AtomWorks pins its supported Biotite version itself. Pinning AtomWorks here
 # keeps parser/feature behavior reproducible in CI while pyproject declares
 # the supported major-version range.
-atomworks==3.0.1
+atomworks==3.0.4
 torch==2.11.0
 rdkit==2026.9.1
 mypy==2.1.0
