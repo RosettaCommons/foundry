@@ -51,12 +51,12 @@ function currentSite() {
   return window.location.hostname || "local";
 }
 
-// sessionStorage can be unavailable (blocked storage).
+// localStorage can be unavailable (blocked storage, some private windows).
 function storageGet(key) {
-  try { return window.sessionStorage.getItem(key); } catch (e) { return null; }
+  try { return window.localStorage.getItem(key); } catch (e) { return null; }
 }
 function storageSet(key, value) {
-  try { window.sessionStorage.setItem(key, value); } catch (e) {}
+  try { window.localStorage.setItem(key, value); } catch (e) {}
 }
 
 function sendComment(widget, reason, comment) {
@@ -129,16 +129,18 @@ document.addEventListener("DOMContentLoaded", function () {
   var popupKey = "page_feedback_popup_seen_" + currentSite() + "_" + popupWindow;
   var popupAllowed = popup && typeof popup.showModal === "function" && popupWindow && !storageGet(popupKey);
 
-  // Don't pop up asking for feedback someone already gave inline.
+  // Don't pop up asking for feedback someone already gave inline, on this
+  // page or any later page during the same popup window.
   document.querySelectorAll(".page-feedback").forEach(function (widget) {
     setUpFeedback(widget, FEEDBACK_EVENT_PREFIX + "_page_feedback", function () {
       popupAllowed = false;
+      if (popupWindow) storageSet(popupKey, "1");
     }, null);
   });
 
   if (!popupAllowed) return;
 
-  // Each visitor sees the popup at most once per site per browser session.
+  // Each visitor sees the popup at most once per site per popup window.
   function closePopup() {
     popup.close();
   }
@@ -146,9 +148,16 @@ document.addEventListener("DOMContentLoaded", function () {
     setTimeout(closePopup, 2000);
   });
   popup.querySelector(".page-feedback-popup-close").addEventListener("click", closePopup);
-  // Clicking the dimmed backdrop outside the popup also closes it.
+  // Clicking the dimmed backdrop outside the popup also closes it. Require the
+  // press to start on the backdrop too, so a text selection that is dragged
+  // out of the textarea doesn't close the popup and lose the comment.
+  var pressStartedOnBackdrop = false;
+  popup.addEventListener("mousedown", function (event) {
+    pressStartedOnBackdrop = event.target === popup;
+  });
   popup.addEventListener("click", function (event) {
-    if (event.target === popup) closePopup();
+    if (event.target === popup && pressStartedOnBackdrop) closePopup();
+    pressStartedOnBackdrop = false;
   });
 
   setTimeout(function () {
