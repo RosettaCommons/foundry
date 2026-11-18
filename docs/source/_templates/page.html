@@ -1,0 +1,47 @@
+{% extends "!page.html" %}
+
+{% macro feedback_body(source) %}
+  <p class="page-feedback-question">Was this page helpful?</p>
+  <div class="page-feedback-buttons">
+    <button type="button" class="page-feedback-button" data-helpful="yes" aria-label="Yes" title="Yes">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+    </button>
+    <button type="button" class="page-feedback-button" data-helpful="no" aria-label="No" title="No">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+    </button>
+  </div>
+  <form class="page-feedback-comment" hidden>
+    <fieldset class="page-feedback-reasons">
+      <legend>Sorry about that. What went wrong? (optional)</legend>
+      {% for reason in [
+        "It's unclear or hard to follow",
+        "It's outdated or incorrect",
+        "An example or command didn't work",
+        "I didn't find what I needed",
+      ] %}
+      <label><input type="radio" name="page-feedback-reason-{{ source }}" value="{{ reason }}"> {{ reason }}</label>
+      {% endfor %}
+    </fieldset>
+    <label for="page-feedback-comment-{{ source }}">Tell us more (optional)</label>
+    <textarea id="page-feedback-comment-{{ source }}" rows="3" maxlength="1000"></textarea>
+    <p class="page-feedback-privacy">Please don't include personal information such as your name or email.</p>
+    <div class="page-feedback-comment-actions">
+      <button type="submit" class="page-feedback-send">Send</button>
+      <button type="button" class="page-feedback-skip">Skip</button>
+    </div>
+  </form>
+  <p class="page-feedback-thanks" role="status" hidden>Thanks for your feedback!</p>
+{% endmacro %}
+
+{% block content %}
+  {{ super() }}
+  <div class="page-feedback" data-source="inline">
+    {{ feedback_body("inline") }}
+  </div>
+  <dialog class="page-feedback-popup" data-source="popup" aria-label="Page feedback">
+    <div class="page-feedback-popup-body">
+      <button type="button" class="page-feedback-popup-close" aria-label="Close" title="Close">&times;</button>
+      {{ feedback_body("popup") }}
+    </div>
+  </dialog>
+{% endblock %}
