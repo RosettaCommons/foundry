@@ -167,7 +167,7 @@ def get_pre_crop_transforms(
             RemoveTokensWithoutCorrespondingCentralAtom(central_atom=central_atom),
         ),
         AnnotateCovalentModifications(
-            p_reassign_modified_residue=1.0, atomize_backbone_modifications=True
+            reassign_modified_residue=True, atomize_modified_residue=True
         ),
         FlagNonPolymersForAtomization(),
         AddGlobalAtomIdAnnotation(),

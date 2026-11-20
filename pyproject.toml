@@ -45,7 +45,7 @@ dependencies = [
     "dm-tree>=0.1.6",
     "zstandard",
     "pandas",
-    "atomworks[ml]>=3.0.1,<4",
+    "atomworks[ml]>=3.0.2,<3.1",
     "ipykernel>=6.31.0",
     "assertpy",
     "toolz",
@@ -93,7 +93,7 @@ dev = [
     "pytest-dotenv>=0.5.2", # load environment variables from .env file
     "pytest-cov>=4.1.0", # generate coverage report
     "pytest-benchmark>=5.0.0", # benchmark tests for speed
-    "atomworks[ml,dev,openbabel]>=3.0.1,<4",
+    "atomworks[ml,dev,openbabel]>=3.0.2,<3.1",
     "pre-commit"
 ]
 [project.scripts]
