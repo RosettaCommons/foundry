@@ -15,7 +15,13 @@ foundry install rf3
 export RF3_CKPT="$HOME/.foundry/checkpoints/rf3_foundry_01_24_latest_remapped.ckpt"
 ```
 
-The Foundry/RF3 environment uses AtomWorks 3 (`atomworks[ml]>=3.0.1,<4`).
+The `rfo` extra pins AtomWorks to **3.0.1**. RFO uses the RF3 checkpoint
+transform pipeline, whose covalent-modification arguments are incompatible
+with AtomWorks 3.0.4. This temporary pin preserves the existing pipeline
+behavior without editing other models' code. Rerun the installation command above
+to apply the pin to an existing environment; avoid upgrading AtomWorks
+independently in that environment.
+
 Keep Boltz and upstream MPNN in their separate environments; their NumPy
 requirements need not match Foundry's.
 
@@ -68,8 +74,9 @@ such as `AAAA` that could otherwise be interpreted as RNA.
 
 Clone [dauparas/LigandMPNN](https://github.com/dauparas/LigandMPNN). This
 repository includes both ProteinMPNN and LigandMPNN inference and checkpoints;
-RFO expects its `run.py` interface. The separate ProteinMPNN repository's
-`protein_mpnn_run.py` interface is not compatible with this adapter.
+RFO runs a scoring worker in that environment using upstream `model_utils.py`
+and `data_utils.py`. The separate ProteinMPNN repository is not compatible
+with this adapter.
 
 For example, on a Linux CUDA machine, following the upstream environment setup:
 
@@ -116,7 +123,11 @@ RFO designs only unfixed residues in chain A and maps positional masks onto
 actual PDB residue numbers and insertion codes. Standard amino acids and
 complete N/CA/C/O backbone atoms are required in the designed chain. The
 adapter preserves other chains and ligands from the predicted complex,
-removes obsolete side-chain atoms at mutations, and selects the first sample.
+and changes only the highest-probability non-native amino acid at one unfixed
+position. Only that residue loses obsolete side-chain atoms. Probabilities are
+conditioned on the backbone and the other native residues, averaged over
+`mpnn_num_seqs` decoding orders. `mpnn_temperature` is accepted for backwards
+compatibility but is not used by this deterministic selection rule.
 When all residues are fixed, it copies the complex without calling MPNN.
 
 ## 3. Install Boltz-2
@@ -183,11 +194,11 @@ A completed run writes a records JSON and the redesigned complex under
 `inputs/`. Missing MPNN installations/checkpoints fail before model inference;
 failed or incomplete runs return a nonzero exit status.
 
-The portable adapter, CLI and gradient tests can be run from the repository root:
+The portable adapter, scoring-worker, CLI and gradient tests can be run from the repository root:
 
 ```bash
 PYTHONPATH=models/rfo/src python -m pytest models/rfo/tests
 ```
 
-These tests use a stand-in external CLI and small differentiable tensors;
+These tests use stand-in upstream model modules and small differentiable tensors;
 they do not replace a GPU smoke test with real model weights.
