@@ -1,0 +1,217 @@
+.page-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-background-border);
+}
+
+.page-feedback p {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.page-feedback-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.page-feedback-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--color-background-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-foreground-secondary);
+  cursor: pointer;
+}
+
+.page-feedback-button:hover,
+.page-feedback-button:focus-visible {
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
+}
+
+.page-feedback-button svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.page-feedback [hidden],
+.page-feedback-popup [hidden] {
+  display: none;
+}
+
+.page-feedback-popup {
+  width: min(30rem, calc(100vw - 2rem));
+  max-width: none;
+  padding: 0;
+  border: 1px solid var(--color-background-border);
+  border-top: 3px solid var(--color-brand-primary);
+  border-radius: 0.5rem;
+  background: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+  box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.3);
+}
+
+.page-feedback-popup[open] {
+  animation: page-feedback-popup-in 0.25s ease-out;
+}
+
+.page-feedback-popup::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.page-feedback-popup-body {
+  position: relative;
+  padding: 1.5rem 3rem 1.5rem 1.75rem;
+}
+
+.page-feedback-popup .page-feedback-question {
+  font-size: 1.15rem;
+}
+
+@keyframes page-feedback-popup-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-feedback-popup[open] {
+    animation: none;
+  }
+}
+
+.page-feedback-popup p {
+  margin: 0 0 0.75rem;
+  color: var(--color-foreground-primary);
+}
+
+.page-feedback-popup .page-feedback-thanks {
+  margin: 0;
+}
+
+.page-feedback-popup-close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.5rem;
+  padding: 0.25rem;
+  border: none;
+  background: transparent;
+  color: var(--color-foreground-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.page-feedback-popup-close:hover,
+.page-feedback-popup-close:focus-visible {
+  color: var(--color-foreground-primary);
+}
+
+.page-feedback-comment {
+  flex-basis: 100%;
+  max-width: 36rem;
+}
+
+.page-feedback-comment label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--color-foreground-primary);
+}
+
+.page-feedback-reasons {
+  margin: 0 0 1rem;
+  padding: 0;
+  border: none;
+}
+
+.page-feedback-reasons legend {
+  margin-bottom: 0.5rem;
+  padding: 0;
+  color: var(--color-foreground-primary);
+}
+
+.page-feedback-reasons label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  cursor: pointer;
+}
+
+.page-feedback-reasons input {
+  margin: 0;
+  accent-color: var(--color-brand-primary);
+}
+
+.page-feedback-comment textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--color-background-border);
+  border-radius: 0.25rem;
+  background: var(--color-background-secondary);
+  color: var(--color-foreground-primary);
+  font: inherit;
+  resize: vertical;
+}
+
+.page-feedback-comment textarea:focus {
+  border-color: var(--color-brand-primary);
+  outline: none;
+}
+
+.page-feedback .page-feedback-privacy,
+.page-feedback-popup .page-feedback-privacy {
+  margin: 0.25rem 0 0.75rem;
+  color: var(--color-foreground-muted);
+  font-size: 0.85em;
+}
+
+.page-feedback-comment-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.page-feedback-send,
+.page-feedback-skip {
+  padding: 0.4rem 1rem;
+  border-radius: 0.25rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.page-feedback-send {
+  border: 1px solid var(--color-brand-primary);
+  background: var(--color-brand-primary);
+  color: var(--color-background-primary);
+}
+
+.page-feedback-skip {
+  border: 1px solid var(--color-background-border);
+  background: transparent;
+  color: var(--color-foreground-secondary);
+}
+
+.page-feedback-send:hover,
+.page-feedback-skip:hover {
+  opacity: 0.85;
+}
