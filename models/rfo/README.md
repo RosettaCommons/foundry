@@ -24,6 +24,7 @@ bundled `mpnn` package or command.
 For the driver and RF3 in one environment, install from this Foundry checkout:
 
 ```bash
+python -m pip install --upgrade pip   # pip 26.2.2 or newer
 python -m pip install -e '.[rf3,rfo]'
 ```
 

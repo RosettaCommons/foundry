@@ -1,0 +1,9 @@
+# Hash-pinned pip used to bootstrap CI jobs.
+#
+# The runner's preinstalled pip may still trust the withdrawn emSign root CA,
+# so the upgrade itself is protected by a hash check rather than by TLS alone.
+# Dependabot keeps the version and hash current (see .github/dependabot.yml).
+# Install with:
+#   python -m pip install --no-cache-dir --require-hashes -r .github/requirements-pip-bootstrap.txt
+pip==26.2.2 \
+    --hash=sha256:fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70

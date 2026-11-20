@@ -17,7 +17,11 @@ FROM ${BASE_IMAGE} AS BUILDER
 # Pin to a release tag or commit when building a deployment image.
 ARG FOUNDRY_REVISION=production
 
-COPY --from=ghcr.io/astral-sh/uv /uv /uvx /bin/
+# uv 0.13.4 or newer is required (emSign CA incident, October 2026).
+# For a deployment image, pin by digest as well as tag so the image cannot be
+# swapped under the tag, e.g. ghcr.io/astral-sh/uv:0.13.4@sha256:<digest>.
+# Get the digest with: docker buildx imagetools inspect ghcr.io/astral-sh/uv:0.13.4
+COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /uvx /bin/
 
 # Install system dependencies and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
