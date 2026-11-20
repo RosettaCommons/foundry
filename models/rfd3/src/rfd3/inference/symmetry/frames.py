@@ -118,7 +118,7 @@ def get_symmetry_frames_from_atom_array(src_atom_array, input_frames):
         assert is_valid_rotation_matrix(
             R
         ), f"Computed frame {R} is not a valid rotation matrix"
-    computed_frames = [(R, np.array([0, 0, 0])) for R in Rs]
+    computed_frames = [(R, np.zeros(3, dtype=np.float32)) for R in Rs]
 
     # check that the computed frames match the input frames
     check_input_frames_match_symmetry_frames(
@@ -243,7 +243,7 @@ def get_cyclic_frames(order):
                 [0, 0, 1],
             ]
         )
-        frames.append((R, np.array([0, 0, 0])))
+        frames.append((R, np.zeros(3, dtype=np.float32)))
 
     return frames
 
@@ -275,8 +275,8 @@ def get_dihedral_frames(order):
         flip = -np.eye(3) + 2 * np.outer(u, u)
 
         # add both frames for the dihedral
-        frames.append((R, np.array([0, 0, 0])))
-        frames.append((R @ flip, np.array([0, 0, 0])))
+        frames.append((R, np.zeros(3, dtype=np.float32)))
+        frames.append((R @ flip, np.zeros(3, dtype=np.float32)))
 
     return frames
 
