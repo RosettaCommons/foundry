@@ -132,7 +132,7 @@ checkpoint CLI, model CLIs, checkpoint locations, and `FOUNDRY_*` environment
 variables are retained. Numerical settings, including RFD3's fast/legacy modes,
 are unchanged by this refactor.
 
-Install for development and run the CPU regression suite:
+Install for development and run the CPU regression suite.
 
 ```bash
 uv pip install -e '.[all,dev]'

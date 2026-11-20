@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Hash-pinned pip bootstrap used by the CI workflows.
+  - package-ecosystem: "pip"
+    directory: "/.github"
+    schedule:
+      interval: "weekly"
+    allow:
+      - dependency-name: "pip"
+
+  # uv image in the example Dockerfile.
+  - package-ecosystem: "docker"
+    directory: "/examples/docker"
+    schedule:
+      interval: "weekly"

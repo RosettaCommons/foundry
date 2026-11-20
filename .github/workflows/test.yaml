@@ -32,7 +32,7 @@ jobs:
         # `-c ci-constraints.txt` pins the type-stub-sensitive packages to the
         # validated versions so the gate is reproducible (see that file).
         run: |
-          python -m pip install --upgrade "pip>=26.2.2"
+          python -m pip install --no-cache-dir --require-hashes -r .github/requirements-pip-bootstrap.txt
           pip install -e ".[dev]" -c ci-constraints.txt
       - name: mypy
         run: mypy
@@ -53,7 +53,7 @@ jobs:
         # `-c ci-constraints.txt` pins the type-stub-sensitive packages to the
         # validated versions so the gate is reproducible (see that file).
         run: |
-          python -m pip install --upgrade "pip>=26.2.2"
+          python -m pip install --no-cache-dir --require-hashes -r .github/requirements-pip-bootstrap.txt
           pip install ".[dev]" -c ci-constraints.txt
       - name: pytest
         # Runs infrastructure regression tests/ plus the CPU-portable per-model tests under

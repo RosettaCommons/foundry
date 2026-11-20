@@ -18,7 +18,12 @@ Here is an overview of how this system is structured:
 - `models/<model>`: Released models that use the structure provided by Foundry and AtomWorks
 
 ### Installing Foundry in Editable Mode
-Install both foundry and models in editable mode for development:
+Install both foundry and models in editable mode for development. 
+
+```{important}
+For security reasons it is recommended to use uv 0.13.4 or newer. Run `uv self update` before installing foundry.
+```
+
 ```bash
 uv pip install -e '.[all,dev]'
 ```

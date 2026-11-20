@@ -139,6 +139,11 @@ exclude = [
   "**/*.gif",
 ]
 
+# uv 0.13.4 or newer is required (emSign CA incident, October 2026); older uv
+# releases still trust the withdrawn emSign root CA certificate.
+[tool.uv]
+required-version = ">=0.13.4"
+
 # Formatting & linting settings -------------------------------------------------------
 [tool.ruff]
 line-length = 88

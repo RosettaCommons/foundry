@@ -17,6 +17,11 @@ This guide provides instructions on preparing inputs and running inference for P
 
 ## Installation
 ### A. Installation using `uv`
+
+> [!IMPORTANT]
+> For security reasons, use uv 0.13.4 or newer (`uv self update`).
+
+
 ```bash
 git clone https://github.com/RosettaCommons/foundry.git \
   && cd foundry \
