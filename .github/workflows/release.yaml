@@ -31,8 +31,67 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  gate:
+    # A release must come from a commit that was reviewed and tested: it must
+    # be on `production` (which only takes reviewed PRs, given branch
+    # protection) and the push-triggered test, integration and lint workflows
+    # must have succeeded on exactly that commit. Enforced on tag pushes only;
+    # PR and manual runs report the result as a warning, since their commits
+    # are not on production yet.
+    name: gate (commit on production, tests passed)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read  # read workflow runs for this commit
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0  # full history of all branches, for the ancestry check
+          persist-credentials: false
+      - name: Commit is on production
+        run: |
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/production; then
+            echo "ok: $GITHUB_SHA is on production"
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "::error::$GITHUB_SHA ($GITHUB_REF_NAME) is not on production. Release tags must point at a commit merged to production."
+            exit 1
+          else
+            echo "::warning::$GITHUB_SHA is not on production (expected for PR and branch runs; would block a release)."
+          fi
+      - name: Tests passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          failed=0
+          for wf in test.yaml test_integration.yaml lint_production.yaml; do
+            # Latest push-triggered run of this workflow on exactly this commit.
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/runs?head_sha=$GITHUB_SHA&event=push&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion // "none") \(.html_url)"')
+            if [ -z "$run" ]; then
+              msg="$wf: no push-triggered run found on $GITHUB_SHA"
+            else
+              read -r status conclusion url <<< "$run"
+              if [ "$status" = "completed" ] && [ "$conclusion" = "success" ]; then
+                echo "ok: $wf succeeded ($url)"
+                continue
+              elif [ "$status" != "completed" ]; then
+                msg="$wf is still $status on $GITHUB_SHA; re-run this workflow once it finishes ($url)"
+              else
+                msg="$wf concluded '$conclusion' on $GITHUB_SHA ($url)"
+              fi
+            fi
+            if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+              echo "::error::$msg"
+              failed=1
+            else
+              echo "::warning::$msg"
+            fi
+          done
+          exit $failed
+
   build:
     name: build sdist + wheel
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -144,7 +203,7 @@ jobs:
 
   publish:
     name: publish to PyPI
-    needs: [build, smoke-test]
+    needs: [gate, build, smoke-test]
     if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-latest
     environment:
