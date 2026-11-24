@@ -38,8 +38,8 @@ jobs:
         # On a tag push, refuse unless the tag is exactly v<version>. On a manual
         # run there is no tag, so only the version's canonical form is checked.
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            python .github/release.py verify "${{ github.ref_name }}"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            python .github/release.py verify "$GITHUB_REF_NAME"
           else
             python .github/release.py verify
           fi
