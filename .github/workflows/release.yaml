@@ -2,7 +2,10 @@ name: release
 
 # Publishes rc-foundry to PyPI when a version tag (e.g. v1.0.0, v1.0.0rc1) is
 # pushed. A manual run (workflow_dispatch) does everything except publish, as a
-# dry run of the build and the installed-wheel smoke test.
+# dry run of the build and the installed-wheel smoke test. Pull requests that
+# change packaging metadata or this workflow run the same build + smoke test, so
+# a broken extra is caught at review rather than at release time. Only a tag
+# push can reach the publish job.
 #
 # Publishing uses PyPI Trusted Publishing (OIDC): there is no API token stored in
 # this repo. The trusted publisher registered on PyPI for rc-foundry must match:
@@ -12,6 +15,11 @@ name: release
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - pyproject.toml
+      - .github/workflows/release.yaml
+      - .github/release.py
   workflow_dispatch:
 
 permissions:
@@ -19,7 +27,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  # Superseded PR runs can be cancelled; tag and manual runs never are.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -27,6 +36,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Nothing here uses git auth; don't leave GITHUB_TOKEN in .git/config
+          # where later steps (pip, the build backend) could read it.
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
@@ -54,9 +67,39 @@ jobs:
           if-no-files-found: error
 
   smoke-test:
-    name: install wheel outside the checkout and import
+    name: smoke test (${{ matrix.extra }})
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      # Report every broken extra, not just the first.
+      fail-fast: false
+      matrix:
+        # Each extra gets its own fresh venv: a dependency missing from one
+        # extra would be masked if another extra installed in the same env
+        # happened to pull it in. `all` additionally catches conflicts that
+        # only appear when the extras are combined. `imports` are the modules
+        # that actually need the extra's dependencies (--help alone does not
+        # load them). The rf3 extra is CUDA kernels (cuEquivariance), which
+        # install on a CPU runner but cannot be exercised, so rf3 is checked
+        # for install + pip check only. `dev` is covered by test.yaml.
+        include:
+          - extra: base
+            imports: ""
+          - extra: rfo
+            imports: "rfo.cli rfo.cycling.cycle"
+          - extra: rfd3
+            imports: "rfd3.engine rfd3.inference.datasets"
+          - extra: rfd3na
+            imports: "rfd3na.engine rfd3na.inference.datasets"
+          - extra: rf3
+            imports: ""
+          - extra: all
+            imports: >-
+              rfo.cli rfo.cycling.cycle rfd3.engine rfd3.inference.datasets
+              rfd3na.engine rfd3na.inference.datasets
+    env:
+      EXTRA: ${{ matrix.extra }}
+      IMPORTS: ${{ matrix.imports }}
     steps:
       # No source checkout: the wheel must work without the source tree on
       # sys.path. This is the "works in the repo, broken when installed" check.
@@ -67,6 +110,7 @@ jobs:
           sparse-checkout: .github/requirements-pip-bootstrap.txt
           sparse-checkout-cone-mode: false
           path: bootstrap
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
@@ -76,16 +120,22 @@ jobs:
           path: dist/
       - name: Install wheel into a fresh venv
         # No ci-constraints here: resolve dependencies the way a user's
-        # `pip install rc-foundry` would.
+        # `pip install rc-foundry[<extra>]` would.
         run: |
+          wheel=$(ls dist/*.whl)
+          if [ "$EXTRA" = "base" ]; then spec="$wheel"; else spec="$wheel[$EXTRA]"; fi
           python -m venv /tmp/venv
           /tmp/venv/bin/python -m pip install --no-cache-dir --require-hashes -r bootstrap/.github/requirements-pip-bootstrap.txt
-          /tmp/venv/bin/python -m pip install dist/*.whl
+          /tmp/venv/bin/python -m pip install "$spec"
           /tmp/venv/bin/python -m pip check
       - name: Import packages and run CLI entry points
         working-directory: /tmp
         run: |
           /tmp/venv/bin/python -c "import rf3, rfd3, rfd3na, mpnn, rfo, foundry_cli"
+          for mod in $IMPORTS; do
+            echo "import $mod"
+            /tmp/venv/bin/python -c "import $mod"
+          done
           for cli in rf3 rfd3 rfd3na mpnn rfo foundry; do
             echo "::group::$cli --help"
             /tmp/venv/bin/$cli --help
