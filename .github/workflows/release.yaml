@@ -1,0 +1,110 @@
+name: release
+
+# Publishes rc-foundry to PyPI when a version tag (e.g. v1.0.0, v1.0.0rc1) is
+# pushed. A manual run (workflow_dispatch) does everything except publish, as a
+# dry run of the build and the installed-wheel smoke test.
+#
+# Publishing uses PyPI Trusted Publishing (OIDC): there is no API token stored in
+# this repo. The trusted publisher registered on PyPI for rc-foundry must match:
+#   owner: RosettaCommons   repository: foundry
+#   workflow: release.yaml  environment: pypi
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: |
+          python -m pip install --no-cache-dir --require-hashes -r .github/requirements-pip-bootstrap.txt
+          pip install build packaging
+      - name: Verify tag matches pyproject.toml version
+        # On a tag push, refuse unless the tag is exactly v<version>. On a manual
+        # run there is no tag, so only the version's canonical form is checked.
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            python .github/release.py verify "${{ github.ref_name }}"
+          else
+            python .github/release.py verify
+          fi
+      - name: Build
+        # Builds the sdist, then the wheel from that sdist, from this clean
+        # checkout of the tagged commit.
+        run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  smoke-test:
+    name: install wheel outside the checkout and import
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # No source checkout: the wheel must work without the source tree on
+      # sys.path. This is the "works in the repo, broken when installed" check.
+      # Only the hash-pinned pip bootstrap file is fetched, so pip is installed
+      # the same way as in every other workflow (see #409).
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/requirements-pip-bootstrap.txt
+          sparse-checkout-cone-mode: false
+          path: bootstrap
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Install wheel into a fresh venv
+        # No ci-constraints here: resolve dependencies the way a user's
+        # `pip install rc-foundry` would.
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/python -m pip install --no-cache-dir --require-hashes -r bootstrap/.github/requirements-pip-bootstrap.txt
+          /tmp/venv/bin/python -m pip install dist/*.whl
+          /tmp/venv/bin/python -m pip check
+      - name: Import packages and run CLI entry points
+        working-directory: /tmp
+        run: |
+          /tmp/venv/bin/python -c "import rf3, rfd3, rfd3na, mpnn, rfo, foundry_cli"
+          for cli in rf3 rfd3 rfd3na mpnn rfo foundry; do
+            echo "::group::$cli --help"
+            /tmp/venv/bin/$cli --help
+            echo "::endgroup::"
+          done
+
+  publish:
+    name: publish to PyPI
+    needs: [build, smoke-test]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/rc-foundry/
+    permissions:
+      id-token: write  # Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
