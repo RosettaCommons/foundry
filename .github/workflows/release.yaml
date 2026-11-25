@@ -1,23 +1,25 @@
 name: release
 
-# Publishes rc-foundry to PyPI when a version tag (e.g. v1.0.0, v1.0.0rc1) is
-# pushed. A manual run (workflow_dispatch) does everything except publish, as a
-# dry run of the build and the installed-wheel smoke test. Pull requests that
-# change packaging metadata or this workflow run the same build + smoke test, so
-# a broken extra is caught at review rather than at release time. Only a tag
-# push can reach the publish job.
+# Builds and verifies rc-foundry release artifacts. It does NOT upload to PyPI.
 #
-# Publishing uses PyPI Trusted Publishing (OIDC): there is no API token stored in
-# this repo. The trusted publisher registered on PyPI for rc-foundry must match:
-#   owner: RosettaCommons   repository: foundry
-#   workflow: release.yaml  environment: (blank)
+# - Tag push (v1.0.0, v1.0.0rc1, ...): the gate job checks that the tagged
+#   commit is on production and that its test, integration and lint runs
+#   passed; release.py checks that the tag matches pyproject.toml's version.
+#   The sdist and wheel are then built from a clean checkout of the tagged
+#   commit, installed into a fresh venv outside the checkout, and smoke-tested
+#   for every extra. The result is saved as the `dist` artifact of the run.
+# - Manual run (workflow_dispatch): the same build + smoke test, as a dry run.
+# - Pull requests touching packaging metadata or release tooling: the same
+#   build + smoke test, so a broken extra is caught at review time.
 #
-# There is deliberately no GitHub deployment environment: the RosettaCommons org
-# is on a legacy GitHub plan on which environments cannot be configured, so an
-# environment here would be auto-created with no protection rules. Release
-# control comes instead from the `gate` job (tagged commit must be on production
-# with tests green), production branch protection (reviewed PRs only), and a
-# tag ruleset restricting who may create `v*` tags.
+# Uploading is a manual step: download the `dist` artifact from the tag's run
+# and `twine upload` it with a PyPI token scoped to rc-foundry. There is
+# deliberately no publish job. PyPI Trusted Publishing from this repo would let
+# anyone with write access publish, by pushing a branch with an edited copy of
+# this workflow: without a configurable deployment environment (not available
+# on the RosettaCommons org's GitHub plan), PyPI can only check the repository
+# and workflow filename. How to automate publishing safely is an open team
+# decision.
 
 on:
   push:
@@ -207,17 +209,3 @@ jobs:
             /tmp/venv/bin/$cli --help
             echo "::endgroup::"
           done
-
-  publish:
-    name: publish to PyPI
-    needs: [gate, build, smoke-test]
-    if: github.event_name == 'push' && github.ref_type == 'tag'
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # Trusted Publishing (OIDC)
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: dist
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
