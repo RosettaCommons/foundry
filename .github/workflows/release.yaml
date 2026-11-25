@@ -10,7 +10,14 @@ name: release
 # Publishing uses PyPI Trusted Publishing (OIDC): there is no API token stored in
 # this repo. The trusted publisher registered on PyPI for rc-foundry must match:
 #   owner: RosettaCommons   repository: foundry
-#   workflow: release.yaml  environment: pypi
+#   workflow: release.yaml  environment: (blank)
+#
+# There is deliberately no GitHub deployment environment: the RosettaCommons org
+# is on a legacy GitHub plan on which environments cannot be configured, so an
+# environment here would be auto-created with no protection rules. Release
+# control comes instead from the `gate` job (tagged commit must be on production
+# with tests green), production branch protection (reviewed PRs only), and a
+# tag ruleset restricting who may create `v*` tags.
 
 on:
   push:
@@ -206,9 +213,6 @@ jobs:
     needs: [gate, build, smoke-test]
     if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/project/rc-foundry/
     permissions:
       id-token: write  # Trusted Publishing (OIDC)
     steps:
