@@ -13,3 +13,10 @@ updates:
     directory: "/examples/docker"
     schedule:
       interval: "weekly"
+
+  # GitHub Actions used by the workflows. release.yaml pins actions to full
+  # commit SHAs (with a "# vX.Y.Z" comment); Dependabot updates both together.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
