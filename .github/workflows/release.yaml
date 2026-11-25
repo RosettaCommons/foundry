@@ -1,25 +1,24 @@
 name: release
 
-# Builds and verifies rc-foundry release artifacts. It does NOT upload to PyPI.
+# Builds and verifies rc-foundry release files. It does NOT upload to PyPI.
 #
 # - Tag push (v1.0.0, v1.0.0rc1, ...): the gate job checks that the tagged
 #   commit is on production and that its test, integration and lint runs
 #   passed; release.py checks that the tag matches pyproject.toml's version.
-#   The sdist and wheel are then built from a clean checkout of the tagged
-#   commit, installed into a fresh venv outside the checkout, and smoke-tested
-#   for every extra. The result is saved as the `dist` artifact of the run.
-# - Manual run (workflow_dispatch): the same build + smoke test, as a dry run.
-# - Pull requests touching packaging metadata or release tooling: the same
-#   build + smoke test, so a broken extra is caught at review time.
+#   The sdist and wheel are built from a clean checkout of the tagged commit,
+#   installed into fresh venvs outside the checkout and smoke-tested (the
+#   wheel alone and with each extra), then checked with `twine check`.
+#   Only if every job passes are they saved as the run's `dist` artifact, with
+#   their SHA-256 hashes in the run summary.
+# - Manual run (workflow_dispatch) on a branch, and pull requests touching
+#   pyproject.toml or the release tooling: the same build and checks as a dry
+#   run. The gate only warns, and the files are saved as `dist-dryrun`, never
+#   as `dist`, so they can't be mistaken for release files. (A manual run on a
+#   v* tag is treated like the tag push.)
 #
-# Uploading is a manual step: download the `dist` artifact from the tag's run
-# and `twine upload` it with a PyPI token scoped to rc-foundry. There is
-# deliberately no publish job. PyPI Trusted Publishing from this repo would let
-# anyone with write access publish, by pushing a branch with an edited copy of
-# this workflow: without a configurable deployment environment (not available
-# on the RosettaCommons org's GitHub plan), PyPI can only check the repository
-# and workflow filename. How to automate publishing safely is an open team
-# decision.
+# Uploading to PyPI is a manual step: download the `dist` artifact from the
+# tag's run, compare its hashes with the run summary, and `twine upload` it.
+# Automated publishing is intentionally not configured.
 
 on:
   push:
@@ -34,6 +33,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # Release files are only ever named `dist` for runs on a v* tag.
+  DIST_ARTIFACT: ${{ github.ref_type == 'tag' && 'dist' || 'dist-dryrun' }}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   # Superseded PR runs can be cancelled; tag and manual runs never are.
@@ -44,9 +47,9 @@ jobs:
     # A release must come from a commit that was reviewed and tested: it must
     # be on `production` (which only takes reviewed PRs, given branch
     # protection) and the push-triggered test, integration and lint workflows
-    # must have succeeded on exactly that commit. Enforced on tag pushes only;
-    # PR and manual runs report the result as a warning, since their commits
-    # are not on production yet.
+    # must have succeeded on exactly that commit. Enforced on any run on a tag
+    # ref; PR and branch runs report the result as a warning, since their
+    # commits are not on production yet.
     name: gate (commit on production, tests passed)
     runs-on: ubuntu-latest
     permissions:
@@ -116,8 +119,8 @@ jobs:
           python -m pip install --no-cache-dir --require-hashes -r .github/requirements-pip-bootstrap.txt
           pip install build packaging
       - name: Verify tag matches pyproject.toml version
-        # On a tag push, refuse unless the tag is exactly v<version>. On a manual
-        # run there is no tag, so only the version's canonical form is checked.
+        # On a tag ref, refuse unless the tag is exactly v<version>. On branch and
+        # PR runs there is no tag, so only the version's canonical form is checked.
         run: |
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             python .github/release.py verify "$GITHUB_REF_NAME"
@@ -126,11 +129,11 @@ jobs:
           fi
       - name: Build
         # Builds the sdist, then the wheel from that sdist, from this clean
-        # checkout of the tagged commit.
+        # checkout (the tagged commit on a tag run; the PR merge commit on PRs).
         run: python -m build
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: dist
+          name: untested-build
           path: dist/
           if-no-files-found: error
 
@@ -184,7 +187,7 @@ jobs:
           python-version: "3.12"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: dist
+          name: untested-build
           path: dist/
       - name: Install wheel into a fresh venv
         # No ci-constraints here: resolve dependencies the way a user's
@@ -209,3 +212,37 @@ jobs:
             /tmp/venv/bin/$cli --help
             echo "::endgroup::"
           done
+
+  release-files:
+    # Runs only when the gate, build and every smoke test passed, so a failed
+    # run never has a `dist` artifact.
+    name: check + save release files
+    needs: [build, smoke-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: untested-build
+          path: dist/
+      - name: twine check
+        run: |
+          pip install twine
+          twine check --strict dist/*
+      - name: Record SHA-256 hashes in the run summary
+        # Compare these with `sha256sum dist/*` on the downloaded files before
+        # uploading them to PyPI.
+        run: |
+          {
+            echo "### $DIST_ARTIFACT files (SHA-256)"
+            echo '```'
+            (cd dist && sha256sum *)
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.DIST_ARTIFACT }}
+          path: dist/
+          if-no-files-found: error

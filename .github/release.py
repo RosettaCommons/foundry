@@ -3,12 +3,12 @@
 Usage:
     python .github/release.py verify [TAG]
 
-`verify` refuses to release unless the version in pyproject.toml is a canonical
+`verify` fails unless the version in pyproject.toml is a canonical
 PEP 440 version and, when a tag is given, the tag is exactly ``v<version>``.
 PyPI versions are immutable, so a tag/version mismatch (e.g. tagging v1.0.1
 while pyproject.toml still says 1.0.0) would burn a version number we did not
 mean to publish. With no TAG argument only the version itself is checked, which
-is what a manual (non-tag) workflow run does.
+is what PR runs and manual runs on a branch do.
 """
 
 import sys
